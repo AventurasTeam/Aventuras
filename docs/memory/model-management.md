@@ -155,6 +155,7 @@ canonical `id` with `/` replaced by `--` to be filesystem-safe.
 <embedders-root>/
   xenova--all-minilm-l6-v2-q8/
     model.onnx
+    config.json
     tokenizer.json
     tokenizer_config.json
     meta.json
@@ -171,9 +172,13 @@ Per-platform `<embedders-root>`:
 | -------- | ---------------------------------------------------- |
 | Android  | `<internal>/files/embedders/`                        |
 | iOS      | `<documents>/embedders/`                             |
-| Linux    | `~/.local/share/Aventuras/embedders/`                |
+| Linux    | `~/.config/Aventuras/embedders/`                     |
 | macOS    | `~/Library/Application Support/Aventuras/embedders/` |
 | Windows  | `%APPDATA%\Aventuras\embedders\`                     |
+
+On desktop all three paths are Electron's per-app userData directory
+(models live next to the SQLite DB); dev builds use the
+`aventuras-dev` userData dir, giving dev/prod separation for free.
 
 The folder is self-contained — removal is a recursive delete, and
 copying a folder to a new device transports the agreed-to license
@@ -204,8 +209,12 @@ source. Check your connection and try again.` No cached-license
 4. **Decline** — no download, no state change. User stays on the
    previous selection. Pre-download state.
 5. **Accept** — download begins with progress bar, resumable on
-   network blip. Each of the three required files is fetched and
-   SHA256-verified against the catalog entry's expected hashes.
+   network blip. Each required file is fetched and SHA256-verified
+   against the catalog entry's expected hashes — `model.onnx`,
+   `config.json`, `tokenizer.json`, `tokenizer_config.json` for a
+   typical model; a sharded ONNX export adds a weights sidecar
+   (`*.onnx_data`) fetched and verified the same way, keyed in the
+   catalog's `files` map by the basename the graph references.
 6. **Cancel mid-download** — distinct from Decline. The download
    stops, partial files are deleted, and no license-acceptance is
    recorded. License acceptance is contingent on completion (see

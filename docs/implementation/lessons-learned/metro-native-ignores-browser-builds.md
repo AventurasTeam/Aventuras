@@ -15,6 +15,15 @@ work perfectly on web and still break every Android bundle. Metro's
   only the `import` / `require` / `react-native` conditions. Observed
   with `cheerio` — native resolves `dist/esm/index.js` (needs
   `node:stream`) even though a Node-free `dist/browser/` build exists.
+- **Syntax the bundled build ships that Hermes can't parse.** Even
+  once the bundled file is otherwise RN-safe, its web dist can still
+  use syntax Metro's default transform doesn't polyfill. Observed
+  with `@huggingface/transformers` — Metro resolves its
+  `transformers.web.js` on native for the same reason as the `cheerio`
+  case (`metro.config.js` already redirects one of its sub-imports,
+  `onnxruntime-web`, for that), and the file itself uses `import.meta`,
+  which crashes the Android bundle with a Hermes parse error distinct
+  from the two resolution failures above.
 
 The failure is invisible until someone runs
 `expo export --platform android`: web builds, tests, and typecheck
@@ -39,3 +48,8 @@ is exactly how the M2 `lib/markdown` → juice → jsdom break shipped).
    `unstable_conditionNames` globally — that flips resolution for
    every package at once and can swap in DOM-flavored builds where
    the Node/RN flavor was correct.
+5. **Hermes parse error on bundled syntax** (e.g. `import.meta`) →
+   enable the specific babel-preset-expo polyfill for that syntax
+   (`unstable_transformImportMeta: true` in `babel.config.js`) rather
+   than rewriting the dependency; it's the whole bundled file's
+   syntax, not something a `resolveRequest` redirect can dodge.

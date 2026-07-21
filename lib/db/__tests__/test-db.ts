@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite'
 
 import { drizzle } from 'drizzle-orm/sqlite-proxy'
 import { migrate } from 'drizzle-orm/sqlite-proxy/migrator'
+import { getLoadablePath } from 'sqlite-vec'
 
 import { dbSchema } from '../schema'
 
@@ -32,7 +33,8 @@ function makeCallback(sqlite: DatabaseSync) {
 // Async because sqlite-proxy/migrator awaits the proxy callback internally.
 // Mirrors the desktop (Electron main) runtime: node:sqlite with FK enforcement.
 export async function createTestDb() {
-  const sqlite = new DatabaseSync(':memory:')
+  const sqlite = new DatabaseSync(':memory:', { allowExtension: true })
+  sqlite.loadExtension(getLoadablePath())
   sqlite.exec('PRAGMA foreign_keys = ON;')
   const callback = makeCallback(sqlite)
   const db = drizzle(callback, { schema: dbSchema })

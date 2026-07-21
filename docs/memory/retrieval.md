@@ -58,10 +58,13 @@ virtual table per (target kind, dimension) pair, named with a dim
 suffix: `entities_vec_384`, `lore_vec_768`, and so on. Prose
 elsewhere refers to a family by its bare name (`entities_vec`); the
 physical table is always dim-suffixed. Each table carries
-`id TEXT PRIMARY KEY` (joining to the source row), `branch_id` as a
-TEXT partition key, `model_id` as a TEXT metadata column,
-`source_hash` as a TEXT auxiliary column, and the vector column at
-the family's dim. There is no per-row dim column — the dimension is
+`pk TEXT PRIMARY KEY` (the `<branch_id>:<id>` composite — vec0
+enforces primary keys globally across partitions, so a bare
+source-row id would collide when branch forks copy rows), `branch_id`
+as a TEXT partition key, `model_id` and `id` as TEXT metadata columns
+(`id` joins to the source row), `source_hash` as a TEXT auxiliary
+column, and the vector column at the family's dim. There is no
+per-row dim column — the dimension is
 encoded in the table name. The base migration creates the five
 384-dim tables (the bundled default model's dim); any other dim's
 family is created lazily by the vec0 write helper via

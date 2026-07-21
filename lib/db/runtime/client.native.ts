@@ -6,8 +6,9 @@ import { dbSchema } from '../schema'
 export const expoDb = openDatabaseSync('aventuras.db')
 expoDb.execSync('PRAGMA foreign_keys = ON;')
 
-// sqlite-vec at client init. No M1 feature uses vectors yet, so a failed load
-// is non-fatal.
+// sqlite-vec at client init. Migration 0005 creates vec0 virtual tables, so a
+// failed load still fails migrations below — this only turns it into an
+// earlier, clearer warning first.
 try {
   const ext = bundledExtensions['sqlite-vec']
   if (!ext) {

@@ -69,6 +69,7 @@ export default defineConfig({
             'lib/**/*.test.{ts,tsx}',
             'scripts/**/*.test.ts',
             'components/**/*.test.{ts,tsx}',
+            'electron/**/*.test.ts',
           ],
           setupFiles: ['./vitest.setup.ts'],
         },

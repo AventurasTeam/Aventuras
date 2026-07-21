@@ -11,6 +11,10 @@ import {
   initDb,
 } from './db/service'
 import type { DbProxyMethod } from './db/types'
+import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
+import { embeddersRoot, modelDir } from './embedder/paths'
+import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
+import type { EmbedderAttestation } from './embedder/types'
 
 const isDev = !app.isPackaged
 
@@ -129,6 +133,16 @@ function createWindow(): void {
   }
 }
 
+function requireModelDir(modelId: string): string {
+  try {
+    return modelDir(modelId)
+  } catch (error) {
+    throw new Error(
+      `Invalid model id "${modelId}": ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+}
+
 app.whenReady().then(async () => {
   await initDb()
   applyContentSecurityPolicy()
@@ -152,6 +166,61 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:transaction', (_e, ops: { sql: string; params: unknown[] }[]) =>
     dbTransaction(ops),
   )
+
+  ipcMain.handle('embedder:embed', (_e, args: { modelDir: string; texts: string[] }) =>
+    embedderEmbed(args),
+  )
+  ipcMain.handle('embedder:smoke-test', (_e, args: { modelDir: string }) => smokeTest(args))
+  ipcMain.handle('embedder:list-installed', () => listInstalled())
+  ipcMain.handle(
+    'embedder:download-file',
+    (
+      event,
+      args: { url: string; modelId: string; fileName: string; expectedSha256: string | null },
+    ) => {
+      let destDir: string
+      try {
+        destDir = modelDir(args.modelId)
+      } catch (error) {
+        return {
+          ok: false as const,
+          reason: 'disk' as const,
+          message: error instanceof Error ? error.message : String(error),
+        }
+      }
+      return downloadFile({
+        url: args.url,
+        destDir,
+        fileName: args.fileName,
+        expectedSha256: args.expectedSha256,
+        onProgress: (bytesReceived, bytesTotal) => {
+          if (event.sender.isDestroyed()) return
+          event.sender.send('embedder:download-progress', {
+            modelId: args.modelId,
+            fileName: args.fileName,
+            bytesReceived,
+            bytesTotal,
+          })
+        },
+      })
+    },
+  )
+  ipcMain.handle(
+    'embedder:persist-install',
+    (_e, args: { modelId: string; licenseText: string; attestation: EmbedderAttestation }) =>
+      persistInstall({
+        destDir: requireModelDir(args.modelId),
+        modelId: args.modelId,
+        licenseText: args.licenseText,
+        attestation: args.attestation,
+      }),
+  )
+  ipcMain.handle('embedder:delete-partial', (_e, args: { modelId: string }) => {
+    const dir = requireModelDir(args.modelId)
+    evictPipeline(dir)
+    return deletePartial(dir)
+  })
+  ipcMain.handle('embedder:root', () => embeddersRoot())
 
   createWindow()
 

@@ -46,6 +46,7 @@
     "@expo/vector-icons": "^15.1.1",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@hookform/resolvers": "^5.4.0",
+    "@huggingface/transformers": "^3.8.1",
     "@native-html/css-processor": "^2.0.1",
     "@native-html/transient-render-engine": "^12.0.1",
     "@react-navigation/bottom-tabs": "^7.15.5",
@@ -97,6 +98,7 @@
     "lucide-react-native": "^0.577.0",
     "marked": "^18.0.5",
     "nativewind": "^4.2.3",
+    "onnxruntime-react-native": "^1.24.3",
     "postcss": "^8.5.10",
     "postcss-safe-parser": "^7.0.1",
     "postcss-value-parser": "^4.2.0",
@@ -108,6 +110,9 @@
     "react-native-gesture-handler": "~2.30.1",
     "react-native-haptic-feedback": "^3.0.0",
     "react-native-keyboard-controller": "1.21.8",
+    "react-native-nitro-modules": "^0.36.1",
+    "react-native-quick-base64": "^3.0.1",
+    "react-native-quick-crypto": "^1.1.6",
     "react-native-reanimated": "~4.2.1",
     "react-native-reanimated-dnd": "^2.0.0",
     "react-native-safe-area-context": "~5.6.2",
@@ -186,7 +191,8 @@
       "package.json"
     ],
     "asarUnpack": [
-      "**/node_modules/sqlite-vec-*/**"
+      "**/node_modules/sqlite-vec-*/**",
+      "**/node_modules/onnxruntime-node/**"
     ],
     "extraResources": [
       {

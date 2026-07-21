@@ -15,6 +15,7 @@ export {
   setDebugLevelEnabled,
   setDefaultProvider,
   setDiagnosticsEnabled,
+  setEmbedderDefaults,
   updateProvider,
   upsertProfile,
 } from './settings'

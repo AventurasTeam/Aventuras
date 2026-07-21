@@ -156,7 +156,11 @@ M7.1; only the gate-required minimum ships here.
 - Storybook: any new settings-surface compounds (the download
   dialog already has stories).
 - Manual smoke: full download → create-story → play-a-turn on
-  desktop + Android; kill-app-mid-download resume.
+  desktop + Android; kill-app-mid-download resume on desktop.
+  Android verifies in-session network-blip resume only — a kill
+  mid-download restarts the affected file from zero (staged
+  `.part`, no corruption); cross-launch resume is descoped for v1
+  (resolved at planning, 2026-07-20).
 
 ## Open questions
 

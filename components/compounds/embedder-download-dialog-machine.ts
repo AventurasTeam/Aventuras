@@ -36,6 +36,7 @@ export type FailReason =
   | { kind: 'validation-failed'; missingFiles: string[] }
   | { kind: 'hash-mismatch'; failingFile: string }
   | { kind: 'smoke-test-failed'; ep: ExecutionProvider }
+  | { kind: 'persist-failed'; message: string }
 
 export type DialogInit =
   | { kind: 'catalog'; entry: CatalogEntry }
@@ -93,6 +94,7 @@ export type DialogAction =
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
+  | { type: 'persist-failed'; message: string }
   | { type: 'cancel' }
   | { type: 'retry' }
   | { type: 'close' }
@@ -278,6 +280,13 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           kind: 'failed',
           meta: state.meta,
           reason: { kind: 'hash-mismatch', failingFile: action.file },
+        }
+      }
+      if (action.type === 'persist-failed') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'persist-failed', message: action.message },
         }
       }
       return state
