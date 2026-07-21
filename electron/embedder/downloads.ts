@@ -63,6 +63,24 @@ async function downloadAttempt(
     return { ok: false, reason: 'disk', message: messageOf(error) }
   }
 
+  // A completed file from an earlier attempt is already renamed into place, so
+  // a retry would otherwise re-pull the entire manifest to reach the one file
+  // that actually failed. Re-hash it instead and skip if it still matches.
+  if (expectedSha256 !== null && existsSync(finalPath)) {
+    try {
+      const existing = createHash('sha256')
+      await hashExistingBytes(existing, finalPath)
+      if (existing.digest('hex') === expectedSha256.toLowerCase()) {
+        const size = statSync(finalPath).size
+        onProgress?.(size, size)
+        return { ok: true }
+      }
+      await rm(finalPath, { force: true })
+    } catch (error) {
+      return { ok: false, reason: 'disk', message: messageOf(error) }
+    }
+  }
+
   const existingSize = existsSync(partPath) ? statSync(partPath).size : 0
 
   let response: Response

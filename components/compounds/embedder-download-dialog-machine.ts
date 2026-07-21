@@ -44,6 +44,10 @@ export type FailReason =
   | { kind: 'download-failed'; failingFile: string; message: string }
   | { kind: 'validation-failed'; missingFiles: string[] }
   | { kind: 'hash-mismatch'; failingFile: string }
+  // The hash could not be computed at all (missing native module, unreadable
+  // file, bridge gone) — distinct from a digest that was computed and differed,
+  // and retryable where a genuine mismatch is not.
+  | { kind: 'verify-error'; failingFile: string; message: string }
   | { kind: 'smoke-test-failed'; ep: ExecutionProvider }
   | { kind: 'persist-failed'; message: string }
 
@@ -120,6 +124,7 @@ export type DialogAction =
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
+  | { type: 'verify-error'; file: string; message: string }
   | { type: 'smoke-test-failed'; ep: ExecutionProvider }
   | { type: 'persist-failed'; message: string }
   | { type: 'cancel' }
@@ -334,6 +339,13 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           reason: { kind: 'hash-mismatch', failingFile: action.file },
         }
       }
+      if (action.type === 'verify-error') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'verify-error', failingFile: action.file, message: action.message },
+        }
+      }
       if (action.type === 'smoke-test-failed') {
         return {
           kind: 'failed',
@@ -358,9 +370,12 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         if (state.reason.kind === 'resolve-failed') {
           return { kind: 'hf-input' }
         }
-        // Restarts the manifest; already-staged bytes survive per platform
-        // (desktop resumes .part via Range, native restarts the failed file).
-        if (state.reason.kind === 'download-failed' && state.meta) {
+        // Restarts the manifest. Files already complete on disk short-circuit in
+        // the driver, so only the unfinished ones actually transfer again.
+        if (
+          (state.reason.kind === 'download-failed' || state.reason.kind === 'verify-error') &&
+          state.meta
+        ) {
           return { kind: 'downloading', meta: state.meta, progressByFile: {} }
         }
       }

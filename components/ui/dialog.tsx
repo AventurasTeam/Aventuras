@@ -98,9 +98,16 @@ function DialogContent({
   )
 }
 
-function DialogHeader({ className, ...props }: ViewProps) {
-  // pr-8 keeps full-width titles clear of the absolutely-positioned ×.
-  return <View className={cn('flex flex-col gap-2 pr-8', className)} {...props} />
+function DialogHeader({
+  className,
+  hasCloseButton = true,
+  ...props
+}: ViewProps & { hasCloseButton?: boolean }) {
+  // pr-8 keeps full-width titles clear of the absolutely-positioned ×; without
+  // one it is just dead space on every title in the app.
+  return (
+    <View className={cn('flex flex-col gap-2', hasCloseButton && 'pr-8', className)} {...props} />
+  )
 }
 
 function DialogFooter({ className, ...props }: ViewProps) {
