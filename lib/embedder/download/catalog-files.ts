@@ -25,11 +25,11 @@ export type DownloadPlanRow = {
 // Order follows the catalog's `files` map insertion order (JS preserves
 // string-key order), which the dialog's downloading effect iterates too.
 export function buildDownloadPlan(entry: CatalogModelEntry): DownloadPlanRow[] {
-  return Object.entries(entry.files).map(([fileName, repoPath]) => ({
+  return Object.entries(entry.files).map(([fileName, { repoPath, sha256 }]) => ({
     url: `${HF_ORIGIN}/${entry.id}/resolve/${entry.huggingfaceRevision}/${repoPath}`,
     fileName,
     repoPath,
-    expectedSha256: entry.expectedSha256[fileName],
+    expectedSha256: sha256,
   }))
 }
 
