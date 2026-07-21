@@ -5,7 +5,10 @@ import { BackHandler, Platform, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
-import { EmbedderGateBlocked } from '@/components/wizard/embedder-gate-blocked'
+import {
+  EmbedderGateBlocked,
+  EmbedderGateUnresolved,
+} from '@/components/wizard/embedder-gate-blocked'
 import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
@@ -49,24 +52,25 @@ type GateState =
   | { status: 'pending' }
   | { status: 'ok' }
   | { status: 'blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
-
-// A listing blip must degrade to "nothing installed" so it surfaces through the
-// embedder gate (model-not-installed), not a generic finish-failed toast.
-async function listInstalledLocalIds(): Promise<string[]> {
-  try {
-    return (await listInstalledLocal()).map((model) => model.id)
-  } catch (err) {
-    logger.warn('embedder.list_installed_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    })
-    return []
-  }
-}
+  | { status: 'unresolved'; message: string }
 
 async function resolveEntryGate(): Promise<GateState> {
   const { embeddingModelId, embeddingProviderId, defaultStorySettings, providers } =
     appSettingsStore.getAppSettings()
-  const installedIds = await listInstalledLocalIds()
+
+  // "Couldn't determine what's installed" is not "nothing is installed": the
+  // latter tells the user to install a model they may already have, and none of
+  // the real causes (preload missing, EACCES on the embedders root) are fixed
+  // that way. A gate that can't answer must fail closed on its own surface.
+  let installedIds: string[]
+  try {
+    installedIds = (await listInstalledLocal()).map((model) => model.id)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    logger.error('embedder.list_installed_failed', { error: message })
+    return { status: 'unresolved', message }
+  }
+
   const result = resolveEmbedderGate(
     { embeddingModelId, embeddingProviderId, defaultStorySettings, providers },
     installedIds,
@@ -100,19 +104,33 @@ export default function WizardRoute() {
   const [gate, setGate] = useState<GateState>({ status: 'pending' })
   const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
   const isFocused = useIsFocused()
+  const gateRunRef = useRef(0)
+  const runEntryGate = useCallback(() => {
+    const run = ++gateRunRef.current
+    setGate({ status: 'pending' })
+    void resolveEntryGate()
+      .then((next) => {
+        if (gateRunRef.current === run) setGate(next)
+      })
+      .catch((err: unknown) => {
+        // Fail closed: leaving `gate` at 'pending' renders no modal at all,
+        // silently turning the hard gate into no gate.
+        const message = err instanceof Error ? err.message : String(err)
+        logger.error('embedder.gate_resolve_failed', { error: message })
+        if (gateRunRef.current === run) setGate({ status: 'unresolved', message })
+      })
+  }, [])
+
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false
       // A fixed embedder must not leave a stale Finish-failure card on step 5.
       setEmbedFailure(null)
-      setGate({ status: 'pending' })
-      void resolveEntryGate().then((next) => {
-        if (!cancelled) setGate(next)
-      })
+      runEntryGate()
       return () => {
-        cancelled = true
+        // Bump the run id so an in-flight resolve can't land after blur.
+        gateRunRef.current += 1
       }
-    }, []),
+    }, [runEntryGate]),
   )
 
   // OS back = Cancel (platform.md → OS back integration): Android hardware
@@ -208,7 +226,11 @@ export default function WizardRoute() {
     const { defaultStorySettings, embeddingModelId, embeddingProviderId, providers } =
       appSettingsStore.getAppSettings()
     runAction(
-      listInstalledLocalIds()
+      // A listing failure rejects rather than reporting "nothing installed":
+      // runAction's toast is honest, whereas an empty list would block Finish
+      // with model-not-installed and send the user to reinstall what they have.
+      listInstalledLocal()
+        .then((models) => models.map((model) => model.id))
         .then((installedLocalIds) =>
           finishWizard(
             wizardStore.getWizard().state,
@@ -360,6 +382,9 @@ export default function WizardRoute() {
           screen is focused. */}
       {gate.status === 'blocked' && isFocused ? (
         <EmbedderGateBlocked reason={gate.reason} backend={gate.backend} />
+      ) : null}
+      {gate.status === 'unresolved' && isFocused ? (
+        <EmbedderGateUnresolved message={gate.message} onRetry={runEntryGate} />
       ) : null}
     </WizardShell>
   )

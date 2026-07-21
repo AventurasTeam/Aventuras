@@ -61,7 +61,7 @@ export function EmbeddingModelsPanel({
   runTest = testEmbedder,
   createDriver = createEmbedderDownloadDriver,
 }: EmbeddingModelsPanelProps) {
-  const { installed, refresh } = useInstalledModels(listInstalled)
+  const { installed, state: installedState, refresh } = useInstalledModels(listInstalled)
   const backend = appSettingsStore.useAppSettings(
     (s) => s.defaultStorySettings.embeddingBackend ?? 'local',
   )
@@ -98,6 +98,18 @@ export function EmbeddingModelsPanel({
   return (
     <View className="gap-4">
       <Text variant="muted">{t('settings:embedding.intro')}</Text>
+      {installedState.status === 'error' ? (
+        <View className="gap-2 rounded-md border border-danger bg-bg-raised p-3">
+          <Text size="sm" className="text-danger">
+            {t('settings:embedding.listFailed', { error: installedState.message })}
+          </Text>
+          <View className="flex-row">
+            <Button variant="secondary" size="sm" onPress={refresh}>
+              <Text>{t('settings:embedding.listRetry')}</Text>
+            </Button>
+          </View>
+        </View>
+      ) : null}
       <Accordion type="multiple">
         {EMBEDDER_CATALOG.models.map((entry) => (
           <AccordionItem

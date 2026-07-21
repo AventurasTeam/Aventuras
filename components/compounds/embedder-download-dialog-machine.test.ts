@@ -410,3 +410,34 @@ describe('reducer — failed state', () => {
     expect(after.kind).toBe('failed')
   })
 })
+
+describe('reducer — smoke test after verification', () => {
+  const verifying: DialogState = {
+    kind: 'verifying',
+    meta: sampleMeta,
+    verifyByFile: { 'model.onnx': 'ok' },
+  }
+
+  it('routes a failed load to smoke-test-failed carrying the attempted EP', () => {
+    const after = reducer(verifying, { type: 'smoke-test-failed', ep: 'nnapi' })
+
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: { kind: 'smoke-test-failed', ep: 'nnapi' },
+    })
+  })
+
+  it('does not reach done once the load has failed', () => {
+    const failed = reducer(verifying, { type: 'smoke-test-failed', ep: 'cpu' })
+    expect(failed.kind).toBe('failed')
+    // all-verified is only meaningful from 'verifying'; a failed state ignores it.
+    expect(reducer(failed, { type: 'all-verified' }).kind).toBe('failed')
+  })
+
+  it('leaves smoke-test-failed unretryable — a rebuilt session needs a fresh download', () => {
+    const failed = reducer(verifying, { type: 'smoke-test-failed', ep: 'cpu' })
+    const retried = reducer(failed, { type: 'retry' })
+    expect(retried.kind).toBe('failed')
+  })
+})

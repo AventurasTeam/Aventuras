@@ -740,6 +740,9 @@ type EmbedderDownloadDialogProps = {
   init: DialogInit
   driver: DialogDriver
   onResolve: (result: DialogResolution) => void
+  /** See EmbedderDownloadDialogViewProps.availableEps. Also selects the EP the
+   * post-verify load is attempted under. */
+  availableEps?: readonly ExecutionProvider[]
 }
 
 export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
@@ -754,6 +757,9 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
   // carry licenseText, but persistInstall (fired from the verifying effect)
   // needs the exact text the user accepted in the 'license' state.
   const licenseTextRef = useRef('')
+  // The EP the post-verify load is attempted under. 'ep-picker' is unreachable
+  // today, so this is the host's first available provider.
+  const smokeTestEp = (props.availableEps ?? DEFAULT_AVAILABLE_EPS)[0] ?? 'cpu'
 
   useEffect(() => {
     if (state.kind === 'license') licenseTextRef.current = state.licenseText
@@ -884,6 +890,19 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         }
       }
       if (cancelled) return
+      // Bytes that hash correctly can still fail to load (a wrong-but-valid
+      // tokenizer.json, a mismatched weights sidecar, an EP the device rejects).
+      // Loading once here keeps a broken model from being written as installed
+      // and resurfacing much later as a bare init error at Finish.
+      try {
+        await driver.smokeTestEmbed({ ep: smokeTestEp })
+      } catch {
+        if (cancelled) return
+        void driver.deletePartial().catch(() => {})
+        dispatch({ type: 'smoke-test-failed', ep: smokeTestEp })
+        return
+      }
+      if (cancelled) return
       // persistInstall writes meta.json, which is what listInstalled keys on —
       // write it before resolving to 'done' so a listed model is a real install.
       try {
@@ -983,6 +1002,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
   return (
     <EmbedderDownloadDialogView
       open={open}
+      availableEps={props.availableEps}
       onOpenChange={handleOpenChange}
       state={state}
       onAcceptLicense={() => dispatch({ type: 'license-accepted' })}

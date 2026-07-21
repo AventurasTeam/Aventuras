@@ -66,6 +66,11 @@
       "model-not-installed": "The selected embedding model isn't downloaded yet. Install it to continue.",
       "no-provider": "The embedding provider isn't configured. Select or re-add a provider to continue.",
       "provider-cannot-embed": "The selected provider has no embedding endpoint. Choose an OpenAI-compatible provider, or switch to a local model."
+    },
+    "unresolved": {
+      "title": "Couldn't check your embedder",
+      "body": "Reading your installed models failed, so we can't confirm an embedder is ready: {{error}}",
+      "retry": "Try again"
     }
   },
   "errors": {

@@ -120,6 +120,7 @@ export type DialogAction =
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
+  | { type: 'smoke-test-failed'; ep: ExecutionProvider }
   | { type: 'persist-failed'; message: string }
   | { type: 'cancel' }
   | { type: 'retry' }
@@ -331,6 +332,13 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           kind: 'failed',
           meta: state.meta,
           reason: { kind: 'hash-mismatch', failingFile: action.file },
+        }
+      }
+      if (action.type === 'smoke-test-failed') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'smoke-test-failed', ep: action.ep },
         }
       }
       if (action.type === 'persist-failed') {

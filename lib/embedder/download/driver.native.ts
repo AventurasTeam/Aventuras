@@ -18,7 +18,7 @@ import { buildDownloadPlan, findPlanRow } from './catalog-files'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
 import { modelDir } from '../local/paths.native'
-import { smokeTestLocal } from '../local/runtime.native'
+import { evictBundle, smokeTestLocal } from '../local/runtime.native'
 
 const HASH_CHUNK_BYTES = 1024 * 1024
 
@@ -205,6 +205,7 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
     },
 
     async deletePartial() {
+      evictBundle(entry.id)
       const dir = modelDir(entry.id)
       if (dir.exists) dir.delete()
     },
