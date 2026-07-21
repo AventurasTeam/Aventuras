@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { Platform, Pressable, ScrollView, View } from 'react-native'
+import { Platform, Pressable, View } from 'react-native'
+// RN's ScrollView can't scroll inside @rn-primitives/dialog on Android: the
+// primitive's native Content claims the JS responder for every touch
+// (onStartShouldSetResponder → true), which blocks native scroll interception.
+// The gesture-handler ScrollView bypasses the responder system entirely.
+import { ScrollView } from 'react-native-gesture-handler'
 
 import { Button } from '@/components/ui/button'
 import {
