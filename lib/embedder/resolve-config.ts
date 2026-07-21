@@ -13,8 +13,11 @@ export type EmbedderAppDefaults = {
   defaultStorySettings: { embeddingBackend?: 'local' | 'provider' }
 }
 
+// Trims before testing: the settings card already stores a blank provider model
+// id as null, but this resolver is the gate every embed passes through, so it
+// rejects whitespace itself rather than trusting that one caller.
 function nonEmpty(value: string | null | undefined): value is string {
-  return value != null && value !== ''
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 export function resolveEmbedderConfig(
