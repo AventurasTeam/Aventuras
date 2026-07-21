@@ -58,8 +58,8 @@ async function embedRaw(
  * (the facade stays store-free) and throws EmbedderInitError when missing.
  *
  * Dim reconciliation is the CALLER's job: `config.dim` must already be the
- * effective dim (resolve-config threads `providerDim`). A `config.dim` of 0 is
- * the not-yet-probed provider sentinel — the returned dim is accepted as-is.
+ * effective dim (resolve-config threads `providerDim`). A provider `dim` of
+ * `null` means not yet probed, so the returned dim is accepted as-is.
  */
 export async function embedTexts(
   config: EmbedderConfig,
@@ -83,7 +83,8 @@ export async function embedTexts(
   // Matryoshka truncation composes ahead of normalization.
   const vectors = raw.vectors.map((vector) => l2Normalize(vector))
 
-  if (config.dim > 0 && raw.dim !== config.dim) {
+  // A local config always knows its dim, so this can't be skipped for local.
+  if (config.dim !== null && raw.dim !== config.dim) {
     throw new EmbedderCallError(`embedding dim mismatch: expected ${config.dim}, got ${raw.dim}`)
   }
 

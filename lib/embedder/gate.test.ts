@@ -88,7 +88,7 @@ describe('resolveEmbedderGate', () => {
     })
   })
 
-  it('provider happy: provider instance present -> usable dim 0', () => {
+  it('provider happy: provider instance present -> usable, dim unprobed', () => {
     const app = baseApp({
       embeddingModelId: 'text-embedding-3-small',
       embeddingProviderId: 'prov-1',
@@ -104,7 +104,7 @@ describe('resolveEmbedderGate', () => {
         backend: 'provider',
         providerId: 'prov-1',
         modelId: 'text-embedding-3-small',
-        dim: 0,
+        dim: null,
       },
     })
   })

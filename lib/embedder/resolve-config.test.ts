@@ -148,7 +148,7 @@ describe('resolveEmbedderConfig', () => {
     })
   })
 
-  it('provider happy path without providerDim resolves dim 0 (unknown until first embed)', () => {
+  it('provider happy path without providerDim resolves dim null (unknown until first embed)', () => {
     const story: StoryInput = {
       embeddingBackend: 'provider',
       embedding_model_id: 'text-embedding-3-small',
@@ -163,7 +163,7 @@ describe('resolveEmbedderConfig', () => {
         backend: 'provider',
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
-        dim: 0,
+        dim: null,
       },
     })
   })

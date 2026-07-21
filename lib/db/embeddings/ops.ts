@@ -1,4 +1,5 @@
 import type { SqlOp } from '../types'
+import type { SourceHash } from './source-hash'
 import { vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
 
 export type VecWrite = {
@@ -7,7 +8,7 @@ export type VecWrite = {
   branchId: string
   modelId: string
   dim: number
-  sourceHash: string
+  sourceHash: SourceHash
   vector: Uint8Array
 }
 

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { SqlOp } from '../types'
 import { deleteVecOps, upsertVecOps } from './ops'
+import { sourceHash } from './source-hash'
 import { ensureVecTables } from './vec-tables'
 
 function makeDb(): DatabaseSync {
@@ -44,8 +45,8 @@ describe('upsertVecOps / deleteVecOps', () => {
 
   it('upserting the same (id, branch_id) twice leaves exactly one row carrying the latest values', () => {
     const base = { kind: 'entity' as const, id: 'e1', branchId: 'b1', modelId: 'm1', dim: 384 }
-    runOps(db, upsertVecOps({ ...base, sourceHash: 'h1', vector: vec(384, 0) }))
-    runOps(db, upsertVecOps({ ...base, sourceHash: 'h2', vector: vec(384, 1) }))
+    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h1'), vector: vec(384, 0) }))
+    runOps(db, upsertVecOps({ ...base, sourceHash: sourceHash('h2'), vector: vec(384, 1) }))
 
     const rows = db
       .prepare('select id, source_hash from entities_vec_384 where branch_id = ?')
@@ -53,7 +54,7 @@ describe('upsertVecOps / deleteVecOps', () => {
 
     expect(rows).toHaveLength(1)
     expect(rows[0].id).toBe('e1')
-    expect(rows[0].source_hash).toBe('h2')
+    expect(rows[0].source_hash).toBe(sourceHash('h2'))
   })
 
   it('does not disturb a different id in the same branch', () => {
@@ -65,7 +66,7 @@ describe('upsertVecOps / deleteVecOps', () => {
         branchId: 'b1',
         modelId: 'm1',
         dim: 384,
-        sourceHash: 'h1',
+        sourceHash: sourceHash('h1'),
         vector: vec(384, 0),
       }),
     )
@@ -77,7 +78,7 @@ describe('upsertVecOps / deleteVecOps', () => {
         branchId: 'b1',
         modelId: 'm1',
         dim: 384,
-        sourceHash: 'h-other',
+        sourceHash: sourceHash('h-other'),
         vector: vec(384, 1),
       }),
     )
@@ -99,7 +100,7 @@ describe('upsertVecOps / deleteVecOps', () => {
         branchId: 'b1',
         modelId: 'm1',
         dim: 384,
-        sourceHash: 'h1',
+        sourceHash: sourceHash('h1'),
         vector: vec(384, 0),
       }),
     )
@@ -112,7 +113,7 @@ describe('upsertVecOps / deleteVecOps', () => {
           branchId: 'b2',
           modelId: 'm1',
           dim: 384,
-          sourceHash: 'h2',
+          sourceHash: sourceHash('h2'),
           vector: vec(384, 1),
         }),
       ),
@@ -132,7 +133,7 @@ describe('upsertVecOps / deleteVecOps', () => {
       .all(vec(384, 0), 'b1') as { id: string; source_hash: string; distance: number }[]
     expect(knnRows).toHaveLength(1)
     expect(knnRows[0].id).toBe('e1')
-    expect(knnRows[0].source_hash).toBe('h1')
+    expect(knnRows[0].source_hash).toBe(sourceHash('h1'))
   })
 
   it('deletes the row for (kind, id, branchId)', () => {
@@ -144,7 +145,7 @@ describe('upsertVecOps / deleteVecOps', () => {
         branchId: 'b1',
         modelId: 'm1',
         dim: 384,
-        sourceHash: 'h1',
+        sourceHash: sourceHash('h1'),
         vector: vec(384, 0),
       }),
     )
