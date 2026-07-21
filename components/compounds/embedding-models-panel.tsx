@@ -136,24 +136,30 @@ function CatalogEntryRow({
           Button nested inside it produces invalid <button>-in-<button>
           markup (and a native double-touchable). */}
       <View className="flex-row items-center gap-3">
-        <AccordionTrigger className="flex-1">
-          <View className="min-w-0 flex-1 gap-1">
-            <Text className="font-semibold">{entry.displayName}</Text>
-            <View className="flex-row flex-wrap items-center gap-1.5">
-              <Text size="xs" variant="muted">
-                {t('settings:embedding.sizeDim', {
-                  size: formatModelSize(entry.size_bytes),
-                  dim: entry.dim,
-                })}
-              </Text>
-              {entry.tags.map((tag) => (
-                <Tag key={tag} tone="soft">
-                  {tag}
-                </Tag>
-              ))}
+        {/* The trigger's flex participant in this row is the primitive's Header
+            (the Pressable receiving className sits inside it), so flex-1 on the
+            trigger itself never reaches the row — Yoga then collapses the
+            content to zero width. A plain flex-1 View owns the row growth. */}
+        <View className="min-w-0 flex-1">
+          <AccordionTrigger>
+            <View className="min-w-0 flex-1 gap-1">
+              <Text className="font-semibold">{entry.displayName}</Text>
+              <View className="flex-row flex-wrap items-center gap-1.5">
+                <Text size="xs" variant="muted">
+                  {t('settings:embedding.sizeDim', {
+                    size: formatModelSize(entry.size_bytes),
+                    dim: entry.dim,
+                  })}
+                </Text>
+                {entry.tags.map((tag) => (
+                  <Tag key={tag} tone="soft">
+                    {tag}
+                  </Tag>
+                ))}
+              </View>
             </View>
-          </View>
-        </AccordionTrigger>
+          </AccordionTrigger>
+        </View>
         {isInstalled ? (
           <Tag tone="success" leading={<Icon as={Check} size="sm" />}>
             {t('settings:embedding.installed')}
