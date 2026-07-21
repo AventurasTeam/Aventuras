@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { Platform, Pressable, View } from 'react-native'
+import { Linking, Platform, Pressable, View } from 'react-native'
 // RN's ScrollView can't scroll inside @rn-primitives/dialog on Android: the
 // primitive's native Content claims the JS responder for every touch
 // (onStartShouldSetResponder → true), which blocks native scroll interception.
@@ -28,6 +28,7 @@ import {
   type ExecutionProvider,
   type FailReason,
   type FileProgress,
+  type LicenseKind,
   initialState,
   reducer,
 } from './embedder-download-dialog-machine'
@@ -176,6 +177,8 @@ function Body(
           meta={state.meta}
           licenseText={state.licenseText}
           licenseName={state.licenseName}
+          licenseKind={state.licenseKind}
+          licenseLink={state.licenseLink}
         />
       )
     case 'ep-picker':
@@ -252,12 +255,17 @@ function LicenseBody({
   meta,
   licenseText,
   licenseName,
+  licenseKind,
+  licenseLink,
 }: {
   meta: { source: string; revision: string; sizeBytes: number; fileCount: number }
   licenseText: string
   licenseName: string
+  licenseKind: LicenseKind
+  licenseLink?: string
 }) {
   const sizeMb = (meta.sizeBytes / 1_000_000).toFixed(0)
+  const isModelCard = licenseKind === 'model-card'
   return (
     <View className="gap-3">
       <View className="gap-1">
@@ -275,10 +283,12 @@ function LicenseBody({
         </Text>
       </View>
       <Text size="sm" className="font-semibold">
-        License — {licenseName || 'no license specified'}
+        {isModelCard
+          ? `Model card — license: ${licenseName || 'unspecified'}`
+          : `License — ${licenseName || 'no license specified'}`}
       </Text>
       <ScrollView
-        accessibilityLabel="License text"
+        accessibilityLabel={isModelCard ? 'Model card' : 'License text'}
         className={cn(
           'rounded-md border border-border bg-bg-sunken p-3',
           Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
@@ -288,6 +298,25 @@ function LicenseBody({
           {licenseText}
         </Text>
       </ScrollView>
+      {isModelCard && licenseName ? (
+        <Text size="sm" variant="muted">
+          No standard text exists for this license — the model card is shown instead. Review the
+          license at the source before accepting.
+          {licenseLink ? (
+            <>
+              {' '}
+              <Text
+                size="sm"
+                className="text-accent underline"
+                accessibilityRole="link"
+                onPress={() => void Linking.openURL(licenseLink)}
+              >
+                View license terms
+              </Text>
+            </>
+          ) : null}
+        </Text>
+      ) : null}
       {!licenseName ? (
         <Text size="sm" variant="muted">
           ⚠ No license specified by the model author. Proceed at your own risk.
@@ -675,6 +704,8 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           meta: res.meta,
           licenseText: res.licenseText,
           licenseName: res.licenseName,
+          licenseKind: res.licenseKind,
+          licenseLink: res.licenseLink,
         })
       })
       .catch((err: unknown) => {
@@ -702,6 +733,8 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           meta: res.meta,
           licenseText: res.licenseText,
           licenseName: res.licenseName,
+          licenseKind: res.licenseKind,
+          licenseLink: res.licenseLink,
         })
       })
       .catch((err: unknown) => {

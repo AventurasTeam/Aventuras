@@ -97,10 +97,16 @@ Resolutions handed back to the host:
 
 ### License dialog
 
-The center of the flow. Renders the model card's license content
-fetched **live** at the catalog entry's pinned
-`huggingfaceRevision` (per model-management.md's defense against
-post-curation edits).
+The center of the flow. License content is fetched **live** (per
+model-management.md's defense against post-curation edits) in two
+tiers: a standard HF license tag renders the real license text
+from the pinned `choosealicense/licenses` dataset mirror; a tag
+with no standard text (proprietary tags like `gemma`,
+`license: other`, or none) falls back to the model card body at
+the catalog entry's pinned `huggingfaceRevision`, with the region
+retitled `Model card — license: <tag>` and the card's
+`license_link` rendered as a link when present. See
+[model-management.md → Download flow](../../memory/model-management.md#download-flow).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -115,8 +121,9 @@ post-curation edits).
 │ │ Apache License                                           │ │
 │ │ Version 2.0, January 2004                                │ │
 │ │ ...                                                      │ │
-│ │ <scrollable license text fetched live from the model   │ │
-│ │  card>                                                   │ │
+│ │ <scrollable license text — standard tags fetch real    │ │
+│ │  text from the pinned license dataset; otherwise the   │ │
+│ │  model card body, labeled as such>                     │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                               │
 │                            [ Decline ]  [ Accept & download ] │

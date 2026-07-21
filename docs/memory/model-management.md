@@ -206,6 +206,16 @@ source. Check your connection and try again.` No cached-license
    substitution — we explicitly want the live one at this revision.
 3. **License dialog** renders: model name, total size, license
    title, scrollable license text, source URL, revision hash.
+   License text resolves in two tiers, both dynamic (the catalog
+   maintains no license URLs): a standard HF license tag
+   (`apache-2.0`, `mit`, …) fetches the real license text from the
+   HF-staff `choosealicense/licenses` dataset mirror at a pinned
+   revision; a tag with no standard text (proprietary tags like
+   `gemma`, `license: other`, or no tag) falls back to the model
+   card body, labeled as a model card, surfacing the card's
+   `license_link` when the author declared one. A non-404 failure
+   fetching standard text blocks like any card-fetch failure — no
+   silent fallback for a license that does have standard text.
 4. **Decline** — no download, no state change. User stays on the
    previous selection. Pre-download state.
 5. **Accept** — download begins with progress bar, resumable on
@@ -235,20 +245,19 @@ doesn't match the expected hash. Try again later.` Don't
 - **Disk-full** mid-download — abort and surface a clear error;
   delete partials.
 
-**Implementation note — `@huggingface/hub`.** The official
-[`@huggingface/hub`](https://www.npmjs.com/package/@huggingface/hub)
-JS SDK covers most of the curated path: `downloadFile({ repo, path,
-revision })` returns a `Response` for an individual file, pinned to
-the catalog entry's `huggingfaceRevision`; `modelInfo({ name,
-revision })` fetches the model-card metadata used for license
-rendering. Both work in browser-shaped runtimes (Expo, Electron
-renderer). `snapshotDownload` is Node-only (uses a local cache
-dir) and not what we want — it bypasses our per-model folder
-layout. The downloader fetches the three required files
-individually via `downloadFile`, streams to disk under
-`<embedders-root>/<sanitized-id>/`, computes SHA256 against the
-catalog's `expectedSha256`, and wraps resume/retry/progress
-around the call site rather than inside the SDK.
+**Implementation note — HF endpoints.** The downloader and
+model-card fetch call HuggingFace's documented endpoints directly
+(`/api/models/<id>/revision/<rev>` for card metadata,
+`<id>/raw/<rev>/<file>` and `<id>/resolve/<rev>/<file>` for
+content) rather than going through the `@huggingface/hub` SDK.
+Decided at M3.1a implementation: Range-based resume, incremental
+SHA256, and per-file progress all need raw `Response` streaming
+control, and the SDK's `downloadFile` / `modelInfo` are thin
+wrappers over these same URLs — the dependency added no coverage.
+Standard license text comes from the
+`datasets/choosealicense/licenses` repo (HF-staff mirror of
+choosealicense.com) pinned at a fixed revision; every standard HF
+license tag maps 1:1 to `markdown/<tag>.md` there.
 
 ### Custom file import
 
@@ -286,10 +295,10 @@ with an existing folder name.
 
 Two paths produce different attestation records:
 
-| Path             | License source                     | Attestation contents                                                                |
-| ---------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| Curated download | Live HuggingFace fetch at revision | timestamp, license SHA256, source URL, revision hash, license text in `LICENSE.txt` |
-| Custom import    | User's assertion                   | timestamp, file SHA256s, no license text                                            |
+| Path             | License source                                                             | Attestation contents                                                                |
+| ---------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Curated download | Live fetch — pinned license dataset (standard tags) or model card fallback | timestamp, license SHA256, source URL, revision hash, license text in `LICENSE.txt` |
+| Custom import    | User's assertion                                                           | timestamp, file SHA256s, no license text                                            |
 
 Acceptance is **per model file**, not per-app-version or per-story.
 Removing and re-downloading a model triggers fresh license fetch

@@ -92,6 +92,7 @@ describe('reducer — card-fetch state', () => {
       meta: sampleMeta,
       licenseText: 'Apache 2.0 …',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     })
     expect(after.kind).toBe('license')
     if (after.kind === 'license') {
@@ -134,6 +135,7 @@ describe('reducer — license state', () => {
       meta: sampleMeta,
       licenseText: '…',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     }
     const after = reducer(before, { type: 'license-accepted' })
     expect(after.kind).toBe('downloading')
@@ -148,6 +150,7 @@ describe('reducer — license state', () => {
       meta: sampleMeta,
       licenseText: '…',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     }
     const after = reducer(before, { type: 'license-declined' })
     expect(after.kind).toBe('done')
