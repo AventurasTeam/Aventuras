@@ -174,8 +174,11 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
   has vectors in two families and deleting the source row orphans one
   of them permanently. Resolve alongside the swap options this slice
   owns — either delete across every existing family for the kind, or
-  record the occupied families per row. Surfaced by M3.1a review
-  (2026-07-21).
+  record the occupied families per row. Note `deleteVecOps` still has
+  no production caller: story deletion clears vectors branch-wide
+  without it, and no per-row deletion path (entity, lore, happening,
+  thread, chapter) calls it at all — so whichever slice introduces
+  one inherits this question. Surfaced by M3.1a review (2026-07-21).
 
 ## Implementation notes
 
