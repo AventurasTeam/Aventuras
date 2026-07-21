@@ -61,15 +61,28 @@ async function buildPipeline(modelDir: string): Promise<FeaturePipeline> {
   const pipeline = transformers.pipeline as unknown as (
     task: 'feature-extraction',
     model: string,
-    options: { local_files_only: boolean; subfolder: string; model_file_name: string },
+    options: {
+      local_files_only: boolean
+      subfolder: string
+      model_file_name: string
+      use_external_data_format: boolean
+    },
   ) => Promise<FeaturePipeline>
   // The on-disk layout is flat (model.onnx at the folder root, not HF's onnx/
   // subfolder). subfolder:'' + model_file_name:'model' points the loader at it
   // without restructuring storage; config.json + tokenizers are read from the root.
+  // use_external_data_format:false — config.json's transformers.js_config would
+  // otherwise demand a `model.onnx_data` sidecar (name derived from our renamed
+  // graph, not the protobuf reference) and its missing-file path never settles in
+  // Electron main. In Node the fetched sidecar is discarded anyway: ORT loads the
+  // model by path and resolves the protobuf-referenced *_data file itself, which
+  // is why the sidecar keeps its graph-referenced basename on disk. Relies on
+  // env.useFSCache staying true (default) so ORT gets a path, not a buffer.
   return pipeline('feature-extraction', modelDir, {
     local_files_only: true,
     subfolder: '',
     model_file_name: 'model',
+    use_external_data_format: false,
   })
 }
 
