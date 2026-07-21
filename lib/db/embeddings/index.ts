@@ -1,8 +1,10 @@
 export type { VecTargetKind } from './vec-tables'
 export {
   VEC_FAMILIES,
+  deleteBranchVecOps,
   ensureVecTables,
   ensureVecTablesSql,
+  isVecFamilyTable,
   vecRowPk,
   vecTableName,
 } from './vec-tables'
