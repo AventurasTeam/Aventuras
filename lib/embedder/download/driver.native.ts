@@ -81,8 +81,19 @@ async function sha256Hex(text: string): Promise<string> {
 // createEmbedderDownloadDriver(entry) closes over the catalog entry it was
 // opened for — hosts (settings tab, onboarding) create one driver instance
 // per dialog open, matching the shipped dialog's memoized-init contract.
+// Thrown when the user cancels: distinguishes a deliberate stop from a network
+// failure so the dialog doesn't render "your download failed".
+class DownloadCancelledError extends Error {
+  readonly cancelled = true
+  constructor() {
+    super('Download cancelled')
+  }
+}
+
 export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDriver {
   const plan = buildDownloadPlan(entry)
+  let inFlight: ReturnType<typeof createDownloadResumable> | null = null
+  let cancelled = false
 
   return {
     fetchModelCard,
@@ -116,16 +127,24 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       // cross-launch resume is what's descoped): a dropped connection rejects
       // downloadAsync, so continue the same resumable from its .part with
       // backoff before surfacing the failure.
+      inFlight = resumable
       let result: Awaited<ReturnType<typeof resumable.downloadAsync>>
-      for (let attempt = 0; ; attempt += 1) {
-        try {
-          result = attempt === 0 ? await resumable.downloadAsync() : await resumable.resumeAsync()
-          break
-        } catch (error) {
-          if (attempt >= BLIP_BACKOFF_MS.length) throw error
-          await new Promise((resolve) => setTimeout(resolve, BLIP_BACKOFF_MS[attempt]))
+      try {
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            result = attempt === 0 ? await resumable.downloadAsync() : await resumable.resumeAsync()
+            break
+          } catch (error) {
+            if (cancelled) throw new DownloadCancelledError()
+            if (attempt >= BLIP_BACKOFF_MS.length) throw error
+            await new Promise((resolve) => setTimeout(resolve, BLIP_BACKOFF_MS[attempt]))
+            if (cancelled) throw new DownloadCancelledError()
+          }
         }
+      } finally {
+        inFlight = null
       }
+      if (cancelled) throw new DownloadCancelledError()
       if (!result) {
         throw new Error(`Download of ${row.fileName} did not complete`)
       }
@@ -175,6 +194,14 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       new File(dir, 'meta.json').write(
         JSON.stringify({ id: entry.id, installedAt: attestation.timestamp }, null, 2),
       )
+    },
+
+    async cancelDownload() {
+      cancelled = true
+      // pauseAsync rather than cancelAsync: cancelAsync also unlinks the .part,
+      // which races the deletePartial the dialog runs once this settles.
+      await inFlight?.pauseAsync().catch(() => {})
+      inFlight = null
     },
 
     async deletePartial() {

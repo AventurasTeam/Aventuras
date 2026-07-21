@@ -148,6 +148,10 @@ export type DialogDriver = {
     onProgress: (bytesReceived: number, bytesTotal: number) => void
   }): Promise<void>
   computeSha256(filePath: string): Promise<string>
+  // Stops the transfer itself, not just its reporting. Callers must await this
+  // and the in-flight downloadFile before deletePartial, or the cleanup races
+  // a live writer.
+  cancelDownload(): Promise<void>
   // No path/id argument on either: a driver instance is created per dialog open
   // and closes over the catalog entry it was opened for.
   smokeTestEmbed(args: { ep: ExecutionProvider }): Promise<void>
@@ -385,6 +389,7 @@ export const stubDriver: DialogDriver = {
   resolveHfModel: () => new Promise(() => {}),
   downloadFile: () => new Promise(() => {}),
   computeSha256: () => new Promise(() => {}),
+  cancelDownload: () => Promise.resolve(),
   smokeTestEmbed: () => new Promise(() => {}),
   persistInstall: () => new Promise(() => {}),
   deletePartial: () => new Promise(() => {}),

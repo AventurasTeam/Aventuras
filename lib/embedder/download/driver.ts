@@ -8,6 +8,15 @@ import { buildDownloadPlan, findPlanRow } from './catalog-files'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
 
+// Thrown when the user cancels: distinguishes a deliberate stop from a network
+// failure so the dialog doesn't render "your download failed".
+class DownloadCancelledError extends Error {
+  readonly cancelled = true
+  constructor() {
+    super('Download cancelled')
+  }
+}
+
 function resolveBridge(): EmbedderBridge {
   const bridge = globalThis.window?.aventurasEmbedder
   if (!bridge) {
@@ -67,6 +76,9 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
           expectedSha256: row.expectedSha256,
         })
         if (result.ok) return
+        if (result.reason === 'cancelled') {
+          throw new DownloadCancelledError()
+        }
         if (result.reason === 'hash-mismatch') {
           // Resolve rather than throw: throwing here would route the failure
           // through the 'downloading' state's generic download-failed action
@@ -95,6 +107,10 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       // Already verified inline during the download above — echo the
       // known-good expected hash rather than re-reading the file over IPC.
       return row.expectedSha256
+    },
+
+    async cancelDownload() {
+      await resolveBridge().cancelDownload({ modelId: entry.id })
     },
 
     async smokeTestEmbed() {

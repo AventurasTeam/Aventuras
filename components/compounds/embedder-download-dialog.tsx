@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
+import { logger } from '@/lib/diagnostics'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -746,6 +747,9 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
   const [state, dispatch] = useReducer(reducer, init, initialState)
   const resolvedRef = useRef(false)
   const lastUserActionRef = useRef<'declined' | 'cancelled' | null>(null)
+  // The in-flight download loop, so cancel can await its settlement before
+  // deleting the directory it is writing into.
+  const downloadRunRef = useRef<Promise<void> | undefined>(undefined)
   // Persisted separately from DialogState — 'downloading'/'verifying' don't
   // carry licenseText, but persistInstall (fired from the verifying effect)
   // needs the exact text the user accepted in the 'license' state.
@@ -817,7 +821,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
     let cancelled = false
     const files = init.entry.files
     dispatch({ type: 'files-planned', files })
-    void (async () => {
+    const run = (async () => {
       let currentFile = ''
       try {
         for (const file of files) {
@@ -842,6 +846,8 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         dispatch({ type: 'download-failed', file: currentFile, message })
       }
     })()
+    downloadRunRef.current = run
+    void run
     return () => {
       cancelled = true
     }
@@ -948,13 +954,25 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         lastUserActionRef.current = 'cancelled'
         // Partial files can only exist once a download has started — earlier
         // states (card-fetch, resolving, ep-picker…) never wrote to disk.
-        // Fire-and-forget: cleanup must not block the dialog closing, and a
-        // failure here is re-covered by the next download's clean-slate guard.
         if (
           (state.kind === 'downloading' || state.kind === 'verifying') &&
           init.kind === 'catalog'
         ) {
-          void driver.deletePartial().catch(() => {})
+          // Stop the transfer, wait for it to settle, and only then delete:
+          // deleting under a live writer races the final rename and, on
+          // Windows, fails outright and leaves the bytes installed.
+          void (async () => {
+            try {
+              await driver.cancelDownload()
+              await downloadRunRef.current
+            } finally {
+              await driver.deletePartial().catch((e: unknown) => {
+                logger.warn('embedder.delete_partial_failed', {
+                  error: e instanceof Error ? e.message : String(e),
+                })
+              })
+            }
+          })()
         }
         dispatch({ type: 'cancel' })
       }

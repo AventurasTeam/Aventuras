@@ -19,6 +19,7 @@ const stubDriver = () => ({
   resolveHfModel: () => new Promise<never>(() => {}),
   downloadFile: () => new Promise<never>(() => {}),
   computeSha256: () => new Promise<never>(() => {}),
+  cancelDownload: () => Promise.resolve(),
   smokeTestEmbed: () => new Promise<never>(() => {}),
   persistInstall: () => new Promise<never>(() => {}),
   deletePartial: () => new Promise<never>(() => {}),
