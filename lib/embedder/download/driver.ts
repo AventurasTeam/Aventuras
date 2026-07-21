@@ -6,6 +6,7 @@ import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation, EmbedderBridge } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
+import { EmbedderDownloadError } from './failure'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
 
@@ -99,8 +100,8 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         }
         // Network/disk failures are genuine download failures — no verification
         // step to defer to, so surface them immediately via the normal
-        // download-failed path.
-        throw new Error(result.message)
+        // download-failed path, carrying main's own classification.
+        throw new EmbedderDownloadError(result.reason, result.message)
       } finally {
         unsubscribe()
       }

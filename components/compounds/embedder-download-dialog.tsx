@@ -14,6 +14,8 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import { logger } from '@/lib/diagnostics'
+import { downloadFailureCode } from '@/lib/embedder'
+import { t } from '@/lib/i18n'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -112,49 +114,47 @@ function Header({ state }: { state: DialogState }) {
 function titleFor(state: DialogState): string {
   switch (state.kind) {
     case 'hf-input':
-      return 'Install from HuggingFace'
+      return t('embedder:title.hfInput')
     case 'resolving':
-      return 'Resolving model…'
+      return t('embedder:title.resolving')
     case 'card-fetch':
-      return `Install ${state.meta.displayName}`
     case 'license':
-      return `Install ${state.meta.displayName}`
+      return t('embedder:title.install', { model: state.meta.displayName })
     case 'ep-picker':
-      return `Pick execution provider — ${state.meta.displayName}`
+      return t('embedder:title.epPicker', { model: state.meta.displayName })
     case 'import-confirm':
-      return 'Import custom embedding model'
+      return t('embedder:title.import')
     case 'downloading':
-      return `Downloading ${state.meta.displayName}`
+      return t('embedder:title.downloading', { model: state.meta.displayName })
     case 'verifying':
-      return `Verifying ${state.meta.displayName}`
+      return t('embedder:title.verifying', { model: state.meta.displayName })
     case 'done':
-      return `Installed ${state.meta.displayName}`
+      return t('embedder:title.installed', { model: state.meta.displayName })
     case 'failed':
       return failedTitle(state.reason)
   }
 }
 
-// FailReason variants — sync with embedder-download-dialog-machine.ts.
 function failedTitle(reason: FailReason): string {
   switch (reason.kind) {
     case 'cancelled':
-      return 'Install cancelled'
+      return t('embedder:failedTitle.cancelled')
     case 'card-fetch-failed':
-      return '⚠ Couldn’t reach the model source'
+      return t('embedder:failedTitle.cardFetchFailed')
     case 'resolve-failed':
-      return '⚠ Couldn’t resolve model'
+      return t('embedder:failedTitle.resolveFailed')
     case 'download-failed':
-      return '⚠ Download failed'
+      return t('embedder:failedTitle.downloadFailed')
     case 'validation-failed':
-      return '⚠ Missing required files'
+      return t('embedder:failedTitle.validationFailed')
     case 'hash-mismatch':
-      return '⚠ Verification failed'
+      return t('embedder:failedTitle.hashMismatch')
     case 'verify-error':
-      return '⚠ Couldn’t verify the download'
+      return t('embedder:failedTitle.verifyError')
     case 'smoke-test-failed':
-      return '⚠ Execution provider not supported'
+      return t('embedder:failedTitle.smokeTestFailed')
     case 'persist-failed':
-      return '⚠ Couldn’t save the installed model'
+      return t('embedder:failedTitle.persistFailed')
   }
 }
 
@@ -230,10 +230,10 @@ function HfInputBody({
   return (
     <View className="gap-3">
       <Text variant="secondary" size="sm">
-        Enter a HuggingFace model id (e.g. `namespace/model`) or paste a model URL.
+        {t('embedder:hfInput.hint')}
       </Text>
       <Input
-        placeholder="namespace/model"
+        placeholder={t('embedder:hfInput.placeholder')}
         value={value}
         onChangeText={onChange}
         onSubmitEditing={() => onSubmit(value)}
@@ -246,7 +246,7 @@ function ResolvingBody() {
   return (
     <View className="items-center gap-3 py-6">
       <Spinner />
-      <Text variant="muted">Resolving model card and file listing…</Text>
+      <Text variant="muted">{t('embedder:resolving')}</Text>
     </View>
   )
 }
@@ -255,7 +255,7 @@ function CardFetchBody({ source }: { source: string }) {
   return (
     <View className="items-center gap-3 py-6">
       <Spinner />
-      <Text variant="muted">Fetching model card from {source}…</Text>
+      <Text variant="muted">{t('embedder:cardFetch.loading', { source })}</Text>
     </View>
   )
 }
@@ -330,28 +330,32 @@ function LicenseBody({
     <View className="gap-3">
       <View className="gap-1">
         <Text size="sm">
-          <Text variant="muted">Source: </Text>
+          <Text variant="muted">{t('embedder:license.sourceLabel')}</Text>
           {meta.source}
         </Text>
         <Text size="sm">
-          <Text variant="muted">Revision: </Text>
+          <Text variant="muted">{t('embedder:license.revisionLabel')}</Text>
           {meta.revision}
         </Text>
         <Text size="sm">
-          <Text variant="muted">Size: </Text>
-          {sizeMb} MB · {meta.fileCount} files
+          <Text variant="muted">{t('embedder:license.sizeLabel')}</Text>
+          {t('embedder:license.sizeValue', { size: sizeMb, count: meta.fileCount })}
         </Text>
       </View>
       <Text size="sm" className="font-semibold">
         {isModelCard
-          ? `Model card — license: ${licenseName || 'unspecified'}`
-          : `License — ${licenseName || 'no license specified'}`}
+          ? t('embedder:license.modelCardHeading', {
+              name: licenseName || t('embedder:license.unspecified'),
+            })
+          : t('embedder:license.licenseHeading', {
+              name: licenseName || t('embedder:license.noneSpecified'),
+            })}
       </Text>
       {isModelCard ? (
         <ModelCardRegion markdown={licenseText} sourceUrl={meta.source} />
       ) : (
         <ScrollView
-          accessibilityLabel="License text"
+          accessibilityLabel={t('embedder:license.a11yRegion')}
           className={cn(
             'rounded-md border border-border bg-bg-sunken',
             Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
@@ -368,8 +372,7 @@ function LicenseBody({
       )}
       {isModelCard && licenseName ? (
         <Text size="sm" variant="muted">
-          No standard text exists for this license — the model card is shown instead. Review the
-          license at the source before accepting.
+          {t('embedder:license.modelCardNotice')}
           {licenseLink ? (
             <>
               {' '}
@@ -379,7 +382,7 @@ function LicenseBody({
                 accessibilityRole="link"
                 onPress={() => openExternalUrl(licenseLink)}
               >
-                View license terms
+                {t('embedder:license.viewTerms')}
               </Text>
             </>
           ) : null}
@@ -387,7 +390,7 @@ function LicenseBody({
       ) : null}
       {!licenseName ? (
         <Text size="sm" variant="muted">
-          ⚠ No license specified by the model author. Proceed at your own risk.
+          {t('embedder:license.noLicenseWarning')}
         </Text>
       ) : null}
     </View>
@@ -410,17 +413,17 @@ function EpSelectRow({
   return (
     <View className="gap-2">
       <Text size="sm" variant="muted">
-        Execution provider
+        {t('embedder:ep.label')}
       </Text>
       <Select
         options={options}
         value={pickedEp}
         onValueChange={onPick}
         mode="radio"
-        label="Execution provider"
+        label={t('embedder:ep.label')}
       />
       <Text size="sm" variant="muted">
-        ⚠ Wrong choice may crash the app on next embed.
+        {t('embedder:ep.warning')}
       </Text>
     </View>
   )
@@ -438,7 +441,7 @@ function EpPickerBody({
   return (
     <View className="gap-3">
       <Text variant="secondary" size="sm">
-        Pick the execution provider this model will run under.
+        {t('embedder:ep.pickHint')}
       </Text>
       <EpSelectRow pickedEp={pickedEp} onPick={onPick} availableEps={availableEps} />
     </View>
@@ -459,19 +462,22 @@ function ImportConfirmBody({
   return (
     <View className="gap-3">
       <Text variant="secondary" size="sm">
-        You’re importing a custom model. By using it, you assert that you have a license to do so.
+        {t('embedder:import.notice')}
       </Text>
       <View className="gap-1">
         <Text size="sm">
-          <Text variant="muted">Model id: </Text>
+          <Text variant="muted">{t('embedder:import.modelIdLabel')}</Text>
           {bundle.modelId}
         </Text>
         <Text size="sm" variant="muted">
-          Files:
+          {t('embedder:import.filesLabel')}
         </Text>
         {bundle.files.map((f) => (
           <Text key={f.name} size="sm">
-            · {f.name} ({(f.sizeBytes / 1_000_000).toFixed(1)} MB)
+            {t('embedder:import.fileRow', {
+              name: f.name,
+              size: (f.sizeBytes / 1_000_000).toFixed(1),
+            })}
           </Text>
         ))}
       </View>
@@ -502,9 +508,9 @@ function DownloadingBody({
           <View className="flex-row justify-between">
             <Text size="sm">{file}</Text>
             <Text size="sm" variant="muted">
-              {progress.kind === 'waiting' && 'waiting…'}
+              {progress.kind === 'waiting' && t('embedder:downloading.waiting')}
               {progress.kind === 'downloading' && formatFilePercent(progress)}
-              {progress.kind === 'done' && 'done'}
+              {progress.kind === 'done' && t('embedder:downloading.done')}
             </Text>
           </View>
           <View className="h-1 rounded-full bg-bg-sunken">
@@ -516,7 +522,10 @@ function DownloadingBody({
         </View>
       ))}
       <Text size="sm" variant="muted">
-        Total: {(received / 1_000_000).toFixed(1)} / {(totalBytes / 1_000_000).toFixed(1)} MB
+        {t('embedder:downloading.total', {
+          received: (received / 1_000_000).toFixed(1),
+          total: (totalBytes / 1_000_000).toFixed(1),
+        })}
       </Text>
     </View>
   )
@@ -532,7 +541,10 @@ function knownTotal(progress: { bytesTotal?: number }): number | null {
 
 function formatFilePercent(progress: { bytesReceived: number; bytesTotal: number }): string {
   const total = knownTotal(progress)
-  if (total === null) return `${(progress.bytesReceived / 1_000_000).toFixed(1)} MB`
+  if (total === null)
+    return t('embedder:downloading.unknownSize', {
+      received: (progress.bytesReceived / 1_000_000).toFixed(1),
+    })
   const pct = Math.min(100, Math.round((progress.bytesReceived / total) * 100))
   return `${pct}%`
 }
@@ -563,9 +575,9 @@ function VerifyingBody({
             {file}
           </Text>
           <Text variant="muted" size="sm">
-            {status === 'ok' && 'hash matches'}
-            {status === 'fail' && 'sha256 mismatch'}
-            {status === 'pending' && 'verifying…'}
+            {status === 'ok' && t('embedder:verifying.ok')}
+            {status === 'fail' && t('embedder:verifying.fail')}
+            {status === 'pending' && t('embedder:verifying.pending')}
           </Text>
         </View>
       ))}
@@ -576,7 +588,23 @@ function VerifyingBody({
 function DoneBody() {
   return (
     <View className="items-center gap-2 py-4">
-      <Text>Done.</Text>
+      <Text>{t('embedder:done')}</Text>
+    </View>
+  )
+}
+
+// Untranslatable payload (an OS errno, a third-party message) is labelled as
+// technical detail rather than presented as the explanation — the explanation
+// itself comes from the failure's code.
+function TechnicalDetail({ detail }: { detail: string }) {
+  return (
+    <View className="gap-1">
+      <Text size="xs" variant="muted">
+        {t('embedder:failure.technicalDetail')}
+      </Text>
+      <Text className="font-mono" size="sm">
+        {detail}
+      </Text>
     </View>
   )
 }
@@ -584,100 +612,82 @@ function DoneBody() {
 function FailedBody({ reason }: { reason: FailReason }) {
   switch (reason.kind) {
     case 'cancelled':
-      return <Text variant="muted">The install was cancelled. No files were written to disk.</Text>
+      return <Text variant="muted">{t('embedder:failure.cancelled')}</Text>
     case 'card-fetch-failed':
       return (
         <View className="gap-2">
-          <Text>The model-card fetch failed:</Text>
-          <Text className="font-mono" size="sm">
-            {reason.message}
-          </Text>
+          <Text>{t('embedder:failure.cardFetchLead')}</Text>
+          <TechnicalDetail detail={reason.message} />
           <Text variant="muted" size="sm">
-            The license is fetched live to defend against post-curation edits — we can’t proceed
-            with a cached copy. Check your connection and try again.
+            {t('embedder:failure.cardFetchHint')}
           </Text>
         </View>
       )
     case 'resolve-failed':
       return (
         <View className="gap-2">
-          <Text>Couldn’t resolve the HF model:</Text>
-          <Text className="font-mono" size="sm">
-            {reason.message}
-          </Text>
+          <Text>{t('embedder:failure.resolveLead')}</Text>
+          <TechnicalDetail detail={reason.message} />
         </View>
       )
     case 'download-failed':
       return (
         <View className="gap-2">
-          <Text>A file failed to download:</Text>
-          <Text size="sm">
-            <Text variant="muted">{reason.failingFile}: </Text>
-            {reason.message}
-          </Text>
+          <Text>{t('embedder:failure.downloadLead', { file: reason.failingFile })}</Text>
           <Text variant="muted" size="sm">
-            Downloaded files are kept so a retry resumes where this left off. Retry when the network
-            is back, or cancel to discard them.
+            {t(`embedder:failure.downloadHint.${reason.code}` as const)}
           </Text>
+          <TechnicalDetail detail={reason.detail} />
         </View>
       )
     case 'validation-failed':
       return (
         <View className="gap-2">
-          <Text>This model doesn’t have the required ONNX exports.</Text>
+          <Text>{t('embedder:failure.validationLead')}</Text>
           <Text variant="muted" size="sm">
-            Missing: {reason.missingFiles.join(', ')}
+            {t('embedder:failure.validationMissing', { files: reason.missingFiles.join(', ') })}
           </Text>
           <Text variant="muted" size="sm">
-            Some HF models ship in Python-only formats (PyTorch / safetensors). Check the model card
-            for ONNX export instructions, or try the curated catalog.
+            {t('embedder:failure.validationHint')}
           </Text>
         </View>
       )
     case 'hash-mismatch':
       return (
         <View className="gap-2">
-          <Text>One of the downloaded files doesn’t match the expected hash:</Text>
-          <Text size="sm">✗ {reason.failingFile} sha256 mismatch</Text>
+          <Text>{t('embedder:failure.hashMismatchLead', { file: reason.failingFile })}</Text>
           <Text variant="muted" size="sm">
-            This may indicate a corrupted download or an upstream change the bundled catalog hasn’t
-            caught up to. The partial install has been deleted.
+            {t('embedder:failure.hashMismatchHint')}
           </Text>
         </View>
       )
     case 'verify-error':
       return (
         <View className="gap-2">
-          <Text>A downloaded file couldn’t be checked:</Text>
-          <Text size="sm">
-            <Text variant="muted">{reason.failingFile}: </Text>
-            {reason.message}
-          </Text>
+          <Text>{t('embedder:failure.verifyErrorLead', { file: reason.failingFile })}</Text>
           <Text variant="muted" size="sm">
-            The file itself may be fine — the check couldn’t run. Retrying resumes from what’s
-            already downloaded.
+            {t('embedder:failure.verifyErrorHint')}
           </Text>
+          <TechnicalDetail detail={reason.message} />
         </View>
       )
     case 'smoke-test-failed':
       return (
         <View className="gap-2">
-          <Text>The smoke-test embed crashed under {reason.ep}.</Text>
+          <Text>{t('embedder:failure.smokeTestLead')}</Text>
           <Text variant="muted" size="sm">
-            Try a different execution provider, or check the model card for EP support notes.
+            {t('embedder:failure.smokeTestHint')}
           </Text>
         </View>
       )
     case 'persist-failed':
       return (
         <View className="gap-2">
-          <Text>The model downloaded and verified, but couldn’t be saved to disk:</Text>
-          <Text className="font-mono" size="sm">
-            {reason.message}
-          </Text>
+          <Text>{t('embedder:failure.persistLead')}</Text>
           <Text variant="muted" size="sm">
-            Check available disk space and try again.
+            {t('embedder:failure.persistHint')}
           </Text>
+          <TechnicalDetail detail={reason.message} />
         </View>
       )
   }
@@ -690,10 +700,10 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel</Text>
+            <Text>{t('embedder:action.cancel')}</Text>
           </Button>
           <Button variant="primary" onPress={() => props.onSubmitHfInput(props.hfInputValue)}>
-            <Text>Resolve</Text>
+            <Text>{t('embedder:action.resolve')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -702,7 +712,7 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel</Text>
+            <Text>{t('embedder:action.cancel')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -710,10 +720,10 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onDeclineLicense}>
-            <Text>Decline</Text>
+            <Text>{t('embedder:action.decline')}</Text>
           </Button>
           <Button variant="primary" onPress={props.onAcceptLicense}>
-            <Text>Accept & download</Text>
+            <Text>{t('embedder:action.accept')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -721,10 +731,10 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel</Text>
+            <Text>{t('embedder:action.cancel')}</Text>
           </Button>
           <Button variant="primary" onPress={props.onContinueEp}>
-            <Text>Continue</Text>
+            <Text>{t('embedder:action.continue')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -732,10 +742,10 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel</Text>
+            <Text>{t('embedder:action.cancel')}</Text>
           </Button>
           <Button variant="primary" onPress={props.onConfirmImport}>
-            <Text>Import</Text>
+            <Text>{t('embedder:action.import')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -743,7 +753,7 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel download</Text>
+            <Text>{t('embedder:action.cancelDownload')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -753,7 +763,7 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="secondary" onPress={props.onCancel}>
-            <Text>Cancel</Text>
+            <Text>{t('embedder:action.cancel')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -769,10 +779,10 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
         return (
           <DialogFooter>
             <Button variant="secondary" onPress={props.onCancel}>
-              <Text>Cancel</Text>
+              <Text>{t('embedder:action.cancel')}</Text>
             </Button>
             <Button variant="primary" onPress={props.onRetry}>
-              <Text>Retry</Text>
+              <Text>{t('embedder:action.retry')}</Text>
             </Button>
           </DialogFooter>
         )
@@ -780,7 +790,7 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return (
         <DialogFooter>
           <Button variant="primary" onPress={props.onClose}>
-            <Text>Close</Text>
+            <Text>{t('embedder:action.close')}</Text>
           </Button>
         </DialogFooter>
       )
@@ -902,18 +912,19 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
         dispatch({ type: 'all-downloaded' })
       } catch (err: unknown) {
         if (cancelled) return
-        const message = err instanceof Error ? err.message : String(err)
-        logger.error('embedder.download_failed', { file: currentFile, error: message })
+        const detail = err instanceof Error ? err.message : String(err)
+        const code = downloadFailureCode(err)
+        logger.error('embedder.download_failed', { file: currentFile, code, error: detail })
         // Keeping the bytes is right for a dropped connection (a retry resumes),
         // but exactly wrong when the disk is full — reclaim the space instead.
-        if (/ENOSPC|EDQUOT|no space/i.test(message)) {
+        if (code === 'disk') {
           await driver.deletePartial().catch((e: unknown) => {
             logger.warn('embedder.delete_partial_failed', {
               error: e instanceof Error ? e.message : String(e),
             })
           })
         }
-        dispatch({ type: 'download-failed', file: currentFile, message })
+        dispatch({ type: 'download-failed', file: currentFile, code, detail })
       }
     })()
     downloadRunRef.current = run

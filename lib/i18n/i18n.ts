@@ -2,12 +2,13 @@ import { createInstance } from 'i18next'
 import { initReactI18next } from 'react-i18next'
 
 import common from '@/locales/en/common.json'
+import embedder from '@/locales/en/embedder.json'
 import landing from '@/locales/en/landing.json'
 import reader from '@/locales/en/reader.json'
 import settings from '@/locales/en/settings.json'
 import wizard from '@/locales/en/wizard.json'
 
-const resources = { en: { common, landing, reader, settings, wizard } } as const
+const resources = { en: { common, embedder, landing, reader, settings, wizard } } as const
 
 // Synchronous init: resources are bundled, no async backend. The instance is
 // usable (i18n.t) the moment this module is imported — before any boot logic —
@@ -17,7 +18,7 @@ void i18n.use(initReactI18next).init({
   resources,
   lng: 'en',
   fallbackLng: 'en',
-  ns: ['common', 'landing', 'reader', 'settings', 'wizard'],
+  ns: ['common', 'embedder', 'landing', 'reader', 'settings', 'wizard'],
   defaultNS: 'common',
   returnNull: false,
   interpolation: { escapeValue: false },

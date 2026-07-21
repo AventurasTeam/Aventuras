@@ -55,9 +55,17 @@ function TestRow({
             {t('settings:embedderDefault.testOk', { dim: testState.dim, ms: testState.ms })}
           </Text>
         ) : (
-          <Text size="sm" className="text-danger">
-            {testState.message}
-          </Text>
+          <View className="gap-1">
+            <Text size="sm" className="text-danger">
+              {t(`settings:embedderDefault.testFailed.${testState.kind}` as const)}
+            </Text>
+            <Text size="xs" variant="muted">
+              {t('embedder:failure.technicalDetail')}
+            </Text>
+            <Text size="xs" className="font-mono">
+              {testState.message}
+            </Text>
+          </View>
         )
       ) : null}
     </View>

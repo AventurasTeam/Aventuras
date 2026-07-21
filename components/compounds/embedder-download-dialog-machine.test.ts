@@ -293,23 +293,33 @@ describe('reducer — downloading state', () => {
     const after = reducer(before, {
       type: 'download-failed',
       file: 'model.onnx',
-      message: 'connection reset',
+      code: 'network',
+      detail: 'connection reset',
     })
-    expect(after.kind).toBe('failed')
-    if (after.kind === 'failed') {
-      expect(after.reason.kind).toBe('download-failed')
-      if (after.reason.kind === 'download-failed') {
-        expect(after.reason.failingFile).toBe('model.onnx')
-        expect(after.reason.message).toBe('connection reset')
-      }
-    }
+    // Asserted as a whole rather than narrowed: assertions nested inside an
+    // unchecked `if` silently pass when the reducer returns the wrong shape.
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: {
+        kind: 'download-failed',
+        failingFile: 'model.onnx',
+        code: 'network',
+        detail: 'connection reset',
+      },
+    })
   })
 
   it('retry from download-failed restarts the downloading manifest', () => {
     const before: DialogState = {
       kind: 'failed',
       meta: sampleMeta,
-      reason: { kind: 'download-failed', failingFile: 'model.onnx', message: 'connection reset' },
+      reason: {
+        kind: 'download-failed',
+        failingFile: 'model.onnx',
+        code: 'network',
+        detail: 'connection reset',
+      },
     }
     const after = reducer(before, { type: 'retry' })
     expect(after.kind).toBe('downloading')

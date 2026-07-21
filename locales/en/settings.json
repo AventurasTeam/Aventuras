@@ -52,7 +52,11 @@
     "testing": "Testing…",
     "testOk": "OK · dim {{dim}} · {{ms}} ms",
     "listFailed": "Couldn't read your installed models: {{error}}",
-    "listRetry": "Retry"
+    "listRetry": "Retry",
+    "testFailed": {
+      "init": "This model couldn’t be loaded on this device.",
+      "call": "The model loaded but the test embed failed."
+    }
   },
   "embedderDefault": {
     "heading": "Embedder default",
@@ -74,7 +78,11 @@
     "testing": "Testing…",
     "testOk": "OK · dim {{dim}} · {{ms}} ms",
     "localListFailed": "Couldn't read your installed models. Open Embedding models to retry.",
-    "localLoading": "Checking installed models…"
+    "localLoading": "Checking installed models…",
+    "testFailed": {
+      "init": "The embedder couldn’t start. Check the model or provider settings above.",
+      "call": "The embedder started but the test embed failed."
+    }
   },
   "diagnostics": {
     "enableLabel": "Enable diagnostics capture",

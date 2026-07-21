@@ -52,7 +52,9 @@
       "title": "Couldn't initialize the embedder",
       "retry": "Retry",
       "openSettings": "Open Memory settings",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "init": "The embedder couldn’t start, so the story wasn’t created.",
+      "call": "The embedder failed while indexing, so the story wasn’t created."
     }
   },
   "embedGate": {

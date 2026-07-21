@@ -16,6 +16,7 @@ import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
+import { EmbedderDownloadError } from './failure'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
 import { modelDir } from '../local/paths.native'
@@ -165,10 +166,13 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       }
       if (cancelled) throw new DownloadCancelledError()
       if (!result) {
-        throw new Error(`Download of ${row.fileName} did not complete`)
+        throw new EmbedderDownloadError('network', `Download of ${row.fileName} did not complete`)
       }
       if (result.status < 200 || result.status >= 300) {
-        throw new Error(`Unexpected status ${result.status} downloading ${row.fileName}`)
+        throw new EmbedderDownloadError(
+          'network',
+          `Unexpected status ${result.status} downloading ${row.fileName}`,
+        )
       }
 
       // expo's File.rename throws when the destination exists (no POSIX
