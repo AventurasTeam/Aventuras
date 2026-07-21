@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { BackHandler, Platform, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import { EmbedderGateBlocked } from '@/components/wizard/embedder-gate-blocked'
 import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizard/finish'
@@ -304,13 +303,11 @@ export default function WizardRoute() {
     )
   }
 
-  if (gate.status === 'pending') {
-    return (
-      <View className="flex-1 items-center justify-center">
-        <Spinner />
-      </View>
-    )
-  }
+  // No screen swap while the gate resolves: an early-returned placeholder
+  // flashed an unthemed fullscreen view before the shell mounted. The shell
+  // renders immediately and the blocked modal lands over it once the check
+  // settles — the gate stays hard (Finish re-checks, and every modal exit
+  // leaves the wizard).
   return (
     <WizardShell
       step={step}
