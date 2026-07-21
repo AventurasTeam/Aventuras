@@ -48,9 +48,10 @@ export function buildStorySettings(
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
     ...appDefault,
-    // After the spread: a stale embedding_model_id carried in appDefault must
-    // not win over the app-level selection these arguments carry.
+    // Both halves override unconditionally: appDefault is a template for the
+    // other fields, but the embedder selection has its own app-level columns,
+    // and a stale copy in the template must not outrank them.
     embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
-    ...(appEmbeddingProviderId !== null ? { embedding_provider_id: appEmbeddingProviderId } : {}),
+    embedding_provider_id: appEmbeddingProviderId ?? undefined,
   })
 }

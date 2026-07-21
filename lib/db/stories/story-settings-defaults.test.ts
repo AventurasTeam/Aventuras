@@ -49,4 +49,14 @@ describe('buildStorySettings', () => {
     const s = buildStorySettings({ embedding_model_id: 'stale/model' }, 'fresh/model', null)
     expect(s.embedding_model_id).toBe('fresh/model')
   })
+
+  it('does not let a stale app-default provider id survive an empty app selection', () => {
+    const s = buildStorySettings({ embedding_provider_id: 'stale-prov' }, 'fresh/model', null)
+    expect(s.embedding_provider_id).toBeUndefined()
+  })
+
+  it('does not let a stale app-default provider id outrank the app selection', () => {
+    const s = buildStorySettings({ embedding_provider_id: 'stale-prov' }, 'fresh/model', 'prov-1')
+    expect(s.embedding_provider_id).toBe('prov-1')
+  })
 })
