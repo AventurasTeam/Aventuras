@@ -67,6 +67,15 @@ slice plans when relevant.
 - [Input adornment DOM identity](./input-adornment-dom-identity.md)
   — always render adornments, toggle visibility; conditional
   render re-keys TextInput and loses focus.
+- [Dialog claims the touch responder](./dialog-content-responder-claim.md)
+  — native `Content` blocks ScrollView scroll interception on
+  Android; scrolling is flaky to start, fine once moving.
+- [Layout props on a compound trigger](./compound-trigger-flex-reach.md)
+  — `flex-1` lands on the inner Pressable, not the Header that
+  sits in your row; browsers forgive it, Yoga collapses it.
+- [Portaled overlays outlive screen focus](./portaled-overlay-outlives-screen-focus.md)
+  — a Stack keeps pushed-under screens mounted, so their portaled
+  modals float over the new screen; gate on `useIsFocused()`.
 
 ### Animation / gesture
 
@@ -90,12 +99,23 @@ slice plans when relevant.
   ids from Sets / Maps on disappearance; reset / undo / reload
   can resurrect them and inherit leaked state.
 
+### Desktop / Electron
+
+- [Running ONNX inside Electron main](./onnx-in-electron-main.md)
+  — the CPU memory arena SIGTRAPs the process with no JS error,
+  and config-driven external-data fetch hangs forever; neither
+  reproduces under `ELECTRON_RUN_AS_NODE`.
+
 ### Testing / module graph
 
 - [Keep `vitest.setup.ts`'s import graph thin](./test-setup-import-graph-breaks-mocks.md)
   — an eager setup import (e.g. an action pulling a heavy barrel) loads
   modules before test files register their `vi.mock`, silently breaking
   the mocks; relocate the offending symbol to a light module.
+- [Known-answer vectors can share a blind spot](./known-answer-vectors-share-blind-spots.md)
+  — the published xxh32 vectors all hash below `0x80000000`, so a
+  signed-int32 leak survived a green suite; assert format
+  invariants over a sweep, not just point values.
 - [Vite eagerly bundles a runtime-guarded `require()`, Metro doesn't](./storybook-vite-eager-guarded-require.md)
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias
@@ -106,6 +126,9 @@ slice plans when relevant.
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)
   — `pnpm add` alone crashes Android for libs with native
   modules; config-plugin step is per-library, not universal.
+- [`pnpm patch-commit` drops files you added](./pnpm-patch-drops-added-files.md)
+  — only edits to existing files land in the `.patch`; verify the
+  file list and hand-append new-file hunks.
 - [Metro's native resolution ignores browser-targeted builds](./metro-native-ignores-browser-builds.md)
   — the `browser` main field and `browser` exports condition are
   web-only; a dep can work on web and break every Android bundle.

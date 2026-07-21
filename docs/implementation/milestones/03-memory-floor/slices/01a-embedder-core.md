@@ -174,4 +174,91 @@ M7.1; only the gate-required minimum ships here.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved developer decisions and deviations worth carrying forward.
+Traps that generalize beyond this slice landed in
+[lessons-learned](../../../lessons-learned/README.md) instead.
+
+### Storage and schema
+
+- **Per-`(type, dim)` table families** (canon amended at planning,
+  commit `926ca3a2`): the migration creates the five 384-dim
+  families; other dims are created lazily by the write helper via
+  `CREATE VIRTUAL TABLE IF NOT EXISTS` through an `execRaw` seam,
+  outside the atomic ops batch. Verified on both platforms — the
+  768 families materialized on first Gemma write.
+- **vec0 enforces the primary key globally, not per partition**
+  (verified live during planning). The same row id in two branch
+  partitions is rejected, so rows carry a synthetic
+  `<branch_id>:<id>` pk alongside the plain `id` metadata column.
+- **`source_hash` is a vec0 auxiliary column** (`+source_hash`),
+  resolving the placement canon left open.
+
+### Runtimes
+
+- **Desktop ONNX runs in the Electron main process** behind an
+  `embedder:*` IPC namespace mirroring the M1.2 DB service, via
+  `@huggingface/transformers`. Two Electron-specific traps had to
+  be worked around at the pipeline call — see
+  [Running ONNX inside Electron main](../../../lessons-learned/onnx-in-electron-main.md).
+- **Every embedder runtime is lazily imported.** No ORT,
+  transformers.js, or `react-native-quick-crypto` symbol is
+  reachable at module-eval, because the `lib/embedder` barrel is
+  imported by the config-presence gate that runs before any model
+  is installed.
+- **`onnxruntime-react-native` needs a two-part pnpm patch** —
+  a Gradle 9 fix (upstream still references the removed
+  `VersionNumber` at 1.24.3) and an autolinking config the package
+  doesn't ship. The added file needs re-appending if the patch is
+  ever regenerated
+  ([why](../../../lessons-learned/pnpm-patch-drops-added-files.md)).
+
+### Catalog
+
+- **EmbeddingGemma-300m survived on-device curation** on both
+  desktop and Android at 768 dim, so the named fallback
+  (`multilingual-e5-small`) was not needed and the entry is no
+  longer a severable tail.
+- Entries carry `config.json` (transformers.js fatally requires it)
+  and, for sharded exports, the weights sidecar keyed by **the
+  basename the ONNX graph references** — renaming it breaks
+  loading.
+- License text resolves in two tiers: standard HF tags fetch real
+  license text from the pinned `choosealicense/licenses` dataset
+  mirror; proprietary tags (`gemma`, `license: other`, none) fall
+  back to the model card, labeled as such, with the card's dynamic
+  `license_link` when present. The catalog maintains **no** license
+  URLs — the developer ruled a hand-maintained license map
+  infeasible.
+- HuggingFace's documented endpoints are called directly rather
+  than through `@huggingface/hub`; Range resume, incremental
+  SHA256, and per-file progress all need raw `Response` control,
+  and the SDK wraps the same URLs. Canon's implementation note was
+  replaced accordingly.
+
+### Surfaces
+
+- **The entry gate is an AlertDialog over the wizard shell**, not a
+  fullscreen takeover (canon left the shape open; matched to the
+  autosave-continue precedent at device review). It renders only
+  while the wizard screen is focused, and the shell renders
+  immediately rather than swapping in a placeholder while the
+  check resolves. The gate stays hard: Finish re-checks the config
+  and every modal exit leaves the wizard.
+- **The download dialog has no header ×.** Every state carries an
+  explicit affordance, and a header close bypassed the machine's
+  cancel path (partial-file cleanup). `DialogContent` gained a
+  `hideCloseButton` prop; `DialogHeader` gained default right
+  padding so other dialogs' titles clear their ×.
+- The Embedding models tab ships only the gate-required subset;
+  no remove flow, EP picker, or custom import until M7.1.
+
+### Verification
+
+Cross-platform smoke passed on desktop (Linux) and Android:
+curated download with license attestation, wizard gate, story
+creation embedding the lead inside the atomic batch, lazy 768
+family creation, corrupted-model typed failure, in-session
+network-blip resume, and a provider-backend embed with capability
+detection. Two findings from that pass are recorded above; the
+`source_hash` sign bug it exposed is in
+[Known-answer vectors can share a blind spot](../../../lessons-learned/known-answer-vectors-share-blind-spots.md).
