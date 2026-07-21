@@ -32,7 +32,7 @@
     {
       "id": "onnx-community/embeddinggemma-300m-ONNX",
       "displayName": "EmbeddingGemma 300m (multilingual)",
-      "shortDescription": "Google's on-device model. 100+ languages, best quality at this size.",
+      "shortDescription": "Google's on-device model. 100+ languages, great quality at this size.",
       "size_bytes": 330940405,
       "dim": 768,
       "huggingfaceRevision": "5090578d9565bb06545b4552f76e6bc2c93e4a66",
