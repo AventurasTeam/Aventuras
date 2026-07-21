@@ -15,7 +15,7 @@ moving — is the responder claim racing the scroll gesture at
 touch-down. Each new touch re-runs the race; an in-progress scroll
 already owns the gesture.
 
-## The fix
+## Fix
 
 Clear the prop on the substrate wrapper, after spreading `props` so
 it wins:
@@ -36,12 +36,22 @@ backdrop taps were already inert (verify on-device before removing
 ## What not to reach for
 
 Swapping in `react-native-gesture-handler`'s `ScrollView` bypasses
-the responder system and _does_ fix Android. It then breaks the
-web: RNGH's `ScrollView` ignores max-height styling there, so the
-content renders unbounded and pushes the modal off the viewport.
-Treat that swap as a diagnostic probe, not a fix, and remove the
-root cause instead. See
+the responder system and _does_ fix Android — it is how `Select` and
+`MultiSelect` get past the identical claim in
+`@rn-primitives/popover` / `@rn-primitives/select`. Inside a Dialog
+it is still the wrong lever: we own that wrapper, so the claim can be
+deleted where it is stamped rather than routed around. Treat the swap
+as a diagnostic probe here, not a fix. See
 [Library-first defaults](./library-first-defaults.md).
+
+If you do route around it, know the web trap that follows. RNGH's
+`ScrollView` looks like it "ignores max-height on web" — the content
+renders unbounded and pushes the modal off the viewport — but the
+cause is narrower: a NativeWind `max-h-*` className doesn't reach the
+scrollable element, because RN-Web nests divs and the class lands on
+a wrapper that doesn't constrain the inner scroller. An explicit
+`style` bounds it fine; `components/ui/multi-select.tsx` ships that
+counter-example.
 
 ## Adjacent trap: padding clips the scrollable extent
 
@@ -60,9 +70,12 @@ Put padding on the content container:
 When a `ScrollView` misbehaves inside any overlay primitive, ask
 first whether an ancestor claims the responder, and second whether
 the scroll container carries its own padding. Both present as
-"scrolling is broken"; neither is a styling problem. Fixing the
-responder claim at the substrate level fixes every dialog in the
-app at once, which is the point of owning the wrapper.
+"scrolling is broken"; neither is a styling problem. Clearing the
+claim in `components/ui/dialog.tsx` fixes every dialog in the app at
+once, which is the point of owning the wrapper — but the fix stops
+at Dialog. `@rn-primitives/popover` and `@rn-primitives/select` stamp
+the same prop, and `Select` / `MultiSelect` still route around it
+with RNGH rather than clearing it.
 
 Related: [Portal drops custom contexts on native](./rn-primitives-portal-context.md)
 for the other native-only Dialog trap.

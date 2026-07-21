@@ -378,8 +378,10 @@ cross-slice routing verifies at integration once both are merged
   rules but not the wire shape. Resolve in
   [Slice 3.3](./slices/03-classifier.md) planning.
 - **Curated catalog v1 contents.** Which embedding models ship in
-  the bundled catalog JSON beyond `Xenova/all-MiniLM-L6-v2-q8`.
-  Resolve in [Slice 3.1a](./slices/01a-embedder-core.md) planning.
+  the bundled catalog JSON. **Resolved in
+  [Slice 3.1a](./slices/01a-embedder-core.md#catalog)** — two
+  entries, `Xenova/all-MiniLM-L6-v2` (384 dim, mobile default) and
+  `onnx-community/embeddinggemma-300m-ONNX` (768 dim).
 - **Scheduler placement.** Where the cadence tick lives (store
   subscription on entry writes vs an orchestrator-adjacent
   module) — the framework deliberately excludes it

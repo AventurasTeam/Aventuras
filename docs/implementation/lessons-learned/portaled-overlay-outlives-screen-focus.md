@@ -12,7 +12,7 @@ Its own actions still work, but it obscures the screen the user
 navigated to, and any "resolve this by going to Settings" flow is
 unusable because the blocker follows the user there.
 
-## The fix
+## Fix
 
 Gate the overlay on focus:
 
