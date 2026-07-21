@@ -119,9 +119,9 @@ export async function fetchModelCard(
   licenseLink?: string
 }> {
   if (source.kind === 'hf-id') {
-    // The dialog only receives catalog inits this slice — the power-user HF-id
-    // path (live file-listing resolution + validation) lands in M7.1.
-    throw new Error('HF-id path lands in M7.1')
+    // Only catalog inits reach the dialog today; the power-user HF-id path
+    // (live file-listing resolution + validation) is not implemented.
+    throw new Error('HF-id model resolution is not implemented')
   }
 
   const { entry } = source
@@ -157,5 +157,5 @@ export async function fetchModelCard(
 }
 
 export function resolveHfModel(): Promise<{ meta: ModelMeta; files: string[] }> {
-  return Promise.reject(new Error('HF-id path lands in M7.1'))
+  return Promise.reject(new Error('HF-id model resolution is not implemented'))
 }

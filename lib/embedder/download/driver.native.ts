@@ -108,10 +108,8 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
 
       // Stage to `<fileName>.part` and rename into place only once the
       // transfer completes, so an interrupted download never leaves a
-      // partial file sitting at the canonical install path. Cross-launch
-      // resume is descoped for v1 — any leftover `.part` from a prior
-      // attempt is discarded and this one starts clean rather than
-      // resuming from it.
+      // partial file sitting at the canonical install path. A leftover
+      // `.part` from a previous launch is discarded rather than resumed.
       // A completed file from an earlier attempt short-circuits, so a retry
       // re-transfers only what actually failed rather than the whole manifest.
       const existingFinal = new File(dir, row.fileName)
@@ -137,8 +135,7 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         },
       )
 
-      // In-session network-blip resume (the slice's kept acceptance —
-      // cross-launch resume is what's descoped): a dropped connection rejects
+      // In-session network-blip resume: a dropped connection rejects
       // downloadAsync, so continue the same resumable from its .part with
       // backoff before surfacing the failure.
       inFlight = resumable

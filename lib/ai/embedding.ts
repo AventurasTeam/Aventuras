@@ -47,7 +47,7 @@ function buildEmbeddingModel(
 /**
  * Embed `texts` through `provider`'s configured embedding endpoint. Returns
  * raw vectors at the model's native dim — prefixing and Matryoshka
- * truncation are the caller's job (facade / 3.1b), not this transport.
+ * truncation are the caller's job, not this transport.
  */
 export async function embedViaProvider(
   provider: ProviderInstanceWithStub,

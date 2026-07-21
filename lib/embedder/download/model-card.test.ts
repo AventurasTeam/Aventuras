@@ -182,13 +182,15 @@ describe('fetchModelCard — catalog path', () => {
 })
 
 describe('fetchModelCard — hf-id path', () => {
-  it('rejects — the power-user HF-id path lands in M7.1', async () => {
-    await expect(fetchModelCard({ kind: 'hf-id', id: 'foo/bar' })).rejects.toThrow(/M7\.1/)
+  it('rejects — the power-user HF-id path is not implemented', async () => {
+    await expect(fetchModelCard({ kind: 'hf-id', id: 'foo/bar' })).rejects.toThrow(
+      /not implemented/,
+    )
   })
 })
 
 describe('resolveHfModel', () => {
-  it('rejects — the power-user HF-id path lands in M7.1', async () => {
-    await expect(resolveHfModel()).rejects.toThrow(/M7\.1/)
+  it('rejects — the power-user HF-id path is not implemented', async () => {
+    await expect(resolveHfModel()).rejects.toThrow(/not implemented/)
   })
 })

@@ -41,16 +41,17 @@ Per-entry shape:
   "version": "2026-05-08",
   "models": [
     {
-      "id": "Xenova/all-MiniLM-L6-v2-q8",
+      "id": "Xenova/all-MiniLM-L6-v2",
       "displayName": "MiniLM-L6 (lightweight)",
       "shortDescription": "Small, fast, English-focused. Default for mobile.",
       "size_bytes": 25000000,
       "dim": 384,
       "huggingfaceRevision": "<pinned commit hash>",
-      "expectedSha256": {
-        "model.onnx": "...",
-        "tokenizer.json": "...",
-        "tokenizer_config.json": "..."
+      "files": {
+        "model.onnx": { "repoPath": "onnx/model_quantized.onnx", "sha256": "..." },
+        "config.json": { "repoPath": "config.json", "sha256": "..." },
+        "tokenizer.json": { "repoPath": "tokenizer.json", "sha256": "..." },
+        "tokenizer_config.json": { "repoPath": "tokenizer_config.json", "sha256": "..." }
       },
       "default_ep": {
         "android": "cpu",
@@ -70,8 +71,11 @@ Per-entry shape:
 - **`huggingfaceRevision`** — a pinned commit hash. The model card
   and files are fetched at this revision. Defends against post-
   curation edits to the model card or weights.
-- **`expectedSha256`** — known hashes for every file in the entry's
-  `files` map. Verified after download completion.
+- **`files`** — one entry per file, keyed by the canonical on-disk
+  name, carrying the HuggingFace repo-relative `repoPath` and the
+  `sha256` verified after that file's download completes. A file
+  and its digest are one record so neither can exist without the
+  other; a malformed or missing digest fails the import-time parse.
 - **`default_ep`** — per-platform execution provider, set at
   curation time based on our pre-release testing. v1 default
   posture is `cpu` everywhere unless we have explicit test evidence
@@ -225,9 +229,12 @@ source. Check your connection and try again.` No cached-license
    typical model; a sharded ONNX export adds a weights sidecar
    (`*.onnx_data`) fetched and verified the same way, keyed in the
    catalog's `files` map by the basename the graph references.
-6. **Cancel mid-download** — distinct from Decline. The download
-   stops, partial files are deleted, and no license-acceptance is
-   recorded. License acceptance is contingent on completion (see
+6. **Cancel mid-download** — distinct from Decline. The transfer is
+   aborted (desktop through an `AbortSignal` on the main-process
+   fetch, Android by pausing the resumable), and only once it has
+   settled are the partial files deleted — deleting under a live
+   writer races the final rename. No license-acceptance is recorded;
+   acceptance is contingent on completion (see
    [License attestation](#license-attestation)).
 7. **All files verified** — `LICENSE.txt` is written from the
    dialog text, `.attestation` is written with timestamp + license
@@ -243,11 +250,21 @@ doesn't match the expected hash. Try again later.` Don't
 - **Network drop** — transient blips continue in-session without
   user action (desktop resumes the partial via Range; Android
   retries the same resumable with backoff). A hard drop surfaces
-  the failed state with a Retry that restarts the manifest —
-  desktop continues from staged partials, Android restarts the
-  interrupted file (amended at M3.1a device review).
-- **Disk-full** mid-download — abort and surface a clear error;
-  delete partials.
+  the failed state with a Retry that restarts the manifest. Files
+  already complete on disk are re-hashed and skipped, so only the
+  unfinished ones transfer again; desktop additionally continues an
+  interrupted file from its staged partial via Range.
+- **Disk-full** mid-download — abort, delete the partials (unlike a
+  network drop, keeping them helps nothing and holds the space), and
+  surface a clear error.
+- **Verification could not run** — distinct from a mismatch. If the
+  digest is never computed (missing platform crypto, unreadable
+  file), the failure says so and offers Retry, which resumes from
+  what is already downloaded rather than discarding it.
+- **Model loads but the graph is rejected** — after the digests
+  check out, the model is loaded once before `meta.json` is written.
+  Bytes that hash correctly but cannot execute never register as
+  installed.
 
 **Implementation note — HF endpoints.** The downloader and
 model-card fetch call HuggingFace's documented endpoints directly

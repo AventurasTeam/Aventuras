@@ -238,12 +238,12 @@ describe('createEmbedderDownloadDriver — deletePartial', () => {
 })
 
 describe('createEmbedderDownloadDriver — resolveHfModel', () => {
-  it('rejects — the power-user HF-id path lands in M7.1', async () => {
+  it('rejects — the power-user HF-id path is not implemented', async () => {
     const bridge = makeBridge()
     vi.stubGlobal('window', { aventurasEmbedder: bridge })
     const driver = createEmbedderDownloadDriver(entry)
 
-    await expect(driver.resolveHfModel('foo/bar')).rejects.toThrow(/M7\.1/)
+    await expect(driver.resolveHfModel('foo/bar')).rejects.toThrow(/not implemented/)
   })
 })
 
