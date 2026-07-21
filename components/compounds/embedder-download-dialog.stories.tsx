@@ -184,7 +184,8 @@ export const Failed_Resolve = failed({
 export const Failed_Download = failed({
   kind: 'download-failed',
   failingFile: 'model.onnx',
-  message: 'connection reset by peer',
+  code: 'network',
+  detail: 'connection reset by peer',
 })
 export const Failed_Validation = failed({
   kind: 'validation-failed',

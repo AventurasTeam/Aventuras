@@ -37,11 +37,18 @@ export type FileProgress =
   // counting toward the persistent received/total line.
   | { kind: 'done'; bytesTotal?: number }
 
+/**
+ * Why a download failed, as a code rather than prose: the dialog renders
+ * localized copy from it, and the untranslatable detail (an OS errno string, a
+ * third-party message) travels alongside for the diagnostics log.
+ */
+export type DownloadFailureCode = 'network' | 'disk' | 'invalid-request' | 'unknown'
+
 export type FailReason =
   | { kind: 'cancelled' }
   | { kind: 'card-fetch-failed'; message: string }
   | { kind: 'resolve-failed'; message: string }
-  | { kind: 'download-failed'; failingFile: string; message: string }
+  | { kind: 'download-failed'; failingFile: string; code: DownloadFailureCode; detail: string }
   | { kind: 'validation-failed'; missingFiles: string[] }
   | { kind: 'hash-mismatch'; failingFile: string }
   // The hash could not be computed at all (missing native module, unreadable
@@ -120,7 +127,7 @@ export type DialogAction =
     }
   | { type: 'download-complete'; file: string }
   | { type: 'all-downloaded' }
-  | { type: 'download-failed'; file: string; message: string }
+  | { type: 'download-failed'; file: string; code: DownloadFailureCode; detail: string }
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
@@ -317,7 +324,12 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         return {
           kind: 'failed',
           meta: state.meta,
-          reason: { kind: 'download-failed', failingFile: action.file, message: action.message },
+          reason: {
+            kind: 'download-failed',
+            failingFile: action.file,
+            code: action.code,
+            detail: action.detail,
+          },
         }
       }
       return state

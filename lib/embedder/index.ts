@@ -32,6 +32,8 @@ export type { EmbedIntent } from './service'
 
 export { createEmbedderDownloadDriver } from './download/driver'
 
+export { EmbedderDownloadError, downloadFailureCode } from './download/failure'
+
 export {
   buildDownloadPlan,
   findPlanRow,

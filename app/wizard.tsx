@@ -102,7 +102,10 @@ export default function WizardRoute() {
   // the wizard outright. Focus-aware so returning from Settings (having fixed the
   // embedder) re-checks; the `cancelled` guard drops a stale in-flight resolve.
   const [gate, setGate] = useState<GateState>({ status: 'pending' })
-  const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
+  const [embedFailure, setEmbedFailure] = useState<{
+    kind: 'init' | 'call'
+    message: string
+  } | null>(null)
   const isFocused = useIsFocused()
   const gateRunRef = useRef(0)
   const runEntryGate = useCallback(() => {
@@ -270,7 +273,7 @@ export default function WizardRoute() {
             flushAutosave()
             return
           }
-          setEmbedFailure({ message: result.message })
+          setEmbedFailure({ kind: result.kind, message: result.message })
           flushAutosave()
         })
         .catch((err) => {
@@ -357,7 +360,15 @@ export default function WizardRoute() {
               <Text className="text-sm font-medium text-danger">
                 {t('wizard:finish.embedFailed.title')}
               </Text>
-              <Text className="text-sm text-fg-secondary">{embedFailure.message}</Text>
+              <Text className="text-sm text-fg-secondary">
+                {t(`wizard:finish.embedFailed.${embedFailure.kind}` as const)}
+              </Text>
+              <Text size="xs" variant="muted">
+                {t('embedder:failure.technicalDetail')}
+              </Text>
+              <Text size="xs" className="font-mono text-fg-secondary">
+                {embedFailure.message}
+              </Text>
               <View className="flex-row flex-wrap gap-2">
                 <Button size="sm" onPress={finish} loading={isFinishing}>
                   <Text>{t('wizard:finish.embedFailed.retry')}</Text>
