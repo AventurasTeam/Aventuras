@@ -21,6 +21,10 @@ import {
 import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
 
+// Abort handles for in-flight downloads, so a renderer cancel actually stops
+// the transfer instead of only hiding its progress.
+const downloadAborts = new Map<string, AbortController>()
+
 const isDev = !app.isPackaged
 
 // Dev runs get their own userData dir (~/.config/aventuras-dev) so dev DB/cache
@@ -203,11 +207,18 @@ app.whenReady().then(async () => {
           message: error instanceof Error ? error.message : String(error),
         }
       }
+      // One controller per model: the dialog downloads a model's files in
+      // series, so a later file replaces the entry its predecessor left.
+      const controller = new AbortController()
+      downloadAborts.get(args.modelId)?.abort()
+      downloadAborts.set(args.modelId, controller)
+
       return downloadFile({
         url,
         destDir,
         fileName,
         expectedSha256,
+        signal: controller.signal,
         onProgress: (bytesReceived, bytesTotal) => {
           if (event.sender.isDestroyed()) return
           event.sender.send('embedder:download-progress', {
@@ -217,9 +228,14 @@ app.whenReady().then(async () => {
             bytesTotal,
           })
         },
+      }).finally(() => {
+        if (downloadAborts.get(args.modelId) === controller) downloadAborts.delete(args.modelId)
       })
     },
   )
+  ipcMain.handle('embedder:cancel-download', (_e, args: { modelId: string }) => {
+    downloadAborts.get(args.modelId)?.abort()
+  })
   ipcMain.handle(
     'embedder:persist-install',
     (_e, args: { modelId: string; licenseText: string; attestation: EmbedderAttestation }) =>

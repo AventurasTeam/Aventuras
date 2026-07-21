@@ -20,6 +20,7 @@ function makeBridge(overrides: Partial<EmbedderBridge> = {}): EmbedderBridge {
     listInstalled: vi.fn(async () => []),
     downloadFile: vi.fn(async () => ({ ok: true }) as const),
     persistInstall: vi.fn(async () => undefined),
+    cancelDownload: vi.fn(async () => undefined),
     deletePartial: vi.fn(async () => undefined),
     onDownloadProgress: vi.fn(() => () => {}),
     ...overrides,

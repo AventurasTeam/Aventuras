@@ -5,7 +5,12 @@
 // mirrors types/db-bridge.d.ts.)
 export type EmbedderErrorEnvelope = { kind: 'init' | 'call'; message: string }
 
-export type EmbedderDownloadReason = 'hash-mismatch' | 'network' | 'disk' | 'invalid-request'
+export type EmbedderDownloadReason =
+  | 'hash-mismatch'
+  | 'network'
+  | 'disk'
+  | 'invalid-request'
+  | 'cancelled'
 
 export type EmbedderInstalled = { id: string; sizeBytes: number; installedAt: number }
 
@@ -47,6 +52,7 @@ export type EmbedderBridge = {
     licenseText: string
     attestation: EmbedderAttestation
   }): Promise<void>
+  cancelDownload(args: { modelId: string }): Promise<void>
   deletePartial(args: { modelId: string }): Promise<void>
   onDownloadProgress(cb: (progress: EmbedderDownloadProgress) => void): () => void
 }

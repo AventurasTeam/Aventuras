@@ -14,6 +14,7 @@ type DownloadArgs = {
   destDir: string
   fileName: string
   expectedSha256: string | null
+  signal?: AbortSignal
   onProgress?: (bytesReceived: number, bytesTotal: number) => void
 }
 
@@ -50,9 +51,11 @@ async function downloadAttempt(
   args: DownloadArgs,
   retriedAfter416: boolean,
 ): Promise<DownloadResult> {
-  const { url, destDir, fileName, expectedSha256, onProgress } = args
+  const { url, destDir, fileName, expectedSha256, signal, onProgress } = args
   const finalPath = join(destDir, fileName)
   const partPath = `${finalPath}.part`
+
+  if (signal?.aborted) return { ok: false, reason: 'cancelled', message: 'Download cancelled' }
 
   try {
     await mkdir(destDir, { recursive: true })
@@ -64,11 +67,12 @@ async function downloadAttempt(
 
   let response: Response
   try {
-    response = await fetch(
-      url,
-      existingSize > 0 ? { headers: { Range: `bytes=${existingSize}-` } } : {},
-    )
+    response = await fetch(url, {
+      ...(existingSize > 0 ? { headers: { Range: `bytes=${existingSize}-` } } : {}),
+      ...(signal ? { signal } : {}),
+    })
   } catch (error) {
+    if (signal?.aborted) return { ok: false, reason: 'cancelled', message: 'Download cancelled' }
     return { ok: false, reason: 'network', message: messageOf(error) }
   }
 
@@ -160,6 +164,7 @@ async function downloadAttempt(
     // deletePartial is the cleanup path for an abandoned install. Swallow a close
     // failure so it can't replace the error that actually caused the abort.
     await handle.close().catch(() => {})
+    if (signal?.aborted) return { ok: false, reason: 'cancelled', message: 'Download cancelled' }
     if (isDiskError(error)) return { ok: false, reason: 'disk', message: messageOf(error) }
     return { ok: false, reason: 'network', message: messageOf(error) }
   }
