@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native'
 import { useFocusEffect, useLocalSearchParams, useRouter, type Href } from 'expo-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BackHandler, Platform, View } from 'react-native'
@@ -97,6 +98,7 @@ export default function WizardRoute() {
   // embedder) re-checks; the `cancelled` guard drops a stale in-flight resolve.
   const [gate, setGate] = useState<GateState>({ status: 'pending' })
   const [embedFailure, setEmbedFailure] = useState<{ message: string } | null>(null)
+  const isFocused = useIsFocused()
   useFocusEffect(
     useCallback(() => {
       let cancelled = false
@@ -354,7 +356,10 @@ export default function WizardRoute() {
           )}
         </>
       )}
-      {gate.status === 'blocked' ? <EmbedderGateBlocked reason={gate.reason} /> : null}
+      {/* Portaled to the app root, so it would float above a pushed Settings
+          screen — the wizard stays mounted underneath. Render only while this
+          screen is focused. */}
+      {gate.status === 'blocked' && isFocused ? <EmbedderGateBlocked reason={gate.reason} /> : null}
     </WizardShell>
   )
 }
