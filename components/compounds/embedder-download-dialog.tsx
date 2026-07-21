@@ -257,8 +257,12 @@ function CardFetchBody({ source }: { source: string }) {
 // mono ScrollView above because markdown rendering would reflow its
 // hard-wrapped plain text. The WebView owns its scrolling on native, so the
 // fixed height replaces the ScrollView's max-height.
-function ModelCardRegion({ markdown }: { markdown: string }) {
+function ModelCardRegion({ markdown, sourceUrl }: { markdown: string; sourceUrl: string }) {
   const { theme } = useTheme()
+  // Native WebView boot takes seconds; overlay a spinner until the document
+  // reports its first paint (reader pattern). Web renders inline — no boot.
+  const [painted, setPainted] = useState(Platform.OS === 'web')
+  const handleFirstPaint = useCallback(() => setPainted(true), [])
   // Allow only the document's own initial load (reader pattern); link taps
   // route through onOpenLink instead of navigating the WebView.
   const documentUrlRef = useRef<string | null>(null)
@@ -271,12 +275,14 @@ function ModelCardRegion({ markdown }: { markdown: string }) {
     return false
   }, [])
   const openLink = useCallback((url: string) => {
+    // Relative hrefs are resolved document-side against sourceUrl; anything
+    // that still isn't http(s) here (mailto:, malformed) is dropped.
     if (/^https?:\/\//i.test(url)) void Linking.openURL(url)
   }, [])
   return (
     <View
       className={cn(
-        'overflow-hidden rounded-md border border-border bg-bg-sunken',
+        'relative overflow-hidden rounded-md border border-border bg-bg-sunken',
         Platform.select({ web: 'h-[40vh]', default: 'h-96' }),
       )}
     >
@@ -284,13 +290,20 @@ function ModelCardRegion({ markdown }: { markdown: string }) {
         markdown={markdown}
         themeId={theme.id}
         hostIsWebView={Platform.OS !== 'web'}
+        linkBase={sourceUrl.endsWith('/') ? sourceUrl : `${sourceUrl}/`}
         onOpenLink={openLink}
+        onFirstPaint={handleFirstPaint}
         dom={{
           scrollEnabled: false,
           style: { flex: 1 },
           onShouldStartLoadWithRequest: handleShouldStartLoad,
         }}
       />
+      {!painted ? (
+        <View className="absolute inset-0 items-center justify-center">
+          <Spinner />
+        </View>
+      ) : null}
     </View>
   )
 }
@@ -332,7 +345,7 @@ function LicenseBody({
           : `License — ${licenseName || 'no license specified'}`}
       </Text>
       {isModelCard ? (
-        <ModelCardRegion markdown={licenseText} />
+        <ModelCardRegion markdown={licenseText} sourceUrl={meta.source} />
       ) : (
         <ScrollView
           accessibilityLabel="License text"

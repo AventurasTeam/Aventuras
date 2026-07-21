@@ -38,3 +38,13 @@ export function sanitizeHtml(html: string): string {
   // handle the elements (allowing divs, tables, spans, custom margins/padding via style, etc.).
   return purifyInstance.sanitize(inlined, { FORBID_ATTR: NAVIGATION_FORBID_ATTRS })
 }
+
+// Model-card variant: `href` survives because that surface routes every anchor
+// click through its own interceptor (and locks WebView navigation) instead of
+// relying on anchor-free HTML. DOMPurify's default URI policy still kills
+// javascript: hrefs; the rest of the navigation vectors stay forbidden.
+const DOCUMENT_FORBID_ATTRS = NAVIGATION_FORBID_ATTRS.filter((attr) => attr !== 'href')
+
+export function sanitizeDocumentHtml(html: string): string {
+  return purifyInstance.sanitize(juice(html), { FORBID_ATTR: DOCUMENT_FORBID_ATTRS })
+}

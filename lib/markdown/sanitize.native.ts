@@ -5,3 +5,7 @@
 export function sanitizeHtml(html: string): string {
   return html
 }
+
+export function sanitizeDocumentHtml(html: string): string {
+  return html
+}

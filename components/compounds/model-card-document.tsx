@@ -5,7 +5,7 @@ import '@/global.css'
 import { type DOMProps } from 'expo/dom'
 import { useEffect, type MouseEvent } from 'react'
 
-import { renderNarrativeHtml } from '@/lib/markdown'
+import { renderDocumentHtml } from '@/lib/markdown'
 import { ThemeProvider, useTheme } from '@/lib/themes'
 
 // Model cards are markdown with embedded HTML (tables, badges); rendering them
@@ -42,20 +42,39 @@ function ThemeSync({ themeId }: { themeId: string }) {
 
 function DocBody({
   markdown,
+  linkBase,
   onOpenLink,
+  onFirstPaint,
 }: {
   markdown: string
+  linkBase: string
   onOpenLink?: (url: string) => void
+  onFirstPaint?: () => void
 }) {
+  // Signals the host to drop its loading overlay — on native the WebView takes
+  // seconds to boot its bundle, and until this fires the region is blank.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => onFirstPaint?.())
+    return () => cancelAnimationFrame(frame)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once, at first paint
+  }, [])
+
   // Anchors survive sanitize (only navigation event-handlers are stripped);
   // clicks route to the host so links open externally instead of navigating
-  // the WebView / the app page.
+  // the WebView / the app page. Model cards use relative hrefs liberally
+  // (/org/repo, ./file) — resolve against the model source, not the WebView's
+  // local bundle URL, before handing the URL over.
   const handleClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     const anchor = (event.target as HTMLElement).closest('a')
     if (anchor == null) return
     event.preventDefault()
     const href = anchor.getAttribute('href')
-    if (href != null && onOpenLink != null) onOpenLink(href)
+    if (href == null || onOpenLink == null) return
+    try {
+      onOpenLink(new URL(href, linkBase).href)
+    } catch {
+      // Unresolvable href (malformed) — drop the click.
+    }
   }
   return (
     <>
@@ -63,7 +82,7 @@ function DocBody({
       <div
         className="model-card-doc"
         onClickCapture={handleClickCapture}
-        dangerouslySetInnerHTML={{ __html: renderNarrativeHtml(markdown) }}
+        dangerouslySetInnerHTML={{ __html: renderDocumentHtml(markdown) }}
       />
     </>
   )
@@ -73,24 +92,41 @@ export default function ModelCardDocument({
   markdown,
   themeId,
   hostIsWebView,
+  linkBase,
   onOpenLink,
+  onFirstPaint,
 }: {
   markdown: string
   themeId: string
   /** True when hosted in a native WebView; gates the html/body reset + theme seeding. */
   hostIsWebView: boolean
+  /** Base URL relative hrefs resolve against (the model's source page). */
+  linkBase: string
   onOpenLink?: (url: string) => void
+  onFirstPaint?: () => void
   dom?: DOMProps
 }) {
   if (!hostIsWebView) {
     // Inline on web: the page already carries global.css theme vars.
-    return <DocBody markdown={markdown} onOpenLink={onOpenLink} />
+    return (
+      <DocBody
+        markdown={markdown}
+        linkBase={linkBase}
+        onOpenLink={onOpenLink}
+        onFirstPaint={onFirstPaint}
+      />
+    )
   }
   return (
     <ThemeProvider initialThemeId={themeId}>
       <ThemeSync themeId={themeId} />
       <style>{WEBVIEW_RESET_CSS}</style>
-      <DocBody markdown={markdown} onOpenLink={onOpenLink} />
+      <DocBody
+        markdown={markdown}
+        linkBase={linkBase}
+        onOpenLink={onOpenLink}
+        onFirstPaint={onFirstPaint}
+      />
     </ThemeProvider>
   )
 }
