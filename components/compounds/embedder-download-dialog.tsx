@@ -31,6 +31,22 @@ import {
 } from './embedder-download-dialog-machine'
 import ModelCardDocument from './model-card-document'
 
+// Every outbound link here originates in remote model-card JSON, so the scheme
+// is checked before handing it to the OS — on Android an unvalidated scheme
+// reaches other installed apps through ACTION_VIEW.
+function openExternalUrl(url: string): void {
+  if (!/^https?:\/\//i.test(url)) {
+    logger.warn('embedder.blocked_external_url', { url })
+    return
+  }
+  void Linking.openURL(url).catch((e: unknown) => {
+    logger.error('embedder.open_external_failed', {
+      url,
+      error: e instanceof Error ? e.message : String(e),
+    })
+  })
+}
+
 // Fallback when the host doesn't supply `availableEps`.
 // Real hosts enumerate via the driver (platform detection + ORT
 // build introspection). v1 always-works fallback is plain CPU.
@@ -87,7 +103,7 @@ export type { EmbedderDownloadDialogViewProps }
 
 function Header({ state }: { state: DialogState }) {
   return (
-    <DialogHeader>
+    <DialogHeader hasCloseButton={false}>
       <DialogTitle>{titleFor(state)}</DialogTitle>
     </DialogHeader>
   )
@@ -133,6 +149,8 @@ function failedTitle(reason: FailReason): string {
       return '⚠ Missing required files'
     case 'hash-mismatch':
       return '⚠ Verification failed'
+    case 'verify-error':
+      return '⚠ Couldn’t verify the download'
     case 'smoke-test-failed':
       return '⚠ Execution provider not supported'
     case 'persist-failed':
@@ -263,11 +281,7 @@ function ModelCardRegion({ markdown, sourceUrl }: { markdown: string; sourceUrl:
     }
     return false
   }, [])
-  const openLink = useCallback((url: string) => {
-    // Relative hrefs are resolved document-side against sourceUrl; anything
-    // that still isn't http(s) here (mailto:, malformed) is dropped.
-    if (/^https?:\/\//i.test(url)) void Linking.openURL(url)
-  }, [])
+  const openLink = useCallback((url: string) => openExternalUrl(url), [])
   return (
     <View
       className={cn(
@@ -363,7 +377,7 @@ function LicenseBody({
                 size="sm"
                 className="text-accent underline"
                 accessibilityRole="link"
-                onPress={() => void Linking.openURL(licenseLink)}
+                onPress={() => openExternalUrl(licenseLink)}
               >
                 View license terms
               </Text>
@@ -489,22 +503,14 @@ function DownloadingBody({
             <Text size="sm">{file}</Text>
             <Text size="sm" variant="muted">
               {progress.kind === 'waiting' && 'waiting…'}
-              {progress.kind === 'downloading' &&
-                `${Math.round((progress.bytesReceived / progress.bytesTotal) * 100)}%`}
+              {progress.kind === 'downloading' && formatFilePercent(progress)}
               {progress.kind === 'done' && 'done'}
             </Text>
           </View>
           <View className="h-1 rounded-full bg-bg-sunken">
             <View
               className="h-1 rounded-full bg-accent"
-              style={{
-                width:
-                  progress.kind === 'downloading'
-                    ? `${(progress.bytesReceived / progress.bytesTotal) * 100}%`
-                    : progress.kind === 'done'
-                      ? '100%'
-                      : '0%',
-              }}
+              style={{ width: progressBarWidth(progress) }}
             />
           </View>
         </View>
@@ -514,6 +520,30 @@ function DownloadingBody({
       </Text>
     </View>
   )
+}
+
+// A server that omits content-length reports the total as -1 (desktop) or 0
+// (native): both make the naive percentage Infinity or NaN, which renders as a
+// broken bar and an "Infinity%" label.
+function knownTotal(progress: { bytesTotal?: number }): number | null {
+  const total = progress.bytesTotal
+  return total !== undefined && Number.isFinite(total) && total > 0 ? total : null
+}
+
+function formatFilePercent(progress: { bytesReceived: number; bytesTotal: number }): string {
+  const total = knownTotal(progress)
+  if (total === null) return `${(progress.bytesReceived / 1_000_000).toFixed(1)} MB`
+  const pct = Math.min(100, Math.round((progress.bytesReceived / total) * 100))
+  return `${pct}%`
+}
+
+function progressBarWidth(progress: FileProgress): `${number}%` {
+  if (progress.kind === 'done') return '100%'
+  if (progress.kind !== 'downloading') return '0%'
+  const total = knownTotal(progress)
+  // Indeterminate: a thin sliver rather than a bar that reads as complete.
+  if (total === null) return '10%'
+  return `${Math.min(100, (progress.bytesReceived / total) * 100)}%`
 }
 
 function VerifyingBody({
@@ -586,8 +616,8 @@ function FailedBody({ reason }: { reason: FailReason }) {
             {reason.message}
           </Text>
           <Text variant="muted" size="sm">
-            The partial install has been discarded. Close this dialog and try again from the picker
-            when the network is back.
+            Downloaded files are kept so a retry resumes where this left off. Retry when the network
+            is back, or cancel to discard them.
           </Text>
         </View>
       )
@@ -612,6 +642,20 @@ function FailedBody({ reason }: { reason: FailReason }) {
           <Text variant="muted" size="sm">
             This may indicate a corrupted download or an upstream change the bundled catalog hasn’t
             caught up to. The partial install has been deleted.
+          </Text>
+        </View>
+      )
+    case 'verify-error':
+      return (
+        <View className="gap-2">
+          <Text>A downloaded file couldn’t be checked:</Text>
+          <Text size="sm">
+            <Text variant="muted">{reason.failingFile}: </Text>
+            {reason.message}
+          </Text>
+          <Text variant="muted" size="sm">
+            The file itself may be fine — the check couldn’t run. Retrying resumes from what’s
+            already downloaded.
           </Text>
         </View>
       )
@@ -704,13 +748,23 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
         </DialogFooter>
       )
     case 'verifying':
+      // Hashing a 300MB file is long enough that an unexplained dead dialog
+      // reads as a hang; Escape/back already work, this makes it discoverable.
+      return (
+        <DialogFooter>
+          <Button variant="secondary" onPress={props.onCancel}>
+            <Text>Cancel</Text>
+          </Button>
+        </DialogFooter>
+      )
     case 'done':
       return null
     case 'failed': {
       const retryable =
         state.reason.kind === 'card-fetch-failed' ||
         state.reason.kind === 'resolve-failed' ||
-        state.reason.kind === 'download-failed'
+        state.reason.kind === 'download-failed' ||
+        state.reason.kind === 'verify-error'
       if (retryable) {
         return (
           <DialogFooter>
@@ -849,6 +903,16 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
       } catch (err: unknown) {
         if (cancelled) return
         const message = err instanceof Error ? err.message : String(err)
+        logger.error('embedder.download_failed', { file: currentFile, error: message })
+        // Keeping the bytes is right for a dropped connection (a retry resumes),
+        // but exactly wrong when the disk is full — reclaim the space instead.
+        if (/ENOSPC|EDQUOT|no space/i.test(message)) {
+          await driver.deletePartial().catch((e: unknown) => {
+            logger.warn('embedder.delete_partial_failed', {
+              error: e instanceof Error ? e.message : String(e),
+            })
+          })
+        }
         dispatch({ type: 'download-failed', file: currentFile, message })
       }
     })()
@@ -882,10 +946,13 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
             return
           }
           dispatch({ type: 'verify-progress', file, result: 'ok' })
-        } catch {
+        } catch (err: unknown) {
           if (cancelled) return
-          void driver.deletePartial().catch(() => {})
-          dispatch({ type: 'verify-failed', file })
+          // Not a mismatch: the digest was never computed. Keep the bytes so a
+          // retry can resume rather than re-pull the whole manifest.
+          const message = err instanceof Error ? err.message : String(err)
+          logger.error('embedder.verify_failed', { file, error: message })
+          dispatch({ type: 'verify-error', file, message })
           return
         }
       }
@@ -969,6 +1036,9 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
       } else if (state.kind === 'license') {
         lastUserActionRef.current = 'declined'
         dispatch({ type: 'license-declined' })
+        // Resolve here, not from the effect: the host unmounts this component
+        // on the onOpenChange below, so the effect never gets to run.
+        fireResolveOnce({ kind: 'declined' })
       } else if (state.kind !== 'done') {
         lastUserActionRef.current = 'cancelled'
         // Partial files can only exist once a download has started — earlier
@@ -994,6 +1064,7 @@ export function EmbedderDownloadDialog(props: EmbedderDownloadDialogProps) {
           })()
         }
         dispatch({ type: 'cancel' })
+        fireResolveOnce({ kind: 'cancelled' })
       }
     }
     onOpenChange(next)

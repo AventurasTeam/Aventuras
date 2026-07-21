@@ -441,3 +441,45 @@ describe('reducer — smoke test after verification', () => {
     expect(retried.kind).toBe('failed')
   })
 })
+
+describe('reducer — verify-error vs hash-mismatch', () => {
+  const verifying: DialogState = {
+    kind: 'verifying',
+    meta: sampleMeta,
+    verifyByFile: { 'model.onnx': 'pending' },
+  }
+
+  it('a digest that was computed and differed is a hash mismatch', () => {
+    const after = reducer(verifying, { type: 'verify-failed', file: 'model.onnx' })
+    expect(after.kind).toBe('failed')
+    if (after.kind === 'failed') expect(after.reason.kind).toBe('hash-mismatch')
+  })
+
+  it('a digest that could not be computed is a distinct, message-carrying failure', () => {
+    const after = reducer(verifying, {
+      type: 'verify-error',
+      file: 'model.onnx',
+      message: 'quick-crypto unavailable',
+    })
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: {
+        kind: 'verify-error',
+        failingFile: 'model.onnx',
+        message: 'quick-crypto unavailable',
+      },
+    })
+  })
+
+  it('verify-error is retryable — the bytes may be fine, the check could not run', () => {
+    const failed = reducer(verifying, { type: 'verify-error', file: 'model.onnx', message: 'boom' })
+    const retried = reducer(failed, { type: 'retry' })
+    expect(retried.kind).toBe('downloading')
+  })
+
+  it('a genuine hash mismatch stays terminal — retrying the same bytes cannot help', () => {
+    const failed = reducer(verifying, { type: 'verify-failed', file: 'model.onnx' })
+    expect(reducer(failed, { type: 'retry' }).kind).toBe('failed')
+  })
+})

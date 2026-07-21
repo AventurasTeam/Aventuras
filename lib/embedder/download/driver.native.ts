@@ -111,6 +111,19 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       // resume is descoped for v1 — any leftover `.part` from a prior
       // attempt is discarded and this one starts clean rather than
       // resuming from it.
+      // A completed file from an earlier attempt short-circuits, so a retry
+      // re-transfers only what actually failed rather than the whole manifest.
+      const existingFinal = new File(dir, row.fileName)
+      if (existingFinal.exists) {
+        const existingHash = await hashFile(existingFinal)
+        if (existingHash === row.expectedSha256) {
+          const size = existingFinal.size ?? 0
+          onProgress(size, size)
+          return
+        }
+        existingFinal.delete()
+      }
+
       const partFile = new File(dir, `${row.fileName}.part`)
       if (partFile.exists) partFile.delete()
 
