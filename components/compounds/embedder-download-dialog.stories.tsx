@@ -105,7 +105,12 @@ export const License_LongText = story({
 export const License_ModelCardFallback = story({
   kind: 'license',
   meta: sampleMeta,
-  licenseText: '# EmbeddingGemma\n\nModel card body shown when no standard license text exists.',
+  licenseText:
+    '# EmbeddingGemma\n\nModel card body shown when no standard license text exists.\n\n' +
+    '| Metric | Score |\n| --- | --- |\n| MTEB | 61.2 |\n| Params | 300M |\n\n' +
+    'Embedded HTML also renders:\n\n' +
+    '<table><tr><th>Dim</th><th>Storage</th></tr><tr><td>768</td><td>3 KB/row</td></tr></table>\n\n' +
+    '[Terms link](https://ai.google.dev/gemma/terms) routes through the host.',
   licenseName: 'gemma',
   licenseKind: 'model-card',
   licenseLink: 'https://ai.google.dev/gemma/terms',

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Linking, Platform, Pressable, View } from 'react-native'
 // RN's ScrollView can't scroll inside @rn-primitives/dialog on Android: the
 // primitive's native Content claims the JS responder for every touch
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
+import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 import {
@@ -32,6 +33,7 @@ import {
   initialState,
   reducer,
 } from './embedder-download-dialog-machine'
+import ModelCardDocument from './model-card-document'
 
 // Fallback when the host doesn't supply `availableEps`.
 // Real hosts enumerate via the driver (platform detection + ORT
@@ -251,6 +253,48 @@ function CardFetchBody({ source }: { source: string }) {
   )
 }
 
+// Model cards are markdown + embedded HTML; standard license text stays in the
+// mono ScrollView above because markdown rendering would reflow its
+// hard-wrapped plain text. The WebView owns its scrolling on native, so the
+// fixed height replaces the ScrollView's max-height.
+function ModelCardRegion({ markdown }: { markdown: string }) {
+  const { theme } = useTheme()
+  // Allow only the document's own initial load (reader pattern); link taps
+  // route through onOpenLink instead of navigating the WebView.
+  const documentUrlRef = useRef<string | null>(null)
+  const handleShouldStartLoad = useCallback((request: { url: string }) => {
+    if (documentUrlRef.current != null) return request.url === documentUrlRef.current
+    if (/^(file:|about:|https?:\/\/localhost[:/])/i.test(request.url)) {
+      documentUrlRef.current = request.url
+      return true
+    }
+    return false
+  }, [])
+  const openLink = useCallback((url: string) => {
+    if (/^https?:\/\//i.test(url)) void Linking.openURL(url)
+  }, [])
+  return (
+    <View
+      className={cn(
+        'overflow-hidden rounded-md border border-border bg-bg-sunken',
+        Platform.select({ web: 'h-[40vh]', default: 'h-96' }),
+      )}
+    >
+      <ModelCardDocument
+        markdown={markdown}
+        themeId={theme.id}
+        hostIsWebView={Platform.OS !== 'web'}
+        onOpenLink={openLink}
+        dom={{
+          scrollEnabled: false,
+          style: { flex: 1 },
+          onShouldStartLoadWithRequest: handleShouldStartLoad,
+        }}
+      />
+    </View>
+  )
+}
+
 function LicenseBody({
   meta,
   licenseText,
@@ -287,21 +331,25 @@ function LicenseBody({
           ? `Model card — license: ${licenseName || 'unspecified'}`
           : `License — ${licenseName || 'no license specified'}`}
       </Text>
-      <ScrollView
-        accessibilityLabel={isModelCard ? 'Model card' : 'License text'}
-        className={cn(
-          'rounded-md border border-border bg-bg-sunken',
-          Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
-        )}
-        // Padding must live on the content container: on the scroll container
-        // itself, Android clips the scrollable extent by the padding and the
-        // content tail becomes unreachable.
-        contentContainerClassName="p-3"
-      >
-        <Text size="sm" className="font-mono">
-          {licenseText}
-        </Text>
-      </ScrollView>
+      {isModelCard ? (
+        <ModelCardRegion markdown={licenseText} />
+      ) : (
+        <ScrollView
+          accessibilityLabel="License text"
+          className={cn(
+            'rounded-md border border-border bg-bg-sunken',
+            Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
+          )}
+          // Padding must live on the content container: on the scroll container
+          // itself, Android clips the scrollable extent by the padding and the
+          // content tail becomes unreachable.
+          contentContainerClassName="p-3"
+        >
+          <Text size="sm" className="font-mono">
+            {licenseText}
+          </Text>
+        </ScrollView>
+      )}
       {isModelCard && licenseName ? (
         <Text size="sm" variant="muted">
           No standard text exists for this license — the model card is shown instead. Review the
