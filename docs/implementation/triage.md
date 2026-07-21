@@ -40,6 +40,16 @@ slice-planning gate forces its resolution before that slice is planned.
   model-remove flow, and any other future deletion path, must call it too.
   Nothing enforces that mechanically. Surfaced by M3.1a implementation
   (2026-07-20), partially resolved during M3.1a review (2026-07-21).
+- **The `onnxruntime-react-native` patch carries two upstream gaps worth
+  reporting.** `patches/onnxruntime-react-native.patch` drops a Gradle-9
+  incompatibility (`VersionNumber`, removed in Gradle 9, guarding a fbjni
+  fallback that only applies below RN 0.71) and adds the
+  `react-native.config.js` the package omits, without which RN autolinking
+  skips it and `NativeModules.Onnxruntime` is null at runtime. Both are
+  upstream bugs, not app-specific workarounds, so the patch has to be
+  re-verified on every ORT-RN bump until they land upstream. Decide whether to
+  file them against microsoft/onnxruntime. Surfaced by M3.1a review
+  (2026-07-21).
 - **Custom-import file set may need `config.json` on desktop.**
   [`model-management.md → Custom file import`](../memory/model-management.md#custom-file-import)
   specifies three files (`model.onnx`, `tokenizer.json`,

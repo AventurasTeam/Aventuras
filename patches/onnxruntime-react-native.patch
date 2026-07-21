@@ -10,9 +10,9 @@ index 41b43599a9af6ef1c170047d39db1f3baa6ca682..cb30837e45e900e9793e06bb9304a714
 -    extractLibs "com.facebook.fbjni:fbjni:+:headers"
 -    extractLibs "com.facebook.fbjni:fbjni:+"
 -  }
-+  // PoC patch: VersionNumber removed in Gradle 9. Conditional was for
-+  // RN < 0.71 fbjni fallback; we run RN 0.83 so the branch is dead.
-+  // Removing the entire check is the minimal Gradle-9-compatible fix.
++  // Gradle 9 removed VersionNumber, which this guard calls. The guard only
++  // gated an fbjni fallback for RN < 0.71 and this app runs 0.83, so the branch
++  // is dead — dropping it is the minimal change that builds under Gradle 9.
  
    // By default it will just include onnxruntime full aar package
    if (ortExtensionsEnabled) {
@@ -21,10 +21,10 @@ new file mode 100644
 --- /dev/null
 +++ b/react-native.config.js
 @@ -0,0 +1,15 @@
-+// PoC patch: ORT-RN ships no autolinking config, so RN's PackageList
-+// generator skips it and NativeModules.Onnxruntime ends up null at
-+// runtime ("Cannot read property 'install' of null"). This config
-+// teaches RN autolinking how to register the legacy ReactPackage.
++// Upstream ships no autolinking config, so RN's PackageList generator skips
++// this package and NativeModules.Onnxruntime is null at runtime ("Cannot read
++// property 'install' of null"). This is the standard dependency config that
++// teaches autolinking to register the legacy ReactPackage.
 +module.exports = {
 +  dependency: {
 +    platforms: {
