@@ -17,6 +17,8 @@ export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-co
 export { resolveEmbedderGate } from './gate'
 export type { EmbedderGateResult } from './gate'
 
+export { providerTypeSupportsEmbedding } from './provider-support'
+
 export { EmbedderCallError, EmbedderInitError } from './types'
 export type { EmbedderBackend, EmbedderConfig } from './types'
 

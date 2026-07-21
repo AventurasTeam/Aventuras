@@ -23,14 +23,14 @@ export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: fa
 export type FinishResult =
   | { status: 'ok'; storyId: string }
   | { status: 'invalid'; reasons: string[] }
-  | { status: 'embed-blocked'; reason: EmbedderGateBlockedReason }
+  | { status: 'embed-blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
   | { status: 'embed-failed'; kind: 'init' | 'call'; message: string }
 
 export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
   embeddingModelId: string | null
   embeddingProviderId: string | null
-  providers: readonly { id: string }[]
+  providers: readonly { id: string; type: string }[]
   installedLocalIds: readonly string[]
 }
 
@@ -106,7 +106,7 @@ export async function finishWizard(
     },
     appDefaults.installedLocalIds,
   )
-  if (!gate.usable) return { status: 'embed-blocked', reason: gate.reason }
+  if (!gate.usable) return { status: 'embed-blocked', reason: gate.reason, backend: gate.backend }
 
   let commit: { storyId: string; branchId: string }
   try {
