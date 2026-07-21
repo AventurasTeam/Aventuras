@@ -2,7 +2,7 @@
 // DOMPurify needs a real `window`; the shared lib/** project runs under `environment: 'node'`.
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeHtml } from './sanitize'
+import { sanitizeDocumentHtml, sanitizeHtml } from './sanitize'
 
 describe('sanitizeHtml', () => {
   it('strips script tags and inline event handlers', () => {
@@ -86,5 +86,36 @@ describe('sanitizeHtml', () => {
     expect(clean).toContain('<div')
     expect(clean).toContain('style="margin: 10px; padding: 20px; background-color: blue"')
     expect(clean).toContain('<table><tbody><tr><td>cell</td></tr></tbody></table></div>')
+  })
+})
+
+describe('sanitizeDocumentHtml', () => {
+  it('preserves href — the model-card surface intercepts anchor clicks itself', () => {
+    const clean = sanitizeDocumentHtml('<p><a href="https://example.com/x">a link</a></p>')
+    expect(clean).toContain('href="https://example.com/x"')
+    expect(clean).toContain('a link')
+  })
+
+  it('still strips the other navigation vectors (target, ping, action, formaction)', () => {
+    const clean = sanitizeDocumentHtml(
+      '<a href="https://ok.example" target="_blank" ping="https://evil.example/p">l</a>' +
+        '<form action="https://evil.example/f"><button formaction="https://evil.example/b">go</button></form>',
+    )
+    expect(clean).toContain('href="https://ok.example"')
+    expect(clean).not.toContain('target')
+    expect(clean).not.toContain('ping')
+    expect(clean).not.toContain('action')
+  })
+
+  it('kills javascript: hrefs via the default URI policy', () => {
+    const clean = sanitizeDocumentHtml('<a href="javascript:alert(1)">x</a>')
+    expect(clean).not.toContain('javascript:')
+    expect(clean).toContain('x')
+  })
+
+  it('strips scripts and event handlers like the narrative path', () => {
+    const clean = sanitizeDocumentHtml('<script>alert(1)</script><img src=x onerror=alert(2)>')
+    expect(clean).not.toContain('<script>')
+    expect(clean).not.toContain('onerror')
   })
 })
