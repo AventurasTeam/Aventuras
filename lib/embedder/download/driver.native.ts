@@ -19,6 +19,7 @@ import { buildDownloadPlan, findPlanRow } from './catalog-files'
 import { EmbedderDownloadError } from './failure'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
+import { lazyModule } from '../lazy-module'
 import { modelDir } from '../local/paths.native'
 import { evictBundle, smokeTestLocal } from '../local/runtime.native'
 
@@ -45,11 +46,9 @@ type QuickCrypto = { createHash: (algorithm: 'sha256') => QuickCryptoHash }
 // reachable from config-presence checks that run before a model is installed
 // (and before the dev-client is rebuilt). Load it lazily, only inside the
 // hashing call sites.
-let quickCryptoPromise: Promise<QuickCrypto> | undefined
-function loadQuickCrypto(): Promise<QuickCrypto> {
-  quickCryptoPromise ??= import('react-native-quick-crypto') as unknown as Promise<QuickCrypto>
-  return quickCryptoPromise
-}
+const loadQuickCrypto = lazyModule(
+  () => import('react-native-quick-crypto') as unknown as Promise<QuickCrypto>,
+)
 
 // Reads the file in fixed-size chunks so a large model.onnx never has to sit
 // fully in memory at once, per the task's streaming-hash requirement.
