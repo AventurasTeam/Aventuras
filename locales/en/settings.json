@@ -39,6 +39,11 @@
   },
   "embedding": {
     "intro": "Curated local embedding models. Download one to enable retrieval without a provider.",
+    "setDefault": "Set as default",
+    "setDefaultA11y": "Set {{model}} as the default embedding model",
+    "isDefault": "Default",
+    "getA11y": "Download {{model}}",
+    "testA11y": "Test {{model}}",
     "get": "Get",
     "installed": "Installed",
     "folder": "Folder: {{folder}}",
