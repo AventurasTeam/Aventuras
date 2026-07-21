@@ -66,6 +66,13 @@ function DialogContent({
             className,
           )}
           {...props}
+          // The primitive claims the JS responder for every touch inside the
+          // dialog (its guard against a close-on-press overlay). Our native
+          // overlay is an Animated.View slot that ignores onPress, so the
+          // guard protects nothing — and the claim races native scroll
+          // interception on Android, making ScrollView gestures flaky to
+          // start. Drop it.
+          onStartShouldSetResponder={undefined}
         >
           <>{children}</>
           <DialogPrimitive.Close
