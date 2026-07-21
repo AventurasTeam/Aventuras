@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
-import { Linking, Platform, View } from 'react-native'
-// RN's ScrollView can't scroll inside @rn-primitives/dialog on Android: the
-// primitive's native Content claims the JS responder for every touch
-// (onStartShouldSetResponder → true), which blocks native scroll interception.
-// The gesture-handler ScrollView bypasses the responder system entirely.
-import { ScrollView } from 'react-native-gesture-handler'
+import { Linking, Platform, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -76,7 +71,9 @@ export function EmbedderDownloadDialogView(props: EmbedderDownloadDialogViewProp
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* 560px overrides the primitive's sm:max-w-lg (≈512px) per
           the design spec: "560px-capped centered shape." */}
-      <DialogContent className="sm:max-w-[560px]" portalHost={portalHost}>
+      {/* No header ×: every state carries an explicit affordance, and a header
+          close would bypass the machine's cancel path (partial-file cleanup). */}
+      <DialogContent className="sm:max-w-[560px]" portalHost={portalHost} hideCloseButton>
         <Header state={state} />
         <Body {...props} hfInputValue={hfInputValue} onHfInputChange={setHfInputValue} />
         <Footer {...props} hfInputValue={hfInputValue} />

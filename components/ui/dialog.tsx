@@ -51,10 +51,13 @@ function DialogOverlay({
 function DialogContent({
   className,
   portalHost,
+  hideCloseButton,
   children,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   portalHost?: string
+  /** Hosts whose every state carries an explicit affordance can drop the ×. */
+  hideCloseButton?: boolean
 }) {
   return (
     <DialogPortal hostName={portalHost}>
@@ -75,18 +78,20 @@ function DialogContent({
           onStartShouldSetResponder={undefined}
         >
           <>{children}</>
-          <DialogPrimitive.Close
-            className={cn(
-              'absolute right-4 top-4 rounded opacity-70 active:bg-tint-press active:opacity-100',
-              Platform.select({
-                web: 'outline-none transition-colors hover:bg-tint-hover hover:opacity-100 focus-visible:ring-2 focus-visible:ring-focus-ring',
-              }),
-            )}
-            hitSlop={12}
-          >
-            <Icon as={X} className="size-4 shrink-0 text-fg-primary web:pointer-events-none" />
-            <Text className="sr-only">Close</Text>
-          </DialogPrimitive.Close>
+          {hideCloseButton ? null : (
+            <DialogPrimitive.Close
+              className={cn(
+                'absolute right-4 top-4 rounded opacity-70 active:bg-tint-press active:opacity-100',
+                Platform.select({
+                  web: 'outline-none transition-colors hover:bg-tint-hover hover:opacity-100 focus-visible:ring-2 focus-visible:ring-focus-ring',
+                }),
+              )}
+              hitSlop={12}
+            >
+              <Icon as={X} className="size-4 shrink-0 text-fg-primary web:pointer-events-none" />
+              <Text className="sr-only">Close</Text>
+            </DialogPrimitive.Close>
+          )}
         </DialogPrimitive.Content>
       </DialogOverlay>
     </DialogPortal>
@@ -94,7 +99,8 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: ViewProps) {
-  return <View className={cn('flex flex-col gap-2', className)} {...props} />
+  // pr-8 keeps full-width titles clear of the absolutely-positioned ×.
+  return <View className={cn('flex flex-col gap-2 pr-8', className)} {...props} />
 }
 
 function DialogFooter({ className, ...props }: ViewProps) {
