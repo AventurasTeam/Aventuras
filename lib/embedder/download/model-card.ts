@@ -3,11 +3,19 @@
 // substitution, per docs/memory/model-management.md → License attestation.
 import type {
   CatalogEntry,
+  LicenseKind,
   ModelMeta,
 } from '@/components/compounds/embedder-download-dialog-machine'
 
 const HF_ORIGIN = 'https://huggingface.co'
 const FETCH_TIMEOUT_MS = 15_000
+
+// HF-staff mirror of choosealicense.com; standard HF license tags map 1:1 to
+// markdown/<tag>.md. Pinned like model revisions — attested license text must
+// not drift under us. Proprietary tags (e.g. `gemma`) are absent → 404 →
+// model-card fallback.
+const LICENSE_DATASET_PATH = 'datasets/choosealicense/licenses'
+const LICENSE_DATASET_REVISION = '20edaed2b9e7dccd366d0654d4536fb377850680'
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -22,7 +30,9 @@ function fetchWithTimeout(url: string): Promise<Response> {
   return fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
 }
 
-async function fetchLicenseName(id: string, revision: string): Promise<string> {
+type CardLicense = { id: string; displayName: string; link?: string }
+
+async function fetchCardLicense(id: string, revision: string): Promise<CardLicense> {
   let res: Response
   try {
     res = await fetchWithTimeout(`${HF_ORIGIN}/api/models/${id}/revision/${revision}`)
@@ -32,14 +42,20 @@ async function fetchLicenseName(id: string, revision: string): Promise<string> {
   if (!res.ok) {
     throw new Error(`Model-card metadata fetch failed: ${res.status} ${res.statusText}`)
   }
-  const json = (await res.json()) as { cardData?: { license?: string } }
-  return json.cardData?.license ?? ''
+  const json = (await res.json()) as {
+    cardData?: { license?: string; license_name?: string; license_link?: string }
+  }
+  const card = json.cardData ?? {}
+  const licenseId = card.license ?? ''
+  return {
+    // `license: other` is HF's escape hatch: the real name/link live in
+    // license_name / license_link on the card itself.
+    displayName: licenseId === 'other' && card.license_name ? card.license_name : licenseId,
+    id: licenseId,
+    link: card.license_link,
+  }
 }
 
-// The dialog renders the README body verbatim as the "license text" (per
-// docs/ui/patterns/embedder-download.md — "License text is not paraphrased").
-// Strip the leading YAML frontmatter block HF model cards use for metadata;
-// keep everything after it.
 function stripFrontmatter(markdown: string): string {
   if (!markdown.startsWith('---')) return markdown.trim()
   const closingIndex = markdown.indexOf('\n---', 3)
@@ -48,7 +64,39 @@ function stripFrontmatter(markdown: string): string {
   return (bodyStart === -1 ? '' : markdown.slice(bodyStart + 1)).trim()
 }
 
-async function fetchLicenseText(id: string, revision: string): Promise<string> {
+function parseFrontmatterTitle(markdown: string): string | null {
+  if (!markdown.startsWith('---')) return null
+  const closingIndex = markdown.indexOf('\n---', 3)
+  if (closingIndex === -1) return null
+  const match = markdown.slice(0, closingIndex).match(/^title:\s*(.+)$/m)
+  return match ? match[1].trim() : null
+}
+
+// Returns null when the tag has no standard text (proprietary tags 404 here —
+// the model-card fallback path). Network failures and non-404 errors throw:
+// silently swapping the model card in for a license that does have standard
+// text would corrupt the attestation.
+async function fetchStandardLicenseText(
+  licenseId: string,
+): Promise<{ title: string; text: string } | null> {
+  if (!licenseId || licenseId === 'other') return null
+  let res: Response
+  try {
+    res = await fetchWithTimeout(
+      `${HF_ORIGIN}/${LICENSE_DATASET_PATH}/raw/${LICENSE_DATASET_REVISION}/markdown/${licenseId}.md`,
+    )
+  } catch (error) {
+    throw new Error(`Couldn't reach the license source: ${messageOf(error)}`)
+  }
+  if (res.status === 404) return null
+  if (!res.ok) {
+    throw new Error(`License text fetch failed: ${res.status} ${res.statusText}`)
+  }
+  const raw = await res.text()
+  return { title: parseFrontmatterTitle(raw) ?? licenseId, text: stripFrontmatter(raw) }
+}
+
+async function fetchModelCardText(id: string, revision: string): Promise<string> {
   let res: Response
   try {
     res = await fetchWithTimeout(`${HF_ORIGIN}/${id}/raw/${revision}/README.md`)
@@ -63,7 +111,13 @@ async function fetchLicenseText(id: string, revision: string): Promise<string> {
 
 export async function fetchModelCard(
   source: { kind: 'catalog'; entry: CatalogEntry } | { kind: 'hf-id'; id: string },
-): Promise<{ meta: ModelMeta; licenseText: string; licenseName: string }> {
+): Promise<{
+  meta: ModelMeta
+  licenseText: string
+  licenseName: string
+  licenseKind: LicenseKind
+  licenseLink?: string
+}> {
   if (source.kind === 'hf-id') {
     // The dialog only receives catalog inits this slice — the power-user HF-id
     // path (live file-listing resolution + validation) lands in M7.1.
@@ -79,12 +133,27 @@ export async function fetchModelCard(
     fileCount: entry.files.length,
   }
 
-  const [licenseName, licenseText] = await Promise.all([
-    fetchLicenseName(entry.id, entry.revision),
-    fetchLicenseText(entry.id, entry.revision),
+  const [cardLicense, modelCardText] = await Promise.all([
+    fetchCardLicense(entry.id, entry.revision),
+    fetchModelCardText(entry.id, entry.revision),
   ])
 
-  return { meta, licenseText, licenseName }
+  const standard = await fetchStandardLicenseText(cardLicense.id)
+  if (standard) {
+    return {
+      meta,
+      licenseKind: 'license',
+      licenseName: standard.title,
+      licenseText: standard.text,
+    }
+  }
+  return {
+    meta,
+    licenseKind: 'model-card',
+    licenseName: cardLicense.displayName,
+    licenseText: modelCardText,
+    ...(cardLicense.link ? { licenseLink: cardLicense.link } : {}),
+  }
 }
 
 export function resolveHfModel(): Promise<{ meta: ModelMeta; files: string[] }> {

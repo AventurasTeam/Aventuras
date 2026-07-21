@@ -23,6 +23,13 @@ export type ModelMeta = {
   fileCount: number
 }
 
+/**
+ * What the license region shows: `license` — real license text (standard HF
+ * tags resolved via the pinned choosealicense dataset); `model-card` — README
+ * fallback for proprietary/unknown tags with no standard text.
+ */
+export type LicenseKind = 'license' | 'model-card'
+
 export type FileProgress =
   | { kind: 'waiting' }
   | { kind: 'downloading'; bytesReceived: number; bytesTotal: number }
@@ -54,7 +61,14 @@ export type DialogState =
   // driver wiring lands and inserts license → ep-picker → downloading.
   | { kind: 'resolving'; init: DialogInit }
   | { kind: 'card-fetch'; meta: ModelMeta }
-  | { kind: 'license'; meta: ModelMeta; licenseText: string; licenseName: string }
+  | {
+      kind: 'license'
+      meta: ModelMeta
+      licenseText: string
+      licenseName: string
+      licenseKind: LicenseKind
+      licenseLink?: string
+    }
   | { kind: 'ep-picker'; meta: ModelMeta; pickedEp: ExecutionProvider }
   | { kind: 'import-confirm'; bundle: ImportBundle; pickedEp: ExecutionProvider }
   | {
@@ -72,7 +86,14 @@ export type DialogState =
 
 export type DialogAction =
   | { type: 'submit-hf-input'; input: string }
-  | { type: 'card-fetched'; meta: ModelMeta; licenseText: string; licenseName: string }
+  | {
+      type: 'card-fetched'
+      meta: ModelMeta
+      licenseText: string
+      licenseName: string
+      licenseKind: LicenseKind
+      licenseLink?: string
+    }
   | { type: 'card-fetch-failed'; message: string }
   | { type: 'license-accepted' }
   | { type: 'license-declined' }
@@ -108,7 +129,13 @@ export type DialogResolution =
 export type DialogDriver = {
   fetchModelCard(
     source: { kind: 'catalog'; entry: CatalogEntry } | { kind: 'hf-id'; id: string },
-  ): Promise<{ meta: ModelMeta; licenseText: string; licenseName: string }>
+  ): Promise<{
+    meta: ModelMeta
+    licenseText: string
+    licenseName: string
+    licenseKind: LicenseKind
+    licenseLink?: string
+  }>
   resolveHfModel(id: string): Promise<{ meta: ModelMeta; files: string[] }>
   downloadFile(args: {
     url: string
@@ -164,6 +191,8 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           meta: action.meta,
           licenseText: action.licenseText,
           licenseName: action.licenseName,
+          licenseKind: action.licenseKind,
+          licenseLink: action.licenseLink,
         }
       }
       if (action.type === 'card-fetch-failed') {
@@ -182,6 +211,8 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           meta: action.meta,
           licenseText: action.licenseText,
           licenseName: action.licenseName,
+          licenseKind: action.licenseKind,
+          licenseLink: action.licenseLink,
         }
       }
       if (action.type === 'card-fetch-failed') {
