@@ -305,6 +305,19 @@ describe('reducer — downloading state', () => {
     }
   })
 
+  it('retry from download-failed restarts the downloading manifest', () => {
+    const before: DialogState = {
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: { kind: 'download-failed', failingFile: 'model.onnx', message: 'connection reset' },
+    }
+    const after = reducer(before, { type: 'retry' })
+    expect(after.kind).toBe('downloading')
+    if (after.kind === 'downloading') {
+      expect(after.progressByFile).toEqual({})
+    }
+  })
+
   it('cancel from downloading transitions to failed with cancelled reason', () => {
     const before: DialogState = {
       kind: 'downloading',

@@ -707,7 +707,9 @@ function Footer(props: EmbedderDownloadDialogViewProps & { hfInputValue: string 
       return null
     case 'failed': {
       const retryable =
-        state.reason.kind === 'card-fetch-failed' || state.reason.kind === 'resolve-failed'
+        state.reason.kind === 'card-fetch-failed' ||
+        state.reason.kind === 'resolve-failed' ||
+        state.reason.kind === 'download-failed'
       if (retryable) {
         return (
           <DialogFooter>

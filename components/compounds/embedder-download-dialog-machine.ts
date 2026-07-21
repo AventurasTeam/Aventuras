@@ -344,6 +344,11 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         if (state.reason.kind === 'resolve-failed') {
           return { kind: 'hf-input' }
         }
+        // Restarts the manifest; already-staged bytes survive per platform
+        // (desktop resumes .part via Range, native restarts the failed file).
+        if (state.reason.kind === 'download-failed' && state.meta) {
+          return { kind: 'downloading', meta: state.meta, progressByFile: {} }
+        }
       }
       return state
     }

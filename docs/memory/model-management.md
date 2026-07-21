@@ -240,8 +240,12 @@ Failure modes during the run:
 doesn't match the expected hash. Try again later.` Don't
   auto-retry; the mismatch may indicate corruption or a rotated
   upstream that the catalog hasn't caught up to.
-- **Network drop** — pause the download with a Resume affordance.
-  Standard download UX.
+- **Network drop** — transient blips continue in-session without
+  user action (desktop resumes the partial via Range; Android
+  retries the same resumable with backoff). A hard drop surfaces
+  the failed state with a Retry that restarts the manifest —
+  desktop continues from staged partials, Android restarts the
+  interrupted file (amended at M3.1a device review).
 - **Disk-full** mid-download — abort and surface a clear error;
   delete partials.
 
