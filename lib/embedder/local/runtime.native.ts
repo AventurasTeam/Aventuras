@@ -5,6 +5,7 @@ import { logger } from '@/lib/diagnostics'
 
 import { embeddersRoot, modelDir } from './paths.native'
 import { meanPoolAndNormalize } from './pooling'
+import { lazyModule } from '../lazy-module'
 import { EmbedderCallError, EmbedderInitError } from '../types'
 
 export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
@@ -33,11 +34,9 @@ type SessionBundle = { session: InferenceSession; tokenizer: TokenizerFn; ort: O
 // never be imported at the top level — the lib/embedder barrel is reachable from
 // config-presence checks that run before the model is loaded (and before the
 // dev-client is rebuilt). Load it lazily, only inside the session-building path.
-let ortModulePromise: Promise<OrtRuntime> | undefined
-function loadOrt(): Promise<OrtRuntime> {
-  ortModulePromise ??= import('onnxruntime-react-native') as unknown as Promise<OrtRuntime>
-  return ortModulePromise
-}
+const loadOrt = lazyModule(
+  () => import('onnxruntime-react-native') as unknown as Promise<OrtRuntime>,
+)
 
 // Lazy per-model session+tokenizer cache. A model isn't loaded until first embed;
 // a failed load evicts itself so a later call can retry after the user reinstalls.
