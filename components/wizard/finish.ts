@@ -79,6 +79,7 @@ export async function finishWizard(
   const settings = buildStorySettings(
     appDefaults.defaultStorySettings,
     appDefaults.embeddingModelId,
+    appDefaults.embeddingProviderId,
   )
 
   // The lead is the only entity the M2 commit materializes, so it's the only id

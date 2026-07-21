@@ -37,13 +37,20 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   packVariables: {},
 }
 
+// A story copies the embedder selection at creation and never re-reads the app
+// default, so both halves must be captured here or a provider-backend story
+// resolves to 'no-provider' for the rest of its life.
 export function buildStorySettings(
   appDefault: Partial<StorySettings>,
   appEmbeddingModelId: string | null,
+  appEmbeddingProviderId: string | null,
 ): StorySettings {
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
-    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
     ...appDefault,
+    // After the spread: a stale embedding_model_id carried in appDefault must
+    // not win over the app-level selection these arguments carry.
+    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
+    ...(appEmbeddingProviderId !== null ? { embedding_provider_id: appEmbeddingProviderId } : {}),
   })
 }
