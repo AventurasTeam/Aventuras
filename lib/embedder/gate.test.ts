@@ -8,7 +8,7 @@ type GateApp = {
   embeddingModelId: string | null
   embeddingProviderId: string | null
   defaultStorySettings: Partial<StorySettings>
-  providers: readonly { id: string; type: string }[]
+  providers: readonly { id: string; type: string; endpoint?: string }[]
 }
 
 const LOCAL_CATALOG_ID = 'Xenova/all-MiniLM-L6-v2'
@@ -93,7 +93,9 @@ describe('resolveEmbedderGate', () => {
       embeddingModelId: 'text-embedding-3-small',
       embeddingProviderId: 'prov-1',
       defaultStorySettings: { embeddingBackend: 'provider' },
-      providers: [{ id: 'prov-1', type: 'openai-compatible' }],
+      providers: [
+        { id: 'prov-1', type: 'openai-compatible', endpoint: 'http://localhost:1234/v1' },
+      ],
     })
 
     const result = resolveEmbedderGate(app, [])
@@ -108,6 +110,30 @@ describe('resolveEmbedderGate', () => {
       },
     })
   })
+
+  it.each([undefined, '', '   '])(
+    'openai-compatible provider with endpoint %p -> provider-missing-endpoint, not usable',
+    (endpoint) => {
+      const app = baseApp({
+        embeddingModelId: 'text-embedding-3-small',
+        embeddingProviderId: 'prov-1',
+        defaultStorySettings: { embeddingBackend: 'provider' },
+        providers: [
+          {
+            id: 'prov-1',
+            type: 'openai-compatible',
+            ...(endpoint === undefined ? {} : { endpoint }),
+          },
+        ],
+      })
+
+      expect(resolveEmbedderGate(app, [])).toEqual({
+        usable: false,
+        backend: 'provider',
+        reason: 'provider-missing-endpoint',
+      })
+    },
+  )
 
   it('provider id set but instance missing from providers -> no-provider', () => {
     const app = baseApp({

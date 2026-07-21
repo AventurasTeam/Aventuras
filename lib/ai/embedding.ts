@@ -1,20 +1,24 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { embedMany, type EmbeddingModel } from 'ai'
 
-import { EmbedderCallError, EmbedderInitError, providerTypeSupportsEmbedding } from '@/lib/embedder'
+import {
+  EmbedderCallError,
+  EmbedderInitError,
+  providerHasEmbeddingEndpoint,
+  providerTypeSupportsEmbedding,
+} from '@/lib/embedder'
 
 import { classifyProviderError } from './transport/classify-provider-error'
 import { createFetchWithCapture } from './transport/fetch'
 import { type ProviderInstanceWithStub } from './types'
 
 function requireEndpoint(provider: ProviderInstanceWithStub): string {
-  const endpoint = provider.endpoint?.trim()
-  if (endpoint === undefined || endpoint.length === 0) {
+  if (!providerHasEmbeddingEndpoint(provider)) {
     throw new EmbedderInitError(
       `Provider "${provider.id}" (openai-compatible) requires an endpoint`,
     )
   }
-  return endpoint
+  return provider.endpoint.trim()
 }
 
 function buildEmbeddingModel(

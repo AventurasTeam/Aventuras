@@ -20,9 +20,14 @@ import type { EmbedderGateBlockedReason } from './finish'
 // provider-backend user with no model name to the local ONNX catalog.
 const INSTALL_TAB = '/settings?tab=embedding-models' as Href
 const SELECT_TAB = '/settings?tab=memory' as Href
+const PROVIDERS_TAB = '/settings?tab=providers' as Href
 
 function settingsHref(reason: EmbedderGateBlockedReason): Href {
-  return reason === 'model-not-installed' ? INSTALL_TAB : SELECT_TAB
+  if (reason === 'model-not-installed') return INSTALL_TAB
+  // The provider is already selected — the missing endpoint is only editable on
+  // the provider form, so the memory tab would be a dead end.
+  if (reason === 'provider-missing-endpoint') return PROVIDERS_TAB
+  return SELECT_TAB
 }
 
 const BODY_KEY_BY_REASON = {
@@ -31,6 +36,7 @@ const BODY_KEY_BY_REASON = {
   'model-not-installed': 'wizard:embedGate.body.model-not-installed',
   'no-provider': 'wizard:embedGate.body.no-provider',
   'provider-cannot-embed': 'wizard:embedGate.body.provider-cannot-embed',
+  'provider-missing-endpoint': 'wizard:embedGate.body.provider-missing-endpoint',
 } as const satisfies Record<EmbedderGateBlockedReason, string>
 
 type EmbedderGateBlockedProps = {

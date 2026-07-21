@@ -30,7 +30,7 @@ export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
   embeddingModelId: string | null
   embeddingProviderId: string | null
-  providers: readonly { id: string; type: string }[]
+  providers: readonly { id: string; type: string; endpoint?: string }[]
   installedLocalIds: readonly string[]
 }
 

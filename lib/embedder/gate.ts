@@ -1,6 +1,6 @@
 import type { StorySettings } from '@/lib/db'
 
-import { providerTypeSupportsEmbedding } from './provider-support'
+import { providerHasEmbeddingEndpoint, providerTypeSupportsEmbedding } from './provider-support'
 import { resolveEmbedderConfig } from './resolve-config'
 import type { EmbedderConfig } from './types'
 
@@ -11,8 +11,12 @@ import type { EmbedderConfig } from './types'
 // - 'no-provider' covers both never-selected and selected-but-instance-deleted
 //   (the providerId points at an entry no longer in app.providers).
 // - 'unknown-model' is local-only. Provider model ids are never
-//   catalog-validated (dim resolves via the 0 sentinel), so a bad provider
-//   model id still resolves usable here and only fails later at embed time.
+//   catalog-validated (a provider config carries a null dim until the first
+//   embed probes it), so a bad provider model id still resolves usable here and
+//   only fails later at embed time.
+// - 'provider-missing-endpoint' is the one blocked reason whose fix lives on the
+//   providers tab rather than the memory tab — the provider is selected and can
+//   embed, it just has no base URL to embed against.
 export type EmbedderGateResult =
   | { usable: true; config: EmbedderConfig }
   | {
@@ -24,6 +28,7 @@ export type EmbedderGateResult =
         | 'model-not-installed'
         | 'no-provider'
         | 'provider-cannot-embed'
+        | 'provider-missing-endpoint'
     }
 
 // Config-presence only, no init/smoke-test: the gate answers "is a backend
@@ -35,7 +40,7 @@ export function resolveEmbedderGate(
     embeddingModelId: string | null
     embeddingProviderId: string | null
     defaultStorySettings: Partial<StorySettings>
-    providers: readonly { id: string; type: string }[]
+    providers: readonly { id: string; type: string; endpoint?: string }[]
   },
   installedLocalIds: readonly string[],
 ): EmbedderGateResult {
@@ -72,6 +77,9 @@ export function resolveEmbedderGate(
   // commit time, so the gate has to reject it here rather than promise usable.
   if (!providerTypeSupportsEmbedding(provider.type)) {
     return { usable: false, backend, reason: 'provider-cannot-embed' }
+  }
+  if (!providerHasEmbeddingEndpoint(provider)) {
+    return { usable: false, backend, reason: 'provider-missing-endpoint' }
   }
   return { usable: true, config }
 }

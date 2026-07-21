@@ -503,7 +503,7 @@ describe('finishWizard — embedder hard gate', () => {
         defaultStorySettings: { embeddingBackend: 'provider' },
         embeddingModelId: 'text-embedding-3-small',
         embeddingProviderId: 'p1',
-        providers: [{ id: 'p1', type: 'openai-compatible' }],
+        providers: [{ id: 'p1', type: 'openai-compatible', endpoint: 'http://localhost:1234/v1' }],
         installedLocalIds: [],
       },
       embedCtx,
