@@ -58,8 +58,8 @@ async function hydrateCurrentDefaults(): Promise<void> {
 describe('resetStorySettings', () => {
   it('rebuilds current defaults and preserves definition, entries, entities, and deltas', async () => {
     const { db, sqlite, runInTransaction } = await createTestDb()
-    const oldSettings = buildStorySettings({ classifierCadence: 2 }, 'old-embed')
-    const healthySettings = buildStorySettings({ classifierCadence: 4 }, 'other-embed')
+    const oldSettings = buildStorySettings({ classifierCadence: 2 }, 'old-embed', null)
+    const healthySettings = buildStorySettings({ classifierCadence: 4 }, 'other-embed', null)
 
     await db.insert(stories).values([
       {
@@ -139,6 +139,7 @@ describe('resetStorySettings', () => {
           chapterAutoClose: false,
         },
         'app-embed',
+        null,
       ),
     )
     expect(recovered.definition).toEqual(STORY_DEFINITION)
@@ -169,7 +170,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed'),
+      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed', null),
       createdAt: 1,
       updatedAt: 1,
     })
@@ -194,7 +195,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed'),
+      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed', null),
       createdAt: 1,
       updatedAt: 1,
     })
