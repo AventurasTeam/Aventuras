@@ -1,3 +1,4 @@
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderErrorEnvelope } from '@/types/embedder-bridge'
 
 import { EmbedderCallError, EmbedderInitError } from '../types'
@@ -15,6 +16,10 @@ function resolveBridge() {
 export function envelopeToError(
   envelope: EmbedderErrorEnvelope,
 ): EmbedderInitError | EmbedderCallError {
+  logger.error('embedder.local_runtime_failed', {
+    kind: envelope.kind,
+    error: envelope.message,
+  })
   // instanceof can't survive the IPC boundary — the {kind} tag is the contract.
   return envelope.kind === 'init'
     ? new EmbedderInitError(envelope.message)

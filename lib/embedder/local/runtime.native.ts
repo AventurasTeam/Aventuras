@@ -1,6 +1,8 @@
 import { Directory, File } from 'expo-file-system'
 import type { InferenceSession, Tensor } from 'onnxruntime-react-native'
 
+import { logger } from '@/lib/diagnostics'
+
 import { embeddersRoot, modelDir } from './paths.native'
 import { meanPoolAndNormalize } from './pooling'
 import { EmbedderCallError, EmbedderInitError } from '../types'
@@ -54,7 +56,13 @@ function getBundle(modelId: string): Promise<SessionBundle> {
   if (!bundle) {
     bundle = buildBundle(modelId)
     bundles.set(modelId, bundle)
-    bundle.catch(() => bundles.delete(modelId))
+    bundle.catch((error: unknown) => {
+      logger.error('embedder.bundle_build_failed', {
+        modelId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      bundles.delete(modelId)
+    })
   }
   return bundle
 }
@@ -171,7 +179,13 @@ export async function listInstalledLocal(): Promise<{ id: string; sizeBytes: num
     try {
       const meta = JSON.parse(await new File(entry, 'meta.json').text()) as { id: string }
       installed.push({ id: meta.id, sizeBytes: folderSizeBytes(entry) })
-    } catch {
+    } catch (error) {
+      // A corrupt meta.json must not sink the whole list, but a model silently
+      // vanishing from Settings needs to leave a trace.
+      logger.warn('embedder.installed_entry_skipped', {
+        dir: entry.name,
+        error: error instanceof Error ? error.message : String(error),
+      })
       continue
     }
   }

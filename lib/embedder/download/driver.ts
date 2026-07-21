@@ -2,6 +2,7 @@
 // window.aventurasEmbedder (electron/embedder, exposed via preload). See
 // docs/memory/model-management.md → Download flow for the on-disk contract.
 import type { DialogDriver } from '@/components/compounds/embedder-download-dialog-machine'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation, EmbedderBridge } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
@@ -79,6 +80,12 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         if (result.reason === 'cancelled') {
           throw new DownloadCancelledError()
         }
+        logger.error('embedder.download_file_failed', {
+          modelId: entry.id,
+          fileName: row.fileName,
+          reason: result.reason,
+          message: result.message,
+        })
         if (result.reason === 'hash-mismatch') {
           // Resolve rather than throw: throwing here would route the failure
           // through the 'downloading' state's generic download-failed action
