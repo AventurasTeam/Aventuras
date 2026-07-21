@@ -290,9 +290,13 @@ function LicenseBody({
       <ScrollView
         accessibilityLabel={isModelCard ? 'Model card' : 'License text'}
         className={cn(
-          'rounded-md border border-border bg-bg-sunken p-3',
+          'rounded-md border border-border bg-bg-sunken',
           Platform.select({ web: 'max-h-[40vh]', default: 'max-h-96' }),
         )}
+        // Padding must live on the content container: on the scroll container
+        // itself, Android clips the scrollable extent by the padding and the
+        // content tail becomes unreachable.
+        contentContainerClassName="p-3"
       >
         <Text size="sm" className="font-mono">
           {licenseText}
