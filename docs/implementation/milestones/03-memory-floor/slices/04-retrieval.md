@@ -178,6 +178,15 @@ simulator re-runs it bit-for-bit.
   share it.
 - **Per-type overhead constants** — measured after the memory
   macros are concrete; record the measured values.
+- **vec0 returns L2 distance, not cosine similarity** — the
+  `0005_embedder_vec0.sql` tables declare no `distance_metric`, so
+  KNN ranks by raw L2. That matches cosine ranking only because
+  every stored and query vector is unit-norm, an invariant 3.1a's
+  embedder facade enforces on every embed rather than something the
+  vec0 layer guarantees. The ranker has to convert each `distance`
+  column back to a similarity via `cos = 1 − d²/2` before scoring or
+  tracing, not treat distance as already-cosine. Carried over from
+  3.1a implementation (2026-07-20).
 
 ## Implementation notes
 

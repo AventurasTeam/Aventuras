@@ -10,22 +10,50 @@
 // Directory/File classes for everything else.
 import { File } from 'expo-file-system'
 import { createDownloadResumable } from 'expo-file-system/legacy'
-import { createHash } from 'react-native-quick-crypto'
 
 import type { DialogDriver } from '@/components/compounds/embedder-download-dialog-machine'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
+import { EmbedderDownloadError } from './failure'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
+import { lazyModule } from '../lazy-module'
 import { modelDir } from '../local/paths.native'
-import { smokeTestLocal } from '../local/runtime.native'
+import { evictBundle, smokeTestLocal } from '../local/runtime.native'
 
 const HASH_CHUNK_BYTES = 1024 * 1024
 
+// Waits between in-session resume attempts after a connection drop; a hard
+// offline surfaces the failure after the last retry (~7s).
+const BLIP_BACKOFF_MS = [1000, 2000, 4000]
+
+// The slice of react-native-quick-crypto this driver touches. A structural
+// surface (rather than `typeof import(...)`, which the type-import lint
+// forbids, or a banned namespace import) keeps the module off the top-level
+// import graph entirely — mirrors local/runtime.native.ts's OrtRuntime. The
+// package doesn't export its `Hash` class type, so this is hand-written
+// rather than imported.
+type QuickCryptoHash = {
+  update(data: Uint8Array | string, inputEncoding?: string): unknown
+  digest(encoding: 'hex'): string
+}
+type QuickCrypto = { createHash: (algorithm: 'sha256') => QuickCryptoHash }
+
+// react-native-quick-crypto's module-eval performs a native JSI install, so it
+// must never be imported at the top level — the lib/embedder barrel is
+// reachable from config-presence checks that run before a model is installed
+// (and before the dev-client is rebuilt). Load it lazily, only inside the
+// hashing call sites.
+const loadQuickCrypto = lazyModule(
+  () => import('react-native-quick-crypto') as unknown as Promise<QuickCrypto>,
+)
+
 // Reads the file in fixed-size chunks so a large model.onnx never has to sit
 // fully in memory at once, per the task's streaming-hash requirement.
-function hashFile(file: File): string {
+async function hashFile(file: File): Promise<string> {
+  const { createHash } = await loadQuickCrypto()
   const hash = createHash('sha256')
   const handle = file.open()
   try {
@@ -42,7 +70,8 @@ function hashFile(file: File): string {
   return hash.digest('hex') as string
 }
 
-function sha256HexSync(text: string): string {
+async function sha256Hex(text: string): Promise<string> {
+  const { createHash } = await loadQuickCrypto()
   // update()'s two-arg overload (data + inputEncoding) returns a Buffer, not
   // the Hash instance, so it can't chain into digest() — call them separately.
   const hash = createHash('sha256')
@@ -53,8 +82,19 @@ function sha256HexSync(text: string): string {
 // createEmbedderDownloadDriver(entry) closes over the catalog entry it was
 // opened for — hosts (settings tab, onboarding) create one driver instance
 // per dialog open, matching the shipped dialog's memoized-init contract.
+// Thrown when the user cancels: distinguishes a deliberate stop from a network
+// failure so the dialog doesn't render "your download failed".
+class DownloadCancelledError extends Error {
+  readonly cancelled = true
+  constructor() {
+    super('Download cancelled')
+  }
+}
+
 export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDriver {
   const plan = buildDownloadPlan(entry)
+  let inFlight: ReturnType<typeof createDownloadResumable> | null = null
+  let cancelled = false
 
   return {
     fetchModelCard,
@@ -68,9 +108,21 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
 
       // Stage to `<fileName>.part` and rename into place only once the
       // transfer completes, so an interrupted download never leaves a
-      // partial file sitting at the canonical install path. Not a resume
-      // across attempts (pending decision) — any leftover `.part` from a
-      // prior attempt is discarded and this one starts clean.
+      // partial file sitting at the canonical install path. A leftover
+      // `.part` from a previous launch is discarded rather than resumed.
+      // A completed file from an earlier attempt short-circuits, so a retry
+      // re-transfers only what actually failed rather than the whole manifest.
+      const existingFinal = new File(dir, row.fileName)
+      if (existingFinal.exists) {
+        const existingHash = await hashFile(existingFinal)
+        if (existingHash === row.expectedSha256) {
+          const size = existingFinal.size ?? 0
+          onProgress(size, size)
+          return
+        }
+        existingFinal.delete()
+      }
+
       const partFile = new File(dir, `${row.fileName}.part`)
       if (partFile.exists) partFile.delete()
 
@@ -83,14 +135,50 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         },
       )
 
-      const result = await resumable.downloadAsync()
+      // In-session network-blip resume: a dropped connection rejects
+      // downloadAsync, so continue the same resumable from its .part with
+      // backoff before surfacing the failure.
+      inFlight = resumable
+      let result: Awaited<ReturnType<typeof resumable.downloadAsync>>
+      try {
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            result = attempt === 0 ? await resumable.downloadAsync() : await resumable.resumeAsync()
+            break
+          } catch (error) {
+            if (cancelled) throw new DownloadCancelledError()
+            // Only the last error escapes, so log each attempt — otherwise a
+            // disk-full followed by a transient blip reports the wrong cause.
+            logger.warn('embedder.download_attempt_failed', {
+              modelId: entry.id,
+              fileName: row.fileName,
+              attempt,
+              error: error instanceof Error ? error.message : String(error),
+            })
+            if (attempt >= BLIP_BACKOFF_MS.length) throw error
+            await new Promise((resolve) => setTimeout(resolve, BLIP_BACKOFF_MS[attempt]))
+            if (cancelled) throw new DownloadCancelledError()
+          }
+        }
+      } finally {
+        inFlight = null
+      }
+      if (cancelled) throw new DownloadCancelledError()
       if (!result) {
-        throw new Error(`Download of ${row.fileName} did not complete`)
+        throw new EmbedderDownloadError('network', `Download of ${row.fileName} did not complete`)
       }
       if (result.status < 200 || result.status >= 300) {
-        throw new Error(`Unexpected status ${result.status} downloading ${row.fileName}`)
+        throw new EmbedderDownloadError(
+          'network',
+          `Unexpected status ${result.status} downloading ${row.fileName}`,
+        )
       }
 
+      // expo's File.rename throws when the destination exists (no POSIX
+      // overwrite) — a completed file from a prior failed run would otherwise
+      // brick every re-download of this model.
+      const finalFile = new File(dir, row.fileName)
+      if (finalFile.exists) finalFile.delete()
       partFile.rename(row.fileName)
     },
 
@@ -105,13 +193,11 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       // Mirrors desktop's `expectedSha256.toLowerCase()` tolerance (electron/
       // embedder/downloads.ts) — the container compares this against the
       // catalog's expected hash with a strict `!==`.
-      return hashFile(new File(dir, row.fileName)).toLowerCase()
+      return (await hashFile(new File(dir, row.fileName))).toLowerCase()
     },
 
-    // `ep` isn't forwarded: this driver is created for the catalog install
-    // path, and the model being smoke-tested is always the entry the driver
-    // was opened for — `args.modelDir` (if supplied) names the same
-    // directory `modelDir(entry.id)` already resolves.
+    // `ep` isn't forwarded: the ORT session is built from the entry's own
+    // default_ep when the bundle is first created.
     async smokeTestEmbed() {
       await smokeTestLocal(entry.id)
     },
@@ -121,7 +207,7 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       if (!dir.exists) dir.create({ intermediates: true })
       const attestation: EmbedderAttestation = {
         timestamp: Date.now(),
-        licenseSha256: sha256HexSync(licenseText),
+        licenseSha256: await sha256Hex(licenseText),
         sourceUrl: meta.source,
         revision: meta.revision,
       }
@@ -132,7 +218,16 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       )
     },
 
+    async cancelDownload() {
+      cancelled = true
+      // pauseAsync rather than cancelAsync: cancelAsync also unlinks the .part,
+      // which races the deletePartial the dialog runs once this settles.
+      await inFlight?.pauseAsync().catch(() => {})
+      inFlight = null
+    },
+
     async deletePartial() {
+      evictBundle(entry.id)
       const dir = modelDir(entry.id)
       if (dir.exists) dir.delete()
     },

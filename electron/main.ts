@@ -12,9 +12,18 @@ import {
 } from './db/service'
 import type { DbProxyMethod } from './db/types'
 import { deletePartial, downloadFile, persistInstall } from './embedder/downloads'
-import { embeddersRoot, modelDir } from './embedder/paths'
+import {
+  assertAllowedDownloadUrl,
+  assertSafeFileName,
+  assertSha256,
+  modelDir,
+} from './embedder/paths'
 import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
+
+// Abort handles for in-flight downloads, so a renderer cancel actually stops
+// the transfer instead of only hiding its progress.
+const downloadAborts = new Map<string, AbortController>()
 
 const isDev = !app.isPackaged
 
@@ -110,9 +119,11 @@ function createWindow(): void {
 
   // Navigation floor, mirroring the native document's nav lock: entry hrefs
   // are stripped at sanitize, so any renderer navigation away from the app's
-  // own origin is hostile or a sanitize regression — block it. window.open is
-  // denied outright: Electron's default child window would inherit this
-  // window's webPreferences, preload (and its DB bridge) included.
+  // own origin is hostile or a sanitize regression — block it. window.open
+  // never creates a child window (it would inherit this window's
+  // webPreferences, preload and DB bridge included) — but https targets route
+  // to the system browser: legitimate surfaces (model-card links) open
+  // externally via Linking.openURL, which is window.open on react-native-web.
   // Prefix match with a slash guard, not URL.origin: Node's URL reports the
   // origin of the custom app scheme as the literal string "null".
   const ownOrigins = [
@@ -123,7 +134,10 @@ function createWindow(): void {
     const own = ownOrigins.some((origin) => url === origin || url.startsWith(`${origin}/`))
     if (!own) event.preventDefault()
   })
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
 
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
@@ -167,44 +181,61 @@ app.whenReady().then(async () => {
     dbTransaction(ops),
   )
 
-  ipcMain.handle('embedder:embed', (_e, args: { modelDir: string; texts: string[] }) =>
-    embedderEmbed(args),
+  ipcMain.handle('embedder:embed', (_e, args: { modelId: string; texts: string[] }) =>
+    embedderEmbed({ modelDir: requireModelDir(args.modelId), texts: args.texts }),
   )
-  ipcMain.handle('embedder:smoke-test', (_e, args: { modelDir: string }) => smokeTest(args))
+  ipcMain.handle('embedder:smoke-test', (_e, args: { modelId: string }) =>
+    smokeTest({ modelDir: requireModelDir(args.modelId) }),
+  )
   ipcMain.handle('embedder:list-installed', () => listInstalled())
   ipcMain.handle(
     'embedder:download-file',
-    (
-      event,
-      args: { url: string; modelId: string; fileName: string; expectedSha256: string | null },
-    ) => {
+    (event, args: { url: string; modelId: string; fileName: string; expectedSha256: string }) => {
       let destDir: string
+      let fileName: string
+      let url: string
+      let expectedSha256: string
       try {
         destDir = modelDir(args.modelId)
+        fileName = assertSafeFileName(args.fileName)
+        url = assertAllowedDownloadUrl(args.url)
+        expectedSha256 = assertSha256(args.expectedSha256, args.fileName)
       } catch (error) {
         return {
           ok: false as const,
-          reason: 'disk' as const,
+          reason: 'invalid-request' as const,
           message: error instanceof Error ? error.message : String(error),
         }
       }
+      // One controller per model: the dialog downloads a model's files in
+      // series, so a later file replaces the entry its predecessor left.
+      const controller = new AbortController()
+      downloadAborts.get(args.modelId)?.abort()
+      downloadAborts.set(args.modelId, controller)
+
       return downloadFile({
-        url: args.url,
+        url,
         destDir,
-        fileName: args.fileName,
-        expectedSha256: args.expectedSha256,
+        fileName,
+        expectedSha256,
+        signal: controller.signal,
         onProgress: (bytesReceived, bytesTotal) => {
           if (event.sender.isDestroyed()) return
           event.sender.send('embedder:download-progress', {
             modelId: args.modelId,
-            fileName: args.fileName,
+            fileName,
             bytesReceived,
             bytesTotal,
           })
         },
+      }).finally(() => {
+        if (downloadAborts.get(args.modelId) === controller) downloadAborts.delete(args.modelId)
       })
     },
   )
+  ipcMain.handle('embedder:cancel-download', (_e, args: { modelId: string }) => {
+    downloadAborts.get(args.modelId)?.abort()
+  })
   ipcMain.handle(
     'embedder:persist-install',
     (_e, args: { modelId: string; licenseText: string; attestation: EmbedderAttestation }) =>
@@ -220,7 +251,6 @@ app.whenReady().then(async () => {
     evictPipeline(dir)
     return deletePartial(dir)
   })
-  ipcMain.handle('embedder:root', () => embeddersRoot())
 
   createWindow()
 

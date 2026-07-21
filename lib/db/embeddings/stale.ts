@@ -1,5 +1,5 @@
 import type { SqlOp } from '../types'
-import { compositeText, sourceHash } from './source-hash'
+import { compositeText, parseSourceHash, sourceHash } from './source-hash'
 import { vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
 
 export type EmbeddedFieldRow = {
@@ -37,7 +37,10 @@ export async function recomputeStaleOp(
     vecRowPk(row.branchId, row.id),
   ])
   const currentHash = sourceHash(compositeText(row.fields))
-  const stale = vecRow?.source_hash === currentHash ? 0 : 1
+  // An unparseable stored hash (legacy encoding, a driver handing back a Buffer)
+  // is treated as stale rather than silently comparing unequal forever.
+  const storedHash = parseSourceHash(vecRow?.source_hash)
+  const stale = storedHash !== null && storedHash === currentHash ? 0 : 1
 
   return {
     sql: `UPDATE ${SOURCE_TABLES[row.kind]} SET embedding_stale = ? WHERE id = ? AND branch_id = ?`,

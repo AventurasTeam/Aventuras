@@ -95,16 +95,27 @@ Resolutions handed back to the host:
 
 ## Per-state UI
 
+No header × on any state — every state carries an explicit footer
+affordance, and a header close would bypass the machine's cancel
+path (partial-file cleanup). Escape / system back still close
+(amended at M3.1a device review).
+
 ### License dialog
 
-The center of the flow. Renders the model card's license content
-fetched **live** at the catalog entry's pinned
-`huggingfaceRevision` (per model-management.md's defense against
-post-curation edits).
+The center of the flow. License content is fetched **live** (per
+model-management.md's defense against post-curation edits) in two
+tiers: a standard HF license tag renders the real license text
+from the pinned `choosealicense/licenses` dataset mirror; a tag
+with no standard text (proprietary tags like `gemma`,
+`license: other`, or none) falls back to the model card body at
+the catalog entry's pinned `huggingfaceRevision`, with the region
+retitled `Model card — license: <tag>` and the card's
+`license_link` rendered as a link when present. See
+[model-management.md → Download flow](../../memory/model-management.md#download-flow).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Install MiniLM-L6 (lightweight)                       ×     │
+│ Install MiniLM-L6 (lightweight)                             │
 │ ─────────────────────────────────────────────────────       │
 │ Source:  huggingface.co/Xenova/all-MiniLM-L6-v2-q8          │
 │ Revision: abc123def456…                                      │
@@ -115,8 +126,9 @@ post-curation edits).
 │ │ Apache License                                           │ │
 │ │ Version 2.0, January 2004                                │ │
 │ │ ...                                                      │ │
-│ │ <scrollable license text fetched live from the model   │ │
-│ │  card>                                                   │ │
+│ │ <scrollable license text — standard tags fetch real    │ │
+│ │  text from the pinned license dataset; otherwise the   │ │
+│ │  model card body, labeled as such>                     │ │
 │ └─────────────────────────────────────────────────────────┘ │
 │                                                               │
 │                            [ Decline ]  [ Accept & download ] │
@@ -137,7 +149,7 @@ fetch shouldn't take long but isn't instant.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Install MiniLM-L6 (lightweight)                       ×     │
+│ Install MiniLM-L6 (lightweight)                             │
 │ ─────────────────────────────────────────────────────       │
 │                                                               │
 │   Fetching model card from huggingface.co…                   │
@@ -151,7 +163,7 @@ Cancel during this state resolves as `cancelled`.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ⚠ Couldn't reach the model source                     ×     │
+│ ⚠ Couldn't reach the model source                           │
 │ ─────────────────────────────────────────────────────       │
 │ Aventuras tried to fetch the license from                    │
 │ huggingface.co. The request failed:                          │
@@ -171,21 +183,25 @@ Cancel resolves with `error(card-fetch-failed)`.
 
 ### Downloading
 
-Three files (`model.onnx`, `tokenizer.json`, `tokenizer_config.json`)
-download in sequence. Per-file progress + overall progress.
-Resumable on network blip (continuation, not restart).
+The catalog entry's files download in sequence. The full manifest
+renders as `waiting…` rows before the first byte arrives, and the
+running total (against the catalog's total size) stays visible for
+the whole phase. Resumable on network blip (continuation, not
+restart). Cancel is a dedicated footer button, not header chrome
+(amended at M3.1a device review).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Downloading MiniLM-L6 (lightweight)                  Cancel │
+│ Downloading MiniLM-L6 (lightweight)                          │
 │ ─────────────────────────────────────────────────────       │
 │                                                               │
-│   model.onnx              ████████████░░░░░  72%   18 / 25 MB │
+│   model.onnx              ████████████░░░░░  72%              │
 │   tokenizer.json          waiting…                            │
 │   tokenizer_config.json   waiting…                            │
 │                                                               │
-│   Total: 18 / 25 MB · ~12 s remaining                        │
+│   Total: 18 / 25 MB                                           │
 │                                                               │
+│                                       [ Cancel download ]    │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -218,7 +234,7 @@ isn't a meaningful state.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ⚠ Verification failed                                  ×     │
+│ ⚠ Verification failed                                        │
 │ ─────────────────────────────────────────────────────       │
 │ One of the downloaded files doesn't match the expected      │
 │ hash:                                                         │
@@ -233,9 +249,62 @@ isn't a meaningful state.
 └─────────────────────────────────────────────────────────────┘
 ```
 
-No auto-retry. Per model-management.md → Failure modes: SHA256
-mismatch may indicate corruption or rotated upstream; we don't
-silently retry. Close resolves with `error(hash-mismatch)`.
+No auto-retry, and no Retry affordance: the bytes on disk are known
+bad, so retrying them cannot help. Per model-management.md →
+Failure modes, a mismatch may indicate corruption or a rotated
+upstream. Close resolves with `error(hash-mismatch)`.
+
+### Download failed
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ Download failed                                            │
+│ ─────────────────────────────────────────────────────       │
+│ A file failed to download:                                   │
+│                                                               │
+│   model.onnx: network request failed                         │
+│                                                               │
+│ Downloaded files are kept so a retry resumes where this      │
+│ left off. Retry when the network is back, or cancel to       │
+│ discard them.                                                │
+│                                                               │
+│                                   [ Cancel ]  [ Retry ]      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Retryable. Retry restarts the manifest, but files already complete
+on disk are re-hashed and skipped, so only the unfinished ones
+transfer again. Disk-full is the exception to keeping the bytes —
+see model-management.md → Failure modes.
+
+### Verification couldn't run
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ Couldn't verify the download                               │
+│ ─────────────────────────────────────────────────────       │
+│ A downloaded file couldn't be checked:                       │
+│                                                               │
+│   model.onnx: crypto module unavailable                      │
+│                                                               │
+│ The file itself may be fine — the check couldn't run.        │
+│ Retrying resumes from what's already downloaded.             │
+│                                                               │
+│                                   [ Cancel ]  [ Retry ]      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Distinct from the mismatch above, and retryable where that one is
+not: a digest that was never computed says nothing about the bytes.
+Collapsing the two would tell a user with a missing platform module
+that their download is corrupt.
+
+### Persist failed
+
+Reachable when the files verify but writing `LICENSE.txt` /
+`.attestation` / `meta.json` fails. Terminal, with Close — the
+partial install is removed, since a half-written install must never
+read as complete.
 
 ### Done
 
@@ -368,7 +437,7 @@ The confirmation state replaces the license dialog:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Import custom embedding model                         ×     │
+│ Import custom embedding model                               │
 │ ─────────────────────────────────────────────────────       │
 │ You're importing a custom model. By using it, you assert     │
 │ that you have a license to do so. The file SHA256 hashes     │

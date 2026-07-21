@@ -13,8 +13,11 @@ export type EmbedderAppDefaults = {
   defaultStorySettings: { embeddingBackend?: 'local' | 'provider' }
 }
 
+// Trims before testing: the settings card already stores a blank provider model
+// id as null, but this resolver is the gate every embed passes through, so it
+// rejects whitespace itself rather than trusting that one caller.
 function nonEmpty(value: string | null | undefined): value is string {
-  return value != null && value !== ''
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 export function resolveEmbedderConfig(
@@ -47,7 +50,7 @@ export function resolveEmbedderConfig(
   if (!nonEmpty(modelId)) {
     return { ok: false, reason: 'no-model' }
   }
-  // dim 0 = unknown until first embed; the service facade treats 0 as to-be-verified.
-  const dim = opts?.providerDim ?? 0
+  // null = unknown until first embed; the facade skips the dim check for it.
+  const dim = opts?.providerDim ?? null
   return { ok: true, config: { backend: 'provider', providerId, modelId, dim } }
 }

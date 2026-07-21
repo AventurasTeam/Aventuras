@@ -92,6 +92,7 @@ describe('reducer — card-fetch state', () => {
       meta: sampleMeta,
       licenseText: 'Apache 2.0 …',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     })
     expect(after.kind).toBe('license')
     if (after.kind === 'license') {
@@ -134,6 +135,7 @@ describe('reducer — license state', () => {
       meta: sampleMeta,
       licenseText: '…',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     }
     const after = reducer(before, { type: 'license-accepted' })
     expect(after.kind).toBe('downloading')
@@ -148,6 +150,7 @@ describe('reducer — license state', () => {
       meta: sampleMeta,
       licenseText: '…',
       licenseName: 'Apache 2.0',
+      licenseKind: 'license',
     }
     const after = reducer(before, { type: 'license-declined' })
     expect(after.kind).toBe('done')
@@ -228,7 +231,7 @@ describe('reducer — downloading state', () => {
     }
   })
 
-  it('download-complete marks file done', () => {
+  it('download-complete marks file done, preserving bytesTotal for the running total', () => {
     const before: DialogState = {
       kind: 'downloading',
       meta: sampleMeta,
@@ -238,7 +241,30 @@ describe('reducer — downloading state', () => {
     }
     const after = reducer(before, { type: 'download-complete', file: 'model.onnx' })
     if (after.kind === 'downloading') {
-      expect(after.progressByFile['model.onnx']).toEqual({ kind: 'done' })
+      expect(after.progressByFile['model.onnx']).toEqual({ kind: 'done', bytesTotal: 25_000_000 })
+    }
+  })
+
+  it('files-planned seeds every file as waiting without clobbering in-flight progress', () => {
+    const before: DialogState = {
+      kind: 'downloading',
+      meta: sampleMeta,
+      progressByFile: {
+        'model.onnx': { kind: 'downloading', bytesReceived: 1_000, bytesTotal: 25_000_000 },
+      },
+    }
+    const after = reducer(before, {
+      type: 'files-planned',
+      files: ['model.onnx', 'tokenizer.json', 'tokenizer_config.json'],
+    })
+    if (after.kind === 'downloading') {
+      expect(after.progressByFile['model.onnx']).toEqual({
+        kind: 'downloading',
+        bytesReceived: 1_000,
+        bytesTotal: 25_000_000,
+      })
+      expect(after.progressByFile['tokenizer.json']).toEqual({ kind: 'waiting' })
+      expect(after.progressByFile['tokenizer_config.json']).toEqual({ kind: 'waiting' })
     }
   })
 
@@ -267,15 +293,38 @@ describe('reducer — downloading state', () => {
     const after = reducer(before, {
       type: 'download-failed',
       file: 'model.onnx',
-      message: 'connection reset',
+      code: 'network',
+      detail: 'connection reset',
     })
-    expect(after.kind).toBe('failed')
-    if (after.kind === 'failed') {
-      expect(after.reason.kind).toBe('download-failed')
-      if (after.reason.kind === 'download-failed') {
-        expect(after.reason.failingFile).toBe('model.onnx')
-        expect(after.reason.message).toBe('connection reset')
-      }
+    // Asserted as a whole rather than narrowed: assertions nested inside an
+    // unchecked `if` silently pass when the reducer returns the wrong shape.
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: {
+        kind: 'download-failed',
+        failingFile: 'model.onnx',
+        code: 'network',
+        detail: 'connection reset',
+      },
+    })
+  })
+
+  it('retry from download-failed restarts the downloading manifest', () => {
+    const before: DialogState = {
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: {
+        kind: 'download-failed',
+        failingFile: 'model.onnx',
+        code: 'network',
+        detail: 'connection reset',
+      },
+    }
+    const after = reducer(before, { type: 'retry' })
+    expect(after.kind).toBe('downloading')
+    if (after.kind === 'downloading') {
+      expect(after.progressByFile).toEqual({})
     }
   })
 
@@ -369,5 +418,78 @@ describe('reducer — failed state', () => {
     }
     const after = reducer(before, { type: 'close' })
     expect(after.kind).toBe('failed')
+  })
+})
+
+describe('reducer — smoke test after verification', () => {
+  const verifying: DialogState = {
+    kind: 'verifying',
+    meta: sampleMeta,
+    verifyByFile: { 'model.onnx': 'ok' },
+  }
+
+  it('routes a failed load to smoke-test-failed carrying the attempted EP', () => {
+    const after = reducer(verifying, { type: 'smoke-test-failed', ep: 'nnapi' })
+
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: { kind: 'smoke-test-failed', ep: 'nnapi' },
+    })
+  })
+
+  it('does not reach done once the load has failed', () => {
+    const failed = reducer(verifying, { type: 'smoke-test-failed', ep: 'cpu' })
+    expect(failed.kind).toBe('failed')
+    // all-verified is only meaningful from 'verifying'; a failed state ignores it.
+    expect(reducer(failed, { type: 'all-verified' }).kind).toBe('failed')
+  })
+
+  it('leaves smoke-test-failed unretryable — a rebuilt session needs a fresh download', () => {
+    const failed = reducer(verifying, { type: 'smoke-test-failed', ep: 'cpu' })
+    const retried = reducer(failed, { type: 'retry' })
+    expect(retried.kind).toBe('failed')
+  })
+})
+
+describe('reducer — verify-error vs hash-mismatch', () => {
+  const verifying: DialogState = {
+    kind: 'verifying',
+    meta: sampleMeta,
+    verifyByFile: { 'model.onnx': 'pending' },
+  }
+
+  it('a digest that was computed and differed is a hash mismatch', () => {
+    const after = reducer(verifying, { type: 'verify-failed', file: 'model.onnx' })
+    expect(after.kind).toBe('failed')
+    if (after.kind === 'failed') expect(after.reason.kind).toBe('hash-mismatch')
+  })
+
+  it('a digest that could not be computed is a distinct, message-carrying failure', () => {
+    const after = reducer(verifying, {
+      type: 'verify-error',
+      file: 'model.onnx',
+      message: 'quick-crypto unavailable',
+    })
+    expect(after).toEqual({
+      kind: 'failed',
+      meta: sampleMeta,
+      reason: {
+        kind: 'verify-error',
+        failingFile: 'model.onnx',
+        message: 'quick-crypto unavailable',
+      },
+    })
+  })
+
+  it('verify-error is retryable — the bytes may be fine, the check could not run', () => {
+    const failed = reducer(verifying, { type: 'verify-error', file: 'model.onnx', message: 'boom' })
+    const retried = reducer(failed, { type: 'retry' })
+    expect(retried.kind).toBe('downloading')
+  })
+
+  it('a genuine hash mismatch stays terminal — retrying the same bytes cannot help', () => {
+    const failed = reducer(verifying, { type: 'verify-failed', file: 'model.onnx' })
+    expect(reducer(failed, { type: 'retry' }).kind).toBe('failed')
   })
 })

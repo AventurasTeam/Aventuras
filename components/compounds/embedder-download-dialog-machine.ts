@@ -23,18 +23,38 @@ export type ModelMeta = {
   fileCount: number
 }
 
+/**
+ * What the license region shows: `license` — real license text (standard HF
+ * tags resolved via the pinned choosealicense dataset); `model-card` — README
+ * fallback for proprietary/unknown tags with no standard text.
+ */
+export type LicenseKind = 'license' | 'model-card'
+
 export type FileProgress =
   | { kind: 'waiting' }
   | { kind: 'downloading'; bytesReceived: number; bytesTotal: number }
-  | { kind: 'done' }
+  // bytesTotal is preserved from the downloading entry so completed files keep
+  // counting toward the persistent received/total line.
+  | { kind: 'done'; bytesTotal?: number }
+
+/**
+ * Why a download failed, as a code rather than prose: the dialog renders
+ * localized copy from it, and the untranslatable detail (an OS errno string, a
+ * third-party message) travels alongside for the diagnostics log.
+ */
+export type DownloadFailureCode = 'network' | 'disk' | 'invalid-request' | 'unknown'
 
 export type FailReason =
   | { kind: 'cancelled' }
   | { kind: 'card-fetch-failed'; message: string }
   | { kind: 'resolve-failed'; message: string }
-  | { kind: 'download-failed'; failingFile: string; message: string }
+  | { kind: 'download-failed'; failingFile: string; code: DownloadFailureCode; detail: string }
   | { kind: 'validation-failed'; missingFiles: string[] }
   | { kind: 'hash-mismatch'; failingFile: string }
+  // The hash could not be computed at all (missing native module, unreadable
+  // file, bridge gone) — distinct from a digest that was computed and differed,
+  // and retryable where a genuine mismatch is not.
+  | { kind: 'verify-error'; failingFile: string; message: string }
   | { kind: 'smoke-test-failed'; ep: ExecutionProvider }
   | { kind: 'persist-failed'; message: string }
 
@@ -54,7 +74,14 @@ export type DialogState =
   // driver wiring lands and inserts license → ep-picker → downloading.
   | { kind: 'resolving'; init: DialogInit }
   | { kind: 'card-fetch'; meta: ModelMeta }
-  | { kind: 'license'; meta: ModelMeta; licenseText: string; licenseName: string }
+  | {
+      kind: 'license'
+      meta: ModelMeta
+      licenseText: string
+      licenseName: string
+      licenseKind: LicenseKind
+      licenseLink?: string
+    }
   | { kind: 'ep-picker'; meta: ModelMeta; pickedEp: ExecutionProvider }
   | { kind: 'import-confirm'; bundle: ImportBundle; pickedEp: ExecutionProvider }
   | {
@@ -72,7 +99,14 @@ export type DialogState =
 
 export type DialogAction =
   | { type: 'submit-hf-input'; input: string }
-  | { type: 'card-fetched'; meta: ModelMeta; licenseText: string; licenseName: string }
+  | {
+      type: 'card-fetched'
+      meta: ModelMeta
+      licenseText: string
+      licenseName: string
+      licenseKind: LicenseKind
+      licenseLink?: string
+    }
   | { type: 'card-fetch-failed'; message: string }
   | { type: 'license-accepted' }
   | { type: 'license-declined' }
@@ -82,6 +116,9 @@ export type DialogAction =
   // (For 'import-confirm' the Import button fires 'license-accepted'.)
   | { type: 'ep-picked'; ep: ExecutionProvider }
   | { type: 'ep-confirmed' }
+  // Seeds every planned file as 'waiting' when the download phase starts, so
+  // the dialog lists the full manifest before the first byte arrives.
+  | { type: 'files-planned'; files: readonly string[] }
   | {
       type: 'download-progress'
       file: string
@@ -90,10 +127,12 @@ export type DialogAction =
     }
   | { type: 'download-complete'; file: string }
   | { type: 'all-downloaded' }
-  | { type: 'download-failed'; file: string; message: string }
+  | { type: 'download-failed'; file: string; code: DownloadFailureCode; detail: string }
   | { type: 'verify-progress'; file: string; result: 'ok' | 'fail' }
   | { type: 'all-verified' }
   | { type: 'verify-failed'; file: string }
+  | { type: 'verify-error'; file: string; message: string }
+  | { type: 'smoke-test-failed'; ep: ExecutionProvider }
   | { type: 'persist-failed'; message: string }
   | { type: 'cancel' }
   | { type: 'retry' }
@@ -108,7 +147,13 @@ export type DialogResolution =
 export type DialogDriver = {
   fetchModelCard(
     source: { kind: 'catalog'; entry: CatalogEntry } | { kind: 'hf-id'; id: string },
-  ): Promise<{ meta: ModelMeta; licenseText: string; licenseName: string }>
+  ): Promise<{
+    meta: ModelMeta
+    licenseText: string
+    licenseName: string
+    licenseKind: LicenseKind
+    licenseLink?: string
+  }>
   resolveHfModel(id: string): Promise<{ meta: ModelMeta; files: string[] }>
   downloadFile(args: {
     url: string
@@ -116,9 +161,15 @@ export type DialogDriver = {
     onProgress: (bytesReceived: number, bytesTotal: number) => void
   }): Promise<void>
   computeSha256(filePath: string): Promise<string>
-  smokeTestEmbed(args: { modelDir: string; ep: ExecutionProvider }): Promise<void>
-  persistInstall(args: { meta: ModelMeta; files: string[]; licenseText: string }): Promise<void>
-  deletePartial(modelDir: string): Promise<void>
+  // Stops the transfer itself, not just its reporting. Callers must await this
+  // and the in-flight downloadFile before deletePartial, or the cleanup races
+  // a live writer.
+  cancelDownload(): Promise<void>
+  // No path/id argument on either: a driver instance is created per dialog open
+  // and closes over the catalog entry it was opened for.
+  smokeTestEmbed(args: { ep: ExecutionProvider }): Promise<void>
+  persistInstall(args: { meta: ModelMeta; licenseText: string }): Promise<void>
+  deletePartial(): Promise<void>
 }
 
 export function initialState(init: DialogInit): DialogState {
@@ -164,6 +215,8 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           meta: action.meta,
           licenseText: action.licenseText,
           licenseName: action.licenseName,
+          licenseKind: action.licenseKind,
+          licenseLink: action.licenseLink,
         }
       }
       if (action.type === 'card-fetch-failed') {
@@ -182,6 +235,8 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           meta: action.meta,
           licenseText: action.licenseText,
           licenseName: action.licenseName,
+          licenseKind: action.licenseKind,
+          licenseLink: action.licenseLink,
         }
       }
       if (action.type === 'card-fetch-failed') {
@@ -229,6 +284,11 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
       return state
     }
     case 'downloading': {
+      if (action.type === 'files-planned') {
+        const progressByFile = { ...state.progressByFile }
+        for (const file of action.files) progressByFile[file] ??= { kind: 'waiting' }
+        return { ...state, progressByFile }
+      }
       if (action.type === 'download-progress') {
         return {
           ...state,
@@ -243,11 +303,15 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         }
       }
       if (action.type === 'download-complete') {
+        const prior = state.progressByFile[action.file]
         return {
           ...state,
           progressByFile: {
             ...state.progressByFile,
-            [action.file]: { kind: 'done' },
+            [action.file]: {
+              kind: 'done',
+              bytesTotal: prior?.kind === 'downloading' ? prior.bytesTotal : undefined,
+            },
           },
         }
       }
@@ -260,7 +324,12 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         return {
           kind: 'failed',
           meta: state.meta,
-          reason: { kind: 'download-failed', failingFile: action.file, message: action.message },
+          reason: {
+            kind: 'download-failed',
+            failingFile: action.file,
+            code: action.code,
+            detail: action.detail,
+          },
         }
       }
       return state
@@ -282,6 +351,20 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
           reason: { kind: 'hash-mismatch', failingFile: action.file },
         }
       }
+      if (action.type === 'verify-error') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'verify-error', failingFile: action.file, message: action.message },
+        }
+      }
+      if (action.type === 'smoke-test-failed') {
+        return {
+          kind: 'failed',
+          meta: state.meta,
+          reason: { kind: 'smoke-test-failed', ep: action.ep },
+        }
+      }
       if (action.type === 'persist-failed') {
         return {
           kind: 'failed',
@@ -298,6 +381,14 @@ export function reducer(state: DialogState, action: DialogAction): DialogState {
         }
         if (state.reason.kind === 'resolve-failed') {
           return { kind: 'hf-input' }
+        }
+        // Restarts the manifest. Files already complete on disk short-circuit in
+        // the driver, so only the unfinished ones actually transfer again.
+        if (
+          (state.reason.kind === 'download-failed' || state.reason.kind === 'verify-error') &&
+          state.meta
+        ) {
+          return { kind: 'downloading', meta: state.meta, progressByFile: {} }
         }
       }
       return state
@@ -333,6 +424,7 @@ export const stubDriver: DialogDriver = {
   resolveHfModel: () => new Promise(() => {}),
   downloadFile: () => new Promise(() => {}),
   computeSha256: () => new Promise(() => {}),
+  cancelDownload: () => Promise.resolve(),
   smokeTestEmbed: () => new Promise(() => {}),
   persistInstall: () => new Promise(() => {}),
   deletePartial: () => new Promise(() => {}),

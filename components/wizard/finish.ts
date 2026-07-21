@@ -1,4 +1,5 @@
 import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
+import type { ProviderInstanceWithStub } from '@/lib/ai'
 import {
   buildStorySettings,
   type EntryMetadata,
@@ -7,17 +8,38 @@ import {
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import {
+  EmbedderCallError,
+  EmbedderInitError,
+  resolveEmbedderGate,
+  type EmbedderGateResult,
+} from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 
 import { needsLead } from './step-frame-logic'
 
+export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
+
 export type FinishResult =
   | { status: 'ok'; storyId: string }
   | { status: 'invalid'; reasons: string[] }
+  | { status: 'embed-blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
+  | { status: 'embed-failed'; kind: 'init' | 'call'; message: string }
 
 export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
   embeddingModelId: string | null
+  embeddingProviderId: string | null
+  providers: readonly { id: string; type: string; endpoint?: string }[]
+  installedLocalIds: readonly string[]
+}
+
+// The exec + provider seams the embed step needs, threaded from the store-aware
+// caller so finish.ts stays store-free: exec runs raw vec DDL, resolveProvider
+// looks up the configured provider instance for provider-backend configs.
+export type FinishEmbedCtx = {
+  exec: (sql: string) => Promise<void>
+  resolveProvider: (providerId: string) => ProviderInstanceWithStub | undefined
 }
 
 export async function finishWizard(
@@ -25,6 +47,7 @@ export async function finishWizard(
   ctx: DbCtx,
   navigate: (branchId: string) => void,
   appDefaults: FinishAppDefaults,
+  embedCtx: FinishEmbedCtx,
   nowMs?: number,
   // When the working-state came from a resumed draft, its stories row (and
   // wizard_sessions row) are replaced in place instead of minting a new id —
@@ -56,6 +79,7 @@ export async function finishWizard(
   const settings = buildStorySettings(
     appDefaults.defaultStorySettings,
     appDefaults.embeddingModelId,
+    appDefaults.embeddingProviderId,
   )
 
   // The lead is the only entity the M2 commit materializes, so it's the only id
@@ -69,22 +93,56 @@ export async function finishWizard(
     ...(s.opening.model ? { model: s.opening.model } : {}),
   }
 
-  const { storyId } = await createStoryWithBranch(
+  // Hard gate re-check at commit time (also enforced at wizard entry): an
+  // embedder removed mid-session must block the commit, not silently create a
+  // story with no retrieval. Applies regardless of lead presence — creation
+  // requires a configured embedder even when this story has nothing to embed yet.
+  const gate = resolveEmbedderGate(
     {
-      storyId: promoteDraftStoryId,
-      replaceExistingStoryId: promoteDraftStoryId != null,
-      title: s.definition.title,
-      description:
-        s.definition.description.trim().length > 0 ? s.definition.description : undefined,
-      definition,
-      settings,
-      openingContent: s.opening.content,
-      openingMetadata,
-      lead,
+      embeddingModelId: appDefaults.embeddingModelId,
+      embeddingProviderId: appDefaults.embeddingProviderId,
+      defaultStorySettings: appDefaults.defaultStorySettings,
+      providers: appDefaults.providers,
     },
-    ctx,
-    nowMs,
+    appDefaults.installedLocalIds,
   )
+  if (!gate.usable) return { status: 'embed-blocked', reason: gate.reason, backend: gate.backend }
+
+  let commit: { storyId: string; branchId: string }
+  try {
+    commit = await createStoryWithBranch(
+      {
+        storyId: promoteDraftStoryId,
+        replaceExistingStoryId: promoteDraftStoryId != null,
+        title: s.definition.title,
+        description:
+          s.definition.description.trim().length > 0 ? s.definition.description : undefined,
+        definition,
+        settings,
+        openingContent: s.opening.content,
+        openingMetadata,
+        lead,
+        embed: {
+          config: gate.config,
+          exec: embedCtx.exec,
+          provider:
+            gate.config.backend === 'provider'
+              ? embedCtx.resolveProvider(gate.config.providerId)
+              : undefined,
+        },
+      },
+      ctx,
+      nowMs,
+    )
+  } catch (err) {
+    // Embed failures (init/call, incl. vec-ensure) surface as the graceful
+    // step-5 error card; nothing committed since the throw precedes the batch.
+    if (err instanceof EmbedderInitError || err instanceof EmbedderCallError) {
+      return { status: 'embed-failed', kind: err.kind, message: err.message }
+    }
+    throw err
+  }
+  const { storyId } = commit
 
   // The story is already committed; clearing the live session is cleanup. If it
   // throws, swallow it so navigation still fires — otherwise Finish stalls on

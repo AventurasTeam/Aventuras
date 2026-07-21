@@ -151,6 +151,34 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
 - **Progress UI host for phase-1** — inline panel in Story
   Settings · Memory vs the generation-status pill; canon says
   foreground job with progress indicator, host unpinned.
+- **Same-dim swaps can't stage non-destructively under the current
+  vec0 primary key.**
+  [Phase 1](../../../../memory/retrieval.md#model-swap-ux) stages
+  `model_id = NEW` rows alongside `model_id = OLD`, but
+  `lib/db/embeddings/vec-tables.ts` derives the vec0 primary key as
+  `<branchId>:<id>` with no model component, and `upsertVecOps`
+  deletes before inserting. Two same-dim models therefore collide on
+  one pk and the NEW row replaces the OLD one — losing exactly the
+  "old vectors stay intact throughout" property phase 1 depends on.
+  Different-dim swaps are unaffected (separate table family). Pick at
+  planning: widen the pk to include `model_id`, or amend canon to say
+  same-dim swaps are destructive-in-place and drop phase 1 for them.
+  Note `model_id` is written today but read by nothing, so the
+  cache-key / mismatch-detection role the schema section claims for it
+  is not yet real. Surfaced by M3.1a review (2026-07-21).
+- **Vector cleanup on row deletion only clears one dim family.**
+  `deleteVecOps(kind, dim, id, branchId)` takes a single `dim` and
+  nothing records which families actually hold a row's vectors, while
+  vec0 gives no FK cascade. After a `keep` swap (old-model vectors
+  deliberately retained) or an abandoned phase 1, a row legitimately
+  has vectors in two families and deleting the source row orphans one
+  of them permanently. Resolve alongside the swap options this slice
+  owns — either delete across every existing family for the kind, or
+  record the occupied families per row. Note `deleteVecOps` still has
+  no production caller: story deletion clears vectors branch-wide
+  without it, and no per-row deletion path (entity, lore, happening,
+  thread, chapter) calls it at all — so whichever slice introduces
+  one inherits this question. Surfaced by M3.1a review (2026-07-21).
 
 ## Implementation notes
 

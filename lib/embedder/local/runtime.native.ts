@@ -1,8 +1,11 @@
 import { Directory, File } from 'expo-file-system'
 import type { InferenceSession, Tensor } from 'onnxruntime-react-native'
 
+import { logger } from '@/lib/diagnostics'
+
 import { embeddersRoot, modelDir } from './paths.native'
 import { meanPoolAndNormalize } from './pooling'
+import { lazyModule } from '../lazy-module'
 import { EmbedderCallError, EmbedderInitError } from '../types'
 
 export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
@@ -31,22 +34,34 @@ type SessionBundle = { session: InferenceSession; tokenizer: TokenizerFn; ort: O
 // never be imported at the top level — the lib/embedder barrel is reachable from
 // config-presence checks that run before the model is loaded (and before the
 // dev-client is rebuilt). Load it lazily, only inside the session-building path.
-let ortModulePromise: Promise<OrtRuntime> | undefined
-function loadOrt(): Promise<OrtRuntime> {
-  ortModulePromise ??= import('onnxruntime-react-native') as unknown as Promise<OrtRuntime>
-  return ortModulePromise
-}
+const loadOrt = lazyModule(
+  () => import('onnxruntime-react-native') as unknown as Promise<OrtRuntime>,
+)
 
 // Lazy per-model session+tokenizer cache. A model isn't loaded until first embed;
 // a failed load evicts itself so a later call can retry after the user reinstalls.
 const bundles = new Map<string, Promise<SessionBundle>>()
+
+// A successfully-built session outlives the files it was built from, so a
+// remove/reinstall in the same session would keep embedding through the deleted
+// model and write vectors tagged with the new id. Desktop evicts via
+// evictPipeline; this is the native counterpart.
+export function evictBundle(modelId: string): void {
+  bundles.delete(modelId)
+}
 
 function getBundle(modelId: string): Promise<SessionBundle> {
   let bundle = bundles.get(modelId)
   if (!bundle) {
     bundle = buildBundle(modelId)
     bundles.set(modelId, bundle)
-    bundle.catch(() => bundles.delete(modelId))
+    bundle.catch((error: unknown) => {
+      logger.error('embedder.bundle_build_failed', {
+        modelId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      bundles.delete(modelId)
+    })
   }
   return bundle
 }
@@ -163,7 +178,13 @@ export async function listInstalledLocal(): Promise<{ id: string; sizeBytes: num
     try {
       const meta = JSON.parse(await new File(entry, 'meta.json').text()) as { id: string }
       installed.push({ id: meta.id, sizeBytes: folderSizeBytes(entry) })
-    } catch {
+    } catch (error) {
+      // A corrupt meta.json must not sink the whole list, but a model silently
+      // vanishing from Settings needs to leave a trace.
+      logger.warn('embedder.installed_entry_skipped', {
+        dir: entry.name,
+        error: error instanceof Error ? error.message : String(error),
+      })
       continue
     }
   }

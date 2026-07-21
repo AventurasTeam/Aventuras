@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { EMBEDDER_CATALOG, getCatalogEntry, getDefaultCatalogEntry, localModelDim } from './catalog'
+import {
+  EMBEDDER_CATALOG,
+  embedderCatalogSchema,
+  getCatalogEntry,
+  getDefaultCatalogEntry,
+  localModelDim,
+} from './catalog'
 import { EMBEDDER_INTEGRATIONS } from './integrations'
 
 const REVISION_RE = /^[0-9a-f]{40}$/
@@ -29,10 +35,10 @@ describe('EMBEDDER_CATALOG', () => {
     }
   })
 
-  it('every expectedSha256 value is a sha256 hex digest', () => {
+  it('every file carries a sha256 hex digest', () => {
     for (const model of EMBEDDER_CATALOG.models) {
-      for (const hash of Object.values(model.expectedSha256)) {
-        expect(hash).toMatch(SHA256_RE)
+      for (const file of Object.values(model.files)) {
+        expect(file.sha256).toMatch(SHA256_RE)
       }
     }
   })
@@ -51,27 +57,79 @@ describe('EMBEDDER_CATALOG', () => {
 
   it('EmbeddingGemma entry carries a weights-sidecar files entry', () => {
     const gemma = getCatalogEntry('onnx-community/embeddinggemma-300m-ONNX')
-    expect(gemma).toBeDefined()
-    expect(gemma?.files['model_quantized.onnx_data']).toBe('onnx/model_quantized.onnx_data')
-    expect(Object.keys(gemma?.expectedSha256 ?? {})).toHaveLength(5)
-    for (const hash of Object.values(gemma?.expectedSha256 ?? {})) {
-      expect(hash).toMatch(SHA256_RE)
-    }
+    expect(gemma?.files['model_quantized.onnx_data']?.repoPath).toBe(
+      'onnx/model_quantized.onnx_data',
+    )
   })
 
   it('every catalog entry includes config.json in its files map', () => {
     for (const model of EMBEDDER_CATALOG.models) {
-      expect(model.files['config.json']).toBe('config.json')
-      expect(model.expectedSha256['config.json']).toMatch(SHA256_RE)
+      expect(model.files['config.json'].repoPath).toBe('config.json')
     }
-  })
-
-  it('MiniLM entry has exactly four expectedSha256 entries', () => {
-    const minilm = getCatalogEntry('Xenova/all-MiniLM-L6-v2')
-    expect(Object.keys(minilm?.expectedSha256 ?? {})).toHaveLength(4)
   })
 
   it('getCatalogEntry returns undefined for an unknown id', () => {
     expect(getCatalogEntry('nonexistent/model')).toBeUndefined()
+  })
+})
+
+describe('embedderCatalogSchema', () => {
+  function entry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    const file = (repoPath: string) => ({ repoPath, sha256: 'a'.repeat(64) })
+    return {
+      id: 'acme/model',
+      displayName: 'Model',
+      shortDescription: 'desc',
+      size_bytes: 1,
+      dim: 384,
+      huggingfaceRevision: 'b'.repeat(40),
+      files: {
+        'model.onnx': file('onnx/model.onnx'),
+        'config.json': file('config.json'),
+        'tokenizer.json': file('tokenizer.json'),
+        'tokenizer_config.json': file('tokenizer_config.json'),
+      },
+      default_ep: { android: 'cpu', ios: 'cpu', linux: 'cpu', macos: 'cpu', windows: 'cpu' },
+      tags: ['default'],
+      ...overrides,
+    }
+  }
+
+  function parse(
+    models: Record<string, unknown>[],
+  ): ReturnType<typeof embedderCatalogSchema.parse> {
+    return embedderCatalogSchema.parse({ version: '1', models })
+  }
+
+  it('accepts a well-formed catalog', () => {
+    expect(() => parse([entry()])).not.toThrow()
+  })
+
+  it('rejects a file whose sha256 is not a 64-char hex digest', () => {
+    const files = entry().files as Record<string, unknown>
+    expect(() =>
+      parse([entry({ files: { ...files, 'model.onnx': { repoPath: 'x', sha256: 'nope' } } })]),
+    ).toThrow()
+  })
+
+  it('rejects a file entry with no sha256 at all — verification must not be skippable', () => {
+    const files = entry().files as Record<string, unknown>
+    expect(() =>
+      parse([entry({ files: { ...files, 'extra.bin': { repoPath: 'extra.bin' } } })]),
+    ).toThrow()
+  })
+
+  it('rejects an entry missing config.json', () => {
+    const files = { ...(entry().files as Record<string, unknown>) }
+    delete files['config.json']
+    expect(() => parse([entry({ files })])).toThrow()
+  })
+
+  it('rejects a catalog with two default-tagged models', () => {
+    expect(() => parse([entry(), entry({ id: 'acme/other' })])).toThrow(/exactly one/)
+  })
+
+  it('rejects a catalog with no default-tagged model', () => {
+    expect(() => parse([entry({ tags: ['mobile'] })])).toThrow(/exactly one/)
   })
 })

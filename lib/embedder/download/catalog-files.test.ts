@@ -46,12 +46,14 @@ describe('buildDownloadPlan', () => {
     )
   })
 
-  it('attaches the catalog expectedSha256 for each file', () => {
+  it('gives every planned file a usable digest — the plan is total', () => {
     const plan = buildDownloadPlan(gemma)
+    expect(plan).toHaveLength(Object.keys(gemma.files).length)
     for (const row of plan) {
-      expect(row.expectedSha256).toBe(gemma.expectedSha256[row.fileName])
       expect(row.expectedSha256).toMatch(/^[0-9a-f]{64}$/)
     }
+    // Distinct digests, so a row can't be silently paired with another's hash.
+    expect(new Set(plan.map((row) => row.expectedSha256)).size).toBe(plan.length)
   })
 
   it('carries the HF repo-relative path separately from the canonical file name', () => {
@@ -82,7 +84,7 @@ describe('toDialogCatalogEntry', () => {
     const sidecarRepoPath = 'onnx/model_quantized.onnx_data'
     expect(entry.files).toContain(sidecarRepoPath)
     expect(entry.expectedSha256[sidecarRepoPath]).toBe(
-      gemma.expectedSha256['model_quantized.onnx_data'],
+      gemma.files['model_quantized.onnx_data'].sha256,
     )
   })
 

@@ -47,7 +47,34 @@
       "opening": "an opening",
       "lead": "a lead character name"
     },
-    "failed": "Couldn't create the story."
+    "failed": "Couldn't create the story.",
+    "embedFailed": {
+      "title": "Couldn't initialize the embedder",
+      "retry": "Retry",
+      "openSettings": "Open Memory settings",
+      "cancel": "Cancel",
+      "init": "The embedder couldn’t start, so the story wasn’t created.",
+      "call": "The embedder failed while indexing, so the story wasn’t created."
+    }
+  },
+  "embedGate": {
+    "title": "Set up an embedder to create stories",
+    "openSettings": "Open Memory settings",
+    "back": "← Back",
+    "body": {
+      "no-model": "Choose an embedding model before creating a story. Memory retrieval needs one to index your cast and world.",
+      "no-model-provider": "Enter the embedding model name your provider should use. Memory retrieval needs one to index your cast and world.",
+      "unknown-model": "The selected embedding model isn't recognized. Pick a supported model to continue.",
+      "model-not-installed": "The selected embedding model isn't downloaded yet. Install it to continue.",
+      "no-provider": "The embedding provider isn't configured. Select or re-add a provider to continue.",
+      "provider-cannot-embed": "The selected provider has no embedding endpoint. Choose an OpenAI-compatible provider, or switch to a local model.",
+      "provider-missing-endpoint": "The selected provider has no endpoint URL set. Add it in Providers to continue."
+    },
+    "unresolved": {
+      "title": "Couldn't check your embedder",
+      "body": "Reading your installed models failed, so we can't confirm an embedder is ready: {{error}}",
+      "retry": "Try again"
+    }
   },
   "errors": {
     "saveDraftFailed": "Couldn't save the draft. Please try again."

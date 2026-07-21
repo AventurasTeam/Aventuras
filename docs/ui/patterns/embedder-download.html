@@ -106,7 +106,6 @@
     <div class="state-pane" data-state-body="card-fetch">
       <div class="modal-head">
         <div class="modal-title">Install MiniLM-L6 (lightweight)</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <div class="spinner-block">
@@ -123,7 +122,6 @@
     <div class="state-pane" data-state-body="fetch-failed">
       <div class="modal-head">
         <div class="modal-title warn">&#9888; Couldn't reach the model source</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <p class="info-line">Aventuras tried to fetch the license from <code>huggingface.co</code>. The request failed:</p>
@@ -140,7 +138,6 @@
     <div class="state-pane active" data-state-body="license">
       <div class="modal-head">
         <div class="modal-title">Install MiniLM-L6 (lightweight)</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-meta-row">
         <span><b>Source:</b> <code>huggingface.co/Xenova/all-MiniLM-L6-v2-q8</code></span>
@@ -161,6 +158,7 @@
           "You" (or "Your") shall mean an individual or Legal Entity exercising permissions granted by this License.<br><br>
           <i>&hellip; (full license text fetched live, scrolls within this region)</i>
         </div>
+        <p class="info-line"><i>Standard tags fetch real license text from the pinned <code>choosealicense/licenses</code> dataset. Proprietary tags (<code>gemma</code>, <code>license: other</code>, none) fall back to the model card body — region retitled <b>Model card &mdash; license: &lt;tag&gt;</b>, with the card's <code>license_link</code> rendered as a link when present.</i></p>
       </div>
       <div class="modal-actions">
         <button class="btn">Decline</button>
@@ -178,21 +176,18 @@
           <span class="name">model.onnx</span>
           <div class="bar"><div class="fill" style="width: 72%"></div></div>
           <span class="pct">72%</span>
-          <span class="size">18 / 25 MB</span>
         </div>
         <div class="progress-row">
           <span class="name muted">tokenizer.json</span>
           <div class="bar"><div class="fill" style="width: 0%"></div></div>
           <span class="pct">waiting&hellip;</span>
-          <span class="size">0 / 695 KB</span>
         </div>
         <div class="progress-row">
           <span class="name muted">tokenizer_config.json</span>
           <div class="bar"><div class="fill" style="width: 0%"></div></div>
           <span class="pct">waiting&hellip;</span>
-          <span class="size">0 / 366 B</span>
         </div>
-        <p class="info-line" style="margin-top: 10px;">Total: <b>18 / 25 MB</b> &middot; ~12 s remaining</p>
+        <p class="info-line" style="margin-top: 10px;">Total: <b>18 / 25 MB</b></p>
       </div>
       <div class="modal-actions">
         <button class="btn warn">Cancel download</button>
@@ -227,7 +222,6 @@
     <div class="state-pane" data-state-body="verify-failed">
       <div class="modal-head">
         <div class="modal-title warn">&#9888; Verification failed</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <p class="info-line">One of the downloaded files doesn't match the expected hash:</p>
@@ -247,7 +241,6 @@
     <div class="state-pane" data-state-body="hf-id-input">
       <div class="modal-head">
         <div class="modal-title">Install model from HuggingFace</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <p class="info-line">Type a HuggingFace model id, or paste a HuggingFace URL. Aventuras fetches the model card + license live.</p>
@@ -271,7 +264,6 @@
     <div class="state-pane" data-state-body="validation-failed">
       <div class="modal-head">
         <div class="modal-title warn">&#9888; Model doesn't have the required ONNX exports</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <p class="info-line">Aventuras needs <code>model.onnx</code>, <code>tokenizer.json</code>, and <code>tokenizer_config.json</code> at the repo root or under <code>onnx/</code>.</p>
@@ -295,7 +287,6 @@
     <div class="state-pane" data-state-body="custom-import">
       <div class="modal-head">
         <div class="modal-title">Import custom embedding model</div>
-        <span class="modal-close">&times;</span>
       </div>
       <div class="modal-body">
         <p class="info-line">You're importing a custom model. By using it, you assert that you have a license to do so. The file SHA256 hashes are recorded for your reference.</p>

@@ -4,6 +4,8 @@ import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { DiagnosticsSettingsPanel } from '@/components/compounds/diagnostics-settings-panel'
+import { EmbedderDefaultCard } from '@/components/compounds/embedder-default-card'
+import { EmbeddingModelsPanel } from '@/components/compounds/embedding-models-panel'
 import { ProviderSetupForm } from '@/components/compounds/provider-setup-form'
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -21,6 +23,7 @@ import { cn } from '@/lib/utils'
 type SettingsTabId =
   | 'providers'
   | 'profiles'
+  | 'embedding-models'
   | 'memory'
   | 'translation'
   | 'composer'
@@ -35,6 +38,7 @@ const SETTINGS_RAIL_WIDTH = 240
 const SETTINGS_TAB_IDS = [
   'providers',
   'profiles',
+  'embedding-models',
   'memory',
   'translation',
   'composer',
@@ -70,6 +74,7 @@ export default function SettingsRoute() {
       tabs: [
         { id: 'providers', label: t('settings:tabs.providers') },
         { id: 'profiles', label: t('settings:tabs.profiles') },
+        { id: 'embedding-models', label: t('settings:tabs.embeddingModels') },
       ],
     },
     {
@@ -147,6 +152,10 @@ export default function SettingsRoute() {
         </>
       ) : activeTab === 'providers' ? (
         <ProviderSetupForm />
+      ) : activeTab === 'embedding-models' ? (
+        <EmbeddingModelsPanel />
+      ) : activeTab === 'memory' ? (
+        <EmbedderDefaultCard onManage={() => setSelectedTab('embedding-models')} />
       ) : activeTab != null ? (
         <EmptyState title={t('settings:comingSoon')} />
       ) : null}

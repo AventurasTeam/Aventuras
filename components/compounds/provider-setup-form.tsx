@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { addProvider, quickWireModel, updateProvider } from '@/lib/actions'
-import { fetchModelCatalog } from '@/lib/ai'
+import { fetchModelCatalog, normalizeModelCatalog } from '@/lib/ai'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -71,7 +71,7 @@ export function ProviderSetupForm() {
       })
       await updateProvider(
         provider.id,
-        { cachedModels: ids.map((id) => ({ id })), cachedAt: Date.now() },
+        { cachedModels: normalizeModelCatalog(ids, provider.cachedModels), cachedAt: Date.now() },
         { db },
       )
       setCatalog('idle')

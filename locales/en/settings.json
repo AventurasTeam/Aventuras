@@ -9,6 +9,7 @@
   "tabs": {
     "providers": "Providers",
     "profiles": "Profiles",
+    "embeddingModels": "Embedding models",
     "memory": "Memory",
     "translation": "Translation",
     "composer": "Composer",
@@ -35,6 +36,53 @@
     "modelPlaceholder": "Pick a model",
     "quickWire": "Use this model for narrative and agent tasks",
     "quickWired": "Wired. You can create a story now."
+  },
+  "embedding": {
+    "intro": "Curated local embedding models. Download one to enable retrieval without a provider.",
+    "setDefault": "Set as default",
+    "setDefaultA11y": "Set {{model}} as the default embedding model",
+    "isDefault": "Default",
+    "getA11y": "Download {{model}}",
+    "testA11y": "Test {{model}}",
+    "get": "Get",
+    "installed": "Installed",
+    "folder": "Folder: {{folder}}",
+    "sizeDim": "{{size}} · dim {{dim}}",
+    "testButton": "Test embedder",
+    "testing": "Testing…",
+    "testOk": "OK · dim {{dim}} · {{ms}} ms",
+    "listFailed": "Couldn't read your installed models: {{error}}",
+    "listRetry": "Retry",
+    "testFailed": {
+      "init": "This model couldn’t be loaded on this device.",
+      "call": "The model loaded but the test embed failed."
+    }
+  },
+  "embedderDefault": {
+    "heading": "Embedder default",
+    "intro": "The embedder new stories inherit by default. Override per-story in Story Settings · Memory.",
+    "backendLabel": "Backend",
+    "backendLocal": "Local",
+    "backendProvider": "Provider",
+    "localModelLabel": "Model",
+    "localEmptyState": "No local models installed yet.",
+    "manageLink": "Manage →",
+    "providerLabel": "Provider",
+    "providerEmptyState": "No providers configured yet. Add one in Providers.",
+    "modelSelectLabel": "Embedding-capable models",
+    "modelSelectPlaceholder": "Pick a cached model",
+    "modelIdLabel": "Model id",
+    "modelIdPlaceholder": "text-embedding-3-small",
+    "providerHint": "Provider embedding works with OpenAI-compatible endpoints only in v1.",
+    "testButton": "Test embedder",
+    "testing": "Testing…",
+    "testOk": "OK · dim {{dim}} · {{ms}} ms",
+    "localListFailed": "Couldn't read your installed models. Open Embedding models to retry.",
+    "localLoading": "Checking installed models…",
+    "testFailed": {
+      "init": "The embedder couldn’t start. Check the model or provider settings above.",
+      "call": "The embedder started but the test embed failed."
+    }
   },
   "diagnostics": {
     "enableLabel": "Enable diagnostics capture",

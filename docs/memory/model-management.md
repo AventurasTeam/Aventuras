@@ -41,16 +41,17 @@ Per-entry shape:
   "version": "2026-05-08",
   "models": [
     {
-      "id": "Xenova/all-MiniLM-L6-v2-q8",
+      "id": "Xenova/all-MiniLM-L6-v2",
       "displayName": "MiniLM-L6 (lightweight)",
       "shortDescription": "Small, fast, English-focused. Default for mobile.",
       "size_bytes": 25000000,
       "dim": 384,
       "huggingfaceRevision": "<pinned commit hash>",
-      "expectedSha256": {
-        "model.onnx": "...",
-        "tokenizer.json": "...",
-        "tokenizer_config.json": "..."
+      "files": {
+        "model.onnx": { "repoPath": "onnx/model_quantized.onnx", "sha256": "..." },
+        "config.json": { "repoPath": "config.json", "sha256": "..." },
+        "tokenizer.json": { "repoPath": "tokenizer.json", "sha256": "..." },
+        "tokenizer_config.json": { "repoPath": "tokenizer_config.json", "sha256": "..." }
       },
       "default_ep": {
         "android": "cpu",
@@ -70,8 +71,11 @@ Per-entry shape:
 - **`huggingfaceRevision`** — a pinned commit hash. The model card
   and files are fetched at this revision. Defends against post-
   curation edits to the model card or weights.
-- **`expectedSha256`** — known hashes for the three required files.
-  Verified after download completion.
+- **`files`** — one entry per file, keyed by the canonical on-disk
+  name, carrying the HuggingFace repo-relative `repoPath` and the
+  `sha256` verified after that file's download completes. A file
+  and its digest are one record so neither can exist without the
+  other; a malformed or missing digest fails the import-time parse.
 - **`default_ep`** — per-platform execution provider, set at
   curation time based on our pre-release testing. v1 default
   posture is `cpu` everywhere unless we have explicit test evidence
@@ -206,6 +210,16 @@ source. Check your connection and try again.` No cached-license
    substitution — we explicitly want the live one at this revision.
 3. **License dialog** renders: model name, total size, license
    title, scrollable license text, source URL, revision hash.
+   License text resolves in two tiers, both dynamic (the catalog
+   maintains no license URLs): a standard HF license tag
+   (`apache-2.0`, `mit`, …) fetches the real license text from the
+   HF-staff `choosealicense/licenses` dataset mirror at a pinned
+   revision; a tag with no standard text (proprietary tags like
+   `gemma`, `license: other`, or no tag) falls back to the model
+   card body, labeled as a model card, surfacing the card's
+   `license_link` when the author declared one. A non-404 failure
+   fetching standard text blocks like any card-fetch failure — no
+   silent fallback for a license that does have standard text.
 4. **Decline** — no download, no state change. User stays on the
    previous selection. Pre-download state.
 5. **Accept** — download begins with progress bar, resumable on
@@ -215,11 +229,14 @@ source. Check your connection and try again.` No cached-license
    typical model; a sharded ONNX export adds a weights sidecar
    (`*.onnx_data`) fetched and verified the same way, keyed in the
    catalog's `files` map by the basename the graph references.
-6. **Cancel mid-download** — distinct from Decline. The download
-   stops, partial files are deleted, and no license-acceptance is
-   recorded. License acceptance is contingent on completion (see
+6. **Cancel mid-download** — distinct from Decline. The transfer is
+   aborted (desktop through an `AbortSignal` on the main-process
+   fetch, Android by pausing the resumable), and only once it has
+   settled are the partial files deleted — deleting under a live
+   writer races the final rename. No license-acceptance is recorded;
+   acceptance is contingent on completion (see
    [License attestation](#license-attestation)).
-7. **All three files verified** — `LICENSE.txt` is written from the
+7. **All files verified** — `LICENSE.txt` is written from the
    dialog text, `.attestation` is written with timestamp + license
    SHA256 + source URL + revision. The model is now usable.
 
@@ -230,25 +247,38 @@ Failure modes during the run:
 doesn't match the expected hash. Try again later.` Don't
   auto-retry; the mismatch may indicate corruption or a rotated
   upstream that the catalog hasn't caught up to.
-- **Network drop** — pause the download with a Resume affordance.
-  Standard download UX.
-- **Disk-full** mid-download — abort and surface a clear error;
-  delete partials.
+- **Network drop** — transient blips continue in-session without
+  user action (desktop resumes the partial via Range; Android
+  retries the same resumable with backoff). A hard drop surfaces
+  the failed state with a Retry that restarts the manifest. Files
+  already complete on disk are re-hashed and skipped, so only the
+  unfinished ones transfer again; desktop additionally continues an
+  interrupted file from its staged partial via Range.
+- **Disk-full** mid-download — abort, delete the partials (unlike a
+  network drop, keeping them helps nothing and holds the space), and
+  surface a clear error.
+- **Verification could not run** — distinct from a mismatch. If the
+  digest is never computed (missing platform crypto, unreadable
+  file), the failure says so and offers Retry, which resumes from
+  what is already downloaded rather than discarding it.
+- **Model loads but the graph is rejected** — after the digests
+  check out, the model is loaded once before `meta.json` is written.
+  Bytes that hash correctly but cannot execute never register as
+  installed.
 
-**Implementation note — `@huggingface/hub`.** The official
-[`@huggingface/hub`](https://www.npmjs.com/package/@huggingface/hub)
-JS SDK covers most of the curated path: `downloadFile({ repo, path,
-revision })` returns a `Response` for an individual file, pinned to
-the catalog entry's `huggingfaceRevision`; `modelInfo({ name,
-revision })` fetches the model-card metadata used for license
-rendering. Both work in browser-shaped runtimes (Expo, Electron
-renderer). `snapshotDownload` is Node-only (uses a local cache
-dir) and not what we want — it bypasses our per-model folder
-layout. The downloader fetches the three required files
-individually via `downloadFile`, streams to disk under
-`<embedders-root>/<sanitized-id>/`, computes SHA256 against the
-catalog's `expectedSha256`, and wraps resume/retry/progress
-around the call site rather than inside the SDK.
+**Implementation note — HF endpoints.** The downloader and
+model-card fetch call HuggingFace's documented endpoints directly
+(`/api/models/<id>/revision/<rev>` for card metadata,
+`<id>/raw/<rev>/<file>` and `<id>/resolve/<rev>/<file>` for
+content) rather than going through the `@huggingface/hub` SDK.
+Decided at M3.1a implementation: Range-based resume, incremental
+SHA256, and per-file progress all need raw `Response` streaming
+control, and the SDK's `downloadFile` / `modelInfo` are thin
+wrappers over these same URLs — the dependency added no coverage.
+Standard license text comes from the
+`datasets/choosealicense/licenses` repo (HF-staff mirror of
+choosealicense.com) pinned at a fixed revision; every standard HF
+license tag maps 1:1 to `markdown/<tag>.md` there.
 
 ### Custom file import
 
@@ -286,10 +316,10 @@ with an existing folder name.
 
 Two paths produce different attestation records:
 
-| Path             | License source                     | Attestation contents                                                                |
-| ---------------- | ---------------------------------- | ----------------------------------------------------------------------------------- |
-| Curated download | Live HuggingFace fetch at revision | timestamp, license SHA256, source URL, revision hash, license text in `LICENSE.txt` |
-| Custom import    | User's assertion                   | timestamp, file SHA256s, no license text                                            |
+| Path             | License source                                                             | Attestation contents                                                                |
+| ---------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Curated download | Live fetch — pinned license dataset (standard tags) or model card fallback | timestamp, license SHA256, source URL, revision hash, license text in `LICENSE.txt` |
+| Custom import    | User's assertion                                                           | timestamp, file SHA256s, no license text                                            |
 
 Acceptance is **per model file**, not per-app-version or per-story.
 Removing and re-downloading a model triggers fresh license fetch

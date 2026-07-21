@@ -12,3 +12,4 @@ overrides:
   '@storybook/react-dom-shim': '10.3.5'
 patchedDependencies:
   react-native-reanimated-dnd: patches/react-native-reanimated-dnd.patch
+  onnxruntime-react-native: patches/onnxruntime-react-native.patch

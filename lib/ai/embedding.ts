@@ -1,20 +1,24 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { embedMany, type EmbeddingModel } from 'ai'
 
-import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
+import {
+  EmbedderCallError,
+  EmbedderInitError,
+  providerHasEmbeddingEndpoint,
+  providerTypeSupportsEmbedding,
+} from '@/lib/embedder'
 
 import { classifyProviderError } from './transport/classify-provider-error'
 import { createFetchWithCapture } from './transport/fetch'
 import { type ProviderInstanceWithStub } from './types'
 
 function requireEndpoint(provider: ProviderInstanceWithStub): string {
-  const endpoint = provider.endpoint?.trim()
-  if (endpoint === undefined || endpoint.length === 0) {
+  if (!providerHasEmbeddingEndpoint(provider)) {
     throw new EmbedderInitError(
       `Provider "${provider.id}" (openai-compatible) requires an endpoint`,
     )
   }
-  return endpoint
+  return provider.endpoint.trim()
 }
 
 function buildEmbeddingModel(
@@ -22,38 +26,32 @@ function buildEmbeddingModel(
   modelId: string,
   actionId?: string,
 ): EmbeddingModel {
+  // Same predicate the embedder gate consults, so a provider that passes the
+  // gate can always be constructed here.
+  if (!providerTypeSupportsEmbedding(provider.type)) {
+    throw new EmbedderInitError(
+      `Provider type "${provider.type}" does not support an embedding endpoint`,
+    )
+  }
+
   const fetchImpl = createFetchWithCapture({
     source: `provider:${provider.id}`,
     ...(actionId !== undefined ? { actionId } : {}),
   })
 
-  switch (provider.type) {
-    case 'openai-compatible': {
-      const openaiCompatible = createOpenAICompatible({
-        name: provider.displayName,
-        apiKey: provider.apiKey,
-        baseURL: requireEndpoint(provider),
-        fetch: fetchImpl,
-      })
-      return openaiCompatible.textEmbeddingModel(modelId)
-    }
-    case 'anthropic':
-      throw new EmbedderInitError('provider has no embedding endpoint')
-    default:
-      // v1 provider embedding is openai-compatible endpoints only; 'stub' has
-      // no embedding-shaped scenario fetch (lib/ai/stub/scenarios.ts is
-      // chat-shaped) so it falls through here too rather than attempting a
-      // real network call against a fake endpoint.
-      throw new EmbedderInitError(
-        `Provider type "${provider.type}" does not support an embedding endpoint`,
-      )
-  }
+  const openaiCompatible = createOpenAICompatible({
+    name: provider.displayName,
+    apiKey: provider.apiKey,
+    baseURL: requireEndpoint(provider),
+    fetch: fetchImpl,
+  })
+  return openaiCompatible.textEmbeddingModel(modelId)
 }
 
 /**
  * Embed `texts` through `provider`'s configured embedding endpoint. Returns
  * raw vectors at the model's native dim — prefixing and Matryoshka
- * truncation are the caller's job (facade / 3.1b), not this transport.
+ * truncation are the caller's job, not this transport.
  */
 export async function embedViaProvider(
   provider: ProviderInstanceWithStub,

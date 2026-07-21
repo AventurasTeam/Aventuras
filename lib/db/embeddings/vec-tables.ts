@@ -1,3 +1,5 @@
+import type { SqlOp } from '../types'
+
 export type VecTargetKind = 'entity' | 'lore' | 'happening' | 'thread' | 'chapter'
 
 export const VEC_FAMILIES: Record<VecTargetKind, string> = {
@@ -6,6 +8,37 @@ export const VEC_FAMILIES: Record<VecTargetKind, string> = {
   happening: 'happenings_vec',
   thread: 'threads_vec',
   chapter: 'chapter_summaries_vec',
+}
+
+// vec0 creates shadow tables beside each virtual table (`_info`, `_chunks`,
+// `_rowids`, `_vector_chunks00`), and those reject DML — so a name match has to
+// be exact rather than a LIKE over `%_vec_%`.
+const VEC_FAMILY_TABLE_RE = new RegExp(`^(?:${Object.values(VEC_FAMILIES).join('|')})_[1-9][0-9]*$`)
+
+export function isVecFamilyTable(name: string): boolean {
+  return VEC_FAMILY_TABLE_RE.test(name)
+}
+
+/**
+ * Deletes every vector belonging to `branchIds`, across whichever dim families
+ * currently exist. Discovery is by table name because nothing records which
+ * families hold a given row's vectors, and after a kept or abandoned model swap
+ * a branch legitimately has rows in more than one.
+ *
+ * vec0 tables are virtual, so they are absent from dbSchema and no Drizzle
+ * cascade or DB-level FK reaches them — a caller deleting source rows must call
+ * this or the vectors outlive them permanently.
+ */
+export function deleteBranchVecOps(
+  tableNames: readonly string[],
+  branchIds: readonly string[],
+): SqlOp[] {
+  if (branchIds.length === 0) return []
+  const placeholders = branchIds.map(() => '?').join(', ')
+  return tableNames.filter(isVecFamilyTable).map((table) => ({
+    sql: `DELETE FROM ${table} WHERE branch_id IN (${placeholders})`,
+    params: [...branchIds],
+  }))
 }
 
 function assertValidDim(dim: number): void {

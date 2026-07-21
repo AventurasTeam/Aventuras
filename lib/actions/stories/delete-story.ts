@@ -4,6 +4,8 @@ import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core'
 import {
   branchEraFlips,
   branches,
+  deleteBranchVecOps,
+  listTableNames,
   chapters,
   characterRelationships,
   deltas,
@@ -46,7 +48,13 @@ export const BRANCH_SCOPED: (SQLiteTable & { branchId: SQLiteColumn })[] = [
 ]
 
 /** Transactional cascade of a story's entire owned graph, child -> parent. No DB-level FK cascade exists. */
-export async function deleteStory(storyId: string, ctx: DbCtx): Promise<void> {
+export async function deleteStory(
+  storyId: string,
+  ctx: DbCtx,
+  // Injected for tests, which drive sqlite directly rather than through the
+  // platform bridge this resolves to at runtime.
+  listTables: () => Promise<string[]> = listTableNames,
+): Promise<void> {
   const branchRows = await ctx.db
     .select({ id: branches.id })
     .from(branches)
@@ -58,6 +66,9 @@ export async function deleteStory(storyId: string, ctx: DbCtx): Promise<void> {
     for (const table of BRANCH_SCOPED) {
       ops.push(ctx.db.delete(table).where(inArray(table.branchId, branchIds)).toSQL())
     }
+    // vec0 tables are virtual, so they are absent from dbSchema and the loop
+    // above cannot reach them; without this their rows outlive the story.
+    ops.push(...deleteBranchVecOps(await listTables(), branchIds))
   }
   ops.push(ctx.db.delete(pipelineRuns).where(eq(pipelineRuns.storyId, storyId)).toSQL())
   // A draft carries a wizard_sessions row keyed by its story id; this slice owns that table.

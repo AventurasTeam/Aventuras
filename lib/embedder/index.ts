@@ -17,16 +17,22 @@ export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-co
 export { resolveEmbedderGate } from './gate'
 export type { EmbedderGateResult } from './gate'
 
+export { providerHasEmbeddingEndpoint, providerTypeSupportsEmbedding } from './provider-support'
+
 export { EmbedderCallError, EmbedderInitError } from './types'
 export type { EmbedderBackend, EmbedderConfig } from './types'
 
 export { embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
 export type { LocalEmbedResult } from './local/runtime'
 
+export { sanitizeModelDirName } from './local/sanitize'
+
 export { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
 export type { EmbedIntent } from './service'
 
 export { createEmbedderDownloadDriver } from './download/driver'
+
+export { EmbedderDownloadError, downloadFailureCode } from './download/failure'
 
 export {
   buildDownloadPlan,

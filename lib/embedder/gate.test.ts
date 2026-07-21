@@ -8,7 +8,7 @@ type GateApp = {
   embeddingModelId: string | null
   embeddingProviderId: string | null
   defaultStorySettings: Partial<StorySettings>
-  providers: readonly { id: string }[]
+  providers: readonly { id: string; type: string; endpoint?: string }[]
 }
 
 const LOCAL_CATALOG_ID = 'Xenova/all-MiniLM-L6-v2'
@@ -44,7 +44,7 @@ describe('resolveEmbedderGate', () => {
 
     const result = resolveEmbedderGate(app, [])
 
-    expect(result).toEqual({ usable: false, reason: 'model-not-installed' })
+    expect(result).toEqual({ usable: false, backend: 'local', reason: 'model-not-installed' })
   })
 
   it('local unknown id, installed -> unknown-model (installed-ness irrelevant once unknowable)', () => {
@@ -55,7 +55,7 @@ describe('resolveEmbedderGate', () => {
 
     const result = resolveEmbedderGate(app, ['not-a-real-model'])
 
-    expect(result).toEqual({ usable: false, reason: 'unknown-model' })
+    expect(result).toEqual({ usable: false, backend: 'local', reason: 'unknown-model' })
   })
 
   it('local unknown id, not installed -> unknown-model', () => {
@@ -66,7 +66,7 @@ describe('resolveEmbedderGate', () => {
 
     const result = resolveEmbedderGate(app, [])
 
-    expect(result).toEqual({ usable: false, reason: 'unknown-model' })
+    expect(result).toEqual({ usable: false, backend: 'local', reason: 'unknown-model' })
   })
 
   it('nothing set -> no-model', () => {
@@ -74,7 +74,7 @@ describe('resolveEmbedderGate', () => {
 
     const result = resolveEmbedderGate(app, [])
 
-    expect(result).toEqual({ usable: false, reason: 'no-model' })
+    expect(result).toEqual({ usable: false, backend: 'local', reason: 'no-model' })
   })
 
   it('backend default absent -> treated as local', () => {
@@ -88,12 +88,14 @@ describe('resolveEmbedderGate', () => {
     })
   })
 
-  it('provider happy: provider instance present -> usable dim 0', () => {
+  it('provider happy: provider instance present -> usable, dim unprobed', () => {
     const app = baseApp({
       embeddingModelId: 'text-embedding-3-small',
       embeddingProviderId: 'prov-1',
       defaultStorySettings: { embeddingBackend: 'provider' },
-      providers: [{ id: 'prov-1' }],
+      providers: [
+        { id: 'prov-1', type: 'openai-compatible', endpoint: 'http://localhost:1234/v1' },
+      ],
     })
 
     const result = resolveEmbedderGate(app, [])
@@ -104,10 +106,34 @@ describe('resolveEmbedderGate', () => {
         backend: 'provider',
         providerId: 'prov-1',
         modelId: 'text-embedding-3-small',
-        dim: 0,
+        dim: null,
       },
     })
   })
+
+  it.each([undefined, '', '   '])(
+    'openai-compatible provider with endpoint %p -> provider-missing-endpoint, not usable',
+    (endpoint) => {
+      const app = baseApp({
+        embeddingModelId: 'text-embedding-3-small',
+        embeddingProviderId: 'prov-1',
+        defaultStorySettings: { embeddingBackend: 'provider' },
+        providers: [
+          {
+            id: 'prov-1',
+            type: 'openai-compatible',
+            ...(endpoint === undefined ? {} : { endpoint }),
+          },
+        ],
+      })
+
+      expect(resolveEmbedderGate(app, [])).toEqual({
+        usable: false,
+        backend: 'provider',
+        reason: 'provider-missing-endpoint',
+      })
+    },
+  )
 
   it('provider id set but instance missing from providers -> no-provider', () => {
     const app = baseApp({
@@ -119,18 +145,53 @@ describe('resolveEmbedderGate', () => {
 
     const result = resolveEmbedderGate(app, [])
 
-    expect(result).toEqual({ usable: false, reason: 'no-provider' })
+    expect(result).toEqual({ usable: false, backend: 'provider', reason: 'no-provider' })
   })
 
   it('provider backend missing model -> no-model', () => {
     const app = baseApp({
       embeddingProviderId: 'prov-1',
       defaultStorySettings: { embeddingBackend: 'provider' },
-      providers: [{ id: 'prov-1' }],
+      providers: [{ id: 'prov-1', type: 'openai-compatible' }],
     })
 
     const result = resolveEmbedderGate(app, [])
 
-    expect(result).toEqual({ usable: false, reason: 'no-model' })
+    expect(result).toEqual({ usable: false, backend: 'provider', reason: 'no-model' })
   })
+
+  it('provider that has no embedding endpoint -> provider-cannot-embed, not usable', () => {
+    const app = baseApp({
+      embeddingModelId: 'claude-3-5-sonnet',
+      embeddingProviderId: 'prov-anthropic',
+      defaultStorySettings: { embeddingBackend: 'provider' },
+      providers: [{ id: 'prov-anthropic', type: 'anthropic' }],
+    })
+
+    const result = resolveEmbedderGate(app, [])
+
+    expect(result).toEqual({
+      usable: false,
+      backend: 'provider',
+      reason: 'provider-cannot-embed',
+    })
+  })
+
+  it.each(['openai', 'google', 'openrouter', 'nanogpt', 'nvidia-nim'])(
+    'provider type %s cannot embed in v1, so the gate blocks rather than deferring to commit time',
+    (type) => {
+      const app = baseApp({
+        embeddingModelId: 'some-embed-model',
+        embeddingProviderId: 'prov-1',
+        defaultStorySettings: { embeddingBackend: 'provider' },
+        providers: [{ id: 'prov-1', type }],
+      })
+
+      expect(resolveEmbedderGate(app, [])).toEqual({
+        usable: false,
+        backend: 'provider',
+        reason: 'provider-cannot-embed',
+      })
+    },
+  )
 })

@@ -86,18 +86,34 @@ export const License_Apache = story({
   meta: sampleMeta,
   licenseText: APACHE_2,
   licenseName: 'Apache 2.0',
+  licenseKind: 'license',
 })
 export const License_NoLicense = story({
   kind: 'license',
   meta: sampleMeta,
   licenseText: '(no license text was found in the model card)',
   licenseName: '',
+  licenseKind: 'model-card',
 })
 export const License_LongText = story({
   kind: 'license',
   meta: sampleMeta,
   licenseText: LONG_LICENSE,
   licenseName: 'Apache 2.0',
+  licenseKind: 'license',
+})
+export const License_ModelCardFallback = story({
+  kind: 'license',
+  meta: sampleMeta,
+  licenseText:
+    '# EmbeddingGemma\n\nModel card body shown when no standard license text exists.\n\n' +
+    '| Metric | Score |\n| --- | --- |\n| MTEB | 61.2 |\n| Params | 300M |\n\n' +
+    'Embedded HTML also renders:\n\n' +
+    '<table><tr><th>Dim</th><th>Storage</th></tr><tr><td>768</td><td>3 KB/row</td></tr></table>\n\n' +
+    '[Terms link](https://ai.google.dev/gemma/terms) routes through the host.',
+  licenseName: 'gemma',
+  licenseKind: 'model-card',
+  licenseLink: 'https://ai.google.dev/gemma/terms',
 })
 export const EpPicker = story({ kind: 'ep-picker', meta: sampleMeta, pickedEp: 'cpu' })
 export const ImportConfirm = story({
@@ -168,7 +184,8 @@ export const Failed_Resolve = failed({
 export const Failed_Download = failed({
   kind: 'download-failed',
   failingFile: 'model.onnx',
-  message: 'connection reset by peer',
+  code: 'network',
+  detail: 'connection reset by peer',
 })
 export const Failed_Validation = failed({
   kind: 'validation-failed',
@@ -216,6 +233,7 @@ export const ThemeMatrix: Story = {
                 meta: sampleMeta,
                 licenseText: APACHE_2,
                 licenseName: 'Apache 2.0',
+                licenseKind: 'license',
               }}
               {...handlers}
             />

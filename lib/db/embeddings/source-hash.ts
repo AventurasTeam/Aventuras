@@ -20,7 +20,25 @@ function readLE32(bytes: Uint8Array, offset: number): number {
   )
 }
 
-export function sourceHash(text: string): string {
+/**
+ * An 8-char lowercase hex xxh32 digest. Branded so only this module can mint
+ * one: the value is persisted and compared for equality, so a differently
+ * formatted string would read as "changed" and re-embed the row on every pass.
+ */
+export type SourceHash = string & { readonly __brand: 'SourceHash' }
+
+const SOURCE_HASH_RE = /^[0-9a-f]{8}$/
+
+/**
+ * Narrows a value read back from SQLite. `queryOne` hands back `unknown`, and
+ * `unknown === SourceHash` compiles happily while always being false — this
+ * forces the comparison to confront the untyped value instead.
+ */
+export function parseSourceHash(value: unknown): SourceHash | null {
+  return typeof value === 'string' && SOURCE_HASH_RE.test(value) ? (value as SourceHash) : null
+}
+
+export function sourceHash(text: string): SourceHash {
   const bytes = new TextEncoder().encode(text)
   const len = bytes.length
   const seed = 0
@@ -70,14 +88,16 @@ export function sourceHash(text: string): string {
     offset += 1
   }
 
-  // Final avalanche
+  // Final avalanche. The trailing `>>> 0` is load-bearing: `^` yields a signed
+  // int32, so without it every hash with the high bit set formats as a negative
+  // 9-char string ('-77e5d848') instead of its unsigned hex.
   h32 = h32 ^ (h32 >>> 15)
   h32 = Math.imul(h32, PRIME2) >>> 0
   h32 = h32 ^ (h32 >>> 13)
   h32 = Math.imul(h32, PRIME3) >>> 0
-  h32 = h32 ^ (h32 >>> 16)
+  h32 = (h32 ^ (h32 >>> 16)) >>> 0
 
-  return h32.toString(16).padStart(8, '0')
+  return h32.toString(16).padStart(8, '0') as SourceHash
 }
 
 export function compositeText(fields: (string | null | undefined)[]): string {

@@ -1,0 +1,104 @@
+{
+  "title": {
+    "hfInput": "Install from HuggingFace",
+    "resolving": "Resolving model…",
+    "install": "Install {{model}}",
+    "epPicker": "Pick execution provider — {{model}}",
+    "import": "Import custom embedding model",
+    "downloading": "Downloading {{model}}",
+    "verifying": "Verifying {{model}}",
+    "installed": "Installed {{model}}"
+  },
+  "failedTitle": {
+    "cancelled": "Install cancelled",
+    "cardFetchFailed": "⚠ Couldn’t reach the model source",
+    "resolveFailed": "⚠ Couldn’t resolve model",
+    "downloadFailed": "⚠ Download failed",
+    "validationFailed": "⚠ Missing required files",
+    "hashMismatch": "⚠ Verification failed",
+    "verifyError": "⚠ Couldn’t verify the download",
+    "smokeTestFailed": "⚠ Model couldn’t be loaded",
+    "persistFailed": "⚠ Couldn’t save the installed model"
+  },
+  "hfInput": {
+    "hint": "Enter a HuggingFace model id (e.g. namespace/model) or paste a model URL.",
+    "placeholder": "namespace/model"
+  },
+  "resolving": "Resolving model card and file listing…",
+  "cardFetch": {
+    "loading": "Fetching the model card from {{source}}…"
+  },
+  "license": {
+    "viewTerms": "View license terms",
+    "sourceLabel": "Source: ",
+    "revisionLabel": "Revision: ",
+    "sizeLabel": "Size: ",
+    "a11yRegion": "License text",
+    "sizeValue": "{{size}} MB · {{count}} files",
+    "modelCardHeading": "Model card — license: {{name}}",
+    "licenseHeading": "License — {{name}}",
+    "unspecified": "unspecified",
+    "noneSpecified": "no license specified",
+    "modelCardNotice": "No standard text exists for this license — the model card is shown instead. Review the license at the source before accepting.",
+    "noLicenseWarning": "⚠ No license specified by the model author. Proceed at your own risk."
+  },
+  "ep": {
+    "label": "Execution provider",
+    "pickHint": "Pick the execution provider this model will run under.",
+    "warning": "⚠ Wrong choice may crash the app on next embed."
+  },
+  "import": {
+    "notice": "You’re importing a custom model. By using it, you assert that you have a license to do so.",
+    "modelIdLabel": "Model id: ",
+    "filesLabel": "Files:",
+    "fileRow": "· {{name}} ({{size}} MB)"
+  },
+  "downloading": {
+    "waiting": "waiting…",
+    "done": "done",
+    "total": "Total: {{received}} / {{total}} MB",
+    "unknownSize": "{{received}} MB"
+  },
+  "verifying": {
+    "ok": "hash matches",
+    "fail": "sha256 mismatch",
+    "pending": "verifying…"
+  },
+  "done": "The model is installed and ready to use.",
+  "failure": {
+    "cancelled": "The install was cancelled. Nothing was added to your models.",
+    "cardFetchLead": "The model card couldn’t be fetched.",
+    "cardFetchHint": "The license is fetched live to defend against post-curation edits, so we can’t proceed with a cached copy. Check your connection and try again.",
+    "resolveLead": "That HuggingFace model couldn’t be resolved.",
+    "downloadLead": "A file failed to download: {{file}}",
+    "downloadHint": {
+      "network": "The connection dropped. Downloaded files are kept, so a retry resumes where this left off.",
+      "disk": "There isn’t enough free space. The partial download has been removed to reclaim it.",
+      "invalid-request": "The download request was rejected. This looks like a problem with the bundled catalog rather than your device.",
+      "unknown": "Downloaded files are kept, so a retry resumes where this left off."
+    },
+    "validationLead": "This model doesn’t have the required ONNX exports.",
+    "validationMissing": "Missing: {{files}}",
+    "validationHint": "Some models ship in Python-only formats (PyTorch / safetensors). Check the model card for ONNX export instructions, or try the curated catalog.",
+    "hashMismatchLead": "A downloaded file doesn’t match the expected hash: {{file}}",
+    "hashMismatchHint": "This can mean a corrupted download, or an upstream change the bundled catalog hasn’t caught up to. The files have been removed — retrying the same bytes wouldn’t help.",
+    "verifyErrorLead": "A downloaded file couldn’t be checked: {{file}}",
+    "verifyErrorHint": "The file itself may be fine — the check couldn’t run. Retrying resumes from what’s already downloaded.",
+    "smokeTestLead": "The model downloaded correctly but couldn’t be loaded.",
+    "smokeTestHint": "The files are intact but this device couldn’t run the model. Try a different model, or check the model card for supported hardware.",
+    "persistLead": "The model downloaded and verified, but couldn’t be saved.",
+    "persistHint": "Check available disk space and try again.",
+    "technicalDetail": "Technical detail"
+  },
+  "action": {
+    "cancel": "Cancel",
+    "cancelDownload": "Cancel download",
+    "close": "Close",
+    "retry": "Retry",
+    "accept": "Accept & install",
+    "decline": "Decline",
+    "continue": "Continue",
+    "import": "Import",
+    "resolve": "Resolve"
+  }
+}

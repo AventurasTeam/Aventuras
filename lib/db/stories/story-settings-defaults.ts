@@ -11,7 +11,7 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   classifierCadence: 5,
   piggybackMode: 'off',
   embeddingBackend: 'local',
-  embedding_model_id: 'bge-small-en',
+  embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
   retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
   probe_mode_active: false,
   composerModesEnabled: false,
@@ -37,13 +37,21 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   packVariables: {},
 }
 
+// A story copies the embedder selection at creation and never re-reads the app
+// default, so both halves must be captured here or a provider-backend story
+// resolves to 'no-provider' for the rest of its life.
 export function buildStorySettings(
   appDefault: Partial<StorySettings>,
   appEmbeddingModelId: string | null,
+  appEmbeddingProviderId: string | null,
 ): StorySettings {
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
-    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
     ...appDefault,
+    // Both halves override unconditionally: appDefault is a template for the
+    // other fields, but the embedder selection has its own app-level columns,
+    // and a stale copy in the template must not outrank them.
+    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
+    embedding_provider_id: appEmbeddingProviderId ?? undefined,
   })
 }

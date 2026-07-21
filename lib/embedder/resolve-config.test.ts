@@ -128,6 +128,30 @@ describe('resolveEmbedderConfig', () => {
     expect(result).toEqual({ ok: false, reason: 'no-model' })
   })
 
+  it('treats a whitespace-only model id as missing rather than usable', () => {
+    const story: StoryInput = {
+      embeddingBackend: 'provider',
+      embedding_model_id: '   ',
+      embedding_provider_id: 'openai',
+    }
+
+    const result = resolveEmbedderConfig(story, appDefaults())
+
+    expect(result).toEqual({ ok: false, reason: 'no-model' })
+  })
+
+  it('treats a whitespace-only provider id as missing rather than usable', () => {
+    const story: StoryInput = {
+      embeddingBackend: 'provider',
+      embedding_model_id: 'text-embedding-3-small',
+      embedding_provider_id: '  \t ',
+    }
+
+    const result = resolveEmbedderConfig(story, appDefaults())
+
+    expect(result).toEqual({ ok: false, reason: 'no-provider' })
+  })
+
   it('provider happy path uses opts.providerDim', () => {
     const story: StoryInput = {
       embeddingBackend: 'provider',
@@ -148,7 +172,7 @@ describe('resolveEmbedderConfig', () => {
     })
   })
 
-  it('provider happy path without providerDim resolves dim 0 (unknown until first embed)', () => {
+  it('provider happy path without providerDim resolves dim null (unknown until first embed)', () => {
     const story: StoryInput = {
       embeddingBackend: 'provider',
       embedding_model_id: 'text-embedding-3-small',
@@ -163,7 +187,7 @@ describe('resolveEmbedderConfig', () => {
         backend: 'provider',
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
-        dim: 0,
+        dim: null,
       },
     })
   })

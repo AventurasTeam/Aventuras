@@ -248,6 +248,93 @@ describe('downloadFile — network failure', () => {
   })
 })
 
+describe('downloadFile — cancellation', () => {
+  it('returns cancelled, not network, when the signal is already aborted', async () => {
+    const dir = freshDir()
+    const controller = new AbortController()
+    controller.abort()
+
+    const result = await downloadFile({
+      url: baseUrl,
+      destDir: dir,
+      fileName: 'model.onnx',
+      expectedSha256: PAYLOAD_SHA,
+      signal: controller.signal,
+    })
+
+    expect(result).toEqual({ ok: false, reason: 'cancelled', message: 'Download cancelled' })
+    // Nothing requested, so the transfer genuinely never started.
+    expect(behavior.requestCount).toBe(0)
+  })
+
+  it('stops an in-flight transfer and leaves no final file', async () => {
+    const dir = freshDir()
+    const controller = new AbortController()
+    behavior.abortAfter = undefined
+
+    const pending = downloadFile({
+      url: baseUrl,
+      destDir: dir,
+      fileName: 'model.onnx',
+      expectedSha256: PAYLOAD_SHA,
+      signal: controller.signal,
+      onProgress: () => controller.abort(),
+    })
+    controller.abort()
+    const result = await pending
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('cancelled')
+    expect(existsSync(join(dir, 'model.onnx'))).toBe(false)
+  })
+})
+
+describe('downloadFile — range-not-satisfiable', () => {
+  it('terminates instead of recursing when the server keeps rejecting the range', async () => {
+    const dir = freshDir()
+    // Always 416, even for a bare request: the retry has no partial left, so a
+    // second 416 must end the attempt rather than loop.
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+    server = createServer((_req, res) => {
+      behavior.requestCount += 1
+      res.writeHead(416, { 'content-range': 'bytes */100' })
+      res.end()
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as AddressInfo
+
+    const result = await downloadFile({
+      url: `http://127.0.0.1:${port}/file`,
+      destDir: dir,
+      fileName: 'model.onnx',
+      expectedSha256: null,
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('network')
+    expect(behavior.requestCount).toBeLessThanOrEqual(2)
+  })
+})
+
+describe('downloadFile — disk failures', () => {
+  it('reports disk, not network, when the destination cannot be created', async () => {
+    // A file where the model directory should be makes mkdir fail with ENOTDIR.
+    const dir = freshDir()
+    const blocked = join(dir, 'blocked')
+    writeFileSync(blocked, 'not-a-directory')
+
+    const result = await downloadFile({
+      url: baseUrl,
+      destDir: blocked,
+      fileName: 'model.onnx',
+      expectedSha256: PAYLOAD_SHA,
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('disk')
+  })
+})
+
 describe('persistInstall', () => {
   it('writes LICENSE.txt, .attestation, and meta.json', async () => {
     const dir = freshDir()

@@ -18,6 +18,7 @@ export async function resetStorySettings(
   const settings = buildStorySettings(
     appSettings.defaultStorySettings,
     appSettings.embeddingModelId,
+    appSettings.embeddingProviderId,
   )
 
   await ctx.runInTransaction([

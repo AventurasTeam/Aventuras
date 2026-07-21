@@ -4,21 +4,25 @@ import catalogData from './catalog-data.json'
 
 const executionProviderSchema = z.string()
 
+// One entry per file rather than parallel path/hash maps: a file can't exist
+// without its digest, so the download plan is total and verification can't be
+// skipped by a key that's present in one map and absent from the other.
+const catalogFileSchema = z
+  .object({
+    repoPath: z.string().min(1),
+    sha256: z.string().regex(/^[0-9a-f]{64}$/, 'expected a lowercase 64-char SHA-256 digest'),
+  })
+  .strict()
+
+// config.json is required because the desktop transformers.js loader reads it.
 const catalogFilesSchema = z
   .object({
-    'model.onnx': z.string(),
-    'tokenizer.json': z.string(),
-    'tokenizer_config.json': z.string(),
+    'model.onnx': catalogFileSchema,
+    'config.json': catalogFileSchema,
+    'tokenizer.json': catalogFileSchema,
+    'tokenizer_config.json': catalogFileSchema,
   })
-  .catchall(z.string())
-
-const catalogSha256Schema = z
-  .object({
-    'model.onnx': z.string(),
-    'tokenizer.json': z.string(),
-    'tokenizer_config.json': z.string(),
-  })
-  .catchall(z.string())
+  .catchall(catalogFileSchema)
 
 const catalogDefaultEpSchema = z
   .object({
@@ -39,7 +43,6 @@ export const catalogModelEntrySchema = z
     dim: z.number().int().positive(),
     huggingfaceRevision: z.string(),
     files: catalogFilesSchema,
-    expectedSha256: catalogSha256Schema,
     default_ep: catalogDefaultEpSchema,
     tags: z.array(z.string()),
   })
@@ -51,6 +54,17 @@ export const embedderCatalogSchema = z
     models: z.array(catalogModelEntrySchema),
   })
   .strict()
+  .superRefine((catalog, ctx) => {
+    // getDefaultCatalogEntry picks the first match, so two defaults would make
+    // the app's starting model depend on array order.
+    const defaults = catalog.models.filter((model) => model.tags.includes('default'))
+    if (defaults.length !== 1) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `catalog must tag exactly one model "default" (found ${defaults.length})`,
+      })
+    }
+  })
 
 export type CatalogModelEntry = z.infer<typeof catalogModelEntrySchema>
 export type EmbedderCatalog = z.infer<typeof embedderCatalogSchema>

@@ -6,14 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
-import type { SqlOp } from '@/lib/db'
+import { compositeText, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
 
 import { embedLocal } from './local/runtime'
 import { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
 import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from './types'
 
-vi.mock('./local/runtime', () => ({ embedLocal: vi.fn() }))
-vi.mock('@/lib/ai', () => ({ embedViaProvider: vi.fn() }))
+// Hoisted so the mock identities survive vi.resetModules() — the lazy-init test
+// re-evaluates ./service, and a factory-local vi.fn() would hand the fresh module
+// a different spy than the one asserted on here.
+const mocks = vi.hoisted(() => ({ embedLocal: vi.fn(), embedViaProvider: vi.fn() }))
+vi.mock('./local/runtime', () => ({ embedLocal: mocks.embedLocal }))
+vi.mock('@/lib/ai', () => ({ embedViaProvider: mocks.embedViaProvider }))
 
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
 const GEMMA = 'onnx-community/embeddinggemma-300m-ONNX'
@@ -124,22 +128,40 @@ describe('embedTexts dim verification', () => {
     )
   })
 
-  it('accepts the returned dim when config.dim is the 0 not-yet-probed sentinel', async () => {
+  it('accepts the returned dim when a provider dim is not yet probed', async () => {
     vi.mocked(embedViaProvider).mockResolvedValue({ vectors: [new Float32Array([3, 4])], dim: 2 })
     const config: EmbedderConfig = {
       backend: 'provider',
       providerId: 'prov-1',
       modelId: 'm1',
-      dim: 0,
+      dim: null,
     }
 
     const result = await embedTexts(config, ['a'], 'document', provider)
     expect(result.dim).toBe(2)
   })
+
+  it('still checks the dim for a local config — no unprobed escape hatch', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [new Float32Array([1, 0, 0])], dim: 3 })
+    const config: EmbedderConfig = {
+      backend: 'local',
+      modelId: 'Xenova/all-MiniLM-L6-v2',
+      dim: 384,
+    }
+
+    await expect(embedTexts(config, ['a'])).rejects.toThrow(
+      'embedding dim mismatch: expected 384, got 3',
+    )
+  })
 })
 
 describe('lazy init', () => {
   it('does not invoke the runtime factories on import (only on first embed call)', async () => {
+    // resetModules, not a bare import: ./service is statically imported above,
+    // so a plain dynamic import would hand back the cached module without
+    // re-running its top-level code — and any violation would have fired during
+    // that first import, before clearAllMocks could observe it.
+    vi.resetModules()
     vi.clearAllMocks()
     await import('./service')
     expect(embedLocal).not.toHaveBeenCalled()
@@ -290,5 +312,64 @@ describe('testEmbedder', () => {
 
     const result = await testEmbedder(config)
     expect(result).toEqual({ ok: false, kind: 'init', message: 'session never came up' })
+  })
+})
+
+describe('embedAndBuildVecOps — vector/row alignment', () => {
+  // The builder correlates rows[i], vectors[i] and composites[i] by index. A
+  // transposition attaches the wrong embedding to the wrong entity, clears its
+  // stale flag, and never self-heals — and one-row fixtures cannot detect it.
+  it('pairs each row with its own vector and its own composite hash', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      { kind: 'entity', id: 'e2', branchId: 'b1', fields: ['Bram', 'a smith'] },
+      { kind: 'lore', id: 'l1', branchId: 'b1', fields: ['The Reach', 'cold north'] },
+    ]
+    // Distinguishable one-hot vectors, in row order.
+    const vectors = [
+      new Float32Array([1, 0, 0]),
+      new Float32Array([0, 1, 0]),
+      new Float32Array([0, 0, 1]),
+    ]
+    vi.mocked(embedLocal).mockResolvedValue({ vectors, dim: 3 })
+
+    const ops = await embedAndBuildVecOps(
+      { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 3 },
+      rows,
+      async () => {},
+    )
+
+    // Each row contributes an upsert (params: pk, branchId, modelId, id, hash,
+    // vector) followed by its stale-clear.
+    const upserts = ops.filter((op) => op.sql.includes('INSERT INTO'))
+    expect(upserts).toHaveLength(3)
+
+    for (const [i, row] of rows.entries()) {
+      const params = upserts[i].params
+      expect(params).toContain(row.id)
+      expect(params).toContain(sourceHash(compositeText(row.fields)))
+      const packed = params.find((p) => p instanceof Uint8Array) as Uint8Array
+      expect(new Float32Array(packed.buffer, packed.byteOffset, 3)).toEqual(vectors[i])
+    }
+  })
+
+  it('embeds the composites in row order, so the model sees each row once', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      { kind: 'entity', id: 'e2', branchId: 'b1', fields: ['Bram', 'a smith'] },
+    ]
+    vi.mocked(embedLocal).mockResolvedValue({
+      vectors: [new Float32Array([1, 0]), new Float32Array([0, 1])],
+      dim: 2,
+    })
+
+    await embedAndBuildVecOps(
+      { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 2 },
+      rows,
+      async () => {},
+    )
+
+    const texts = vi.mocked(embedLocal).mock.calls.at(-1)?.[1]
+    expect(texts).toEqual(['Kara a scout', 'Bram a smith'])
   })
 })

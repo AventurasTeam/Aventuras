@@ -29,19 +29,35 @@ slice-planning gate forces its resolution before that slice is planned.
   id-allocation mechanic the section describes is correct either way; the
   fix is dropping or rewording the parenthetical. Canonical edit — route
   through a design / cleanup pass, not a planning commit.
-- **Native embedder session cache needs eviction on model removal.**
+- **Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
   its dir, so without eviction the cache keeps serving inferences from the
-  deleted model. Desktop already wires `evictPipeline` into
-  `delete-partial` (Task 6); the native map needs a symmetric evict hook
-  when the M7.1 model-remove flow lands. Surfaced by M3.1a Task 7
-  (2026-07-20).
-- **Ranker must convert vec0's L2 distance to cosine similarity.** The
-  `0005_embedder_vec0.sql` `vec0` tables declare no `distance_metric`, so
-  KNN ranks by raw L2; that's only equivalent to cosine ranking because
-  every stored and query vector is unit-norm — an invariant the C1 facade
-  (Task 9, landing next) enforces at write and query time, not the vec0
-  layer itself. Slice 3.4's ranker must convert each `distance` column back
-  to a similarity via `cos = 1 − d²/2` before building its trace, not treat
-  distance as already-cosine. Surfaced by M3.1a Task 8 (2026-07-20).
+  deleted model — and the resulting vectors land tagged with the _new_
+  model id, so nothing marks them for re-embedding. The hook now exists
+  (`evictBundle`) and is wired into the native driver's `deletePartial`,
+  mirroring desktop's `evictPipeline`; what remains is that the M7.1
+  model-remove flow, and any other future deletion path, must call it too.
+  Nothing enforces that mechanically. Surfaced by M3.1a implementation
+  (2026-07-20), partially resolved during M3.1a review (2026-07-21).
+- **The `onnxruntime-react-native` patch carries two upstream gaps worth
+  reporting.** `patches/onnxruntime-react-native.patch` drops a Gradle-9
+  incompatibility (`VersionNumber`, removed in Gradle 9, guarding a fbjni
+  fallback that only applies below RN 0.71) and adds the
+  `react-native.config.js` the package omits, without which RN autolinking
+  skips it and `NativeModules.Onnxruntime` is null at runtime. Both are
+  upstream bugs, not app-specific workarounds, so the patch has to be
+  re-verified on every ORT-RN bump until they land upstream. Decide whether to
+  file them against microsoft/onnxruntime. Surfaced by M3.1a review
+  (2026-07-21).
+- **Custom-import file set may need `config.json` on desktop.**
+  [`model-management.md → Custom file import`](../memory/model-management.md#custom-file-import)
+  specifies three files (`model.onnx`, `tokenizer.json`,
+  `tokenizer_config.json`), but M3.1a found transformers.js fatally
+  requires `config.json` to build a pipeline, which is why the curated
+  catalog entries carry it. The native runtime constructs its tokenizer
+  directly and does its own pooling, so it may not need the file at all —
+  making the required set platform-dependent, which the custom-import
+  spec doesn't model. Resolve when M7.1 plans the import flow; verify the
+  native requirement rather than assuming symmetry. Surfaced by M3.1a
+  device review (2026-07-21).

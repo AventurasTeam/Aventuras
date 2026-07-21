@@ -2,11 +2,22 @@
 // window.aventurasEmbedder (electron/embedder, exposed via preload). See
 // docs/memory/model-management.md → Download flow for the on-disk contract.
 import type { DialogDriver } from '@/components/compounds/embedder-download-dialog-machine'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderAttestation, EmbedderBridge } from '@/types/embedder-bridge'
 
 import { buildDownloadPlan, findPlanRow } from './catalog-files'
+import { EmbedderDownloadError } from './failure'
 import { fetchModelCard, resolveHfModel } from './model-card'
 import type { CatalogModelEntry } from '../catalog'
+
+// Thrown when the user cancels: distinguishes a deliberate stop from a network
+// failure so the dialog doesn't render "your download failed".
+class DownloadCancelledError extends Error {
+  readonly cancelled = true
+  constructor() {
+    super('Download cancelled')
+  }
+}
 
 function resolveBridge(): EmbedderBridge {
   const bridge = globalThis.window?.aventurasEmbedder
@@ -67,6 +78,15 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
           expectedSha256: row.expectedSha256,
         })
         if (result.ok) return
+        if (result.reason === 'cancelled') {
+          throw new DownloadCancelledError()
+        }
+        logger.error('embedder.download_file_failed', {
+          modelId: entry.id,
+          fileName: row.fileName,
+          reason: result.reason,
+          message: result.message,
+        })
         if (result.reason === 'hash-mismatch') {
           // Resolve rather than throw: throwing here would route the failure
           // through the 'downloading' state's generic download-failed action
@@ -80,8 +100,8 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         }
         // Network/disk failures are genuine download failures — no verification
         // step to defer to, so surface them immediately via the normal
-        // download-failed path.
-        throw new Error(result.message)
+        // download-failed path, carrying main's own classification.
+        throw new EmbedderDownloadError(result.reason, result.message)
       } finally {
         unsubscribe()
       }
@@ -97,11 +117,14 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
       return row.expectedSha256
     },
 
-    async smokeTestEmbed({ modelDir }) {
-      // `ep` isn't threaded to the bridge: desktop's catalog default_ep is
-      // always 'cpu' (transformers.js picks its own WASM/CPU backend) — there's
-      // no EP choice to forward at this layer, unlike mobile's ORT-RN EPs.
-      const result = await resolveBridge().smokeTest({ modelDir })
+    async cancelDownload() {
+      await resolveBridge().cancelDownload({ modelId: entry.id })
+    },
+
+    async smokeTestEmbed() {
+      // `ep` isn't threaded to the bridge: transformers.js picks its own
+      // WASM/CPU backend, so there's no EP choice to forward at this layer.
+      const result = await resolveBridge().smokeTest({ modelId: entry.id })
       if (!result.ok) throw new Error(result.error.message)
     },
 
