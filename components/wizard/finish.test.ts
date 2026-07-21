@@ -417,7 +417,7 @@ describe('finishWizard — embedder hard gate', () => {
       1000,
     )
 
-    expect(result).toEqual({ status: 'embed-blocked', reason: 'no-model' })
+    expect(result).toEqual({ status: 'embed-blocked', reason: 'no-model', backend: 'local' })
     expect(mockedEmbed).not.toHaveBeenCalled()
     expect(await db.select().from(stories)).toHaveLength(0)
     expect(navigate).not.toHaveBeenCalled()
@@ -503,7 +503,7 @@ describe('finishWizard — embedder hard gate', () => {
         defaultStorySettings: { embeddingBackend: 'provider' },
         embeddingModelId: 'text-embedding-3-small',
         embeddingProviderId: 'p1',
-        providers: [{ id: 'p1' }],
+        providers: [{ id: 'p1', type: 'openai-compatible' }],
         installedLocalIds: [],
       },
       embedCtx,

@@ -61,9 +61,11 @@
     "back": "← Back",
     "body": {
       "no-model": "Choose an embedding model before creating a story. Memory retrieval needs one to index your cast and world.",
+      "no-model-provider": "Enter the embedding model name your provider should use. Memory retrieval needs one to index your cast and world.",
       "unknown-model": "The selected embedding model isn't recognized. Pick a supported model to continue.",
       "model-not-installed": "The selected embedding model isn't downloaded yet. Install it to continue.",
-      "no-provider": "The embedding provider isn't configured. Select or re-add a provider to continue."
+      "no-provider": "The embedding provider isn't configured. Select or re-add a provider to continue.",
+      "provider-cannot-embed": "The selected provider has no embedding endpoint. Choose an OpenAI-compatible provider, or switch to a local model."
     }
   },
   "errors": {

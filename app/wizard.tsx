@@ -48,7 +48,7 @@ const FINISH_REASON_KEY = {
 type GateState =
   | { status: 'pending' }
   | { status: 'ok' }
-  | { status: 'blocked'; reason: EmbedderGateBlockedReason }
+  | { status: 'blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
 
 // A listing blip must degrade to "nothing installed" so it surfaces through the
 // embedder gate (model-not-installed), not a generic finish-failed toast.
@@ -71,7 +71,9 @@ async function resolveEntryGate(): Promise<GateState> {
     { embeddingModelId, embeddingProviderId, defaultStorySettings, providers },
     installedIds,
   )
-  return result.usable ? { status: 'ok' } : { status: 'blocked', reason: result.reason }
+  return result.usable
+    ? { status: 'ok' }
+    : { status: 'blocked', reason: result.reason, backend: result.backend }
 }
 
 export default function WizardRoute() {
@@ -242,7 +244,7 @@ export default function WizardRoute() {
           if (result.status === 'embed-blocked') {
             // The embedder was removed mid-session; drop back to the entry-gate
             // surface (same rendering) so the fix path is the settings route.
-            setGate({ status: 'blocked', reason: result.reason })
+            setGate({ status: 'blocked', reason: result.reason, backend: result.backend })
             flushAutosave()
             return
           }
@@ -356,7 +358,9 @@ export default function WizardRoute() {
       {/* Portaled to the app root, so it would float above a pushed Settings
           screen — the wizard stays mounted underneath. Render only while this
           screen is focused. */}
-      {gate.status === 'blocked' && isFocused ? <EmbedderGateBlocked reason={gate.reason} /> : null}
+      {gate.status === 'blocked' && isFocused ? (
+        <EmbedderGateBlocked reason={gate.reason} backend={gate.backend} />
+      ) : null}
     </WizardShell>
   )
 }
