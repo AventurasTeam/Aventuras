@@ -22,6 +22,10 @@ import { smokeTestLocal } from '../local/runtime.native'
 
 const HASH_CHUNK_BYTES = 1024 * 1024
 
+// Waits between in-session resume attempts after a connection drop; a hard
+// offline surfaces the failure after the last retry (~7s).
+const BLIP_BACKOFF_MS = [1000, 2000, 4000]
+
 // The slice of react-native-quick-crypto this driver touches. A structural
 // surface (rather than `typeof import(...)`, which the type-import lint
 // forbids, or a banned namespace import) keeps the module off the top-level
@@ -108,7 +112,20 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         },
       )
 
-      const result = await resumable.downloadAsync()
+      // In-session network-blip resume (the slice's kept acceptance —
+      // cross-launch resume is what's descoped): a dropped connection rejects
+      // downloadAsync, so continue the same resumable from its .part with
+      // backoff before surfacing the failure.
+      let result: Awaited<ReturnType<typeof resumable.downloadAsync>>
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          result = attempt === 0 ? await resumable.downloadAsync() : await resumable.resumeAsync()
+          break
+        } catch (error) {
+          if (attempt >= BLIP_BACKOFF_MS.length) throw error
+          await new Promise((resolve) => setTimeout(resolve, BLIP_BACKOFF_MS[attempt]))
+        }
+      }
       if (!result) {
         throw new Error(`Download of ${row.fileName} did not complete`)
       }
@@ -116,6 +133,11 @@ export function createEmbedderDownloadDriver(entry: CatalogModelEntry): DialogDr
         throw new Error(`Unexpected status ${result.status} downloading ${row.fileName}`)
       }
 
+      // expo's File.rename throws when the destination exists (no POSIX
+      // overwrite) — a completed file from a prior failed run would otherwise
+      // brick every re-download of this model.
+      const finalFile = new File(dir, row.fileName)
+      if (finalFile.exists) finalFile.delete()
       partFile.rename(row.fileName)
     },
 
