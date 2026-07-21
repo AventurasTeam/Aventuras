@@ -95,6 +95,11 @@ Resolutions handed back to the host:
 
 ## Per-state UI
 
+No header × on any state — every state carries an explicit footer
+affordance, and a header close would bypass the machine's cancel
+path (partial-file cleanup). Escape / system back still close
+(amended at M3.1a device review).
+
 ### License dialog
 
 The center of the flow. License content is fetched **live** (per
@@ -110,7 +115,7 @@ retitled `Model card — license: <tag>` and the card's
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Install MiniLM-L6 (lightweight)                       ×     │
+│ Install MiniLM-L6 (lightweight)                             │
 │ ─────────────────────────────────────────────────────       │
 │ Source:  huggingface.co/Xenova/all-MiniLM-L6-v2-q8          │
 │ Revision: abc123def456…                                      │
@@ -144,7 +149,7 @@ fetch shouldn't take long but isn't instant.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Install MiniLM-L6 (lightweight)                       ×     │
+│ Install MiniLM-L6 (lightweight)                             │
 │ ─────────────────────────────────────────────────────       │
 │                                                               │
 │   Fetching model card from huggingface.co…                   │
@@ -158,7 +163,7 @@ Cancel during this state resolves as `cancelled`.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ⚠ Couldn't reach the model source                     ×     │
+│ ⚠ Couldn't reach the model source                           │
 │ ─────────────────────────────────────────────────────       │
 │ Aventuras tried to fetch the license from                    │
 │ huggingface.co. The request failed:                          │
@@ -229,7 +234,7 @@ isn't a meaningful state.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ⚠ Verification failed                                  ×     │
+│ ⚠ Verification failed                                        │
 │ ─────────────────────────────────────────────────────       │
 │ One of the downloaded files doesn't match the expected      │
 │ hash:                                                         │
@@ -379,7 +384,7 @@ The confirmation state replaces the license dialog:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ Import custom embedding model                         ×     │
+│ Import custom embedding model                               │
 │ ─────────────────────────────────────────────────────       │
 │ You're importing a custom model. By using it, you assert     │
 │ that you have a license to do so. The file SHA256 hashes     │
