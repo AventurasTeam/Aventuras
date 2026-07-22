@@ -101,10 +101,18 @@ function applyContentSecurityPolicy(): void {
   })
 }
 
-// Windows whose renderer holds unsaved work, and those that have already
-// answered the prompt and may close.
+// Windows whose renderer holds unsaved work, those that have already answered
+// the prompt and may close, and those whose close cancelled a quit.
 const closeGuards = new Set<number>()
 const confirmedCloses = new Set<number>()
+const pendingQuits = new Set<number>()
+
+// `before-quit` runs before any window's `close`, so a guard that cancels the
+// close also cancels this quit. Recorded per window so confirming resumes it.
+let quitRequested = false
+app.on('before-quit', () => {
+  quitRequested = true
+})
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -144,11 +152,23 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  // Fail-open: only a renderer that has armed the guard gets asked. A renderer
-  // that never armed it, or died holding it, closes normally.
+  // A dead renderer can never answer the prompt, and preventing the close keeps
+  // `closed` from firing — so without this the window becomes unclosable and
+  // every later quit is blocked too.
+  win.webContents.on('render-process-gone', () => {
+    closeGuards.delete(win.id)
+  })
+
+  // Fail-open: only a live renderer that armed the guard gets asked.
   win.on('close', (event) => {
     if (!closeGuards.has(win.id) || confirmedCloses.has(win.id)) return
+    if (win.webContents.isDestroyed() || win.webContents.isCrashed()) return
     event.preventDefault()
+    // Assigned, not merged: a close arriving outside a quit must clear an
+    // intent left behind by a quit the user cancelled.
+    if (quitRequested) pendingQuits.add(win.id)
+    else pendingQuits.delete(win.id)
+    quitRequested = false
     win.webContents.send('native:close-requested')
   })
   win.on('closed', () => {
@@ -156,6 +176,7 @@ function createWindow(): void {
     // unrelated future window.
     closeGuards.delete(win.id)
     confirmedCloses.delete(win.id)
+    pendingQuits.delete(win.id)
   })
 
   if (isDev) {
@@ -202,7 +223,11 @@ app.whenReady().then(async () => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win == null) return
     confirmedCloses.add(win.id)
+    // `window-all-closed` does not quit on darwin, so a Cmd-Q whose close we
+    // cancelled would otherwise leave the process running with no windows.
+    const resumeQuit = pendingQuits.delete(win.id)
     win.close()
+    if (resumeQuit) app.quit()
   })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),
