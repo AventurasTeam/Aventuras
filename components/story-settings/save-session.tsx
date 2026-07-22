@@ -123,6 +123,9 @@ export function StorySettingsSaveSessionProvider({
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
+  const pendingLeaveRef = useRef(pendingLeave)
+  pendingLeaveRef.current = pendingLeave
+
   const save = useCallback(async () => {
     if (savingRef.current) return false
     savingRef.current = true
@@ -149,6 +152,14 @@ export function StorySettingsSaveSessionProvider({
       // session lands clean without each one tracking its own save baseline.
       for (const entry of callbacksRef.current.values()) entry.current.reset()
       onSaved?.()
+      // Any save satisfies a waiting leave, not just the one the guard started:
+      // the back arrow stays live during a commit, so a leave can be requested
+      // after it, and the session is clean now either way.
+      const proceed = pendingLeaveRef.current
+      if (proceed != null) {
+        setPendingLeave(null)
+        proceed()
+      }
       return true
     } catch (error) {
       onSaveFailed?.(error)
@@ -190,14 +201,11 @@ export function StorySettingsSaveSessionProvider({
         proceed()
         return
       }
-      // The guard outlives the commit: it can then disable itself while the
-      // write runs, and a failure leaves the user on the same three choices
-      // rather than dropping the navigation they asked for.
-      void save().then((ok) => {
-        if (!ok) return
-        setPendingLeave(null)
-        proceed()
-      })
+      // The guard outlives the commit — save() clears it and proceeds on
+      // success — so it can disable itself while the write runs, and a failure
+      // leaves the user on the same three choices rather than dropping the
+      // navigation they asked for.
+      void save()
     },
     [pendingLeave, discard, save],
   )

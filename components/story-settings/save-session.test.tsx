@@ -552,6 +552,53 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
     expect(proceed).toHaveBeenCalledTimes(1)
   })
 
+  // The SaveBar and the header back arrow both stay live during a commit, so a
+  // leave can be requested after the save that will satisfy it already started.
+  it('honours a leave requested while an earlier save was already running', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    await act(async () => {
+      void session.api().save()
+    })
+    expect(session.api().saving).toBe(true)
+
+    act(() => session.api().requestLeave(proceed))
+    expect(session.api().pendingLeave).toBe(true)
+
+    await act(async () => {
+      for (const release of releases) release()
+    })
+
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+  })
+
+  it('does not navigate on a save once the pending leave was cancelled', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    act(() => session.api().resolveLeave('cancel'))
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.api().pendingLeave).toBe(false)
+  })
+
   // The in-flight refusal below reads the same ref that gates save() re-entry,
   // so a flag left raised would silently make every later leave inert.
   it('accepts a save-and-leave after an earlier commit has settled', async () => {
