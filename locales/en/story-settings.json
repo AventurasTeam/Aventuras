@@ -1,0 +1,29 @@
+{
+  "title": "Story Settings",
+  "landsLater": "Lands in a later milestone",
+  "landsLaterBody": "This tab isn't built yet. Nothing here is configurable.",
+  "moreLandsLater": "More Memory settings land in a later milestone.",
+  "sections": {
+    "story": "Story",
+    "settings": "Settings"
+  },
+  "tabs": {
+    "about": "About",
+    "generation": "Generation",
+    "models": "Models",
+    "memory": "Memory",
+    "translation": "Translation",
+    "pack": "Pack",
+    "calendar": "Calendar",
+    "advanced": "Advanced"
+  },
+  "save": {
+    "saved": "Saved.",
+    "failed": "Couldn't save your changes.",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedBody": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
+    "unsavedSave": "Save",
+    "unsavedDiscard": "Discard"
+  },
+  "missingStory": "This story could not be loaded."
+}
