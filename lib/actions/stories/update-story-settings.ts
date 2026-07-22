@@ -20,7 +20,9 @@ export async function updateStorySettings(
 
   const settings = storySettingsSchema.parse({
     ...storySettingsSchema.parse(row.settings),
-    ...patch,
+    // Explicit `undefined` typechecks without exactOptionalPropertyTypes, and
+    // spreading it in would trip zod's defaults instead of leaving the key alone.
+    ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)),
   })
 
   await ctx.runInTransaction([

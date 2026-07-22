@@ -23,8 +23,8 @@ afterEach(() => {
 })
 
 async function seed() {
-  const { db, sqlite, runInTransaction } = await createTestDb()
-  const settings = buildStorySettings({ classifierCadence: 2 }, 'embed-a', null)
+  const { db, runInTransaction } = await createTestDb()
+  const settings = buildStorySettings({ classifierCadence: 2, suggestionCount: 6 }, 'embed-a', null)
   await db.insert(stories).values({
     id: 'story_1',
     title: 'Aria',
@@ -38,7 +38,7 @@ async function seed() {
   await db
     .insert(branches)
     .values({ id: 'branch_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-  return { db, sqlite, runInTransaction, settings }
+  return { db, runInTransaction, settings }
 }
 
 describe('updateStorySettings', () => {
@@ -90,12 +90,30 @@ describe('updateStorySettings', () => {
       settings,
     })
 
-    await updateStorySettings('story_1', { suggestionCount: 6 }, { db, runInTransaction }, 99)
+    await updateStorySettings('story_1', { suggestionCount: 4 }, { db, runInTransaction }, 99)
 
     expect(currentStoryStore.getCurrentStory()?.storyId).toBe('story_other')
     expect(currentStoryStore.getCurrentStory()?.settings.suggestionCount).toBe(
       settings.suggestionCount,
     )
+  })
+
+  it('treats an undefined-valued key as untouched rather than a reset to default', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    expect(settings.suggestionCount).toBe(6)
+
+    const next = await updateStorySettings(
+      'story_1',
+      { suggestionCount: undefined, piggybackMode: 'on' },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(next.suggestionCount).toBe(6)
+    expect(next.piggybackMode).toBe('on')
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(6)
   })
 
   it('throws for an unknown story', async () => {
