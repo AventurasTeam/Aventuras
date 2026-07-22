@@ -153,6 +153,15 @@ row-click intent; a settings surface wires route changes; both
 wire the window-close intent), but the user-visible UX is
 identical. No surface gets to skip the guard while dirty.
 
+**Window-close is the one intent that cannot always show this
+modal.** On desktop it can: Electron's main process holds the
+close, the renderer raises the normal Save / Discard / Cancel
+dialog, and confirming releases the close — `useUnsavedChangesGuard`
+wires both halves. In a browser it cannot: `beforeunload` cannot be
+resumed once the handler returns, so the only available affordance
+is the browser's own generic prompt. Surfaces get the modal
+everywhere else; this one degrades by platform, deliberately.
+
 ---
 
 ## Quick-edit exception — peek drawer

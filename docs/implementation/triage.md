@@ -72,9 +72,17 @@ slice-planning gate forces its resolution before that slice is planned.
   [Slice 3.1b](./milestones/03-memory-floor/slices/01b-embedder-lifecycle.md)
   clears `embedding_swap_target` atomically at its swap phase-2 commit
   and will need an explicit affordance (a `null` sentinel, or a
-  dedicated clear action). Nullable fields are unaffected — the filter
+  dedicated clear action). The shape is already specced:
+  [`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux)
+  writes that commit as
+  `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`.
+  Suggested shape is a `StorySettingsPatch` type distinct from
+  `Partial<StorySettings>`, widening those three keys to `T | null`
+  with `null` meaning clear and `undefined` still meaning leave
+  untouched — deliberately left to 3.1b, which owns the semantics and
+  is the only consumer. Nullable fields are unaffected — the filter
   drops only `undefined`, so `null` still writes. Surfaced by M3.11
-  Task 1 (2026-07-22).
+  Task 1 (2026-07-22), scoped to 3.1b 2026-07-22.
 - **`compositeText` space-joins fields, diverging silently from its
   spec.** `lib/db/embeddings/source-hash.ts:104` joins embedded fields
   with a space. `.impl-plans/M03-01a-embedder-core.md:187` specified
@@ -143,10 +151,14 @@ slice-planning gate forces its resolution before that slice is planned.
   overwrites the first's slot rather than both surviving, while
   `removeSection` filters _every_ match, so one section unmounting
   takes its twin's dirty state with it. The result presents as "the
-  save bar forgot my edits", not as a visible duplicate. Suggested:
-  warn on `id` collision in `__DEV__`, and give same-tab sections an
-  explicit intra-tab rank. Surfaced by M3.11 Task 4 review
-  (2026-07-22).
+  save bar forgot my edits", not as a visible duplicate. **Partly
+  closed by M3.11 review:** `attach`'s cleanup is now identity-checked,
+  so a twin unmounting no longer detaches the survivor's callbacks, and
+  `SectionDirtyState` carries `tab` rather than a raw `order`. What
+  remains is the intra-tab rank for same-tab siblings, and a `__DEV__`
+  warning on `id` collision — the shared-`id` publish slot is still
+  last-writer-wins. Surfaced by M3.11 Task 4 review (2026-07-22),
+  narrowed 2026-07-22.
 - **`save-sessions.md` overstates delta participation.**
   [`save-sessions.md → Session semantics`](../ui/patterns/save-sessions.md#session-semantics)
   says "Save commits all session changes as deltas under a single
@@ -196,34 +208,39 @@ slice-planning gate forces its resolution before that slice is planned.
   web.** `app/settings/index.tsx:119` sets `accessibilityRole="tab"`
   with `accessibilityState={{ selected }}`, but react-native-web does
   not translate that into an `aria-selected` attribute — verified, the
-  attribute is `null`. A `role="tab"` without `aria-selected` is an
-  axe `aria-required-attr` violation, and a screen reader cannot tell
-  which tab is active. M3.11's Story Settings rail was lifted from
+  attribute is `null`. This is **not** an axe finding: axe-core's
+  `tab` role lists `aria-selected` under `allowedAttrs` with no
+  `requiredAttrs`, so no rule fires. The damage is real anyway — a
+  screen reader cannot tell which tab is active, and because no
+  linter flags it the bug is invisible. M3.11's Story Settings rail was lifted from
   this JSX and adds `aria-selected={selected}` alongside (a valid RN
   prop, so it is correct on native too). App Settings still ships the
   bug and wants the same one-line fix. Surfaced by M3.11 Task 7
   (2026-07-22).
-- **`rehydrateStories`'s boolean is discarded, so a failed read
-  reads as "story missing".** The hydration effect in
-  `app/story-settings/[storyId].tsx` sets its `hydrated` flag
-  unconditionally in `.then()`, but `rehydrateStories`
-  (`lib/stores/stories/stories.ts`) logs and swallows read errors,
-  then returns `false`. On a cold entry where that read fails the
-  route shows "This story could not be loaded." across all eight
-  tabs, conflating a transient failure with a deleted story.
-  `app/reader-composer/[branchId].tsx` already models the three
-  states its own branch hydration needs — failed, still-loading,
-  empty — and is the shape to copy. Surfaced by M3.11 final review
-  (2026-07-22).
-- **The save-session context rebuilds on every snapshot change.**
-  `components/story-settings/save-session.tsx` rebuilds its `api`
-  object whenever `snapshot`, `saving`, or `pendingLeave` changes,
-  and `useStorySettingsSection` subscribes to the whole object — so
-  with every tab panel mounted by design, one section going dirty
-  re-renders every mounted section. Harmless at M3 scale (zero
-  sections today, one once 3.7 lands), but M4.4's basic surface and
-  M7.2's deep tabs fill most of the eight tabs, and the cost scales
-  with the number of registered sections. Splitting the stable
-  registration surface (`publish` / `unpublish` / `attach`) from the
-  volatile snapshot into two contexts would make that free.
-  Surfaced by M3.11 final review (2026-07-22).
+- **A settings save is not atomic against a concurrent writer.**
+  `updateStorySettings` reads `stories.settings`, merges, then writes
+  in a separate `runInTransaction` call. `stories.settings` is one
+  JSON blob, so any interleaved writer — `resetStorySettings`, a
+  second Electron window, or 3.1b's pipeline writing `effectiveDim` —
+  loses one side of the merge entirely, not just the overlapping key,
+  and both writers report success. Not fixable at the action layer as
+  the bridge stands: `runInTransaction(ops: SqlOp[])` takes only SQL
+  ops and resolves `void`, so the read cannot join the transaction and
+  a compare-and-set (`WHERE updated_at = ?`) cannot be verified
+  without a row count. Needs a bridge capability — a transaction that
+  can read, or one that returns `changes` — before the action can do
+  better. Surfaced by M3.11 review (2026-07-22).
+- **Electron reload is unguarded while a save session is dirty.**
+  M3.11 routes the desktop window-close intent through the main
+  process (`native:set-close-guard` / `native:close-requested`), so
+  closing the window raises the surface's own Save / Discard / Cancel
+  dialog. A renderer-initiated reload (Ctrl-R, devtools) does not go
+  through `win.on('close')` and so bypasses the guard, dropping the
+  session. A renderer `beforeunload` would catch it but cancels
+  **silently** under Electron — the docs are explicit that returning a
+  non-void value gives no prompt — so the naive fix trades data loss
+  for a mystery no-op. Wants either a main-process
+  `webContents.on('will-prevent-unload')` handler that shows the
+  dialog, or an in-app reload command that routes through
+  `requestLeave`. Browsers are unaffected: they get the native
+  `beforeunload` prompt. Surfaced by M3.11 review (2026-07-22).

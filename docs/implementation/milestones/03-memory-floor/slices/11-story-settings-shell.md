@@ -59,8 +59,9 @@ surface. M4.4 extends this shell rather than replacing it.
   later milestone" copy), themed per foundations, mobile
   expression per the standard narrow-tier rules.
 - **Tab map + save-session seam (C7):** the route's tab map is the
-  extension point — a consumer slice adds its section to the tab's
-  branch, mirroring how M3.1a extended App Settings. Sections join
+  extension point — `renderPanel` switches on the tab id and a
+  consumer slice introduces its own branch there, mirroring how
+  M3.1a extended App Settings. Sections join
   the surface's save session at runtime via
   `useStorySettingsSection`; names fixed in this slice's first
   commit.
@@ -145,7 +146,12 @@ the first real section consumer went to
 - **Accepted scope gap.** `AppActionsMenu`'s Diagnostics-Hub jump is
   a bare `router.push`, so the navigate-away guard — which wraps only
   the surface's own back path — does not intercept it. A general
-  router-event interceptor was out of scope. Window-close intent is
-  likewise unwired; both wait on
+  router-event interceptor was out of scope; it waits on
   [Slice 3.7](./07-suggestions.md#open-questions), the first slice
   that can make the session dirty.
+- **Window-close intent is wired.** `useUnsavedChangesGuard` raises
+  the surface's own dialog for an Electron window-close (held in the
+  main process until the user answers) and the browser's native
+  prompt for a web reload or tab close. Electron's own reload path
+  still bypasses it — queued in
+  [triage](../../../triage.md#inbox).
