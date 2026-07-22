@@ -244,3 +244,24 @@ slice-planning gate forces its resolution before that slice is planned.
   dialog, or an in-app reload command that routes through
   `requestLeave`. Browsers are unaffected: they get the native
   `beforeunload` prompt. Surfaced by M3.11 review (2026-07-22).
+- **Reloading any deep route in a packaged desktop build renders a
+  black screen.** `resolveBundlePath` in `electron/main.ts` maps a URL
+  path straight onto `dist/`, and its only fallback is a traversal
+  guard — a _missing_ file falls through to `net.fetch` on a
+  nonexistent `file://` path, which rejects. `protocol.handle` has no
+  rejection handler, so the main-frame load fails and the window shows
+  its `#000000` background. `app.json` sets web `output` to `single`,
+  so `dist/` holds one `index.html` and no per-route directories:
+  `/settings`, `/story-settings/<id>`, `/reader-composer/<id>` and
+  `/diagnostics` all miss. Dev is unaffected — `isDev` loads the Metro
+  dev server, which does its own SPA routing, so the `app://` handler
+  never runs unpackaged. Confirmed on a packaged Linux build
+  (2026-07-22): Ctrl-R on App Settings blacks out, Ctrl-R on the story
+  list reloads fine. Wants an existence check falling back to
+  `index.html` — extension sniffing breaks on dotted route params —
+  plus a rejection handler on `protocol.handle`. Distinct from the
+  unguarded-reload entry above: that one loses the session, this one
+  stops the page coming back. Pre-existing and repo-wide, not
+  introduced by M3.11, but M3.11's window-close guard would compound it
+  into a window that is also unclosable once a section can be dirty.
+  Surfaced by M3.11 review (2026-07-22).
