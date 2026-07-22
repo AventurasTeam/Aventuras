@@ -182,8 +182,11 @@ slice-planning gate forces its resolution before that slice is planned.
   an emergent property of how the blurred screen is frozen and
   portaled, not something the code guarantees. Same family as the
   Ctrl-Z hazard M3.11 Task 9 closed; `SaveBar` registers an equally
-  ungated Ctrl-S, inert only because no product surface mounts two
-  save bars at once yet. Not a one-liner: `useGlobalHotkey` is called
+  ungated Ctrl-S, and the trigger there is a mounted-but-blurred save
+  bar rather than two at once — with a dirty session, the Diagnostics
+  jump pushes over Story Settings and leaves one live `capture: true`
+  Ctrl-S listener behind the new screen. Not a one-liner:
+  `useGlobalHotkey` is called
   inside a shared compound that Storybook mounts with no navigator,
   and `useIsFocused` throws outside one — so focus state has to be
   threaded down as a prop from each route, or the compound needs a

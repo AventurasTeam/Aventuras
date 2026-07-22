@@ -2,7 +2,6 @@
   "title": "Story Settings",
   "landsLater": "Lands in a later milestone",
   "landsLaterBody": "This tab isn't built yet. Nothing here is configurable.",
-  "moreLandsLater": "More Memory settings land in a later milestone.",
   "sections": {
     "story": "Story",
     "settings": "Settings"
