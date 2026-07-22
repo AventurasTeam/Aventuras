@@ -1,10 +1,9 @@
 /**
- * C7 seam: adding a tab id to a group here registers the tab. The id union,
- * the deep-link accept-list, and each section's save-bar `order` all derive
- * from this one structure, so a rail entry can't drift out of sync with them.
- * Labels resolve at render (`storySettings:tabs.<id>`) so a language switch
- * still reaches them; the section body itself lives in its own module and
- * joins the save session via `useStorySettingsSection`.
+ * Adding an id to a group here registers the tab: the id union, the
+ * deep-link accept-list, each section's save-bar order, and the
+ * `storySettings:tabs.<id>` label lookup all derive from this structure, so a
+ * rail entry can't drift out of sync with them. A missing locale key is a
+ * typecheck failure, not a runtime one.
  */
 const STORY_SETTINGS_TAB_GROUPS = [
   { id: 'story', tabs: ['about', 'generation'] },
@@ -18,7 +17,17 @@ const STORY_SETTINGS_TAB_IDS: readonly StorySettingsTabId[] = STORY_SETTINGS_TAB
   (group) => group.tabs,
 )
 
-/** Rail position of a tab. `useStorySettingsSection` resolves it from `tab`. */
+// A duplicate id keeps the union intact but silently mounts two panels and
+// makes `indexOf` resolve both to the first one's rail slot. Node (vitest)
+// leaves __DEV__ undefined, so the check runs there too.
+if (typeof __DEV__ === 'undefined' || __DEV__) {
+  const unique = new Set(STORY_SETTINGS_TAB_IDS)
+  if (unique.size !== STORY_SETTINGS_TAB_IDS.length) {
+    throw new Error('STORY_SETTINGS_TAB_GROUPS contains a duplicate tab id.')
+  }
+}
+
+/** Rail position of a tab. `computeSnapshot` resolves it to order the save bar. */
 function storySettingsTabOrder(id: StorySettingsTabId): number {
   return STORY_SETTINGS_TAB_IDS.indexOf(id)
 }

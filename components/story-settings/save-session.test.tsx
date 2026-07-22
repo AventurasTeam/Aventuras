@@ -334,6 +334,116 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
     expect(session.api().saving).toBe(false)
   })
+
+  it('does not write, or claim a save, when the session is clean', async () => {
+    const aids = makeSection('authoring-aids', 'generation', [])
+    const session = mountSession({ children: sectionsOf(aids) })
+
+    let outcome: boolean | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toBe(true)
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(session.onSaved).not.toHaveBeenCalled()
+    expect(aids.reset).not.toHaveBeenCalled()
+  })
+
+  it('leaves an edit made during the commit dirty instead of resetting it away', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const late = makeSection('embedding-status', 'memory', [], { embeddingBackend: 'local' })
+    const session = mountSession({
+      children: sectionsOf(aids, late),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+
+    let inFlight: Promise<boolean> | undefined
+    await act(async () => {
+      inFlight = session.api().save()
+    })
+
+    // The user keeps typing in a second section while the write is in flight.
+    const lateDirty = { ...late, dirtyFields: ['embedder'] }
+    act(() => {
+      session.rerenderWith(sectionsOf(aids, lateDirty))
+    })
+
+    await act(async () => {
+      releases.forEach((release) => release())
+      await inFlight
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(aids.reset).toHaveBeenCalledTimes(1)
+    // Neither committed nor reset: the edit landed after getPatch ran, so it
+    // survives to the next save instead of being re-derived away.
+    expect(late.getPatch).not.toHaveBeenCalled()
+    expect(late.reset).not.toHaveBeenCalled()
+    expect(session.api().snapshot.dirtyFields).toContain('embedder')
+  })
+
+  it('reports a committed write as saved even when a post-commit step throws', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const onSaved = vi.fn(() => {
+      throw new Error('toast blew up')
+    })
+    const session = mountSession({ children: sectionsOf(aids), onSaved })
+
+    let outcome: boolean | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+    expect(outcome).toBe(true)
+    expect(session.onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('resets the remaining sections when one section’s reset throws', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    aids.reset.mockImplementation(() => {
+      throw new Error('reset blew up')
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
+    const session = mountSession({ children: sectionsOf(aids, memory) })
+
+    let outcome: boolean | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(memory.reset).toHaveBeenCalledTimes(1)
+    expect(outcome).toBe(true)
+    expect(session.onSaveFailed).not.toHaveBeenCalled()
+  })
+
+  it('names the section whose getPatch throws', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'])
+    aids.getPatch.mockImplementation(() => {
+      throw new Error('draft is malformed')
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+
+    let outcome: boolean | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toBe(false)
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(session.onSaveFailed).toHaveBeenCalledOnce()
+    expect(String(session.onSaveFailed.mock.calls[0]?.[0])).toContain('authoring-aids')
+  })
 })
 
 describe('StorySettingsSaveSessionProvider — discard', () => {
@@ -357,7 +467,7 @@ describe('StorySettingsSaveSessionProvider — discard', () => {
 describe('StorySettingsSaveSessionProvider — snapshot', () => {
   it('is clean with no registered sections', () => {
     const session = mountSession()
-    expect(session.api().snapshot).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
+    expect(session.api().snapshot).toEqual({ dirtyFields: [] })
   })
 
   it('is clean while every registered section is clean', () => {
@@ -365,7 +475,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
     const memory = makeSection('embedding-status', 'memory', [])
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
-    expect(session.api().snapshot).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
+    expect(session.api().snapshot).toEqual({ dirtyFields: [] })
   })
 
   it('aggregates dirty fields across sections in rail order, not mount order', () => {
@@ -374,9 +484,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
     const session = mountSession({ children: sectionsOf(memory, aids) })
 
     expect(session.api().snapshot).toEqual({
-      isDirty: true,
       dirtyFields: ['suggestions', 'suggestion count', 'embedder'],
-      dirtyCount: 3,
     })
   })
 
@@ -394,16 +502,14 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
   it('tracks a section that goes dirty after mount', () => {
     const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
-    expect(session.api().snapshot.isDirty).toBe(false)
+    expect(session.api().snapshot.dirtyFields).toEqual([])
 
     act(() => {
       session.rerenderWith(sectionsOf({ ...aids, dirtyFields: ['suggestions'] }))
     })
 
     expect(session.api().snapshot).toEqual({
-      isDirty: true,
       dirtyFields: ['suggestions'],
-      dirtyCount: 1,
     })
   })
 })
@@ -417,16 +523,14 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
       embeddingBackend: 'local',
     })
     const session = mountSession({ children: sectionsOf(aids, memory) })
-    expect(session.api().snapshot.dirtyCount).toBe(2)
+    expect(session.api().snapshot.dirtyFields).toHaveLength(2)
 
     act(() => {
       session.rerenderWith(sectionsOf(aids))
     })
 
     expect(session.api().snapshot).toEqual({
-      isDirty: true,
       dirtyFields: ['suggestions'],
-      dirtyCount: 1,
     })
 
     await act(async () => {
@@ -437,9 +541,52 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
     expect(memory.reset).not.toHaveBeenCalled()
     expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
   })
+
+  it('keeps the survivor wired when a section sharing its id unmounts', async () => {
+    // Two slices can independently pick the same free-form id on a seam built
+    // for independent extension; the first to unmount must not evict the other.
+    const first = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const second = makeSection('authoring-aids', 'generation', ['suggestions'])
+    const session = mountSession({
+      children: [
+        <Section key="first" fixture={first} />,
+        <Section key="second" fixture={second} />,
+      ],
+    })
+
+    act(() => {
+      session.rerenderWith(<Section key="first" fixture={first} />)
+    })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+    expect(first.reset).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('StorySettingsSaveSessionProvider — leave guard', () => {
+  // A window-close intercept can reach resolveLeave without going through the
+  // dialog; requestLeave first is the precondition, not an optimization.
+  it('does nothing when resolved without a pending leave', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+
+    await act(async () => {
+      session.api().resolveLeave('save')
+      session.api().resolveLeave('discard')
+    })
+
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(aids.reset).not.toHaveBeenCalled()
+  })
+
   it('lets a clean session leave immediately', () => {
     const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
@@ -713,7 +860,7 @@ describe('useStorySettingsSection', () => {
 
     const settled = renders.count
     expect(settled).toBeLessThanOrEqual(3)
-    expect(session.api().snapshot.dirtyCount).toBe(2)
+    expect(session.api().snapshot.dirtyFields).toHaveLength(2)
 
     await act(async () => {})
     expect(renders.count).toBe(settled)
@@ -732,6 +879,6 @@ describe('useStorySettingsSection', () => {
     const session = mountSession({ children: <ChurningSection /> })
 
     expect(renders.count).toBeLessThanOrEqual(3)
-    expect(session.api().snapshot.dirtyCount).toBe(2)
+    expect(session.api().snapshot.dirtyFields).toHaveLength(2)
   })
 })

@@ -1,20 +1,20 @@
+import { storySettingsTabOrder, type StorySettingsTabId } from './tabs'
+
 export type SectionDirtyState = {
   id: string
-  order: number
+  tab: StorySettingsTabId
   dirtyFields: readonly string[]
 }
 
+/**
+ * The surface's dirty fields in rail order. One field, so "clean" and "which
+ * fields" can never disagree — read `dirtyFields.length` for both.
+ */
 export type SaveSessionSnapshot = {
-  readonly isDirty: boolean
   readonly dirtyFields: readonly string[]
-  readonly dirtyCount: number
 }
 
-const CLEAN_SNAPSHOT: SaveSessionSnapshot = {
-  isDirty: false,
-  dirtyFields: [],
-  dirtyCount: 0,
-}
+const CLEAN_SNAPSHOT: SaveSessionSnapshot = { dirtyFields: [] }
 
 function sameFields(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((field, i) => field === b[i])
@@ -22,13 +22,17 @@ function sameFields(a: readonly string[], b: readonly string[]): boolean {
 
 /** Returns a fresh snapshot per dirty call — derive it (useMemo), never store it in state. */
 // Rail order drives the label order in the save bar, so the user reads dirty
-// fields in the same sequence the tabs present them.
+// fields in the same sequence the tabs present them. Sections sharing a tab tie
+// on order and fall back to id, so the sequence stays stable across mounts.
 export function computeSnapshot(sections: readonly SectionDirtyState[]): SaveSessionSnapshot {
   const dirtyFields = [...sections]
-    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+    .sort(
+      (a, b) =>
+        storySettingsTabOrder(a.tab) - storySettingsTabOrder(b.tab) || a.id.localeCompare(b.id),
+    )
     .flatMap((section) => section.dirtyFields)
   if (dirtyFields.length === 0) return CLEAN_SNAPSHOT
-  return { isDirty: true, dirtyFields, dirtyCount: dirtyFields.length }
+  return { dirtyFields }
 }
 
 // Returns the SAME array reference when nothing changed, so the provider's
@@ -40,7 +44,7 @@ export function upsertSection(
   const index = sections.findIndex((s) => s.id === next.id)
   if (index === -1) return [...sections, next]
   const current = sections[index]
-  if (current.order === next.order && sameFields(current.dirtyFields, next.dirtyFields)) {
+  if (current.tab === next.tab && sameFields(current.dirtyFields, next.dirtyFields)) {
     return sections
   }
   const copy = [...sections]

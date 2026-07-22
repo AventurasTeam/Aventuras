@@ -9,41 +9,45 @@ import {
 
 const memory: SectionDirtyState = {
   id: 'embedding-status',
-  order: 20,
+  tab: 'memory',
   dirtyFields: ['embedder'],
 }
 const generation: SectionDirtyState = {
   id: 'authoring-aids',
-  order: 10,
+  tab: 'generation',
   dirtyFields: ['suggestions', 'suggestion count'],
 }
 
 describe('computeSnapshot', () => {
   it('reports a clean session for no sections', () => {
-    expect(computeSnapshot([])).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
+    expect(computeSnapshot([])).toEqual({ dirtyFields: [] })
   })
 
   it('reports a clean session when every section is clean', () => {
     const snapshot = computeSnapshot([
-      { id: 'a', order: 0, dirtyFields: [] },
-      { id: 'b', order: 10, dirtyFields: [] },
+      { id: 'a', tab: 'about', dirtyFields: [] },
+      { id: 'b', tab: 'memory', dirtyFields: [] },
     ])
-    expect(snapshot).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
+    expect(snapshot).toEqual({ dirtyFields: [] })
   })
 
   it('flattens dirty fields in ascending rail order', () => {
     const snapshot = computeSnapshot([memory, generation])
-    expect(snapshot).toEqual({
-      isDirty: true,
-      dirtyFields: ['suggestions', 'suggestion count', 'embedder'],
-      dirtyCount: 3,
-    })
+    expect(snapshot).toEqual({ dirtyFields: ['suggestions', 'suggestion count', 'embedder'] })
   })
 
-  it('breaks an order tie deterministically by id', () => {
+  it('ranks a section by its tab, not its registration order', () => {
     const snapshot = computeSnapshot([
-      { id: 'zulu', order: 0, dirtyFields: ['z'] },
-      { id: 'alpha', order: 0, dirtyFields: ['a'] },
+      { id: 'late', tab: 'about', dirtyFields: ['first in the rail'] },
+      { id: 'early', tab: 'advanced', dirtyFields: ['last in the rail'] },
+    ])
+    expect(snapshot.dirtyFields).toEqual(['first in the rail', 'last in the rail'])
+  })
+
+  it('breaks a same-tab tie deterministically by id', () => {
+    const snapshot = computeSnapshot([
+      { id: 'zulu', tab: 'about', dirtyFields: ['z'] },
+      { id: 'alpha', tab: 'about', dirtyFields: ['a'] },
     ])
     expect(snapshot.dirtyFields).toEqual(['a', 'z'])
   })
@@ -55,8 +59,8 @@ describe('computeSnapshot', () => {
   })
 
   it('ignores clean sections when others are dirty', () => {
-    const snapshot = computeSnapshot([generation, { id: 'quiet', order: 99, dirtyFields: [] }])
-    expect(snapshot.dirtyCount).toBe(2)
+    const snapshot = computeSnapshot([generation, { id: 'quiet', tab: 'pack', dirtyFields: [] }])
+    expect(snapshot.dirtyFields).toEqual(['suggestions', 'suggestion count'])
   })
 })
 
@@ -70,8 +74,8 @@ describe('upsertSection', () => {
     expect(upsertSection([generation, memory], updated)).toEqual([updated, memory])
   })
 
-  it('replaces a known section when only its order changed', () => {
-    const moved = { ...generation, order: 30 }
+  it('replaces a known section when only its tab changed', () => {
+    const moved: SectionDirtyState = { ...generation, tab: 'advanced' }
     expect(upsertSection([generation, memory], moved)).toEqual([moved, memory])
   })
 
@@ -85,9 +89,16 @@ describe('upsertSection', () => {
     expect(upsertSection([generation, memory], swapped)).toEqual([generation, swapped])
   })
 
-  it('returns the same array reference when nothing changed', () => {
+  it('returns the same array reference for an equal but freshly built section', () => {
+    // A fresh array literal, not a spread of the same one: the anti-loop guard
+    // has to compare per field, and an identity check would also pass a spread.
     const list = [generation]
-    expect(upsertSection(list, { ...generation })).toBe(list)
+    const republished: SectionDirtyState = {
+      id: 'authoring-aids',
+      tab: 'generation',
+      dirtyFields: ['suggestions', 'suggestion count'],
+    }
+    expect(upsertSection(list, republished)).toBe(list)
   })
 })
 
