@@ -7,28 +7,29 @@
   the M2 in-story routing are merged prerequisites)
 - **Blocks:** the settings-section portions of
   [Slice 3.1b](./01b-embedder-lifecycle.md) (embedding-status
-  panel) and [Slice 3.7](./07-suggestions.md) (Composer section) —
-  partial gates; both slices' core work is independent of this
-  shell.
+  panel) and [Slice 3.7](./07-suggestions.md) (Authoring aids
+  section) — partial gates; both slices' core work is independent
+  of this shell.
 
 ## Goal
 
 A minimal Story Settings host so M3's two settings surfaces have
 somewhere to live: the route, the screen scaffold with tab /
-section structure per the canonical layout, and a
-section-registration seam (C7) that lets 3.1b and 3.7 add their
-sections without touching shared files. Added at milestone
+section structure per the canonical layout, and the C7 seam — the
+route's tab map plus the shell's save session — that 3.1b and 3.7
+hang their sections off. Added at milestone
 promotion — the audit found 3.1b and 3.7 authoring sections into a
 screen the roadmap doesn't build until M4.4.
 
 ## Background
 
-The canonical Story Settings screen is large — models, generation,
-memory, translation, pack, and calendar tabs — and its real basic
-surface is M4.4's job, with deep tabs in M7.2. M3 needs only a
-host: the staleness resolution panel canon places in Story
-Settings · Memory, and the suggestions controls canon places in
-Story Settings → Composer. This slice ships the smallest honest
+The canonical Story Settings screen is large — about, generation,
+models, memory, translation, pack, calendar, and advanced tabs —
+and its real basic surface is M4.4's job, with deep tabs in M7.2.
+M3 needs only a host: the staleness resolution panel canon places
+in Story Settings · Memory, and the suggestions controls canon
+places on the Generation tab under _Authoring aids_. This slice
+ships the smallest honest
 version of the screen — navigable route, canonical tab skeleton
 with empty-state placeholders, and a registration mechanism —
 explicitly _not_ the M4.4 surface. M4.4 extends this shell rather
@@ -58,10 +59,12 @@ than replacing it.
   empty-state placeholders for tabs M3 doesn't fill ("lands in a
   later milestone" copy), themed per foundations, mobile
   expression per the standard narrow-tier rules.
-- **Section-registration seam (C7):** each section is a
-  self-registered module (same spirit as the M1.5 delta-dispatch
-  registration — consumers touch no shared file); registration
-  names fixed in this slice's first commit.
+- **Tab map + save-session seam (C7):** the route's tab map is the
+  extension point — a consumer slice adds its section to the tab's
+  branch, mirroring how M3.1a extended App Settings. Sections join
+  the surface's save session at runtime via
+  `useStorySettingsSection`; names fixed in this slice's first
+  commit.
 - **Save plumbing floor:** whatever minimal save-session wiring the
   two M3 sections need to persist through the existing
   story-settings mutators (3.7's editor and 3.1b's panel bring
@@ -80,10 +83,10 @@ than replacing it.
 - The Story Settings route opens from an open story and renders
   the tab skeleton with empty-state placeholders on desktop and
   Android; navigation back to the reader preserves reader state.
-- A fixture section registered through C7 renders in its declared
-  tab without edits to any shared file (vitest / component test on
-  the registration, mirroring the M1.5 registration-API test
-  shape).
+- A fixture section joining the save session through
+  `useStorySettingsSection` surfaces its dirty fields in the shell's
+  single save bar, and Save / Discard reach its `getPatch` /
+  `reset` (vitest on the aggregation module).
 - Unfilled tabs show the placeholder, not blank panes; no dead
   controls.
 - Every chrome string routes through `t()`; new compounds have
@@ -98,10 +101,11 @@ than replacing it.
 
 ## Open questions
 
-- **Skeleton breadth** — render all six canonical tabs with
-  placeholders vs only the tabs M3 fills (Memory, Generation /
-  Composer). Lean minimal (two tabs) to avoid advertising dead
-  surface; confirm at planning.
+- **Skeleton breadth** — **Resolved at planning:** all eight
+  canonical tabs render, with unfilled tabs showing the
+  later-milestone placeholder. Matches App Settings, which already
+  ships its full rail with placeholders, and keeps M4.4 / M7.2 to
+  adding content rather than restructuring the rail.
 
 ## Implementation notes
 

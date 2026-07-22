@@ -20,7 +20,8 @@ turn: a sibling `<suggestions>` block emits in the narrative fold
 the entry's metadata, and renders as the reader's chip strip with
 category overlines, a refresh re-roll through the new
 `suggestion-refresh` pipeline, and an empty-state Generate. Story
-Settings gains the Composer categories editor (wiring the shipped
+Settings gains the Generation tab's Authoring aids categories
+editor (wiring the shipped
 `SuggestionCategoriesEditor`) plus the `suggestionsEnabled` toggle
 and `suggestionCount` stepper.
 
@@ -87,8 +88,8 @@ tap-after-typing draft loss is a documented v1 wart.
   `(removed)` fallback; disabled-category render rules;
   accessibility (chip = button with category label, `aria-busy`
   loading, refresh `aria-label`).
-- **Settings surface:** the Composer section registered into the
-  Story Settings shell per C7
+- **Settings surface:** the Generation tab's Authoring aids section
+  hosted by the Story Settings shell per C7
   ([Slice 3.11](./11-story-settings-shell.md) hosts), with
   `suggestionsEnabled` master toggle, `suggestionCount` stepper,
   and the categories editor wiring the shipped
