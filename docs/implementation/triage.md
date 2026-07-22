@@ -186,12 +186,11 @@ slice-planning gate forces its resolution before that slice is planned.
   bar rather than two at once — with a dirty session, the Diagnostics
   jump pushes over Story Settings and leaves one live `capture: true`
   Ctrl-S listener behind the new screen. Not a one-liner:
-  `useGlobalHotkey` is called
-  inside a shared compound that Storybook mounts with no navigator,
-  and `useIsFocused` throws outside one — so focus state has to be
-  threaded down as a prop from each route, or the compound needs a
-  navigator-optional focus hook. Surfaced by M3.11 Task 9
-  (2026-07-22).
+  `useGlobalHotkey` is called inside a shared compound that Storybook
+  mounts with no navigator, and `useIsFocused` throws outside one — so
+  focus state has to be threaded down as a prop from each route, or the
+  compound needs a navigator-optional focus hook. Surfaced by M3.11
+  Task 9 (2026-07-22).
 - **Storybook vitest project applies no NativeWind classNames.**
   `storybookTest` in `vitest.config.ts` does not carry
   `framework.options.pluginReactOptions.jsxImportSource: 'nativewind'`
