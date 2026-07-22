@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  cloneDraft,
   computeSnapshot,
   removeSection,
+  sameDraft,
   upsertSection,
   type SectionDirtyState,
 } from './save-session-state'
@@ -110,5 +112,55 @@ describe('removeSection', () => {
   it('returns the same array reference when the id is absent', () => {
     const list = [generation]
     expect(removeSection(list, 'nope')).toBe(list)
+  })
+})
+
+describe('sameDraft', () => {
+  // JSON.stringify collapses this pair. Harmless while `updateStorySettings`
+  // also strips undefined — the point is that the reset decision no longer
+  // rests on the two modules happening to agree.
+  it('separates a cleared key from an absent one', () => {
+    expect(sameDraft({ embedding_swap_target: undefined }, {})).toBe(false)
+    expect(sameDraft({}, { embedding_swap_target: undefined })).toBe(false)
+    expect(
+      sameDraft({ embedding_swap_target: undefined }, { embedding_swap_target: undefined }),
+    ).toBe(true)
+  })
+
+  it('compares nested values structurally', () => {
+    expect(sameDraft({ models: { narrative: 'a' } }, { models: { narrative: 'a' } })).toBe(true)
+    expect(sameDraft({ models: { narrative: 'a' } }, { models: { narrative: 'b' } })).toBe(false)
+    expect(sameDraft({ models: { narrative: undefined } }, { models: {} })).toBe(false)
+  })
+
+  it('does not confuse an array with an object holding the same keys', () => {
+    expect(sameDraft(['a'], { 0: 'a' })).toBe(false)
+  })
+
+  it('reads an unrepresentable draft as changed rather than throwing', () => {
+    const cyclic: Record<string, unknown> = {}
+    cyclic.self = cyclic
+    const twin: Record<string, unknown> = {}
+    twin.self = twin
+    expect(sameDraft(cyclic, twin)).toBe(false)
+  })
+})
+
+describe('cloneDraft', () => {
+  // getPatch may hand back the section's own draft object; holding it by
+  // reference would let a later edit rewrite what we compare against.
+  it('detaches the copy from later mutation', () => {
+    const draft = { models: { narrative: 'a' }, packVariables: { tone: 'wry' } }
+    const before = cloneDraft(draft)
+
+    draft.models.narrative = 'b'
+    expect(sameDraft(draft, before)).toBe(false)
+  })
+
+  it('preserves a cleared key', () => {
+    expect(sameDraft(cloneDraft({ activePackId: undefined }), { activePackId: undefined })).toBe(
+      true,
+    )
+    expect(sameDraft(cloneDraft({ activePackId: undefined }), {})).toBe(false)
   })
 })

@@ -59,3 +59,54 @@ export function removeSection(
   if (!sections.some((s) => s.id === id)) return sections
   return sections.filter((s) => s.id !== id)
 }
+
+// Deeper than any `StorySettings` branch. `packVariables` is an open record, so
+// the floor has to be a depth cap rather than the schema — anything past it
+// reads as "changed", which only costs a stale save bar.
+const DRAFT_DEPTH_LIMIT = 12
+
+/**
+ * Point-in-time copy of a section's draft, for comparing against a later read.
+ * Copied rather than held by reference: `getPatch` may hand back the section's
+ * own draft object, and a later edit to it would rewrite the thing we're
+ * comparing against.
+ */
+export function cloneDraft(value: unknown, depth = 0): unknown {
+  if (depth >= DRAFT_DEPTH_LIMIT || typeof value !== 'object' || value === null) return value
+  if (Array.isArray(value)) return value.map((item) => cloneDraft(item, depth + 1))
+  const copy: Record<string, unknown> = {}
+  for (const key of Object.keys(value)) {
+    copy[key] = cloneDraft((value as Record<string, unknown>)[key], depth + 1)
+  }
+  return copy
+}
+
+/**
+ * Whether two reads of a section's draft are the same edit.
+ *
+ * Compares key *presence*, so `{ k: undefined }` and `{}` differ — unlike
+ * `JSON.stringify` equality, which drops `undefined`-valued keys. That
+ * difference is currently invisible, because `updateStorySettings` strips
+ * `undefined` the same way, so a stringify-equal pair also writes equal. This
+ * exists so the reset decision stops depending on that coincidence: nothing
+ * enforces that the two modules keep agreeing on what `undefined` means.
+ */
+export function sameDraft(a: unknown, b: unknown, depth = 0): boolean {
+  // Only reached by a cycle or a draft deeper than the cap; both fall to
+  // "changed", which skips a reset rather than discarding an edit.
+  if (depth >= DRAFT_DEPTH_LIMIT) return false
+  if (Object.is(a, b)) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const aKeys = Object.keys(a)
+  if (aKeys.length !== Object.keys(b).length) return false
+  return aKeys.every(
+    (key) =>
+      Object.hasOwn(b, key) &&
+      sameDraft(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key],
+        depth + 1,
+      ),
+  )
+}

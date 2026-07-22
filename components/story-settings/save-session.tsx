@@ -14,8 +14,10 @@ import type { StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import {
+  cloneDraft,
   computeSnapshot,
   removeSection,
+  sameDraft,
   upsertSection,
   type SaveSessionSnapshot,
   type SectionDirtyState,
@@ -87,15 +89,6 @@ function dirtyIds(sections: readonly SectionDirtyState[]): Set<string> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-/**
- * Identifies a section's draft at a point in time. Both sides always come from
- * the same `getPatch`, so key order matches; a reordering would read as
- * "changed", which only skips a reset — it can never discard an edit.
- */
-function patchSignature(patch: Partial<StorySettings>): string {
-  return JSON.stringify(patch)
 }
 
 function reportKeyCollision(
@@ -247,7 +240,7 @@ export function StorySettingsSaveSessionProvider({
 
     // What each section's draft looked like when its patch was read, so an
     // edit made while the write was in flight isn't re-derived away after it.
-    const committed = new Map<string, string>()
+    const committed = new Map<string, unknown>()
 
     update((prev) => ({ ...prev, committing: true }))
     try {
@@ -269,7 +262,7 @@ export function StorySettingsSaveSessionProvider({
           })
         }
         reportKeyCollision(owners, id, patch)
-        committed.set(id, patchSignature(patch))
+        committed.set(id, cloneDraft(patch))
         merged = { ...merged, ...patch }
       }
       await onCommit(merged)
@@ -294,10 +287,9 @@ export function StorySettingsSaveSessionProvider({
     // now-updated store, so it lands clean without tracking a save baseline.
     const persisted = new Set<string>()
     for (const [id, entry] of callbacksRef.current.entries()) {
-      const before = committed.get(id)
-      if (before === undefined) continue
+      if (!committed.has(id)) continue
       try {
-        if (patchSignature(entry.current.getPatch()) === before) persisted.add(id)
+        if (sameDraft(entry.current.getPatch(), committed.get(id))) persisted.add(id)
       } catch (error) {
         // Treat an unreadable draft as changed: skipping a reset costs a stale
         // save bar, resetting one the user has moved on from costs their edit.
