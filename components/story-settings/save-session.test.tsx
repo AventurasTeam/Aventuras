@@ -10,6 +10,7 @@ import {
   StorySettingsSaveSessionProvider,
   useStorySettingsSaveSession,
   useStorySettingsSection,
+  type SaveOutcome,
   type SaveSessionApi,
 } from './save-session'
 import { type SectionDirtyState } from './save-session-state'
@@ -172,12 +173,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
-    expect(outcome).toBe(true)
+    expect(outcome?.status).toBe('committed')
     expect(aids.reset).toHaveBeenCalledTimes(1)
     expect(memory.reset).toHaveBeenCalledTimes(1)
     expect(session.onSaved).toHaveBeenCalledTimes(1)
@@ -197,12 +198,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       onCommit: vi.fn(() => Promise.reject(failure)),
     })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
-    expect(outcome).toBe(false)
+    expect(outcome?.status).toBe('rejected')
     expect(session.onSaveFailed).toHaveBeenCalledWith(failure)
     expect(session.onSaved).not.toHaveBeenCalled()
     expect(aids.reset).not.toHaveBeenCalled()
@@ -225,7 +226,10 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
     act(() => session.api().requestLeave(proceed))
     await act(async () => {
-      await expect(session.api().save()).resolves.toBe(true)
+      await expect(session.api().save()).resolves.toMatchObject({
+        status: 'committed',
+        storeStale: true,
+      })
     })
 
     expect(session.onSaveFailed).toHaveBeenCalledWith(stale)
@@ -291,8 +295,8 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
     })
 
-    let inFlight: Promise<boolean> | undefined
-    let second: Promise<boolean> | undefined
+    let inFlight: Promise<SaveOutcome> | undefined
+    let second: Promise<SaveOutcome> | undefined
     await act(async () => {
       inFlight = session.api().save()
       second = session.api().save()
@@ -300,14 +304,14 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
     expect(session.api().saving).toBe(true)
 
-    let outcomes: boolean[] = []
+    let outcomes: SaveOutcome[] = []
     await act(async () => {
       for (const release of releases) release()
       outcomes = await Promise.all([inFlight!, second!])
     })
 
     expect(session.onCommit).toHaveBeenCalledTimes(1)
-    expect(outcomes).toEqual([true, false])
+    expect(outcomes.map((o) => o.status)).toEqual(['committed', 'busy'])
     expect(aids.reset).toHaveBeenCalledTimes(1)
     expect(session.onSaved).toHaveBeenCalledTimes(1)
   })
@@ -324,7 +328,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     const session = mountSession({ children: sectionsOf(composer, languages) })
 
     await act(async () => {
-      await expect(session.api().save()).resolves.toBe(false)
+      await expect(session.api().save()).resolves.toMatchObject({ status: 'rejected' })
     })
 
     expect(session.onCommit).not.toHaveBeenCalled()
@@ -372,12 +376,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
-    expect(outcome).toBe(true)
+    expect(outcome?.status).toBe('noop')
     expect(session.onCommit).not.toHaveBeenCalled()
     expect(session.onSaved).not.toHaveBeenCalled()
     expect(aids.reset).not.toHaveBeenCalled()
@@ -394,7 +398,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
     })
 
-    let inFlight: Promise<boolean> | undefined
+    let inFlight: Promise<SaveOutcome> | undefined
     await act(async () => {
       inFlight = session.api().save()
     })
@@ -442,7 +446,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
     })
 
-    let inFlight: Promise<boolean> | undefined
+    let inFlight: Promise<SaveOutcome> | undefined
     await act(async () => {
       inFlight = session.api().save()
     })
@@ -472,13 +476,13 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
     const session = mountSession({ children: sectionsOf(aids), onSaved })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
     expect(session.onCommit).toHaveBeenCalledTimes(1)
-    expect(outcome).toBe(true)
+    expect(outcome?.status).toBe('committed')
     expect(session.onSaveFailed).not.toHaveBeenCalled()
   })
 
@@ -494,13 +498,13 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
     expect(memory.reset).toHaveBeenCalledTimes(1)
-    expect(outcome).toBe(true)
+    expect(outcome?.status).toBe('committed')
     expect(session.onSaveFailed).not.toHaveBeenCalled()
   })
 
@@ -511,12 +515,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
     const session = mountSession({ children: sectionsOf(aids) })
 
-    let outcome: boolean | undefined
+    let outcome: SaveOutcome | undefined
     await act(async () => {
       outcome = await session.api().save()
     })
 
-    expect(outcome).toBe(false)
+    expect(outcome?.status).toBe('rejected')
     expect(session.onCommit).not.toHaveBeenCalled()
     expect(session.onSaveFailed).toHaveBeenCalledOnce()
     expect(String(session.onSaveFailed.mock.calls[0]?.[0])).toContain('authoring-aids')
@@ -655,6 +659,54 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
 })
 
 describe('StorySettingsSaveSessionProvider — leave guard', () => {
+  // Electron queues a window close, then the user hits the back arrow before
+  // answering. Holding one slot dropped the close, so the main process kept
+  // holding a prevented close nobody could ever confirm.
+  it('runs every queued leave intent, not just the newest', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+    const closeWindow = vi.fn()
+    const goBack = vi.fn()
+
+    act(() => session.api().requestLeave(closeWindow))
+    act(() => session.api().requestLeave(goBack))
+    expect(session.api().pendingLeave).toBe(true)
+
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+
+    expect(closeWindow).toHaveBeenCalledTimes(1)
+    expect(goBack).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+  })
+
+  it('drops every queued intent on cancel, not just the newest', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+    const closeWindow = vi.fn()
+    const goBack = vi.fn()
+
+    act(() => session.api().requestLeave(closeWindow))
+    act(() => session.api().requestLeave(goBack))
+    act(() => session.api().resolveLeave('cancel'))
+
+    expect(session.api().pendingLeave).toBe(false)
+    expect(closeWindow).not.toHaveBeenCalled()
+    expect(goBack).not.toHaveBeenCalled()
+
+    // A later save must not resurrect them.
+    await act(async () => {
+      await session.api().save()
+    })
+    expect(closeWindow).not.toHaveBeenCalled()
+    expect(goBack).not.toHaveBeenCalled()
+  })
+
   // A window-close intercept can reach resolveLeave without going through the
   // dialog; requestLeave first is the precondition, not an optimization.
   it('does nothing when resolved without a pending leave', async () => {

@@ -30,21 +30,40 @@ type SectionCallbacks = {
   reset: () => void
 }
 
+/**
+ * What a save did. `committed` means the write is on disk — `storeStale` only
+ * says the re-read afterwards failed, and `stillDirty` that an edit landed
+ * while the write was in flight, so neither contradicts it.
+ */
+type SaveOutcome =
+  | { status: 'noop' }
+  | { status: 'busy' }
+  | { status: 'committed'; stillDirty: boolean; storeStale: boolean }
+  | { status: 'rejected'; error: unknown }
+
+/**
+ * The session's whole mutable state. One object so the synchronous mirror
+ * below can't drift from what's rendered: `saving` and `pendingLeave` are
+ * projections of this, never separate cells that need keeping in step.
+ */
+type SessionState = {
+  sections: readonly SectionDirtyState[]
+  committing: boolean
+  /**
+   * Leave intents waiting on the session, oldest first. A list, not one slot:
+   * a window close and a back-navigation can both be outstanding, and dropping
+   * the earlier one strands whoever queued it — the main process keeps holding
+   * a close nobody will ever confirm.
+   */
+  intents: readonly (() => void)[]
+}
+
+const EMPTY_STATE: SessionState = { sections: [], committing: false, intents: [] }
+
 type SaveSessionApi = {
   snapshot: SaveSessionSnapshot
   saving: boolean
-  /**
-   * Resolves `true` when the write landed, or when there was nothing to write.
-   * `false` means it was rejected, or a commit was already in flight and this
-   * call was turned away; either way the caller must not proceed. A failure
-   * *after* the write lands never reports `false` — it is logged, because the
-   * data is on disk.
-   *
-   * `true` does not promise a clean session: an edit made while the commit was
-   * in flight survives it and stays dirty. A caller that needs cleanliness must
-   * check `snapshot` rather than infer it from here.
-   */
-  save: () => Promise<boolean>
+  save: () => Promise<SaveOutcome>
   discard: () => void
   requestLeave: (proceed: () => void) => void
   pendingLeave: boolean
@@ -118,25 +137,43 @@ export function StorySettingsSaveSessionProvider({
   onSaveFailed,
   children,
 }: ProviderProps) {
-  const [sections, setSections] = useState<readonly SectionDirtyState[]>([])
-  const [saving, setSaving] = useState(false)
-  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
+  const [state, setState] = useState<SessionState>(EMPTY_STATE)
 
-  // `saving` state lands a tick late, so only a ref can turn away a second entry
-  // synchronously — Cmd-S can race the leave guard's own save.
-  const savingRef = useRef(false)
+  // Rendered state lands a tick late, so every synchronous guard reads this
+  // instead — Cmd-S can race the leave guard's own save. Writing both through
+  // `update` is what keeps the two from disagreeing.
+  const stateRef = useRef(state)
+
+  const update = useCallback((fn: (prev: SessionState) => SessionState) => {
+    const next = fn(stateRef.current)
+    if (next === stateRef.current) return
+    stateRef.current = next
+    setState(next)
+  }, [])
 
   // Callbacks live in refs, never in state: sections hand us fresh closures on
   // every render and storing them would re-render the whole surface each time.
   const callbacksRef = useRef(new Map<string, { current: SectionCallbacks }>())
 
-  const publish = useCallback((state: SectionDirtyState) => {
-    setSections((prev) => upsertSection(prev, state))
-  }, [])
+  const publish = useCallback(
+    (section: SectionDirtyState) => {
+      update((prev) => {
+        const sections = upsertSection(prev.sections, section)
+        return sections === prev.sections ? prev : { ...prev, sections }
+      })
+    },
+    [update],
+  )
 
-  const unpublish = useCallback((id: string) => {
-    setSections((prev) => removeSection(prev, id))
-  }, [])
+  const unpublish = useCallback(
+    (id: string) => {
+      update((prev) => {
+        const sections = removeSection(prev.sections, id)
+        return sections === prev.sections ? prev : { ...prev, sections }
+      })
+    },
+    [update],
+  )
 
   const attach = useCallback((id: string, callbacks: { current: SectionCallbacks }) => {
     const map = callbacksRef.current
@@ -158,15 +195,7 @@ export function StorySettingsSaveSessionProvider({
     }
   }, [])
 
-  const snapshot = useMemo(() => computeSnapshot(sections), [sections])
-
-  // Read at save time rather than closed over, so a consumer holding a stale
-  // `api` still merges against the newest published dirty state.
-  const sectionsRef = useRef(sections)
-  sectionsRef.current = sections
-
-  const pendingLeaveRef = useRef(pendingLeave)
-  pendingLeaveRef.current = pendingLeave
+  const snapshot = useMemo(() => computeSnapshot(state.sections), [state.sections])
 
   // `ids` undefined resets every section (Discard); a set resets only what a
   // save committed, so an edit made mid-commit isn't reverted with it.
@@ -185,38 +214,42 @@ export function StorySettingsSaveSessionProvider({
     }
   }, [])
 
-  const settlePendingLeave = useCallback(() => {
-    const proceed = pendingLeaveRef.current
-    if (proceed == null) return
-    setPendingLeave(null)
-    try {
-      proceed()
-    } catch (error) {
-      logger.error('action_layer.story_settings_leave_failed', { error: errorMessage(error) })
+  // Drains every waiting intent. Cleared before running them so an intent that
+  // navigates and unmounts the surface can't see itself still queued.
+  const settleIntents = useCallback(() => {
+    const intents = stateRef.current.intents
+    if (intents.length === 0) return
+    update((prev) => ({ ...prev, intents: [] }))
+    for (const proceed of intents) {
+      try {
+        proceed()
+      } catch (error) {
+        // Isolated: one intent failing must not strand the rest.
+        logger.error('action_layer.story_settings_leave_failed', { error: errorMessage(error) })
+      }
     }
-  }, [])
+  }, [update])
 
-  const save = useCallback(async () => {
-    if (savingRef.current) return false
+  const save = useCallback(async (): Promise<SaveOutcome> => {
+    if (stateRef.current.committing) return { status: 'busy' }
 
     // Clean sections are skipped rather than trusted to return `{}`: every
     // panel stays mounted so a draft survives a tab switch, so an
     // unconditional getPatch would write a never-visited tab's mount-time
     // values over whatever changed them since.
-    const dirty = dirtyIds(sectionsRef.current)
+    const dirty = dirtyIds(stateRef.current.sections)
     // Nothing to write. A leave waiting on this is already satisfied — the
     // session is clean — so proceed rather than stranding it.
     if (dirty.size === 0) {
-      settlePendingLeave()
-      return true
+      settleIntents()
+      return { status: 'noop' }
     }
 
     // What each section's draft looked like when its patch was read, so an
     // edit made while the write was in flight isn't re-derived away after it.
     const committed = new Map<string, string>()
 
-    savingRef.current = true
-    setSaving(true)
+    update((prev) => ({ ...prev, committing: true }))
     try {
       // One merged write, not a commit per section: `stories` carries no delta,
       // so a mid-way failure across N writes would strand earlier sections
@@ -245,16 +278,14 @@ export function StorySettingsSaveSessionProvider({
       // The write landed and only the store re-read failed, so this is not a
       // save failure. Sections keep their drafts — resetting would re-derive
       // them from a store still holding pre-save values — but the data is on
-      // disk, so a leave waiting on this save must not be refused, and the
-      // still-dirty sections below must not talk it out of settling.
+      // disk, so a leave waiting on this save must not be refused.
       if (error instanceof StorySettingsStaleStoreError) {
-        settlePendingLeave()
-        return true
+        settleIntents()
+        return { status: 'committed', stillDirty: true, storeStale: true }
       }
-      return false
+      return { status: 'rejected', error }
     } finally {
-      savingRef.current = false
-      setSaving(false)
+      update((prev) => ({ ...prev, committing: false }))
     }
 
     // Past the commit — the write is on disk, so nothing below may report a
@@ -288,16 +319,16 @@ export function StorySettingsSaveSessionProvider({
     // the back arrow stays live during a commit. Only once the session is
     // actually clean, though: an edit that landed mid-write is still unsaved,
     // and proceeding would drop it.
-    const stillDirty = [...dirtyIds(sectionsRef.current)].some((id) => !persisted.has(id))
-    if (!stillDirty) settlePendingLeave()
-    return true
-  }, [onCommit, onSaved, onSaveFailed, resetSections, settlePendingLeave])
+    const stillDirty = [...dirtyIds(stateRef.current.sections)].some((id) => !persisted.has(id))
+    if (!stillDirty) settleIntents()
+    return { status: 'committed', stillDirty, storeStale: false }
+  }, [onCommit, onSaved, onSaveFailed, resetSections, settleIntents, update])
 
   const discard = useCallback(() => {
     // A commit in flight owns the outcome, same as `resolveLeave`: the write
     // lands regardless, so reverting the drafts here would leave the session
     // clean and showing the values the user just asked to throw away.
-    if (savingRef.current) {
+    if (stateRef.current.committing) {
       logger.warn('action_layer.story_settings_discard_ignored', {})
       return
     }
@@ -306,54 +337,54 @@ export function StorySettingsSaveSessionProvider({
 
   const requestLeave = useCallback(
     (proceed: () => void) => {
-      if (snapshot.dirtyFields.length === 0) {
+      if (dirtyIds(stateRef.current.sections).size === 0) {
         proceed()
         return
       }
-      setPendingLeave(() => proceed)
+      update((prev) => ({ ...prev, intents: [...prev.intents, proceed] }))
     },
-    [snapshot],
+    [update],
   )
 
   const resolveLeave = useCallback(
     (outcome: 'save' | 'discard' | 'cancel') => {
       // A commit in flight owns the outcome; the dialog's disabled buttons are
       // presentation, not enforcement.
-      if (savingRef.current) {
+      if (stateRef.current.committing) {
         logger.warn('action_layer.story_settings_leave_ignored', { outcome })
         return
       }
-      const proceed = pendingLeave
-      if (proceed == null || outcome === 'cancel') {
-        setPendingLeave(null)
+      if (stateRef.current.intents.length === 0 || outcome === 'cancel') {
+        // Cancel drops every queued intent, not just the newest: the user asked
+        // to stay, so nothing outstanding may quietly navigate later.
+        update((prev) => (prev.intents.length === 0 ? prev : { ...prev, intents: [] }))
         return
       }
       if (outcome === 'discard') {
-        setPendingLeave(null)
         discard()
-        proceed()
+        settleIntents()
         return
       }
-      // The guard outlives the commit — save() clears it once the session is
-      // actually clean — so it can disable itself while the write runs. A
-      // failure, or an edit that landed mid-write, leaves the user on the same
+      // The intents outlive the commit — save() drains them once the session is
+      // actually clean — so the dialog can disable itself while the write runs.
+      // A failure, or an edit that landed mid-write, leaves the user on the same
       // three choices rather than dropping the navigation they asked for.
       void save()
     },
-    [pendingLeave, discard, save],
+    [discard, save, settleIntents, update],
   )
 
   const api = useMemo<SaveSessionApi>(
     () => ({
       snapshot,
-      saving,
+      saving: state.committing,
       save,
       discard,
       requestLeave,
-      pendingLeave: pendingLeave != null,
+      pendingLeave: state.intents.length > 0,
       resolveLeave,
     }),
-    [snapshot, saving, save, discard, requestLeave, pendingLeave, resolveLeave],
+    [snapshot, state.committing, state.intents, save, discard, requestLeave, resolveLeave],
   )
 
   const registry = useMemo<SectionRegistry>(
@@ -453,4 +484,4 @@ export function useStorySettingsSection({
   useEffect(() => () => unpublish(id), [unpublish, id])
 }
 
-export type { SaveSessionApi, SectionRegistration }
+export type { SaveOutcome, SaveSessionApi, SectionRegistration }
