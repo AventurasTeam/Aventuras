@@ -3,6 +3,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
+import { StorySettingsStaleStoreError } from '@/lib/actions'
 import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 
 import {
@@ -208,6 +209,33 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(memory.reset).not.toHaveBeenCalled()
   })
 
+  // The write is on disk; only the store re-read failed. Reporting `false`
+  // would break save()'s own contract and, worse, strand a leave waiting on it
+  // — the user would be told to Save/Discard changes already persisted.
+  it('treats a stale store as a landed write and settles a waiting leave', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const stale = new StorySettingsStaleStoreError()
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => Promise.reject(stale)),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      await expect(session.api().save()).resolves.toBe(true)
+    })
+
+    expect(session.onSaveFailed).toHaveBeenCalledWith(stale)
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+    // Re-deriving would read the store's pre-save values, so the draft stands.
+    expect(aids.reset).not.toHaveBeenCalled()
+    expect(session.onSaved).not.toHaveBeenCalled()
+  })
+
   it('skips a clean section rather than trusting it to return an empty patch', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
@@ -284,8 +312,9 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(session.onSaved).toHaveBeenCalledTimes(1)
   })
 
-  it('warns when two sections patch the same top-level key', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  // The merge is shallow, so the loser's slice is gone and `stories` has no
+  // delta to recover it. Refusing the save is the only outcome that keeps both.
+  it('refuses the save when two sections patch the same top-level key', async () => {
     const composer = makeSection('composer', 'generation', ['translation'], {
       translation: { ...STORY_SETTINGS_DEFAULTS.translation, enabled: true },
     })
@@ -295,12 +324,16 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     const session = mountSession({ children: sectionsOf(composer, languages) })
 
     await act(async () => {
-      await session.api().save()
+      await expect(session.api().save()).resolves.toBe(false)
     })
 
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining(COLLISION))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"composer" and "languages"'))
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"translation"'))
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(composer.reset).not.toHaveBeenCalled()
+    expect(languages.reset).not.toHaveBeenCalled()
+    const [error] = session.onSaveFailed.mock.calls[0] as [Error]
+    expect(error.message).toContain(COLLISION)
+    expect(error.message).toContain('"composer" and "languages"')
+    expect(error.message).toContain('"translation"')
   })
 
   it('stays quiet when every section patches a distinct top-level key', async () => {
@@ -586,30 +619,38 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
     expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
   })
 
-  it('keeps the survivor wired when a section sharing its id unmounts', async () => {
+  it('refuses two live sections registering the same id', () => {
     // Two slices can independently pick the same free-form id on a seam built
-    // for independent extension; the first to unmount must not evict the other.
-    const first = makeSection('authoring-aids', 'generation', ['suggestions'], {
+    // for independent extension. Every registry is id-keyed, so the loser is
+    // unreconstructable — the surface has to fail loudly instead of dropping it.
+    const first = makeSection('authoring-aids', 'generation', ['suggestions'])
+    const second = makeSection('authoring-aids', 'generation', ['suggestions'])
+
+    expect(() =>
+      mountSession({
+        children: [
+          <Section key="first" fixture={first} />,
+          <Section key="second" fixture={second} />,
+        ],
+      }),
+    ).toThrow(/registered the id "authoring-aids"/)
+  })
+
+  it('lets a remount reuse the id of the section it replaces', () => {
+    // The duplicate check must not fire on a tab panel remounting, which is a
+    // detach followed by an attach on the same id rather than two live claims.
+    const first = makeSection('authoring-aids', 'generation', ['suggestions'])
+    const replacement = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
     })
-    const second = makeSection('authoring-aids', 'generation', ['suggestions'])
-    const session = mountSession({
-      children: [
-        <Section key="first" fixture={first} />,
-        <Section key="second" fixture={second} />,
-      ],
-    })
+    const session = mountSession({ children: sectionsOf(first) })
 
-    act(() => {
-      session.rerenderWith(<Section key="first" fixture={first} />)
-    })
+    expect(() => {
+      act(() => session.rerenderWith(null))
+      act(() => session.rerenderWith(sectionsOf(replacement)))
+    }).not.toThrow()
 
-    await act(async () => {
-      await session.api().save()
-    })
-
-    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
-    expect(first.reset).toHaveBeenCalledTimes(1)
+    expect(session.api().snapshot.dirtyFields).toEqual(['suggestions'])
   })
 })
 
@@ -885,6 +926,34 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
 
     expect(aids.reset).toHaveBeenCalledTimes(1)
     expect(proceed).toHaveBeenCalledTimes(1)
+  })
+
+  // The SaveBar's Discard button is `disabled={saving}`, but that is
+  // presentation: the write lands regardless, so a discard let through here
+  // would revert the drafts and leave the session clean showing the values the
+  // user asked to throw away, under a "Saved." toast.
+  it('refuses a bare discard that arrives while a save is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+
+    await act(async () => {
+      void session.api().save()
+    })
+    act(() => session.api().discard())
+
+    expect(aids.reset).not.toHaveBeenCalled()
+
+    await act(async () => {
+      for (const release of releases) release()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
   })
 })
 

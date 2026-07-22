@@ -98,7 +98,7 @@ export function StorySettingsShell<TId extends string, TPanelData>({
           </ScrollView>
         </View>
       ))}
-      {/* Outside the scroller — see docs/ui/patterns/save-sessions.md → Positioning. */}
+      {/* Outside the scroller — see docs/ui/patterns/save-sessions.md#visual. */}
       {saveBar}
     </View>
   )

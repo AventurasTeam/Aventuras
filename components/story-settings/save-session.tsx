@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 
+import { StorySettingsStaleStoreError } from '@/lib/actions'
 import type { StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
@@ -90,13 +91,12 @@ function reportKeyCollision(
       continue
     }
     const message = `Story Settings sections "${owner}" and "${id}" both patch the top-level key "${key}". The merge is shallow, so one clobbers the other and the winner depends on mount order.`
-    // Unrecoverable data loss (`stories` carries no delta), so it is logged in
-    // every build, not just dev.
+    // A wiring error, not a runtime condition: the screen doc assigns each
+    // top-level key to exactly one tab. Dev throws, which refuses the save
+    // rather than clobbering; prod logs and merges, since refusing every save
+    // is worse than a shallow one when `stories` carries no delta to undo.
+    if (DEV_CHECKS) throw new Error(message)
     logger.error('action_layer.story_settings_key_collision', { owner, sectionId: id, key })
-    if (DEV_CHECKS) {
-      // eslint-disable-next-line no-console -- __DEV__ wiring warning; must fire regardless of the diagnostics master gate, so the logger alone is the wrong channel.
-      console.warn(message)
-    }
   }
 }
 
@@ -140,10 +140,20 @@ export function StorySettingsSaveSessionProvider({
 
   const attach = useCallback((id: string, callbacks: { current: SectionCallbacks }) => {
     const map = callbacksRef.current
+    // Every registry here is id-keyed, so two live sections sharing an id are
+    // indistinguishable: the second overwrites the first's callbacks and its
+    // published dirty fields, and `unpublish` then strips the pair on either
+    // unmount. Nothing can reconstruct the loser, so this is a wiring error to
+    // fail on, not a state to recover from.
+    if (DEV_CHECKS && map.has(id)) {
+      throw new Error(
+        `Two Story Settings sections registered the id "${id}". Section ids must be unique across the surface.`,
+      )
+    }
     map.set(id, callbacks)
     return () => {
-      // Identity-checked: two sections sharing an id would otherwise let the
-      // first to unmount evict the survivor, leaving it dirty but invisible.
+      // A remount can attach the replacement before this cleanup runs; without
+      // the identity check it would delete the live registration.
       if (map.get(id) === callbacks) map.delete(id)
     }
   }, [])
@@ -232,6 +242,15 @@ export function StorySettingsSaveSessionProvider({
       await onCommit(merged)
     } catch (error) {
       onSaveFailed?.(error)
+      // The write landed and only the store re-read failed, so this is not a
+      // save failure. Sections keep their drafts — resetting would re-derive
+      // them from a store still holding pre-save values — but the data is on
+      // disk, so a leave waiting on this save must not be refused, and the
+      // still-dirty sections below must not talk it out of settling.
+      if (error instanceof StorySettingsStaleStoreError) {
+        settlePendingLeave()
+        return true
+      }
       return false
     } finally {
       savingRef.current = false
@@ -240,8 +259,8 @@ export function StorySettingsSaveSessionProvider({
 
     // Past the commit — the write is on disk, so nothing below may report a
     // save failure, and each step is isolated so one failure can't strand the
-    // rest. Sections re-derive their draft from the now-updated store, so the
-    // session lands clean without each one tracking a save baseline.
+    // rest. A section that didn't move re-derives its draft from the
+    // now-updated store, so it lands clean without tracking a save baseline.
     const persisted = new Set<string>()
     for (const [id, entry] of callbacksRef.current.entries()) {
       const before = committed.get(id)
@@ -275,6 +294,13 @@ export function StorySettingsSaveSessionProvider({
   }, [onCommit, onSaved, onSaveFailed, resetSections, settlePendingLeave])
 
   const discard = useCallback(() => {
+    // A commit in flight owns the outcome, same as `resolveLeave`: the write
+    // lands regardless, so reverting the drafts here would leave the session
+    // clean and showing the values the user just asked to throw away.
+    if (savingRef.current) {
+      logger.warn('action_layer.story_settings_discard_ignored', {})
+      return
+    }
     resetSections()
   }, [resetSections])
 
@@ -308,10 +334,10 @@ export function StorySettingsSaveSessionProvider({
         proceed()
         return
       }
-      // The guard outlives the commit — save() clears it and proceeds on
-      // success — so it can disable itself while the write runs, and a failure
-      // leaves the user on the same three choices rather than dropping the
-      // navigation they asked for.
+      // The guard outlives the commit — save() clears it once the session is
+      // actually clean — so it can disable itself while the write runs. A
+      // failure, or an edit that landed mid-write, leaves the user on the same
+      // three choices rather than dropping the navigation they asked for.
       void save()
     },
     [pendingLeave, discard, save],

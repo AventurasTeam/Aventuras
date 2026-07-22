@@ -29,7 +29,7 @@ describe('story-settings tabs', () => {
       expect(t(key)).not.toBe(key)
     }
     for (const group of STORY_SETTINGS_TAB_GROUPS) {
-      const key = `storySettings:sections.${group.id}` as const
+      const key = `storySettings:groups.${group.id}` as const
       expect(t(key)).not.toBe(key)
     }
   })

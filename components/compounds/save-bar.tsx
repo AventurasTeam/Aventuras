@@ -34,6 +34,12 @@ type SaveBarProps = {
    * keyboard shortcut.
    */
   saving?: boolean
+  /**
+   * The host screen's focus state. A pushed-under expo-router screen stays
+   * mounted, so leaving this unset lets its Cmd-S fire from behind whatever
+   * screen is on top. Defaults to `true` for hosts that never push.
+   */
+  enabled?: boolean
   className?: string
 }
 
@@ -44,6 +50,7 @@ export function SaveBar({
   onSave,
   onDiscard,
   saving = false,
+  enabled = true,
   className,
 }: SaveBarProps) {
   const count = dirtyCount ?? dirtyFields.length
@@ -56,7 +63,11 @@ export function SaveBar({
   const handleSaveShortcut = useCallback(() => {
     if (!saving) onSave()
   }, [onSave, saving])
-  useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, { capture: true, stopPropagation: true })
+  useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, {
+    capture: true,
+    stopPropagation: true,
+    enabled,
+  })
 
   const shortcutHint = useMemo(() => {
     if (Platform.OS !== 'web') return null

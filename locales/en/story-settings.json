@@ -7,7 +7,7 @@
   "unavailableBody": "Something went wrong loading this device's story list. Go back and try again.",
   "uninitialized": "This story has no settings yet",
   "uninitializedBody": "Settings are written when a story finishes setup. Finish the wizard for this story, or reset its settings to defaults.",
-  "sections": {
+  "groups": {
     "story": "Story",
     "settings": "Settings"
   },

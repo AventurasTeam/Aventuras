@@ -137,7 +137,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
 
   const groups = STORY_SETTINGS_TAB_GROUPS.map((group) => ({
     id: group.id,
-    header: t(`storySettings:sections.${group.id}`),
+    header: t(`storySettings:groups.${group.id}`),
     tabs: group.tabs.map((id) => ({ id, label: t(`storySettings:tabs.${id}`) })),
   }))
 
@@ -220,14 +220,21 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
               dirtyFields={session.snapshot.dirtyFields}
               dirtyCount={session.snapshot.dirtyFields.length}
               saving={session.saving}
+              enabled={isFocused}
               onSave={() => void session.save()}
               onDiscard={session.discard}
             />
           ) : null
         }
       />
+      {/* No focus gate: `pendingLeave` is only set by this screen's own back
+          arrow or the window-close guard, and a pushed-under screen's back
+          arrow can't fire — so a pending leave while unfocused means the user
+          is closing the window, which is exactly when the dialog must show.
+          Gating it there held the close open with nothing on screen to answer
+          it, leaving the window unclosable. */}
       <UnsavedChangesDialog
-        open={session.pendingLeave && isFocused}
+        open={session.pendingLeave}
         saving={session.saving}
         onSave={() => session.resolveLeave('save')}
         onDiscard={() => session.resolveLeave('discard')}
