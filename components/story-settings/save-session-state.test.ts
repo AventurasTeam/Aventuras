@@ -24,11 +24,14 @@ describe('computeSnapshot', () => {
   })
 
   it('reports a clean session when every section is clean', () => {
-    const snapshot = computeSnapshot([{ id: 'a', order: 0, dirtyFields: [] }])
+    const snapshot = computeSnapshot([
+      { id: 'a', order: 0, dirtyFields: [] },
+      { id: 'b', order: 10, dirtyFields: [] },
+    ])
     expect(snapshot).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
   })
 
-  it('flattens dirty fields in ascending order, then by id', () => {
+  it('flattens dirty fields in ascending rail order', () => {
     const snapshot = computeSnapshot([memory, generation])
     expect(snapshot).toEqual({
       isDirty: true,
@@ -69,6 +72,11 @@ describe('upsertSection', () => {
   it('replaces a known section when a dirty field is appended', () => {
     const grown = { ...memory, dirtyFields: ['embedder', 'auto-embed'] }
     expect(upsertSection([generation, memory], grown)).toEqual([generation, grown])
+  })
+
+  it('replaces a known section when a dirty field is swapped for another', () => {
+    const swapped = { ...memory, dirtyFields: ['auto-embed'] }
+    expect(upsertSection([generation, memory], swapped)).toEqual([generation, swapped])
   })
 
   it('returns the same array reference when nothing changed', () => {
