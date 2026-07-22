@@ -164,7 +164,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     })
   })
 
-  it('resolves true and resets every section after a successful save', async () => {
+  it('reports a committed write and resets every section after a successful save', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
     })
