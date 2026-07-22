@@ -3,7 +3,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi, type Mock } from 'vitest'
 
-import type { StorySettings } from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 
 import {
   StorySettingsSaveSessionProvider,
@@ -38,7 +38,10 @@ vi.mock('./save-session-state', async (importOriginal) => {
 afterEach(() => {
   guard.breakArrayIdentity = false
   cleanup()
+  vi.restoreAllMocks()
 })
+
+const COLLISION = 'both patch the top-level key'
 
 type SectionFixture = {
   id: string
@@ -192,6 +195,65 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(session.onSaved).not.toHaveBeenCalled()
     expect(aids.reset).not.toHaveBeenCalled()
     expect(memory.reset).not.toHaveBeenCalled()
+  })
+
+  it('turns away a second save while one is already in flight', async () => {
+    // Every commit gets released, not just the last: a regression must fail on
+    // the call-count assertion rather than deadlocking on an orphaned promise.
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+
+    let outcomes: boolean[] = []
+    await act(async () => {
+      const inFlight = session.api().save()
+      const second = session.api().save()
+      for (const release of releases) release()
+      outcomes = await Promise.all([inFlight, second])
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
+    expect(outcomes).toEqual([true, false])
+    expect(aids.reset).toHaveBeenCalledTimes(1)
+    expect(session.onSaved).toHaveBeenCalledTimes(1)
+  })
+
+  it('warns when two sections patch the same top-level key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const composer = makeSection('composer', 10, ['translation'], {
+      translation: { ...STORY_SETTINGS_DEFAULTS.translation, enabled: true },
+    })
+    const languages = makeSection('languages', 20, ['granular toggles'], {
+      translation: { ...STORY_SETTINGS_DEFAULTS.translation, targetLanguage: 'cs' },
+    })
+    const session = mountSession({ children: sectionsOf(composer, languages) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(COLLISION))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"composer" and "languages"'))
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('"translation"'))
+  })
+
+  it('stays quiet when every section patches a distinct top-level key', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], {
+      suggestionsEnabled: true,
+      suggestionCount: 5,
+    })
+    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const session = mountSession({ children: sectionsOf(aids, memory) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining(COLLISION))
   })
 
   it('leaves the session clean again after a successful save', async () => {

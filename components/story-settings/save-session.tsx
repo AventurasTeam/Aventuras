@@ -19,6 +19,9 @@ import {
   type SectionDirtyState,
 } from './save-session-state'
 
+// Node (vitest) leaves __DEV__ undefined, so the check runs there too.
+const DEV_CHECKS = typeof __DEV__ === 'undefined' || __DEV__
+
 type SectionCallbacks = {
   getPatch: () => Partial<StorySettings>
   reset: () => void
@@ -30,6 +33,12 @@ type SaveSessionApi = {
   publish: (state: SectionDirtyState) => void
   unpublish: (id: string) => void
   attach: (id: string, callbacks: { current: SectionCallbacks }) => () => void
+  /**
+   * Resolves `true` only when this call committed. `false` covers both a
+   * rejected commit and a call turned away because one was already in flight —
+   * in either case the outcome is unknown to the caller, so treat it as "do not
+   * proceed".
+   */
   save: () => Promise<boolean>
   discard: () => void
   requestLeave: (proceed: () => void) => void
@@ -38,6 +47,24 @@ type SaveSessionApi = {
 }
 
 const SaveSessionContext = createContext<SaveSessionApi | null>(null)
+
+function warnOnKeyCollision(
+  owners: Map<string, string>,
+  id: string,
+  patch: Partial<StorySettings>,
+): void {
+  for (const key of Object.keys(patch)) {
+    const owner = owners.get(key)
+    if (owner === undefined) {
+      owners.set(key, id)
+      continue
+    }
+    // eslint-disable-next-line no-console -- __DEV__ wiring warning; must fire regardless of the diagnostics master gate, so the logger is the wrong channel.
+    console.warn(
+      `Story Settings sections "${owner}" and "${id}" both patch the top-level key "${key}". The merge is shallow, so one clobbers the other and the winner depends on mount order.`,
+    )
+  }
+}
 
 type ProviderProps = {
   /**
@@ -59,6 +86,10 @@ export function StorySettingsSaveSessionProvider({
   const [sections, setSections] = useState<readonly SectionDirtyState[]>([])
   const [saving, setSaving] = useState(false)
   const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
+
+  // `saving` state lands a tick late, so only a ref can turn away a second entry
+  // synchronously — Cmd-S can race the leave guard's own save.
+  const savingRef = useRef(false)
 
   // Callbacks live in refs, never in state: sections hand us fresh closures on
   // every render and storing them would re-render the whole surface each time.
@@ -83,14 +114,19 @@ export function StorySettingsSaveSessionProvider({
   const snapshot = useMemo(() => computeSnapshot(sections), [sections])
 
   const save = useCallback(async () => {
+    if (savingRef.current) return false
+    savingRef.current = true
     setSaving(true)
     try {
       // One merged write, not a commit per section: `stories` carries no delta,
       // so a mid-way failure across N writes would strand earlier sections
       // persisted with no way to undo them.
       let merged: Partial<StorySettings> = {}
-      for (const entry of callbacksRef.current.values()) {
-        merged = { ...merged, ...entry.current.getPatch() }
+      const owners = DEV_CHECKS ? new Map<string, string>() : null
+      for (const [id, entry] of callbacksRef.current.entries()) {
+        const patch = entry.current.getPatch()
+        if (owners) warnOnKeyCollision(owners, id, patch)
+        merged = { ...merged, ...patch }
       }
       await onCommit(merged)
       // Sections re-derive their draft from the now-updated store, so the
@@ -102,6 +138,7 @@ export function StorySettingsSaveSessionProvider({
       onSaveFailed?.(error)
       return false
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }, [onCommit, onSaved, onSaveFailed])
@@ -187,7 +224,12 @@ type SectionRegistration = {
   /**
    * This section's contribution to the surface's single save. Read only at
    * save time, so it may close over draft state freely. Return `{}` when clean.
-   * Sections own disjoint settings keys — the merge does not resolve conflicts.
+   *
+   * Sections must own disjoint **top-level** `StorySettings` keys. The merge is
+   * shallow, so two sections contributing different parts of one nested object
+   * (`translation`, `models`, `retrievalBudgets`, `packVariables`) clobber each
+   * other, and the winner is decided by mount order. Dev builds warn on
+   * collision.
    */
   getPatch: () => Partial<StorySettings>
   /** Re-derive the draft from persisted state. Fires on Discard AND after a successful save. */
