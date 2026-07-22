@@ -2,11 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import type { DbBridge } from './db/types'
 import type { EmbedderBridge, EmbedderDownloadProgress } from './embedder/types'
+import type { NativeApi } from './native/types'
 
-const api = {
+const api: NativeApi = {
   platform: process.platform,
   revealDbFile: (): Promise<void> => ipcRenderer.invoke('native:reveal-db-file'),
-  /** Arm/disarm the window-close prompt. Disarmed windows close untouched. */
   setCloseGuard: (active: boolean): void => {
     ipcRenderer.send('native:set-close-guard', active)
   },
@@ -18,7 +18,7 @@ const api = {
     ipcRenderer.on('native:close-requested', listener)
     return () => ipcRenderer.removeListener('native:close-requested', listener)
   },
-} as const
+}
 
 contextBridge.exposeInMainWorld('native', api)
 
@@ -48,5 +48,3 @@ const embedderBridge: EmbedderBridge & {
 }
 
 contextBridge.exposeInMainWorld('aventurasEmbedder', embedderBridge)
-
-export type NativeApi = typeof api

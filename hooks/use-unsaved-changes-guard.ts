@@ -1,15 +1,16 @@
 import { useEffect, useRef } from 'react'
 import { Platform } from 'react-native'
 
-type CloseBridge = {
-  setCloseGuard: (active: boolean) => void
-  confirmClose: () => void
-  onCloseRequested: (cb: () => void) => () => void
-}
+import type { NativeApi } from '@/types/native'
 
+type CloseBridge = Pick<NativeApi, 'setCloseGuard' | 'confirmClose' | 'onCloseRequested'>
+
+// The declared type says nothing about what the running preload exposes: the
+// web build has no `window.native` at all, and an older desktop shell can be
+// missing methods this build expects. Probe before trusting it.
 function closeBridge(): CloseBridge | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null
-  const native = (window as { native?: Partial<CloseBridge> }).native
+  const native = window.native
   if (
     typeof native?.setCloseGuard !== 'function' ||
     typeof native.confirmClose !== 'function' ||
@@ -17,7 +18,7 @@ function closeBridge(): CloseBridge | null {
   ) {
     return null
   }
-  return native as CloseBridge
+  return native
 }
 
 /**
