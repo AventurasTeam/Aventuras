@@ -108,4 +108,40 @@ surface. M4.4 extends this shell rather than replacing it.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved developer decisions and deviations worth carrying forward.
+Cross-cutting findings this slice surfaced went to
+[triage](../../../triage.md) instead.
+
+- **The C7 seam is a route tab map plus a save-session context, not
+  a component registry.** The contract cites the M1.5 delta-registry
+  precedent, but App Settings — canonically the same layout
+  pattern — extends by editing its own route file, and
+  [Slice 3.1a](./01a-embedder-core.md) did exactly that to add its
+  Embedding models tab, for nine lines. A registry would have saved a
+  consumer slice roughly four lines at the price of giving the two
+  settings screens divergent extension patterns. The seam is
+  `components/story-settings/tabs.ts`: adding an id to a group
+  registers the tab, and the id union, the deep-link accept-list, and
+  each section's save-bar `order` all derive from that one structure.
+- **Story Settings saves are direct writes, with no delta and no
+  CTRL-Z**, because `stories` is absent from the tables
+  [`deltas.target_table`](../../../../data-model.md#diagram)
+  enumerates. Sections contribute patches that the shell merges into
+  exactly one `updateStorySettings` call; per-section commits would
+  strand earlier sections persisted and unrecoverable if a later one
+  failed.
+- **The shell renders every tab panel and hides the inactive ones on
+  purpose.** A section joins the save session from inside its own
+  body, so lazily mounting panels would drop a dirty section on a tab
+  switch and silently discard the draft, against the
+  one-session-per-surface rule. A later slice must not optimize this
+  into lazy mounting.
+- **`getPatch()` is gated on the section being dirty**, which is
+  load-bearing precisely because every panel is mounted: an unvisited
+  section returning its slice of settings unconditionally would write
+  mount-time values back on any save.
+- **Accepted scope gap.** `AppActionsMenu`'s Diagnostics-Hub jump is
+  a bare `router.push`, so the navigate-away guard — which wraps only
+  the surface's own back path — does not intercept it. A general
+  router-event interceptor was out of scope. Window-close intent is
+  likewise unwired; both sit in [triage](../../../triage.md).
