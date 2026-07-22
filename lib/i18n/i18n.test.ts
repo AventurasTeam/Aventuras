@@ -24,6 +24,9 @@ describe('lib/i18n', () => {
     expect(t('reader:send')).toBe('Send')
     expect(t('settings:tabs.diagnostics')).toBe('Diagnostics')
     expect(t('settings:diagnosticsHub.comingSoon')).toBe('Diagnostics Hub — coming soon')
+    expect(t('storySettings:title')).toBe('Story Settings')
+    expect(t('storySettings:tabs.memory')).toBe('Memory')
+    expect(t('storySettings:save.unsavedTitle')).toBe('Unsaved changes')
   })
 
   it('resolves the shared chrome keys from the common namespace', () => {
