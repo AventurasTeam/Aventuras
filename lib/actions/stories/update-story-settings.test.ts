@@ -195,6 +195,22 @@ describe('updateStorySettings', () => {
     expect(row.updatedAt).toBe(1)
   })
 
+  // `key in shape` passes for every Object.prototype member, so these reached
+  // zod, were stripped, and reported a successful save that wrote nothing.
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'])(
+    'rejects the prototype key %s instead of silently dropping it',
+    async (key) => {
+      const { db, runInTransaction } = await seed()
+
+      await expect(
+        updateStorySettings('story_1', { [key]: 'x' } as never, { db, runInTransaction }, 99),
+      ).rejects.toThrow(key)
+
+      const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+      expect(row.updatedAt).toBe(1)
+    },
+  )
+
   it('flags the story for repair when the stored settings are unreadable', async () => {
     const { db, sqlite, runInTransaction } = await seed()
     sqlite.exec(`UPDATE stories SET settings = NULL WHERE id = 'story_1'`)

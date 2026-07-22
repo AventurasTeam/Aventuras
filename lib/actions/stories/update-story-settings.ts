@@ -45,7 +45,11 @@ export async function updateStorySettings(
   // `Partial<StorySettings>` is a compile-time claim only, and zod strips
   // unknown keys — without this a typo'd key reports a successful save that
   // wrote nothing.
-  const unknownKeys = Object.keys(changed).filter((key) => !(key in storySettingsSchema.shape))
+  // `hasOwn`, not `in`: `in` walks the prototype chain, so `constructor` and
+  // `toString` would pass the guard and then be stripped by zod.
+  const unknownKeys = Object.keys(changed).filter(
+    (key) => !Object.hasOwn(storySettingsSchema.shape, key),
+  )
   if (unknownKeys.length > 0) {
     throw new Error(`Unknown story-settings key(s): ${unknownKeys.join(', ')}`)
   }
