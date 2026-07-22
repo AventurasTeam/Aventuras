@@ -5,12 +5,12 @@ export type SectionDirtyState = {
 }
 
 export type SaveSessionSnapshot = {
-  isDirty: boolean
-  dirtyFields: readonly string[]
-  dirtyCount: number
+  readonly isDirty: boolean
+  readonly dirtyFields: readonly string[]
+  readonly dirtyCount: number
 }
 
-export const CLEAN_SNAPSHOT: SaveSessionSnapshot = {
+const CLEAN_SNAPSHOT: SaveSessionSnapshot = {
   isDirty: false,
   dirtyFields: [],
   dirtyCount: 0,
@@ -20,6 +20,7 @@ function sameFields(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((field, i) => field === b[i])
 }
 
+/** Returns a fresh snapshot per dirty call — derive it (useMemo), never store it in state. */
 // Rail order drives the label order in the save bar, so the user reads dirty
 // fields in the same sequence the tabs present them.
 export function computeSnapshot(sections: readonly SectionDirtyState[]): SaveSessionSnapshot {

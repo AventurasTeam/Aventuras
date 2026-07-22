@@ -48,6 +48,12 @@ describe('computeSnapshot', () => {
     expect(snapshot.dirtyFields).toEqual(['a', 'z'])
   })
 
+  it('does not reorder the caller’s array', () => {
+    const input = [memory, generation]
+    computeSnapshot(input)
+    expect(input).toEqual([memory, generation])
+  })
+
   it('ignores clean sections when others are dirty', () => {
     const snapshot = computeSnapshot([generation, { id: 'quiet', order: 99, dirtyFields: [] }])
     expect(snapshot.dirtyCount).toBe(2)
