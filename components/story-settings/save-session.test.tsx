@@ -380,6 +380,17 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
     })
   })
 
+  // Ids run reverse-alphabetical to rail order on purpose: with equal ranks the
+  // id tie-break would order these the other way, so a tab that stopped driving
+  // the rank can't hide behind the test above.
+  it('ranks a section by its tab, not by its id', () => {
+    const later = makeSection('aaa-embedder', 'memory', ['embedder'])
+    const earlier = makeSection('zzz-suggestions', 'generation', ['suggestions'])
+    const session = mountSession({ children: sectionsOf(later, earlier) })
+
+    expect(session.api().snapshot.dirtyFields).toEqual(['suggestions', 'embedder'])
+  })
+
   it('tracks a section that goes dirty after mount', () => {
     const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
