@@ -52,6 +52,7 @@ export type {
 } from './stories/story-config-schema'
 export {
   storyDefinitionSchema,
+  storySettingsPartialSchema,
   storySettingsSchema,
   suggestionCategorySchema,
 } from './stories/story-config-schema'

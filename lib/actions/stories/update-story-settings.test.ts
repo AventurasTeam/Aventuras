@@ -5,7 +5,7 @@ import { branches, buildStorySettings, stories, storyDefinitionSchema } from '@/
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { currentStoryStore, resetAllStores, storiesStore } from '@/lib/stores'
 
-import { updateStorySettings } from './update-story-settings'
+import { StorySettingsStaleStoreError, updateStorySettings } from './update-story-settings'
 
 const STORY_DEFINITION = storyDefinitionSchema.parse({
   mode: 'adventure',
@@ -180,5 +180,64 @@ describe('updateStorySettings', () => {
 
     const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
     expect(row.updatedAt).toBe(1)
+  })
+
+  // Zod strips unknown keys, so without an explicit check a typo'd key reports
+  // a successful save that wrote nothing.
+  it('rejects an unknown key by name instead of silently dropping it', async () => {
+    const { db, runInTransaction } = await seed()
+
+    await expect(
+      updateStorySettings('story_1', { suggestionCoutn: 4 } as never, { db, runInTransaction }, 99),
+    ).rejects.toThrow('suggestionCoutn')
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
+  })
+
+  it('flags the story for repair when the stored settings are unreadable', async () => {
+    const { db, sqlite, runInTransaction } = await seed()
+    sqlite.exec(`UPDATE stories SET settings = NULL WHERE id = 'story_1'`)
+
+    await expect(
+      updateStorySettings('story_1', { suggestionCount: 2 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow()
+
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+  })
+
+  it('reports a stale store distinctly from a failed save', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    // The write lands, then rehydrateStories' re-read fails — the user must
+    // not be told their changes were lost. The action's own select is the
+    // first; the store's re-read is the second.
+    let selects = 0
+    const brokenDb = new Proxy(db, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown
+        if (prop !== 'select' || typeof value !== 'function') {
+          return typeof value === 'function' ? value.bind(target) : value
+        }
+        return (...args: unknown[]) => {
+          selects += 1
+          if (selects > 1) throw new Error('read failed')
+          return (value as (...a: unknown[]) => unknown).apply(target, args)
+        }
+      },
+    })
+
+    await expect(
+      updateStorySettings(
+        'story_1',
+        { suggestionCount: 2 },
+        { db: brokenDb, runInTransaction },
+        99,
+      ),
+    ).rejects.toBeInstanceOf(StorySettingsStaleStoreError)
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(2)
+    expect(row.updatedAt).toBe(99)
+    expect(settings.suggestionCount).toBe(6)
   })
 })
