@@ -207,12 +207,19 @@ describe('StorySettingsSaveSessionProvider — save', () => {
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
     })
 
+    let inFlight: Promise<boolean> | undefined
+    let second: Promise<boolean> | undefined
+    await act(async () => {
+      inFlight = session.api().save()
+      second = session.api().save()
+    })
+
+    expect(session.api().saving).toBe(true)
+
     let outcomes: boolean[] = []
     await act(async () => {
-      const inFlight = session.api().save()
-      const second = session.api().save()
       for (const release of releases) release()
-      outcomes = await Promise.all([inFlight, second])
+      outcomes = await Promise.all([inFlight!, second!])
     })
 
     expect(session.onCommit).toHaveBeenCalledTimes(1)
@@ -256,7 +263,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining(COLLISION))
   })
 
-  it('leaves the session clean again after a successful save', async () => {
+  it('clears the saving flag after a successful save', async () => {
     const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
     const session = mountSession({ children: sectionsOf(aids) })
     expect(session.api().saving).toBe(false)
