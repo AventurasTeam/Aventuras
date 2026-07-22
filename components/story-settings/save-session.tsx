@@ -276,9 +276,12 @@ type SectionRegistration = {
    * Re-derive the draft from persisted state. Fires on Discard AND after a
    * successful save.
    *
-   * After a save this runs before React yields, so re-derive from the store. A
-   * value reaching this section by any other route — memoized props, a query
-   * cache, a mirror updated in an effect — is still pre-save here, and
+   * Re-derive from the settings the surface hands the panel, which
+   * `updateStorySettings` refreshes through `storiesStore`. Not
+   * `currentStoryStore` — nothing opens a story on the way to this screen, so
+   * it is null on any cold entry. And not a value reaching this section by some
+   * other route (memoized props, a query cache, a mirror updated in an effect):
+   * this runs before React yields, so such a value is still pre-save here and
    * resetting to it makes the save bar reappear showing the old values.
    */
   reset: () => void

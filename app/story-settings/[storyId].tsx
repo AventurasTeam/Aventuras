@@ -85,6 +85,12 @@ function StorySettingsSurface() {
   }, [])
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
   const storyExists = storiesStore.useStories((s) => s.rows.some((r) => r.id === storyId))
+  // The route owns the source: `currentStoryStore` is null on any cold entry
+  // here (only the index and the reader open a story), and `updateStorySettings`
+  // rehydrates this store, so a saved section re-derives from the fresh row.
+  const settings = storiesStore.useStories(
+    (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
+  )
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some((r) => r.storyId === storyId),
   )
@@ -115,10 +121,12 @@ function StorySettingsSurface() {
   )
   const missingStory = <EmptyState title={t('storySettings:missingStory')} />
 
-  // C7 seam: consumer slices replace a placeholder branch with their section.
+  // C7 seam: consumer slices replace a placeholder branch with their section,
+  // deriving its draft from `settings` rather than a store — null covers both
+  // the pre-hydration window and a story that isn't there.
   // Called for every tab, not just the active one — see StorySettingsShell.
-  const renderPanel = (_id: StorySettingsTabId) =>
-    hydrated && !storyExists ? missingStory : placeholder
+  const renderPanel = (_id: StorySettingsTabId, resolved: StorySettings | null) =>
+    resolved != null ? placeholder : hydrated && !storyExists ? missingStory : placeholder
 
   return (
     <ScreenShell
@@ -146,6 +154,7 @@ function StorySettingsSurface() {
         groups={groups}
         activeTab={activeTab}
         onSelectTab={setSelectedTab}
+        panelData={settings}
         renderPanel={renderPanel}
         saveBar={
           session.snapshot.isDirty ? (

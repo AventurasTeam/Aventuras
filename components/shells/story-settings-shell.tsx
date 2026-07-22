@@ -10,10 +10,17 @@ const STORY_SETTINGS_RAIL_WIDTH = 240
 type RailTab<TId extends string> = { id: TId; label: string }
 type RailGroup<TId extends string> = { id: string; header: string; tabs: RailTab<TId>[] }
 
-type StorySettingsShellProps<TId extends string> = {
+type StorySettingsShellProps<TId extends string, TPanelData> = {
   groups: RailGroup<TId>[]
   activeTab: TId | null
   onSelectTab: (id: TId) => void
+  /**
+   * Everything the panels read, resolved once by the owner. Threaded
+   * through so a panel takes its data from the surface that owns the
+   * screen rather than reaching into a store whose readiness it can't
+   * see.
+   */
+  panelData: TPanelData
   /**
    * Renders one tab's panel. Called for EVERY tab in `groups`, not
    * just the active one — every panel stays mounted and inactive
@@ -22,18 +29,19 @@ type StorySettingsShellProps<TId extends string> = {
    * silently discard its edits, which the one-session-per-surface
    * contract forbids.
    */
-  renderPanel: (id: TId) => ReactNode
+  renderPanel: (id: TId, data: TPanelData) => ReactNode
   /** Mounted by the route only while the session is dirty. */
   saveBar?: ReactNode
 }
 
-export function StorySettingsShell<TId extends string>({
+export function StorySettingsShell<TId extends string, TPanelData>({
   groups,
   activeTab,
   onSelectTab,
+  panelData,
   renderPanel,
   saveBar,
-}: StorySettingsShellProps<TId>) {
+}: StorySettingsShellProps<TId, TPanelData>) {
   const tabIds = groups.flatMap((group) => group.tabs.map((tab) => tab.id))
 
   const rail = (
@@ -79,7 +87,7 @@ export function StorySettingsShell<TId extends string>({
       {tabIds.map((id) => (
         <View key={id} className={cn('min-h-0 flex-1', id !== activeTab && 'hidden')}>
           <ScrollView className="flex-1" contentContainerClassName="gap-4 p-4">
-            {renderPanel(id)}
+            {renderPanel(id, panelData)}
           </ScrollView>
         </View>
       ))}

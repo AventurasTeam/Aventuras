@@ -98,7 +98,7 @@ function GenerationPanel() {
   )
 }
 
-const meta: Meta<typeof StorySettingsShell<TabId>> = {
+const meta: Meta<typeof StorySettingsShell<TabId, null>> = {
   title: 'Shells/StorySettingsShell',
   component: StorySettingsShell,
   parameters: { layout: 'fullscreen' },
@@ -125,6 +125,7 @@ export const PlaceholderTab: Story = {
     groups: GROUPS,
     activeTab: 'pack',
     onSelectTab: fn(),
+    panelData: null,
     renderPanel: () => <Placeholder />,
   },
   play: async ({ args }) => {
@@ -145,6 +146,7 @@ export const FilledTab: Story = {
     groups: GROUPS,
     activeTab: 'memory',
     onSelectTab: fn(),
+    panelData: null,
     renderPanel: (id) => (id === 'memory' ? <MemoryPanel /> : <Placeholder />),
   },
   play: async () => {
@@ -162,6 +164,7 @@ export const DirtySession: Story = {
     groups: GROUPS,
     activeTab: 'generation',
     onSelectTab: fn(),
+    panelData: null,
     renderPanel: (id) => (id === 'generation' ? <GenerationPanel /> : <Placeholder />),
     saveBar: (
       <SaveBar dirtyFields={['suggestions', 'suggestion count']} onSave={noop} onDiscard={noop} />
@@ -189,10 +192,11 @@ export const DraftSurvivesTabSwitch: Story = {
   render: function DraftHarness() {
     const [activeTab, setActiveTab] = useState<TabId>('about')
     return (
-      <StorySettingsShell<TabId>
+      <StorySettingsShell<TabId, null>
         groups={GROUPS}
         activeTab={activeTab}
         onSelectTab={setActiveTab}
+        panelData={null}
         renderPanel={(id) => (id === 'about' ? <DraftPanel /> : <Placeholder />)}
       />
     )
