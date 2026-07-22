@@ -51,6 +51,9 @@ slice plans when relevant.
   — engine anchoring silently skips RN-Web wrapper trees; opt out
   with `overflow-anchor: none` and compensate deterministically,
   never mid-gesture.
+- [`BackHandler` is not inert on web](./backhandler-web-console-error.md)
+  — RN-Web's shim `console.error`s on every subscribe; gate the
+  subscribe on `Platform.OS === 'android'`, not the handler.
 
 ### rn-primitives substrate
 
