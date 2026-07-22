@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react'
+import { type ReactElement, type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { MasterDetailLayout } from '@/components/shells/master-detail-layout'
@@ -8,10 +8,14 @@ import { cn } from '@/lib/utils'
 const STORY_SETTINGS_RAIL_WIDTH = 240
 
 type RailTab<TId extends string> = { id: TId; label: string }
-type RailGroup<TId extends string> = { id: string; header: string; tabs: RailTab<TId>[] }
+type RailGroup<TId extends string> = {
+  id: string
+  header: string
+  tabs: readonly RailTab<TId>[]
+}
 
 type StorySettingsShellProps<TId extends string, TPanelData> = {
-  groups: RailGroup<TId>[]
+  groups: readonly RailGroup<TId>[]
   activeTab: TId | null
   onSelectTab: (id: TId) => void
   /**
@@ -28,9 +32,12 @@ type StorySettingsShellProps<TId extends string, TPanelData> = {
    * Unmounting would unpublish the section's dirty fields and
    * silently discard its edits, which the one-session-per-surface
    * contract forbids.
+   *
+   * Returns an element, not a `ReactNode`: a `switch` over the tab union that
+   * misses a case would otherwise return `undefined` and compile.
    */
-  renderPanel: (id: TId, data: TPanelData) => ReactNode
-  /** Mounted by the route only while the session is dirty. */
+  renderPanel: (id: TId, data: TPanelData) => ReactElement
+  /** Rendered at the bottom of the detail pane, outside the panel scroller. */
   saveBar?: ReactNode
 }
 
@@ -62,8 +69,8 @@ export function StorySettingsShell<TId extends string, TPanelData>({
                 key={tab.id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
-                // RN-Web doesn't derive aria-selected from accessibilityState,
-                // and role="tab" without it is an axe violation.
+                // RN-Web doesn't map accessibilityState.selected to
+                // aria-selected, so AT reports every tab unselected without it.
                 aria-selected={selected}
                 onPress={() => onSelectTab(tab.id)}
                 className={cn(
@@ -91,7 +98,7 @@ export function StorySettingsShell<TId extends string, TPanelData>({
           </ScrollView>
         </View>
       ))}
-      {/* Outside the scroller: the pattern anchors the bar to the pane bottom as a flex item, not a sticky overlay. */}
+      {/* Outside the scroller — see docs/ui/patterns/save-sessions.md → Positioning. */}
       {saveBar}
     </View>
   )

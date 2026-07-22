@@ -1,12 +1,13 @@
 import { useIsFocused } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { SaveBar } from '@/components/compounds/save-bar'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
+import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
 import {
   StorySettingsSaveSessionProvider,
   useStorySettingsSaveSession,
@@ -14,6 +15,7 @@ import {
 import {
   isStorySettingsTabId,
   STORY_SETTINGS_TAB_GROUPS,
+  STORY_SETTINGS_TAB_IDS,
   type StorySettingsTabId,
 } from '@/components/story-settings/tabs'
 import { UnsavedChangesDialog } from '@/components/story-settings/unsaved-changes-dialog'
@@ -21,7 +23,8 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useTier } from '@/hooks/use-tier'
-import { updateStorySettings } from '@/lib/actions'
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
+import { StorySettingsStaleStoreError, updateStorySettings } from '@/lib/actions'
 import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
@@ -31,22 +34,36 @@ import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
+// expo-router types params as strings but hands back `string[]` for a repeated
+// query param.
+function singleParam(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
 export default function StorySettingsRoute() {
-  const { storyId } = useLocalSearchParams<{ storyId: string }>()
+  const params = useLocalSearchParams<{ storyId?: string | string[] }>()
+  const storyId = singleParam(params.storyId)
   // All three are in the provider's `save` dep chain; inline arrows would give
   // every consumer a new context identity on each render.
   const onCommit = useCallback(
-    (patch: Partial<StorySettings>) => updateStorySettings(storyId, patch, ctx),
+    (patch: Partial<StorySettings>) => {
+      if (storyId == null) return Promise.reject(new Error('Story not found'))
+      return updateStorySettings(storyId, patch, ctx)
+    },
     [storyId],
   )
   const onSaved = useCallback(() => toast.success(t('storySettings:save.saved')), [])
   const onSaveFailed = useCallback(
     (error: unknown) => {
+      // A stale store means the write landed — telling the user it failed would
+      // send them to re-enter values that are already persisted.
+      const stale = error instanceof StorySettingsStaleStoreError
       logger.error('action_layer.story_settings_save_failed', {
         storyId,
+        stale,
         error: error instanceof Error ? error.message : String(error),
       })
-      toast.error(t('storySettings:save.failed'))
+      toast.error(stale ? t('storySettings:save.stale') : t('storySettings:save.failed'))
     },
     [storyId],
   )
@@ -56,44 +73,52 @@ export default function StorySettingsRoute() {
       onSaved={onSaved}
       onSaveFailed={onSaveFailed}
     >
-      <StorySettingsSurface />
+      <StorySettingsSurface storyId={storyId} />
     </StorySettingsSaveSessionProvider>
   )
 }
 
-function StorySettingsSurface() {
+function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const router = useRouter()
   const isPhone = useTier() === 'phone'
   const isFocused = useIsFocused()
-  const { storyId, tab } = useLocalSearchParams<{ storyId: string; tab?: string }>()
+  const params = useLocalSearchParams<{ tab?: string | string[] }>()
+  const tab = singleParam(params.tab)
   const session = useStorySettingsSaveSession()
 
   const [selectedTab, setSelectedTab] = useState<StorySettingsTabId | null>(
     isStorySettingsTabId(tab) ? tab : null,
   )
 
-  // Desktop / tablet always shows a detail pane, so fall back to a default tab;
-  // phone is list-first, so no tab is open until one is tapped.
-  const activeTab: StorySettingsTabId | null = selectedTab ?? (isPhone ? null : 'about')
+  // Desktop / tablet always shows a detail pane, so fall back to the first rail
+  // entry; phone is list-first, so no tab is open until one is tapped.
+  const activeTab: StorySettingsTabId | null =
+    selectedTab ?? (isPhone ? null : (STORY_SETTINGS_TAB_IDS[0] ?? null))
 
-  // Only the story-list and reader routes hydrate this store, so a deep link
+  // Only routes that open or list a story hydrate this store, so a deep link
   // straight here starts empty — the missing-story state has to wait for the
   // read or it flashes over a story that does exist.
-  const [hydrated, setHydrated] = useState(false)
+  // rehydrateStories swallows its own read failures and reports them in its
+  // return value, so a failed read has to be tracked apart from an empty one —
+  // otherwise it renders as "this story is gone".
+  const [hydration, setHydration] = useState<'pending' | 'ok' | 'failed'>('pending')
   useEffect(() => {
-    void rehydrateStories(db).then(() => setHydrated(true))
+    void rehydrateStories(db).then((ok) => setHydration(ok ? 'ok' : 'failed'))
   }, [])
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
   const storyExists = storiesStore.useStories((s) => s.rows.some((r) => r.id === storyId))
   // The route owns the source: `currentStoryStore` is null on any cold entry
-  // here (only the index and the reader open a story), and `updateStorySettings`
-  // rehydrates this store, so a saved section re-derives from the fresh row.
+  // here, and `updateStorySettings` rehydrates this store, so a saved section
+  // re-derives from the fresh row.
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some((r) => r.storyId === storyId),
   )
+
+  const isDirty = session.snapshot.dirtyFields.length > 0
+  useUnsavedChangesGuard(isDirty, session.requestLeave)
 
   const leaveSurface = useCallback(() => {
     session.requestLeave(() => router.back())
@@ -106,8 +131,8 @@ function StorySettingsSurface() {
     else leaveSurface()
   }, [isPhone, selectedTab, leaveSurface])
 
-  // Unconditional: on tablet `isPhone` is false, so returning false here would
-  // let Android's default pop the route straight past the dirty guard.
+  // Constant true on every tier: any false here falls through to Android's
+  // route-pop, which never sees the dirty guard.
   useMasterDetailBack(true, handleBack)
 
   const groups = STORY_SETTINGS_TAB_GROUPS.map((group) => ({
@@ -116,17 +141,50 @@ function StorySettingsSurface() {
     tabs: group.tabs.map((id) => ({ id, label: t(`storySettings:tabs.${id}`) })),
   }))
 
-  const placeholder = (
-    <EmptyState title={t('storySettings:landsLater')} subtext={t('storySettings:landsLaterBody')} />
-  )
-  const missingStory = <EmptyState title={t('storySettings:missingStory')} />
+  const panelData: StorySettingsPanelData =
+    storyId == null
+      ? { status: 'missing' }
+      : hydration === 'pending'
+        ? { status: 'loading' }
+        : hydration === 'failed'
+          ? { status: 'unavailable' }
+          : !storyExists
+            ? { status: 'missing' }
+            : settings == null
+              ? { status: 'uninitialized' }
+              : { status: 'ready', settings }
 
-  // C7 seam: consumer slices replace a placeholder branch with their section,
-  // deriving its draft from `settings` rather than a store — null covers both
-  // the pre-hydration window and a story that isn't there.
-  // Called for every tab, not just the active one — see StorySettingsShell.
-  const renderPanel = (_id: StorySettingsTabId, resolved: StorySettings | null) =>
-    resolved != null ? placeholder : hydrated && !storyExists ? missingStory : placeholder
+  // Consumer slices switch on `id` here and render their section for the
+  // `ready` branch, deriving its draft from `data.settings`.
+  const renderPanel = (_id: StorySettingsTabId, data: StorySettingsPanelData): ReactElement => {
+    switch (data.status) {
+      case 'loading':
+        return <EmptyState title={t('storySettings:loading')} />
+      case 'unavailable':
+        return (
+          <EmptyState
+            title={t('storySettings:unavailable')}
+            subtext={t('storySettings:unavailableBody')}
+          />
+        )
+      case 'missing':
+        return <EmptyState title={t('storySettings:missingStory')} />
+      case 'uninitialized':
+        return (
+          <EmptyState
+            title={t('storySettings:uninitialized')}
+            subtext={t('storySettings:uninitializedBody')}
+          />
+        )
+      case 'ready':
+        return (
+          <EmptyState
+            title={t('storySettings:landsLater')}
+            subtext={t('storySettings:landsLaterBody')}
+          />
+        )
+    }
+  }
 
   return (
     <ScreenShell
@@ -154,13 +212,13 @@ function StorySettingsSurface() {
         groups={groups}
         activeTab={activeTab}
         onSelectTab={setSelectedTab}
-        panelData={settings}
+        panelData={panelData}
         renderPanel={renderPanel}
         saveBar={
-          session.snapshot.isDirty ? (
+          isDirty ? (
             <SaveBar
               dirtyFields={session.snapshot.dirtyFields}
-              dirtyCount={session.snapshot.dirtyCount}
+              dirtyCount={session.snapshot.dirtyFields.length}
               saving={session.saving}
               onSave={() => void session.save()}
               onDiscard={session.discard}
