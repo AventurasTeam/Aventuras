@@ -12,6 +12,7 @@ import {
   type SaveSessionApi,
 } from './save-session'
 import { type SectionDirtyState } from './save-session-state'
+import { type StorySettingsTabId } from './tabs'
 
 // The publish loop has two independent guards: the effect's serialized dirty
 // key, and upsertSection returning the same array reference for an unchanged
@@ -45,7 +46,7 @@ const COLLISION = 'both patch the top-level key'
 
 type SectionFixture = {
   id: string
-  order: number
+  tab: StorySettingsTabId
   dirtyFields: readonly string[]
   getPatch: Mock<() => Partial<StorySettings>>
   reset: Mock<() => void>
@@ -53,17 +54,17 @@ type SectionFixture = {
 
 function makeSection(
   id: string,
-  order: number,
+  tab: StorySettingsTabId,
   dirtyFields: readonly string[],
   patch: Partial<StorySettings> = {},
 ): SectionFixture {
-  return { id, order, dirtyFields, getPatch: vi.fn(() => patch), reset: vi.fn() }
+  return { id, tab, dirtyFields, getPatch: vi.fn(() => patch), reset: vi.fn() }
 }
 
 function Section({ fixture }: { fixture: SectionFixture }) {
   useStorySettingsSection({
     id: fixture.id,
-    order: fixture.order,
+    tab: fixture.tab,
     dirtyFields: fixture.dirtyFields,
     getPatch: fixture.getPatch,
     reset: fixture.reset,
@@ -126,7 +127,7 @@ function churningSection(renders: { count: number }) {
     renders.count += 1
     useStorySettingsSection({
       id: 'authoring-aids',
-      order: 10,
+      tab: 'generation',
       dirtyFields: ['suggestions', 'suggestion count'].slice(),
       getPatch: () => ({ suggestionsEnabled: true }),
       reset: () => {},
@@ -138,11 +139,13 @@ function churningSection(renders: { count: number }) {
 
 describe('StorySettingsSaveSessionProvider — save', () => {
   it('commits every registered section as ONE merged write', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, ['embedder'], {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
     })
-    const chapters = makeSection('chapters', 30, ['chapter threshold'], {
+    const chapters = makeSection('chapters', 'advanced', ['chapter threshold'], {
       chapterTokenThreshold: 9000,
     })
     const session = mountSession({ children: sectionsOf(aids, memory, chapters) })
@@ -160,8 +163,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
   })
 
   it('resolves true and resets every section after a successful save', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
     let outcome: boolean | undefined
@@ -178,8 +185,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
   it('keeps every draft intact when the commit rejects', async () => {
     const failure = new Error('write failed')
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
     const session = mountSession({
       children: sectionsOf(aids, memory),
       onCommit: vi.fn(() => Promise.reject(failure)),
@@ -198,8 +209,10 @@ describe('StorySettingsSaveSessionProvider — save', () => {
   })
 
   it('skips a clean section rather than trusting it to return an empty patch', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, [], {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', [], {
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
     })
     const session = mountSession({ children: sectionsOf(aids, memory) })
@@ -217,7 +230,7 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     function CountSection({ count }: { count: number }) {
       useStorySettingsSection({
         id: 'authoring-aids',
-        order: 10,
+        tab: 'generation',
         dirtyFields: ['suggestion count'],
         getPatch: () => ({ suggestionCount: count }),
         reset: () => resets.push(count),
@@ -242,7 +255,9 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     // Every commit gets released, not just the last: a regression must fail on
     // the call-count assertion rather than deadlocking on an orphaned promise.
     const releases: (() => void)[] = []
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({
       children: sectionsOf(aids),
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
@@ -271,10 +286,10 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
   it('warns when two sections patch the same top-level key', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const composer = makeSection('composer', 10, ['translation'], {
+    const composer = makeSection('composer', 'generation', ['translation'], {
       translation: { ...STORY_SETTINGS_DEFAULTS.translation, enabled: true },
     })
-    const languages = makeSection('languages', 20, ['granular toggles'], {
+    const languages = makeSection('languages', 'translation', ['granular toggles'], {
       translation: { ...STORY_SETTINGS_DEFAULTS.translation, targetLanguage: 'cs' },
     })
     const session = mountSession({ children: sectionsOf(composer, languages) })
@@ -290,11 +305,13 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
   it('stays quiet when every section patches a distinct top-level key', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
       suggestionCount: 5,
     })
-    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
     await act(async () => {
@@ -305,7 +322,9 @@ describe('StorySettingsSaveSessionProvider — save', () => {
   })
 
   it('clears the saving flag after a successful save', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({ children: sectionsOf(aids) })
     expect(session.api().saving).toBe(false)
 
@@ -319,8 +338,12 @@ describe('StorySettingsSaveSessionProvider — save', () => {
 
 describe('StorySettingsSaveSessionProvider — discard', () => {
   it('resets every section without writing', () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
     act(() => session.api().discard())
@@ -338,16 +361,16 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
   })
 
   it('is clean while every registered section is clean', () => {
-    const aids = makeSection('authoring-aids', 10, [])
-    const memory = makeSection('embedding-status', 20, [])
+    const aids = makeSection('authoring-aids', 'generation', [])
+    const memory = makeSection('embedding-status', 'memory', [])
     const session = mountSession({ children: sectionsOf(aids, memory) })
 
     expect(session.api().snapshot).toEqual({ isDirty: false, dirtyFields: [], dirtyCount: 0 })
   })
 
   it('aggregates dirty fields across sections in rail order, not mount order', () => {
-    const memory = makeSection('embedding-status', 20, ['embedder'])
-    const aids = makeSection('authoring-aids', 10, ['suggestions', 'suggestion count'])
+    const memory = makeSection('embedding-status', 'memory', ['embedder'])
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions', 'suggestion count'])
     const session = mountSession({ children: sectionsOf(memory, aids) })
 
     expect(session.api().snapshot).toEqual({
@@ -358,7 +381,7 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
   })
 
   it('tracks a section that goes dirty after mount', () => {
-    const aids = makeSection('authoring-aids', 10, [])
+    const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
     expect(session.api().snapshot.isDirty).toBe(false)
 
@@ -376,8 +399,12 @@ describe('StorySettingsSaveSessionProvider — snapshot', () => {
 
 describe('StorySettingsSaveSessionProvider — unmount', () => {
   it('drops an unmounted section from the snapshot and from the merged write', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
-    const memory = makeSection('embedding-status', 20, ['embedder'], { embeddingBackend: 'local' })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
+    const memory = makeSection('embedding-status', 'memory', ['embedder'], {
+      embeddingBackend: 'local',
+    })
     const session = mountSession({ children: sectionsOf(aids, memory) })
     expect(session.api().snapshot.dirtyCount).toBe(2)
 
@@ -403,7 +430,7 @@ describe('StorySettingsSaveSessionProvider — unmount', () => {
 
 describe('StorySettingsSaveSessionProvider — leave guard', () => {
   it('lets a clean session leave immediately', () => {
-    const aids = makeSection('authoring-aids', 10, [])
+    const aids = makeSection('authoring-aids', 'generation', [])
     const session = mountSession({ children: sectionsOf(aids) })
     const proceed = vi.fn()
 
@@ -414,7 +441,7 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   })
 
   it('holds a dirty session at the prompt', () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'])
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'])
     const session = mountSession({ children: sectionsOf(aids) })
     const proceed = vi.fn()
 
@@ -425,7 +452,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   })
 
   it('cancel keeps the session and stays put', () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({ children: sectionsOf(aids) })
     const proceed = vi.fn()
 
@@ -439,7 +468,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   })
 
   it('discard throws the drafts away and proceeds', () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({ children: sectionsOf(aids) })
     const proceed = vi.fn()
 
@@ -453,7 +484,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   })
 
   it('save commits once and then proceeds', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({ children: sectionsOf(aids) })
     const proceed = vi.fn()
 
@@ -468,7 +501,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   })
 
   it('does NOT proceed when the save it was asked for fails', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({
       children: sectionsOf(aids),
       onCommit: vi.fn(() => Promise.reject(new Error('write failed'))),
@@ -490,7 +525,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
 
   it('holds the guard open and saving while its own save is in flight', async () => {
     const releases: (() => void)[] = []
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({
       children: sectionsOf(aids),
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
@@ -518,7 +555,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   // The in-flight refusal below reads the same ref that gates save() re-entry,
   // so a flag left raised would silently make every later leave inert.
   it('accepts a save-and-leave after an earlier commit has settled', async () => {
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({ children: sectionsOf(aids) })
 
     await act(async () => {
@@ -540,7 +579,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
   // intercepts reach resolveLeave directly, so the refusal lives here too.
   it('refuses a cancel that arrives while its own save is in flight', async () => {
     const releases: (() => void)[] = []
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({
       children: sectionsOf(aids),
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
@@ -568,7 +609,9 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
 
   it('refuses a discard that arrives while its own save is in flight', async () => {
     const releases: (() => void)[] = []
-    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
+      suggestionsEnabled: true,
+    })
     const session = mountSession({
       children: sectionsOf(aids),
       onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
@@ -598,7 +641,7 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
 
 describe('useStorySettingsSection', () => {
   it('throws outside a provider', () => {
-    const aids = makeSection('authoring-aids', 10, [])
+    const aids = makeSection('authoring-aids', 'generation', [])
     expect(() => render(<Section fixture={aids} />)).toThrow(
       /must be used inside StorySettingsSaveSessionProvider/,
     )

@@ -18,6 +18,7 @@ import {
   type SaveSessionSnapshot,
   type SectionDirtyState,
 } from './save-session-state'
+import { storySettingsTabOrder, type StorySettingsTabId } from './tabs'
 
 // Node (vitest) leaves __DEV__ undefined, so the check runs there too.
 const DEV_CHECKS = typeof __DEV__ === 'undefined' || __DEV__
@@ -243,8 +244,8 @@ export function useStorySettingsSaveSession(): SaveSessionApi {
 
 type SectionRegistration = {
   id: string
-  /** Rail order of the owning tab — drives save-bar label order. */
-  order: number
+  /** Owning tab. Its rail position drives this section's save-bar label order. */
+  tab: StorySettingsTabId
   /**
    * User-recognizable labels, e.g. `['suggestions', 'suggestion count']`.
    * Empty means clean, which also gates whether the save merges this section.
@@ -281,12 +282,13 @@ type SectionRegistration = {
  */
 export function useStorySettingsSection({
   id,
-  order,
+  tab,
   dirtyFields,
   getPatch,
   reset,
 }: SectionRegistration): void {
   const { publish, unpublish, attach } = useStorySettingsSaveSession()
+  const order = storySettingsTabOrder(tab)
 
   const callbacksRef = useRef<SectionCallbacks>({ getPatch, reset })
   callbacksRef.current = { getPatch, reset }

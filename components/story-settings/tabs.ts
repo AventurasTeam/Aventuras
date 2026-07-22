@@ -18,7 +18,7 @@ const STORY_SETTINGS_TAB_IDS: readonly StorySettingsTabId[] = STORY_SETTINGS_TAB
   (group) => group.tabs,
 )
 
-/** Rail position of the owning tab — what `useStorySettingsSection` wants for `order`. */
+/** Rail position of a tab. `useStorySettingsSection` resolves it from `tab`. */
 function storySettingsTabOrder(id: StorySettingsTabId): number {
   return STORY_SETTINGS_TAB_IDS.indexOf(id)
 }
