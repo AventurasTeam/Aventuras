@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -79,6 +80,7 @@ export default function ReaderComposerRoute() {
   const router = useRouter()
   const tier = useTier()
   const showRail = tier !== 'phone'
+  const isFocused = useIsFocused()
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
 
   const [storyId, setStoryId] = useState<string | null>(null)
@@ -462,7 +464,10 @@ export default function ReaderComposerRoute() {
     },
     [branchId],
   )
-  useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, { ignoreEditableTargets: true })
+  useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
+    ignoreEditableTargets: true,
+    enabled: isFocused,
+  })
 
   // Touch-tier path to undo/redo (the shortcut is keyboard-only). A tapped menu
   // item silently doing nothing reads as broken, so rejections toast — unlike
@@ -490,7 +495,10 @@ export default function ReaderComposerRoute() {
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
   const matchesJumpToBottomShortcut = useCallback((ev: KeyboardEvent) => ev.key === 'End', [])
   // Editable-target exclusion keeps End moving the caret inside the composer.
-  useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, { ignoreEditableTargets: true })
+  useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
+    ignoreEditableTargets: true,
+    enabled: isFocused,
+  })
   const contextualActions: ActionGroup = useMemo(() => {
     const blocked = {
       disabled: isGenerating,
@@ -559,6 +567,9 @@ export default function ReaderComposerRoute() {
       title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
       chapterProgress={0}
       onBack={() => router.back()}
+      onOpenStorySettings={() => {
+        if (storyId != null) router.push(`/story-settings/${storyId}`)
+      }}
       actions={<AppActionsMenu contextual={contextualActions} />}
       statusSlot={
         <GenerationStatusPill
