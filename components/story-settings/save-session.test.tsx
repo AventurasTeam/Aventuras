@@ -197,6 +197,47 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(memory.reset).not.toHaveBeenCalled()
   })
 
+  it('skips a clean section rather than trusting it to return an empty patch', async () => {
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const memory = makeSection('embedding-status', 20, [], {
+      embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
+    })
+    const session = mountSession({ children: sectionsOf(aids, memory) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(memory.getPatch).not.toHaveBeenCalled()
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionsEnabled: true })
+  })
+
+  it('commits the newest getPatch and reset closures, not the ones from mount', async () => {
+    const resets: number[] = []
+    function CountSection({ count }: { count: number }) {
+      useStorySettingsSection({
+        id: 'authoring-aids',
+        order: 10,
+        dirtyFields: ['suggestion count'],
+        getPatch: () => ({ suggestionCount: count }),
+        reset: () => resets.push(count),
+      })
+      return null
+    }
+
+    const session = mountSession({ children: <CountSection count={3} /> })
+    act(() => {
+      session.rerenderWith(<CountSection count={5} />)
+    })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionCount: 5 })
+    expect(resets).toEqual([5])
+  })
+
   it('turns away a second save while one is already in flight', async () => {
     // Every commit gets released, not just the last: a regression must fail on
     // the call-count assertion rather than deadlocking on an orphaned promise.

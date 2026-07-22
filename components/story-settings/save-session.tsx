@@ -48,6 +48,10 @@ type SaveSessionApi = {
 
 const SaveSessionContext = createContext<SaveSessionApi | null>(null)
 
+function dirtyIds(sections: readonly SectionDirtyState[]): Set<string> {
+  return new Set(sections.filter((s) => s.dirtyFields.length > 0).map((s) => s.id))
+}
+
 function warnOnKeyCollision(
   owners: Map<string, string>,
   id: string,
@@ -113,6 +117,11 @@ export function StorySettingsSaveSessionProvider({
 
   const snapshot = useMemo(() => computeSnapshot(sections), [sections])
 
+  // Read at save time rather than closed over, so a consumer holding a stale
+  // `api` still merges against the newest published dirty state.
+  const sectionsRef = useRef(sections)
+  sectionsRef.current = sections
+
   const save = useCallback(async () => {
     if (savingRef.current) return false
     savingRef.current = true
@@ -123,7 +132,13 @@ export function StorySettingsSaveSessionProvider({
       // persisted with no way to undo them.
       let merged: Partial<StorySettings> = {}
       const owners = DEV_CHECKS ? new Map<string, string>() : null
+      // Clean sections are skipped rather than trusted to return `{}`: every
+      // panel stays mounted so a draft survives a tab switch, so an
+      // unconditional getPatch would write a never-visited tab's mount-time
+      // values over whatever changed them since.
+      const dirty = dirtyIds(sectionsRef.current)
       for (const [id, entry] of callbacksRef.current.entries()) {
+        if (!dirty.has(id)) continue
         const patch = entry.current.getPatch()
         if (owners) warnOnKeyCollision(owners, id, patch)
         merged = { ...merged, ...patch }
@@ -219,11 +234,16 @@ type SectionRegistration = {
   id: string
   /** Rail order of the owning tab — drives save-bar label order. */
   order: number
-  /** User-recognizable labels, e.g. `['suggestions', 'suggestion count']`. */
+  /**
+   * User-recognizable labels, e.g. `['suggestions', 'suggestion count']`.
+   * Empty means clean, which also gates whether the save merges this section.
+   */
   dirtyFields: readonly string[]
   /**
    * This section's contribution to the surface's single save. Read only at
-   * save time, so it may close over draft state freely. Return `{}` when clean.
+   * save time, so it may close over draft state freely. The provider skips
+   * sections whose `dirtyFields` is empty, so this never runs while clean —
+   * return this section's whole slice, unconditionally.
    *
    * Sections must own disjoint **top-level** `StorySettings` keys. The merge is
    * shallow, so two sections contributing different parts of one nested object
@@ -232,7 +252,15 @@ type SectionRegistration = {
    * collision.
    */
   getPatch: () => Partial<StorySettings>
-  /** Re-derive the draft from persisted state. Fires on Discard AND after a successful save. */
+  /**
+   * Re-derive the draft from persisted state. Fires on Discard AND after a
+   * successful save.
+   *
+   * After a save this runs before React yields, so re-derive from the store. A
+   * value reaching this section by any other route — memoized props, a query
+   * cache, a mirror updated in an effect — is still pre-save here, and
+   * resetting to it makes the save bar reappear showing the old values.
+   */
   reset: () => void
 }
 
