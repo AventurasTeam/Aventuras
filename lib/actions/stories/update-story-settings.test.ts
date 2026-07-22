@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { branches, buildStorySettings, stories, storyDefinitionSchema } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { currentStoryStore, resetAllStores } from '@/lib/stores'
+import { currentStoryStore, resetAllStores, storiesStore } from '@/lib/stores'
 
 import { updateStorySettings } from './update-story-settings'
 
@@ -22,9 +22,20 @@ afterEach(() => {
   resetAllStores()
 })
 
+// classifierCadence and suggestionCount must stay different from
+// STORY_SETTINGS_DEFAULTS (5 and 3): the merge assertions can only tell a
+// preserved value from a re-defaulted one while those differ.
 async function seed() {
-  const { db, runInTransaction } = await createTestDb()
-  const settings = buildStorySettings({ classifierCadence: 2, suggestionCount: 6 }, 'embed-a', null)
+  const { db, sqlite, runInTransaction } = await createTestDb()
+  const settings = buildStorySettings(
+    {
+      classifierCadence: 2,
+      suggestionCount: 6,
+      models: { narrative: 'model-a', classifier: 'model-b' },
+    },
+    'embed-a',
+    null,
+  )
   await db.insert(stories).values({
     id: 'story_1',
     title: 'Aria',
@@ -38,7 +49,7 @@ async function seed() {
   await db
     .insert(branches)
     .values({ id: 'branch_1', storyId: 'story_1', name: 'main', createdAt: 1 })
-  return { db, runInTransaction, settings }
+  return { db, sqlite, runInTransaction, settings }
 }
 
 describe('updateStorySettings', () => {
@@ -60,6 +71,24 @@ describe('updateStorySettings', () => {
     expect(row.settings?.suggestionCount).toBe(5)
     expect(row.settings?.classifierCadence).toBe(2)
     expect(row.updatedAt).toBe(99)
+
+    const mirrored = storiesStore.getStories().rows.find((r) => r.id === 'story_1')
+    expect(mirrored?.settings?.suggestionCount).toBe(5)
+    expect(mirrored?.updatedAt).toBe(99)
+  })
+
+  it('replaces nested objects wholesale rather than merging them', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    expect(settings.models).toEqual({ narrative: 'model-a', classifier: 'model-b' })
+
+    const next = await updateStorySettings(
+      'story_1',
+      { models: { narrative: 'model-c' } },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(next.models).toEqual({ narrative: 'model-c' })
   })
 
   it('refreshes currentStoryStore when the updated story is open', async () => {
@@ -114,6 +143,19 @@ describe('updateStorySettings', () => {
 
     const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
     expect(row.settings?.suggestionCount).toBe(6)
+  })
+
+  it('rejects rather than self-heals when the stored settings are corrupt', async () => {
+    const { db, sqlite, runInTransaction, settings } = await seed()
+    const corrupt = JSON.stringify({ ...settings, classifierCadence: 'broken' })
+    sqlite.exec(`UPDATE stories SET settings = '${corrupt}' WHERE id = 'story_1'`)
+
+    await expect(
+      updateStorySettings('story_1', { classifierCadence: 7 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow()
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
   })
 
   it('throws for an unknown story', async () => {
