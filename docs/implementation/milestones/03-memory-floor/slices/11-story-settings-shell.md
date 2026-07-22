@@ -110,7 +110,9 @@ surface. M4.4 extends this shell rather than replacing it.
 
 Resolved developer decisions and deviations worth carrying forward.
 Cross-cutting findings this slice surfaced went to
-[triage](../../../triage.md) instead.
+[triage](../../../triage.md) instead, and the ones that go live with
+the first real section consumer went to
+[Slice 3.7's Open questions](./07-suggestions.md#open-questions).
 
 - **The C7 seam is a route tab map plus a save-session context, not
   a component registry.** The contract cites the M1.5 delta-registry
@@ -144,4 +146,6 @@ Cross-cutting findings this slice surfaced went to
   a bare `router.push`, so the navigate-away guard — which wraps only
   the surface's own back path — does not intercept it. A general
   router-event interceptor was out of scope. Window-close intent is
-  likewise unwired; both sit in [triage](../../../triage.md).
+  likewise unwired; both wait on
+  [Slice 3.7](./07-suggestions.md#open-questions), the first slice
+  that can make the session dirty.

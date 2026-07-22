@@ -159,20 +159,6 @@ slice-planning gate forces its resolution before that slice is planned.
   sentence needs a scope qualifier. Cross-cutting (App Settings is
   equally affected), so not 3.11's to own. Surfaced by M3.11 planning
   (2026-07-22).
-- **The save-session window-close intercept is unimplemented.**
-  [`save-sessions.md → Navigate-away guard`](../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
-  lists "window-close intent — electron window-close or the web
-  `beforeunload`" as a required intercept category, and M3.11's save
-  session anticipates it (`resolveLeave` is documented as reachable
-  directly, since a `beforeunload` handler cannot route through a
-  React modal). Nothing registers one. Inert while Story Settings has
-  zero registered sections, so it cannot be dirty; it goes live on the
-  primary platform the moment
-  [Slice 3.7](./milestones/03-memory-floor/slices/07-suggestions.md)
-  lands its authoring-aids section. Deliberately out of M3.11's
-  scope — the intercept is cross-cutting infra no surface wires today
-  and would pull a UI slice into `electron/`. Surfaced by M3.11 Task 8
-  review (2026-07-22).
 - **`AppActionsMenu`'s Ctrl-K is not focus-gated.** The reader and
   Story Settings both mount `AppActionsMenu`, and expo-router's Stack
   keeps the pushed-under screen alive — so with Story Settings open
@@ -217,3 +203,27 @@ slice-planning gate forces its resolution before that slice is planned.
   prop, so it is correct on native too). App Settings still ships the
   bug and wants the same one-line fix. Surfaced by M3.11 Task 7
   (2026-07-22).
+- **`rehydrateStories`'s boolean is discarded, so a failed read
+  reads as "story missing".** The hydration effect in
+  `app/story-settings/[storyId].tsx` sets its `hydrated` flag
+  unconditionally in `.then()`, but `rehydrateStories`
+  (`lib/stores/stories/stories.ts`) logs and swallows read errors,
+  then returns `false`. On a cold entry where that read fails the
+  route shows "This story could not be loaded." across all eight
+  tabs, conflating a transient failure with a deleted story.
+  `app/reader-composer/[branchId].tsx` already models the three
+  states its own branch hydration needs — failed, still-loading,
+  empty — and is the shape to copy. Surfaced by M3.11 final review
+  (2026-07-22).
+- **The save-session context rebuilds on every snapshot change.**
+  `components/story-settings/save-session.tsx` rebuilds its `api`
+  object whenever `snapshot`, `saving`, or `pendingLeave` changes,
+  and `useStorySettingsSection` subscribes to the whole object — so
+  with every tab panel mounted by design, one section going dirty
+  re-renders every mounted section. Harmless at M3 scale (zero
+  sections today, one once 3.7 lands), but M4.4's basic surface and
+  M7.2's deep tabs fill most of the eight tabs, and the cost scales
+  with the number of registered sections. Splitting the stable
+  registration surface (`publish` / `unpublish` / `attach`) from the
+  volatile snapshot into two contexts would make that free.
+  Surfaced by M3.11 final review (2026-07-22).
