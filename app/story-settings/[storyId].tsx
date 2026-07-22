@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useCallback, useEffect, useState } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
+import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { SaveBar } from '@/components/compounds/save-bar'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
@@ -10,6 +11,11 @@ import {
   StorySettingsSaveSessionProvider,
   useStorySettingsSaveSession,
 } from '@/components/story-settings/save-session'
+import {
+  isStorySettingsTabId,
+  STORY_SETTINGS_TAB_GROUPS,
+  type StorySettingsTabId,
+} from '@/components/story-settings/tabs'
 import { UnsavedChangesDialog } from '@/components/story-settings/unsaved-changes-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -19,25 +25,9 @@ import { updateStorySettings } from '@/lib/actions'
 import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { rehydrateStories, storiesStore } from '@/lib/stores'
+import { awaitRunTerminal, PER_TURN_KIND } from '@/lib/pipeline'
+import { generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
-
-// C7 seam: adding an id here registers a tab — the union derives from this
-// array, so a consumer slice adds its id (if new), lists it in `groups`, then
-// renders its section in the ternary below. Sections join the save session
-// from inside their own body via useStorySettingsSection.
-const STORY_SETTINGS_TAB_IDS = [
-  'about',
-  'generation',
-  'models',
-  'memory',
-  'translation',
-  'pack',
-  'calendar',
-  'advanced',
-] as const
-
-type StorySettingsTabId = (typeof STORY_SETTINGS_TAB_IDS)[number]
 
 const ctx = { db, runInTransaction }
 
@@ -50,12 +40,16 @@ export default function StorySettingsRoute() {
     [storyId],
   )
   const onSaved = useCallback(() => toast.success(t('storySettings:save.saved')), [])
-  const onSaveFailed = useCallback((error: unknown) => {
-    logger.error('action_layer.story_settings_save_failed', {
-      error: error instanceof Error ? error.message : String(error),
-    })
-    toast.error(t('storySettings:save.failed'))
-  }, [])
+  const onSaveFailed = useCallback(
+    (error: unknown) => {
+      logger.error('action_layer.story_settings_save_failed', {
+        storyId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      toast.error(t('storySettings:save.failed'))
+    },
+    [storyId],
+  )
   return (
     <StorySettingsSaveSessionProvider
       onCommit={onCommit}
@@ -74,21 +68,26 @@ function StorySettingsSurface() {
   const { storyId, tab } = useLocalSearchParams<{ storyId: string; tab?: string }>()
   const session = useStorySettingsSaveSession()
 
-  const initialTab = STORY_SETTINGS_TAB_IDS.includes(tab as StorySettingsTabId)
-    ? (tab as StorySettingsTabId)
-    : null
-  const [selectedTab, setSelectedTab] = useState<StorySettingsTabId | null>(initialTab)
+  const [selectedTab, setSelectedTab] = useState<StorySettingsTabId | null>(
+    isStorySettingsTabId(tab) ? tab : null,
+  )
 
   // Desktop / tablet always shows a detail pane, so fall back to a default tab;
   // phone is list-first, so no tab is open until one is tapped.
   const activeTab: StorySettingsTabId | null = selectedTab ?? (isPhone ? null : 'about')
 
   // Only the story-list and reader routes hydrate this store, so a deep link
-  // straight here would render the breadcrumb without its story title.
+  // straight here starts empty — the missing-story state has to wait for the
+  // read or it flashes over a story that does exist.
+  const [hydrated, setHydrated] = useState(false)
   useEffect(() => {
-    void rehydrateStories(db)
+    void rehydrateStories(db).then(() => setHydrated(true))
   }, [])
   const storyTitle = storiesStore.useStories((s) => s.rows.find((r) => r.id === storyId)?.title)
+  const storyExists = storiesStore.useStories((s) => s.rows.some((r) => r.id === storyId))
+  const isGenerating = generationStore.useGeneration((s) =>
+    [...s.txState.runs.values()].some((r) => r.storyId === storyId),
+  )
 
   const leaveSurface = useCallback(() => {
     session.requestLeave(() => router.back())
@@ -101,32 +100,15 @@ function StorySettingsSurface() {
     else leaveSurface()
   }, [isPhone, selectedTab, leaveSurface])
 
-  // Always intercepts on this surface. Returning false would let Android pop
-  // the route without ever consulting the dirty guard.
+  // Unconditional: on tablet `isPhone` is false, so returning false here would
+  // let Android's default pop the route straight past the dirty guard.
   useMasterDetailBack(true, handleBack)
 
-  const groups = [
-    {
-      id: 'story',
-      header: t('storySettings:sections.story'),
-      tabs: [
-        { id: 'about' as const, label: t('storySettings:tabs.about') },
-        { id: 'generation' as const, label: t('storySettings:tabs.generation') },
-      ],
-    },
-    {
-      id: 'settings',
-      header: t('storySettings:sections.settings'),
-      tabs: [
-        { id: 'models' as const, label: t('storySettings:tabs.models') },
-        { id: 'memory' as const, label: t('storySettings:tabs.memory') },
-        { id: 'translation' as const, label: t('storySettings:tabs.translation') },
-        { id: 'pack' as const, label: t('storySettings:tabs.pack') },
-        { id: 'calendar' as const, label: t('storySettings:tabs.calendar') },
-        { id: 'advanced' as const, label: t('storySettings:tabs.advanced') },
-      ],
-    },
-  ]
+  const groups = STORY_SETTINGS_TAB_GROUPS.map((group) => ({
+    id: group.id,
+    header: t(`storySettings:sections.${group.id}`),
+    tabs: group.tabs.map((id) => ({ id, label: t(`storySettings:tabs.${id}`) })),
+  }))
 
   const placeholder = (
     <EmptyState title={t('storySettings:landsLater')} subtext={t('storySettings:landsLaterBody')} />
@@ -134,9 +116,9 @@ function StorySettingsSurface() {
   const missingStory = <EmptyState title={t('storySettings:missingStory')} />
 
   // C7 seam: consumer slices replace a placeholder branch with their section.
-  // 3.1b → 'memory' (embedding status). 3.7 → 'generation' (authoring aids).
   // Called for every tab, not just the active one — see StorySettingsShell.
-  const renderPanel = (_id: StorySettingsTabId) => (storyId == null ? missingStory : placeholder)
+  const renderPanel = (_id: StorySettingsTabId) =>
+    hydrated && !storyExists ? missingStory : placeholder
 
   return (
     <ScreenShell
@@ -152,6 +134,13 @@ function StorySettingsSurface() {
       hideSelfReferentialIcon
       onBack={handleBack}
       actions={<AppActionsMenu />}
+      statusSlot={
+        <GenerationStatusPill
+          activePhase={isGenerating ? 'generating-narrative' : undefined}
+          onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+          onErrorTap={() => {}}
+        />
+      }
     >
       <StorySettingsShell
         groups={groups}
@@ -180,6 +169,3 @@ function StorySettingsSurface() {
     </ScreenShell>
   )
 }
-
-export { STORY_SETTINGS_TAB_IDS }
-export type { StorySettingsTabId }
