@@ -17,9 +17,9 @@ A minimal Story Settings host so M3's two settings surfaces have
 somewhere to live: the route, the screen scaffold with tab /
 section structure per the canonical layout, and the C7 seam — the
 route's tab map plus the shell's save session — that 3.1b and 3.7
-hang their sections off. Added at milestone
-promotion — the audit found 3.1b and 3.7 authoring sections into a
-screen the roadmap doesn't build until M4.4.
+hang their sections off. Added at milestone promotion — the audit
+found 3.1b and 3.7 authoring sections into a screen the roadmap
+doesn't build until M4.4.
 
 ## Background
 
@@ -29,11 +29,10 @@ and its real basic surface is M4.4's job, with deep tabs in M7.2.
 M3 needs only a host: the staleness resolution panel canon places
 in Story Settings · Memory, and the suggestions controls canon
 places on the Generation tab under _Authoring aids_. This slice
-ships the smallest honest
-version of the screen — navigable route, canonical tab skeleton
-with empty-state placeholders, and a registration mechanism —
-explicitly _not_ the M4.4 surface. M4.4 extends this shell rather
-than replacing it.
+ships the smallest honest version of the screen — navigable route,
+canonical tab skeleton with empty-state placeholders, and the
+save-session seam sections join — explicitly _not_ the M4.4
+surface. M4.4 extends this shell rather than replacing it.
 
 ## Required reading
 
