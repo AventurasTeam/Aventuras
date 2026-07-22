@@ -176,15 +176,23 @@ export function StorySettingsSaveSessionProvider({
   const resolveLeave = useCallback(
     (outcome: 'save' | 'discard' | 'cancel') => {
       const proceed = pendingLeave
-      setPendingLeave(null)
-      if (proceed == null || outcome === 'cancel') return
+      if (proceed == null || outcome === 'cancel') {
+        setPendingLeave(null)
+        return
+      }
       if (outcome === 'discard') {
+        setPendingLeave(null)
         discard()
         proceed()
         return
       }
+      // The guard outlives the commit: it can then disable itself while the
+      // write runs, and a failure leaves the user on the same three choices
+      // rather than dropping the navigation they asked for.
       void save().then((ok) => {
-        if (ok) proceed()
+        if (!ok) return
+        setPendingLeave(null)
+        proceed()
       })
     },
     [pendingLeave, discard, save],

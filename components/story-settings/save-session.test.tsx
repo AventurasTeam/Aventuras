@@ -483,6 +483,36 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
     expect(session.onSaveFailed).toHaveBeenCalledTimes(1)
     expect(proceed).not.toHaveBeenCalled()
     expect(aids.reset).not.toHaveBeenCalled()
+    // The guard stays up so the failure leaves the user on the same choice
+    // instead of stranding the navigation they asked for.
+    expect(session.api().pendingLeave).toBe(true)
+  })
+
+  it('holds the guard open and saving while its own save is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+
+    expect(session.api().pendingLeave).toBe(true)
+    expect(session.api().saving).toBe(true)
+    expect(proceed).not.toHaveBeenCalled()
+
+    await act(async () => {
+      for (const release of releases) release()
+    })
+
+    expect(session.api().pendingLeave).toBe(false)
+    expect(session.api().saving).toBe(false)
+    expect(proceed).toHaveBeenCalledTimes(1)
   })
 })
 
