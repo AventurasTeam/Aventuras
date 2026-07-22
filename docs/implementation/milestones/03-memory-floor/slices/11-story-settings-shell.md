@@ -143,6 +143,13 @@ the first real section consumer went to
   load-bearing precisely because every panel is mounted: an unvisited
   section returning its slice of settings unconditionally would write
   mount-time values back on any save.
+- **`getPatch()` runs twice per save and must stay side-effect
+  free.** Panel inputs stay live while a commit is in flight, so the
+  provider re-reads each committed section afterwards and resets only
+  those whose draft still matches what it wrote. A section the user
+  kept editing keeps its newer draft, stays dirty, and holds a
+  pending leave open — the save bar reappearing right after `Saved.`
+  is the correct reading of "that edit is not on disk yet".
 - **Accepted scope gap.** `AppActionsMenu`'s Diagnostics-Hub jump is
   a bare `router.push`, so the navigate-away guard — which wraps only
   the surface's own back path — does not intercept it. A general

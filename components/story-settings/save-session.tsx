@@ -33,11 +33,15 @@ type SaveSessionApi = {
   snapshot: SaveSessionSnapshot
   saving: boolean
   /**
-   * Resolves `true` when the session reached a clean, persisted state — the
-   * commit landed, or there was nothing to commit. `false` means the write was
-   * rejected, or a commit was already in flight and this call was turned away;
-   * either way the caller must not proceed. A failure *after* the write lands
-   * never reports `false` — it is logged, because the data is on disk.
+   * Resolves `true` when the write landed, or when there was nothing to write.
+   * `false` means it was rejected, or a commit was already in flight and this
+   * call was turned away; either way the caller must not proceed. A failure
+   * *after* the write lands never reports `false` — it is logged, because the
+   * data is on disk.
+   *
+   * `true` does not promise a clean session: an edit made while the commit was
+   * in flight survives it and stays dirty. A caller that needs cleanliness must
+   * check `snapshot` rather than infer it from here.
    */
   save: () => Promise<boolean>
   discard: () => void
@@ -63,6 +67,15 @@ function dirtyIds(sections: readonly SectionDirtyState[]): Set<string> {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * Identifies a section's draft at a point in time. Both sides always come from
+ * the same `getPatch`, so key order matches; a reordering would read as
+ * "changed", which only skips a reset — it can never discard an edit.
+ */
+function patchSignature(patch: Partial<StorySettings>): string {
+  return JSON.stringify(patch)
 }
 
 function reportKeyCollision(
@@ -188,6 +201,10 @@ export function StorySettingsSaveSessionProvider({
       return true
     }
 
+    // What each section's draft looked like when its patch was read, so an
+    // edit made while the write was in flight isn't re-derived away after it.
+    const committed = new Map<string, string>()
+
     savingRef.current = true
     setSaving(true)
     try {
@@ -209,6 +226,7 @@ export function StorySettingsSaveSessionProvider({
           })
         }
         reportKeyCollision(owners, id, patch)
+        committed.set(id, patchSignature(patch))
         merged = { ...merged, ...patch }
       }
       await onCommit(merged)
@@ -224,7 +242,22 @@ export function StorySettingsSaveSessionProvider({
     // save failure, and each step is isolated so one failure can't strand the
     // rest. Sections re-derive their draft from the now-updated store, so the
     // session lands clean without each one tracking a save baseline.
-    resetSections(dirty)
+    const persisted = new Set<string>()
+    for (const [id, entry] of callbacksRef.current.entries()) {
+      const before = committed.get(id)
+      if (before === undefined) continue
+      try {
+        if (patchSignature(entry.current.getPatch()) === before) persisted.add(id)
+      } catch (error) {
+        // Treat an unreadable draft as changed: skipping a reset costs a stale
+        // save bar, resetting one the user has moved on from costs their edit.
+        logger.error('action_layer.story_settings_reset_check_failed', {
+          sectionId: id,
+          error: errorMessage(error),
+        })
+      }
+    }
+    resetSections(persisted)
     try {
       onSaved?.()
     } catch (error) {
@@ -232,10 +265,12 @@ export function StorySettingsSaveSessionProvider({
         error: errorMessage(error),
       })
     }
-    // Any save satisfies a waiting leave, not just the one the guard started:
-    // the back arrow stays live during a commit, so a leave can be requested
-    // after it, and the session is clean now either way.
-    settlePendingLeave()
+    // Any save satisfies a waiting leave, not just the one the guard started —
+    // the back arrow stays live during a commit. Only once the session is
+    // actually clean, though: an edit that landed mid-write is still unsaved,
+    // and proceeding would drop it.
+    const stillDirty = [...dirtyIds(sectionsRef.current)].some((id) => !persisted.has(id))
+    if (!stillDirty) settlePendingLeave()
     return true
   }, [onCommit, onSaved, onSaveFailed, resetSections, settlePendingLeave])
 
@@ -327,10 +362,13 @@ type SectionRegistration = {
    */
   dirtyFields: readonly string[]
   /**
-   * This section's contribution to the surface's single save. Read only at
-   * save time, so it may close over draft state freely. The provider skips
-   * sections whose `dirtyFields` is empty, so this never runs while clean —
-   * return this section's whole slice, unconditionally.
+   * This section's contribution to the surface's single save. Called only
+   * during a save, so it may close over draft state freely, but called
+   * **twice** per save — once to build the write, once after it lands to check
+   * whether the draft moved while it was in flight. Keep it free of side
+   * effects. The provider skips sections whose `dirtyFields` is empty, so this
+   * never runs while clean — return this section's whole slice,
+   * unconditionally.
    *
    * Sections must own disjoint **top-level** `StorySettings` keys. Every value
    * is replaced wholesale — nested objects and arrays included — so two
@@ -341,7 +379,8 @@ type SectionRegistration = {
   /**
    * Drop this section's local draft so it re-derives from the `settings` the
    * surface passes down. Fires on Discard, and after a save for each section
-   * that save committed.
+   * whose draft still matches what that save wrote — a section the user kept
+   * editing during the commit is left alone and stays dirty.
    *
    * Reading the `settings` prop here is correct: `updateStorySettings`
    * refreshes `storiesStore` inside the awaited commit, and React flushes that

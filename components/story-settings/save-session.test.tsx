@@ -386,6 +386,50 @@ describe('StorySettingsSaveSessionProvider — save', () => {
     expect(session.api().snapshot.dirtyFields).toContain('embedder')
   })
 
+  it('leaves a section the user kept editing during its own commit dirty', async () => {
+    // The section is dirty at save time, so it IS committed — and then edited
+    // again before the write lands. Resetting it would re-derive the draft back
+    // to the values just written and drop the newer edit.
+    const releases: (() => void)[] = []
+    const draft = { current: 3 }
+    const reset = vi.fn()
+    function CountSection() {
+      useStorySettingsSection({
+        id: 'authoring-aids',
+        tab: 'generation',
+        dirtyFields: ['suggestion count'],
+        getPatch: () => ({ suggestionCount: draft.current }),
+        reset,
+      })
+      return null
+    }
+
+    const session = mountSession({
+      children: <CountSection />,
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+
+    let inFlight: Promise<boolean> | undefined
+    await act(async () => {
+      inFlight = session.api().save()
+    })
+
+    draft.current = 5
+    const proceed = vi.fn()
+    act(() => session.api().requestLeave(proceed))
+
+    await act(async () => {
+      releases.forEach((release) => release())
+      await inFlight
+    })
+
+    expect(session.onCommit).toHaveBeenCalledExactlyOnceWith({ suggestionCount: 3 })
+    expect(reset).not.toHaveBeenCalled()
+    // The session is not clean, so a leave waiting on this save must not run.
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.api().pendingLeave).toBe(true)
+  })
+
   it('reports a committed write as saved even when a post-commit step throws', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestions'], {
       suggestionsEnabled: true,
