@@ -514,6 +514,86 @@ describe('StorySettingsSaveSessionProvider — leave guard', () => {
     expect(session.api().saving).toBe(false)
     expect(proceed).toHaveBeenCalledTimes(1)
   })
+
+  // The in-flight refusal below reads the same ref that gates save() re-entry,
+  // so a flag left raised would silently make every later leave inert.
+  it('accepts a save-and-leave after an earlier commit has settled', async () => {
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const session = mountSession({ children: sectionsOf(aids) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    const proceed = vi.fn()
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(2)
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+  })
+
+  // The dialog disables itself mid-commit, but window-close and other non-modal
+  // intercepts reach resolveLeave directly, so the refusal lives here too.
+  it('refuses a cancel that arrives while its own save is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+    await act(async () => {
+      session.api().resolveLeave('cancel')
+    })
+
+    expect(session.api().pendingLeave).toBe(true)
+
+    await act(async () => {
+      for (const release of releases) release()
+    })
+
+    // Refused, not queued: the save the user asked for still lands and leaves.
+    expect(proceed).toHaveBeenCalledTimes(1)
+    expect(session.api().pendingLeave).toBe(false)
+  })
+
+  it('refuses a discard that arrives while its own save is in flight', async () => {
+    const releases: (() => void)[] = []
+    const aids = makeSection('authoring-aids', 10, ['suggestions'], { suggestionsEnabled: true })
+    const session = mountSession({
+      children: sectionsOf(aids),
+      onCommit: vi.fn(() => new Promise<void>((resolve) => releases.push(resolve))),
+    })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+    await act(async () => {
+      session.api().resolveLeave('discard')
+    })
+
+    expect(aids.reset).not.toHaveBeenCalled()
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.api().pendingLeave).toBe(true)
+
+    await act(async () => {
+      for (const release of releases) release()
+    })
+
+    expect(aids.reset).toHaveBeenCalledTimes(1)
+    expect(proceed).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('useStorySettingsSection', () => {

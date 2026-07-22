@@ -175,6 +175,9 @@ export function StorySettingsSaveSessionProvider({
 
   const resolveLeave = useCallback(
     (outcome: 'save' | 'discard' | 'cancel') => {
+      // A commit in flight owns the outcome. The dialog disables itself, but
+      // window-close intercepts reach this directly and bypass that.
+      if (savingRef.current) return
       const proceed = pendingLeave
       if (proceed == null || outcome === 'cancel') {
         setPendingLeave(null)
