@@ -22,19 +22,10 @@ import { t } from '@/lib/i18n'
 import { rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
-// C7 seam: a consumer slice adds its tab here (if new), then renders its
-// section in the ternary below. Sections join the save session from inside
-// their own body via useStorySettingsSection.
-type StorySettingsTabId =
-  | 'about'
-  | 'generation'
-  | 'models'
-  | 'memory'
-  | 'translation'
-  | 'pack'
-  | 'calendar'
-  | 'advanced'
-
+// C7 seam: adding an id here registers a tab — the union derives from this
+// array, so a consumer slice adds its id (if new), lists it in `groups`, then
+// renders its section in the ternary below. Sections join the save session
+// from inside their own body via useStorySettingsSection.
 const STORY_SETTINGS_TAB_IDS = [
   'about',
   'generation',
@@ -44,7 +35,9 @@ const STORY_SETTINGS_TAB_IDS = [
   'pack',
   'calendar',
   'advanced',
-] as const satisfies readonly StorySettingsTabId[]
+] as const
+
+type StorySettingsTabId = (typeof STORY_SETTINGS_TAB_IDS)[number]
 
 const ctx = { db, runInTransaction }
 
