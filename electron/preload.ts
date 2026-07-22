@@ -6,6 +6,18 @@ import type { EmbedderBridge, EmbedderDownloadProgress } from './embedder/types'
 const api = {
   platform: process.platform,
   revealDbFile: (): Promise<void> => ipcRenderer.invoke('native:reveal-db-file'),
+  /** Arm/disarm the window-close prompt. Disarmed windows close untouched. */
+  setCloseGuard: (active: boolean): void => {
+    ipcRenderer.send('native:set-close-guard', active)
+  },
+  confirmClose: (): void => {
+    ipcRenderer.send('native:confirm-close')
+  },
+  onCloseRequested: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('native:close-requested', listener)
+    return () => ipcRenderer.removeListener('native:close-requested', listener)
+  },
 } as const
 
 contextBridge.exposeInMainWorld('native', api)

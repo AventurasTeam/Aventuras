@@ -101,6 +101,11 @@ function applyContentSecurityPolicy(): void {
   })
 }
 
+// Windows whose renderer holds unsaved work, and those that have already
+// answered the prompt and may close.
+const closeGuards = new Set<number>()
+const confirmedCloses = new Set<number>()
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -139,6 +144,20 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Fail-open: only a renderer that has armed the guard gets asked. A renderer
+  // that never armed it, or died holding it, closes normally.
+  win.on('close', (event) => {
+    if (!closeGuards.has(win.id) || confirmedCloses.has(win.id)) return
+    event.preventDefault()
+    win.webContents.send('native:close-requested')
+  })
+  win.on('closed', () => {
+    // Window ids are reused; a stale entry here would arm the guard on an
+    // unrelated future window.
+    closeGuards.delete(win.id)
+    confirmedCloses.delete(win.id)
+  })
+
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
     win.webContents.openDevTools({ mode: 'detach' })
@@ -172,6 +191,18 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('native:reveal-db-file', () => {
     shell.showItemInFolder(getDbFilePath())
+  })
+  ipcMain.on('native:set-close-guard', (event, active: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win == null) return
+    if (active) closeGuards.add(win.id)
+    else closeGuards.delete(win.id)
+  })
+  ipcMain.on('native:confirm-close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win == null) return
+    confirmedCloses.add(win.id)
+    win.close()
   })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),
