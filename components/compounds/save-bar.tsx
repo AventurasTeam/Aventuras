@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type SaveBarProps = {
@@ -83,7 +84,7 @@ export function SaveBar({
         <View className="h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
         <Text size="xs" numberOfLines={1} className="shrink">
           <Text size="xs" className="font-semibold text-fg-primary">
-            {count} unsaved change{count === 1 ? '' : 's'}
+            {t('saveBar.unsavedChanges', { count })}
           </Text>
           {fieldList != null ? (
             <Text size="xs" variant="secondary">
@@ -107,10 +108,13 @@ export function SaveBar({
 
       <View className="shrink-0 flex-row items-center gap-2">
         <Button variant="secondary" size="sm" onPress={onDiscard} disabled={saving}>
-          <Text>Discard</Text>
+          <Text>{t('saveBar.discard')}</Text>
         </Button>
         <Button variant="primary" size="sm" onPress={onSave} disabled={saving}>
-          <Text>Save{shortcutHint != null ? ` ${shortcutHint}` : ''}</Text>
+          <Text>
+            {t('saveBar.save')}
+            {shortcutHint != null ? ` ${shortcutHint}` : ''}
+          </Text>
         </Button>
       </View>
     </View>

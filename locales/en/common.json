@@ -43,6 +43,12 @@
     "noProviders": "No providers configured. Add one in App Settings → Providers.",
     "noMatch": "No models match \"{{query}}\"."
   },
+  "saveBar": {
+    "unsavedChanges_one": "{{count}} unsaved change",
+    "unsavedChanges_other": "{{count}} unsaved changes",
+    "discard": "Discard",
+    "save": "Save"
+  },
   "storyCard": {
     "genreNotSet": "Genre not set",
     "noDescription": "(no description yet)",
