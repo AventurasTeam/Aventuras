@@ -61,3 +61,157 @@ slice-planning gate forces its resolution before that slice is planned.
   spec doesn't model. Resolve when M7.1 plans the import flow; verify the
   native requirement rather than assuming symmetry. Surfaced by M3.1a
   device review (2026-07-21).
+- **Story settings has no unset affordance for optional keys.**
+  `updateStorySettings` ignores `undefined`-valued patch keys, so an
+  explicit `undefined` reads as "leave untouched" rather than "clear
+  this key". The three optional fields in
+  [`stories.settings`](../data-model.md#story-settings-shape) —
+  `embedding_swap_target`, `embedding_provider_id`, `effectiveDim` —
+  therefore have no clear path through the action. Nothing reads or
+  writes them today, so nothing regresses; but
+  [Slice 3.1b](./milestones/03-memory-floor/slices/01b-embedder-lifecycle.md)
+  clears `embedding_swap_target` atomically at its swap phase-2 commit
+  and will need an explicit affordance (a `null` sentinel, or a
+  dedicated clear action). Nullable fields are unaffected — the filter
+  drops only `undefined`, so `null` still writes. Surfaced by M3.11
+  Task 1 (2026-07-22).
+- **`compositeText` space-joins fields, diverging silently from its
+  spec.** `lib/db/embeddings/source-hash.ts:104` joins embedded fields
+  with a space. `.impl-plans/M03-01a-embedder-core.md:187` specified
+  `'\0'` and gave the rationale ("unambiguous separator"), but that
+  plan file carries literal NUL bytes at five sites, and its test at
+  line 179 is _named_ "single-space separator" while its assertions
+  expect NUL — the plan contradicted itself and the space won.
+  Implementation and test moved together, so the suite is green and no
+  gate can see the divergence. The obvious fear does **not**
+  materialize: `lib/embedder/service.ts:120-142` hashes the very
+  composite it embeds, so two field partitions that collide on the
+  hash also embed to an identical vector, and keeping that vector is
+  correct rather than stale. What remains is that the separator is
+  load-bearing for the _embedder_ — `['Kara Vex', 'a scout']` and
+  `['Kara', 'Vex a scout']` are one string to the model — and nothing
+  records whether that is intended. A NUL inside provider JSON is a
+  fair reason to prefer the space; if field boundaries should be
+  visible, the clean split is to hash a NUL-joined composite and embed
+  a space-joined one, which also decouples the two uses. Needs the
+  M3.1a owner. Surfaced by M3.11 Task 4 review (2026-07-22).
+- **Story Settings sections must own disjoint top-level settings
+  keys.** The save session merges each section's patch shallowly
+  (`{ ...merged, ...patch }`) and commits once, and
+  `updateStorySettings` deliberately replaces nested objects rather
+  than merging them (pinned by test). So two sections contributing
+  different parts of the SAME nested object — `translation`, `models`,
+  `retrievalBudgets`, `packVariables` — silently clobber one another,
+  and the winner is decided by `Map` insertion order, i.e. section
+  mount order, i.e. whichever tab the user opened first.
+  Non-deterministic data loss with no delta to recover it. No
+  collision exists in M3 (3.7's section owns only top-level keys), and
+  3.11 adds a `__DEV__` collision warning so the next one is loud
+  rather than silent. But the rule needs a real home before M7.2,
+  where a Translation tab section plausibly splits
+  `translation.enabled` from `translation.granularToggles`. Options:
+  enforce one-section-per-top-level-key at registration, give sections
+  a declared key-ownership manifest, or introduce a merge strategy at
+  the aggregation layer that is consistent with the action's
+  shallow-replace contract. Surfaced by M3.11 Task 5 (2026-07-22).
+- **The unsaved-changes guard lives in a single-domain folder.**
+  [`save-sessions.md → Navigate-away guard`](../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  specifies the intercept as **global** — "same modal, same copy, same
+  actions across every surface that uses the save-session pattern" —
+  but M3.11 shipped `UnsavedChangesDialog` under
+  `components/story-settings/`, a single-domain folder, with its copy
+  in the `storySettings` i18n namespace. World, Plot, App Settings,
+  the Vault calendar editor, and the chapter-timeline cards all
+  inherit the same pattern and would have to reach across domains or
+  duplicate it. Taxonomy-correct home is `components/compounds/`, with
+  the four `save.unsaved*` keys moving to `common`. Deliberately
+  deferred in M3.11 rather than churning the route's import path for a
+  surface with no second consumer yet; the move is a `git mv` plus a
+  key relocation whenever the second guard lands. Surfaced by M3.11
+  Task 6 (2026-07-22).
+- **Story Settings section `id` has no uniqueness guard, and same-tab
+  siblings tie on `order`.** `save-session-state.ts` sorts sections by
+  `order`, tie-breaking on `id.localeCompare`. `order` now derives
+  from the route's tab map (`storySettingsTabOrder`), so a tab
+  insertion can no longer desync it — but two sections sharing a tab
+  still tie, and the tie-break is alphabetical by internal slug,
+  unrelated to on-screen position, so the save bar lists same-tab
+  siblings in the wrong order with nothing looking broken. Separately,
+  `id` uniqueness is an unstated invariant, and the two helpers
+  disagree about duplicates in a way that hides the symptom:
+  `upsertSection` matches with `findIndex`, so a second registrant
+  overwrites the first's slot rather than both surviving, while
+  `removeSection` filters _every_ match, so one section unmounting
+  takes its twin's dirty state with it. The result presents as "the
+  save bar forgot my edits", not as a visible duplicate. Suggested:
+  warn on `id` collision in `__DEV__`, and give same-tab sections an
+  explicit intra-tab rank. Surfaced by M3.11 Task 4 review
+  (2026-07-22).
+- **`save-sessions.md` overstates delta participation.**
+  [`save-sessions.md → Session semantics`](../ui/patterns/save-sessions.md#session-semantics)
+  says "Save commits all session changes as deltas under a single
+  shared `action_id`. CTRL-Z reverses the entire session as one step."
+  That holds for the World / Plot detail panes it was written from,
+  but not for either settings surface: `stories` and `app_settings`
+  are both absent from the twelve tables
+  [`deltas.target_table`](../data-model.md#diagram) enumerates, so
+  settings saves are direct writes with no delta and no CTRL-Z. The
+  sentence needs a scope qualifier. Cross-cutting (App Settings is
+  equally affected), so not 3.11's to own. Surfaced by M3.11 planning
+  (2026-07-22).
+- **The save-session window-close intercept is unimplemented.**
+  [`save-sessions.md → Navigate-away guard`](../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  lists "window-close intent — electron window-close or the web
+  `beforeunload`" as a required intercept category, and M3.11's save
+  session anticipates it (`resolveLeave` is documented as reachable
+  directly, since a `beforeunload` handler cannot route through a
+  React modal). Nothing registers one. Inert while Story Settings has
+  zero registered sections, so it cannot be dirty; it goes live on the
+  primary platform the moment
+  [Slice 3.7](./milestones/03-memory-floor/slices/07-suggestions.md)
+  lands its authoring-aids section. Deliberately out of M3.11's
+  scope — the intercept is cross-cutting infra no surface wires today
+  and would pull a UI slice into `electron/`. Surfaced by M3.11 Task 8
+  review (2026-07-22).
+- **`AppActionsMenu`'s Ctrl-K is not focus-gated.** The reader and
+  Story Settings both mount `AppActionsMenu`, and expo-router's Stack
+  keeps the pushed-under screen alive — so with Story Settings open
+  there are two live `capture: true` Ctrl-K listeners, the reader's
+  included. Observed behaviour is benign today (only the focused
+  screen's menu paints, and one Escape closes everything), but that is
+  an emergent property of how the blurred screen is frozen and
+  portaled, not something the code guarantees. Same family as the
+  Ctrl-Z hazard M3.11 Task 9 closed; `SaveBar` registers an equally
+  ungated Ctrl-S, inert only because no product surface mounts two
+  save bars at once yet. Not a one-liner: `useGlobalHotkey` is called
+  inside a shared compound that Storybook mounts with no navigator,
+  and `useIsFocused` throws outside one — so focus state has to be
+  threaded down as a prop from each route, or the compound needs a
+  navigator-optional focus hook. Surfaced by M3.11 Task 9
+  (2026-07-22).
+- **Storybook vitest project applies no NativeWind classNames.**
+  `storybookTest` in `vitest.config.ts` does not carry
+  `framework.options.pluginReactOptions.jsxImportSource: 'nativewind'`
+  into the vitest project, so components render with `style=null` and
+  only react-native-web's own classes — no `rounded-md`, no `hidden`,
+  no theme tokens. The CSS rules are present in the loaded
+  stylesheets; nothing carries the classes. Consequence: **any story
+  assertion about styling passes vacuously under `pnpm test:run`**,
+  and the repo currently has zero style-level test coverage in CI. The
+  Storybook dev server is unaffected. Found while trying to assert
+  that an inactive tab panel is hidden — `toBeVisible()` and
+  `checkVisibility()` both passed against a panel that is
+  `display: none` in the real app. Any future visual-regression or
+  style assertion needs this fixed first. Surfaced by M3.11 Task 7
+  (2026-07-22).
+- **`accessibilityState={{ selected }}` emits no `aria-selected` on
+  web.** `app/settings/index.tsx:119` sets `accessibilityRole="tab"`
+  with `accessibilityState={{ selected }}`, but react-native-web does
+  not translate that into an `aria-selected` attribute — verified, the
+  attribute is `null`. A `role="tab"` without `aria-selected` is an
+  axe `aria-required-attr` violation, and a screen reader cannot tell
+  which tab is active. M3.11's Story Settings rail was lifted from
+  this JSX and adds `aria-selected={selected}` alongside (a valid RN
+  prop, so it is correct on native too). App Settings still ships the
+  bug and wants the same one-line fix. Surfaced by M3.11 Task 7
+  (2026-07-22).
