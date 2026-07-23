@@ -2,6 +2,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
+import { remapSeedIds } from './seed-ids'
 import {
   appearanceSchema,
   modelProfileSchema,
@@ -543,6 +544,15 @@ const heroEntities: NewEntity[] = [
 ]
 
 // Canonical order requires aId < bId; the chosen char IDs already sort kael<mira<vorne.
+// The char_rel_canonical_order CHECK stores each pair with a_id < b_id. Rows
+// are authored in mnemonic order, but remapped uuids sort differently, so
+// re-canonicalize after the remap — the POV columns (kind / inverseKind) swap
+// with the ids so the a→b / b→a semantics survive the flip.
+function canonicalizeRelationship(r: NewCharacterRelationship): NewCharacterRelationship {
+  if (r.aId <= r.bId) return r
+  return { ...r, aId: r.bId, bId: r.aId, kind: r.inverseKind, inverseKind: r.kind }
+}
+
 const heroRelationships: NewCharacterRelationship[] = [
   {
     id: 'rel_kael_mira',
@@ -1590,7 +1600,7 @@ export function buildSeedSteps(): SeedStep[] {
   // Order encodes FK dependencies: parents before children, assets before
   // entry_assets. The runner inserts in this order with foreign_keys ON, so a
   // broken reference fails the seed loudly instead of landing silently.
-  return [
+  const steps: SeedStep[] = [
     step('vault_calendars', vaultCalendars, vaultCalendarRows),
     step('assets', assets, assetRows),
     step('stories', stories, [heroStory, rich.story, ...filler.stories]),
@@ -1611,4 +1621,21 @@ export function buildSeedSteps(): SeedStep[] {
     step('pipeline_runs', pipelineRuns, pipelineRunRows),
     step('app_settings', appSettings, [appSettingsRow]),
   ]
+
+  // Authored ids are readable mnemonics (char_kael); rewrite them to canonical
+  // prefix_<uuid> so the substitution layer round-trips and a turn can run on
+  // seeded data. Deterministic, so the fixture stays byte-stable across builds.
+  // See docs/testing.md → Fixture + seed contract.
+  return steps.map((s) => {
+    const rows = s.rows.map((row) => remapSeedIds(row))
+    // Relationships carry an a_id < b_id invariant that the uuid remap can
+    // invert; re-canonicalize once the ids are final.
+    if (s.name === 'character_relationships') {
+      return {
+        ...s,
+        rows: rows.map((r) => canonicalizeRelationship(r as NewCharacterRelationship)),
+      }
+    }
+    return { ...s, rows }
+  })
 }
