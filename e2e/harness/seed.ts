@@ -38,3 +38,28 @@ export function setProviderEndpoint(dbPath: string, url: string): void {
     db.close()
   }
 }
+
+// Clear taggedBlockReliable on every cached model so piggyback can't ride
+// in-band — forcing the per-turn fallback classifier (a separate structured
+// call) to fire. Runs before launch.
+export function disablePiggybackCapability(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as {
+      cachedModels?: { capabilities?: Record<string, unknown> }[]
+    }[]
+    for (const provider of providers) {
+      for (const model of provider.cachedModels ?? []) {
+        if (model.capabilities) delete model.capabilities.taggedBlockReliable
+      }
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
+}

@@ -1,24 +1,50 @@
 import { createServer, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
-// A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
-// (POST …/chat/completions) but a turn fans out into several calls with
-// different shapes — the streaming narrative, and later the non-streaming
-// structured classifier. The mock routes on the request itself: `stream: true`
-// → an SSE prose stream; otherwise → a JSON chat completion. Responses are
-// canned and overridable per test so assertions stay deterministic. Exercises
-// the real transport (lib/ai/transport), unlike the __DEV__-gated stub
-// provider. See docs/testing.md → Mock LLM.
+import { z } from 'zod'
 
-export type MockRequest = { body: Record<string, unknown>; streamed: boolean }
+import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
+import { fallbackClassifierSchema } from '@/lib/pipeline'
+
+// A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
+// (POST …/chat/completions) but a turn fans out into calls with different
+// shapes. The mock routes on the request:
+//   - stream: true          → an SSE prose stream (the narrative call).
+//   - otherwise (structured) → a JSON chat completion, whose body is chosen by
+//     matching the exact TypeScript block the app injects into the prompt
+//     (schemaToTypeScriptBlock over the agent's zod schema). Each structured
+//     agent is one STRUCTURED_AGENTS entry; adding one is mechanical and the
+//     match can't drift because it reuses the app's own renderer.
+// Exercises the real transport (lib/ai/transport), unlike the __DEV__-gated
+// stub provider. See docs/testing.md → Mock LLM.
+
+export type MockRequest = {
+  body: Record<string, unknown>
+  streamed: boolean
+  /** For structured calls, which agent's schema the prompt matched (or null). */
+  agent: string | null
+}
+
+// One entry per structured agent. `block` is the exact string the app renders
+// into the prompt for this schema; `example` is a schema-valid default reply.
+type StructuredAgent = { name: string; block: string; example: unknown }
+
+const STRUCTURED_AGENTS: StructuredAgent[] = [
+  {
+    name: 'per-turn-classifier',
+    block: schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
+    // No-op: empty scene, no time change — parses and applies cleanly.
+    example: { sceneEntities: [], worldTimeDelta: 0 },
+  },
+]
 
 export type MockLlm = {
   /** baseURL to seed as the provider endpoint (already includes /v1). */
   url: string
   /** Set the prose the next streaming (narrative) call returns. */
   setNarrative: (content: string) => void
-  /** Set the JSON object the next non-streaming (structured) call returns. */
-  setStructured: (value: unknown) => void
+  /** Override a structured agent's reply (defaults to its schema-valid example). */
+  setStructured: (agentName: string, value: unknown) => void
   /** Every completion request received, in order. */
   requests: MockRequest[]
   close: () => Promise<void>
@@ -60,6 +86,21 @@ function structuredCompletion(value: unknown): string {
   })
 }
 
+// The injected schema block lives in the message content (the app's auto path
+// renders it into the prompt); flatten every message to one searchable string.
+function promptText(body: Record<string, unknown>): string {
+  const messages = Array.isArray(body.messages) ? body.messages : []
+  return messages
+    .map((m) => {
+      const content = (m as { content?: unknown }).content
+      if (typeof content === 'string') return content
+      if (Array.isArray(content))
+        return content.map((p) => (p as { text?: string }).text ?? '').join('\n')
+      return ''
+    })
+    .join('\n')
+}
+
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     let data = ''
@@ -71,9 +112,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 export async function startMockLlm(): Promise<MockLlm> {
   let narrative = DEFAULT_NARRATIVE
-  // A no-op classifier result (satisfies the fallback/periodic classifier
-  // schemas: empty scene, no time change); overridable per test.
-  let structured: unknown = { sceneEntities: [], worldTimeDelta: 0 }
+  const overrides = new Map<string, unknown>()
   const requests: MockRequest[] = []
 
   // The renderer fetches cross-origin (its own origin → this server), which
@@ -98,9 +137,9 @@ export async function startMockLlm(): Promise<MockLlm> {
       const raw = await readBody(req)
       const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>
       const streamed = body.stream === true
-      requests.push({ body, streamed })
 
       if (streamed) {
+        requests.push({ body, streamed, agent: null })
         res.writeHead(200, {
           ...cors,
           'content-type': 'text/event-stream',
@@ -108,10 +147,15 @@ export async function startMockLlm(): Promise<MockLlm> {
           connection: 'keep-alive',
         })
         res.end(narrativeSse(narrative))
-      } else {
-        res.writeHead(200, { ...cors, 'content-type': 'application/json' })
-        res.end(structuredCompletion(structured))
+        return
       }
+
+      const text = promptText(body)
+      const agent = STRUCTURED_AGENTS.find((a) => text.includes(a.block)) ?? null
+      requests.push({ body, streamed, agent: agent?.name ?? null })
+      const value = agent ? (overrides.get(agent.name) ?? agent.example) : {}
+      res.writeHead(200, { ...cors, 'content-type': 'application/json' })
+      res.end(structuredCompletion(value))
     })()
   })
 
@@ -123,8 +167,8 @@ export async function startMockLlm(): Promise<MockLlm> {
     setNarrative: (content) => {
       narrative = content
     },
-    setStructured: (value) => {
-      structured = value
+    setStructured: (agentName, value) => {
+      overrides.set(agentName, value)
     },
     requests,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),

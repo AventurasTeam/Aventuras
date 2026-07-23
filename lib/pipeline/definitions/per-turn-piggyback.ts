@@ -34,7 +34,7 @@ export function shouldFallbackFire(outcome?: PiggybackOutcome): boolean {
   return !outcome.attempted || !outcome.succeeded
 }
 
-const fallbackClassifierSchema = z.object({
+export const fallbackClassifierSchema = z.object({
   sceneEntities: z.array(z.string()),
   currentLocation: z.string().optional(),
   worldTimeDelta: z.number(),
