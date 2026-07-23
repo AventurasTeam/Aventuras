@@ -135,6 +135,14 @@ jobs:
       - name: Install system libraries for Electron
         run: pnpm exec playwright install-deps chromium
 
+      # Fixture embedder model (~24 MB from Hugging Face); the harness downloads
+      # it on a cache miss. Keyed on the catalog so a model/revision bump busts.
+      - name: Restore embedder model cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/aventuras-e2e
+          key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
+
       # Electron has no true headless mode on Linux — run under a virtual
       # display. The harness seeds a throwaway userData per run and launches the
       # packaged binary against it.
