@@ -299,9 +299,9 @@ every PR alongside `check` and `test`:
    builder downloads are cached, keyed on the lockfile.
 4. `playwright install-deps chromium` — Electron's shared libraries
    (no browser download).
-5. `xvfb-run -a pnpm test:e2e` with `AVENTURAS_E2E_MODE=packaged` —
-   Electron has no true headless mode on Linux, so it runs under a
-   virtual display. The harness seeds a throwaway `userData` per run
+5. `xvfb-run -a pnpm test:e2e:packaged` (the `packaged` Playwright
+   project) — Electron has no true headless mode on Linux, so it runs
+   under a virtual display. The harness seeds a throwaway `userData` per run
    and launches the packaged binary against it.
 
 The embedder model cache (for the retrieval/turn tiers) is added when

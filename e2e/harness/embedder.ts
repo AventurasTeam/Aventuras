@@ -36,12 +36,9 @@ function sanitizeModelDirName(id: string): string {
   return id.toLowerCase().replaceAll('/', '--')
 }
 
-// Persistent, CI-cacheable cache outside any single run's userData. Overridable
-// so a dev can point at an already-installed model and skip the download.
+// Persistent, CI-cacheable cache outside any single run's userData.
 function cacheRoot(): string {
-  return (
-    process.env.AVENTURAS_E2E_MODEL_DIR ?? join(homedir(), '.cache', 'aventuras-e2e', 'embedders')
-  )
+  return join(homedir(), '.cache', 'aventuras-e2e', 'embedders')
 }
 
 function sha256(path: string): string {

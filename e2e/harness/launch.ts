@@ -3,23 +3,26 @@ import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { extname, join, normalize } from 'node:path'
 
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, test, type ElectronApplication, type Page } from '@playwright/test'
 
 const REPO_ROOT = join(__dirname, '..', '..')
 const DIST = join(REPO_ROOT, 'dist')
 
-// Launch mode (docs/testing.md → Launch modes):
+// Launch mode (docs/testing.md → Launch modes), selected by the Playwright
+// project (playwright.config.ts `projects`), not an env var:
 //   dev      — unpackaged main + renderer from a static dist. Fast, no
 //              packaging step; the default for local authoring.
 //   packaged — the electron-builder --dir binary loading app://bundle. The
 //              CI target of record: exercises the app:// protocol, asar, the
 //              unpacked native modules, and extraResources migrations.
 type Mode = 'dev' | 'packaged'
-const MODE = (process.env.AVENTURAS_E2E_MODE as Mode | undefined) ?? 'dev'
 
-// Linux electron-builder --dir output. Overridable for other platforms / CI.
-const PACKAGED_APP =
-  process.env.AVENTURAS_E2E_APP_PATH ?? join(REPO_ROOT, 'release', 'linux-unpacked', 'aventuras')
+function currentMode(): Mode {
+  return test.info().project.name === 'packaged' ? 'packaged' : 'dev'
+}
+
+// Linux electron-builder --dir output.
+const PACKAGED_APP = join(REPO_ROOT, 'release', 'linux-unpacked', 'aventuras')
 
 const APP_SCHEME_ORIGIN = 'app://'
 
@@ -92,7 +95,7 @@ export async function launchApp(opts: {
   const stopServer = (server: Server) =>
     new Promise<void>((resolve) => server.close(() => resolve()))
 
-  if (MODE === 'packaged') {
+  if (currentMode() === 'packaged') {
     let app: ElectronApplication | undefined
     try {
       app = await electron.launch({

@@ -144,9 +144,7 @@ jobs:
           key: e2e-embedder-${{ hashFiles('lib/embedder/catalog-data.json') }}
 
       # Electron has no true headless mode on Linux — run under a virtual
-      # display. The harness seeds a throwaway userData per run and launches the
-      # packaged binary against it.
+      # display. The packaged project launches the built binary; the harness
+      # seeds a throwaway userData per run.
       - name: Run E2E (packaged, headless via xvfb)
-        run: xvfb-run -a pnpm test:e2e
-        env:
-          AVENTURAS_E2E_MODE: packaged
+        run: xvfb-run -a pnpm test:e2e:packaged
