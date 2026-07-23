@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:e2e": "playwright test",
     "coverage:lib": "vitest run --project unit --coverage",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:start": "electron electron/dist/main.js",
@@ -130,6 +131,7 @@
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.1.2",
+    "@playwright/test": "1.59.1",
     "@storybook/addon-a11y": "^10.3.5",
     "@storybook/addon-docs": "^10.3.5",
     "@storybook/addon-mcp": "^0.6.0",

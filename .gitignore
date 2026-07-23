@@ -49,6 +49,12 @@ app-example
 /electron/dist
 /release
 
+# Playwright (E2E)
+/test-results
+/playwright-report
+/blob-report
+/.playwright
+
 # IDE stuff
 .vscode/
 .idea/
