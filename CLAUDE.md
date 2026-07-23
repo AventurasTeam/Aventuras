@@ -19,7 +19,10 @@ vars, no BaaS.
   translation, retrieval invariants.
 - [`docs/code-conventions.md`](./docs/code-conventions.md) — code
   conventions: module structure, state placement, action layer,
-  component taxonomy, i18n, testing, forms, pnpm.
+  component taxonomy, i18n, unit/component testing, forms, pnpm.
+- [`docs/testing.md`](./docs/testing.md) — the E2E layer: Playwright
+  - Electron harness, fixture/seed contract, mock LLM, selector
+    strategy; when a slice warrants an E2E test.
 - [`docs/generation-pipeline.md`](./docs/generation-pipeline.md) —
   pipeline framework: phases, orchestrator, action layer, event bus,
   transactions, concurrency model.
