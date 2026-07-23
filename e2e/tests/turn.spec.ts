@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
-import { createSeededUserDataDir, setProviderEndpoint } from '../harness/seed'
+import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { home } from '../locators/home'
 
 async function dbRows(page: Page, sql: string, params: unknown[] = []): Promise<unknown[][]> {
@@ -27,18 +27,21 @@ const REPLY = 'E2E-TURN-MARKER — the blade sings and the rain leans in.'
 test.describe('reader turn against the mock LLM', () => {
   let app: LaunchedApp
   let mock: MockLlm
+  let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    const { userDataDir, dbPath } = createSeededUserDataDir()
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
     mock = await startMockLlm()
     mock.setNarrative(REPLY)
-    setProviderEndpoint(dbPath, mock.url)
+    setProviderEndpoint(seeded.dbPath, mock.url)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
   test.afterAll(async () => {
     await app?.close()
     await mock?.close()
+    removeUserDataDir(userDataDir)
   })
 
   test('submits a user action and commits the mock AI reply on the seeded story', async () => {

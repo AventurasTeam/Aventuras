@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -48,20 +48,40 @@ function sha256(path: string): string {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
 }
 
+// The marker holds the catalog revision, written last (after every file is
+// hash-verified). A cache is trustworthy only if the marker records the current
+// revision AND every expected file is still present — otherwise a catalog bump
+// or a partial/corrupted cache could be reused, passing the test against a stale
+// model. Anything else is a miss.
+const MARKER = '.e2e-complete'
+
+function cacheIsValid(dir: string, model: CatalogModel): boolean {
+  const marker = join(dir, MARKER)
+  if (!existsSync(marker)) return false
+  if (readFileSync(marker, 'utf8').trim() !== model.huggingfaceRevision) return false
+  return Object.keys(model.files).every((name) => existsSync(join(dir, name)))
+}
+
+// Per-file cap so a stalled Hugging Face connection fails cleanly instead of
+// hanging the run to its outer timeout.
+const DOWNLOAD_TIMEOUT_MS = 60_000
+
 /** Idempotently download + verify the default model into the cache. */
 export async function ensureEmbedderModel(): Promise<{ modelId: string; dim: number }> {
   const model = defaultModel()
-  const dirName = sanitizeModelDirName(model.id)
-  const dir = join(cacheRoot(), dirName)
-  const marker = join(dir, '.e2e-complete')
+  const dir = join(cacheRoot(), sanitizeModelDirName(model.id))
 
-  if (existsSync(marker)) return { modelId: model.id, dim: model.dim }
+  if (cacheIsValid(dir, model)) return { modelId: model.id, dim: model.dim }
 
+  // Rebuild from scratch: a stale-revision or partial cache must not survive.
+  rmSync(dir, { recursive: true, force: true })
   mkdirSync(dir, { recursive: true })
   const base = `https://huggingface.co/${model.id}/resolve/${model.huggingfaceRevision}`
   for (const [onDiskName, file] of Object.entries(model.files)) {
     const dest = join(dir, onDiskName)
-    const res = await fetch(`${base}/${file.repoPath}`)
+    const res = await fetch(`${base}/${file.repoPath}`, {
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`download ${file.repoPath}: HTTP ${res.status}`)
     await writeFile(dest, Buffer.from(await res.arrayBuffer()))
     const actual = sha256(dest)
@@ -71,7 +91,8 @@ export async function ensureEmbedderModel(): Promise<{ modelId: string; dim: num
   }
   // listInstalled requires meta.json alongside model.onnx.
   writeFileSync(join(dir, 'meta.json'), JSON.stringify({ id: model.id, installedAt: 0 }))
-  writeFileSync(marker, '')
+  // Marker last, stamped with the revision the cache now holds.
+  writeFileSync(join(dir, MARKER), model.huggingfaceRevision)
   return { modelId: model.id, dim: model.dim }
 }
 

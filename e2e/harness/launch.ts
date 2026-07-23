@@ -89,39 +89,67 @@ export async function launchApp(opts: {
   const cleanupUserData = async () => {
     if (opts.cleanupUserData) await rm(opts.userDataDir, { recursive: true, force: true })
   }
+  const stopServer = (server: Server) =>
+    new Promise<void>((resolve) => server.close(() => resolve()))
 
   if (MODE === 'packaged') {
-    const app = await electron.launch({
-      executablePath: PACKAGED_APP,
-      args: [`--user-data-dir=${opts.userDataDir}`],
-      timeout: 60_000,
-    })
-    const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
-    return {
-      app,
-      window,
-      close: async () => {
-        await app.close()
-        await cleanupUserData()
-      },
+    let app: ElectronApplication | undefined
+    try {
+      app = await electron.launch({
+        executablePath: PACKAGED_APP,
+        args: [`--user-data-dir=${opts.userDataDir}`],
+        timeout: 60_000,
+      })
+      const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
+      const launched = app
+      return {
+        app: launched,
+        window,
+        // finally so a failing app.close() still cleans up the temp dir.
+        close: async () => {
+          try {
+            await launched.close()
+          } finally {
+            await cleanupUserData()
+          }
+        },
+      }
+    } catch (err) {
+      await app?.close().catch(() => {})
+      await cleanupUserData()
+      throw err
     }
   }
 
   const { server, origin } = await serveDist()
-  const app = await electron.launch({
-    args: ['electron/dist/main.js', `--user-data-dir=${opts.userDataDir}`],
-    cwd: REPO_ROOT,
-    env: { ...process.env, EXPO_WEB_URL: origin },
-    timeout: 60_000,
-  })
-  const window = await selectAppWindow(app, origin)
-  return {
-    app,
-    window,
-    close: async () => {
-      await app.close()
-      await new Promise<void>((resolve) => server.close(() => resolve()))
-      await cleanupUserData()
-    },
+  let app: ElectronApplication | undefined
+  try {
+    app = await electron.launch({
+      args: ['electron/dist/main.js', `--user-data-dir=${opts.userDataDir}`],
+      cwd: REPO_ROOT,
+      env: { ...process.env, EXPO_WEB_URL: origin },
+      timeout: 60_000,
+    })
+    const window = await selectAppWindow(app, origin)
+    const launched = app
+    return {
+      app: launched,
+      window,
+      // Each step runs regardless of an earlier failure — a throwing
+      // app.close() must not leave the server holding the worker open.
+      close: async () => {
+        try {
+          await launched.close()
+        } finally {
+          await stopServer(server)
+          await cleanupUserData()
+        }
+      },
+    }
+  } catch (err) {
+    await app?.close().catch(() => {})
+    await stopServer(server)
+    await cleanupUserData()
+    throw err
   }
 }

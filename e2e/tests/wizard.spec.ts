@@ -3,7 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { createAdventureStory } from '../flows/create-story'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { createSeededUserDataDir } from '../harness/seed'
+import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
 import { wizard } from '../locators/wizard'
 
@@ -28,6 +28,7 @@ async function dbRows(page: Page, sql: string, params: unknown[] = []): Promise<
 
 test.describe('create-story wizard', () => {
   let app: LaunchedApp
+  let userDataDir: string | undefined
   const STORY = {
     lead: 'Wren Calloway',
     title: 'The Salt Road',
@@ -36,13 +37,14 @@ test.describe('create-story wizard', () => {
 
   test.beforeAll(async () => {
     test.setTimeout(180_000)
-    const { userDataDir } = createSeededUserDataDir()
+    ;({ userDataDir } = createSeededUserDataDir())
     await installEmbedderModel(userDataDir)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
   test.afterAll(async () => {
     await app?.close()
+    removeUserDataDir(userDataDir)
   })
 
   test('creates a story and embeds its lead entity through the real pipeline', async () => {

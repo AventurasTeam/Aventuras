@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 
 import { FixtureDb } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { createSeededUserDataDir } from '../harness/seed'
+import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
 
 // Spike: proves the harness end-to-end — seed a temp userData, launch the real
@@ -24,6 +24,7 @@ test.describe('seeded home screen', () => {
   test.afterAll(async () => {
     db?.close()
     await app?.close()
+    removeUserDataDir(seededUserDataDir)
   })
 
   test('renders the seeded stories that exist in the DB', async () => {

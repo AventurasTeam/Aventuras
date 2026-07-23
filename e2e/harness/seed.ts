@@ -1,10 +1,17 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 
 const REPO_ROOT = join(__dirname, '..', '..')
+
+// Remove a seeded temp dir; safe to call more than once (launchApp also removes
+// it on close). Specs call it in afterAll so a setup failure between seed and
+// launch doesn't orphan the dir.
+export function removeUserDataDir(dir: string | undefined): void {
+  if (dir) rmSync(dir, { recursive: true, force: true })
+}
 
 // Build a throwaway Electron userData dir seeded with the dev fixture. The DB
 // lands at <dir>/aventuras.db — exactly where getDbFilePath() resolves under
@@ -15,7 +22,13 @@ const REPO_ROOT = join(__dirname, '..', '..')
 export function createSeededUserDataDir(): { userDataDir: string; dbPath: string } {
   const userDataDir = mkdtempSync(join(tmpdir(), 'aventuras-e2e-'))
   const dbPath = join(userDataDir, 'aventuras.db')
-  execFileSync('pnpm', ['db:seed', dbPath], { cwd: REPO_ROOT, stdio: 'pipe' })
+  try {
+    execFileSync('pnpm', ['db:seed', dbPath], { cwd: REPO_ROOT, stdio: 'pipe' })
+  } catch (err) {
+    // Don't orphan the dir if seeding fails after mkdtemp.
+    removeUserDataDir(userDataDir)
+    throw err
+  }
   return { userDataDir, dbPath }
 }
 

@@ -6,6 +6,7 @@ import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   disablePiggybackCapability,
+  removeUserDataDir,
   setProviderEndpoint,
 } from '../harness/seed'
 import { home } from '../locators/home'
@@ -32,19 +33,22 @@ async function dbRows(page: Page, sql: string, params: unknown[] = []): Promise<
 test.describe('turn fanning out to the fallback classifier', () => {
   let app: LaunchedApp
   let mock: MockLlm
+  let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    const { userDataDir, dbPath } = createSeededUserDataDir()
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
     mock = await startMockLlm()
     mock.setNarrative('E2E-CLASSIFIER-TURN the courier moves.')
-    setProviderEndpoint(dbPath, mock.url)
-    disablePiggybackCapability(dbPath)
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    disablePiggybackCapability(seeded.dbPath)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
   test.afterAll(async () => {
     await app?.close()
     await mock?.close()
+    removeUserDataDir(userDataDir)
   })
 
   test('routes the narrative to the SSE stream and the classifier to the JSON path', async () => {

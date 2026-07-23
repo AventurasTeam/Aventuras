@@ -6,6 +6,7 @@ import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   disablePiggybackCapability,
+  removeUserDataDir,
   setProfileStructuredOutput,
   setProviderEndpoint,
 } from '../harness/seed'
@@ -21,20 +22,23 @@ import { home } from '../locators/home'
 test.describe('force-on structured output', () => {
   let app: LaunchedApp
   let mock: MockLlm
+  let userDataDir: string | undefined
 
   test.beforeAll(async () => {
-    const { userDataDir, dbPath } = createSeededUserDataDir()
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
     mock = await startMockLlm()
     mock.setNarrative('E2E-FORCEON the courier waits.')
-    setProviderEndpoint(dbPath, mock.url)
-    disablePiggybackCapability(dbPath) // force the structured classifier call
-    setProfileStructuredOutput(dbPath, 'prof_classifier', 'force-on')
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    disablePiggybackCapability(seeded.dbPath) // force the structured classifier call
+    setProfileStructuredOutput(seeded.dbPath, 'prof_classifier', 'force-on')
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
 
   test.afterAll(async () => {
     await app?.close()
     await mock?.close()
+    removeUserDataDir(userDataDir)
   })
 
   test('engages native response_format and skips the prompt-injected schema', async () => {
