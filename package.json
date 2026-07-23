@@ -194,7 +194,9 @@
     ],
     "asarUnpack": [
       "**/node_modules/sqlite-vec-*/**",
-      "**/node_modules/onnxruntime-node/**"
+      "**/node_modules/onnxruntime-node/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**"
     ],
     "extraResources": [
       {
