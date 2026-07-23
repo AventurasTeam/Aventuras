@@ -159,13 +159,12 @@ the machinery under test.
   into a cached directory (mirroring the Playwright-browser cache in
   `.github/workflows/ci.yml`); local runs reuse the dev
   `userData/embedders` when present.
-- **Download flow is out of the main E2E path.**
-  `assertAllowedDownloadUrl` (`electron/embedder/paths.ts`) hardcodes
-  a single allowed origin, so the download IPC path can't target a
-  local mock as-is. Cover it separately in a release-tier test
-  against a Hugging-Face-shaped local mirror, gated behind an
-  explicit test-only origin seam — not by loosening the production
-  allowlist.
+- **Download flow is not E2E-tested — manual only.**
+  `assertAllowedDownloadUrl` (`electron/embedder/paths.ts`) hardcodes a
+  single allowed origin, so the download IPC path can't target a local
+  mock without a test-only origin seam. The setup cost isn't worth the
+  payoff for this one flow, so it stays a manual check; the download
+  itself is verified against a real packaged build.
 
 ## Mock LLM
 
@@ -193,9 +192,15 @@ on the request:
   can't drift because it reuses the app's own renderer, and tests
   override a specific agent's reply via `setStructured(name, value)`.
 
-This covers the **auto** (prompt-injection) path the fixture uses; a
-`force-on` native-structured provider carries the schema in
-`response_format` instead, which the same registry would match there.
+Block-matching keys on the **auto** (prompt-injection) path the fixture
+uses — the only path E2E relies on. A `force-on` profile takes the
+native path instead, but the app doesn't set the openai-compatible
+provider's `supportsStructuredOutputs`, so force-on currently sends
+`response_format: { type: 'json_object' }` with **no schema on the
+wire**; the `structured-force-on` spec pins that (and will flag it if
+the provider flag is ever wired — an app followup, since native schema
+output needs endpoint support and `optional`→`nullable` schemas).
+
 Only the LLM is mocked — the pipeline, transport, entry writes, and
 delta log all run for real; the `turn` and `classifier` specs assert
 their effects through the DB bridge.
@@ -275,5 +280,11 @@ those tests land.
 - **CI wall-clock is estimated, not measured.** Confirm on the first
   green run; if the packaging step dominates, consider gating `e2e`
   behind `check` or caching the unpacked build.
-- **Embedder download flow** is deferred to a release-tier test with a
-  test-only origin seam, per the embedder section above.
+- **Embedder download flow** is manual-only — the origin-seam setup
+  isn't worth the payoff for one flow (see the embedder section).
+- **`force-on` structured output doesn't put the schema on the wire.**
+  The app never sets the openai-compatible provider's
+  `supportsStructuredOutputs`, so a force-on profile degrades to
+  schema-less `json_object`. Wiring the flag (capability-gated, with
+  `optional`→`nullable` schemas) is an app followup; the
+  `structured-force-on` spec pins current behavior meanwhile.

@@ -39,6 +39,31 @@ export function setProviderEndpoint(dbPath: string, url: string): void {
   }
 }
 
+// Set a profile's structuredOutput mode (auto | force-on | force-off). force-on
+// routes structured calls through native response_format instead of the
+// prompt-injected schema. Runs before launch.
+export function setProfileStructuredOutput(
+  dbPath: string,
+  profileId: string,
+  mode: 'auto' | 'force-on' | 'force-off',
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT profiles FROM app_settings WHERE id = 'singleton'`).get() as {
+      profiles: string
+    }
+    const profiles = JSON.parse(row.profiles) as { id: string; structuredOutput?: string }[]
+    for (const profile of profiles) {
+      if (profile.id === profileId) profile.structuredOutput = mode
+    }
+    db.prepare(`UPDATE app_settings SET profiles = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(profiles),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Clear taggedBlockReliable on every cached model so piggyback can't ride
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.
