@@ -319,3 +319,23 @@ slice-planning gate forces its resolution before that slice is planned.
   [`parked.md → Time-advance selection at user-entry submit`](../parked.md#time-advance-selection-at-user-entry-submit)
   — so the sentence should carry the anchor. Small canonical edit;
   fold into the next cleanup pass touching that section.
+
+- **A profile's `structuredOutput: 'force-on'` never reaches the
+  provider.** The flag exists on the profile schema
+  (`modelProfileSchema.structuredOutput`, `auto | force-on | force-off`)
+  and round-trips through the DB, but has no UI to set it (DB-only until
+  the settings editing surface lands) — and even when set,
+  `createProviderModel` (`lib/ai/providers.ts`) never passes
+  `supportsStructuredOutputs` to `createOpenAICompatible`, so a force-on
+  structured call emits `response_format: { type: 'json_object' }` with
+  no schema on the wire (and force-on skips prompt-injection, so no
+  schema reaches the model at all). To wire it: thread the resolved
+  profile's `structuredOutput` into provider creation and set
+  `supportsStructuredOutputs` when force-on **and** the endpoint supports
+  `json_schema` (capability-gate — most openai-compatible / local
+  endpoints don't); the structured schemas then also need
+  `optional`→`nullable` to satisfy strict json_schema (the classifier's
+  `currentLocation?` / `summary?`). Low priority — prod and E2E rely on
+  the prompt-embedded (auto) path; `e2e/tests/structured-force-on.spec.ts`
+  pins current behavior and flags the change if the flag is wired.
+  Surfaced by the M3 E2E harness work (2026-07-24).
