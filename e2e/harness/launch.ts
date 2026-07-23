@@ -8,6 +8,21 @@ import { _electron as electron, type ElectronApplication, type Page } from '@pla
 const REPO_ROOT = join(__dirname, '..', '..')
 const DIST = join(REPO_ROOT, 'dist')
 
+// Launch mode (docs/testing.md → Launch modes):
+//   dev      — unpackaged main + renderer from a static dist. Fast, no
+//              packaging step; the default for local authoring.
+//   packaged — the electron-builder --dir binary loading app://bundle. The
+//              CI target of record: exercises the app:// protocol, asar, the
+//              unpacked native modules, and extraResources migrations.
+type Mode = 'dev' | 'packaged'
+const MODE = (process.env.AVENTURAS_E2E_MODE as Mode | undefined) ?? 'dev'
+
+// Linux electron-builder --dir output. Overridable for other platforms / CI.
+const PACKAGED_APP =
+  process.env.AVENTURAS_E2E_APP_PATH ?? join(REPO_ROOT, 'release', 'linux-unpacked', 'aventuras')
+
+const APP_SCHEME_ORIGIN = 'app://'
+
 const MIME: Record<string, string> = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -20,9 +35,6 @@ const MIME: Record<string, string> = {
   '.map': 'application/json',
 }
 
-// Serve the exported web bundle with a SPA fallback. This is the local/dev
-// launch mode (docs/testing.md → Launch modes): unpackaged main, renderer from
-// a static dist. The packaged CI tier swaps this for the app:// protocol.
 function serveDist(): Promise<{ server: Server; origin: string }> {
   const server = createServer((req, res) => {
     void (async () => {
@@ -49,6 +61,20 @@ function serveDist(): Promise<{ server: Server; origin: string }> {
   })
 }
 
+// The app window is the one serving the app's own origin. In dev, main also
+// opens a detached DevTools window that races it, so first-open order is
+// unreliable; selecting by origin is correct in both modes.
+async function selectAppWindow(app: ElectronApplication, originPrefix: string): Promise<Page> {
+  const isApp = (page: Page) => page.url().startsWith(originPrefix)
+  let window = app.windows().find(isApp)
+  while (!window) {
+    const page = await app.waitForEvent('window', { timeout: 30_000 })
+    if (isApp(page)) window = page
+  }
+  await window.waitForLoadState('domcontentloaded')
+  return window
+}
+
 export type LaunchedApp = {
   app: ElectronApplication
   window: Page
@@ -60,31 +86,42 @@ export async function launchApp(opts: {
   /** Remove userDataDir on close. */
   cleanupUserData?: boolean
 }): Promise<LaunchedApp> {
-  const { server, origin } = await serveDist()
+  const cleanupUserData = async () => {
+    if (opts.cleanupUserData) await rm(opts.userDataDir, { recursive: true, force: true })
+  }
 
+  if (MODE === 'packaged') {
+    const app = await electron.launch({
+      executablePath: PACKAGED_APP,
+      args: [`--user-data-dir=${opts.userDataDir}`],
+      timeout: 60_000,
+    })
+    const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
+    return {
+      app,
+      window,
+      close: async () => {
+        await app.close()
+        await cleanupUserData()
+      },
+    }
+  }
+
+  const { server, origin } = await serveDist()
   const app = await electron.launch({
     args: ['electron/dist/main.js', `--user-data-dir=${opts.userDataDir}`],
     cwd: REPO_ROOT,
     env: { ...process.env, EXPO_WEB_URL: origin },
     timeout: 60_000,
   })
-
-  // Dev-mode main opens a detached DevTools window that races the app window,
-  // so firstWindow() is unreliable here — select by origin instead
-  // (docs/testing.md → Launch modes).
-  const isAppWindow = (page: Page) => page.url().startsWith(origin)
-  let window = app.windows().find(isAppWindow)
-  while (!window) {
-    const page = await app.waitForEvent('window', { timeout: 30_000 })
-    if (isAppWindow(page)) window = page
+  const window = await selectAppWindow(app, origin)
+  return {
+    app,
+    window,
+    close: async () => {
+      await app.close()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await cleanupUserData()
+    },
   }
-  await window.waitForLoadState('domcontentloaded')
-
-  const close = async () => {
-    await app.close()
-    await new Promise<void>((resolve) => server.close(() => resolve()))
-    if (opts.cleanupUserData) await rm(opts.userDataDir, { recursive: true, force: true })
-  }
-
-  return { app, window, close }
 }

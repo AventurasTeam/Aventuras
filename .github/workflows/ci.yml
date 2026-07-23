@@ -88,3 +88,57 @@ jobs:
 
       - name: Run story tests
         run: pnpm test:run
+
+  e2e:
+    name: E2E (Playwright + Electron, packaged)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Electron binary + builder downloads (~100 MB); cache across runs, keyed
+      # on the lockfile so a version bump busts it.
+      - name: Restore Electron cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: electron-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Build web bundle
+        run: pnpm build:web
+
+      - name: Compile Electron main
+        run: pnpm electron:compile
+
+      # --dir skips AppImage/deb compression but still produces the asar,
+      # unpacked native modules, and extraResources migrations the packaged
+      # tier exercises (docs/testing.md → CI).
+      - name: Package desktop (unpacked)
+        run: pnpm exec electron-builder --linux --dir
+
+      # Electron needs Chromium's shared libraries; install-deps provides them
+      # (and xvfb) without downloading a browser.
+      - name: Install system libraries for Electron
+        run: pnpm exec playwright install-deps chromium
+
+      # Electron has no true headless mode on Linux — run under a virtual
+      # display. The harness seeds a throwaway userData per run and launches the
+      # packaged binary against it.
+      - name: Run E2E (packaged, headless via xvfb)
+        run: xvfb-run -a pnpm test:e2e
+        env:
+          AVENTURAS_E2E_MODE: packaged

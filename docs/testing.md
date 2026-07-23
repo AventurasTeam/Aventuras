@@ -222,27 +222,31 @@ role selectors are safe there.
 
 ## CI
 
-One packaged job, added to [`.github/workflows/ci.yml`](../.github/workflows/ci.yml):
+One packaged job (`e2e`) in
+[`.github/workflows/ci.yml`](../.github/workflows/ci.yml), running on
+every PR alongside `check` and `test`:
 
 1. `pnpm build:web` — export the web bundle (~21 s).
-2. `pnpm exec electron-builder --linux --dir` — package unpacked,
+2. `pnpm electron:compile` — compile the Electron main.
+3. `pnpm exec electron-builder --linux --dir` — package unpacked,
    skipping AppImage/deb compression (~58 s locally vs ~2m38s for a
    full package). Produces the asar, unpacked native modules, and
-   `extraResources` migrations the tests need.
-3. Restore caches: Playwright browsers (existing) + fixture embedder
-   model (new).
-4. Seed a temp `userData`, launch the packaged app, run `e2e/tests`.
+   `extraResources` migrations the tests need. The Electron binary and
+   builder downloads are cached, keyed on the lockfile.
+4. `playwright install-deps chromium` — Electron's shared libraries
+   (no browser download).
+5. `xvfb-run -a pnpm test:e2e` with `AVENTURAS_E2E_MODE=packaged` —
+   Electron has no true headless mode on Linux, so it runs under a
+   virtual display. The harness seeds a throwaway `userData` per run
+   and launches the packaged binary against it.
 
-Estimated added wall-clock is a few minutes on a two-core runner
-(packaging, `@electron/rebuild` of native deps, cold-cache model
-download); not yet measured on CI hardware.
+The embedder model cache (for the retrieval/turn tiers) is added when
+those tests land.
 
 ## Known limitations and open questions
 
 - **CI wall-clock is estimated, not measured.** Confirm on the first
-  green run; if the packaging step dominates, consider caching the
-  unpacked build keyed on `electron/` + lockfile hashes.
-- **i18next in plain Node is assumed to boot clean** for the harness
-  resolver; verify in the first spike.
+  green run; if the packaging step dominates, consider gating `e2e`
+  behind `check` or caching the unpacked build.
 - **Embedder download flow** is deferred to a release-tier test with a
   test-only origin seam, per the embedder section above.
