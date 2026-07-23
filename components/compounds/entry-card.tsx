@@ -4,6 +4,7 @@ import {
   Book,
   Brain,
   GitBranch,
+  Globe,
   Pencil,
   RefreshCw,
   Trash2,
@@ -25,6 +26,7 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
+import { stripStateBlock } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -153,7 +155,11 @@ export function EntryCard({
   className,
 }: EntryCardProps) {
   const [expanded, setExpanded] = useState(false)
+  const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
+
+  const { prose, stateRaw } = useMemo(() => stripStateBlock(content), [content])
+  const hasState = stateRaw != null && stateRaw.length > 0
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
   const showWorldTime = worldTimeLabel != null && kind !== 'system' && kind !== 'streaming'
@@ -205,6 +211,14 @@ export function EntryCard({
                 />
               )
             ) : null}
+            {hasState ? (
+              <IconAction
+                icon={Globe}
+                label={stateExpanded ? 'Hide state' : 'Show state'}
+                size="sm"
+                onPress={() => setStateExpanded((v) => !v)}
+              />
+            ) : null}
             {kind === 'streaming' ? (
               <Text size="xs" variant="muted" className="leading-none">
                 {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
@@ -224,6 +238,17 @@ export function EntryCard({
       {hasReasoning && expanded && !editing ? (
         <View className="mb-3 border-l-2 border-border pl-3">
           <NarrativeContent text={reasoning ?? ''} muted />
+        </View>
+      ) : null}
+
+      {hasState && stateExpanded && !editing ? (
+        <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
+          <Text size="xs" variant="muted" className="mb-1 font-medium">
+            World state block
+          </Text>
+          <Text size="xs" className="font-mono text-fg-muted">
+            {stateRaw}
+          </Text>
         </View>
       ) : null}
 
@@ -285,7 +310,7 @@ export function EntryCard({
         </View>
       ) : kind === 'streaming' && content.length === 0 ? null : ( // pre-first-chunk / reasoning-phase placeholder: nothing to render yet
         <NarrativeContent
-          text={content}
+          text={prose}
           allowRich={kind === 'user_action' || kind === 'ai_reply' || kind === 'opening'}
         />
       )}

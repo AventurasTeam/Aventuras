@@ -4,7 +4,7 @@ import type { MutationResult } from '@/lib/actions/types'
 import { pipelineRuns, type DbCtx } from '@/lib/db'
 import { logger, makeLogger, turnCaptureSink } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { appSettingsStore, generationStore, type RunState } from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, generationStore, type RunState } from '@/lib/stores'
 
 import { getPipeline, getPipelineSafe } from '../authoring/registry'
 import type {
@@ -298,7 +298,16 @@ async function abortRun(
     )
   }
   turnCaptureSink.endTurn(run.actionId, outcome, cause.reason)
-  logger.error('pipeline.run_aborted', { runId: run.runId, outcome }, { actionId: run.actionId })
+  logger.error(
+    'pipeline.run_aborted',
+    {
+      runId: run.runId,
+      outcome,
+      reason: cause.reason,
+      ...(error ? { errorKind: error.kind, errorDetail: error.detail } : {}),
+    },
+    { actionId: run.actionId },
+  )
   pipelineEventBus.emit({
     type: 'run_complete',
     runId: run.runId,
@@ -322,8 +331,19 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   try {
     for (const node of pipeline.phases) {
       const result = await runNode(node, run, ctx)
-      if (result.status === 'failed')
+      if (result.status === 'failed') {
+        logger.error(
+          'pipeline.phase_failed',
+          {
+            runId: run.runId,
+            phase: node.name,
+            errorKind: result.error.kind,
+            errorDetail: result.error.detail,
+          },
+          { actionId: run.actionId },
+        )
         return { kind: 'aborted', cause: { reason: 'phase-failure', error: result.error } }
+      }
       if (result.status === 'aborted') return { kind: 'aborted', cause: { reason: 'user-cancel' } }
     }
   } catch (e) {
@@ -331,6 +351,11 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
       e instanceof ActionLayerError
         ? { kind: 'action-layer', detail: e.detail }
         : { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
+    logger.error(
+      'pipeline.phase_exception',
+      { runId: run.runId, errorKind: error.kind, errorDetail: error.detail },
+      { actionId: run.actionId },
+    )
     return { kind: 'aborted', cause: { reason: 'phase-failure', error } }
   }
   return { kind: 'completed' }
@@ -371,11 +396,21 @@ export async function runPipeline(kind: string, ctx: RunCtx): Promise<TxResult |
     try {
       preflightError = runPreflight(getPipeline(run.kind), {
         appSettings: appSettingsStore.getAppSettings(),
+        storySettings: currentStoryStore.getCurrentStory()?.settings,
       })
     } catch (e) {
       preflightError = { kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) }
     }
     if (preflightError) {
+      logger.error(
+        'pipeline.preflight_failed',
+        {
+          runId: run.runId,
+          errorKind: preflightError.kind,
+          errorDetail: preflightError.detail,
+        },
+        { actionId: run.actionId },
+      )
       const tx = await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError })
       return originResult ?? tx
     }

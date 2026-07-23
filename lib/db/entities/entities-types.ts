@@ -7,7 +7,7 @@ export type CharacterState = {
     hair?: string
     eyes?: string
     attire?: string
-    distinguishing?: string[]
+    distinguishing?: string
   }
   traits: string[]
   drives: string[]

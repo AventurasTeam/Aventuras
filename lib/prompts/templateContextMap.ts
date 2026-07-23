@@ -45,6 +45,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'calendarVocabulary',
+      type: 'CalendarVocabulary | null',
+      category: 'Story Config',
+      description:
+        'Vocabulary descriptor (base units, tier names/labels, era names) for the active calendar system.',
+      required: false,
+    },
+    {
       name: 'userSettings',
       type: 'object',
       category: 'Story Config',
@@ -57,6 +65,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       category: 'Generation Results',
       description: 'Per-run phase outputs (narrativeResult, etc.).',
       required: false,
+    },
+    {
+      name: 'piggybackFires',
+      type: 'boolean',
+      category: 'Generation Results',
+      description:
+        'True when this turn expects the tagged trailing block to actually be used (piggybackMode on + resolved narrative model capability-flagged reliable). False means the per-turn fallback classifier will redo extraction from scratch, so state-emission instructions are omitted.',
+      required: true,
     },
   ],
   wizard: [
@@ -105,6 +121,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
 // while requiring every TemplateId to be mapped — a missing one fails to compile.
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
   [TEMPLATE_IDS.perTurnNarrative]: 'generationContext',
+  [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
@@ -115,8 +132,8 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries'],
   Entities: ['entities', 'sceneEntities', 'leadName', 'leadEntityId'],
-  'Story Config': ['definition', 'userSettings'],
-  'Generation Results': ['intermediates', 'opening', 'guidance'],
+  'Story Config': ['definition', 'calendarVocabulary', 'userSettings'],
+  'Generation Results': ['intermediates', 'opening', 'guidance', 'piggybackFires'],
 }
 
 export type RegistryIssue =

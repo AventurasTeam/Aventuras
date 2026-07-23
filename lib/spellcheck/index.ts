@@ -20,8 +20,27 @@ function getLinter(): LocalLinter {
  * Returns an array of linting errors with spans, messages, and suggestions.
  */
 export async function lintNarrativeText(text: string): Promise<Lint[]> {
-  return getLinter().lint(text, {
+  const lints = await getLinter().lint(text, {
     language: 'markdown',
+  })
+
+  return lints.filter((lint) => {
+    if (lint.lint_kind() === 'Capitalization') {
+      return false
+    }
+
+    if (lint.lint_kind() === 'Spelling') {
+      const problem = lint.get_problem_text()
+      const hasCapitalizedSuggestion = lint.suggestions().some((s) => {
+        const replacement = s.get_replacement_text()
+        return replacement.toLowerCase() === problem.toLowerCase() && replacement !== problem
+      })
+      if (hasCapitalizedSuggestion) {
+        return false
+      }
+    }
+
+    return true
   })
 }
 

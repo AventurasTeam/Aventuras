@@ -263,7 +263,7 @@ erDiagram
         text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; null (chapter close, user direct edit) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
-        text source "ai_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
+        text source "ai_classifier | piggyback_tagged_block | per_turn_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
         text target_table "story_entries | entities | lore | threads | happenings | happening_involvements | happening_awareness | character_relationships | chapters | entry_assets | translations | branch_era_flips"
         text target_id "id in target_table"
         text op "create | update | delete"
@@ -593,7 +593,7 @@ type CharacterState = {
     hair?: string // color + style + state
     eyes?: string // color + distinctive eye traits
     attire?: string // live current attire — classifier-updates on observed change
-    distinguishing?: string[] // catch-all: scars, tattoos, voice tone, gait, posture, scent
+    distinguishing?: string // catch-all: scars, tattoos, voice tone, gait, posture, scent — single prose note, full-replace like every other visual field
   }
 
   // Identity — personality + motivation
@@ -635,9 +635,21 @@ renders as chip groups; classifier emits one element at a time. A third
 is functionally a trait ("diplomatic") or a drive ("avoids violence");
 separate bag silently bloats with mis-classified entries.
 
-**`voice` is single-string, optional.** Distinct from `distinguishing[]`
+**`voice` is single-string, optional.** Distinct from `distinguishing`
 because dialogue-coherence demands voice be surfaced explicitly; folding
 into distinguishing buries it.
+
+**`distinguishing` is a single string, not an array** (decided during
+Slice 3.2 planning). Originally a list so multiple marks could
+accumulate independently; flattened to match every other `visual.*`
+field's full-replace semantics — the piggyback/per-turn write path
+re-emits the whole field when it changes rather than appending, the
+same way `attire` or `hair` do. Avoids building per-turn array
+add/remove machinery for one field when the existing
+[soft-cap + chapter-close-compaction discipline](#soft-caps--compaction-discipline)
+already handles list-shaped bloat for `traits` / `drives` / `agenda`
+by _not_ letting per-turn writes touch them at all — `distinguishing`
+follows the simpler pattern instead of inventing a second one.
 
 **`equipped_items` vs `inventory` asymmetry.** Both are `EntityId[]` of
 unique items; the split is semantic — equipped is what's actively in use,
@@ -978,9 +990,9 @@ agent design.
 **Zod degradation bounds** (separate from soft caps — these are
 "don't crash on pathological values" caps, much higher than the
 prompt-discipline caps): `voice.max(2000)` characters; `traits` /
-`drives` / `agenda` arrays `.max(50)`; `distinguishing.max(20)`;
-each visual sub-field `.max(500)`; `condition` / `standing`
-`.max(500)`; `stackables` keys non-empty + `.max(40)` characters;
+`drives` / `agenda` arrays `.max(50)`; every visual sub-field
+(including `distinguishing`) `.max(500)` characters; `condition` /
+`standing` `.max(500)`; `stackables` keys non-empty + `.max(40)` characters;
 `stackables` values non-negative integers.
 
 #### Translation targets
@@ -990,7 +1002,7 @@ via dotted paths. The split:
 
 **Translatable** (text content the user faces in different languages):
 
-- All `visual.*` sub-fields (string and per-element of `distinguishing[]`).
+- All `visual.*` sub-fields — every one, including `distinguishing`, is a single string.
 - `traits[]`, `drives[]`, `voice` per element / single string.
 - `condition` (Location, Item).
 - `standing` (Faction).
@@ -1693,6 +1705,9 @@ story_entries.metadata: {
   // In-world time — classifier-authored, user-editable
   worldTime: number                 // physical seconds since story start; calendar-uniform. Storage invariant: ≥ 0. Classifier writes are monotonically non-decreasing (delta ≥ 0 hard); user manual edits may produce non-monotonic sequences which the UI flags and consumers tolerate. See "In-world time tracking" below.
 
+  // Narrative digest — piggyback/classifier-authored, one sentence
+  summary?: string                  // enrichment for the NEXT turn's Q2 structural digest (memory/retrieval.md#q2-structural-digest); absent on parse failure or restart is fine
+
   // Next-turn suggestions — emission output for the chip strip displayed below this entry
   nextTurnSuggestions?: {
     items: { categoryId: string; text: string }[]  // 1..suggestionCount; categoryId references stories.settings.suggestionCategories[].id (orphans render with neutral fallback per reader-composer.md)
@@ -1717,6 +1732,13 @@ narrative content).
 and items — the things that come and go. `currentLocationId` is the
 singleton "we are here" pointer. Factions are not scene-tagged; a
 faction isn't in a scene the way a person is.
+
+**`summary` transport is store-scoped, not run-scoped.** It's a
+field on the persisted `story_entries.metadata` blob like every other
+field here — not something threaded through in-memory pipeline state
+between runs. This means it survives an app restart between turns (a
+restart between turn N's write and turn N+1's read still sees turn
+N's `summary`), and it's delta-logged like any other metadata edit.
 
 **Metadata edits are delta-logged.** Unlike `content` (the single
 per-column side-channel exemption, see "Entry mutability & rollback"),
@@ -2159,7 +2181,7 @@ time:
   `state.stackables: Record<string, number>`) — `null` means "this
   sub-key was absent pre-change; delete it on apply."
 - **At an optional fixed-shape leaf** (e.g. `state.voice?: string`,
-  `state.visual.distinguishing?: string[]`) — `null` means "this key
+  `state.visual.distinguishing?: string`) — `null` means "this key
   was absent pre-change; delete it on apply."
 
 **Nullable-object transitions** have three cases. Going from
@@ -2224,13 +2246,16 @@ by the same user-visible operation. Action boundaries:
 - **User direct edit** — one delta, one fresh `action_id`. CTRL-Z
   reverses that single delta.
 - **AI reply** — the `story_entries` create delta plus the per-turn
-  piggyback deltas share one `action_id`. Undoing it is a **positional
-  suffix reversal** from the turn's start, not merely its `action_id`
-  group, so it also sweeps any **periodic-classifier** deltas that
-  landed on top of the turn — those carry their own `action_id` and
-  `source = periodic_classifier`, and are never an undo target in their
-  own right (see the algorithm). The `story_entries` row is deleted as
-  the reversal of its `op=create` delta.
+  piggyback deltas (`source = piggyback_tagged_block` on the direct
+  tagged-block path, `source = per_turn_classifier` on the synchronous fallback —
+  see [`memory/piggyback.md → Capability gate`](./memory/piggyback.md#capability-gate))
+  share one `action_id`. Undoing it is a **positional suffix
+  reversal** from the turn's start, not merely its `action_id` group,
+  so it also sweeps any **periodic-classifier** deltas that landed on
+  top of the turn — those carry their own `action_id` and
+  `source = periodic_classifier`, and are never an undo target in
+  their own right (see the algorithm). The `story_entries` row is
+  deleted as the reversal of its `op=create` delta.
 - **Chapter close** — the chapter row insert + `story_entries.chapter_id`
   updates across the range + lore-mgmt writes (the 5 sub-jobs) all
   share one `action_id`. CTRL-Z collapses the entire batch as a

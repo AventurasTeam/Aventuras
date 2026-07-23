@@ -1,12 +1,19 @@
 import { eq, sql } from 'drizzle-orm'
 
-import { streamText } from '@/lib/ai'
-import { storyEntries, type EntryMetadata } from '@/lib/db'
+import { resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
+import { buildPiggybackActions, parseStateBlock, substitutePiggybackIds } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
+import {
+  PIGGYBACK_FALLBACK_PHASE_NAME,
+  PIGGYBACK_FALLBACK_RESOLVES,
+  piggybackFallbackClassifierPhase,
+  resolvePiggybackFires,
+} from './per-turn-piggyback'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -37,6 +44,34 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     .sort((a, b) => a.position - b.position)
   const entities = [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
 
+  const cfg = appSettingsStore.getAppSettings()
+
+  // Resolved ahead of the call (not just from the post-call providerId/modelId)
+  // so the prompt itself can skip the state-emission apparatus when we already
+  // know this turn's tagged block would be thrown away — piggyback off, or the
+  // resolved model isn't capability-flagged reliable, means the per-turn
+  // fallback classifier redoes the extraction from scratch regardless
+  // (docs/memory/piggyback.md → Capability gate). Pure resolution over the same
+  // config streamText resolves internally, so the two can't disagree.
+  const resolvedNarrativeModel = resolveModel('narrative', {
+    providers: cfg.providers,
+    profiles: cfg.profiles,
+    assignments: cfg.assignments,
+    defaultProviderId: cfg.defaultProviderId,
+    storyModels: open.settings.models,
+  })
+  const narrativeCapabilities = resolvedNarrativeModel.ok
+    ? resolveModelCapabilities(
+        resolvedNarrativeModel.providerId,
+        resolvedNarrativeModel.modelId,
+        cfg.providers,
+      )
+    : undefined
+  const piggybackShouldFire = resolvePiggybackFires({
+    piggybackMode: open.settings.piggybackMode ?? 'off',
+    narrativeModelCapabilities: narrativeCapabilities,
+  })
+
   const idMap = new IdBiMap()
   ctx.intermediates.idMap = idMap
   const context = buildGenerationContext({
@@ -45,10 +80,10 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     definition: open.definition,
     settings: open.settings,
     idMap,
+    piggybackFires: piggybackShouldFire,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
-  const cfg = appSettingsStore.getAppSettings()
   const entryId = generateId('entry')
   const startedAt = Date.now()
   let streamError: unknown
@@ -124,12 +159,45 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const usage = await Promise.resolve(stream.usage).catch(() => undefined)
   const reasoningText = await Promise.resolve(stream.reasoningText).catch(() => undefined)
   const tail = entries.at(-1)
-  // Scene state (membership, location, worldTime) inherits from the tail — by
-  // submitTurn ordering that is the just-written user_action, which carries the
-  // inherited values (see submit-turn.ts). M2 has no classifier, so this
-  // propagates the opening's values forward until piggyback/classifier (M3+)
-  // emits fresh ones.
-  const worldTime = tail?.metadata?.worldTime ?? 0
+  const inherited = inheritedEntryMetadata(tail?.metadata)
+
+  const parsedState = parseStateBlock(content)
+  // Fields inside parsedState.block still carry the model's bracketed-ID
+  // placeholders (c1, l1, i1...); swap them back to real entity ids using the
+  // same idMap the prompt was built with before anything looks them up.
+  const { block: resolvedBlock, failures: substitutionFailures } = substitutePiggybackIds(
+    parsedState.block,
+    idMap,
+  )
+  const parseFailures = [...parsedState.failures, ...substitutionFailures]
+
+  const piggybackParseSucceeded = parsedState.blockFound && parseFailures.length === 0
+  if (piggybackShouldFire && !piggybackParseSucceeded) {
+    ctx.log.warn('classifier.piggyback_parse_failed', {
+      blockFound: parsedState.blockFound,
+      fields: parseFailures.map((f) => f.field),
+    })
+  }
+  let piggybackApplied: ReturnType<typeof buildPiggybackActions> | undefined
+  if (piggybackShouldFire) {
+    piggybackApplied = buildPiggybackActions({
+      entryId,
+      block: resolvedBlock,
+      entities,
+      previousMetadata: {
+        ...inherited,
+        ...(tail?.id ? { entryId: tail.id } : {}),
+      },
+      branchId,
+      source: 'piggyback_tagged_block',
+    })
+  }
+
+  ctx.intermediates.piggybackOutcome = {
+    attempted: piggybackShouldFire,
+    succeeded: piggybackShouldFire && piggybackParseSucceeded,
+  }
+
   const metadata: EntryMetadata = {
     ...(usage
       ? {
@@ -145,9 +213,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     model: call.modelId,
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
-    sceneEntities: tail?.metadata?.sceneEntities ?? [],
-    currentLocationId: tail?.metadata?.currentLocationId ?? null,
-    worldTime,
+    ...(piggybackApplied?.metadata ?? inherited),
   }
 
   const [next] = await ctx.db
@@ -175,6 +241,13 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       },
     },
   }
+
+  if (piggybackApplied) {
+    for (const action of piggybackApplied.actions) {
+      yield { type: 'delta_emitted', action }
+    }
+  }
+
   return { status: 'completed' }
 }
 
@@ -203,6 +276,11 @@ export function ensurePerTurnPipelineRegistered(): void {
       phases: [
         { name: 'user-action-translation', run: userActionTranslationPhase },
         { name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] },
+        {
+          name: PIGGYBACK_FALLBACK_PHASE_NAME,
+          run: piggybackFallbackClassifierPhase,
+          resolves: PIGGYBACK_FALLBACK_RESOLVES,
+        },
       ],
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',

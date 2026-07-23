@@ -82,7 +82,7 @@ function contentSecurityPolicy(): string {
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "media-src 'self' data: blob:",
-    'connect-src *',
+    'connect-src * data: blob:',
     "worker-src 'self' blob:",
     "object-src 'none'",
     "frame-src 'none'",

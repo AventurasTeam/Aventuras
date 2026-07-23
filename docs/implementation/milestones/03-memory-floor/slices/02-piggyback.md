@@ -51,8 +51,8 @@ is off, a separate per-turn classifier call writes the same subset.
   — the resolver-input declaration + halt semantics the fallback
   phase's agent declaration rides.
 - [`architecture.md → Classifier contract — metadata fields`](../../../../architecture.md#classifier-contract--metadata-fields)
-  — `worldTime` delta invariant (`≥ 0`, flashback `0`, re-roll then
-  clamp + warn), user-action inheritance.
+  — `worldTime` delta invariant (`≥ 0`, flashback `0`, clamp + warn,
+  classifier-path re-roll), user-action inheritance.
 - [`data-model.md → Entry metadata shape`](../../../../data-model.md#entry-metadata-shape)
   — the metadata fields this slice writes.
 
@@ -73,8 +73,11 @@ is off, a separate per-turn classifier call writes the same subset.
   non-zero `worldTime` values flow through the M2.5 calendar
   renderer from this slice); `visual.*` and
   transfer writes via per-field narrow actions; the `worldTime`
-  validation ladder (reject negative → re-roll once → clamp to 0 +
-  `logger.warn`).
+  validation ladder — reject negative → clamp to 0 + `logger.warn`
+  on the direct tagged-block path; reject → re-roll the whole
+  classification call once → clamp + warn on the per-turn fallback
+  classifier path (see
+  [`piggyback.md → Capability gate`](../../../../memory/piggyback.md#capability-gate)).
 - **`<summary>` enrichment hand-off:** parse the trailing block's
   optional one-sentence summary and hand it off for the next
   turn's Q2 structural digest
@@ -124,9 +127,10 @@ is off, a separate per-turn classifier call writes the same subset.
   failure logs (vitest per fixture).
 - A staged entity emitted in `<scene_entities>` flips to `active`
   in the same action; a second emission no-ops (monotonic).
-- Negative `worldTime` delta: rejected, re-rolled once, then
-  clamped to 0 with `classifier.delta_clamped` warn (vitest, fault
-  injection).
+- Negative `worldTime` delta: rejected and clamped to 0 with
+  `classifier.delta_clamped` warn on the direct path; re-rolled once
+  before clamping on the per-turn fallback classifier path (vitest,
+  fault injection).
 - With the capability flag off, the per-turn classifier fallback
   phase runs, writes the same subset, and pre-flight fails cleanly
   when its agent is unassigned (M2.9 vocabulary).
@@ -150,15 +154,55 @@ is off, a separate per-turn classifier call writes the same subset.
 
 ## Open questions
 
-- **Tagged format final shape** — canon says "exact tagged format
-  firms up at implementation"; pin the grammar in this slice and
-  record it in Implementation notes (3.7's `<suggestions>` inherits
-  it).
-- **Capability flag sourcing** — the tagged-block reliability flag
-  is "curation + detection, user-overridable"; what seeds it for
-  OAI-compat models where no curation exists yet (default-off vs
-  default-on-with-fallback).
+Both resolved during slice planning (2026-07-20); see Implementation
+notes below and the canonical docs they update.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Tagged format pinned.** The `<state>` grammar is fixed in
+[`piggyback.md → Trailing block format`](../../../../memory/piggyback.md#trailing-block-format)
+(3.7's `<suggestions>` inherits the parse utility, C2). Two fields
+resolved to structured, non-free-text shapes during planning:
+`visual_changes` is full-replace per visual category (`type="attire"`
+etc., never a partial edit), and `transfers` splits into `<item>` /
+`<stackable>` sub-tags referencing only already-existing entities
+(piggyback creates no rows). `distinguishing` on `CharacterState`
+flipped from `string[]` to a single string to match every other
+visual category's full-replace semantics — a
+[`data-model.md`](../../../../data-model.md#characterstate-shape)
+change, not just a piggyback-local one.
+
+**Capability flag default: off for uncurated models.** No
+curation/detection pipeline exists yet anywhere in the codebase, so
+every model resolves to capability-off (and the per-turn classifier
+fallback) until a future slice builds one. See
+[`piggyback.md → Capability gate`](../../../../memory/piggyback.md#capability-gate).
+
+**Per-turn classifier fires on two triggers, same synchronous
+mechanism.** Originally scoped to `piggybackMode='off'` only; planning
+extended it to also fire — for that turn alone, synchronously, in the
+same pipeline run — when `piggybackMode` is on but the trailing block
+fails to parse. This replaces the earlier canon claim that a parse
+failure waits for the periodic classifier; the periodic classifier's
+write-set never included piggyback's fields, so it could never have
+recovered them. See
+[`piggyback.md → Parse strategy and failure recovery`](../../../../memory/piggyback.md#parse-strategy-and-failure-recovery).
+
+**`introducedNewEntity`-style early trigger: rejected for v1.** A
+proposed signal to early-trigger the periodic classifier when prose
+introduces a relevant new character or location was considered and
+parked — see
+[`parked.md → Early classifier trigger on new-entity introduction`](../../../../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity).
+The same tolerance (stale/missing data for a few turns, acceptable)
+extends to `currentLocationId` when prose moves to a location that
+doesn't exist as an entity yet.
+
+**Non-existent entity ID filtering.** `buildPiggybackActions` (`lib/piggyback/apply.ts`)
+filters `visualChanges` and `transfers` against `byId.has(id)` before creating
+patch actions, enforcing the "piggyback creates no rows" invariant and preventing
+action-layer rejection crashes when unmapped placeholders or new entities appear in state blocks.
+
+**UI `<state>` block presentation.** `EntryCard` (`components/compounds/entry-card.tsx`)
+uses `stripStateBlock` to separate narrative prose from trailing `<state>` XML blocks,
+rendering clean prose in the story reader while exposing a `Globe` icon in the card header
+to toggle an expandable preview of the raw state block.

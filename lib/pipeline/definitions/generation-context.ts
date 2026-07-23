@@ -1,3 +1,4 @@
+import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 
@@ -10,6 +11,12 @@ type BuildArgs = {
   definition: StoryDefinition
   settings: StorySettings
   idMap: IdBiMap
+  // Whether THIS turn's tagged block will actually be consumed — only the
+  // narrative phase knows this (piggybackMode + resolved model capability),
+  // so it's caller-supplied rather than computed here. Defaults false for
+  // every other generationContext consumer, which never emits state-emission
+  // instructions in the first place.
+  piggybackFires?: boolean
 }
 
 // Defense-in-depth: emit '' for whitespace-only definitional prose so a header
@@ -24,7 +31,7 @@ function blankIfWhitespace(value: string): string {
 // agent's phase calls this and its template picks from the same variable set
 // (pinned in templateContextMap; parity-tested here).
 export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
-  const { entries, entities, definition, settings, idMap } = args
+  const { entries, entities, definition, settings, idMap, piggybackFires = false } = args
 
   // System entries are technical-only rows (removed on generate) — templates
   // must never see them, so exclusion is unconditional defense-in-depth.
@@ -37,6 +44,8 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     tone: { ...definition.tone, promptBody: blankIfWhitespace(definition.tone.promptBody) },
   }
 
+  const calendar = getCalendar(definition.calendarSystemId)
+
   const context = {
     entries: narrative.map((e) => ({ content: e.content })),
     entities,
@@ -44,8 +53,10 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     // non-system tail always carries the current scene state.
     sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],
     definition: normalizedDefinition,
+    calendarVocabulary: calendar ? describeCalendarVocabulary(calendar) : null,
     userSettings: { partialChapterBuffer: settings.partialChapterBuffer },
     intermediates: {},
+    piggybackFires,
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

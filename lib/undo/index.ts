@@ -13,6 +13,10 @@ export type UndoTarget =
 // Rows MUST be pre-ordered newest-first (log_position DESC) by the caller —
 // this function only classifies, it never re-sorts (data-model.md -> CTRL-Z algorithm).
 export function selectUndoTarget(rows: readonly UndoCandidateDelta[]): UndoTarget | null {
+  // 'per_turn_classifier' is deliberately not filtered here: unlike
+  // 'periodic_classifier' (a real background pass with its own later
+  // action_id), it always shares the triggering turn's action_id, so it's
+  // already part of that turn's group below — never a lone commit to skip.
   const head = rows.find((r) => r.source !== 'periodic_classifier')
   if (!head) return null
 

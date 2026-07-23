@@ -16,13 +16,16 @@ export const appearanceSchema = z.object({
   density: z.enum(['default', 'compact', 'regular', 'comfortable']).default('default'),
 })
 
-const providerCapabilitiesSchema = z.object({
+export const providerCapabilitiesSchema = z.object({
   reasoning: z.boolean().optional(),
   structuredOutput: z.boolean().optional(),
+  taggedBlockReliable: z.boolean().optional(),
   matryoshkaSupported: z.boolean().optional(),
   matryoshkaDims: z.array(z.number()).optional(),
   embedding: z.boolean().optional(),
 })
+
+export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>
 
 export const providerInstanceSchema = z.object({
   id: z.string(),

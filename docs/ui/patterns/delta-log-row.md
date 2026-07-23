@@ -43,7 +43,14 @@ type DeltaLogRowProps = {
   delta: {
     id: string
     op: 'create' | 'update' | 'delete'
-    source: 'ai_classifier' | 'periodic_classifier' | 'user_edit' | 'lore_agent' | 'chapter_close'
+    source:
+      | 'ai_classifier'
+      | 'piggyback_tagged_block'
+      | 'per_turn_classifier'
+      | 'periodic_classifier'
+      | 'user_edit'
+      | 'lore_agent'
+      | 'chapter_close'
     targetTable: string // host's resolution call; compound uses it as fallback label only
     targetDisplayName: string // pre-resolved by host
     fieldPath: string | null // op=update: "state.traits[2]"; op=create/delete: null
@@ -122,7 +129,9 @@ Muted foreground (`text-fg-muted text-xs`), middle-dot separators:
 
 - **Source label** — compound owns the enum → label mapping:
   - `ai_classifier` → `classifier`
-  - `periodic_classifier` → `background classifier`
+  - `piggyback_tagged_block` → `piggyback`
+  - `per_turn_classifier` → `per-turn classifier`
+  - `periodic_classifier` → `periodic classifier`
   - `user_edit` → `user`
   - `lore_agent` → `lore agent`
   - `chapter_close` → `chapter close`

@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import { createEngine } from '../engine'
-import { PER_TURN_NARRATIVE } from './per-turn'
+import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
+import { PER_TURN_NARRATIVE } from './per-turn'
+import { STATE_EMISSION } from './state-emission'
 
 const sceneEntity = {
   id: 'char_1',
@@ -41,7 +43,10 @@ const BROKEN_PER_TURN = `# Characters in scene
 function render(source: string): string {
   const pack: Pack = {
     templates: { t: { group: 'generationContext', source } },
-    macros: { macro_output_format_narrative: { group: 'staticContent', source: 'FMT' } },
+    macros: {
+      [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
+      [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
+    },
   }
   return createEngine(pack).renderFileSync('t', context) as string
 }

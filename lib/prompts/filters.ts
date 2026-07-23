@@ -11,6 +11,10 @@ export function active<T extends Statused>(items: T[]): T[] {
   return Array.isArray(items) ? items.filter((i) => i && i.status === 'active') : []
 }
 
+export function staged<T extends Statused>(items: T[]): T[] {
+  return Array.isArray(items) ? items.filter((i) => i && i.status === 'staged') : []
+}
+
 // Floor at 1: slice(-0) returns the whole array, so `recent: 0` (or garbage
 // input) would silently send everything instead of a minimal window.
 export function recent<T>(items: T[], count: number): T[] {
@@ -43,6 +47,7 @@ export function jsonFilter(value: unknown): string {
 export function registerFilters(engine: Liquid): void {
   engine.registerFilter('by_kind', byKind)
   engine.registerFilter('active', active)
+  engine.registerFilter('staged', staged)
   engine.registerFilter('recent', recent)
   engine.registerFilter('prose_join', proseJoin)
   engine.registerFilter('json', jsonFilter)

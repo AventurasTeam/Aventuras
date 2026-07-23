@@ -140,7 +140,7 @@ describe('buildGenerationContext', () => {
     expect(ctx.sceneEntities).toEqual([(ctx.entities as { id: string }[])[0]!.id])
 
     const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
-    expect(prompt).toContain('# Characters in scene')
+    expect(prompt).toContain('# In scene')
     expect(prompt).toContain('A knight.')
   })
 
@@ -178,5 +178,26 @@ describe('buildGenerationContext', () => {
     expect(prompt).toContain('third-line')
     expect(prompt).not.toContain('first-line') // outside the 3-entry window
     expect(prompt).not.toContain('second-line')
+  })
+
+  it('resolves calendarVocabulary for known calendar id and null for unknown', () => {
+    const knownCtx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition: { ...definition, calendarSystemId: 'earth-gregorian' },
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(knownCtx.calendarVocabulary).not.toBeNull()
+    expect((knownCtx.calendarVocabulary as { baseUnitName: string }).baseUnitName).toBe('second')
+
+    const unknownCtx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition: { ...definition, calendarSystemId: 'nonexistent-calendar' },
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(unknownCtx.calendarVocabulary).toBeNull()
   })
 })

@@ -13,6 +13,13 @@ import { entitiesStore } from '@/lib/stores'
 import { computeUndoPayload } from '../delta/delta-encoding'
 import { register, type ActionHandler } from '../delta/registry'
 import type { DeltaSource } from '../types'
+import {
+  promoteStagedEntityHandler,
+  updateEntityInventoryHandler,
+  updateEntityLocationTrackingHandler,
+  updateEntityStackablesHandler,
+  updateEntityVisualStateHandler,
+} from './state-patch-actions'
 
 type EntityUpdatePatch = Partial<{
   name: string
@@ -198,6 +205,11 @@ export function registerEntities(): void {
       createEntity: createHandler,
       updateEntity: updateHandler,
       deleteEntity: deleteHandler,
+      updateEntityVisualState: updateEntityVisualStateHandler,
+      updateEntityInventory: updateEntityInventoryHandler,
+      updateEntityStackables: updateEntityStackablesHandler,
+      updateEntityLocationTracking: updateEntityLocationTrackingHandler,
+      promoteStagedEntity: promoteStagedEntityHandler,
     },
     patcher: (branchId, p) => entitiesStore.patch(branchId, p),
   })

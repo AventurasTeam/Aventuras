@@ -1,6 +1,6 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
-import { storyEntries, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import {
   ensurePerTurnPipelineRegistered,
@@ -72,11 +72,7 @@ export async function submitTurn(
     const position = (tail?.position ?? 0) + 1
     const entryId = generateId('entry')
     const createdAt = Date.now()
-    const metadata: EntryMetadata = {
-      sceneEntities: sceneTail?.metadata?.sceneEntities ?? [],
-      currentLocationId: sceneTail?.metadata?.currentLocationId ?? null,
-      worldTime: sceneTail?.metadata?.worldTime ?? 0,
-    }
+    const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
 
     const result = await applyDeltaAction(
       {

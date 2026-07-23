@@ -14,5 +14,6 @@ export {
 } from './world-time-to-tuple'
 export { resolveEra, type EraFlip, type EraResult } from './era'
 export { formatWorldTime, FormatMiss } from './render'
+export { describeCalendarVocabulary, type CalendarVocabulary } from './vocabulary'
 export { getCalendar, listCalendars, DEFAULT_CALENDAR_ID } from './registry'
 export { EARTH_GREGORIAN } from './builtins/earth-gregorian'

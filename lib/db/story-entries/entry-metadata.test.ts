@@ -38,6 +38,23 @@ describe('entryMetadataSchema', () => {
     ).toBe(true)
   })
 
+  it('accepts summary when present and omits it cleanly when absent', () => {
+    const parsedWithSummary = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      summary: 'The hero enters the dark cave.',
+    })
+    expect(parsedWithSummary.summary).toBe('The hero enters the dark cave.')
+
+    const parsedWithoutSummary = entryMetadataSchema.parse({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+    })
+    expect(parsedWithoutSummary.summary).toBeUndefined()
+  })
+
   it('rejects a negative worldTime', () => {
     expect(
       entryMetadataSchema.safeParse({ sceneEntities: [], currentLocationId: null, worldTime: -1 })

@@ -63,7 +63,15 @@ export const deltas = sqliteTable(
     actionId: text('action_id').notNull(),
     logPosition: integer('log_position').notNull(),
     source: text('source', {
-      enum: ['ai_classifier', 'periodic_classifier', 'user_edit', 'lore_agent', 'chapter_close'],
+      enum: [
+        'ai_classifier',
+        'piggyback_tagged_block',
+        'per_turn_classifier',
+        'periodic_classifier',
+        'user_edit',
+        'lore_agent',
+        'chapter_close',
+      ],
     }).notNull(),
     // Free text validated by the C1 runtime registry; an enum would re-couple
     // every new delta-logged table to the schema.

@@ -68,3 +68,20 @@ describe('buildTextSegments', () => {
     expect(result.map((s) => s.text).join('')).toBe('abcdef')
   })
 })
+
+describe('lintNarrativeText', () => {
+  it('filters out capitalization lints and capitalized-suggestion spelling lints', async () => {
+    const { lintNarrativeText } = await import('./index')
+    const lints = await lintNarrativeText(
+      'The hero aria walked into the room. This is a badspellingword.',
+    )
+    const capitalizationLints = lints.filter((l) => l.lint_kind() === 'Capitalization')
+    expect(capitalizationLints).toHaveLength(0)
+
+    const ariaLints = lints.filter((l) => l.get_problem_text() === 'aria')
+    expect(ariaLints).toHaveLength(0)
+
+    const badSpellingLints = lints.filter((l) => l.get_problem_text().includes('badspellingword'))
+    expect(badSpellingLints.length).toBeGreaterThan(0)
+  }, 15000)
+})

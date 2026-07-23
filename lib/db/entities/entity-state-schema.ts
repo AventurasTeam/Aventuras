@@ -22,7 +22,7 @@ const visualSchema = z.object({
   hair: z.string().max(500).optional(),
   eyes: z.string().max(500).optional(),
   attire: z.string().max(500).optional(),
-  distinguishing: z.array(z.string().max(500)).max(20).optional(),
+  distinguishing: z.string().max(500).optional(),
 })
 
 export const characterStateSchema = z.object({
@@ -64,7 +64,7 @@ export const entityStateColumnSchema = z.object({
     hair: z.string().optional(),
     eyes: z.string().optional(),
     attire: z.string().optional(),
-    distinguishing: z.array(z.string()).optional(),
+    distinguishing: z.string().optional(),
   }),
   traits: z.array(z.string()),
   drives: z.array(z.string()),

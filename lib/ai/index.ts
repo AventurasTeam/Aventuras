@@ -23,3 +23,4 @@ export {
   type ResolveFailureKind,
   type ResolvedParams,
 } from './resolve-model'
+export { resolveModelCapabilities, type ModelCapabilities } from './model-capabilities'

@@ -924,6 +924,31 @@ Lands as a story-level toggle ("Use combined query — faster, less
 precise") if cross-device data shows mid-range mobile users with
 high-dim provider models hitting unworkable retrieval latency.
 
+#### Early classifier trigger on new-entity introduction (`introducedNewRelevantEntity`)
+
+Today a genuinely new character introduced only via prose (no
+pre-staged entity, no explicit ID emission) has no structured
+`entities` row until the periodic classifier's next scheduled pass —
+up to `classifierCadence` turns later (the slow path in
+[`edge-cases.md → Staged-entity promotion`](./memory/edge-cases.md#staged-entity-promotion)).
+A proposed fix, raised during Slice 3.2 planning: let the tagged
+trailing block emit a signal (`introducedNewRelevantEntity`) that
+early-triggers the periodic classifier for that turn instead of
+waiting for cadence.
+
+Deliberately not built for v1: retrieval has nothing to miss until
+the entity exists as a row, so the gap reads as mild inconsistency
+(a named character with no data behind it) rather than a functional
+bug, and not every character who appears deserves an entity — a
+few turns' wait for the classifier to judge relevance is acceptable.
+Building the trigger also pushes new judgment onto the narrative
+model ("is this character relevant enough to flag") for a benefit
+that hasn't shown up as a real problem yet.
+
+Signal: user reports of noticeably stale or missing character data
+in retrieval or the World panel for newly-introduced characters,
+especially on stories running a high `classifierCadence`.
+
 ### UX (parked)
 
 #### Drag-and-drop file import for ImportDialog

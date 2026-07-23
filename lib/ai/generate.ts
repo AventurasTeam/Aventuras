@@ -92,7 +92,7 @@ export type StreamTextOptions = {
 }
 
 export type StreamTextResult =
-  | { ok: true; stream: ReturnType<typeof streamProviderCall>; modelId: string }
+  | { ok: true; stream: ReturnType<typeof streamProviderCall>; modelId: string; providerId: string }
   | { ok: false; kind: ResolveFailureKind; target: ResolveTarget }
 
 /**
@@ -110,7 +110,7 @@ export function streamText(target: ResolveTarget, opts: StreamTextOptions): Stre
     ...(opts.onError !== undefined ? { onError: opts.onError } : {}),
     ...resolved.callSettings,
   })
-  return { ok: true, stream, modelId: resolved.modelId }
+  return { ok: true, stream, modelId: resolved.modelId, providerId: resolved.providerId }
 }
 
 /** Parse a model's raw text into `schema`, recovering common LLM JSON slop (fences, trailing commas) via jsonrepair before validating. */

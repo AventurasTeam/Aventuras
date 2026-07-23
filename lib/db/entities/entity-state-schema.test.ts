@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { applyUndoPayload, computeUndoPayload } from '@/lib/actions'
+import { applyUndoPayload, computeUndoPayload } from '@/lib/actions/delta/delta-encoding'
 
 import {
   characterStateSchema,
@@ -14,7 +14,7 @@ describe('per-kind state schemas', () => {
   it('parses a representative state for each kind', () => {
     expect(
       characterStateSchema.safeParse({
-        visual: { attire: 'cloak', distinguishing: ['scar'] },
+        visual: { attire: 'cloak', distinguishing: 'scar' },
         traits: ['brave'],
         drives: ['vengeance'],
         voice: 'gruff',

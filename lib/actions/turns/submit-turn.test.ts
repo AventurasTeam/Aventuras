@@ -61,7 +61,7 @@ const WORKING_CONFIG = {
       modelRef: { providerId: 'prov-1', modelId: 'm' },
     },
   ],
-  assignments: {},
+  assignments: { classifier: 'np' },
   defaultProviderId: 'prov-1',
   diagnostics: { enabled: false, debug_level_enabled: false },
 }
@@ -130,7 +130,7 @@ describe('submitTurn', () => {
     resetSingletons()
   })
 
-  it('registers a two-phase pill-and-banner hard-gate per-turn pipeline', async () => {
+  it('registers a three-phase pill-and-banner hard-gate per-turn pipeline', async () => {
     const { ctx } = await makeHarness()
     openStory('s1', 'b1')
     entriesStore.hydrate('b1', [])
@@ -140,7 +140,7 @@ describe('submitTurn', () => {
 
     const pipeline = getPipeline(PER_TURN_KIND)
     expect(pipeline.kind).toBe(PER_TURN_KIND)
-    expect(pipeline.phases).toHaveLength(2)
+    expect(pipeline.phases).toHaveLength(3)
     expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
     expect(pipeline.concurrencyPolicy.blockedBy).toEqual([PER_TURN_KIND, 'chapter-close'])

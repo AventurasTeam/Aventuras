@@ -1,16 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { byKind, active, recent, proseJoin, jsonFilter } from './filters'
+import { byKind, active, staged, recent, proseJoin, jsonFilter } from './filters'
 
 describe('prompt filters', () => {
   const entities = [
     { id: 'char_1', kind: 'character', status: 'active', name: 'Aria' },
     { id: 'char_2', kind: 'character', status: 'retired', name: 'Bex' },
+    { id: 'char_3', kind: 'character', status: 'staged', name: 'Cass' },
     { id: 'loc_1', kind: 'location', status: 'active', name: 'The Keep' },
   ]
 
   it('byKind filters by the kind discriminator', () => {
-    expect(byKind(entities, 'character').map((e) => e.id)).toEqual(['char_1', 'char_2'])
+    expect(byKind(entities, 'character').map((e) => e.id)).toEqual(['char_1', 'char_2', 'char_3'])
     expect(byKind(entities, 'location').map((e) => e.id)).toEqual(['loc_1'])
   })
 
@@ -24,6 +25,14 @@ describe('prompt filters', () => {
 
   it('active filters to status active', () => {
     expect(active(entities).map((e) => e.id)).toEqual(['char_1', 'loc_1'])
+  })
+
+  it('staged returns [] for non-array input', () => {
+    expect(staged(undefined as unknown as never[])).toEqual([])
+  })
+
+  it('staged filters to status staged', () => {
+    expect(staged(entities).map((e) => e.id)).toEqual(['char_3'])
   })
 
   it('recent keeps the last N items', () => {

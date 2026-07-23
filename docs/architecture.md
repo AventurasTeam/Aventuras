@@ -500,11 +500,19 @@ populates the new entry's metadata:
 - `worldTime: number` — seconds delta (universal across calendars)
   added to the previous entry's `worldTime`. The delta is
   **non-negative — `delta ≥ 0` is a hard pipeline-layer invariant**.
-  Validation rejects classifier outputs with negative deltas; on
-  rejection, re-roll once, then clamp to `0` and emit
+  Validation rejects a negative delta and clamps it to `0`, emitting
   `logger.warn('classifier.delta_clamped', { originalDelta, finalDelta: 0, entryId })`
-  if re-roll also fails (see
-  [`observability.md → Logger contract`](./observability.md#logger-contract)). **For detected flashback / memory framing
+  (see
+  [`observability.md → Logger contract`](./observability.md#logger-contract)).
+  The **periodic and per-turn-fallback classifiers re-roll the whole
+  classification call once** before clamping — cheap, since it's an
+  isolated structured-output call — see
+  [`memory/piggyback.md → Capability gate`](./memory/piggyback.md#capability-gate).
+  **Piggyback's direct (tagged-block) path clamps immediately, no
+  re-roll**: the delta rides the same call as the narrative prose, so
+  re-rolling it would mean regenerating the entire reply just to get a
+  new number — not worth the cost or the narrative-text churn. **For
+  detected flashback / memory framing
   ("she remembered...", "25 years earlier..."), the classifier emits
   0** — main-timeline clock doesn't advance during recalled scenes.
   Cumulative monotonicity holds when written by the classifier

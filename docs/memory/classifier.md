@@ -168,7 +168,7 @@ If the user starts a new turn while the classifier is mid-run, both
 proceed. The classifier holds its own `actionId` for its writes; the
 user-turn pipeline holds its own. That `actionId` is stamped
 `source = periodic_classifier` (distinct from per-turn piggyback's
-`ai_classifier`) and is **never an undo target** — CTRL-Z's
+`piggyback_tagged_block`) and is **never an undo target** — CTRL-Z's
 head-selection skips it (see
 [`data-model.md → Entry mutability & rollback`](../data-model.md#entry-mutability--rollback)).
 It survives only for crash recovery.
