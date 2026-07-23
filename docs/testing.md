@@ -169,13 +169,36 @@ the machinery under test.
 
 ## Mock LLM
 
-Provider calls route to a local HTTP server (`e2e/harness/mock-llm.ts`)
-seeded as an `openai-compatible` provider row in the fixture DB. This
-exercises the real transport (`lib/ai/transport`) rather than
-bypassing it, and works identically in local and packaged modes —
-unlike the `stub` provider, which is `__DEV__`-gated and absent from
-the packaged build. Deterministic canned responses per prompt shape
-keep assertions stable.
+Provider calls route to a local HTTP server (`e2e/harness/mock-llm.ts`).
+The fixture already seeds an `openai-compatible` provider; the harness
+starts the mock, then `setProviderEndpoint` repoints that provider's
+endpoint at the mock's URL before launch (the port is dynamic, so the
+override happens at seed time, not in the dataset). This exercises the
+real transport (`lib/ai/transport`) rather than bypassing it, and works
+identically in local and packaged modes — unlike the `stub` provider,
+which is `__DEV__`-gated and absent from the packaged build. It sends
+CORS headers (and answers the preflight) because the renderer's fetch
+is cross-origin.
+
+**One endpoint, many output shapes.** A single turn fans out into
+several calls on the same `…/chat/completions` URL, so the mock routes
+on the request:
+
+- **`stream: true`** → an SSE prose stream (the narrative call).
+- **otherwise (structured)** → a JSON chat completion whose body is
+  chosen by matching the exact TypeScript block the app injects into
+  the prompt — `schemaToTypeScriptBlock` over each agent's Zod schema
+  (`lib/ai/prompt-schema.ts`). Each structured agent is one
+  `STRUCTURED_AGENTS` entry `{ name, block, example }`; the match
+  can't drift because it reuses the app's own renderer, and tests
+  override a specific agent's reply via `setStructured(name, value)`.
+
+This covers the **auto** (prompt-injection) path the fixture uses; a
+`force-on` native-structured provider carries the schema in
+`response_format` instead, which the same registry would match there.
+Only the LLM is mocked — the pipeline, transport, entry writes, and
+delta log all run for real; the `turn` and `classifier` specs assert
+their effects through the DB bridge.
 
 ## Selector strategy
 
