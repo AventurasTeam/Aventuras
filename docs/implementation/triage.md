@@ -339,3 +339,18 @@ slice-planning gate forces its resolution before that slice is planned.
   the prompt-embedded (auto) path; `e2e/tests/structured-force-on.spec.ts`
   pins current behavior and flags the change if the flag is wired.
   Surfaced by the M3 E2E harness work (2026-07-24).
+
+- **E2E suite sits at the happy-path core; backfill to the "thorough"
+  bar.** The harness and the eight specs cover one representative path
+  per seam (home, embedder, wizard-create, turn, classifier, force-on),
+  but [`docs/testing.md → Coverage`](../testing.md#coverage-thorough-not-exhaustive)
+  sets the bar at thorough — common alternative flows and common
+  seam-crossing edge cases too. Known gaps on flows that already exist:
+  creative-mode create (no lead / no embed), regenerate, undo,
+  resume-draft, open-existing, composer modes; and the edge cases —
+  generation-failure → retry surface, cancel mid-turn,
+  embedder-gate-blocked wizard, opening-only-branch turn, settings-corrupt
+  recovery. New seam-touching slices meet the bar at plan time (the
+  plan-slice gate); this queues the backfill for the pre-existing flows
+  so it isn't assumed done. Surfaced by the M3 E2E harness work
+  (2026-07-24).
