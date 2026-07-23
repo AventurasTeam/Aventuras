@@ -27,6 +27,38 @@ deltas. It does **not** re-verify rendering (Storybook owns that) or
 logic (unit owns that). The rule of thumb: **drive through the UI,
 assert against the database.**
 
+## Coverage: thorough, not exhaustive
+
+E2E is **broad across flows, shallow within each** — it proves the
+seams hold under realistic use, not that every branch is correct.
+
+**In scope — write these:**
+
+- **Every happy path.** The main success route through each flow —
+  create a story, take a turn, install + embed, browse, classify.
+- **Common alternative flows.** The routes real users hit often:
+  creative-mode story (no lead, no embed), regenerate / undo a turn,
+  open an existing story, resume a draft, the composer modes.
+- **Common edge cases _that cross a seam_.** The boundary and failure
+  states only a running app reaches: a generation failure surfacing
+  the retry path, cancel mid-turn, the embedder-unavailable gate
+  blocking the wizard, a turn on an opening-only branch.
+
+**Out of scope — leave to the cheaper layers, or skip:**
+
+- **Pure-logic branches and parser edge cases** → unit (malformed
+  classifier output, id-substitution failures). Don't re-drive them
+  through the packaged app.
+- **Rendering variations** → Storybook.
+- **Rare / pathological permutations.** Exhaustive enumeration in the
+  slowest layer isn't worth the wall-clock.
+
+**The boundary test:** an edge case earns an E2E test when it is a
+flow/seam behavior the cheaper layers _can't_ reach. If unit or
+Storybook can catch it, it lives there. No coverage threshold —
+calibrate to how common the path is and whether a running app is the
+only place the behavior is observable.
+
 ## E2E target: desktop only
 
 E2E runs against **Electron**, packaged. Two platform decisions are

@@ -92,7 +92,7 @@ The E2E layer ([`docs/testing.md`](../../../docs/testing.md)) is expensive and t
 - **Warrants an E2E test** when the slice changes a seam only a running app exercises: renderer↔main IPC, migrations, the `app://` protocol, a native module, a generation pipeline, or a user-facing flow end-to-end (a reader turn, the wizard, story open).
 - **Does not** when the slice is `lib/*` logic (unit-tested), a component (Storybook), or docs — the default for most slices.
 
-When it warrants one, the plan MUST carry an E2E task (write the spec against the harness, reusing `e2e/locators` + `e2e/flows`; drive the UI, assert through the DB bridge) and `pnpm test:e2e` as a named verification command. New selector needs go in as `testID`s per the doc's tier rule, co-designed with the UI work — not bolted on later.
+When it warrants one, the plan MUST carry an E2E task (write the spec against the harness, reusing `e2e/locators` + `e2e/flows`; drive the UI, assert through the DB bridge) and `pnpm test:e2e` as a named verification command. Size the coverage per [`docs/testing.md` → Coverage](../../../docs/testing.md#coverage-thorough-not-exhaustive): thorough, not exhaustive — the flow's happy path, its common alternative flows, and the common edge cases that cross a seam; leave pure-logic branches to unit. New selector needs go in as `testID`s per the doc's tier rule, co-designed with the UI work — not bolted on later.
 
 **Classifying questions:**
 
