@@ -81,8 +81,8 @@ const DAY = 86_400_000
 // ---------------------------------------------------------------------------
 
 const HERO = 'story_hero'
-const MAIN = 'branch_hero_main'
-const FORK = 'branch_hero_fork'
+const MAIN = 'br_hero_main'
+const FORK = 'br_hero_fork'
 
 const CAL = 'cal_default'
 
@@ -104,7 +104,7 @@ const ID = {
 } as const
 
 function entryId(prefix: string, i: number): string {
-  return `e_${prefix}_${String(i).padStart(4, '0')}`
+  return `entry_${prefix}_${String(i).padStart(4, '0')}`
 }
 
 // Validate-or-throw: build-time guard that every JSON payload satisfies its Zod
@@ -783,49 +783,49 @@ const heroHappenings: NewHappening[] = [
 
 const heroInvolvements: NewHappeningInvolvement[] = [
   {
-    id: 'inv_ambush_kael',
+    id: 'hinv_ambush_kael',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     entityId: ID.kael,
     role: 'target',
   },
   {
-    id: 'inv_ambush_vorne',
+    id: 'hinv_ambush_vorne',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     entityId: ID.vorne,
     role: 'aggressor',
   },
   {
-    id: 'inv_fire_mira',
+    id: 'hinv_fire_mira',
     branchId: MAIN,
     happeningId: 'hap_fire',
     entityId: ID.mira,
     role: 'witness',
   },
   {
-    id: 'inv_fire_watch',
+    id: 'hinv_fire_watch',
     branchId: MAIN,
     happeningId: 'hap_fire',
     entityId: ID.watch,
     role: 'responder',
   },
   {
-    id: 'inv_betrayal_sage',
+    id: 'hinv_betrayal_sage',
     branchId: MAIN,
     happeningId: 'hap_betrayal',
     entityId: ID.sage,
     role: 'betrayer',
   },
   {
-    id: 'inv_pact_kael',
+    id: 'hinv_pact_kael',
     branchId: MAIN,
     happeningId: 'hap_pact',
     entityId: ID.kael,
     role: 'party',
   },
   {
-    id: 'inv_pact_vorne',
+    id: 'hinv_pact_vorne',
     branchId: MAIN,
     happeningId: 'hap_pact',
     entityId: ID.vorne,
@@ -836,7 +836,7 @@ const heroInvolvements: NewHappeningInvolvement[] = [
 // characterId must be a character entity; the natural key is (branch, character, happening).
 const heroAwareness: NewHappeningAwareness[] = [
   {
-    id: 'aw_ambush_kael',
+    id: 'haw_ambush_kael',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     characterId: ID.kael,
@@ -846,7 +846,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_ambush_mira',
+    id: 'haw_ambush_mira',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     characterId: ID.mira,
@@ -856,7 +856,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'told',
   },
   {
-    id: 'aw_fire_mira',
+    id: 'haw_fire_mira',
     branchId: MAIN,
     happeningId: 'hap_fire',
     characterId: ID.mira,
@@ -866,7 +866,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_fire_kael',
+    id: 'haw_fire_kael',
     branchId: MAIN,
     happeningId: 'hap_fire',
     characterId: ID.kael,
@@ -876,7 +876,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'told',
   },
   {
-    id: 'aw_betrayal_kael',
+    id: 'haw_betrayal_kael',
     branchId: MAIN,
     happeningId: 'hap_betrayal',
     characterId: ID.kael,
@@ -886,7 +886,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'discovered',
   },
   {
-    id: 'aw_pact_kael',
+    id: 'haw_pact_kael',
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.kael,
@@ -896,7 +896,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_pact_vorne',
+    id: 'haw_pact_vorne',
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.vorne,
@@ -969,7 +969,7 @@ const heroTranslations: NewTranslation[] = [
 
 const heroEntryAssets: NewEntryAsset[] = [
   {
-    id: 'ea_hero_1',
+    id: 'ast_hero_1',
     branchId: MAIN,
     entryId: entryId('hero', 6),
     assetId: 'asset_inline_1',
@@ -983,7 +983,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_1',
     branchId: MAIN,
     entryId: entryId('hero', 14),
-    actionId: 'seed_act_edit_1',
+    actionId: 'act_edit_1',
     logPosition: 1,
     source: 'user_edit',
     targetTable: 'story_entries',
@@ -997,7 +997,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_2',
     branchId: MAIN,
     entryId: entryId('hero', 22),
-    actionId: 'seed_act_class_1',
+    actionId: 'act_class_1',
     logPosition: 2,
     source: 'ai_classifier',
     targetTable: 'happenings',
@@ -1011,7 +1011,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_3',
     branchId: MAIN,
     entryId: null,
-    actionId: 'seed_act_chapter_1',
+    actionId: 'act_chapter_1',
     logPosition: 3,
     source: 'chapter_close',
     targetTable: 'chapters',
@@ -1036,7 +1036,7 @@ function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
       id: `delta_create_${e.branchId}_${e.id}`,
       branchId: e.branchId,
       entryId: null,
-      actionId: `seed_act_create_${e.branchId}_${e.id}`,
+      actionId: `act_create_${e.branchId}_${e.id}`,
       logPosition: lp,
       source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
       targetTable: 'story_entries',
@@ -1069,7 +1069,7 @@ type Filler = {
 
 const fillerLead: NewEntity = {
   id: 'char_sable',
-  branchId: 'branch_active2_main',
+  branchId: 'br_active2_main',
   kind: 'character',
   name: 'Sable',
   description: 'A cartographer mapping a coast that keeps redrawing itself.',
@@ -1199,7 +1199,7 @@ function fillerStoryRows(): {
 
   fillers.forEach((f, fi) => {
     const storyId = `story_${f.key}`
-    const branchId = `branch_${f.key}_main`
+    const branchId = `br_${f.key}_main`
     const t0 = BASE + (fi + 2) * DAY
     storyRows.push({
       id: storyId,
@@ -1276,7 +1276,7 @@ function fillerStoryRows(): {
 // ---------------------------------------------------------------------------
 
 const RICH = 'story_rich'
-const RMAIN = 'branch_rich_main'
+const RMAIN = 'br_rich_main'
 
 const RICH_OPENING =
   'A plain opening: the gallery of impossible rooms admits one visitor at a time. Every door beyond this one is painted in styles no honest wall should hold.'
@@ -1490,7 +1490,7 @@ const pipelineRunRows: NewPipelineRun[] = [
   {
     runId: 'run_hero_1',
     kind: 'narrative',
-    actionId: 'seed_act_run_1',
+    actionId: 'act_run_1',
     storyId: HERO,
     startedAt: BASE + 70 * MIN,
     finishedAt: BASE + 70 * MIN + 4_200,

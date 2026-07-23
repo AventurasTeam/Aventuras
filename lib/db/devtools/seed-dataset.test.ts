@@ -52,7 +52,7 @@ describe('buildSeedSteps', () => {
   })
 
   it('seeds the rich-rendering story with entries the detector actually flags', () => {
-    const richEntries = rowsOf('story_entries').filter((r) => r.branchId === 'branch_rich_main')
+    const richEntries = rowsOf('story_entries').filter((r) => r.branchId === 'br_rich_main')
     expect(richEntries.length).toBeGreaterThanOrEqual(40)
 
     const flagged = richEntries.filter((r) =>
@@ -63,7 +63,7 @@ describe('buildSeedSteps', () => {
 
   it('routes every security probe through the rich path (a plain-path probe tests nothing)', () => {
     const probes = rowsOf('story_entries').filter(
-      (r) => r.branchId === 'branch_rich_main' && (r.content as string).startsWith('PROBE'),
+      (r) => r.branchId === 'br_rich_main' && (r.content as string).startsWith('PROBE'),
     )
     expect(probes.length).toBeGreaterThanOrEqual(5)
     for (const probe of probes) {
