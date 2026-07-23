@@ -109,29 +109,33 @@ and the fixture always matches the current migrations.
 
 ### Substitutable IDs must be real UUIDs
 
-This is a hard prerequisite, and the current seed dataset violates
-it. During a turn, `substituteIds` (`lib/ids/substitute.ts`) walks
-the generation context and replaces every entity ID that matches
-`ID_PATTERN` — `prefix_<uuid-v4-shape>` for the prefixes in
-`SUBSTITUTABLE_PREFIXES` (`lib/ids/prefixes.ts`) — with a compact
-placeholder, so the model sees `c1` not a UUID. The classifier /
-piggyback layer maps the model's placeholders back to UUIDs on the
-return trip.
+Why the fixture can't use mnemonic IDs. During a turn, `substituteIds`
+(`lib/ids/substitute.ts`) walks the generation context and replaces
+every entity ID that matches `ID_PATTERN` — `prefix_<uuid-shape>` for
+the prefixes in `SUBSTITUTABLE_PREFIXES` (`lib/ids/prefixes.ts`) — with
+a compact placeholder, so the model sees `c1` not a UUID. The
+classifier / piggyback layer maps the placeholders back to UUIDs on
+the return trip.
 
-The dev seed dataset (`lib/db/devtools/seed-dataset.ts`) uses
-**mnemonic** IDs like `char_kael` and `lore_veil`. These do **not**
-match `ID_PATTERN`, so `substituteIds` passes them through untouched
-and no placeholder is ever allocated. Nothing errors at context-build
-time — which is why browsing seeded data looks fine — but the return
-trip has no placeholder to resolve and the turn fails with a malformed
-placeholder. A turn cannot run on top of today's seed data.
+A mnemonic ID like `char_kael` does **not** match `ID_PATTERN`, so
+`substituteIds` passes it through untouched and no placeholder is
+allocated. Nothing errors at context-build time — which is why
+browsing seeded data looks fine — but the return trip has no
+placeholder to resolve and the turn fails with a malformed
+placeholder.
 
 **Contract:** every seeded ID under a substitutable prefix is a real
-`prefix_<uuid>` value. The seed derives it **deterministically** from
-the mnemonic handle (a fixed-namespace UUIDv5), so authoring stays
-readable, cross-references stay wired, and the fixture is byte-stable
-across runs without a checked-in DB. Fixing this is a standalone
-prerequisite slice; it also repairs `pnpm db:seed` for dev, unlocking
+`prefix_<uuid>` value. `buildSeedSteps` (`lib/db/devtools/seed-dataset.ts`)
+authors readable mnemonics, then a final pass (`seed-ids.ts`) rewrites
+every substitutable ID to `prefix_<uuid>` — the UUID is a deterministic
+pure-JS hash of the mnemonic (v4-shaped, engine-agnostic so it matches
+under both the Node seed script and the Hermes reseed), so
+cross-references stay wired and the fixture is byte-stable across runs
+without a checked-in DB. The same pass corrects two authored off-spec
+prefixes (`fac_`→`fact_`, `thread_`→`thr_`) and re-canonicalizes
+character-relationship pairs whose `a_id < b_id` order the remap
+inverts. Non-substitutable IDs keep readable suffixes (`br_hero_main`).
+This also repaired `pnpm db:seed` for dev, unlocking
 turns-on-seeded-data in the dev app.
 
 ## Embedder in E2E
