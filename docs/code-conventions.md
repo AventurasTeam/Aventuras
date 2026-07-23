@@ -200,6 +200,10 @@ bar). Coverage settings live exclusively in `vitest.config.ts` —
 CLI `--coverage.*` dot-overrides crash the storybook project's
 preset loader, so never pass them; change the config instead.
 
+End-to-end (Playwright + Electron) coverage of the cross-subsystem
+seams is a separate layer with its own spec:
+[`testing.md`](./testing.md).
+
 ## Forms
 
 Input clusters with a submit button use `react-hook-form` — multi

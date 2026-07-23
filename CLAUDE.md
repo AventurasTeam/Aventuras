@@ -156,6 +156,10 @@ file is symlinked from `AGENTS.md`, so non-Claude agents that read
   (commenting discipline, import-wildcard ban with rn-primitives
   exception). Applies to any `app/**`, `components/**`, `hooks/**`,
   `lib/**`, `types/**`, `electron/**`, or `scripts/**` work.
+- [`testing.md`](./.claude/rules/testing.md) — test-layer rules
+  (which layer to use, desktop-only E2E, fixture/seed contract,
+  DB-first selectors). Applies to any `e2e/**`, `*.spec.ts`, or
+  `*.test.{ts,tsx}` work.
 
 Code work also draws on
 [`docs/implementation/lessons-learned/`](./docs/implementation/lessons-learned/README.md)

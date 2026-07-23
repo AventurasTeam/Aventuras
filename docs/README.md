@@ -53,3 +53,7 @@ implementation, and the open questions tracked across the project.
 - **[code-conventions.md](./code-conventions.md)** — code conventions:
   module structure (`lib/*` public-API rule), state placement, action
   layer, component taxonomy, i18n, testing, forms, pnpm and patches.
+- **[testing.md](./testing.md)** — the E2E layer: Playwright + Electron
+  target, harness structure, fixture/seed contract, embedder seeding,
+  mock LLM, and the DB-first selector strategy. Unit + component
+  discipline stays in code-conventions.md.
