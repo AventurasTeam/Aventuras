@@ -88,8 +88,9 @@ dropped: canon defines no reader-entry refine (refine is a
 wizard-opening affordance, 3.6).
 [Slice 3.11](./slices/11-story-settings-shell.md) (also added at
 promotion, from an audit finding) ships the minimal Story Settings
-host that 3.1b's embedding-status panel and 3.7's Composer section
-register into — the real basic surface remains M4.4.
+host that 3.1b's embedding-status panel and 3.7's Generation-tab
+Authoring aids section register into — the real basic surface
+remains M4.4.
 
 What changes from "before" to "after": the app goes from "one loop
 that forgets everything past the recent buffer" to "prose and
@@ -289,13 +290,19 @@ slice lands first; the insertion order above is binding either way.
 ### C7 — Story Settings section registration
 
 [Slice 3.11](./slices/11-story-settings-shell.md) owns the minimal
-Story Settings shell and a section-registration seam: a section is
-a self-registered module declaring its tab and rendering its own
-body — consumers touch no shared file (same spirit as the M1.5
-delta-dispatch registration API). Consumers: 3.1b registers the
-Memory tab's embedding-status panel; 3.7 registers the Composer
-section (categories editor, master toggle, count stepper).
-Registration names fixed in 3.11's first commit.
+Story Settings shell. Two seams: the route's **tab map** — a
+consumer slice renders its section in the tab's branch, the same way
+M3.1a extended the App Settings route — and the shell's
+**save session**, which a section joins at runtime by calling
+`useStorySettingsSection` from inside its own body, reporting
+`{ dirtyFields, getPatch, reset }` into the surface's single save
+bar.
+Consumers: 3.1b registers the Memory tab's embedding-status panel;
+3.7 registers the Generation tab's Authoring aids section
+(categories editor, master toggle, count stepper). Story Settings
+saves write `stories.settings` directly — `stories` is absent from
+`deltas.target_table`, so a settings save carries no delta and is
+not CTRL-Z reversible. Names fixed in 3.11's first commit.
 
 ### C8 — Swap-dialog open action
 

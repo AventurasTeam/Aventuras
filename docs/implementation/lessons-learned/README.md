@@ -51,6 +51,9 @@ slice plans when relevant.
   — engine anchoring silently skips RN-Web wrapper trees; opt out
   with `overflow-anchor: none` and compensate deterministically,
   never mid-gesture.
+- [`BackHandler` is not inert on web](./backhandler-web-console-error.md)
+  — RN-Web's shim `console.error`s on every subscribe; gate the
+  subscribe on `Platform.OS === 'android'`, not the handler.
 
 ### rn-primitives substrate
 
@@ -117,6 +120,9 @@ slice plans when relevant.
   — the published xxh32 vectors all hash below `0x80000000`, so a
   signed-int32 leak survived a green suite; assert format
   invariants over a sweep, not just point values.
+- [A literal NUL in a plan file silently rewrites the code it specifies](./plan-file-nul-corruption.md)
+  — `file .impl-plans/*.md` should never say `data`; reading tools disagree
+  about a raw NUL and each renders a different separator.
 - [Vite eagerly bundles a runtime-guarded `require()`, Metro doesn't](./storybook-vite-eager-guarded-require.md)
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias

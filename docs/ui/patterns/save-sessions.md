@@ -96,11 +96,12 @@ single primitive, never a second row. The visual contract stays
 single-row across surfaces.
 
 **Positioning** — the save bar is a flex item at the bottom of the
-editable pane (after the form sections). Not sticky-positioned;
-on long forms it scrolls below the visible viewport. Sticky-
-positioning is a cross-cutting change worth its own pass if it
-becomes friction in practice; v1 stays consistent across surfaces
-with the non-sticky pattern.
+editable pane, a **sibling of the pane's scroller rather than a
+child of it**. It stays anchored to the pane's bottom edge no
+matter how long the form is, and it spans the editable pane only —
+never the rail or the surrounding chrome. Pinned by layout — the
+scroller is the flex sibling that shrinks — not by
+`position: sticky`.
 
 **Save success → toast.** On a successful save the bar disappears
 and a `toast.success` fires (`Saved.` or surface-specific copy).
@@ -151,6 +152,15 @@ intercept hooks are per-surface (a master-detail list wires the
 row-click intent; a settings surface wires route changes; both
 wire the window-close intent), but the user-visible UX is
 identical. No surface gets to skip the guard while dirty.
+
+**Window-close is the one intent that cannot always show this
+modal.** On desktop it can: Electron's main process holds the
+close, the renderer raises the normal Save / Discard / Cancel
+dialog, and confirming releases the close — `useUnsavedChangesGuard`
+wires both halves. In a browser it cannot: `beforeunload` cannot be
+resumed once the handler returns, so the only available affordance
+is the browser's own generic prompt. Surfaces get the modal
+everywhere else; this one degrades by platform, deliberately.
 
 ---
 

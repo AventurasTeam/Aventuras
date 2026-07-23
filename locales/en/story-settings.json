@@ -1,0 +1,34 @@
+{
+  "title": "Story Settings",
+  "loading": "Loading story settings…",
+  "landsLater": "Lands in a later milestone",
+  "landsLaterBody": "This tab isn't built yet. Nothing here is configurable.",
+  "unavailable": "Couldn't read your stories",
+  "unavailableBody": "Something went wrong loading this device's story list. Go back and try again.",
+  "uninitialized": "This story has no settings yet",
+  "uninitializedBody": "Settings are written when a story finishes setup. Finish the wizard for this story, or reset its settings to defaults.",
+  "groups": {
+    "story": "Story",
+    "settings": "Settings"
+  },
+  "tabs": {
+    "about": "About",
+    "generation": "Generation",
+    "models": "Models",
+    "memory": "Memory",
+    "translation": "Translation",
+    "pack": "Pack",
+    "calendar": "Calendar",
+    "advanced": "Advanced"
+  },
+  "save": {
+    "saved": "Saved.",
+    "failed": "Couldn't save your changes. They're still here — try again.",
+    "stale": "Saved, but this screen is out of date. Reload to see the current values.",
+    "unsavedTitle": "Unsaved changes",
+    "unsavedBody": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
+    "unsavedSave": "Save",
+    "unsavedDiscard": "Discard"
+  },
+  "missingStory": "This story could not be loaded."
+}

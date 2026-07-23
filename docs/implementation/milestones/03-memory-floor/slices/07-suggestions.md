@@ -20,7 +20,8 @@ turn: a sibling `<suggestions>` block emits in the narrative fold
 the entry's metadata, and renders as the reader's chip strip with
 category overlines, a refresh re-roll through the new
 `suggestion-refresh` pipeline, and an empty-state Generate. Story
-Settings gains the Composer categories editor (wiring the shipped
+Settings gains the Generation tab's Authoring aids categories
+editor (wiring the shipped
 `SuggestionCategoriesEditor`) plus the `suggestionsEnabled` toggle
 and `suggestionCount` stepper.
 
@@ -87,8 +88,8 @@ tap-after-typing draft loss is a documented v1 wart.
   `(removed)` fallback; disabled-category render rules;
   accessibility (chip = button with category label, `aria-busy`
   loading, refresh `aria-label`).
-- **Settings surface:** the Composer section registered into the
-  Story Settings shell per C7
+- **Settings surface:** the Generation tab's Authoring aids section
+  hosted by the Story Settings shell per C7
   ([Slice 3.11](./11-story-settings-shell.md) hosts), with
   `suggestionsEnabled` master toggle, `suggestionCount` stepper,
   and the categories editor wiring the shipped
@@ -163,6 +164,49 @@ tap-after-typing draft loss is a documented v1 wart.
   virtualized entry list and the composer; confirm it lives outside
   the scroll container (reader-document pattern) rather than as a
   list row.
+- **Which navigate-away intercepts the settings section needs.**
+  [`save-sessions.md → Navigate-away guard`](../../../../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
+  lists window-close intent (electron close, web `beforeunload`)
+  and Actions-menu route jumps among its required categories, and
+  [Slice 3.11](./11-story-settings-shell.md) wired neither — only
+  the surface's own back path (chrome Return, Android hardware
+  back). Window-close was left out deliberately: cross-cutting
+  infra no surface wires today, and wiring it would pull a UI slice
+  into `electron/`. The shell anticipates one anyway —
+  `resolveLeave` is documented as reachable directly, because a
+  `beforeunload` handler cannot route through a React modal. Both
+  gaps are inert while the session has no sections and so can never
+  be dirty; the Authoring aids section makes them live — the route
+  jump everywhere, window-close on desktop. Decide at planning
+  whether to wire them or accept that a window close or a
+  Diagnostics jump drops unsaved category edits. Surfaced by M3.11
+  (2026-07-22).
+- **The save bar is invisible in the phone collapsed state.** The
+  shell renders it inside the detail pane, and `MasterDetailLayout`
+  hides that pane on phone whenever no tab is selected — so a dirty
+  session collapsed back to the rail shows no bar, no dirty count,
+  and no way to save or discard. Nothing is lost (every panel stays
+  mounted, and leaving still routes through the guard), but the
+  user cannot see or act on the unsaved changes.
+  [`save-sessions.md → Save bar`](../../../../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
+  does not cover the collapsed case, and its positioning rule
+  ("spans the editable pane only — never the rail or the
+  surrounding chrome") argues against the obvious fix. This slice
+  is the first that can make the session dirty, so it inherits the
+  call: lift the bar to the surface footer on phone, or accept
+  rail-state invisibility. Surfaced by M3.11 (2026-07-22).
+- **The route-to-session wiring has no test coverage.**
+  [Slice 3.11](./11-story-settings-shell.md)'s route mounts the
+  save bar on `snapshot.isDirty` and the guard dialog on
+  `pendingLeave && isFocused`, then maps their actions onto
+  `resolveLeave`. With zero registered sections none of that can
+  execute, so deleting both blocks outright passes typecheck, lint,
+  and all 1928 tests across the unit and storybook vitest
+  projects — and running the app cannot catch it either. This slice
+  is the first able to exercise the path end to end; decide whether
+  to pin the seam with a story or test that mounts the provider
+  over a fixture section and asserts the wiring. Surfaced by M3.11
+  (2026-07-22).
 
 ## Implementation notes
 

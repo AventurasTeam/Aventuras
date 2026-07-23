@@ -1,0 +1,259 @@
+import { eq } from 'drizzle-orm'
+import { afterEach, describe, expect, it } from 'vitest'
+
+import { branches, buildStorySettings, stories, storyDefinitionSchema } from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { currentStoryStore, resetAllStores, storiesStore } from '@/lib/stores'
+
+import { StorySettingsStaleStoreError, updateStorySettings } from './update-story-settings'
+
+const STORY_DEFINITION = storyDefinitionSchema.parse({
+  mode: 'adventure',
+  leadEntityId: 'entity_1',
+  narration: 'third',
+  genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+  tone: { label: 'Wry', promptBody: 'wry' },
+  setting: 'A keep on a hill.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+})
+
+afterEach(() => {
+  resetAllStores()
+})
+
+// classifierCadence and suggestionCount must stay different from
+// STORY_SETTINGS_DEFAULTS (5 and 3): the merge assertions can only tell a
+// preserved value from a re-defaulted one while those differ.
+async function seed() {
+  const { db, sqlite, runInTransaction } = await createTestDb()
+  const settings = buildStorySettings(
+    {
+      classifierCadence: 2,
+      suggestionCount: 6,
+      models: { narrative: 'model-a', classifier: 'model-b' },
+    },
+    'embed-a',
+    null,
+  )
+  await db.insert(stories).values({
+    id: 'story_1',
+    title: 'Aria',
+    status: 'active',
+    currentBranchId: 'branch_1',
+    definition: STORY_DEFINITION,
+    settings,
+    createdAt: 1,
+    updatedAt: 1,
+  })
+  await db
+    .insert(branches)
+    .values({ id: 'branch_1', storyId: 'story_1', name: 'main', createdAt: 1 })
+  return { db, sqlite, runInTransaction, settings }
+}
+
+describe('updateStorySettings', () => {
+  it('merges the patch without clobbering sibling fields', async () => {
+    const { db, runInTransaction, settings } = await seed()
+
+    const next = await updateStorySettings(
+      'story_1',
+      { suggestionCount: 5 },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(next.suggestionCount).toBe(5)
+    expect(next.classifierCadence).toBe(2)
+    expect(next.embedding_model_id).toBe(settings.embedding_model_id)
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(5)
+    expect(row.settings?.classifierCadence).toBe(2)
+    expect(row.updatedAt).toBe(99)
+
+    const mirrored = storiesStore.getStories().rows.find((r) => r.id === 'story_1')
+    expect(mirrored?.settings?.suggestionCount).toBe(5)
+    expect(mirrored?.updatedAt).toBe(99)
+  })
+
+  it('replaces nested objects wholesale rather than merging them', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    expect(settings.models).toEqual({ narrative: 'model-a', classifier: 'model-b' })
+
+    const next = await updateStorySettings(
+      'story_1',
+      { models: { narrative: 'model-c' } },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(next.models).toEqual({ narrative: 'model-c' })
+  })
+
+  it('refreshes currentStoryStore when the updated story is open', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    currentStoryStore.set({
+      storyId: 'story_1',
+      branchId: 'branch_1',
+      definition: STORY_DEFINITION,
+      settings,
+    })
+
+    expect(settings.suggestionsEnabled).toBe(false)
+
+    await updateStorySettings('story_1', { suggestionsEnabled: true }, { db, runInTransaction }, 99)
+
+    expect(currentStoryStore.getCurrentStory()?.settings.suggestionsEnabled).toBe(true)
+    expect(currentStoryStore.getCurrentStory()?.settings.classifierCadence).toBe(2)
+    expect(currentStoryStore.getCurrentStory()?.branchId).toBe('branch_1')
+    expect(currentStoryStore.getCurrentStory()?.definition).toEqual(STORY_DEFINITION)
+  })
+
+  it('leaves currentStoryStore alone when a different story is open', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    currentStoryStore.set({
+      storyId: 'story_other',
+      branchId: 'branch_other',
+      definition: STORY_DEFINITION,
+      settings,
+    })
+
+    await updateStorySettings('story_1', { suggestionCount: 4 }, { db, runInTransaction }, 99)
+
+    expect(currentStoryStore.getCurrentStory()?.storyId).toBe('story_other')
+    expect(currentStoryStore.getCurrentStory()?.settings.suggestionCount).toBe(
+      settings.suggestionCount,
+    )
+  })
+
+  it('treats an undefined-valued key as untouched rather than a reset to default', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    expect(settings.suggestionCount).toBe(6)
+
+    const next = await updateStorySettings(
+      'story_1',
+      { suggestionCount: undefined, piggybackMode: 'on' },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(next.suggestionCount).toBe(6)
+    expect(next.piggybackMode).toBe('on')
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(6)
+  })
+
+  it('rejects rather than self-heals when the stored settings are corrupt', async () => {
+    const { db, sqlite, runInTransaction, settings } = await seed()
+    const corrupt = JSON.stringify({ ...settings, classifierCadence: 'broken' })
+    sqlite.exec(`UPDATE stories SET settings = '${corrupt}' WHERE id = 'story_1'`)
+
+    await expect(
+      updateStorySettings('story_1', { classifierCadence: 7 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow()
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
+  })
+
+  it('throws for an unknown story', async () => {
+    const { db, runInTransaction } = await seed()
+
+    await expect(
+      updateStorySettings('story_missing', { suggestionCount: 2 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow('Story not found')
+  })
+
+  it('rejects an invalid patch without writing', async () => {
+    const { db, runInTransaction } = await seed()
+
+    await expect(
+      updateStorySettings(
+        'story_1',
+        { suggestionCount: 'lots' } as never,
+        { db, runInTransaction },
+        99,
+      ),
+    ).rejects.toThrow()
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
+  })
+
+  // Zod strips unknown keys, so without an explicit check a typo'd key reports
+  // a successful save that wrote nothing.
+  it('rejects an unknown key by name instead of silently dropping it', async () => {
+    const { db, runInTransaction } = await seed()
+
+    await expect(
+      updateStorySettings('story_1', { suggestionCoutn: 4 } as never, { db, runInTransaction }, 99),
+    ).rejects.toThrow('suggestionCoutn')
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
+  })
+
+  // `key in shape` passes for every Object.prototype member, so these reached
+  // zod, were stripped, and reported a successful save that wrote nothing.
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty'])(
+    'rejects the prototype key %s instead of silently dropping it',
+    async (key) => {
+      const { db, runInTransaction } = await seed()
+
+      await expect(
+        updateStorySettings('story_1', { [key]: 'x' } as never, { db, runInTransaction }, 99),
+      ).rejects.toThrow(key)
+
+      const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+      expect(row.updatedAt).toBe(1)
+    },
+  )
+
+  it('flags the story for repair when the stored settings are unreadable', async () => {
+    const { db, sqlite, runInTransaction } = await seed()
+    sqlite.exec(`UPDATE stories SET settings = NULL WHERE id = 'story_1'`)
+
+    await expect(
+      updateStorySettings('story_1', { suggestionCount: 2 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow()
+
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+  })
+
+  it('reports a stale store distinctly from a failed save', async () => {
+    const { db, runInTransaction, settings } = await seed()
+    // The write lands, then rehydrateStories' re-read fails — the user must
+    // not be told their changes were lost. The action's own select is the
+    // first; the store's re-read is the second.
+    let selects = 0
+    const brokenDb = new Proxy(db, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop) as unknown
+        if (prop !== 'select' || typeof value !== 'function') {
+          return typeof value === 'function' ? value.bind(target) : value
+        }
+        return (...args: unknown[]) => {
+          selects += 1
+          if (selects > 1) throw new Error('read failed')
+          return (value as (...a: unknown[]) => unknown).apply(target, args)
+        }
+      },
+    })
+
+    await expect(
+      updateStorySettings(
+        'story_1',
+        { suggestionCount: 2 },
+        { db: brokenDb, runInTransaction },
+        99,
+      ),
+    ).rejects.toBeInstanceOf(StorySettingsStaleStoreError)
+
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(2)
+    expect(row.updatedAt).toBe(99)
+    expect(settings.suggestionCount).toBe(6)
+  })
+})

@@ -14,6 +14,11 @@ type UseGlobalHotkeyOptions = {
   capture?: boolean
   stopPropagation?: boolean
   ignoreEditableTargets?: boolean
+  /**
+   * Pass a screen's focus state. A pushed-under expo-router screen stays
+   * mounted, so an ungated listener keeps firing from behind the new screen.
+   */
+  enabled?: boolean
 }
 
 export function useGlobalHotkey(
@@ -23,10 +28,11 @@ export function useGlobalHotkey(
     capture = false,
     stopPropagation = false,
     ignoreEditableTargets = false,
+    enabled = true,
   }: UseGlobalHotkeyOptions = {},
 ): void {
   useEffect(() => {
-    if (Platform.OS !== 'web') return undefined
+    if (Platform.OS !== 'web' || !enabled) return undefined
     const handler = (event: KeyboardEvent) => {
       if (event.repeat) return
       if (ignoreEditableTargets && isEditableTarget(event.target)) return
@@ -37,5 +43,5 @@ export function useGlobalHotkey(
     }
     window.addEventListener('keydown', handler, capture)
     return () => window.removeEventListener('keydown', handler, capture)
-  }, [matches, onMatch, capture, stopPropagation, ignoreEditableTargets])
+  }, [matches, onMatch, capture, stopPropagation, ignoreEditableTargets, enabled])
 }

@@ -101,6 +101,19 @@ function applyContentSecurityPolicy(): void {
   })
 }
 
+// Windows whose renderer holds unsaved work, those that have already answered
+// the prompt and may close, and those whose close cancelled a quit.
+const closeGuards = new Set<number>()
+const confirmedCloses = new Set<number>()
+const pendingQuits = new Set<number>()
+
+// `before-quit` runs before any window's `close`, so a guard that cancels the
+// close also cancels this quit. Recorded per window so confirming resumes it.
+let quitRequested = false
+app.on('before-quit', () => {
+  quitRequested = true
+})
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1280,
@@ -139,6 +152,33 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // A dead renderer can never answer the prompt, and preventing the close keeps
+  // `closed` from firing — so without this the window becomes unclosable and
+  // every later quit is blocked too.
+  win.webContents.on('render-process-gone', () => {
+    closeGuards.delete(win.id)
+  })
+
+  // Fail-open: only a live renderer that armed the guard gets asked.
+  win.on('close', (event) => {
+    if (!closeGuards.has(win.id) || confirmedCloses.has(win.id)) return
+    if (win.webContents.isDestroyed() || win.webContents.isCrashed()) return
+    event.preventDefault()
+    // Assigned, not merged: a close arriving outside a quit must clear an
+    // intent left behind by a quit the user cancelled.
+    if (quitRequested) pendingQuits.add(win.id)
+    else pendingQuits.delete(win.id)
+    quitRequested = false
+    win.webContents.send('native:close-requested')
+  })
+  win.on('closed', () => {
+    // Window ids are reused; a stale entry here would arm the guard on an
+    // unrelated future window.
+    closeGuards.delete(win.id)
+    confirmedCloses.delete(win.id)
+    pendingQuits.delete(win.id)
+  })
+
   if (isDev) {
     win.loadURL(process.env.EXPO_WEB_URL ?? 'http://localhost:8081')
     win.webContents.openDevTools({ mode: 'detach' })
@@ -172,6 +212,22 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('native:reveal-db-file', () => {
     shell.showItemInFolder(getDbFilePath())
+  })
+  ipcMain.on('native:set-close-guard', (event, active: boolean) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win == null) return
+    if (active) closeGuards.add(win.id)
+    else closeGuards.delete(win.id)
+  })
+  ipcMain.on('native:confirm-close', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win == null) return
+    confirmedCloses.add(win.id)
+    // `window-all-closed` does not quit on darwin, so a Cmd-Q whose close we
+    // cancelled would otherwise leave the process running with no windows.
+    const resumeQuit = pendingQuits.delete(win.id)
+    win.close()
+    if (resumeQuit) app.quit()
   })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),
