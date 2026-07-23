@@ -1508,7 +1508,10 @@ const appSettingsRow: NewAppSettings = {
       apiKey: '',
       endpoint: 'http://localhost:1234/v1',
       favoriteModelIds: ['seed/narrative'],
-      cachedModels: [{ id: 'seed/narrative' }],
+      // taggedBlockReliable lets piggyback ride in-band on the narrative call;
+      // the classifier profile below still backs the periodic classifier and
+      // the piggyback fallback so a turn resolves on seeded data.
+      cachedModels: [{ id: 'seed/narrative', capabilities: { taggedBlockReliable: true } }],
     }),
   ],
   profiles: [
@@ -1519,8 +1522,14 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
       temperature: 0.8,
     }),
+    modelProfileSchema.parse({
+      id: 'prof_classifier',
+      kind: 'agent',
+      name: 'Seed Classifier',
+      modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
+    }),
   ],
-  assignments: { narrative: 'prof_narrative' },
+  assignments: { narrative: 'prof_narrative', classifier: 'prof_classifier' },
   defaultProviderId: 'prov_local',
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   embeddingProviderId: 'prov_local',
