@@ -28,7 +28,7 @@ test.describe('force-on structured output', () => {
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     mock = await startMockLlm()
-    mock.setNarrative('E2E-FORCEON the courier waits.')
+    mock.setNarrative('E2E-FORCEON-REPLY the courier waits.')
     setProviderEndpoint(seeded.dbPath, mock.url)
     disablePiggybackCapability(seeded.dbPath) // force the structured classifier call
     setProfileStructuredOutput(seeded.dbPath, 'prof_classifier', 'force-on')
@@ -48,7 +48,9 @@ test.describe('force-on structured output', () => {
     await composer.fill('E2E-FORCEON-USER I wait.')
     await app.window.getByRole('button', { name: t('reader:send') }).click()
 
-    await expect(app.window.getByText('E2E-FORCEON', { exact: false })).toBeVisible({
+    // Distinct from the user action text ("E2E-FORCEON-USER …") so the match
+    // is unambiguous under strict mode.
+    await expect(app.window.getByText('E2E-FORCEON-REPLY', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
 
