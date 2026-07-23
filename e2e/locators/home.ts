@@ -14,4 +14,7 @@ export const home = {
   // The list header count: t('landing:list.total', { count }).
   listTotal: (page: Page, count: number): Locator =>
     page.getByText(t('landing:list.total', { count }), { exact: false }),
+
+  // Starts the wizard (goes straight to /wizard when no live session exists).
+  newStory: (page: Page): Locator => page.getByRole('button', { name: t('landing:list.newStory') }),
 }
