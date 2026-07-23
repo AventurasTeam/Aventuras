@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
 const REPO_ROOT = join(__dirname, '..', '..')
 
@@ -16,4 +17,24 @@ export function createSeededUserDataDir(): { userDataDir: string; dbPath: string
   const dbPath = join(userDataDir, 'aventuras.db')
   execFileSync('pnpm', ['db:seed', dbPath], { cwd: REPO_ROOT, stdio: 'pipe' })
   return { userDataDir, dbPath }
+}
+
+// Repoint every openai-compatible provider at the mock server. Runs before
+// launch, so the app reads the mock URL into its settings store on boot.
+export function setProviderEndpoint(dbPath: string, url: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as { type: string; endpoint?: string }[]
+    for (const provider of providers) {
+      if (provider.type === 'openai-compatible') provider.endpoint = url
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
 }
