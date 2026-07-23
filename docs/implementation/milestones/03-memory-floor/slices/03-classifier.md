@@ -192,6 +192,26 @@ head]` with the placeholder universe;
 
 ## Open questions
 
+- **Gating user scene-state edits against this pass** — the scheduled
+  world-state-block edit surface ([`followups.md`](../../../../followups.md))
+  applies its edits to entity rows, which collides with this pipeline's
+  `entities.status` writes (staged promotion vs classifier status flip).
+  `'no-gate'` is deliberate and shouldn't be inverted wholesale; the gate
+  wants to be **field-scoped to status** rather than blocking metadata
+  edits at large. Entry metadata itself is uncontested — this pass
+  doesn't write it.
+- **Happening involvements drift when scene membership is edited after
+  the fact** — involvements record who was present at an entry, so a
+  later edit to that entry's `sceneEntities` can contradict them.
+  Rolling back and re-running the pass is disproportionate: it
+  over-reverses (facts anchored to surviving entries must be spared per
+  the survival anchor), costs a full LLM pass for a small correction,
+  and can silently rewrite happenings the user never touched. Prefer
+  flagging affected involvements for review over recomputing, which
+  also matches the established posture that user edits stick only until
+  the classifier reads contradicting prose
+  ([`data-model.md → Authorship contract`](../../../../data-model.md#authorship-contract)
+  parks the manual-edit-vs-overwrite policy as its own question).
 - **Output wire format** — strict structured-output mode
   (capability-gated) vs tagged trailing block; also whether one
   call emits all write kinds or the pass splits into a small number

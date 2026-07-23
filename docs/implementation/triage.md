@@ -265,3 +265,57 @@ slice-planning gate forces its resolution before that slice is planned.
   introduced by M3.11, but M3.11's window-close guard would compound it
   into a window that is also unclosable once a section can be dirty.
   Surfaced by M3.11 review (2026-07-22).
+
+- **`systemFailure` is missing from the canonical entry-metadata
+  shape.** `entryMetadataSchema` (`lib/db/story-entries/entry-metadata.ts`)
+  carries a `systemFailure` object — `kind` / `failure` / `detail` /
+  `submission` — that appears nowhere in
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
+  nor anywhere else in that file. It backs the reader's system-entry
+  error surface and preserves the reversed user action's text so Retry
+  survives a restart. Confirmed as intentional and worth documenting
+  (2026-07-23) — the fix is adding it to the shape block with its
+  open-string rationale, not deleting the field. Surfaced while auditing
+  metadata editability during M3.2 review. Canonical edit — route through
+  a design / cleanup pass.
+
+- **Entry-metadata shape annotations contradict the user-editability
+  prose.** The shape block in
+  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
+  annotates `sceneEntities` and `currentLocationId` as "classifier-authored"
+  while marking only `worldTime` "classifier-authored, user-editable" —
+  but the "Metadata edits are delta-logged" paragraph forty lines below
+  explicitly sanctions `sceneEntities` and `currentLocationId` user-edits
+  and gives them the same reversible-delta treatment. A planner reading
+  only the shape block would conclude the scene fields are off-limits,
+  which is the wrong premise for the scheduled world-state-block edit
+  surface (see [`followups.md`](../followups.md)). Prose is the more
+  specific statement; the annotations should be brought in line.
+  Surfaced 2026-07-23. Canonical edit — route through a design / cleanup
+  pass.
+
+- **`piggyback.md` understates the accepted new-location tolerance.**
+  The `currentLocationId` row in
+  [`piggyback.md → What piggyback writes`](../memory/piggyback.md) says a
+  location introduced this turn that has no entity yet "leaves this field
+  unchanged (stale/null)… retrieval for that location is degraded for a
+  few turns." The staleness does not stay in that field: `apply.ts`
+  inherits the previous location and the computed bookkeeping then writes
+  it as `current_location_id` on every in-scene character, so entity rows
+  carry an affirmatively false location, not merely a missing one — and
+  the next turn's `wasInScene` comparison builds on it. The fix angle is
+  already parked
+  ([`parked.md → Early classifier trigger on new-entity introduction`](../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity)),
+  so this is purely a canon-accuracy edit: state the tolerance's real
+  blast radius so accepting it stays an informed decision. Surfaced
+  during M3.2 review 2026-07-23.
+
+- **`data-model.md`'s "future user-triggered time-advance affordance"
+  now has a parked entry to point at.**
+  [`data-model.md → In-world time tracking`](../data-model.md#in-world-time-tracking)
+  justifies the `user_action` `worldTime` edit hook as enabling that
+  future affordance but names no destination. The affordance was
+  specified and parked on 2026-07-23 —
+  [`parked.md → Time-advance selection at user-entry submit`](../parked.md#time-advance-selection-at-user-entry-submit)
+  — so the sentence should carry the anchor. Small canonical edit;
+  fold into the next cleanup pass touching that section.

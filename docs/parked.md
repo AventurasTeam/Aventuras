@@ -151,6 +151,32 @@ currently only gestures at.
 
 ### UX (post-v1)
 
+#### Time-advance selection at user-entry submit
+
+A user action can imply elapsed time ("I wait until nightfall") with
+nowhere to record it. The classifier delta is defined as seconds since
+the previous entry — which _is_ the user action — so the action's own
+span is structurally outside it, and `submit-turn` inherits `worldTime`
+unchanged. The `worldTime` edit affordance on `user_action` entries is
+the hook canon named for closing this
+([`data-model.md → In-world time tracking`](./data-model.md#in-world-time-tracking)),
+but no edit can reach the generation it would need to influence: submit
+writes the entry and dispatches the pipeline in the same action, so the
+reply's base `worldTime` is already fixed by the time the entry is
+editable at all. Editing it afterward corrects the record and nothing
+else.
+
+Closing it needs a composer-side control that sets the new entry's
+`worldTime` at submit rather than editing it afterward — a tier-tuple
+or preset-duration picker adjacent to send, writing the inherited base
+plus the chosen advance in the same transaction. No structural
+exception is required; the next AI reply's "delta added to previous
+`worldTime`" rule picks the advanced base up naturally.
+
+Deferred 2026-07-23 while settling the world-state-block edit surface
+(see [`followups.md`](./followups.md)); the edit hook stays in place so
+this lands as an addition rather than a re-derivation.
+
 #### Prompt-pack editor (desktop spec + mobile retrofit)
 
 The prompt-pack editor surface is post-v1. v1 ships without a
