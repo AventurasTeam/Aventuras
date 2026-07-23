@@ -179,31 +179,6 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
   without it, and no per-row deletion path (entity, lore, happening,
   thread, chapter) calls it at all — so whichever slice introduces
   one inherits this question. Surfaced by M3.1a review (2026-07-21).
-- **Embedding-model install fails its smoke test in packaged desktop
-  builds.** Reported on a packaged Linux build (2026-07-22): the
-  download itself completes, then the dialog shows
-  `embedder:failure.smokeTestHint` ("The files are intact but this
-  device couldn't run the model"). So this is the post-download
-  inference check, not the transfer. The path is
-  `embedder-download-dialog.tsx` calling `driver.smokeTestEmbed`, the
-  `smokeTest` IPC, then `getPipeline` in
-  `electron/embedder/service.ts`, whose `buildPipeline` opens with a
-  dynamic import of `@huggingface/transformers`. The reporter's
-  initial "ONNX runtime packaging" hypothesis is **falsified** by
-  inspecting the artifact: `@huggingface/transformers` is present
-  inside `app.asar`, and `onnxruntime-node` is correctly listed in
-  `asarUnpack` and present under `app.asar.unpacked` with the
-  `linux/x64` `onnxruntime_binding.node` and `libonnxruntime.so.1` in
-  place. Live leads instead: transformers.js v3 may select its wasm
-  backend inside the Electron main process and then fail to read
-  `ort-wasm-simd-threaded.jsep.wasm` from inside the asar, or the
-  `modelDir` handed to the pipeline may not resolve under packaging
-  with `allowRemoteModels` disabled. First step is probably to surface
-  the real error: the failure envelope carries a message the dialog
-  collapses into generic copy, and the logger is gated off by default,
-  so nothing reaches the user or diagnostics. Not reproduced in dev;
-  nothing beyond the artifact inspection is verified. Surfaced by
-  M3.11 review (2026-07-22).
 
 ## Implementation notes
 
