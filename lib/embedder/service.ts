@@ -48,23 +48,31 @@ async function embedRaw(
   // Lazy so importing the embedder barrel (reachable from config-presence checks)
   // never pulls the AI SDK into module-eval; provider embedding is v1 prefix-free.
   const { embedViaProvider } = await import('@/lib/ai')
-  return embedViaProvider(provider, config.modelId, texts)
+  const dimensions =
+    config.requestDimensions === true && config.effectiveDim != null
+      ? config.effectiveDim
+      : undefined
+  return embedViaProvider(provider, config.modelId, texts, undefined, dimensions)
 }
 
 /**
- * Embed `texts` and return unit-norm vectors at the model's native dim.
+ * Embed `texts` and return unit-norm vectors at the model's native dim, or at
+ * `config.effectiveDim` (provider Matryoshka truncation) when set.
  *
  * Every returned vector is L2-normalized here so vec0's L2 KNN stays
- * rank-equivalent to cosine. Local vectors arrive unit-norm and pass the
- * idempotent guard untouched; provider vectors are normalized as needed.
+ * rank-equivalent to cosine — truncation runs before normalization, so a
+ * Matryoshka-truncated vector is still unit-norm. Local vectors arrive
+ * unit-norm and pass the idempotent guard untouched; provider vectors are
+ * normalized as needed.
  *
  * `intent` selects the local model's document/query prefix (provider backends
  * are prefix-free in v1). `provider` is required for provider-backend configs
  * (the facade stays store-free) and throws EmbedderInitError when missing.
  *
  * Dim reconciliation is the CALLER's job: `config.dim` must already be the
- * effective dim (resolve-config threads `providerDim`). A provider `dim` of
- * `null` means not yet probed, so the returned dim is accepted as-is.
+ * effective NATIVE dim (resolve-config threads `providerDim`). A provider
+ * `dim` of `null` means not yet probed, so the returned dim is accepted as-is
+ * before any Matryoshka truncation is applied on top.
  */
 export async function embedTexts(
   config: EmbedderConfig,
@@ -84,16 +92,26 @@ export async function embedTexts(
     )
   }
 
-  // Single funnel for every vector — the one place a post-embed transform
-  // (e.g. Matryoshka truncation) composes ahead of normalization.
-  const vectors = raw.vectors.map((vector) => l2Normalize(vector))
-
   // A local config always knows its dim, so this can't be skipped for local.
+  // Checked against raw.dim (native-vs-native) — truncation happens after.
   if (config.dim !== null && raw.dim !== config.dim) {
     throw new EmbedderCallError(`embedding dim mismatch: expected ${config.dim}, got ${raw.dim}`)
   }
 
-  return { vectors, dim: raw.dim }
+  // Matryoshka: truncate to the story's effective dim BEFORE normalization —
+  // cosine on truncated vectors requires re-norm. Clamped to the native dim so
+  // an over-declared custom dim degrades to a no-op instead of lying about N.
+  const targetDim =
+    config.backend === 'provider' && config.effectiveDim != null
+      ? Math.min(config.effectiveDim, raw.dim)
+      : raw.dim
+  // .slice (not .subarray): l2Normalize may return its input untouched, and
+  // packFloat32 packs the backing view — a shared view is a latent packing hazard.
+  const vectors = raw.vectors.map((vector) =>
+    l2Normalize(targetDim < vector.length ? vector.slice(0, targetDim) : vector),
+  )
+
+  return { vectors, dim: targetDim }
 }
 
 /**

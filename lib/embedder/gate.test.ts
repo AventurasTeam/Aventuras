@@ -107,6 +107,8 @@ describe('resolveEmbedderGate', () => {
         providerId: 'prov-1',
         modelId: 'text-embedding-3-small',
         dim: null,
+        effectiveDim: null,
+        requestDimensions: false,
       },
     })
   })

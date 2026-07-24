@@ -8,7 +8,16 @@ export type EmbedderBackend = 'local' | 'provider'
  */
 export type EmbedderConfig =
   | { backend: 'local'; modelId: string; dim: number }
-  | { backend: 'provider'; providerId: string; modelId: string; dim: number | null }
+  | {
+      backend: 'provider'
+      providerId: string
+      modelId: string
+      dim: number | null
+      /** Story-locked Matryoshka dim; null/absent = native. Local mode never truncates. */
+      effectiveDim?: number | null
+      /** Send the server-side `dimensions` param (gated on matryoshkaSupported). */
+      requestDimensions?: boolean
+    }
 
 // Init-vs-call split lets consumers distinguish "session never came up"
 // (surface at Test Embedder / retry) from "this specific call failed"
