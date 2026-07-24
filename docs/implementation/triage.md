@@ -340,17 +340,33 @@ slice-planning gate forces its resolution before that slice is planned.
   pins current behavior and flags the change if the flag is wired.
   Surfaced by the M3 E2E harness work (2026-07-24).
 
-- **E2E suite sits at the happy-path core; backfill to the "thorough"
-  bar.** The harness and the eight specs cover one representative path
-  per seam (home, embedder, wizard-create, turn, classifier, force-on),
-  but [`docs/testing.md → Coverage`](../testing.md#coverage-thorough-not-exhaustive)
-  sets the bar at thorough — common alternative flows and common
-  seam-crossing edge cases too. Known gaps on flows that already exist:
-  creative-mode create (no lead / no embed), regenerate, undo,
-  resume-draft, open-existing, composer modes; and the edge cases —
-  generation-failure → retry surface, cancel mid-turn,
-  embedder-gate-blocked wizard, opening-only-branch turn, settings-corrupt
-  recovery. New seam-touching slices meet the bar at plan time (the
-  plan-slice gate); this queues the backfill for the pre-existing flows
-  so it isn't assumed done. Surfaced by the M3 E2E harness work
-  (2026-07-24).
+- **E2E coverage — remaining backfill after the coverage-expansion
+  pass.** The coverage-expansion pass (2026-07-24) added nine specs —
+  creative-mode create, resume-draft, embedder-gate-blocked, undo/redo,
+  edit, rollback, failure → retry, cancel mid-turn, and composer modes —
+  closing most of the gap
+  [`docs/testing.md → Coverage`](../testing.md#coverage-thorough-not-exhaustive)
+  named. What still isn't E2E'd, by deliberate scope: **opening-only-branch
+  turn** (a marginal variant of the covered turn happy path — it differs
+  only in an empty content tail); **settings-corrupt recovery** and the
+  rest of the **config surfaces** (settings / story-settings / diagnostics
+  are stub-heavy today — revisit when their real tabs / sections land);
+  and **regenerate** (the `EntryCard` control exists but `onRegen` is
+  unwired in the reader, so there is nothing to drive). **Bad-branch
+  hydration failure** was written then cut: the only way to reach it —
+  hard-navigating to a deep route — trips the packaged `app://` deep-route
+  protocol bug (the black-screen entry above), so it can't be
+  packaged-green until that's fixed, and there is no clean in-app route to
+  a non-existent branch. Surfaced by the M3 E2E harness work (2026-07-24),
+  narrowed by the coverage-expansion pass (2026-07-24).
+- **`EntryCard` action controls are not internationalized.**
+  `components/compounds/entry-card.tsx` hardcodes English on its per-row
+  controls — `Edit entry`, `Delete entry`, `Regenerate`, `Branch from
+here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
+  `Cancel`, and the system-entry `Retry` / `Dismiss` — rather than routing
+  through `t()` like the rest of the chrome. No user-facing regression yet
+  (English-only today), but it breaks the i18n discipline and forces E2E to
+  match literals: `e2e/locators/reader.ts` centralizes them so the eventual
+  i18n pass is a one-line locator change. Fix is to move the strings into
+  the `reader` / `common` namespaces and swap the locators to `t()`.
+  Surfaced by the coverage-expansion pass (2026-07-24).

@@ -22,4 +22,13 @@ export const wizard = {
   next: (page: Page): Locator => page.getByRole('button', { name: t('wizard:footer.next') }),
 
   finish: (page: Page): Locator => page.getByRole('button', { name: t('wizard:footer.finish') }),
+
+  saveDraft: (page: Page): Locator =>
+    page.getByRole('button', { name: t('wizard:footer.saveDraft') }),
+
+  // Hard entry gate (wizard.md → Embedder-unavailable): an AlertDialog over the
+  // shell when no usable embedder resolves. The title is reason-independent, so
+  // it's the stable assertion target.
+  embedGateTitle: (page: Page): Locator =>
+    page.getByText(t('wizard:embedGate.title'), { exact: false }),
 }

@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
+import { queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -10,21 +11,6 @@ import {
   setProviderEndpoint,
 } from '../harness/seed'
 import { home } from '../locators/home'
-
-async function dbRows(page: Page, sql: string, params: unknown[] = []): Promise<unknown[][]> {
-  const result = await page.evaluate(
-    ({ sql, params }) =>
-      (
-        window as unknown as {
-          aventurasDb: {
-            query: (s: string, p: unknown[], m: string) => Promise<{ rows: unknown[][] }>
-          }
-        }
-      ).aventurasDb.query(sql, params, 'all'),
-    { sql, params },
-  )
-  return result.rows
-}
 
 // With piggyback disabled, a single turn fans out into TWO calls on the one
 // endpoint — the streaming narrative and the non-streaming fallback classifier
@@ -74,9 +60,9 @@ test.describe('turn fanning out to the fallback classifier', () => {
 
     // The AI reply still commits despite the extra classifier round-trip.
     const branchId = (
-      await dbRows(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
-    const reply = await dbRows(
+    const reply = await queryApp(
       app.window,
       `SELECT kind FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-CLASSIFIER-TURN%'`,
       [branchId],
