@@ -66,6 +66,9 @@ export const ExpandedWithLadder: Story = {
     // The platform suggestion annotates exactly one row (native on desktop,
     // a curated dim on mobile) — either way the tag renders once.
     expect(screen.getByText('← suggested')).toBeInTheDocument()
+    // Per-row storage preview uses the canon "~{size} / 30 ch" format
+    // (512 dim × 4 bytes × 2250 rows ≈ 5 MB).
+    expect(screen.getByText('~5 MB / 30 ch')).toBeInTheDocument()
   },
 }
 
@@ -92,6 +95,10 @@ export const CustomInputError: Story = {
   play: async () => {
     await userEvent.click(screen.getByRole('button'))
     await userEvent.click(await screen.findByText('Custom…'))
+    // Canon quality-cliff caveat rides alongside the custom input.
+    expect(
+      await screen.findByText(/Custom dims not on the model's curated ladder/),
+    ).toBeInTheDocument()
     const input = await screen.findByTestId('memory-cost-custom')
     await userEvent.type(input, '12.5')
     expect(await screen.findByText('Enter a positive whole number.')).toBeInTheDocument()

@@ -53,6 +53,7 @@
     "storagePreview": "~{{size}} / 30 ch",
     "customPlaceholder": "e.g. 1536",
     "customError": "Enter a positive whole number.",
+    "customCaveat": "Custom dims not on the model's curated ladder may exhibit quality cliffs.",
     "footer": "Storage estimate assumes a 30-chapter story at the default chapter-token threshold; scales linearly with story length."
   },
   "finish": {

@@ -142,10 +142,11 @@ export function MemoryCostDisclosure({
     }
   }
 
+  const previewLabel = (dim: number) =>
+    t('wizard:memoryCost.storagePreview', { size: formatStorage(storagePreviewBytes(dim)) })
+
   const customPreview =
-    customActive && validateCustomDim(customRaw).ok
-      ? formatStorage(storagePreviewBytes(Number(customRaw)))
-      : undefined
+    customActive && validateCustomDim(customRaw).ok ? previewLabel(Number(customRaw)) : undefined
 
   return (
     <View testID="memory-cost-disclosure" className="rounded-md border border-border">
@@ -178,7 +179,7 @@ export function MemoryCostDisclosure({
                 label={t('wizard:memoryCost.dimOption', { dim })}
                 selected={!customActive && onLadder && effectiveDim === dim}
                 suggested={suggestion === dim}
-                preview={formatStorage(storagePreviewBytes(dim))}
+                preview={previewLabel(dim)}
                 onSelect={() => selectLadderDim(dim)}
               />
             ))}
@@ -214,6 +215,9 @@ export function MemoryCostDisclosure({
                   {customError}
                 </Text>
               ) : null}
+              <Text size="xs" variant="muted">
+                {t('wizard:memoryCost.customCaveat')}
+              </Text>
             </View>
           ) : null}
 
