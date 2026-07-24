@@ -77,6 +77,18 @@ export function setProfileStructuredOutput(
   }
 }
 
+// The seed marks one lore row and one chapter row stale and no entity, so a
+// spec that needs entities_vec_* populated by a drain has to flip them itself.
+// Runs before launch.
+export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.prepare(`UPDATE entities SET embedding_stale = 1 WHERE branch_id = ?`).run(branchId)
+  } finally {
+    db.close()
+  }
+}
+
 // Clear taggedBlockReliable on every cached model so piggyback can't ride
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.

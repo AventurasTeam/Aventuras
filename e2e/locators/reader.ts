@@ -57,4 +57,15 @@ export const reader = {
   // Bad-branch hydration failure state.
   hydrationFailed: (page: Page): Locator =>
     page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
+
+  // The generation status pill in its embedder-offline error tone (an
+  // interactive Tag, so role=button). The accessible name interpolates the
+  // pending-row count, so only the lead-in shared by both plural forms is
+  // matched.
+  embedderOfflinePill: (page: Page): Locator => {
+    const [prefix] = t('chrome.generationStatusPill.error.embedderOffline', {
+      count: 1,
+    }).split(' — ')
+    return page.getByRole('button', { name: prefix, exact: false })
+  },
 }
