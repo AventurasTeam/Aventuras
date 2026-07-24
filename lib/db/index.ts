@@ -159,14 +159,17 @@ export { runInTransaction } from './runtime/transaction'
 export { execRaw, listTableNames } from './runtime/exec'
 export type { DbCtx, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
-export type { EmbeddedFieldRow, VecTargetKind, VecWrite } from './embeddings'
+export type { EmbeddedFieldRow, RowQuery, VecTargetKind, VecWrite } from './embeddings'
 export {
   VEC_FAMILIES,
+  branchRowsQuery,
   clearEmbeddingStaleOp,
   compositeText,
+  countStaleRows,
   deleteBranchModelVecOps,
   deleteBranchVecOps,
   deleteVecOps,
+  embeddedRowQuery,
   isVecFamilyTable,
   ensureVecTables,
   ensureVecTablesSql,
@@ -174,6 +177,8 @@ export {
   packFloat32,
   recomputeStaleOp,
   sourceHash,
+  staleRowsQuery,
+  toEmbeddedFieldRow,
   upsertVecOps,
   vecRowPk,
   vecTableName,
