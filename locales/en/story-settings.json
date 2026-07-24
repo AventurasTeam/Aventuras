@@ -30,5 +30,25 @@
     "unsavedSave": "Save",
     "unsavedDiscard": "Discard"
   },
-  "missingStory": "This story could not be loaded."
+  "missingStory": "This story could not be loaded.",
+  "swap": {
+    "title": "Change embedding model",
+    "pickBody": "Pick a model to switch this story to. The current model can't be selected.",
+    "current": "Current",
+    "next": "Next",
+    "back": "Back",
+    "cancel": "Cancel",
+    "optionsTitle": "Switch to {{model}}",
+    "reindex": "Re-index this story",
+    "reindexHint": "Rebuilds every vector under the new model. Crash-safe; resumable.",
+    "keep": "Keep on the current model",
+    "keepHint": "Cancel the switch. Retrieval keeps using the current model; nothing changes.",
+    "relabel": "Skip and just relabel",
+    "relabelHint": "Update the recorded model without rebuilding any vectors.",
+    "relabelDisclaimer": "This asserts the underlying model is unchanged. If it differs, retrieval quality degrades silently.",
+    "resumeTitle": "Re-index interrupted",
+    "resumeBody": "Switching this story to {{model}} was interrupted, likely by a crash or force-quit. Resume to pick up where it left off, or cancel to keep this story on its current model.",
+    "resume": "Resume",
+    "cancelSwap": "Cancel switch"
+  }
 }
