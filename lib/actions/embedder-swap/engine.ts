@@ -5,6 +5,7 @@ import {
   isVecFamilyTable,
   setEmbeddingModelIdOp,
   setSwapTargetOp,
+  SOURCE_TABLES,
   toEmbeddedFieldRow,
   VEC_FAMILIES,
   type DbCtx,
@@ -14,11 +15,16 @@ import {
 } from '@/lib/db'
 import type { EmbedderConfig } from '@/lib/embedder'
 
+/**
+ * Single-flight is a caller precondition, NOT enforced here. The
+ * `currentSwapTarget` guard is only an advisory JS snapshot: two concurrent
+ * engine calls for one story could both pass it and stage vectors under
+ * different targets, orphaning the loser's rows (a storage leak — reads stay
+ * correct because retrieval filters by model_id). Callers MUST serialize all
+ * engine calls per story; the app-deps layer (next task) owns that lock.
+ */
 export type SwapDeps = {
-  db: DbCtx['db']
   runInTransaction: DbCtx['runInTransaction']
-  /** Raw exec for vec0 DDL (same seam the wizard route threads into finishWizard). */
-  exec: (sql: string) => Promise<void>
   /** Positional value-array rows (sqlite-proxy shape) — see field-rows.ts seam docs. */
   queryAll: (sql: string, params: unknown[]) => Promise<unknown[][]>
   /** `embedAndBuildVecOps` behind a seam so tests fault-inject per batch. */
@@ -38,15 +44,15 @@ export type SwapParams = {
 }
 
 export class SwapInProgressError extends Error {
-  constructor() {
-    super('A swap is already in progress for this story')
+  constructor(storyId: string, inFlightTarget: string) {
+    super(`Story ${storyId} already has a swap in flight toward ${inFlightTarget}`)
     this.name = 'SwapInProgressError'
   }
 }
 
 export class SwapNotInProgressError extends Error {
-  constructor() {
-    super('No swap is in progress to resume')
+  constructor(storyId: string) {
+    super(`Story ${storyId} has no swap in flight to resume`)
     this.name = 'SwapNotInProgressError'
   }
 }
@@ -60,12 +66,8 @@ export class SwapStoryMissingError extends Error {
 
 const BATCH_SIZE = 16
 
-// Mirrors SOURCE_TABLES in lib/db/embeddings/stale.ts, which the barrel doesn't
-// re-export. The five embedded-source tables that carry embedding_stale.
-const SWAP_SOURCE_TABLES = ['entities', 'lore', 'happenings', 'threads', 'chapters'] as const
-
 export async function startSwap(deps: SwapDeps, p: SwapParams): Promise<'completed' | 'cancelled'> {
-  if (p.currentSwapTarget != null) throw new SwapInProgressError()
+  if (p.currentSwapTarget != null) throw new SwapInProgressError(p.storyId, p.currentSwapTarget)
   // The marker is committed in its own transaction BEFORE phase 1 — from here on
   // it is the crash-recovery source of truth for "swap in flight, expect NEW rows".
   await deps.runInTransaction([setSwapTargetOp(p.storyId, p.targetConfig.modelId, deps.now())])
@@ -76,7 +78,7 @@ export async function resumeSwap(
   deps: SwapDeps,
   p: SwapParams,
 ): Promise<'completed' | 'cancelled'> {
-  if (p.currentSwapTarget == null) throw new SwapNotInProgressError()
+  if (p.currentSwapTarget == null) throw new SwapNotInProgressError(p.storyId)
   // Marker already set by the original startSwap; resume must not re-set it.
   return runPhases(deps, p)
 }
@@ -176,6 +178,13 @@ export async function relabelModel(
     // while keeping the story's recorded model id and its rows consistent.
     for (const table of tables) {
       ops.push(
+        // Relabel wins: clear any leftover newModelId rows first (e.g. staged
+        // vectors from an abandoned swap toward the same id) so the INSERT can't
+        // hit the vec0 pk constraint and roll the whole relabel back.
+        {
+          sql: `DELETE FROM ${table} WHERE branch_id IN (${ph}) AND model_id = ?`,
+          params: [...branchIds, newModelId],
+        },
         {
           sql: `INSERT INTO ${table} (pk, branch_id, model_id, id, source_hash, embedding)
         SELECT branch_id || ':' || id || ':' || ?, branch_id, ?, id, source_hash, embedding
@@ -242,7 +251,7 @@ function reflagStaleOps(branchIds: readonly string[]): SqlOp[] {
   // but their OLD-model vector may still be outdated. Re-flag so the next sync/drain
   // revalidates each by source_hash — cheap, and it re-embeds nothing when the old
   // vector still matches.
-  return SWAP_SOURCE_TABLES.map((table) => ({
+  return Object.values(SOURCE_TABLES).map((table) => ({
     sql: `UPDATE ${table} SET embedding_stale = 1 WHERE branch_id IN (${ph})`,
     params: [...branchIds],
   }))

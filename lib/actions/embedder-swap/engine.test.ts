@@ -87,11 +87,7 @@ function makeDeps(
 ): { deps: SwapDeps; runSpy: ReturnType<typeof vi.fn> } {
   const runSpy = vi.fn(runInTransaction)
   const deps: SwapDeps = {
-    db: {} as SwapDeps['db'],
     runInTransaction: runSpy as unknown as SwapDeps['runInTransaction'],
-    exec: async (sql) => {
-      sqlite.exec(sql)
-    },
     queryAll: async (sql, params) =>
       (sqlite.prepare(sql).all(...(params as SQLInputValue[])) as Record<string, unknown>[]).map(
         (r) => Object.values(r),
@@ -502,6 +498,36 @@ describe('embedder-swap engine', () => {
     expect(before.pk).toBe('b1:e1:' + OLD)
     expect(after.source_hash).toBe(before.source_hash)
     expect(Buffer.from(after.embedding)).toEqual(Buffer.from(before.embedding))
+  })
+
+  it('8b. relabelModel wins over leftover target rows: no pk-constraint error, one row per id', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    // Leftover NEW row for e1 from an abandoned swap toward the same model id.
+    seedOldVectors(
+      sqlite,
+      [{ kind: 'entity', id: 'e1', branchId: 'b1', fields: ['stale', 'leftover'] }],
+      NEW,
+    )
+    const embed = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, embed.fn)
+
+    await expect(
+      relabelModel(deps, { storyId: 's1', branchIds: ['b1'], oldModelId: OLD, newModelId: NEW }),
+    ).resolves.toBeUndefined()
+
+    expect(embed.calls).toHaveLength(0)
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual([])
+    expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual(['e1', 'e2', 'e3'])
+    // Exactly one row for e1 under NEW — the relabeled OLD row, not the leftover.
+    expect(
+      (
+        sqlite
+          .prepare("SELECT source_hash FROM entities_vec_384 WHERE id = 'e1' AND model_id = ?")
+          .all(NEW) as { source_hash: string }[]
+      ).map((r) => r.source_hash),
+    ).toEqual([sourceHash(compositeText(['Name 1', 'Desc 1']))])
+    expect(storySettings(sqlite)?.embedding_model_id).toBe(NEW)
   })
 
   it('9. cancel-requested mid-phase-1: loop stops, cancel path runs, returns cancelled', async () => {
