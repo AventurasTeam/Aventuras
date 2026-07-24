@@ -14,6 +14,9 @@ export type { EmbedderIntegration } from './integrations'
 export { resolveEmbedderConfig } from './resolve-config'
 export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-config'
 
+export { createDrainController } from './drain'
+export type { DrainDeps } from './drain'
+
 export { resolveEmbedderGate } from './gate'
 export type { EmbedderGateResult } from './gate'
 

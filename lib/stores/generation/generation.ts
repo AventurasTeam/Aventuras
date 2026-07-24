@@ -100,6 +100,7 @@ export const generationStore = {
   useGeneration,
   getTxState,
   isUserEditBlocked: () => isUserEditBlocked(getTxState()),
+  hasActiveRun: () => getTxState().runs.size > 0,
   startRun: api.startRun,
   setCurrentPhase: api.setCurrentPhase,
   recordPhaseResult: api.recordPhaseResult,
