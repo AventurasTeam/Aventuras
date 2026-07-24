@@ -16,6 +16,7 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { embedderSwapStore } from './ui/embedder-swap'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
 import { wizardStore } from './wizard/wizard'
@@ -39,6 +40,7 @@ export function resetAllStores(): void {
   translationsStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
+  embedderSwapStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
   wizardStore.reset()
@@ -49,6 +51,7 @@ export {
   chaptersStore,
   characterRelationshipsStore,
   currentStoryStore,
+  embedderSwapStore,
   entitiesStore,
   entriesStore,
   entryAssetsStore,
@@ -72,6 +75,8 @@ export {
 
 export { createWorkingSetStore } from './factory/working-set-store'
 
+export { openEmbedderSwapDialog } from './ui/embedder-swap'
+
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { RelationshipView } from './character-relationships/character-relationships'
 export type { OpenStory } from './current-story/current-story'
@@ -81,6 +86,7 @@ export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
 export type { RecoveryReportSnapshot } from './ui/recovery-report'
+export type { SwapProgress } from './ui/embedder-swap'
 export type { StoryCardData } from './stories/view-model'
 export type { StoryFilter, StoryListQuery, StorySort } from './stories/selectors'
 export { selectStoryCards } from './stories/selectors'
