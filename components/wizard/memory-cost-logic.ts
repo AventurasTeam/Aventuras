@@ -4,7 +4,7 @@ import type { ProviderCapabilities, StorySettings } from '@/lib/db'
 // (docs/memory/retrieval.md#scale-assumptions). Happenings dominate the
 // embedded corpus — awareness rows are not embedded, and chapters / entities /
 // lore / threads are comparatively negligible — so the storage preview scales
-// off this single count, matching the doc's own ~1.5KB-per-happening estimate.
+// off this single count, the same per-happening scaling the doc's estimate uses.
 export const PROJECTED_ROWS_30CH = 2250
 
 const FALLBACK_LADDER = [512, 1024, 2048]

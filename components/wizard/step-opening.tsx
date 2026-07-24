@@ -61,9 +61,9 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
       : null
   const metadataLabel = isAiGenerated && hasContent && sceneName != null ? sceneName : null
 
-  // --- Memory-cost (Matryoshka) region — self-contained; edits here don't
-  // touch the opening refine/regenerate surface slice 3.6 lands in. The
-  // disclosure hides itself unless provider-backend + a Matryoshka model.
+  // --- Memory-cost (Matryoshka) region — self-contained; kept clear of the
+  // opening refine/regenerate surface. The disclosure hides itself unless the
+  // app default is provider-backend on a Matryoshka model.
   // An absent default-story-setting tracks the code default, which is 'local'.
   const embeddingBackend =
     appSettingsStore.useAppSettings((s) => s.defaultStorySettings.embeddingBackend) ?? 'local'

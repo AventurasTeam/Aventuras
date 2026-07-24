@@ -1,8 +1,9 @@
 import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
-import type { ProviderInstanceWithStub } from '@/lib/ai'
+import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/ai'
 import {
   buildStorySettings,
   type EntryMetadata,
+  type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
   type WizardWorkingState,
@@ -30,7 +31,7 @@ export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
   embeddingModelId: string | null
   embeddingProviderId: string | null
-  providers: readonly { id: string; type: string; endpoint?: string }[]
+  providers: readonly ProviderInstance[]
   installedLocalIds: readonly string[]
 }
 
@@ -59,10 +60,24 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
-  // Backstop for the step-5 Matryoshka gate: the disclosure keeps only valid
-  // dims (or null) in the store, but a corrupt working state must never commit
-  // a dim that would truncate stored vectors to garbage.
-  if (s.effectiveDim != null && (!Number.isInteger(s.effectiveDim) || s.effectiveDim < 1))
+
+  // effectiveDim only means something for a provider-backed Matryoshka model; if
+  // the app default swapped to a non-Matryoshka model/backend mid-session, the
+  // hidden disclosure can't clear the stale pick, so drop it to native (canon:
+  // the flag governs new-story creation) rather than committing/validating it.
+  const matryoshkaApplicable =
+    appDefaults.defaultStorySettings.embeddingBackend === 'provider' &&
+    appDefaults.embeddingProviderId != null &&
+    appDefaults.embeddingModelId != null &&
+    resolveModelCapabilities(
+      appDefaults.embeddingProviderId,
+      appDefaults.embeddingModelId,
+      appDefaults.providers,
+    )?.matryoshkaSupported === true
+  const effectiveDim = matryoshkaApplicable ? s.effectiveDim : null
+  // Backstop: the disclosure keeps only valid dims (or null), but a corrupt
+  // working state must never commit a dim that truncates vectors to garbage.
+  if (effectiveDim != null && (!Number.isInteger(effectiveDim) || effectiveDim < 1))
     reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
@@ -85,7 +100,7 @@ export async function finishWizard(
     appDefaults.defaultStorySettings,
     appDefaults.embeddingModelId,
     appDefaults.embeddingProviderId,
-    s.effectiveDim,
+    effectiveDim,
   )
 
   // The lead is the only entity the M2 commit materializes, so it's the only id

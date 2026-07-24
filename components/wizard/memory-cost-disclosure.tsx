@@ -172,7 +172,10 @@ export function MemoryCostDisclosure({
             {t('wizard:memoryCost.effectiveDimLabel')}
           </Text>
 
-          <View>
+          <View
+            accessibilityRole="radiogroup"
+            aria-label={t('wizard:memoryCost.effectiveDimLabel')}
+          >
             {ladder.map((dim) => (
               <RadioRow
                 key={dim}

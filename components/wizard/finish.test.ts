@@ -46,6 +46,45 @@ const EMBED_CTX: FinishEmbedCtx = {
   resolveProvider: () => undefined,
 }
 
+const PROVIDER_MODEL = 'text-embedding-3-large'
+
+// Provider backend on a Matryoshka-capable model — the only shape where an
+// effectiveDim is applicable and threaded into committed settings.
+const MATRYOSHKA_PROVIDER_DEFAULTS: FinishAppDefaults = {
+  defaultStorySettings: { embeddingBackend: 'provider' },
+  embeddingModelId: PROVIDER_MODEL,
+  embeddingProviderId: 'p1',
+  providers: [
+    {
+      id: 'p1',
+      type: 'openai-compatible',
+      displayName: 'P1',
+      apiKey: 'k',
+      favoriteModelIds: [],
+      endpoint: 'http://localhost:1234/v1',
+      cachedModels: [
+        {
+          id: PROVIDER_MODEL,
+          capabilities: { matryoshkaSupported: true, matryoshkaDims: [512, 1024, 2048] },
+        },
+      ],
+    },
+  ],
+  installedLocalIds: [],
+}
+
+// Same provider/backend but the model no longer declares Matryoshka support —
+// a mid-session app-default swap; the stale dim must be dropped to native.
+const NON_MATRYOSHKA_PROVIDER_DEFAULTS: FinishAppDefaults = {
+  ...MATRYOSHKA_PROVIDER_DEFAULTS,
+  providers: [
+    {
+      ...MATRYOSHKA_PROVIDER_DEFAULTS.providers[0],
+      cachedModels: [{ id: PROVIDER_MODEL, capabilities: { matryoshkaSupported: false } }],
+    },
+  ],
+}
+
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 
 type MakeStateInput = {
@@ -262,7 +301,7 @@ describe('finishWizard', () => {
       makeState({ title: 'Truncated', opening: { content: 'Once.' }, effectiveDim: 1024 }),
       ctx,
       vi.fn(),
-      APP_DEFAULTS,
+      MATRYOSHKA_PROVIDER_DEFAULTS,
       EMBED_CTX,
       6000,
     )
@@ -271,6 +310,24 @@ describe('finishWizard', () => {
     const storyId = result.status === 'ok' ? result.storyId : ''
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
     expect(storyRow.settings!.effectiveDim).toBe(1024)
+  })
+
+  it('drops a stale effectiveDim when the app default model is not Matryoshka', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({ title: 'Swapped', opening: { content: 'Once.' }, effectiveDim: 1024 }),
+      ctx,
+      vi.fn(),
+      NON_MATRYOSHKA_PROVIDER_DEFAULTS,
+      EMBED_CTX,
+      6200,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.settings!.effectiveDim).toBeUndefined()
   })
 
   it('leaves effectiveDim absent (native dim) when the working state is null', async () => {
@@ -291,14 +348,14 @@ describe('finishWizard', () => {
     expect(storyRow.settings!.effectiveDim).toBeUndefined()
   })
 
-  it('blocks Finish when a stored effectiveDim is non-positive; DB untouched', async () => {
+  it('blocks Finish when an applicable stored effectiveDim is non-positive; DB untouched', async () => {
     const { db, ctx } = await setup()
 
     const result = await finishWizard(
       makeState({ title: 'Corrupt', opening: { content: 'Once.' }, effectiveDim: 0 }),
       ctx,
       vi.fn(),
-      APP_DEFAULTS,
+      MATRYOSHKA_PROVIDER_DEFAULTS,
       EMBED_CTX,
       7000,
     )
@@ -558,7 +615,16 @@ describe('finishWizard — embedder hard gate', () => {
         defaultStorySettings: { embeddingBackend: 'provider' },
         embeddingModelId: 'text-embedding-3-small',
         embeddingProviderId: 'p1',
-        providers: [{ id: 'p1', type: 'openai-compatible', endpoint: 'http://localhost:1234/v1' }],
+        providers: [
+          {
+            id: 'p1',
+            type: 'openai-compatible',
+            displayName: 'P1',
+            apiKey: 'k',
+            favoriteModelIds: [],
+            endpoint: 'http://localhost:1234/v1',
+          },
+        ],
         installedLocalIds: [],
       },
       embedCtx,
