@@ -52,10 +52,11 @@ export function vecTableName(kind: VecTargetKind, dim: number): string {
   return `${VEC_FAMILIES[kind]}_${dim}`
 }
 
-// vec0 enforces its primary key globally across partitions, and phase-1 swap
-// staging inserts a NEW-model row NEXT TO the old one — so identity must carry
-// branch, row, and model. Deletes always go by the real columns, never by pk
-// string, which keeps pre-widen rows (branchId:id) forward-compatible.
+// vec0 enforces its primary key globally across partitions, and swap staging
+// can insert a NEW-model row NEXT TO an old-model row for the same source —
+// so identity must carry branch, row, and model. Deletes always go by the real
+// columns, never by pk string, which keeps pre-widen rows (branchId:id)
+// forward-compatible.
 export function vecRowPk(branchId: string, id: string, modelId: string): string {
   return `${branchId}:${id}:${modelId}`
 }
@@ -65,6 +66,9 @@ export function familyTablesFor(kind: VecTargetKind, tableNames: readonly string
   return tableNames.filter((name) => isVecFamilyTable(name) && name.startsWith(prefix))
 }
 
+// Model-scoped (vs deleteBranchVecOps's all-model sweep) because a swap's
+// phase-2/cancel must remove exactly one model's rows without touching a
+// coexisting old- or new-model row for the same branch.
 export function deleteBranchModelVecOps(
   tableNames: readonly string[],
   branchIds: readonly string[],

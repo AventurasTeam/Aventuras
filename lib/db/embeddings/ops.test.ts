@@ -154,6 +154,81 @@ describe('upsertVecOps / deleteVecOps', () => {
     const rows = db.prepare('select id from entities_vec_384 where branch_id = ?').all('b1')
     expect(rows).toHaveLength(0)
   })
+
+  it('matches a legacy 2-part-pk row by columns: upsert of the same model replaces it', () => {
+    db.prepare(
+      'insert into entities_vec_384 (pk, branch_id, model_id, id, source_hash, embedding) values (?, ?, ?, ?, ?, ?)',
+    ).run('b1:e1', 'b1', 'm1', 'e1', sourceHash('legacy'), vec(384, 0))
+
+    runOps(
+      db,
+      upsertVecOps({
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm1',
+        dim: 384,
+        sourceHash: sourceHash('h-new'),
+        vector: vec(384, 1),
+      }),
+    )
+
+    const rows = db
+      .prepare('select pk, source_hash from entities_vec_384 where branch_id = ?')
+      .all('b1') as { pk: string; source_hash: string }[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0].pk).toBe('b1:e1:m1')
+    expect(rows[0].source_hash).toBe(sourceHash('h-new'))
+  })
+
+  it('matches a legacy 2-part-pk row by columns: deleteVecOps removes it', () => {
+    db.prepare(
+      'insert into entities_vec_384 (pk, branch_id, model_id, id, source_hash, embedding) values (?, ?, ?, ?, ?, ?)',
+    ).run('b1:e2', 'b1', 'm1', 'e2', sourceHash('legacy'), vec(384, 0))
+
+    runOps(db, deleteVecOps('entity', 'e2', 'b1', ['entities_vec_384']))
+
+    const rows = db.prepare('select id from entities_vec_384 where branch_id = ?').all('b1')
+    expect(rows).toHaveLength(0)
+  })
+
+  it('upserting a second model for the same (branch, id) leaves both rows, and does not disturb the first model row', () => {
+    runOps(
+      db,
+      upsertVecOps({
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm1',
+        dim: 384,
+        sourceHash: sourceHash('h1'),
+        vector: vec(384, 0),
+      }),
+    )
+    runOps(
+      db,
+      upsertVecOps({
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm2',
+        dim: 384,
+        sourceHash: sourceHash('h2'),
+        vector: vec(384, 1),
+      }),
+    )
+
+    const rows = db
+      .prepare(
+        'select pk, model_id, source_hash from entities_vec_384 where branch_id = ? order by pk',
+      )
+      .all('b1') as { pk: string; model_id: string; source_hash: string }[]
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.pk)).toEqual(['b1:e1:m1', 'b1:e1:m2'])
+
+    const m1Row = rows.find((r) => r.model_id === 'm1')
+    expect(m1Row?.source_hash).toBe(sourceHash('h1'))
+  })
 })
 
 describe('model-aware vec identity', () => {
