@@ -169,7 +169,6 @@ export {
   deleteBranchModelVecOps,
   deleteBranchVecOps,
   deleteVecOps,
-  embeddedRowQuery,
   isVecFamilyTable,
   ensureVecTables,
   ensureVecTablesSql,

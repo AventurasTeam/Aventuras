@@ -9,7 +9,7 @@ export type EmbeddedFieldRow = {
   fields: (string | null)[]
 }
 
-const SOURCE_TABLES: Record<VecTargetKind, string> = {
+export const SOURCE_TABLES: Record<VecTargetKind, string> = {
   entity: 'entities',
   lore: 'lore',
   happening: 'happenings',

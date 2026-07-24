@@ -17,10 +17,4 @@ export { clearEmbeddingStaleOp, recomputeStaleOp } from './stale'
 export { compositeText, parseSourceHash, sourceHash } from './source-hash'
 export type { SourceHash } from './source-hash'
 export type { RowQuery } from './field-rows'
-export {
-  branchRowsQuery,
-  countStaleRows,
-  embeddedRowQuery,
-  staleRowsQuery,
-  toEmbeddedFieldRow,
-} from './field-rows'
+export { branchRowsQuery, countStaleRows, staleRowsQuery, toEmbeddedFieldRow } from './field-rows'
