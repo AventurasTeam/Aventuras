@@ -1,9 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
+import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
+import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 
-import { SwapDialog, type SwapCandidate } from './swap-dialog'
+import { SwapDialog, type SwapCandidate, type SwapDialogProps } from './swap-dialog'
 
 const candidates: SwapCandidate[] = [
   { id: 'minilm-l6', label: 'MiniLM-L6 (lightweight)', isCurrent: true },
@@ -105,5 +109,45 @@ export const CancelFromPickPane: Story = {
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.cancel') }))
     await waitFor(() => expect(args.onDismiss).toHaveBeenCalledTimes(1))
+  },
+}
+
+// Owns `open` itself so the play function can close and reopen the real
+// dialog instance — the reset-on-reopen effect only fires on a genuine
+// closed→open transition, which a fixed `open: true` arg can't exercise.
+function ReopenHarness(props: Omit<SwapDialogProps, 'open' | 'onDismiss'>) {
+  const [open, setOpen] = useState(true)
+  return (
+    <View className="gap-3">
+      <Button testID="reopen-trigger" onPress={() => setOpen(true)}>
+        <Text>Reopen</Text>
+      </Button>
+      <SwapDialog {...props} open={open} onDismiss={() => setOpen(false)} />
+    </View>
+  )
+}
+
+export const ReopenResetsPickPane: Story = {
+  render: () => (
+    <ReopenHarness candidates={candidates} onReindex={fn()} onKeep={fn()} onRelabel={fn()} />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
+    await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.cancel') }))
+    await waitFor(() => expect(screen.queryByTestId('swap-reindex')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByTestId('reopen-trigger'))
+    await waitFor(() => expect(screen.getByTestId('swap-candidate-bge-small')).toBeInTheDocument())
+
+    for (const candidate of candidates) {
+      expect(screen.getByTestId(`swap-candidate-${candidate.id}`)).toHaveAttribute(
+        'aria-checked',
+        'false',
+      )
+    }
+    expect(screen.getByRole('button', { name: t('storySettings:swap.next') })).toBeDisabled()
   },
 }

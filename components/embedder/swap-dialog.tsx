@@ -143,7 +143,6 @@ function CandidateRow({ candidate, selected, onPress }: CandidateRowProps) {
           web: cn(
             !disabled && !selected && 'hover:bg-tint-hover',
             'outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus-ring',
-            disabled && 'cursor-not-allowed',
           ),
         }),
         disabled && 'opacity-50',
@@ -192,6 +191,7 @@ function OptionsPane({
         <AlertDialogTitle>
           {t('storySettings:swap.optionsTitle', { model: target.label })}
         </AlertDialogTitle>
+        <AlertDialogDescription>{t('storySettings:swap.optionsBody')}</AlertDialogDescription>
       </AlertDialogHeader>
 
       <View className="gap-3">
