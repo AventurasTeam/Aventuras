@@ -93,8 +93,17 @@ export async function embedTexts(
   }
 
   // A local config always knows its dim, so this can't be skipped for local.
-  // Checked against raw.dim (native-vs-native) — truncation happens after.
-  if (config.dim !== null && raw.dim !== config.dim) {
+  // A provider that was sent `dimensions` may legitimately return either the
+  // native dim (param ignored) or effectiveDim (param honored) — the server's
+  // compliance isn't guaranteed, so both are accepted only when the param was
+  // actually sent; any other value is still rejected.
+  const dimOk =
+    config.dim === null ||
+    raw.dim === config.dim ||
+    (config.backend === 'provider' &&
+      config.requestDimensions === true &&
+      raw.dim === config.effectiveDim)
+  if (!dimOk) {
     throw new EmbedderCallError(`embedding dim mismatch: expected ${config.dim}, got ${raw.dim}`)
   }
 

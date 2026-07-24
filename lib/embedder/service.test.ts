@@ -233,6 +233,49 @@ describe('matryoshka truncation', () => {
 
     expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm', ['x'], undefined, 4)
   })
+
+  it('accepts an already-truncated vector when the server honors dimensions', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [unit([1, 1, 1, 1])],
+      dim: 4,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      effectiveDim: 4,
+      requestDimensions: true,
+    }
+
+    const { vectors, dim } = await embedTexts(config, ['x'], 'document', provider)
+
+    expect(dim).toBe(4)
+    expect(vectors[0]).toHaveLength(4)
+    expect(normOf(vectors[0])).toBeCloseTo(1, 6)
+  })
+
+  it('still rejects a dim that matches neither native nor effectiveDim', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1])],
+      dim: 6,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      effectiveDim: 4,
+      requestDimensions: true,
+    }
+
+    await expect(embedTexts(config, ['x'], 'document', provider)).rejects.toBeInstanceOf(
+      EmbedderCallError,
+    )
+    await expect(embedTexts(config, ['x'], 'document', provider)).rejects.toThrow(
+      'expected 8, got 6',
+    )
+  })
 })
 
 describe('lazy init', () => {
