@@ -40,12 +40,28 @@
       "guidance": "e.g. \"emphasize the mystery\""
     }
   },
+  "memoryCost": {
+    "header": "Memory cost (advanced)",
+    "headerNative": "using model native dim",
+    "headerDim": "{{dim}} dim",
+    "body": "Provider model supports Matryoshka representation. Smaller dim uses less storage, at a slight quality cost. Locked at story creation.",
+    "effectiveDimLabel": "Effective dim",
+    "dimOption": "{{dim}} dim",
+    "nativeOption": "Native dim",
+    "customOption": "Custom…",
+    "suggested": "← suggested",
+    "storagePreview": "~{{size}} / 30 ch",
+    "customPlaceholder": "e.g. 1536",
+    "customError": "Enter a positive whole number.",
+    "footer": "Storage estimate assumes a 30-chapter story at the default chapter-token threshold; scales linearly with story length."
+  },
   "finish": {
     "invalidList": "Add {{fields}} before finishing.",
     "missing": {
       "title": "a title",
       "opening": "an opening",
-      "lead": "a lead character name"
+      "lead": "a lead character name",
+      "effectiveDim": "a valid effective dim"
     },
     "failed": "Couldn't create the story.",
     "embedFailed": {

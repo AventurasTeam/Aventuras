@@ -33,6 +33,9 @@ export const wizardWorkingStateSchema = z.object({
   // definition.leadEntityId all resolve to the same id at Finish.
   leadEntityId: z.string().nullable().default(null),
   opening: wizardOpeningDraftSchema.default(() => wizardOpeningDraftSchema.parse({})),
+  // null = model native dim; a positive int truncates to that Matryoshka dim.
+  // Locked into stories.settings.effectiveDim at Finish (retrieval.md).
+  effectiveDim: z.number().int().positive().nullable().default(null),
 })
 
 export type WizardWorkingState = z.infer<typeof wizardWorkingStateSchema>

@@ -84,7 +84,7 @@ export const storySettingsSchema = z.object({
   embedding_swap_target: z.string().optional(),
   embedding_provider_id: z.string().optional(),
   retrievalBudgets: retrievalBudgetsSchema,
-  effectiveDim: z.number().optional(),
+  effectiveDim: z.number().int().positive().optional(),
   probe_mode_active: z.boolean().default(false),
   composerModesEnabled: z.boolean(),
   composerWrapPov: z.enum(['first', 'third']),

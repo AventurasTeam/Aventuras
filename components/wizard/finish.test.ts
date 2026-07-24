@@ -56,6 +56,7 @@ type MakeStateInput = {
   leadName?: string
   leadEntityId?: string | null
   opening?: Partial<WizardWorkingState['opening']>
+  effectiveDim?: number | null
 }
 
 function makeState(input: MakeStateInput = {}): WizardWorkingState {
@@ -65,6 +66,7 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
     step: 5,
     leadName: input.leadName ?? base.leadName,
     leadEntityId: input.leadEntityId ?? base.leadEntityId,
+    effectiveDim: input.effectiveDim ?? base.effectiveDim,
     definition: {
       ...base.definition,
       mode: input.mode ?? base.definition.mode,
@@ -251,6 +253,59 @@ describe('finishWizard', () => {
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([])
+  })
+
+  it('threads a chosen effectiveDim into stories.settings.effectiveDim', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({ title: 'Truncated', opening: { content: 'Once.' }, effectiveDim: 1024 }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      6000,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.settings!.effectiveDim).toBe(1024)
+  })
+
+  it('leaves effectiveDim absent (native dim) when the working state is null', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({ title: 'Native', opening: { content: 'Once.' } }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      6500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.settings!.effectiveDim).toBeUndefined()
+  })
+
+  it('blocks Finish when a stored effectiveDim is non-positive; DB untouched', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({ title: 'Corrupt', opening: { content: 'Once.' }, effectiveDim: 0 }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      7000,
+    )
+
+    expect(result.status).toBe('invalid')
+    expect(result.status === 'invalid' && result.reasons).toContain('effectiveDim')
+    expect(await db.select().from(stories)).toHaveLength(0)
   })
 
   it('blocks Finish when the title is empty; DB untouched, no navigation', async () => {

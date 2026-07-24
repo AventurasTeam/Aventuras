@@ -59,6 +59,11 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
+  // Backstop for the step-5 Matryoshka gate: the disclosure keeps only valid
+  // dims (or null) in the store, but a corrupt working state must never commit
+  // a dim that would truncate stored vectors to garbage.
+  if (s.effectiveDim != null && (!Number.isInteger(s.effectiveDim) || s.effectiveDim < 1))
+    reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
   const lead = requiresLead
@@ -80,6 +85,7 @@ export async function finishWizard(
     appDefaults.defaultStorySettings,
     appDefaults.embeddingModelId,
     appDefaults.embeddingProviderId,
+    s.effectiveDim,
   )
 
   // The lead is the only entity the M2 commit materializes, so it's the only id

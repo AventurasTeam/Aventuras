@@ -17,6 +17,7 @@ type WizardState = WizardSnapshot & {
   patchOpening: (patch: Partial<WizardWorkingState['opening']>) => void
   setLeadName: (leadName: string) => void
   setLeadEntityId: (leadEntityId: string | null) => void
+  setEffectiveDim: (effectiveDim: number | null) => void
   hydrate: (state: WizardWorkingState) => void
   reset: () => void
 }
@@ -34,6 +35,7 @@ const store = createStore<WizardState>()((set) => {
       set((s) => ({ state: { ...s.state, opening: { ...s.state.opening, ...patch } } })),
     setLeadName: (leadName) => set((s) => ({ state: { ...s.state, leadName } })),
     setLeadEntityId: (leadEntityId) => set((s) => ({ state: { ...s.state, leadEntityId } })),
+    setEffectiveDim: (effectiveDim) => set((s) => ({ state: { ...s.state, effectiveDim } })),
     hydrate: (state) => set({ state, furthestStep: state.step }),
     reset: () => {
       const r = emptyWorkingState()
@@ -60,6 +62,7 @@ export const wizardStore = {
   patchOpening: api.patchOpening,
   setLeadName: api.setLeadName,
   setLeadEntityId: api.setLeadEntityId,
+  setEffectiveDim: api.setEffectiveDim,
   hydrate: api.hydrate,
   reset: api.reset,
   subscribe: store.subscribe,
