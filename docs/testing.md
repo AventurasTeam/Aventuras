@@ -224,6 +224,13 @@ on the request:
   can't drift because it reuses the app's own renderer, and tests
   override a specific agent's reply via `setStructured(name, value)`.
 
+Two one-shot narrative controls model the boundary states a running turn
+can hit: `failNextNarrative()` makes the next streaming call return HTTP
+500 (the failed-turn → retriable-system-entry path), and
+`holdNextNarrative()` opens the stream but holds it unfinished until
+`releaseNarrative()` or a client abort — the deterministic in-flight
+window the cancel spec cancels into, with no sleep-based wait.
+
 Block-matching keys on the **auto** (prompt-injection) path the fixture
 uses — the only path E2E relies on. A `force-on` profile takes the
 native path instead, but the app doesn't set the openai-compatible
