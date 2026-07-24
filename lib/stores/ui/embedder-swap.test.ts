@@ -30,4 +30,12 @@ describe('embedderSwapStore', () => {
     expect(embedderSwapStore.getState().cancelRequested).toBe(false)
     expect(embedderSwapStore.getState().progress).toBeNull()
   })
+
+  it('openEmbedderSwapDialog resets stale cancelRequested from previous session', () => {
+    embedderSwapStore.requestCancel()
+    expect(embedderSwapStore.getState().cancelRequested).toBe(true)
+    openEmbedderSwapDialog('story-2')
+    expect(embedderSwapStore.getState().cancelRequested).toBe(false)
+    expect(embedderSwapStore.getState().dialog).toEqual({ storyId: 'story-2' })
+  })
 })

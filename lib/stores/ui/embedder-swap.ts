@@ -20,7 +20,7 @@ const store = createStore<EmbedderSwapState>()(() => INITIAL)
  * the name is fixed; renaming is a cross-slice break.
  */
 export function openEmbedderSwapDialog(storyId: string): void {
-  store.setState({ dialog: { storyId } })
+  store.setState({ dialog: { storyId }, cancelRequested: false })
 }
 
 export const embedderSwapStore = {
