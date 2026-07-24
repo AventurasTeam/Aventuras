@@ -74,9 +74,12 @@ test.describe('embedder — drain on story open', () => {
     // paints, which isn't a stable window to assert against. The describe below
     // is this assertion's positive control.
     //
-    // The pill counts story-wide while the poll above counts one branch, so
-    // these agree only because every embeddable hero row lives on br_hero_main;
-    // an embeddable row seeded onto the fork branch would break this.
+    // Two writers feed the count behind the pill: the reader's mount-time
+    // refresh, which counts the whole story, and the drain sink, which reports
+    // only the open branch's remaining — and by the time this runs the sink
+    // wrote last. They agree with the branch-scoped poll above only because
+    // every embeddable seeded row lives on br_hero_main; one on the fork branch
+    // would leave a story-wide count the drain never clears.
     await expect(reader.embedderOfflinePill(app.window)).toBeHidden()
   })
 })

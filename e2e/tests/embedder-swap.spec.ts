@@ -65,13 +65,14 @@ test.describe('embedder — story settings swap flow', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   let originalModelId: string
+  let dim: number
 
   test.beforeAll(async () => {
     // Cold cache downloads ~24 MB once; the second install reuses that cache.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
-    ;({ modelId: originalModelId } = await installEmbedderModel(userDataDir))
+    ;({ modelId: originalModelId, dim } = await installEmbedderModel(userDataDir))
     await installEmbedderModel(userDataDir, { idOverride: COPY_MODEL_ID })
     markEntitiesEmbeddingStale(seeded.dbPath, HERO_BRANCH)
     app = await launchApp({ userDataDir, cleanupUserData: true })
@@ -83,7 +84,13 @@ test.describe('embedder — story settings swap flow', () => {
   })
 
   test('re-indexes on the current model, then switches models via relabel', async () => {
-    test.setTimeout(180_000)
+    // A drain settle, a full re-index and a relabel in one body; their own waits
+    // sum past the default budget, and a bare test timeout would cut off the
+    // polls below before they can report which condition failed.
+    test.setTimeout(240_000)
+    // Guards the vec0 table names in VEC_ROWS_FOR_MODEL_SQL against a catalog
+    // dim change.
+    expect(dim).toBe(384)
 
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
@@ -105,17 +112,27 @@ test.describe('embedder — story settings swap flow', () => {
     // every row of every branch, so a completed run strictly grows the vec set.
     // Pairing that with the cleared marker rules out sampling before the marker
     // was ever written — rows can only grow after it is.
+    //
+    // Polled as a shape rather than a boolean so a timeout names the condition
+    // that never held and prints its actual, instead of a bare `false`.
     await expect
       .poll(
         async () => {
           const settings = await readStorySettings(app)
-          if ('embedding_swap_target' in settings) return false
-          if ((await staleTotal(app)) !== 0) return false
-          return (await vecRowsFor(app, originalModelId)) > drained
+          const rows = await vecRowsFor(app, originalModelId)
+          return {
+            swapPending: 'embedding_swap_target' in settings,
+            stale: await staleTotal(app),
+            vecRows: rows > drained ? 'grew' : `stuck at ${rows} (drain left ${drained})`,
+          }
         },
-        { timeout: 90_000 },
+        {
+          message:
+            'reindex-now should clear the swap marker, leave nothing stale and re-embed every row',
+          timeout: 90_000,
+        },
       )
-      .toBe(true)
+      .toEqual({ swapPending: false, stale: 0, vecRows: 'grew' })
 
     const reindexed = await readStorySettings(app)
     expect(reindexed.embedding_model_id).toBe(originalModelId)
@@ -124,6 +141,10 @@ test.describe('embedder — story settings swap flow', () => {
     // --- relabel onto the second installed model, from the same open panel ---
 
     const before = await vecRowsFor(app, originalModelId)
+    // The button disables itself off a store the re-index refreshes at its own
+    // boundaries, so its enabled state can lag the DB-gated poll above. Without
+    // this, a click on the still-disabled button would hang to the test timeout.
+    await expect(storySettings.switchEmbedder(app.window)).toBeEnabled()
     await storySettings.switchEmbedder(app.window).click()
     await storySettings.swapCandidate(app.window, COPY_MODEL_ID).click()
     await storySettings.swapNext(app.window).click()
@@ -133,13 +154,17 @@ test.describe('embedder — story settings swap flow', () => {
       .poll(
         async () => {
           const settings = await readStorySettings(app)
-          return (
-            settings.embedding_model_id === COPY_MODEL_ID && !('embedding_swap_target' in settings)
-          )
+          return {
+            modelId: settings.embedding_model_id,
+            swapPending: 'embedding_swap_target' in settings,
+          }
         },
-        { timeout: 30_000 },
+        {
+          message: 'relabel should record the new model id without staging a swap',
+          timeout: 30_000,
+        },
       )
-      .toBe(true)
+      .toEqual({ modelId: COPY_MODEL_ID, swapPending: false })
 
     // Relabel rewrites identity rather than re-embedding, so every row moves and
     // the total is preserved exactly.
