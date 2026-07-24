@@ -3,6 +3,7 @@ import { expect, type Page } from '@playwright/test'
 import { wizard } from '../locators/wizard'
 
 export type NewAdventureStory = { lead: string; title: string; opening: string }
+export type NewCreativeStory = { title: string; opening: string }
 
 // Drive the wizard end-to-end to create an adventure story with a lead entity —
 // the path create-story.ts embeds the lead through the local embedder. Assumes
@@ -25,5 +26,24 @@ export async function createAdventureStory(page: Page, story: NewAdventureStory)
   await wizard.finish(page).click()
 
   // Finish commits the story and routes to the reader.
+  await page.waitForURL(/\/reader-composer\//, { timeout: 30_000 })
+}
+
+// Creative mode has no lead (needsLead false), so Finish never embeds. Steps
+// run 1 → 2 → 5, same as the adventure flow minus the lead field. Assumes the
+// wizard is open on step 1 (past the embedder gate).
+export async function createCreativeStory(page: Page, story: NewCreativeStory): Promise<void> {
+  await wizard.modeOption(page, 'creative').click()
+  await wizard.next(page).click()
+
+  // Step 2 — calendar defaults are valid; advance.
+  await wizard.next(page).click()
+
+  // Step 5 — opening + title are the remaining Finish requirements.
+  await expect(wizard.opening(page)).toBeVisible()
+  await wizard.opening(page).fill(story.opening)
+  await wizard.title(page).fill(story.title)
+
+  await wizard.finish(page).click()
   await page.waitForURL(/\/reader-composer\//, { timeout: 30_000 })
 }
