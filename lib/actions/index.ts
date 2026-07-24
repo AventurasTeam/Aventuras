@@ -1,4 +1,16 @@
 export { defineAction } from './define-action'
+export {
+  cancelSwap,
+  reindexStory,
+  relabelModel,
+  resumeSwap,
+  startSwap,
+  SwapInProgressError,
+  SwapNotInProgressError,
+  SwapStoryMissingError,
+  type SwapDeps,
+  type SwapParams,
+} from './embedder-swap'
 export { applyDeltaAction } from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
