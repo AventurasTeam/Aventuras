@@ -58,9 +58,12 @@ virtual table per (target kind, dimension) pair, named with a dim
 suffix: `entities_vec_384`, `lore_vec_768`, and so on. Prose
 elsewhere refers to a family by its bare name (`entities_vec`); the
 physical table is always dim-suffixed. Each table carries
-`pk TEXT PRIMARY KEY` (the `<branch_id>:<id>` composite — vec0
-enforces primary keys globally across partitions, so a bare
-source-row id would collide when branch forks copy rows), `branch_id`
+`pk TEXT PRIMARY KEY` (the `<branch_id>:<id>:<model_id>` composite —
+vec0 enforces primary keys globally across partitions, and phase-1
+swap staging inserts a NEW-model row next to the OLD-model row for
+the same source row, so identity must carry the model too, not just
+branch and row; deletes always go by the real columns, never by pk
+string, which keeps pre-widen rows forward-compatible), `branch_id`
 as a TEXT partition key, `model_id` and `id` as TEXT metadata columns
 (`id` joins to the source row), `source_hash` as a TEXT auxiliary
 column, and the vector column at the family's dim. There is no
@@ -407,10 +410,14 @@ surfaces three options:
   default" prompt stops nagging until the next manual swap
   attempt.
 - **Skip with relabel.** Bulk-updates this story's recorded
-  `embedding_model_id` to the new value without recomputing
-  vectors or touching vec0. **Only safe when the user knows the
-  underlying model is unchanged** — relabeling a custom import,
-  canonical-id refactor, filename rename, quant-suffix change.
+  `embedding_model_id` to the new value without recomputing any
+  vectors. `model_id` is part of the vec0 pk and the KNN filter, so
+  a pure settings relabel would orphan every stored vector — the
+  implementation rewrites vec0 row identity in SQL (pk and
+  `model_id` metadata) for the affected rows in the same
+  transaction. **Only safe when the user knows the underlying
+  model is unchanged** — relabeling a custom import, canonical-id
+  refactor, filename rename, quant-suffix change.
   Disclaimer shown that this is the user's assertion; if the new
   id actually points to a different model, retrieval quality
   silently degrades and the system has no way to detect that.

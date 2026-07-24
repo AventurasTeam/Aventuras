@@ -469,13 +469,15 @@ A panel per affected story:
 > Reason: model removed / embedder offline / init failure / etc.
 > `[ Switch embedder ]`
 
-Displays the current story's stale-row count and blocking reason when non-zero. The action is `Switch embedder`, which routes to
+Displays the current story's stale-row count and blocking reason
+when non-zero. The action is `Switch embedder`, which routes to
 the embedder picker for that story; picking a different model
 triggers the
 [Model swap UX](./retrieval.md#model-swap-ux) dialog where
 `Re-index this story` runs the rebuild.
 
-The cross-story staleness aggregate appears in App Settings · Embedding models (M7.1).
+The cross-story staleness aggregate appears in App Settings ·
+Embedding models (M7.1).
 
 If the blocking reason is recoverable on its own (provider network
 blip, embedder mid-init), the user may not need to take action —

@@ -409,3 +409,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
   catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
   Task 12 (2026-07-24).
+
+- **Staleness pill can stay lit for stale rows on non-open branches.**
+  The drain worker warms only the open branch while the pill's mount
+  refresh counts story-wide; a story with stale embeddable rows on a
+  non-open branch keeps a lit pill the drain never clears (the blocking
+  sync stage still covers correctness on read; `Re-index this story now`
+  clears it). Cosmetic-only; resolve if per-branch status or a
+  story-wide drain scope lands. Surfaced by M3.1b final review
+  (2026-07-25).
