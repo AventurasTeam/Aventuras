@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import {
   check,
+  index,
   integer,
   primaryKey,
   real,
@@ -32,6 +33,9 @@ export const happenings = sqliteTable(
   (t) => [
     primaryKey({ columns: [t.branchId, t.id] }),
     check('happenings_mutual_excl', sql`${t.occurredAtEntryId} IS NULL OR ${t.temporal} IS NULL`),
+    index('happenings_stale_idx')
+      .on(t.branchId)
+      .where(sql`${t.embeddingStale} = 1`),
   ],
 )
 
