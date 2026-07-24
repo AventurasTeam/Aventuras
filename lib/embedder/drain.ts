@@ -23,6 +23,7 @@ export function createDrainController(deps: DrainDeps) {
   let backoffIdx = -1
   let timer: unknown = null
   let running = false
+  let stopped = false
 
   function schedule(storyId: string, ms: number): void {
     if (timer != null) deps.clearTimer(timer)
@@ -31,7 +32,7 @@ export function createDrainController(deps: DrainDeps) {
 
   async function drain(storyId: string): Promise<void> {
     timer = null
-    if (running || deps.hasActiveRun()) return
+    if (stopped || running || deps.hasActiveRun()) return
     running = true
     try {
       const branchIds = deps.branchIdsFor(storyId)
@@ -40,7 +41,9 @@ export function createDrainController(deps: DrainDeps) {
       const rows = await deps.loadStaleRows(branchIds)
       let remaining = rows.length
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        if (deps.hasActiveRun()) return // a turn started — yield; the sync stage owns it now
+        // A torn-down controller (HMR / re-boot) must not keep draining; bail
+        // like the hasActiveRun guard so no further batches or retries fire.
+        if (stopped || deps.hasActiveRun()) return
         const batch = rows.slice(i, i + BATCH_SIZE)
         const ops = await deps.embedRows(resolution.config, batch)
         await deps.runInTransaction(ops)
@@ -54,8 +57,8 @@ export function createDrainController(deps: DrainDeps) {
         error: error instanceof Error ? error.message : String(error),
       })
       backoffIdx = Math.min(backoffIdx + 1, BACKOFF_MS.length - 1)
-      // finally clears `running` before this timer can fire, so the retry is unblocked.
-      schedule(storyId, BACKOFF_MS[backoffIdx])
+      // A stop() mid-flight must not re-arm a zombie retry loop on the dead controller.
+      if (!stopped) schedule(storyId, BACKOFF_MS[backoffIdx])
     } finally {
       running = false
     }
@@ -70,6 +73,7 @@ export function createDrainController(deps: DrainDeps) {
       if (!running) schedule(storyId, 0)
     },
     stop(): void {
+      stopped = true
       if (timer != null) deps.clearTimer(timer)
       timer = null
     },

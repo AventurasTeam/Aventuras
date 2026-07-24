@@ -116,7 +116,8 @@ export function makeCallbackGuards(
     isCancelRequested: () => {
       try {
         return embedderSwapStore.getState().cancelRequested
-      } catch {
+      } catch (error) {
+        logger.debug('embedder.swap_cancel_read_failed', { error: messageOf(error) })
         return false
       }
     },
@@ -163,12 +164,17 @@ function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefin
     .providers.find((provider) => provider.id === config.providerId)
 }
 
+// Single-sources the engine/drain embed composition: raw DDL through execRaw,
+// provider instance resolved from the config's own providerId.
+const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
+  embedAndBuildVecOps(config, rows, execRaw, providerFor(config))
+
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
   return {
     runInTransaction: ctx.runInTransaction,
     queryAll: queryRows,
     listVecTables: listTableNames,
-    embedRows: (config, rows) => embedAndBuildVecOps(config, rows, execRaw, providerFor(config)),
+    embedRows: makeEmbedRows(),
     now: () => Date.now(),
     ...makeCallbackGuards(storyId),
   }
@@ -369,13 +375,16 @@ export function buildDrainController(
 ): ReturnType<typeof createDrainController> {
   return createDrainController({
     hasActiveRun: generationStore.hasActiveRun,
+    // Scope asymmetry by design: the worker warms only the open branch, while the
+    // swap engine re-embeds every branch of a story. Stale rows in other branches
+    // are covered by the blocking pre-retrieval sync stage when those branches read.
     branchIdsFor: (storyId) => {
       const open = currentStoryStore.getCurrentStory()
       return open?.storyId === storyId ? [open.branchId] : []
     },
     loadStaleRows,
     resolveConfig: resolveDrainConfig,
-    embedRows: (config, rows) => embedAndBuildVecOps(config, rows, execRaw, providerFor(config)),
+    embedRows: makeEmbedRows(),
     runInTransaction: ctx.runInTransaction,
     onDrained: (storyId, remaining) => {
       drainStatusSink?.(storyId, remaining)

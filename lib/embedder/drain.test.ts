@@ -230,6 +230,35 @@ describe('drain controller', () => {
       expect(Buffer.from(stored.embedding)).toEqual(Buffer.from(expected))
     }
   })
+
+  it('stop() mid-flight prevents a re-armed retry timer when the embed then fails', async () => {
+    let releaseEmbed: () => void = () => {}
+    const embedGate = new Promise<void>((resolve) => {
+      releaseEmbed = resolve
+    })
+    const embedRows = vi.fn(async () => {
+      await embedGate
+      throw new Error('embedder down')
+    })
+    const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
+    const { ctrl } = makeController({
+      loadStaleRows: async () => [row('e1')],
+      embedRows,
+      setTimer,
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0) // drain starts, parks in the awaited embedRows
+    expect(embedRows).toHaveBeenCalledOnce()
+
+    ctrl.stop()
+    const timerCallsAtStop = setTimer.mock.calls.length
+    releaseEmbed() // embed rejects now, after stop()
+    await vi.advanceTimersByTimeAsync(120_000)
+
+    // The catch saw stopped === true, so no backoff retry was scheduled.
+    expect(setTimer.mock.calls.length).toBe(timerCallsAtStop)
+  })
 })
 
 function seedStaleEntities(sqlite: DatabaseSync, rows: EmbeddedFieldRow[]): void {
