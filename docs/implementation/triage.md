@@ -81,8 +81,14 @@ slice-planning gate forces its resolution before that slice is planned.
   with `null` meaning clear and `undefined` still meaning leave
   untouched — deliberately left to 3.1b, which owns the semantics and
   is the only consumer. Nullable fields are unaffected — the filter
-  drops only `undefined`, so `null` still writes. Surfaced by M3.11
-  Task 1 (2026-07-22), scoped to 3.1b 2026-07-22.
+  drops only `undefined`, so `null` still writes. Resolved for the
+  swap flow 2026-07-24 by dedicated raw json ops in
+  `lib/db/stories/settings-ops.ts` (`json_set`/`json_remove`, committed
+  atomically with vec0 ops); the swap flow never routes through
+  `updateStorySettings`, so the `StorySettingsPatch` widening remains
+  unneeded until some other writer needs a clear affordance through the
+  action layer. Surfaced by M3.11 Task 1 (2026-07-22), scoped to 3.1b
+  2026-07-22.
 - **`compositeText` space-joins fields, diverging silently from its
   spec.** `lib/db/embeddings/source-hash.ts:104` joins embedded fields
   with a space. `.impl-plans/M03-01a-embedder-core.md:187` specified
@@ -370,3 +376,36 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   i18n pass is a one-line locator change. Fix is to move the strings into
   the `reader` / `common` namespaces and swap the locators to `t()`.
   Surfaced by the coverage-expansion pass (2026-07-24).
+
+- **"Upgrade to current default" story-open prompt deferred from 3.1b.**
+  Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
+  names a second dialog entry point: a prompt when opening a story whose
+  embedding model differs from the current app default; accepting it fires
+  the swap dialog. Slice 3.1b shipped only the Story Settings entry point
+  (planning decision 2026-07-24) — the prompt needs its own "stops nagging
+  until the next manual swap attempt" persistence decision. Owner: a future
+  reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
+
+- **`resetStorySettings` drops creation-locked embedding fields.**
+  `lib/actions` reset flow rebuilds settings via `buildStorySettings` from
+  current app defaults, which (a) relabels `embedding_model_id` to the
+  current app default and (b) drops `effectiveDim` — both violate the
+  locked-at-creation invariant ([`retrieval.md → Matryoshka effective dim`](../memory/retrieval.md#matryoshka-effective-dim))
+  and would silently invalidate every stored vector without a re-index.
+  Pre-existing gap surfaced by M3.1b Task 11 review (2026-07-24); more
+  consequential now that `effectiveDim` is actually written. Fix belongs
+  with whoever next touches the reset flow: preserve the locked trio
+  (`embedding_model_id`, `embedding_provider_id`, `effectiveDim`) across
+  reset, or route a model change through the swap flow. Surfaced by M3.1b
+  Task 11 review (2026-07-24).
+
+- **Cross-model swap re-index has no E2E coverage.**
+  The E2E suite exercises the staging engine via same-model re-index and the
+  dialog wiring via relabel, but the `swap-reindex` dialog action's full
+  cross-model path is uncovered: the harness's second model is an id-copy of
+  MiniLM, and a synthetic id fails catalog dim resolution, while real
+  cross-model coverage needs the 768-dim catalog model (~330 MB) downloaded
+  per CI run. Unit coverage: the engine's cross-model matrix in
+  `lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
+  catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
+  Task 12 (2026-07-24).
