@@ -36,6 +36,10 @@ export const wizardWorkingStateSchema = z.object({
   // null = model native dim; a positive int truncates to that Matryoshka dim.
   // Locked into stories.settings.effectiveDim at Finish (retrieval.md).
   effectiveDim: z.number().int().positive().nullable().default(null),
+  // Flips true on any explicit dim pick (including Native/null) so the
+  // platform pre-selection fires once per session, not once per disclosure
+  // mount — a deliberate Native choice survives step-nav remounts.
+  effectiveDimTouched: z.boolean().default(false),
 })
 
 export type WizardWorkingState = z.infer<typeof wizardWorkingStateSchema>

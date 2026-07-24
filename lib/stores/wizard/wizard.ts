@@ -35,7 +35,8 @@ const store = createStore<WizardState>()((set) => {
       set((s) => ({ state: { ...s.state, opening: { ...s.state.opening, ...patch } } })),
     setLeadName: (leadName) => set((s) => ({ state: { ...s.state, leadName } })),
     setLeadEntityId: (leadEntityId) => set((s) => ({ state: { ...s.state, leadEntityId } })),
-    setEffectiveDim: (effectiveDim) => set((s) => ({ state: { ...s.state, effectiveDim } })),
+    setEffectiveDim: (effectiveDim) =>
+      set((s) => ({ state: { ...s.state, effectiveDim, effectiveDimTouched: true } })),
     hydrate: (state) => set({ state, furthestStep: state.step }),
     reset: () => {
       const r = emptyWorkingState()

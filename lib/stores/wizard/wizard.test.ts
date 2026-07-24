@@ -28,6 +28,25 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().state.leadName).toBe('Aria')
   })
 
+  it('setEffectiveDim stores the dim and marks it touched (incl. Native/null)', () => {
+    wizardStore.setEffectiveDim(1024)
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(1024)
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(true)
+
+    wizardStore.setEffectiveDim(null)
+    expect(wizardStore.getWizard().state.effectiveDim).toBeNull()
+    // An explicit Native pick still counts as touched, so the platform
+    // pre-selection won't re-suggest it on a later disclosure remount.
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(true)
+  })
+
+  it('reset clears the effectiveDim touched flag', () => {
+    wizardStore.setEffectiveDim(512)
+    wizardStore.reset()
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(false)
+    expect(wizardStore.getWizard().state.effectiveDim).toBeNull()
+  })
+
   it('setStep updates the step', () => {
     wizardStore.setStep(2)
     expect(wizardStore.getWizard().state.step).toBe(2)

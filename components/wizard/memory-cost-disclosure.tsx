@@ -75,6 +75,7 @@ export function MemoryCostDisclosure({
   const visible = disclosureVisible({ embeddingBackend }, capabilities)
   const platform = useTier() === 'phone' ? 'mobile' : 'desktop'
   const effectiveDim = wizardStore.useWizard((s) => s.state.effectiveDim)
+  const touched = wizardStore.useWizard((s) => s.state.effectiveDimTouched)
 
   const ladder = useMemo(() => dimLadder(capabilities), [capabilities])
   const suggestion = useMemo(() => suggestedDim(ladder, platform), [ladder, platform])
@@ -88,15 +89,18 @@ export function MemoryCostDisclosure({
   )
   const [customError, setCustomError] = useState<string | null>(null)
 
-  // Platform-suggested pre-selection: fires once while visible and untouched
-  // (store still null). Idempotent via the ref so a later remount can't stomp a
-  // user pick. Desktop suggestion is null → leaves the store at native dim.
+  // Platform-suggested pre-selection: fires once per wizard session while
+  // visible and untouched. The persisted `touched` flag (not a mount-scoped
+  // ref) is the gate, so a deliberate Native pick survives step-nav remounts
+  // rather than being re-suggested. Desktop suggestion is null → since even
+  // that null pick marks touched, the store stays at native dim without loop.
   const preselectedRef = useRef(false)
   useEffect(() => {
-    if (!visible || preselectedRef.current) return
+    if (!visible || touched || preselectedRef.current) return
     preselectedRef.current = true
-    if (effectiveDim == null && suggestion != null) wizardStore.setEffectiveDim(suggestion)
-  }, [visible, effectiveDim, suggestion])
+    if (suggestion != null) wizardStore.setEffectiveDim(suggestion)
+    else wizardStore.setEffectiveDim(null)
+  }, [visible, touched, suggestion])
 
   if (!visible) return null
 

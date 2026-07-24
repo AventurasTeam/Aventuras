@@ -69,6 +69,24 @@ export const ExpandedWithLadder: Story = {
   },
 }
 
+// Regression: a dim already chosen this session (touched) must not be stomped
+// by the platform pre-selection when the disclosure (re)mounts on step nav.
+export const RespectsTouchedSelection: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    // Simulate an explicit earlier pick that differs from the platform
+    // suggestion the effect would otherwise apply.
+    wizardStore.setEffectiveDim(512)
+  },
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
+  play: async () => {
+    await screen.findByTestId('memory-cost-disclosure')
+    // Mount ran the pre-selection effect; the touched gate kept the pick intact.
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(512)
+    expect(await screen.findByText(/512 dim/)).toBeInTheDocument()
+  },
+}
+
 export const CustomInputError: Story = {
   render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
   play: async () => {
