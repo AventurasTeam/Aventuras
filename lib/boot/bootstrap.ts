@@ -1,16 +1,20 @@
 import {
   DeltaReplayError,
   applyDeltaAction,
+  buildDrainController,
   normalizeAppSettingsRow,
   registerAllDomains,
   reverseReplayDeltas,
+  setDrainKickSink,
 } from '@/lib/actions'
 import type { DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
-import { configureDeltaActionPort, recoverInFlightRuns } from '@/lib/pipeline'
+import { configureDeltaActionPort, pipelineEventBus, recoverInFlightRuns } from '@/lib/pipeline'
 import {
   appSettingsStore,
   type BootHydrateResult,
+  currentStoryStore,
+  generationStore,
   recoveryReportStore,
   rehydrateAppSettings,
 } from '@/lib/stores'
@@ -36,11 +40,36 @@ export function ensureDeltaActionPort(): void {
   })
 }
 
+// The opportunistic stale-row drain worker: warm-cache only, never surfaces
+// errors (the blocking pre-retrieval sync stage owns correctness). Idempotent
+// across boot re-runs — tears the prior wiring down first so re-mounts don't leak
+// a second subscription.
+let teardownDrainWorker: (() => void) | null = null
+
+export function wireDrainWorker(ctx: DbCtx): void {
+  teardownDrainWorker?.()
+  const controller = buildDrainController(ctx)
+  setDrainKickSink(controller.kick)
+  const unsubscribe = pipelineEventBus.subscribe('run_complete', () => {
+    const open = currentStoryStore.getCurrentStory()
+    // A chained successor keeps hasActiveRun true; only drain when fully idle so
+    // the worker can never overlap a pipeline run's own sync stage at start.
+    if (open != null && !generationStore.hasActiveRun()) controller.noteIdle(open.storyId)
+  })
+  teardownDrainWorker = () => {
+    unsubscribe()
+    controller.stop()
+    setDrainKickSink(null)
+    teardownDrainWorker = null
+  }
+}
+
 export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // Registry must be populated before recovery drives reverse-replay (resolves by target_table).
   registerAllDomains()
   ensureDiagnosticsGate()
   ensureDeltaActionPort()
+  wireDrainWorker(ctx)
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.
   try {

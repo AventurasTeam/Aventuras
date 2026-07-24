@@ -10,3 +10,19 @@ export {
   type SwapDeps,
   type SwapParams,
 } from './engine'
+
+export {
+  buildDrainController,
+  cancelStorySwap,
+  kickStoryDrain,
+  reindexStoryNow,
+  relabelStory,
+  resolveStorySwapConfig,
+  RelabelBlockedError,
+  resumeStorySwap,
+  setDrainKickSink,
+  setDrainStatusSink,
+  startStorySwap,
+  SwapBusyError,
+  SwapConfigError,
+} from './app-deps'

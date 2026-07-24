@@ -1,0 +1,378 @@
+import { eq } from 'drizzle-orm'
+
+import type { ProviderInstanceWithStub } from '@/lib/ai'
+import { resolveModelCapabilities } from '@/lib/ai'
+import {
+  branches,
+  db,
+  execRaw,
+  listTableNames,
+  queryRows,
+  runInTransaction,
+  staleRowsQuery,
+  stories,
+  storySettingsSchema,
+  toEmbeddedFieldRow,
+  VEC_FAMILIES,
+  type DbCtx,
+  type EmbeddedFieldRow,
+  type StorySettings,
+  type VecTargetKind,
+} from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import {
+  createDrainController,
+  embedAndBuildVecOps,
+  resolveEmbedderConfig,
+  type EmbedderAppDefaults,
+  type EmbedderConfig,
+  type EmbedderConfigResolution,
+} from '@/lib/embedder'
+import {
+  appSettingsStore,
+  type AppSettingsSnapshot,
+  currentStoryStore,
+  embedderSwapStore,
+  generationStore,
+  rehydrateStories,
+  storiesStore,
+} from '@/lib/stores'
+
+import {
+  cancelSwap,
+  reindexStory,
+  relabelModel,
+  resumeSwap,
+  startSwap,
+  SwapNotInProgressError,
+  SwapStoryMissingError,
+  type SwapDeps,
+  type SwapParams,
+} from './engine'
+
+type SwapConfigReason = Extract<EmbedderConfigResolution, { ok: false }>['reason']
+
+/**
+ * A second embedder operation was requested for a story while one is already
+ * running. The UI disables its buttons; this typed rejection is the belt-and-
+ * braces the engine's single-flight caller contract requires.
+ */
+export class SwapBusyError extends Error {
+  constructor(storyId: string) {
+    super(`An embedder operation is already running for story ${storyId}`)
+    this.name = 'SwapBusyError'
+  }
+}
+
+export class SwapConfigError extends Error {
+  readonly reason: SwapConfigReason
+
+  constructor(storyId: string, reason: SwapConfigReason) {
+    super(`Cannot resolve an embedder config for story ${storyId}: ${reason}`)
+    this.name = 'SwapConfigError'
+    this.reason = reason
+  }
+}
+
+export class RelabelBlockedError extends Error {
+  constructor(storyId: string) {
+    super(`Refusing to relabel story ${storyId} while an embedder swap is in flight`)
+    this.name = 'RelabelBlockedError'
+  }
+}
+
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error)
+
+// Per-story single-flight lock (engine caller contract): concurrent engine calls
+// for one story would both pass the advisory swap-target guard and stage vectors
+// under different targets, orphaning the loser's rows. Reject rather than queue.
+const inFlight = new Map<string, Promise<unknown>>()
+
+export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
+  if (inFlight.has(storyId)) throw new SwapBusyError(storyId)
+  const run = fn()
+  inFlight.set(storyId, run)
+  try {
+    return await run
+  } finally {
+    inFlight.delete(storyId)
+  }
+}
+
+// The store/UI callbacks are wrapped so a throwing subscriber can never propagate
+// into the engine mid-swap and abort a staging run over a cosmetic render error.
+export function makeCallbackGuards(
+  storyId: string,
+): Pick<SwapDeps, 'onProgress' | 'isCancelRequested'> {
+  return {
+    onProgress: (done, total) => {
+      try {
+        embedderSwapStore.setProgress({ storyId, done, total })
+      } catch (error) {
+        logger.debug('embedder.swap_progress_failed', { error: messageOf(error) })
+      }
+    },
+    isCancelRequested: () => {
+      try {
+        return embedderSwapStore.getState().cancelRequested
+      } catch {
+        return false
+      }
+    },
+  }
+}
+
+function appEmbedderDefaults(app: AppSettingsSnapshot): EmbedderAppDefaults {
+  return {
+    embeddingModelId: app.embeddingModelId,
+    embeddingProviderId: app.embeddingProviderId,
+    defaultStorySettings: { embeddingBackend: app.defaultStorySettings.embeddingBackend },
+  }
+}
+
+export function resolveStorySwapConfig(
+  storyId: string,
+  targetModelId: string,
+): EmbedderConfigResolution {
+  const app = appSettingsStore.getAppSettings()
+  const story = storiesStore.getStories().rows.find((row) => row.id === storyId)
+  const settings = story?.settings ?? null
+  if (settings == null) return { ok: false, reason: 'no-model' }
+
+  const providerId = settings.embedding_provider_id
+  const caps =
+    providerId != null
+      ? resolveModelCapabilities(providerId, targetModelId, app.providers)
+      : undefined
+  // Target model overrides the story's recorded id; effectiveDim is the story's
+  // locked dim (canon: re-index reuses the stored dim, never re-picks).
+  return resolveEmbedderConfig(
+    { ...settings, embedding_model_id: targetModelId },
+    appEmbedderDefaults(app),
+    caps?.matryoshkaSupported != null
+      ? { matryoshkaSupported: caps.matryoshkaSupported }
+      : undefined,
+  )
+}
+
+function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefined {
+  if (config.backend !== 'provider') return undefined
+  return appSettingsStore
+    .getAppSettings()
+    .providers.find((provider) => provider.id === config.providerId)
+}
+
+function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
+  return {
+    runInTransaction: ctx.runInTransaction,
+    queryAll: queryRows,
+    listVecTables: listTableNames,
+    embedRows: (config, rows) => embedAndBuildVecOps(config, rows, execRaw, providerFor(config)),
+    now: () => Date.now(),
+    ...makeCallbackGuards(storyId),
+  }
+}
+
+function defaultCtx(): DbCtx {
+  return { db, runInTransaction }
+}
+
+async function loadSwapContext(
+  storyId: string,
+  ctx: DbCtx,
+): Promise<{ settings: StorySettings; branchIds: string[] }> {
+  const [row] = await ctx.db
+    .select({ settings: stories.settings })
+    .from(stories)
+    .where(eq(stories.id, storyId))
+  const parsed = row ? storySettingsSchema.safeParse(row.settings) : undefined
+  if (!parsed?.success) throw new SwapStoryMissingError(storyId)
+  const branchRows = await ctx.db
+    .select({ id: branches.id })
+    .from(branches)
+    .where(eq(branches.storyId, storyId))
+  return { settings: parsed.data, branchIds: branchRows.map((branch) => branch.id) }
+}
+
+// Mirrors updateStorySettings' tail: the write already committed, so a failed
+// rehydrate is logged rather than thrown — the swap succeeded regardless.
+async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
+  if (!(await rehydrateStories(ctx.db))) {
+    logger.warn('embedder.swap_store_refresh_failed', { storyId })
+    return
+  }
+  const open = currentStoryStore.getCurrentStory()
+  if (open?.storyId !== storyId) return
+  const [row] = await ctx.db
+    .select({ settings: stories.settings })
+    .from(stories)
+    .where(eq(stories.id, storyId))
+  const parsed = row ? storySettingsSchema.safeParse(row.settings) : undefined
+  if (parsed?.success) currentStoryStore.set({ ...open, settings: parsed.data })
+}
+
+async function runStagingSwap(
+  storyId: string,
+  ctx: DbCtx,
+  invoke: (deps: SwapDeps, params: SwapParams) => Promise<'completed' | 'cancelled'>,
+  resolveTarget: (settings: StorySettings) => string,
+): Promise<'completed' | 'cancelled'> {
+  return runExclusive(storyId, async () => {
+    const { settings, branchIds } = await loadSwapContext(storyId, ctx)
+    const targetModelId = resolveTarget(settings)
+    const resolution = resolveStorySwapConfig(storyId, targetModelId)
+    if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
+    const deps = composeSwapDeps(storyId, ctx)
+    embedderSwapStore.setProgress({ storyId, done: 0, total: 0 })
+    try {
+      const outcome = await invoke(deps, {
+        storyId,
+        branchIds,
+        // Current recorded model id — stays OLD until phase-2 commits, so both
+        // resume and re-index read the same value the flip will replace.
+        currentModelId: settings.embedding_model_id,
+        currentSwapTarget: settings.embedding_swap_target ?? null,
+        targetConfig: resolution.config,
+      })
+      await refreshStores(storyId, ctx)
+      return outcome
+    } finally {
+      embedderSwapStore.clearProgress()
+    }
+  })
+}
+
+export function startStorySwap(
+  storyId: string,
+  targetModelId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<'completed' | 'cancelled'> {
+  return runStagingSwap(storyId, ctx, startSwap, () => targetModelId)
+}
+
+export function resumeStorySwap(
+  storyId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<'completed' | 'cancelled'> {
+  return runStagingSwap(storyId, ctx, resumeSwap, (settings) => {
+    if (settings.embedding_swap_target == null) throw new SwapNotInProgressError(storyId)
+    return settings.embedding_swap_target
+  })
+}
+
+export function reindexStoryNow(
+  storyId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<'completed' | 'cancelled'> {
+  return runStagingSwap(storyId, ctx, reindexStory, (settings) => settings.embedding_model_id)
+}
+
+export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()): Promise<void> {
+  // Signal a running staging loop to unwind itself via its isCancelRequested check.
+  embedderSwapStore.requestCancel()
+  const active = inFlight.get(storyId)
+  if (active != null) {
+    // The loop owns the unwind (delete NEW rows, clear marker, re-flag); just wait.
+    await active.catch(() => {})
+    return
+  }
+  // No loop running (a paused / crash-recovered swap with the marker still set):
+  // run the engine's cancel directly.
+  await runExclusive(storyId, async () => {
+    const { settings, branchIds } = await loadSwapContext(storyId, ctx)
+    const target = settings.embedding_swap_target
+    if (target == null) return
+    const resolution = resolveStorySwapConfig(storyId, target)
+    if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
+    await cancelSwap(composeSwapDeps(storyId, ctx), {
+      storyId,
+      branchIds,
+      targetModelId: target,
+    })
+    await refreshStores(storyId, ctx)
+  })
+}
+
+export async function relabelStory(
+  storyId: string,
+  newModelId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<void> {
+  await runExclusive(storyId, async () => {
+    const { settings, branchIds } = await loadSwapContext(storyId, ctx)
+    // Relabel's pre-delete is destructive toward target-model rows; a swap in
+    // flight would have staged exactly those, so refuse until it settles.
+    if (settings.embedding_swap_target != null) throw new RelabelBlockedError(storyId)
+    await relabelModel(composeSwapDeps(storyId, ctx), {
+      storyId,
+      branchIds,
+      oldModelId: settings.embedding_model_id,
+      newModelId,
+    })
+    await refreshStores(storyId, ctx)
+  })
+}
+
+// --- drain worker composition (boot wires the controller; Task 10 attaches sinks) -----
+
+let drainStatusSink: ((storyId: string, remaining: number) => void) | null = null
+
+export function setDrainStatusSink(
+  sink: ((storyId: string, remaining: number) => void) | null,
+): void {
+  drainStatusSink = sink
+}
+
+let drainKickSink: ((storyId: string) => void) | null = null
+
+export function setDrainKickSink(sink: ((storyId: string) => void) | null): void {
+  drainKickSink = sink
+}
+
+/** Fire-and-forget kick for surfaces that just made a story embeddable (story open,
+ *  embedder recovery). A no-op until boot wires the controller. */
+export function kickStoryDrain(storyId: string): void {
+  drainKickSink?.(storyId)
+}
+
+async function loadStaleRows(branchIds: readonly string[]): Promise<EmbeddedFieldRow[]> {
+  const out: EmbeddedFieldRow[] = []
+  for (const kind of Object.keys(VEC_FAMILIES) as VecTargetKind[]) {
+    const query = staleRowsQuery(kind, branchIds)
+    const rows = await queryRows(query.sql, query.params)
+    out.push(...rows.map((row) => toEmbeddedFieldRow(kind, row)))
+  }
+  return out
+}
+
+function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
+  const open = currentStoryStore.getCurrentStory()
+  if (open?.storyId !== storyId) return { ok: false, reason: 'no-model' }
+  // A swap in flight owns the vec tables; let its batched embeds and the blocking
+  // sync stage handle staleness rather than racing them from the warm-cache worker.
+  if (open.settings.embedding_swap_target != null) return { ok: false, reason: 'no-model' }
+  return resolveStorySwapConfig(storyId, open.settings.embedding_model_id)
+}
+
+export function buildDrainController(
+  ctx: DbCtx = defaultCtx(),
+): ReturnType<typeof createDrainController> {
+  return createDrainController({
+    hasActiveRun: generationStore.hasActiveRun,
+    branchIdsFor: (storyId) => {
+      const open = currentStoryStore.getCurrentStory()
+      return open?.storyId === storyId ? [open.branchId] : []
+    },
+    loadStaleRows,
+    resolveConfig: resolveDrainConfig,
+    embedRows: (config, rows) => embedAndBuildVecOps(config, rows, execRaw, providerFor(config)),
+    runInTransaction: ctx.runInTransaction,
+    onDrained: (storyId, remaining) => {
+      drainStatusSink?.(storyId, remaining)
+      logger.debug('embedder.drain_progress', { storyId, remaining })
+    },
+    setTimer: (fn, ms) => setTimeout(fn, ms),
+    clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  })
+}

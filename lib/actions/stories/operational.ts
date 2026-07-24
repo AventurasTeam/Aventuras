@@ -12,6 +12,7 @@ import {
   type OpenFailureKind,
 } from '@/lib/stores'
 
+import { kickStoryDrain } from '../embedder-swap'
 import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
 
@@ -123,6 +124,9 @@ export async function loadOpenStory(
   entriesStore.hydrate(branchId, entryRows)
   entitiesStore.hydrate(branchId, entityRows)
   currentStoryStore.set({ storyId: row.storyId, branchId, definition, settings })
+  // Warm the vec cache for a story opened with pre-existing stale rows; no-op
+  // until boot wires the drain controller, and the sync stage owns correctness.
+  kickStoryDrain(row.storyId)
   return { status: 'ok', storyId: row.storyId, branchId }
 }
 
