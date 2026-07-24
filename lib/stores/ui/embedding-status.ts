@@ -11,7 +11,6 @@ export const embeddingStatusStore = {
   useEmbeddingStatus: <T>(selector: (s: EmbeddingStatusState) => T): T => useStore(store, selector),
   getState: (): EmbeddingStatusState => store.getState(),
   setStatus: (storyId: string, staleTotal: number): void => store.setState({ storyId, staleTotal }),
-  clear: (): void => store.setState(INITIAL),
   __reset: (): void => store.setState(INITIAL),
 }
 

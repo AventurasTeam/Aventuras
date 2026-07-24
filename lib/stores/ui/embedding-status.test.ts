@@ -20,9 +20,9 @@ describe('embeddingStatusStore', () => {
     expect(embeddingStatusStore.getState()).toEqual({ storyId: 'story-2', staleTotal: 3 })
   })
 
-  it('clear resets to the initial state', () => {
+  it('__reset resets to the initial state', () => {
     embeddingStatusStore.setStatus('story-1', 12)
-    embeddingStatusStore.clear()
+    embeddingStatusStore.__reset()
     expect(embeddingStatusStore.getState()).toEqual({ storyId: null, staleTotal: 0 })
   })
 })

@@ -167,8 +167,38 @@ export const SwapInProgress: Story = {
     // No resume prompt while a loop is live for this story, even though the
     // swap-target marker is set.
     expect(screen.queryByTestId('swap-resume')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: t('storySettings:memory.switchEmbedder'), hidden: true }),
+    ).toBeDisabled()
+    expect(screen.getByTestId('reindex-now')).toBeDisabled()
     await userEvent.click(cancel)
     await waitFor(() => expect(embedderSwapStore.getState().cancelRequested).toBe(true))
+  },
+}
+
+export const SwapInProgressBeforeRehydrate: Story = {
+  // Live progress for this story, but `settings` still reflects the
+  // pre-swap row — stores only rehydrate at swap end, so a fresh swap's
+  // marker is never store-visible mid-run. Guards against gating solely on
+  // settings.embedding_swap_target.
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings(),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    embedderSwapStore.setProgress({ storyId: STORY_ID, done: 2, total: 10 })
+  },
+  play: async () => {
+    expect(
+      await screen.findByText(t('storySettings:memory.reindexing', { done: 2, total: 10 })),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
+    ).toBeDisabled()
+    expect(screen.getByTestId('reindex-now')).toBeDisabled()
   },
 }
 

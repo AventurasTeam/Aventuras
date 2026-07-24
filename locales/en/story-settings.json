@@ -42,7 +42,7 @@
     "reindex": "Re-index this story",
     "reindexHint": "Rebuilds every vector under the new model. Crash-safe; resumable.",
     "keep": "Keep on the current model",
-    "keepHint": "Stay on the current model and stop offering this switch until you start a manual swap again.",
+    "keepHint": "Stay on the current model. Nothing changes.",
     "optionsBody": "Choose how to proceed with this switch.",
     "relabel": "Skip and just relabel",
     "relabelHint": "Update the recorded model without rebuilding any vectors.",

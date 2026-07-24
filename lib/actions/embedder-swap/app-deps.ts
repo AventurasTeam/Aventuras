@@ -408,8 +408,14 @@ export function buildDrainController(
   ctx: DbCtx = defaultCtx(),
 ): ReturnType<typeof createDrainController> {
   // Attaches the Task 8 seam to the status store so the Memory panel / reader
-  // pill see the worker's progress without either polling it directly.
-  setDrainStatusSink((storyId, remaining) => embeddingStatusStore.setStatus(storyId, remaining))
+  // pill see the worker's progress without either polling it directly. The
+  // drain only ever drains the open story, so a mismatch here means the user
+  // navigated away mid-drain — drop the write rather than clobber the newly
+  // open story's slot (this sink bypasses statusRequestGeneration).
+  setDrainStatusSink((storyId, remaining) => {
+    if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
+    embeddingStatusStore.setStatus(storyId, remaining)
+  })
   return createDrainController({
     hasActiveRun: generationStore.hasActiveRun,
     // Scope asymmetry by design: the worker warms only the open branch, while the
