@@ -220,6 +220,12 @@ async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
   if (parsed?.success) currentStoryStore.set({ ...open, settings: parsed.data })
 }
 
+// Global, not per-story: embeddingStatusStore is a single slot, so the only
+// coherent policy is "the most recently issued call wins" — a slower, earlier
+// call (e.g. a mount-refresh for a story the user has since navigated away
+// from) resolving after a newer one must not clobber the newer result.
+let statusRequestGeneration = 0
+
 /**
  * Recomputes the story's stale-row total and publishes it to
  * `embeddingStatusStore` — the Memory panel and the reader's status pill both
@@ -232,9 +238,11 @@ export async function refreshEmbeddingStatus(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<void> {
+  const generation = ++statusRequestGeneration
   try {
     const { branchIds } = await loadSwapContext(storyId, ctx)
     const { total } = await countStaleRows(queryRows, branchIds)
+    if (generation !== statusRequestGeneration) return
     embeddingStatusStore.setStatus(storyId, total)
   } catch (error) {
     logger.warn('embedder.status_refresh_failed', { storyId, error: messageOf(error) })

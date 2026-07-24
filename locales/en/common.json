@@ -25,7 +25,22 @@
     "actions": "Actions",
     "back": "Back",
     "chapterProgress": "Chapter progress",
-    "onThisScreen": "On this screen"
+    "onThisScreen": "On this screen",
+    "generationStatusPill": {
+      "phase": {
+        "reasoning": "reasoning…",
+        "generatingNarrative": "generating narrative…",
+        "classifying": "classifying…",
+        "closingChapter": "closing chapter…"
+      },
+      "error": {
+        "embedderOffline_one": "Embedder offline — {{count}} row pending",
+        "embedderOffline_other": "Embedder offline — {{count}} rows pending",
+        "classifierOffline": "Classifier offline — retrieval coverage thinning"
+      },
+      "cancelGeneration": "Cancel generation",
+      "cancelChapterClose": "Cancel chapter close"
+    }
   },
   "modelPicker": {
     "placeholder": "Pick a model",

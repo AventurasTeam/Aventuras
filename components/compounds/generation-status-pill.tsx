@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 
 type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
 
@@ -18,24 +19,34 @@ type GenerationStatusPillProps = {
   onErrorTap: (code: ErrorState['code']) => void
 }
 
-const PHASE_COPY: Record<GenerationPhase, string> = {
-  reasoning: 'reasoning…',
-  'generating-narrative': 'generating narrative…',
-  classifying: 'classifying…',
-  'closing-chapter': 'closing chapter…',
+function phaseCopy(phase: GenerationPhase): string {
+  switch (phase) {
+    case 'reasoning':
+      return t('chrome.generationStatusPill.phase.reasoning')
+    case 'generating-narrative':
+      return t('chrome.generationStatusPill.phase.generatingNarrative')
+    case 'classifying':
+      return t('chrome.generationStatusPill.phase.classifying')
+    case 'closing-chapter':
+      return t('chrome.generationStatusPill.phase.closingChapter')
+  }
 }
 
 function errorCopy(error: ErrorState): string {
   switch (error.code) {
     case 'embedder-offline':
-      return `Embedder offline — ${error.pendingRows} rows pending`
+      return t('chrome.generationStatusPill.error.embedderOffline', {
+        count: error.pendingRows,
+      })
     case 'classifier-offline':
-      return 'Classifier offline — retrieval coverage thinning'
+      return t('chrome.generationStatusPill.error.classifierOffline')
   }
 }
 
 function cancelCopy(phase: GenerationPhase): string {
-  return phase === 'closing-chapter' ? 'Cancel chapter close' : 'Cancel generation'
+  return phase === 'closing-chapter'
+    ? t('chrome.generationStatusPill.cancelChapterClose')
+    : t('chrome.generationStatusPill.cancelGeneration')
 }
 
 export function GenerationStatusPill({
@@ -54,7 +65,7 @@ export function GenerationStatusPill({
       <Popover>
         <PopoverTrigger ref={triggerRef}>
           <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
-            {isPhone ? null : PHASE_COPY[activePhase]}
+            {isPhone ? null : phaseCopy(activePhase)}
           </Tag>
         </PopoverTrigger>
         <PopoverContent>

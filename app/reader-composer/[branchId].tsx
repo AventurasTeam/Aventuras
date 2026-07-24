@@ -137,11 +137,13 @@ export default function ReaderComposerRoute() {
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     s.storyId === storyId ? s.staleTotal : 0,
   )
-  const swapProgress = embedderSwapStore.useSwap((s) => s.progress)
+  // Narrow selector: subscribing to the whole `progress` object would re-render
+  // the entire reader on every embed-batch tick (onProgress fires per batch).
+  const swapProgressStoryId = embedderSwapStore.useSwap((s) => s.progress?.storyId ?? null)
   const swapTarget = openForBranch?.settings.embedding_swap_target ?? null
   // No progress running FOR THIS STORY: a swap loop live elsewhere must not
   // suppress this story's own resume prompt.
-  const resumeSwapOpen = storyId != null && swapTarget != null && swapProgress?.storyId !== storyId
+  const resumeSwapOpen = storyId != null && swapTarget != null && swapProgressStoryId !== storyId
 
   const reportSwapFailure = useCallback(
     (op: string, error: unknown) => {

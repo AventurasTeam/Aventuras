@@ -115,6 +115,40 @@ export const StaleWithReason: Story = {
   },
 }
 
+export const ReasonModelMissing: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_model_id: 'not-a-catalog-model' }),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 7)
+  },
+  play: async () => {
+    expect(await screen.findByText('7 rows pending re-embed.')).toBeInTheDocument()
+    expect(screen.getByText(t('storySettings:memory.reason.modelMissing'))).toBeInTheDocument()
+  },
+}
+
+export const ReasonRetrying: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings(),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 3)
+  },
+  play: async () => {
+    // Config resolves fine (valid local model) — a non-zero stale count with
+    // no config error means transient embed failures, not a blocked config.
+    expect(await screen.findByText('3 rows pending re-embed.')).toBeInTheDocument()
+    expect(screen.getByText(t('storySettings:memory.reason.retrying'))).toBeInTheDocument()
+  },
+}
+
 export const SwapInProgress: Story = {
   args: {
     storyId: STORY_ID,
