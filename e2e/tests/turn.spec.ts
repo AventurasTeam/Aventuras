@@ -1,25 +1,11 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
 
+import { queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
 import { home } from '../locators/home'
-
-async function dbRows(page: Page, sql: string, params: unknown[] = []): Promise<unknown[][]> {
-  const result = await page.evaluate(
-    ({ sql, params }) =>
-      (
-        window as unknown as {
-          aventurasDb: {
-            query: (s: string, p: unknown[], m: string) => Promise<{ rows: unknown[][] }>
-          }
-        }
-      ).aventurasDb.query(sql, params, 'all'),
-    { sql, params },
-  )
-  return result.rows
-}
 
 // A distinctive marker so the reply is unambiguous in both DOM and DB.
 const REPLY = 'E2E-TURN-MARKER — the blade sings and the rain leans in.'
@@ -66,17 +52,17 @@ test.describe('reader turn against the mock LLM', () => {
 
     // Both the user action and the AI reply are committed to the branch.
     const branchId = (
-      await dbRows(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
     )[0][0] as string
 
-    const reply = await dbRows(
+    const reply = await queryApp(
       app.window,
       `SELECT kind FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-TURN-MARKER%'`,
       [branchId],
     )
     expect(reply.length, 'AI reply entry committed').toBe(1)
 
-    const userEntry = await dbRows(
+    const userEntry = await queryApp(
       app.window,
       `SELECT kind FROM story_entries WHERE branch_id = ? AND content LIKE '%E2E-USER-MARKER%'`,
       [branchId],
