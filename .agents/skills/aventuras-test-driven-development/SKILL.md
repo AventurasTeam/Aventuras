@@ -31,6 +31,8 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 For a carve-out, the slice doc's Tests section and the execution plan's evidence matrix name the evidence that stands in for a test — a typecheck, a lint, a Storybook story, a manual smoke. Test coverage is calibrated to the slice's risk profile, per `docs/implementation/conventions.md`.
 
+Behavior that only a running app exercises — cross-subsystem seams and user-facing flows — is the **E2E layer**'s domain ([`docs/testing.md`](../../../docs/testing.md)), the third test form beside unit and Storybook. A slice that warrants one carries it as a planned task (decided at plan time); drive the UI, assert through the DB.
+
 If your work is behavior-bearing and you're thinking "skip TDD just this once" — Stop. That's rationalization. The carve-outs above are the ONLY exceptions.
 
 ## Project code conventions

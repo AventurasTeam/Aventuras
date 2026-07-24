@@ -2,6 +2,7 @@ import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
+import { remapSeedIds } from './seed-ids'
 import {
   appearanceSchema,
   modelProfileSchema,
@@ -80,8 +81,8 @@ const DAY = 86_400_000
 // ---------------------------------------------------------------------------
 
 const HERO = 'story_hero'
-const MAIN = 'branch_hero_main'
-const FORK = 'branch_hero_fork'
+const MAIN = 'br_hero_main'
+const FORK = 'br_hero_fork'
 
 const CAL = 'cal_default'
 
@@ -103,7 +104,7 @@ const ID = {
 } as const
 
 function entryId(prefix: string, i: number): string {
-  return `e_${prefix}_${String(i).padStart(4, '0')}`
+  return `entry_${prefix}_${String(i).padStart(4, '0')}`
 }
 
 // Validate-or-throw: build-time guard that every JSON payload satisfies its Zod
@@ -543,6 +544,15 @@ const heroEntities: NewEntity[] = [
 ]
 
 // Canonical order requires aId < bId; the chosen char IDs already sort kael<mira<vorne.
+// The char_rel_canonical_order CHECK stores each pair with a_id < b_id. Rows
+// are authored in mnemonic order, but remapped uuids sort differently, so
+// re-canonicalize after the remap — the POV columns (kind / inverseKind) swap
+// with the ids so the a→b / b→a semantics survive the flip.
+function canonicalizeRelationship(r: NewCharacterRelationship): NewCharacterRelationship {
+  if (r.aId <= r.bId) return r
+  return { ...r, aId: r.bId, bId: r.aId, kind: r.inverseKind, inverseKind: r.kind }
+}
+
 const heroRelationships: NewCharacterRelationship[] = [
   {
     id: 'rel_kael_mira',
@@ -773,49 +783,49 @@ const heroHappenings: NewHappening[] = [
 
 const heroInvolvements: NewHappeningInvolvement[] = [
   {
-    id: 'inv_ambush_kael',
+    id: 'hinv_ambush_kael',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     entityId: ID.kael,
     role: 'target',
   },
   {
-    id: 'inv_ambush_vorne',
+    id: 'hinv_ambush_vorne',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     entityId: ID.vorne,
     role: 'aggressor',
   },
   {
-    id: 'inv_fire_mira',
+    id: 'hinv_fire_mira',
     branchId: MAIN,
     happeningId: 'hap_fire',
     entityId: ID.mira,
     role: 'witness',
   },
   {
-    id: 'inv_fire_watch',
+    id: 'hinv_fire_watch',
     branchId: MAIN,
     happeningId: 'hap_fire',
     entityId: ID.watch,
     role: 'responder',
   },
   {
-    id: 'inv_betrayal_sage',
+    id: 'hinv_betrayal_sage',
     branchId: MAIN,
     happeningId: 'hap_betrayal',
     entityId: ID.sage,
     role: 'betrayer',
   },
   {
-    id: 'inv_pact_kael',
+    id: 'hinv_pact_kael',
     branchId: MAIN,
     happeningId: 'hap_pact',
     entityId: ID.kael,
     role: 'party',
   },
   {
-    id: 'inv_pact_vorne',
+    id: 'hinv_pact_vorne',
     branchId: MAIN,
     happeningId: 'hap_pact',
     entityId: ID.vorne,
@@ -826,7 +836,7 @@ const heroInvolvements: NewHappeningInvolvement[] = [
 // characterId must be a character entity; the natural key is (branch, character, happening).
 const heroAwareness: NewHappeningAwareness[] = [
   {
-    id: 'aw_ambush_kael',
+    id: 'haw_ambush_kael',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     characterId: ID.kael,
@@ -836,7 +846,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_ambush_mira',
+    id: 'haw_ambush_mira',
     branchId: MAIN,
     happeningId: 'hap_ambush',
     characterId: ID.mira,
@@ -846,7 +856,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'told',
   },
   {
-    id: 'aw_fire_mira',
+    id: 'haw_fire_mira',
     branchId: MAIN,
     happeningId: 'hap_fire',
     characterId: ID.mira,
@@ -856,7 +866,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_fire_kael',
+    id: 'haw_fire_kael',
     branchId: MAIN,
     happeningId: 'hap_fire',
     characterId: ID.kael,
@@ -866,7 +876,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'told',
   },
   {
-    id: 'aw_betrayal_kael',
+    id: 'haw_betrayal_kael',
     branchId: MAIN,
     happeningId: 'hap_betrayal',
     characterId: ID.kael,
@@ -876,7 +886,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'discovered',
   },
   {
-    id: 'aw_pact_kael',
+    id: 'haw_pact_kael',
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.kael,
@@ -886,7 +896,7 @@ const heroAwareness: NewHappeningAwareness[] = [
     source: 'witnessed',
   },
   {
-    id: 'aw_pact_vorne',
+    id: 'haw_pact_vorne',
     branchId: MAIN,
     happeningId: 'hap_pact',
     characterId: ID.vorne,
@@ -959,7 +969,7 @@ const heroTranslations: NewTranslation[] = [
 
 const heroEntryAssets: NewEntryAsset[] = [
   {
-    id: 'ea_hero_1',
+    id: 'ast_hero_1',
     branchId: MAIN,
     entryId: entryId('hero', 6),
     assetId: 'asset_inline_1',
@@ -973,7 +983,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_1',
     branchId: MAIN,
     entryId: entryId('hero', 14),
-    actionId: 'seed_act_edit_1',
+    actionId: 'act_edit_1',
     logPosition: 1,
     source: 'user_edit',
     targetTable: 'story_entries',
@@ -987,7 +997,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_2',
     branchId: MAIN,
     entryId: entryId('hero', 22),
-    actionId: 'seed_act_class_1',
+    actionId: 'act_class_1',
     logPosition: 2,
     source: 'ai_classifier',
     targetTable: 'happenings',
@@ -1001,7 +1011,7 @@ const heroDeltas: NewDelta[] = [
     id: 'delta_hero_3',
     branchId: MAIN,
     entryId: null,
-    actionId: 'seed_act_chapter_1',
+    actionId: 'act_chapter_1',
     logPosition: 3,
     source: 'chapter_close',
     targetTable: 'chapters',
@@ -1026,7 +1036,7 @@ function entryCreateDeltas(allEntries: NewStoryEntry[]): NewDelta[] {
       id: `delta_create_${e.branchId}_${e.id}`,
       branchId: e.branchId,
       entryId: null,
-      actionId: `seed_act_create_${e.branchId}_${e.id}`,
+      actionId: `act_create_${e.branchId}_${e.id}`,
       logPosition: lp,
       source: e.kind === 'user_action' ? ('user_edit' as const) : ('ai_classifier' as const),
       targetTable: 'story_entries',
@@ -1059,7 +1069,7 @@ type Filler = {
 
 const fillerLead: NewEntity = {
   id: 'char_sable',
-  branchId: 'branch_active2_main',
+  branchId: 'br_active2_main',
   kind: 'character',
   name: 'Sable',
   description: 'A cartographer mapping a coast that keeps redrawing itself.',
@@ -1189,7 +1199,7 @@ function fillerStoryRows(): {
 
   fillers.forEach((f, fi) => {
     const storyId = `story_${f.key}`
-    const branchId = `branch_${f.key}_main`
+    const branchId = `br_${f.key}_main`
     const t0 = BASE + (fi + 2) * DAY
     storyRows.push({
       id: storyId,
@@ -1266,7 +1276,7 @@ function fillerStoryRows(): {
 // ---------------------------------------------------------------------------
 
 const RICH = 'story_rich'
-const RMAIN = 'branch_rich_main'
+const RMAIN = 'br_rich_main'
 
 const RICH_OPENING =
   'A plain opening: the gallery of impossible rooms admits one visitor at a time. Every door beyond this one is painted in styles no honest wall should hold.'
@@ -1480,7 +1490,7 @@ const pipelineRunRows: NewPipelineRun[] = [
   {
     runId: 'run_hero_1',
     kind: 'narrative',
-    actionId: 'seed_act_run_1',
+    actionId: 'act_run_1',
     storyId: HERO,
     startedAt: BASE + 70 * MIN,
     finishedAt: BASE + 70 * MIN + 4_200,
@@ -1498,7 +1508,10 @@ const appSettingsRow: NewAppSettings = {
       apiKey: '',
       endpoint: 'http://localhost:1234/v1',
       favoriteModelIds: ['seed/narrative'],
-      cachedModels: [{ id: 'seed/narrative' }],
+      // taggedBlockReliable lets piggyback ride in-band on the narrative call;
+      // the classifier profile below still backs the periodic classifier and
+      // the piggyback fallback so a turn resolves on seeded data.
+      cachedModels: [{ id: 'seed/narrative', capabilities: { taggedBlockReliable: true } }],
     }),
   ],
   profiles: [
@@ -1509,8 +1522,14 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
       temperature: 0.8,
     }),
+    modelProfileSchema.parse({
+      id: 'prof_classifier',
+      kind: 'agent',
+      name: 'Seed Classifier',
+      modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
+    }),
   ],
-  assignments: { narrative: 'prof_narrative' },
+  assignments: { narrative: 'prof_narrative', classifier: 'prof_classifier' },
   defaultProviderId: 'prov_local',
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   embeddingProviderId: 'prov_local',
@@ -1590,7 +1609,7 @@ export function buildSeedSteps(): SeedStep[] {
   // Order encodes FK dependencies: parents before children, assets before
   // entry_assets. The runner inserts in this order with foreign_keys ON, so a
   // broken reference fails the seed loudly instead of landing silently.
-  return [
+  const steps: SeedStep[] = [
     step('vault_calendars', vaultCalendars, vaultCalendarRows),
     step('assets', assets, assetRows),
     step('stories', stories, [heroStory, rich.story, ...filler.stories]),
@@ -1611,4 +1630,21 @@ export function buildSeedSteps(): SeedStep[] {
     step('pipeline_runs', pipelineRuns, pipelineRunRows),
     step('app_settings', appSettings, [appSettingsRow]),
   ]
+
+  // Authored ids are readable mnemonics (char_kael); rewrite them to canonical
+  // prefix_<uuid> so the substitution layer round-trips and a turn can run on
+  // seeded data. Deterministic, so the fixture stays byte-stable across builds.
+  // See docs/testing.md → Fixture + seed contract.
+  return steps.map((s) => {
+    const rows = s.rows.map((row) => remapSeedIds(row))
+    // Relationships carry an a_id < b_id invariant that the uuid remap can
+    // invert; re-canonicalize once the ids are final.
+    if (s.name === 'character_relationships') {
+      return {
+        ...s,
+        rows: rows.map((r) => canonicalizeRelationship(r as NewCharacterRelationship)),
+      }
+    }
+    return { ...s, rows }
+  })
 }

@@ -50,6 +50,7 @@ Skip any step = lying, not verifying
 | Build succeeds        | Build command: exit 0           | Linter passing, logs look good |
 | Bug fixed             | Test original symptom: passes   | Code changed, assumed fixed    |
 | Regression test works | Red-green cycle verified        | Test passes once               |
+| Flow works end-to-end | `pnpm test:e2e`: 0 failures     | Unit + Storybook green         |
 | Agent completed       | VCS diff shows changes          | Agent reports "success"        |
 | Requirements met      | Line-by-line checklist          | Tests passing                  |
 

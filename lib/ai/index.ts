@@ -24,3 +24,4 @@ export {
   type ResolvedParams,
 } from './resolve-model'
 export { resolveModelCapabilities, type ModelCapabilities } from './model-capabilities'
+export { schemaToTypeScriptBlock, type JsonSchema } from './prompt-schema'

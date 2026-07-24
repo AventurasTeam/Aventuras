@@ -1,0 +1,103 @@
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+
+const REPO_ROOT = join(__dirname, '..', '..')
+
+// Remove a seeded temp dir; safe to call more than once (launchApp also removes
+// it on close). Specs call it in afterAll so a setup failure between seed and
+// launch doesn't orphan the dir.
+export function removeUserDataDir(dir: string | undefined): void {
+  if (dir) rmSync(dir, { recursive: true, force: true })
+}
+
+// Build a throwaway Electron userData dir seeded with the dev fixture. The DB
+// lands at <dir>/aventuras.db — exactly where getDbFilePath() resolves under
+// --user-data-dir — so a launched app opens it with zero product changes.
+// Reuses scripts/seed (migrations + Zod-validated dataset) rather than
+// duplicating the seed path. Per-worker isolation comes for free: each call
+// mints its own temp dir. See docs/testing.md → Fixture + seed contract.
+export function createSeededUserDataDir(): { userDataDir: string; dbPath: string } {
+  const userDataDir = mkdtempSync(join(tmpdir(), 'aventuras-e2e-'))
+  const dbPath = join(userDataDir, 'aventuras.db')
+  try {
+    execFileSync('pnpm', ['db:seed', dbPath], { cwd: REPO_ROOT, stdio: 'pipe' })
+  } catch (err) {
+    // Don't orphan the dir if seeding fails after mkdtemp.
+    removeUserDataDir(userDataDir)
+    throw err
+  }
+  return { userDataDir, dbPath }
+}
+
+// Repoint every openai-compatible provider at the mock server. Runs before
+// launch, so the app reads the mock URL into its settings store on boot.
+export function setProviderEndpoint(dbPath: string, url: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as { type: string; endpoint?: string }[]
+    for (const provider of providers) {
+      if (provider.type === 'openai-compatible') provider.endpoint = url
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
+}
+
+// Set a profile's structuredOutput mode (auto | force-on | force-off). force-on
+// routes structured calls through native response_format instead of the
+// prompt-injected schema. Runs before launch.
+export function setProfileStructuredOutput(
+  dbPath: string,
+  profileId: string,
+  mode: 'auto' | 'force-on' | 'force-off',
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT profiles FROM app_settings WHERE id = 'singleton'`).get() as {
+      profiles: string
+    }
+    const profiles = JSON.parse(row.profiles) as { id: string; structuredOutput?: string }[]
+    for (const profile of profiles) {
+      if (profile.id === profileId) profile.structuredOutput = mode
+    }
+    db.prepare(`UPDATE app_settings SET profiles = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(profiles),
+    )
+  } finally {
+    db.close()
+  }
+}
+
+// Clear taggedBlockReliable on every cached model so piggyback can't ride
+// in-band — forcing the per-turn fallback classifier (a separate structured
+// call) to fire. Runs before launch.
+export function disablePiggybackCapability(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT providers FROM app_settings WHERE id = 'singleton'`).get() as {
+      providers: string
+    }
+    const providers = JSON.parse(row.providers) as {
+      cachedModels?: { capabilities?: Record<string, unknown> }[]
+    }[]
+    for (const provider of providers) {
+      for (const model of provider.cachedModels ?? []) {
+        if (model.capabilities) delete model.capabilities.taggedBlockReliable
+      }
+    }
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(providers),
+    )
+  } finally {
+    db.close()
+  }
+}

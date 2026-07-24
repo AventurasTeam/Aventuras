@@ -30,10 +30,11 @@ You MUST create a task for each of these items and complete them in order:
 1. **Read the slice doc** — and its parent milestone doc and `docs/implementation/conventions.md`
 2. **Resolve required reading** — open every Required-reading anchor at its named section, not just the file
 3. **Surface open questions** — the slice doc's Open questions section, plus any underspecified seam you find while reading
-4. **Classify each question** — developer-decision, implementer-choice, monitor-during-work, or blocker
-5. **Resolve developer-decisions** — one question at a time, with the developer
-6. **Check slice size and scope** — if the slice is too large for one PR, or its scope is wrong, stop and recommend an amendment
-7. **Transition to planning** — invoke aventuras-writing-plans
+4. **Decide E2E coverage** — does the slice change a cross-subsystem seam or user-facing flow? If so, the plan must carry an E2E test + its run as a verification command (see Deciding E2E coverage)
+5. **Classify each question** — developer-decision, implementer-choice, monitor-during-work, or blocker
+6. **Resolve developer-decisions** — one question at a time, with the developer
+7. **Check slice size and scope** — if the slice is too large for one PR, or its scope is wrong, stop and recommend an amendment
+8. **Transition to planning** — invoke aventuras-writing-plans
 
 ## Process Flow
 
@@ -42,6 +43,7 @@ digraph planning {
     "Read slice doc + milestone + conventions" [shape=box];
     "Resolve required-reading anchors" [shape=box];
     "Surface open questions" [shape=box];
+    "Decide E2E coverage" [shape=box];
     "Classify each question" [shape=box];
     "Slice too large or scope wrong?" [shape=diamond];
     "Recommend slice amendment, stop" [shape=box];
@@ -53,7 +55,8 @@ digraph planning {
 
     "Read slice doc + milestone + conventions" -> "Resolve required-reading anchors";
     "Resolve required-reading anchors" -> "Surface open questions";
-    "Surface open questions" -> "Classify each question";
+    "Surface open questions" -> "Decide E2E coverage";
+    "Decide E2E coverage" -> "Classify each question";
     "Classify each question" -> "Slice too large or scope wrong?";
     "Slice too large or scope wrong?" -> "Recommend slice amendment, stop" [label="yes"];
     "Slice too large or scope wrong?" -> "Needs a canonical spec change?" [label="no"];
@@ -81,6 +84,15 @@ digraph planning {
 - Start from the slice doc's Open questions section.
 - Add what you find while reading: an acceptance criterion with no clear verification path, a module seam the slice doc doesn't pin, a type or interface the slice needs but no doc defines, behavior the canonical spec leaves ambiguous.
 - An open question is anything an autonomous coding pass would otherwise resolve silently by guessing.
+
+**Deciding E2E coverage:**
+
+The E2E layer ([`docs/testing.md`](../../../docs/testing.md)) is expensive and targeted — it exists for the cross-subsystem seams, not for logic or rendering. Decide whether this slice needs one:
+
+- **Warrants an E2E test** when the slice changes a seam only a running app exercises: renderer↔main IPC, migrations, the `app://` protocol, a native module, a generation pipeline, or a user-facing flow end-to-end (a reader turn, the wizard, story open).
+- **Does not** when the slice is `lib/*` logic (unit-tested), a component (Storybook), or docs — the default for most slices.
+
+When it warrants one, the plan MUST carry an E2E task (write the spec against the harness, reusing `e2e/locators` + `e2e/flows`; drive the UI, assert through the DB bridge) and `pnpm test:e2e` as a named verification command. Size the coverage per [`docs/testing.md` → Coverage](../../../docs/testing.md#coverage-thorough-not-exhaustive): thorough, not exhaustive — the flow's happy path, its common alternative flows, and the common edge cases that cross a seam; leave pure-logic branches to unit. New selector needs go in as `testID`s per the doc's tier rule, co-designed with the UI work — not bolted on later.
 
 **Classifying questions:**
 
