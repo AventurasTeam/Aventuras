@@ -73,6 +73,10 @@ test.describe('embedder — drain on story open', () => {
     // depends on how much of the drain has already run by the time the composer
     // paints, which isn't a stable window to assert against. The describe below
     // is this assertion's positive control.
+    //
+    // The pill counts story-wide while the poll above counts one branch, so
+    // these agree only because every embeddable hero row lives on br_hero_main;
+    // an embeddable row seeded onto the fork branch would break this.
     await expect(reader.embedderOfflinePill(app.window)).toBeHidden()
   })
 })

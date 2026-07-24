@@ -58,8 +58,8 @@ export const reader = {
   hydrationFailed: (page: Page): Locator =>
     page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
 
-  // The generation status pill in its embedder-offline error tone (an
-  // interactive Tag, so role=button). The accessible name interpolates the
+  // The generation status pill in its embedder-offline state (a warning-tone
+  // Tag; interactive, so role=button). The accessible name interpolates the
   // pending-row count, so only the lead-in shared by both plural forms is
   // matched.
   embedderOfflinePill: (page: Page): Locator => {

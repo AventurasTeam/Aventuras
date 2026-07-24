@@ -32,9 +32,8 @@ export const storySettings = {
   swapNext: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.next') }),
 
-  swapReindex: (page: Page): Locator => page.getByTestId('swap-reindex'),
-  swapKeep: (page: Page): Locator => page.getByTestId('swap-keep'),
+  // Only the options-pane action the suite drives. `swap-reindex`, `swap-keep`
+  // and the resume dialog's controls are deliberately absent: nothing reaches
+  // them yet, and a locator for an uncovered control reads as coverage.
   swapRelabel: (page: Page): Locator => page.getByTestId('swap-relabel'),
-  swapResume: (page: Page): Locator => page.getByTestId('swap-resume'),
-  swapCancelSwap: (page: Page): Locator => page.getByTestId('swap-cancel-swap'),
 }

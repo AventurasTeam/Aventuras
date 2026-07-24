@@ -53,11 +53,14 @@ async function readStorySettings(app: LaunchedApp): Promise<Record<string, unkno
 // panel's marker-driven UI only refreshes at swap boundaries, so nothing here
 // asserts on mid-swap chrome.
 //
-// The two tests share one app and run in order: re-index has to happen while the
-// story is still on the catalog model, because `resolveEmbedderConfig` resolves a
-// local-backend target's dim from the catalog and the second installed model is a
-// synthetic-id copy. Relabel is the one swap-engine path that never resolves a
-// config — it rewrites vec0 identity in place — so it's what the copy can drive.
+// Re-index and relabel share one test body because they're strictly ordered:
+// re-index has to run while the story is still on the catalog model, since
+// `resolveEmbedderConfig` resolves a local-backend target's dim from the catalog
+// and the second installed model is a synthetic-id copy. Relabel is the one
+// swap-engine path that never resolves a config — it rewrites vec0 identity in
+// place — so it's what the copy can drive. Splitting them would leave the second
+// assuming the first's navigation and DB state, which a retry (a fresh app at
+// Home, replaying only the failed test) would not reproduce.
 test.describe('embedder — story settings swap flow', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
@@ -79,7 +82,7 @@ test.describe('embedder — story settings swap flow', () => {
     removeUserDataDir(userDataDir)
   })
 
-  test('re-indexes the story on its current model through the staging engine', async () => {
+  test('re-indexes on the current model, then switches models via relabel', async () => {
     test.setTimeout(180_000)
 
     await home.openStory(app.window, HERO_TITLE).click()
@@ -114,17 +117,13 @@ test.describe('embedder — story settings swap flow', () => {
       )
       .toBe(true)
 
-    const settings = await readStorySettings(app)
-    expect(settings.embedding_model_id).toBe(originalModelId)
+    const reindexed = await readStorySettings(app)
+    expect(reindexed.embedding_model_id).toBe(originalModelId)
     expect(await vecRowsFor(app, COPY_MODEL_ID)).toBe(0)
-  })
 
-  test('switches the story to another installed model via relabel', async () => {
-    // Continues from the previous test: the Memory panel is open and the story
-    // is re-indexed on its original model.
+    // --- relabel onto the second installed model, from the same open panel ---
+
     const before = await vecRowsFor(app, originalModelId)
-    expect(before).toBeGreaterThan(0)
-
     await storySettings.switchEmbedder(app.window).click()
     await storySettings.swapCandidate(app.window, COPY_MODEL_ID).click()
     await storySettings.swapNext(app.window).click()
