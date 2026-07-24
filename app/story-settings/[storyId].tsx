@@ -7,6 +7,7 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { SaveBar } from '@/components/compounds/save-bar'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
+import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
 import {
   StorySettingsSaveSessionProvider,
@@ -156,7 +157,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
 
   // Consumer slices switch on `id` here and render their section for the
   // `ready` branch, deriving its draft from `data.settings`.
-  const renderPanel = (_id: StorySettingsTabId, data: StorySettingsPanelData): ReactElement => {
+  const renderPanel = (id: StorySettingsTabId, data: StorySettingsPanelData): ReactElement => {
     switch (data.status) {
       case 'loading':
         return <EmptyState title={t('storySettings:loading')} />
@@ -177,6 +178,8 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
           />
         )
       case 'ready':
+        if (id === 'memory' && storyId != null)
+          return <MemoryPanel storyId={storyId} settings={data.settings} />
         return (
           <EmptyState
             title={t('storySettings:landsLater')}

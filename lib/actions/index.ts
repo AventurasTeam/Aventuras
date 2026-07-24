@@ -4,6 +4,7 @@ export {
   cancelStorySwap,
   cancelSwap,
   kickStoryDrain,
+  refreshEmbeddingStatus,
   reindexStory,
   reindexStoryNow,
   relabelModel,

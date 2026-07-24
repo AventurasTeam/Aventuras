@@ -7,6 +7,7 @@ import { Platform, View } from 'react-native'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import { SwapResumeDialog } from '@/components/embedder/swap-resume-dialog'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -26,14 +27,18 @@ import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useTier } from '@/hooks/use-tier'
 import {
+  cancelStorySwap,
   clearSystemEntry,
   ENTRIES_WINDOW_SIZE,
   getRollbackCounts,
   loadOpenStory,
   readRecentEntries,
   redoLastAction,
+  refreshEmbeddingStatus,
+  resumeStorySwap,
   rollbackToEntry,
   submitTurn,
+  SwapBusyError,
   undoLastAction,
   updateStoryEntryContent,
   writeSystemEntry,
@@ -42,6 +47,7 @@ import {
 } from '@/lib/actions'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import {
@@ -53,6 +59,8 @@ import {
 import {
   appSettingsStore,
   currentStoryStore,
+  embedderSwapStore,
+  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
@@ -125,6 +133,47 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
+
+  const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
+    s.storyId === storyId ? s.staleTotal : 0,
+  )
+  const swapProgress = embedderSwapStore.useSwap((s) => s.progress)
+  const swapTarget = openForBranch?.settings.embedding_swap_target ?? null
+  // No progress running FOR THIS STORY: a swap loop live elsewhere must not
+  // suppress this story's own resume prompt.
+  const resumeSwapOpen = storyId != null && swapTarget != null && swapProgress?.storyId !== storyId
+
+  const reportSwapFailure = useCallback(
+    (op: string, error: unknown) => {
+      if (error instanceof SwapBusyError) {
+        toast.info(t('storySettings:memory.busy'))
+        return
+      }
+      logger.error(`embedder.${op}_failed`, {
+        storyId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      toast.error(t('storySettings:memory.actionFailed'))
+    },
+    [storyId],
+  )
+
+  const handleResumeSwap = useCallback(() => {
+    if (storyId == null) return
+    // Progress renders in the Memory panel, not here — navigate first, then
+    // kick the resume so the panel's own mount picks up the live progress.
+    router.push(`/story-settings/${storyId}?tab=memory`)
+    void resumeStorySwap(storyId, ctx)
+      .catch((error: unknown) => reportSwapFailure('resume', error))
+      .finally(() => void refreshEmbeddingStatus(storyId))
+  }, [storyId, router, reportSwapFailure])
+
+  const handleCancelSwap = useCallback(() => {
+    if (storyId == null) return
+    void cancelStorySwap(storyId, ctx)
+      .catch((error: unknown) => reportSwapFailure('cancel_swap', error))
+      .finally(() => void refreshEmbeddingStatus(storyId))
+  }, [storyId, reportSwapFailure])
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -256,6 +305,10 @@ export default function ReaderComposerRoute() {
       cancelled = true
     }
   }, [branchId])
+
+  useEffect(() => {
+    if (storyId != null) void refreshEmbeddingStatus(storyId)
+  }, [storyId])
 
   useEffect(() => {
     let cancelled = false
@@ -574,8 +627,16 @@ export default function ReaderComposerRoute() {
       statusSlot={
         <GenerationStatusPill
           activePhase={isGenerating ? 'generating-narrative' : undefined}
+          error={
+            staleTotal > 0 && !isGenerating
+              ? { code: 'embedder-offline', pendingRows: staleTotal }
+              : undefined
+          }
           onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
-          onErrorTap={() => {}}
+          onErrorTap={(code) => {
+            if (code === 'embedder-offline' && storyId != null)
+              router.push(`/story-settings/${storyId}?tab=memory`)
+          }}
         />
       }
     >
@@ -665,6 +726,12 @@ export default function ReaderComposerRoute() {
           onConfirm={() => void confirmRollback()}
         />
       ) : null}
+      <SwapResumeDialog
+        open={resumeSwapOpen}
+        targetModelName={swapTarget ?? ''}
+        onResume={handleResumeSwap}
+        onCancelSwap={handleCancelSwap}
+      />
     </ScreenShell>
   )
 }

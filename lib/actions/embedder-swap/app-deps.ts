@@ -4,6 +4,7 @@ import type { ProviderInstanceWithStub } from '@/lib/ai'
 import { resolveModelCapabilities } from '@/lib/ai'
 import {
   branches,
+  countStaleRows,
   db,
   execRaw,
   listTableNames,
@@ -33,6 +34,7 @@ import {
   type AppSettingsSnapshot,
   currentStoryStore,
   embedderSwapStore,
+  embeddingStatusStore,
   generationStore,
   rehydrateStories,
   storiesStore,
@@ -218,6 +220,27 @@ async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
   if (parsed?.success) currentStoryStore.set({ ...open, settings: parsed.data })
 }
 
+/**
+ * Recomputes the story's stale-row total and publishes it to
+ * `embeddingStatusStore` — the Memory panel and the reader's status pill both
+ * read from there rather than querying directly. Never throws: a failed count
+ * (including "no DB bridge", the common case in tests) is logged and dropped,
+ * matching `refreshStores`' tail — the caller's own operation already
+ * succeeded or failed on its own terms.
+ */
+export async function refreshEmbeddingStatus(
+  storyId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<void> {
+  try {
+    const { branchIds } = await loadSwapContext(storyId, ctx)
+    const { total } = await countStaleRows(queryRows, branchIds)
+    embeddingStatusStore.setStatus(storyId, total)
+  } catch (error) {
+    logger.warn('embedder.status_refresh_failed', { storyId, error: messageOf(error) })
+  }
+}
+
 async function runStagingSwap(
   storyId: string,
   ctx: DbCtx,
@@ -246,6 +269,7 @@ async function runStagingSwap(
         targetConfig: resolution.config,
       })
       await refreshStores(storyId, ctx)
+      await refreshEmbeddingStatus(storyId, ctx)
       return outcome
     } finally {
       embedderSwapStore.clearProgress()
@@ -303,6 +327,7 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
         targetModelId: target,
       })
       await refreshStores(storyId, ctx)
+      await refreshEmbeddingStatus(storyId, ctx)
     } finally {
       embedderSwapStore.clearProgress()
     }
@@ -329,7 +354,8 @@ export async function relabelStory(
   })
 }
 
-// --- drain worker composition (boot wires the controller; Task 10 attaches sinks) -----
+// --- drain worker composition (boot wires the controller via buildDrainController,
+// which self-attaches the status sink below) ------------------------------------
 
 let drainStatusSink: ((storyId: string, remaining: number) => void) | null = null
 
@@ -373,6 +399,9 @@ function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
 export function buildDrainController(
   ctx: DbCtx = defaultCtx(),
 ): ReturnType<typeof createDrainController> {
+  // Attaches the Task 8 seam to the status store so the Memory panel / reader
+  // pill see the worker's progress without either polling it directly.
+  setDrainStatusSink((storyId, remaining) => embeddingStatusStore.setStatus(storyId, remaining))
   return createDrainController({
     hasActiveRun: generationStore.hasActiveRun,
     // Scope asymmetry by design: the worker warms only the open branch, while the

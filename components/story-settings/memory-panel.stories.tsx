@@ -1,0 +1,187 @@
+import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { View } from 'react-native'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
+
+import { storySettingsSchema, type StorySettings } from '@/lib/db'
+import { t } from '@/lib/i18n'
+import {
+  appSettingsStore,
+  embedderSwapStore,
+  embeddingStatusStore,
+  openEmbedderSwapDialog,
+} from '@/lib/stores'
+
+import { MemoryPanel } from './memory-panel'
+
+const STORY_ID = 'story-1'
+const MINILM = 'Xenova/all-MiniLM-L6-v2'
+const GEMMA = 'onnx-community/embeddinggemma-300m-ONNX'
+
+function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
+  return storySettingsSchema.parse({
+    classifierCadence: 4,
+    piggybackMode: 'on',
+    embeddingBackend: 'local',
+    embedding_model_id: MINILM,
+    retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
+    composerModesEnabled: true,
+    composerWrapPov: 'third',
+    suggestionsEnabled: true,
+    suggestionCategories: [],
+    translation: {
+      enabled: false,
+      targetLanguage: null,
+      granularToggles: {
+        narrative: false,
+        entityNames: false,
+        entityDescriptions: false,
+        lore: false,
+        threads: false,
+        happenings: false,
+        chapterMeta: false,
+      },
+    },
+    models: {},
+    activePackId: null,
+    packVariables: {},
+    ...overrides,
+  })
+}
+
+const listInstalled = async () => [
+  { id: MINILM, sizeBytes: 90_000_000 },
+  { id: GEMMA, sizeBytes: 300_000_000 },
+]
+
+function resetStores() {
+  embedderSwapStore.__reset()
+  embeddingStatusStore.__reset()
+  appSettingsStore.__reset()
+}
+
+// MemoryPanel reads three module-global Zustand stores directly (swap
+// dialog/progress, stale-count, and app-settings defaults) — each story
+// resets and re-seeds them so a prior story's picks never leak forward.
+const meta: Meta<typeof MemoryPanel> = {
+  title: 'Compounds/StorySettings/MemoryPanel',
+  component: MemoryPanel,
+  parameters: { layout: 'centered' },
+  decorators: [
+    (Story) => (
+      <View className="w-[520px] gap-4 rounded-md bg-bg-base p-6">
+        <Story />
+      </View>
+    ),
+  ],
+}
+
+export default meta
+type Story = StoryObj<typeof MemoryPanel>
+
+export const Clean: Story = {
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+  },
+  play: async () => {
+    expect(await screen.findByTestId('memory-panel')).toBeInTheDocument()
+    expect(screen.getByText('0 rows pending re-embed.')).toBeInTheDocument()
+    expect(screen.queryByText(t('storySettings:memory.reason.retrying'))).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(t('storySettings:memory.reason.providerUnconfigured')),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
+    ).not.toBeDisabled()
+  },
+}
+
+export const StaleWithReason: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embeddingBackend: 'provider', embedding_provider_id: undefined }),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 12)
+  },
+  play: async () => {
+    expect(await screen.findByText('12 rows pending re-embed.')).toBeInTheDocument()
+    expect(
+      screen.getByText(t('storySettings:memory.reason.providerUnconfigured')),
+    ).toBeInTheDocument()
+  },
+}
+
+export const SwapInProgress: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_swap_target: GEMMA }),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embedderSwapStore.setProgress({ storyId: STORY_ID, done: 4, total: 10 })
+  },
+  play: async () => {
+    expect(
+      await screen.findByText(t('storySettings:memory.reindexing', { done: 4, total: 10 })),
+    ).toBeInTheDocument()
+    const cancel = screen.getByTestId('memory-cancel-swap')
+    // No resume prompt while a loop is live for this story, even though the
+    // swap-target marker is set.
+    expect(screen.queryByTestId('swap-resume')).not.toBeInTheDocument()
+    await userEvent.click(cancel)
+    await waitFor(() => expect(embedderSwapStore.getState().cancelRequested).toBe(true))
+  },
+}
+
+export const SwapPendingMarker: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_swap_target: GEMMA }),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 5)
+  },
+  play: async () => {
+    // The resume dialog is modal and marks the rest of the panel aria-hidden,
+    // so the (still-present, still-disabled) Switch-embedder button has to be
+    // queried with `hidden: true` to see past that.
+    expect(
+      await screen.findByRole('button', {
+        name: t('storySettings:memory.switchEmbedder'),
+        hidden: true,
+      }),
+    ).toBeDisabled()
+    expect(screen.getByText(t('storySettings:memory.swapPending'))).toBeInTheDocument()
+    // The resume dialog surfaces the raw swap_target marker value, not a
+    // catalog-resolved label — no progress is running for this story yet.
+    expect(await screen.findByTestId('swap-resume')).toBeInTheDocument()
+    expect(
+      screen.getByText(t('storySettings:swap.resumeBody', { model: GEMMA })),
+    ).toBeInTheDocument()
+  },
+}
+
+export const TargetPickerVisible: Story = {
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    openEmbedderSwapDialog(STORY_ID)
+  },
+  play: async () => {
+    const minilmRow = await screen.findByTestId(`swap-candidate-${MINILM}`)
+    expect(within(minilmRow).getByText(t('storySettings:swap.current'))).toBeInTheDocument()
+
+    const gemmaRow = screen.getByTestId(`swap-candidate-${GEMMA}`)
+    await userEvent.click(gemmaRow)
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
+    await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
+  },
+}
