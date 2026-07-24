@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SqlOp } from '../types'
 import { deleteVecOps, upsertVecOps } from './ops'
 import { sourceHash } from './source-hash'
-import { ensureVecTables } from './vec-tables'
+import { deleteBranchModelVecOps, ensureVecTables, vecRowPk } from './vec-tables'
 
 function makeDb(): DatabaseSync {
   const db = new DatabaseSync(':memory:', { allowExtension: true })
@@ -123,7 +123,7 @@ describe('upsertVecOps / deleteVecOps', () => {
       .prepare('select pk, branch_id, id, source_hash from entities_vec_384 order by branch_id')
       .all() as { pk: string; branch_id: string; id: string; source_hash: string }[]
     expect(rows).toHaveLength(2)
-    expect(rows.map((r) => r.pk)).toEqual(['b1:e1', 'b2:e1'])
+    expect(rows.map((r) => r.pk)).toEqual(['b1:e1:m1', 'b2:e1:m1'])
     expect(rows.every((r) => r.id === 'e1')).toBe(true)
 
     const knnRows = db
@@ -149,9 +149,50 @@ describe('upsertVecOps / deleteVecOps', () => {
         vector: vec(384, 0),
       }),
     )
-    runOps(db, deleteVecOps('entity', 384, 'e1', 'b1'))
+    runOps(db, deleteVecOps('entity', 'e1', 'b1', ['entities_vec_384']))
 
     const rows = db.prepare('select id from entities_vec_384 where branch_id = ?').all('b1')
     expect(rows).toHaveLength(0)
+  })
+})
+
+describe('model-aware vec identity', () => {
+  it('pk carries the model id', () => {
+    expect(vecRowPk('b1', 'e1', 'm1')).toBe('b1:e1:m1')
+  })
+
+  it('upsert replaces only the same model row', () => {
+    const [del, ins] = upsertVecOps({
+      kind: 'entity',
+      id: 'e1',
+      branchId: 'b1',
+      modelId: 'm2',
+      dim: 384,
+      sourceHash: 'h' as never,
+      vector: new Uint8Array(4),
+    })
+    expect(del.sql).toBe(
+      'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id = ? AND model_id = ?',
+    )
+    expect(del.params).toEqual(['b1', 'e1', 'm2'])
+    expect(ins.params[0]).toBe('b1:e1:m2')
+  })
+
+  it('deleteVecOps sweeps every existing family of the kind by columns', () => {
+    const tables = ['entities_vec_384', 'entities_vec_768', 'lore_vec_384', 'entities_vec_384_info']
+    const ops = deleteVecOps('entity', 'e1', 'b1', tables)
+    expect(ops.map((o) => o.sql)).toEqual([
+      'DELETE FROM entities_vec_384 WHERE branch_id = ? AND id = ?',
+      'DELETE FROM entities_vec_768 WHERE branch_id = ? AND id = ?',
+    ])
+  })
+
+  it('deleteBranchModelVecOps deletes one model across all families', () => {
+    const ops = deleteBranchModelVecOps(['entities_vec_384', 'lore_vec_768'], ['b1', 'b2'], 'm1')
+    expect(ops[0].sql).toBe(
+      'DELETE FROM entities_vec_384 WHERE branch_id IN (?, ?) AND model_id = ?',
+    )
+    expect(ops[0].params).toEqual(['b1', 'b2', 'm1'])
+    expect(ops).toHaveLength(2)
   })
 })

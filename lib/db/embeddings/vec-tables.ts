@@ -52,11 +52,30 @@ export function vecTableName(kind: VecTargetKind, dim: number): string {
   return `${VEC_FAMILIES[kind]}_${dim}`
 }
 
-// vec0 enforces its primary key globally across partitions (not scoped by the
-// partition key), so a bare source-row id collides once a branch fork copies rows —
-// the composite pk keeps identity unique while branch_id still partitions storage.
-export function vecRowPk(branchId: string, id: string): string {
-  return `${branchId}:${id}`
+// vec0 enforces its primary key globally across partitions, and phase-1 swap
+// staging inserts a NEW-model row NEXT TO the old one — so identity must carry
+// branch, row, and model. Deletes always go by the real columns, never by pk
+// string, which keeps pre-widen rows (branchId:id) forward-compatible.
+export function vecRowPk(branchId: string, id: string, modelId: string): string {
+  return `${branchId}:${id}:${modelId}`
+}
+
+export function familyTablesFor(kind: VecTargetKind, tableNames: readonly string[]): string[] {
+  const prefix = `${VEC_FAMILIES[kind]}_`
+  return tableNames.filter((name) => isVecFamilyTable(name) && name.startsWith(prefix))
+}
+
+export function deleteBranchModelVecOps(
+  tableNames: readonly string[],
+  branchIds: readonly string[],
+  modelId: string,
+): SqlOp[] {
+  if (branchIds.length === 0) return []
+  const placeholders = branchIds.map(() => '?').join(', ')
+  return tableNames.filter(isVecFamilyTable).map((table) => ({
+    sql: `DELETE FROM ${table} WHERE branch_id IN (${placeholders}) AND model_id = ?`,
+    params: [...branchIds, modelId],
+  }))
 }
 
 export function ensureVecTablesSql(dim: number): string[] {

@@ -92,6 +92,7 @@ describe('recomputeStaleOp', () => {
     const op = await recomputeStaleOp(
       { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
       384,
+      'm1',
       await queryOneFor(db),
     )
     db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
@@ -116,6 +117,32 @@ describe('recomputeStaleOp', () => {
     const op = await recomputeStaleOp(
       { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a veteran scout'] },
       384,
+      'm1',
+      await queryOneFor(db),
+    )
+    db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
+    expect(embeddingStaleOf(db, 'e1')).toBe(1)
+  })
+
+  it('flags dirty when the stored vec row belongs to a different model', async () => {
+    const embeddedHash = sourceHash(compositeText(['Kara', 'a scout']))
+    runOps(
+      db,
+      upsertVecOps({
+        kind: 'entity',
+        id: 'e1',
+        branchId: 'b1',
+        modelId: 'm1',
+        dim: 384,
+        sourceHash: embeddedHash,
+        vector: vec(384, 0),
+      }),
+    )
+
+    const op = await recomputeStaleOp(
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      384,
+      'm2',
       await queryOneFor(db),
     )
     db.prepare(op.sql).run(...(op.params as SQLInputValue[]))
@@ -141,6 +168,7 @@ describe('recomputeStaleOp', () => {
     const op = await recomputeStaleOp(
       { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
       384,
+      'm1',
       await queryOneFor(db),
     )
     db.prepare(op.sql).run(...(op.params as SQLInputValue[]))

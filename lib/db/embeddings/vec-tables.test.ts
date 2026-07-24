@@ -39,8 +39,8 @@ describe('vecTableName', () => {
 })
 
 describe('vecRowPk', () => {
-  it('joins branchId and id with a colon separator', () => {
-    expect(vecRowPk('b1', 'e1')).toBe('b1:e1')
+  it('joins branchId, id, and modelId with a colon separator', () => {
+    expect(vecRowPk('b1', 'e1', 'm1')).toBe('b1:e1:m1')
   })
 })
 

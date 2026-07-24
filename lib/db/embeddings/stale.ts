@@ -1,6 +1,6 @@
 import type { SqlOp } from '../types'
 import { compositeText, parseSourceHash, sourceHash } from './source-hash'
-import { vecRowPk, vecTableName, type VecTargetKind } from './vec-tables'
+import { vecTableName, type VecTargetKind } from './vec-tables'
 
 export type EmbeddedFieldRow = {
   kind: VecTargetKind
@@ -30,12 +30,14 @@ export function clearEmbeddingStaleOp(kind: VecTargetKind, id: string, branchId:
 export async function recomputeStaleOp(
   row: EmbeddedFieldRow,
   dim: number,
+  modelId: string,
   queryOne: (sql: string, params: unknown[]) => Promise<Record<string, unknown> | undefined>,
 ): Promise<SqlOp> {
   const vecTable = vecTableName(row.kind, dim)
-  const vecRow = await queryOne(`SELECT source_hash FROM ${vecTable} WHERE pk = ?`, [
-    vecRowPk(row.branchId, row.id),
-  ])
+  const vecRow = await queryOne(
+    `SELECT source_hash FROM ${vecTable} WHERE branch_id = ? AND id = ? AND model_id = ?`,
+    [row.branchId, row.id, modelId],
+  )
   const currentHash = sourceHash(compositeText(row.fields))
   // An unparseable stored hash (legacy encoding, a driver handing back a Buffer)
   // is treated as stale rather than silently comparing unequal forever.
