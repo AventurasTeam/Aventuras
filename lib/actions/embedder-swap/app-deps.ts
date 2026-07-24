@@ -224,6 +224,10 @@ async function runStagingSwap(
     const resolution = resolveStorySwapConfig(storyId, targetModelId)
     if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
     const deps = composeSwapDeps(storyId, ctx)
+    // cancelRequested is a global flag; a prior cancel that ended without a
+    // running loop leaves it set. Clear it before staging so the engine's first
+    // batch poll can't silently cancel this fresh swap.
+    embedderSwapStore.clearProgress()
     embedderSwapStore.setProgress({ storyId, done: 0, total: 0 })
     try {
       const outcome = await invoke(deps, {
@@ -278,19 +282,24 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
     return
   }
   // No loop running (a paused / crash-recovered swap with the marker still set):
-  // run the engine's cancel directly.
+  // run the engine's cancel directly. clearProgress in finally covers both the
+  // no-marker no-op and the ran-cancel paths, so the global flag can't leak.
   await runExclusive(storyId, async () => {
-    const { settings, branchIds } = await loadSwapContext(storyId, ctx)
-    const target = settings.embedding_swap_target
-    if (target == null) return
-    const resolution = resolveStorySwapConfig(storyId, target)
-    if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
-    await cancelSwap(composeSwapDeps(storyId, ctx), {
-      storyId,
-      branchIds,
-      targetModelId: target,
-    })
-    await refreshStores(storyId, ctx)
+    try {
+      const { settings, branchIds } = await loadSwapContext(storyId, ctx)
+      const target = settings.embedding_swap_target
+      if (target == null) return
+      const resolution = resolveStorySwapConfig(storyId, target)
+      if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
+      await cancelSwap(composeSwapDeps(storyId, ctx), {
+        storyId,
+        branchIds,
+        targetModelId: target,
+      })
+      await refreshStores(storyId, ctx)
+    } finally {
+      embedderSwapStore.clearProgress()
+    }
   })
 }
 

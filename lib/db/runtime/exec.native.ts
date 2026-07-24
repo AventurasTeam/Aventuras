@@ -20,6 +20,9 @@ export async function listTableNames(): Promise<string[]> {
 // Positional value-array query seam (see exec.ts): expo-sqlite returns objects,
 // so each row is normalized to a values-array in the SELECT's column order to
 // match the sqlite-proxy shape the embedder-swap engine's `queryAll` expects.
+// Contract: callers must SELECT explicit, uniquely-named, non-numeric columns —
+// Object.values() reconstructs position from key insertion order, which a numeric
+// alias or a JOIN's duplicate column name would silently reorder or collapse.
 export async function queryRows(sql: string, params: unknown[]): Promise<unknown[][]> {
   const rows = expoDb.getAllSync<Record<string, unknown>>(
     sql,

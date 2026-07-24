@@ -1,8 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { embedderSwapStore } from '@/lib/stores'
+import { buildStorySettings, type DbCtx } from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { currentStoryStore, embedderSwapStore, rehydrateStories, storiesStore } from '@/lib/stores'
 
-import { makeCallbackGuards, runExclusive, SwapBusyError } from './app-deps'
+import {
+  cancelStorySwap,
+  makeCallbackGuards,
+  runExclusive,
+  startStorySwap,
+  SwapBusyError,
+} from './app-deps'
+import { startSwap } from './engine'
+
+vi.mock('./engine', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, startSwap: vi.fn() }
+})
+
+const MINILM = 'Xenova/all-MiniLM-L6-v2'
 
 describe('runExclusive single-flight lock', () => {
   afterEach(() => {
@@ -73,5 +89,50 @@ describe('callback guards', () => {
       throw new Error('store gone')
     })
     expect(makeCallbackGuards('s1').isCancelRequested()).toBe(false)
+  })
+})
+
+describe('stale cancel-flag isolation across operations', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    embedderSwapStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  async function seedStory(): Promise<DbCtx> {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    const settings = buildStorySettings({}, MINILM, null)
+    sqlite
+      .prepare(
+        'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
+      )
+      .run('s1', 'S', JSON.stringify(settings), 1000, 1000)
+    sqlite
+      .prepare('INSERT INTO branches (id, story_id, name, created_at) VALUES (?,?,?,?)')
+      .run('b1', 's1', 'main', 1000)
+    await rehydrateStories(db)
+    return { db, runInTransaction }
+  }
+
+  it('a cancel with nothing running does not poison the next swap', async () => {
+    const ctx = await seedStory()
+
+    // A cancel against a story with no in-flight swap sets the global flag, then
+    // must clear it before returning.
+    await cancelStorySwap('s1', ctx)
+    expect(embedderSwapStore.getState().cancelRequested).toBe(false)
+
+    let firstPoll: boolean | undefined
+    vi.mocked(startSwap).mockImplementation(async (deps) => {
+      firstPoll = deps.isCancelRequested()
+      return 'completed'
+    })
+
+    const result = await startStorySwap('s1', MINILM, ctx)
+
+    expect(startSwap).toHaveBeenCalledOnce()
+    expect(firstPoll).toBe(false)
+    expect(result).toBe('completed')
   })
 })
