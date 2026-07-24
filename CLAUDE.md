@@ -113,6 +113,11 @@ cause is the server isn't running yet — start it and retry.
 
 ## Workflow rules
 
+- **Node version**: develop on the `.nvmrc` version (Node 24.x), which
+  `engines.node` and `engine-strict` enforce. Node 25+ shifts eslint's
+  `import/order` resolution and fails `pnpm lint` on files CI passes on
+  Node 24 — so if lint fails locally but CI is green, check `node -v`
+  first.
 - **Pre-commit hooks (`lefthook.yml`)** run prettier, eslint, and
   remark in parallel on staged files. Don't bypass with
   `--no-verify` — fix the underlying issue.
