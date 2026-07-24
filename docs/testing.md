@@ -91,8 +91,14 @@ the `asarUnpack` native modules (`sqlite-vec`, `onnxruntime-node`),
 and the `extraResources` migrations — the code paths that break in
 production and nowhere else.
 
-Two launch gotchas the harness must handle:
+Three launch gotchas the harness must handle:
 
+- **`pnpm test:e2e:packaged` builds nothing.** The project launches
+  whatever binary already sits in `release/linux-unpacked/` — there is
+  no `globalSetup` and no pretest hook — so a stale bundle runs
+  silently, passing every spec that predates your branch and failing
+  only the newest ones. Run steps 1-3 of [CI](#ci) before the packaged
+  suite. CI itself is safe, because its job always builds first.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open
