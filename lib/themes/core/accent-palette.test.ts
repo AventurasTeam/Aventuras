@@ -40,6 +40,15 @@ describe('resolveAccentColor', () => {
     expect(resolveAccentColor(null)).toBe(NEUTRAL_ACCENT)
     expect(resolveAccentColor(undefined)).toBe(NEUTRAL_ACCENT)
   })
+
+  it('falls back to neutral for Object.prototype keys', () => {
+    // `color` is a bare z.string() column, so a corrupted row or a hostile
+    // import can hold any string — a prototype-chain membership check would
+    // return a function from a String-returning fallback.
+    for (const key of ['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__']) {
+      expect(resolveAccentColor(key)).toBe(NEUTRAL_ACCENT)
+    }
+  })
 })
 
 describe('slotForHex', () => {

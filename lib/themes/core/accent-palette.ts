@@ -17,7 +17,10 @@ export const NEUTRAL_ACCENT = '#71717a'
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
 
 function isCuratedSlot(value: string): value is CuratedAccentSlot {
-  return value in CURATED_ACCENT_PALETTE
+  // Membership via the slot array, not `value in CURATED_ACCENT_PALETTE`: `in`
+  // walks the prototype chain, so a stored color of 'constructor' or 'toString'
+  // would resolve to a function out of a String-returning fallback.
+  return (CURATED_ACCENT_SLOTS as readonly string[]).includes(value)
 }
 
 export function resolveAccentColor(value: string | null | undefined): string {
