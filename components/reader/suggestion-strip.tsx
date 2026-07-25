@@ -49,8 +49,6 @@ type SuggestionStripProps = {
 // The overline sits on the chip surface, so the tint has to carry further on dark.
 const OVERLINE_TINT_ALPHA: Record<'light' | 'dark', number> = { light: 0.14, dark: 0.26 }
 
-const WEB_POINTER_EVENTS_NONE = { pointerEvents: 'none' } as const
-
 function tintOf(hex: string, alpha: number): string {
   const body = hex.slice(1)
   const full = body.length === 3 ? body.replace(/./g, (c) => c + c) : body
@@ -104,8 +102,6 @@ function SuggestionChipRow({
       accessibilityState={{ disabled: locked }}
       disabled={locked}
       onPress={() => onTapChip(chip.text)}
-      // Pressable.disabled alone doesn't reliably gate the web click path.
-      style={locked && Platform.OS === 'web' ? WEB_POINTER_EVENTS_NONE : undefined}
       className={cn(
         'flex-row overflow-hidden rounded-md border border-border bg-bg-raised',
         !locked && 'active:bg-tint-press',
@@ -157,7 +153,7 @@ export function SuggestionStrip({
   const locked = busy || disabled
   // The body's Generate button IS the refresh affordance; two ⟳ side by side read
   // as different actions. Collapsing hides it, so the chrome one comes back.
-  const showChromeRefresh = !(phase === 'empty-state' && !collapsed)
+  const emptyStateOwnsRefresh = phase === 'empty-state' && !collapsed
 
   let body: ReactNode
   if (collapsed) {
@@ -169,7 +165,7 @@ export function SuggestionStrip({
         <Text size="sm" variant="muted" className="min-w-0 flex-1">
           {t('reader:suggestions.errorBody')}
         </Text>
-        <Button variant="secondary" size="sm" onPress={onRefresh} disabled={disabled}>
+        <Button variant="secondary" size="sm" onPress={onRefresh} disabled={locked}>
           <Icon as={RefreshCw} size="sm" />
           <Text>{t('reader:suggestions.retry')}</Text>
         </Button>
@@ -178,7 +174,7 @@ export function SuggestionStrip({
   } else if (phase === 'empty-state') {
     body = (
       <View className="items-center">
-        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={disabled}>
+        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={locked}>
           <Icon as={RefreshCw} size="sm" />
           <Text>{t('reader:suggestions.generate')}</Text>
         </Button>
@@ -217,7 +213,7 @@ export function SuggestionStrip({
     >
       {body}
       <View className="flex-row items-center justify-end gap-1">
-        {showChromeRefresh ? (
+        {emptyStateOwnsRefresh ? null : (
           <Pulsing active={busy}>
             <IconAction
               icon={RefreshCw}
@@ -228,7 +224,7 @@ export function SuggestionStrip({
               onPress={onRefresh}
             />
           </Pulsing>
-        ) : null}
+        )}
         <IconAction
           icon={collapsed ? ChevronUp : ChevronDown}
           label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}

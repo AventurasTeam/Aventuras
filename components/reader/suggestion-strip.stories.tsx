@@ -70,6 +70,9 @@ export const Visible: Story = {}
 
 export const Loading: Story = { args: { phase: 'loading' } }
 
+/** Generate pressed from empty-state: busy before any chip exists. */
+export const LoadingEmpty: Story = { args: { phase: 'loading', chips: [] } }
+
 export const Error: Story = { args: { phase: 'error' } }
 
 export const Collapsed: Story = { args: { collapsed: true } }
