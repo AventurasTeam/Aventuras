@@ -1,3 +1,11 @@
+export {
+  CURATED_ACCENT_PALETTE,
+  CURATED_ACCENT_SLOTS,
+  NEUTRAL_ACCENT,
+  resolveAccentColor,
+  slotForHex,
+  type CuratedAccentSlot,
+} from './core/accent-palette'
 export { contrastRatio } from './core/contrast'
 export { themes } from './core/registry'
 export { ThemeProvider } from './react/theme-provider'
