@@ -21,14 +21,18 @@ import { cn } from '@/lib/utils'
 type SuggestionChip = NonNullable<EntryMetadata['nextTurnSuggestions']>['items'][number]
 
 /**
- * Canon names a sixth state, `hidden` (`settings.suggestionsEnabled = false`).
- * It isn't a union member: hidden means the strip never mounts, which the route
- * owns by not rendering it.
+ * Two of canon's six states are absent by design: `hidden`
+ * (`settings.suggestionsEnabled = false`) means the strip never mounts, which the
+ * route owns by not rendering it, and `collapsed` is an orthogonal prop because
+ * the chrome row survives collapse — so a refresh fired while collapsed has to
+ * stay representable.
  */
-type SuggestionStripState = 'visible' | 'loading' | 'error' | 'collapsed' | 'empty-state'
+type SuggestionStripPhase = 'visible' | 'loading' | 'error' | 'empty-state'
 
 type SuggestionStripProps = {
-  state: SuggestionStripState
+  phase: SuggestionStripPhase
+  /** Hides the body only; the chrome row and its busy signal persist. */
+  collapsed: boolean
   /** Chips as persisted. A `categoryId` that no longer resolves still renders and still taps. */
   chips: readonly SuggestionChip[]
   /** The story's palette, including `enabled: false` entries — disable gates emission, not render. */
@@ -55,8 +59,8 @@ function tintOf(hex: string, alpha: number): string {
 }
 
 // Split like Skeleton: Tailwind's animate-pulse doesn't run on native, and
-// Reanimated's worklet plugin doesn't run under the web/Storybook bundler, where
-// a dependency-array-less useAnimatedStyle throws.
+// Storybook's Vite bundler skips Reanimated's worklet plugin (Metro applies it to
+// both native and the web export), where a deps-array-less useAnimatedStyle throws.
 function Pulsing({ active, children }: { active: boolean; children: ReactNode }) {
   if (Platform.OS === 'web') {
     return <View className={cn(active && 'animate-pulse')}>{children}</View>
@@ -130,7 +134,8 @@ function SuggestionChipRow({
 }
 
 export function SuggestionStrip({
-  state,
+  phase,
+  collapsed,
   chips,
   categories,
   onTapChip,
@@ -148,12 +153,16 @@ export function SuggestionStrip({
     [categories],
   )
 
-  const busy = state === 'loading'
-  const collapsed = state === 'collapsed'
+  const busy = phase === 'loading'
   const locked = busy || disabled
+  // The body's Generate button IS the refresh affordance; two ⟳ side by side read
+  // as different actions. Collapsing hides it, so the chrome one comes back.
+  const showChromeRefresh = !(phase === 'empty-state' && !collapsed)
 
-  let body: ReactNode = null
-  if (state === 'error') {
+  let body: ReactNode
+  if (collapsed) {
+    body = null
+  } else if (phase === 'error') {
     body = (
       <View className="flex-row items-center gap-2 rounded-md border border-dashed border-warning px-3 py-2">
         <Icon as={AlertTriangle} size="sm" className="shrink-0 text-warning" />
@@ -166,7 +175,7 @@ export function SuggestionStrip({
         </Button>
       </View>
     )
-  } else if (state === 'empty-state') {
+  } else if (phase === 'empty-state') {
     body = (
       <View className="items-center">
         <Button variant="ghost" size="sm" onPress={onRefresh} disabled={disabled}>
@@ -183,7 +192,7 @@ export function SuggestionStrip({
         </Text>
       </View>
     )
-  } else if (!collapsed) {
+  } else {
     body = (
       <View className={cn('gap-1.5', locked && 'opacity-50')}>
         {chips.map((chip, index) => (
@@ -208,16 +217,18 @@ export function SuggestionStrip({
     >
       {body}
       <View className="flex-row items-center justify-end gap-1">
-        <Pulsing active={busy}>
-          <IconAction
-            icon={RefreshCw}
-            label={t('reader:suggestions.refresh')}
-            size="sm"
-            aria-busy={busy}
-            disabled={locked}
-            onPress={onRefresh}
-          />
-        </Pulsing>
+        {showChromeRefresh ? (
+          <Pulsing active={busy}>
+            <IconAction
+              icon={RefreshCw}
+              label={t('reader:suggestions.refresh')}
+              size="sm"
+              aria-busy={busy}
+              disabled={locked}
+              onPress={onRefresh}
+            />
+          </Pulsing>
+        ) : null}
         <IconAction
           icon={collapsed ? ChevronUp : ChevronDown}
           label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}
@@ -230,4 +241,4 @@ export function SuggestionStrip({
   )
 }
 
-export type { SuggestionChip, SuggestionStripProps, SuggestionStripState }
+export type { SuggestionChip, SuggestionStripPhase, SuggestionStripProps }

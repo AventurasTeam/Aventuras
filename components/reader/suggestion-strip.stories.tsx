@@ -53,7 +53,8 @@ const meta = {
   parameters: { layout: 'padded' },
   tags: ['autodocs'],
   args: {
-    state: 'visible',
+    phase: 'visible',
+    collapsed: false,
     chips,
     categories,
     onTapChip: fn(),
@@ -67,13 +68,22 @@ type Story = StoryObj<typeof meta>
 
 export const Visible: Story = {}
 
-export const Loading: Story = { args: { state: 'loading' } }
+export const Loading: Story = { args: { phase: 'loading' } }
 
-export const Error: Story = { args: { state: 'error' } }
+export const Error: Story = { args: { phase: 'error' } }
 
-export const Collapsed: Story = { args: { state: 'collapsed' } }
+export const Collapsed: Story = { args: { collapsed: true } }
 
-export const EmptyState: Story = { args: { state: 'empty-state', chips: [] } }
+/** Refresh is reachable from collapsed, so the busy signal has to survive it. */
+export const CollapsedLoading: Story = { args: { collapsed: true, phase: 'loading' } }
+
+/** Body owns the only ⟳ here — the chrome one would duplicate it. */
+export const EmptyState: Story = { args: { phase: 'empty-state', chips: [] } }
+
+/** Collapsed hides the body's Generate, so the chrome ⟳ comes back. */
+export const EmptyStateCollapsed: Story = {
+  args: { phase: 'empty-state', collapsed: true, chips: [] },
+}
 
 /** Deleted category: label falls back to `(removed)`, color to neutral, tap still fires. */
 export const OrphanCategory: Story = {
