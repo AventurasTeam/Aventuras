@@ -475,11 +475,14 @@ export default function ReaderComposerRoute() {
 
   const handleToggleStripCollapsed = useCallback(() => setStripCollapsed((prev) => !prev), [])
 
-  // Read at settle time, not from the closure: a branch-switch abort whose
-  // reverse-replay fails resolves 'failed' well after the switch, and that error
-  // belongs to the branch that was left.
+  // Read at settle time, not from the closure. A refresh outlives what it was
+  // fired on: per-turn doesn't block on it, so a turn can move the tail
+  // mid-run, and a branch-switch abort whose reverse-replay fails resolves
+  // 'failed' well after the switch.
   const branchIdRef = useRef(branchId)
+  const terminalEntryIdRef = useRef(terminalEntry?.id)
   branchIdRef.current = branchId
+  terminalEntryIdRef.current = terminalEntry?.id
 
   const handleRefreshSuggestions = useCallback(() => {
     const target = terminalEntry
@@ -487,8 +490,10 @@ export default function ReaderComposerRoute() {
     if (target == null || story == null) return
     setStripError(false)
     const startedFor = branchId
+    const startedOn = target.id
     const fail = () => {
-      if (branchIdRef.current === startedFor) setStripError(true)
+      if (branchIdRef.current === startedFor && terminalEntryIdRef.current === startedOn)
+        setStripError(true)
     }
     void refreshSuggestions(
       { storyId: story.storyId, branchId },
