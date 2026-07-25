@@ -79,14 +79,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   })
 
   // Suggestions ride the same tagged emission as <state>, so they require it to
-  // be firing at all — separate from whether the story wants chips. Defaulted
-  // the same way as piggybackMode above: older in-memory settings snapshots
-  // predating this feature may omit these fields entirely.
-  const suggestionEmission = resolveSuggestionEmission({
-    suggestionsEnabled: open.settings.suggestionsEnabled ?? false,
-    suggestionCount: open.settings.suggestionCount ?? 3,
-    suggestionCategories: open.settings.suggestionCategories ?? [],
-  })
+  // be firing at all — separate from whether the story wants chips.
+  const suggestionEmission = resolveSuggestionEmission(open.settings)
   const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
 
   const idMap = new IdBiMap()
@@ -221,18 +215,22 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     : { items: [], blockFound: false, failed: false }
   // Refs that don't resolve are dropped, not defaulted: a chip pointing at a
   // category the prompt never showed has no label or color to render with.
-  const suggestionItems = parsedSuggestions.items.flatMap((item) => {
+  const resolvedItems = parsedSuggestions.items.flatMap((item) => {
     const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
     return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
   })
+  // Persisted chip count must honor suggestionCount even if the model
+  // over-emits (reader-composer.md: "drives literal chip count per emission").
+  const suggestionItems = resolvedItems.slice(0, suggestionEmission.count)
   // Keys on items actually resolved, never on blockFound alone — a literal
   // "<suggestions>" string anywhere in prose would otherwise read as captured.
   const suggestionsCaptured = !parsedSuggestions.failed && suggestionItems.length > 0
-  if (suggestionsShouldFire && !suggestionsCaptured) {
+  const droppedCount = parsedSuggestions.items.length - resolvedItems.length
+  if (suggestionsShouldFire && (!suggestionsCaptured || droppedCount > 0)) {
     ctx.log.warn('classifier.suggestions_parse_failed', {
       blockFound: parsedSuggestions.blockFound,
       failed: parsedSuggestions.failed,
-      dropped: parsedSuggestions.items.length - suggestionItems.length,
+      dropped: droppedCount,
     })
   }
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured

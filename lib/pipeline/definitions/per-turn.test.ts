@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
-import { logger, makeLogger } from '@/lib/diagnostics'
+import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -42,6 +42,13 @@ const definition = {
   setting: 'A keep on a hill.',
   calendarSystemId: 'gregorian',
   worldTimeOrigin: { year: 0 },
+}
+
+// Both settings writers gate on storySettingsSchema.parse before
+// currentStoryStore.set, so a partial settings object never reaches
+// production — fixtures use a full default instead of `as never`.
+function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
+  return { ...STORY_SETTINGS_DEFAULTS, ...overrides }
 }
 
 function failingStreamCall() {
@@ -121,7 +128,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: { narrative: 'story-model' } } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, models: { narrative: 'story-model' } }),
     })
     entriesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
@@ -154,7 +161,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's2',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {} } as never,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
     })
 
     const result = await runNarrativePhase()
@@ -171,7 +178,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {} } as never,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
     })
     entriesStore.hydrate('b-other', [])
 
@@ -192,7 +199,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {} } as never,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
     })
     entriesStore.hydrate('b1', [])
     const controller = new AbortController()
@@ -219,7 +226,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {} } as never,
+      settings: baseSettings({ partialChapterBuffer: 3 }),
     })
     entriesStore.hydrate('b1', [])
     streamTextMock.mockReturnValue({
@@ -246,7 +253,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {}, piggybackMode: 'on' } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     const heroId = 'char_00000000-0000-4000-8000-000000000001'
     entriesStore.hydrate('b1', [])
@@ -374,7 +381,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {}, piggybackMode: 'on' } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     entriesStore.hydrate('b1', [])
     // 'c99' is never allocated (definition.leadEntityId claims 'c1', nothing
@@ -462,7 +469,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {}, piggybackMode: 'on' } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     entriesStore.hydrate('b1', [])
     entitiesStore.hydrate('b1', [])
@@ -535,7 +542,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {}, piggybackMode: 'on' } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     entriesStore.hydrate('b1', [])
     entitiesStore.hydrate('b1', [])
@@ -617,7 +624,7 @@ describe('per-turn pipeline declaration', () => {
       storyId: 's1',
       branchId: 'b1',
       definition,
-      settings: { partialChapterBuffer: 3, models: {}, piggybackMode: 'on' } as never,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     entriesStore.hydrate('b1', [])
     entitiesStore.hydrate('b1', [])
@@ -720,20 +727,23 @@ const SUGGESTION_CATEGORIES = [
   },
 ]
 
-async function runNarrativeWith(opts: { narrative: string; settings?: Record<string, unknown> }) {
+async function runNarrativeWith(opts: {
+  narrative: string
+  settings?: Partial<StorySettings>
+  log?: Logger
+}) {
   currentStoryStore.set({
     storyId: 's1',
     branchId: 'b1',
     definition,
-    settings: {
+    settings: baseSettings({
       partialChapterBuffer: 3,
-      models: {},
       piggybackMode: 'on',
       suggestionsEnabled: true,
       suggestionCount: 2,
       suggestionCategories: SUGGESTION_CATEGORIES,
       ...opts.settings,
-    } as never,
+    }),
   })
   entriesStore.hydrate('b1', [])
   entitiesStore.hydrate('b1', [])
@@ -769,11 +779,12 @@ async function runNarrativeWith(opts: { narrative: string; settings?: Record<str
   ensurePerTurnPipelineRegistered()
   const phase = getPipeline(PER_TURN_KIND).phases[1]
   if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+  const intermediates: Record<string, unknown> = {}
   const gen = phase.run({
     actionId: 'act_1',
     abortSignal: new AbortController().signal,
-    intermediates: {},
-    log: makeLogger('act_1'),
+    intermediates,
+    log: opts.log ?? makeLogger('act_1'),
     db: {
       select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
     } as never,
@@ -796,23 +807,41 @@ async function runNarrativeWith(opts: { narrative: string; settings?: Record<str
   return {
     events,
     metadata,
+    intermediates,
     prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
   }
 }
 
 describe('narrative fold — suggestions', () => {
   it('persists parsed chips with source piggyback on the created entry', async () => {
-    const { metadata } = await runNarrativeWith({
+    const { metadata, prompt } = await runNarrativeWith({
       narrative:
         'The rain falls.\n<state><summary>rain</summary></state>\n' +
         '<suggestions><item category="cat1">Draw the blade.</item>' +
         '<item category="cat2">"Who sent you?"</item></suggestions>',
     })
+    expect(prompt).toContain('<suggestions>')
     expect(metadata.nextTurnSuggestions).toEqual({
       items: [
         { categoryId: 'cat_action', text: 'Draw the blade.' },
         { categoryId: 'cat_dialogue', text: '"Who sent you?"' },
       ],
+      source: 'piggyback',
+    })
+  })
+
+  it('persists chips even when the sibling <state> block fails to parse', async () => {
+    const { metadata, intermediates } = await runNarrativeWith({
+      // visual_changes truncated (no closing </entity>) — the same shape as
+      // the existing per-turn-piggyback malformed-block coverage.
+      narrative:
+        'Narrative text\n<state><scene_entities>char_1</scene_entities>' +
+        '<visual_changes><entity id="char_1" type="attire">torn cloak</state>\n' +
+        '<suggestions><item category="cat1">kept</item></suggestions>',
+    })
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+    expect(metadata.nextTurnSuggestions).toEqual({
+      items: [{ categoryId: 'cat_action', text: 'kept' }],
       source: 'piggyback',
     })
   })
@@ -826,6 +855,36 @@ describe('narrative fold — suggestions', () => {
     })
     expect(metadata.nextTurnSuggestions?.items).toEqual([
       { categoryId: 'cat_action', text: 'kept' },
+    ])
+  })
+
+  it('logs classifier.suggestions_parse_failed with the drop count on a partial resolve', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    await runNarrativeWith({
+      log: logger,
+      narrative:
+        'p\n<state><summary>s</summary></state>\n' +
+        '<suggestions><item category="cat9">orphan</item>' +
+        '<item category="cat1">kept</item></suggestions>',
+    })
+    expect(warnSpy).toHaveBeenCalledWith(
+      'classifier.suggestions_parse_failed',
+      expect.objectContaining({ dropped: 1 }),
+    )
+  })
+
+  it('clamps persisted chips to suggestionCount when the model over-emits', async () => {
+    const { metadata } = await runNarrativeWith({
+      // Base fixture settings set suggestionCount: 2; three valid items come back.
+      narrative:
+        'p\n<state><summary>s</summary></state>\n' +
+        '<suggestions><item category="cat1">one</item>' +
+        '<item category="cat2">two</item>' +
+        '<item category="cat1">three</item></suggestions>',
+    })
+    expect(metadata.nextTurnSuggestions?.items).toEqual([
+      { categoryId: 'cat_action', text: 'one' },
+      { categoryId: 'cat_dialogue', text: 'two' },
     ])
   })
 
