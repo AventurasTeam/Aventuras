@@ -1,0 +1,653 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import { makeLogger } from '@/lib/diagnostics'
+import { runPreflight } from '@/lib/pipeline/runtime/preflight'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '@/lib/pipeline/types'
+import {
+  appSettingsStore,
+  currentStoryStore,
+  entitiesStore,
+  entriesStore,
+  resetAllStores,
+} from '@/lib/stores'
+
+import {
+  ensureSuggestionRefreshPipelineRegistered,
+  SUGGESTION_EMISSION_PHASE,
+  SUGGESTION_REFRESH_KIND,
+  SUGGESTION_TRANSLATION_PHASE,
+  suggestionRefreshSchema,
+  type SuggestionRefreshInput,
+} from './suggestion-refresh'
+import { __resetRegistry, getPipeline } from '../authoring/registry'
+
+const definition = {
+  mode: 'adventure' as const,
+  leadEntityId: null,
+  narration: 'first' as const,
+  genre: { label: 'Fantasy', promptBody: 'High fantasy.' },
+  tone: { label: 'Wry', promptBody: '' },
+  setting: 'A keep on a hill.',
+  calendarSystemId: 'gregorian',
+  worldTimeOrigin: { year: 0 },
+}
+
+function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
+  return { ...STORY_SETTINGS_DEFAULTS, ...overrides }
+}
+
+const SUGGESTION_CATEGORIES = [
+  { id: 'cat_action', label: 'Action', promptHint: 'act', color: 'red', enabled: true, order: 0 },
+  {
+    id: 'cat_dialogue',
+    label: 'Dialogue',
+    promptHint: 'say',
+    color: 'blue',
+    enabled: true,
+    order: 1,
+  },
+]
+
+const provider = {
+  id: 'prov-1',
+  type: 'anthropic' as const,
+  displayName: 'Anthropic',
+  apiKey: 'key',
+  favoriteModelIds: [],
+}
+
+const { generateStructuredMock } = vi.hoisted(() => ({ generateStructuredMock: vi.fn() }))
+
+vi.mock('@/lib/ai', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, generateStructured: generateStructuredMock }
+})
+
+const TARGET_ENTRY = {
+  id: 'entry-1',
+  branchId: 'b1',
+  position: 1,
+  kind: 'ai_reply',
+  content: 'The gate groans open.',
+  chapterId: null,
+  metadata: {
+    sceneEntities: [],
+    currentLocationId: null,
+    worldTime: 120,
+    model: 'model-1',
+  },
+  createdAt: 0,
+}
+
+function openStory(settings: Partial<StorySettings> = {}) {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId: 'b1',
+    definition,
+    settings: baseSettings({
+      suggestionsEnabled: true,
+      suggestionCount: 2,
+      suggestionCategories: SUGGESTION_CATEGORIES,
+      ...settings,
+    }),
+  })
+}
+
+function hydrate(entries: unknown[] = [TARGET_ENTRY]) {
+  entriesStore.hydrate('b1', entries as never[])
+  entitiesStore.hydrate('b1', [])
+}
+
+function wireAppSettings() {
+  vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+    ...APP_SETTINGS_DEFAULTS,
+    providers: [provider],
+    profiles: [
+      {
+        id: 'prof-suggestion',
+        kind: 'agent',
+        name: 'Suggestion',
+        modelRef: { providerId: provider.id, modelId: 'sug-model' },
+      },
+    ],
+    assignments: { suggestion: 'prof-suggestion' },
+    defaultProviderId: provider.id,
+  } as never)
+}
+
+function phaseCtx(inputs: unknown, abortSignal = new AbortController().signal): PhaseContext {
+  return {
+    actionId: 'act_1',
+    abortSignal,
+    intermediates: {},
+    inputs,
+    log: makeLogger('act_1'),
+    db: {} as never,
+    storyId: 's1',
+    branchId: 'b1',
+  }
+}
+
+async function drain(gen: AsyncGenerator<PhaseEmittedEvent, PhaseResult>) {
+  const events: PhaseEmittedEvent[] = []
+  let next = await gen.next()
+  while (!next.done) {
+    events.push(next.value)
+    next = await gen.next()
+  }
+  return { events, result: next.value }
+}
+
+function emissionPhase() {
+  ensureSuggestionRefreshPipelineRegistered()
+  const node = getPipeline(SUGGESTION_REFRESH_KIND).phases[0]
+  if (!node || !('run' in node)) throw new Error('expected a single-run emission phase node')
+  return node.run
+}
+
+const DEFAULT_INPUT: SuggestionRefreshInput = { targetEntryId: 'entry-1', refreshGuidance: '' }
+
+async function runEmission(inputs: unknown = DEFAULT_INPUT, abortSignal?: AbortSignal) {
+  return drain(emissionPhase()(phaseCtx(inputs, abortSignal)))
+}
+
+function okChips(suggestions: { categoryRef: string; text: string }[]) {
+  return { status: 'ok', value: { suggestions } }
+}
+
+beforeEach(() => {
+  vi.restoreAllMocks()
+  generateStructuredMock.mockReset()
+  __resetRegistry()
+  resetAllStores()
+})
+
+describe('suggestion-refresh declaration', () => {
+  it('matches the canonical V1 declaration: no-gate, self-blocking, pill-only, two phases', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    const p = getPipeline(SUGGESTION_REFRESH_KIND)
+
+    expect(p.phases.map((n) => n.name)).toEqual([
+      SUGGESTION_EMISSION_PHASE,
+      SUGGESTION_TRANSLATION_PHASE,
+    ])
+    expect(p.affordance).toBe('pill-only')
+    expect(p.gateBehavior).toBe('no-gate')
+    expect(p.concurrencyPolicy.blockedBy).toEqual(['per-turn', 'suggestion-refresh'])
+    expect(p.chainsTo).toBeUndefined()
+  })
+
+  it('declares the suggestion agent as phase 0 resolver input and nothing for translation', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    const [emission, translation] = getPipeline(SUGGESTION_REFRESH_KIND).phases
+    expect(emission && 'resolves' in emission ? emission.resolves : undefined).toEqual([
+      { target: 'suggestion' },
+    ])
+    expect(translation).not.toHaveProperty('resolves')
+  })
+
+  it('registers idempotently — a second ensure() call does not re-register', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    const first = getPipeline(SUGGESTION_REFRESH_KIND)
+    expect(() => ensureSuggestionRefreshPipelineRegistered()).not.toThrow()
+    expect(getPipeline(SUGGESTION_REFRESH_KIND)).toBe(first)
+  })
+
+  it('pre-flight halts the pipeline when the suggestion agent has no assignment', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    const snapshot = {
+      appSettings: {
+        ...APP_SETTINGS_DEFAULTS,
+        providers: [provider],
+        profiles: [],
+        assignments: {},
+        defaultProviderId: provider.id,
+      },
+      storySettings: baseSettings(),
+    }
+    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot as never)).toEqual({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+      target: 'suggestion',
+      phaseName: SUGGESTION_EMISSION_PHASE,
+    })
+  })
+
+  it('pre-flight passes once the suggestion agent resolves', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    const snapshot = {
+      appSettings: {
+        ...APP_SETTINGS_DEFAULTS,
+        providers: [provider],
+        profiles: [
+          {
+            id: 'prof-suggestion',
+            kind: 'agent',
+            name: 'Suggestion',
+            modelRef: { providerId: provider.id, modelId: 'sug-model' },
+          },
+        ],
+        assignments: { suggestion: 'prof-suggestion' },
+        defaultProviderId: provider.id,
+      },
+      storySettings: baseSettings(),
+    }
+    expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot as never)).toBeNull()
+  })
+})
+
+describe('suggestion-refresh translation phase', () => {
+  it('short-circuits in M3: yields nothing, completes', async () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    openStory()
+    const node = getPipeline(SUGGESTION_REFRESH_KIND).phases[1]
+    if (!node || !('run' in node)) throw new Error('expected a single-run translation phase node')
+    const first = await node.run(phaseCtx(undefined)).next()
+    expect(first).toEqual({ done: true, value: { status: 'completed' } })
+  })
+})
+
+describe('suggestion-refresh emission phase', () => {
+  it('fails without ever calling the model when the run carries no refresh input', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+
+    // Not runEmission(undefined) — that would fall back to its default input.
+    const { result } = await drain(emissionPhase()(phaseCtx(undefined)))
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        detail: 'suggestion-refresh: run started without a refresh input',
+        phaseName: SUGGESTION_EMISSION_PHASE,
+      },
+    })
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an open story from a different story on the same branch', async () => {
+    currentStoryStore.set({
+      storyId: 's2',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ suggestionCategories: SUGGESTION_CATEGORIES }),
+    })
+    hydrate()
+
+    const { result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'orchestrator', detail: 'suggestion-refresh: no open story for branch' },
+    })
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('fails when the entries store is loaded for another branch', async () => {
+    openStory()
+    entriesStore.hydrate('b-other', [])
+    entitiesStore.hydrate('b1', [])
+
+    const { result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'orchestrator',
+        detail: 'suggestion-refresh: entries store loaded for another branch',
+      },
+    })
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('no-ops without calling the model when every category is disabled', async () => {
+    openStory({
+      suggestionCategories: SUGGESTION_CATEGORIES.map((c) => ({ ...c, enabled: false })),
+    })
+    hydrate()
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('no-ops without calling the model when suggestions are disabled for the story', async () => {
+    openStory({ suggestionsEnabled: false })
+    hydrate()
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('completes without a write when the target entry is gone', async () => {
+    openStory()
+    hydrate()
+
+    const { events, result } = await runEmission({
+      targetEntryId: 'entry-vanished',
+      refreshGuidance: '',
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
+  it('calls the dedicated suggestion agent with the refresh template and story model overrides', async () => {
+    openStory({ models: { suggestion: 'story-model' } })
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    await runEmission()
+
+    expect(generateStructuredMock).toHaveBeenCalledWith(
+      'suggestion',
+      expect.any(String),
+      suggestionRefreshSchema,
+      expect.objectContaining({ storyModels: { suggestion: 'story-model' } }),
+      expect.anything(),
+    )
+    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    expect(prompt).toContain('A keep on a hill.')
+    expect(prompt).toContain('The gate groans open.')
+    expect(prompt).toContain('[cat1] Action')
+    expect(prompt).toContain('[cat2] Dialogue')
+    // Structured call: it must ask for the JSON field, never the tagged block
+    // the narrative fold's shared macro instructs.
+    expect(prompt).toContain('"suggestions" field')
+    expect(prompt).not.toContain('<suggestions>')
+  })
+
+  it('threads composer text into the prompt as refresh guidance and persists it', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    const { events } = await runEmission({
+      targetEntryId: 'entry-1',
+      refreshGuidance: 'I want to sneak around the back',
+    })
+
+    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    expect(prompt).toContain('I want to sneak around the back')
+    expect(events[0]).toMatchObject({
+      action: {
+        payload: {
+          metadata: {
+            nextTurnSuggestions: expect.objectContaining({
+              refreshGuidance: 'I want to sneak around the back',
+            }),
+          },
+        },
+      },
+    })
+  })
+
+  it('omits refreshGuidance from metadata and prompt when the composer was empty', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    const { events } = await runEmission({ targetEntryId: 'entry-1', refreshGuidance: '   ' })
+
+    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    expect(prompt).not.toContain('already started writing')
+    const event = events[0]
+    if (
+      !event ||
+      event.type !== 'delta_emitted' ||
+      event.action.kind !== 'updateStoryEntryMetadata'
+    )
+      throw new Error('expected an updateStoryEntryMetadata delta')
+    expect(event.action.payload.metadata.nextTurnSuggestions).not.toHaveProperty('refreshGuidance')
+  })
+
+  it('writes one metadata delta anchored to the target entry, preserving its other metadata', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(
+      okChips([
+        { categoryRef: 'cat1', text: 'Draw the blade.' },
+        { categoryRef: 'cat2', text: '"Who sent you?"' },
+      ]),
+    )
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toHaveLength(1)
+    expect(events[0]).toEqual({
+      type: 'delta_emitted',
+      entryId: 'entry-1',
+      action: {
+        kind: 'updateStoryEntryMetadata',
+        source: 'ai_classifier',
+        payload: {
+          branchId: 'b1',
+          id: 'entry-1',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 120,
+            model: 'model-1',
+            nextTurnSuggestions: {
+              items: [
+                { categoryId: 'cat_action', text: 'Draw the blade.' },
+                { categoryId: 'cat_dialogue', text: '"Who sent you?"' },
+              ],
+              source: 'refresh',
+            },
+          },
+        },
+      },
+    })
+  })
+
+  it('builds a metadata floor for a target entry that carries none (system / legacy entry)', async () => {
+    openStory()
+    hydrate([{ ...TARGET_ENTRY, kind: 'system', metadata: null }])
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    const { events } = await runEmission()
+
+    const event = events[0]
+    if (
+      !event ||
+      event.type !== 'delta_emitted' ||
+      event.action.kind !== 'updateStoryEntryMetadata'
+    )
+      throw new Error('expected an updateStoryEntryMetadata delta')
+    expect(event.action.payload.metadata).toEqual({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      nextTurnSuggestions: {
+        items: [{ categoryId: 'cat_action', text: 'Draw.' }],
+        source: 'refresh',
+      },
+    })
+  })
+
+  it('drops chips whose category ref never resolved and clamps the rest to suggestionCount', async () => {
+    openStory({ suggestionCount: 2 })
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(
+      okChips([
+        { categoryRef: 'cat9', text: 'Invented category.' },
+        { categoryRef: 'cat1', text: 'One.' },
+        { categoryRef: 'cat2', text: 'Two.' },
+        { categoryRef: 'cat1', text: 'Three.' },
+      ]),
+    )
+
+    const { events } = await runEmission()
+
+    const event = events[0]
+    if (
+      !event ||
+      event.type !== 'delta_emitted' ||
+      event.action.kind !== 'updateStoryEntryMetadata'
+    )
+      throw new Error('expected an updateStoryEntryMetadata delta')
+    expect(event.action.payload.metadata.nextTurnSuggestions?.items).toEqual([
+      { categoryId: 'cat_action', text: 'One.' },
+      { categoryId: 'cat_dialogue', text: 'Two.' },
+    ])
+  })
+
+  it('completes without a write when nothing resolved', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat9', text: 'Nope.' }]))
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+  })
+
+  it('completes without a write when a reversal deletes the target during the call', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    // no-gate: CTRL-Z / rollback are not blocked by this run, so the row the
+    // write targets can be gone by the time the call returns.
+    generateStructuredMock.mockImplementation(async () => {
+      entriesStore.hydrate('b1', [])
+      return okChips([{ categoryRef: 'cat1', text: 'Orphaned.' }])
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+  })
+
+  it('writes over the row as it stands after the call, not the pre-call snapshot', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockImplementation(async () => {
+      entriesStore.patch('b1', {
+        op: 'update',
+        id: 'entry-1',
+        columns: { metadata: { ...TARGET_ENTRY.metadata, worldTime: 999 } },
+      })
+      return okChips([{ categoryRef: 'cat1', text: 'Draw.' }])
+    })
+
+    const { events } = await runEmission()
+
+    const event = events[0]
+    if (
+      !event ||
+      event.type !== 'delta_emitted' ||
+      event.action.kind !== 'updateStoryEntryMetadata'
+    )
+      throw new Error('expected an updateStoryEntryMetadata delta')
+    expect(event.action.payload.metadata.worldTime).toBe(999)
+  })
+
+  it('discards the result when a cancel lands while the model call is in flight', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    const controller = new AbortController()
+    // The provider call resolves normally and the cancel lands in the window
+    // between its return and the write — canon discards the result.
+    generateStructuredMock.mockImplementation(async () => {
+      controller.abort()
+      return okChips([{ categoryRef: 'cat1', text: 'Too late.' }])
+    })
+
+    const { events, result } = await runEmission(
+      { targetEntryId: 'entry-1', refreshGuidance: '' },
+      controller.signal,
+    )
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events).toEqual([])
+  })
+
+  it('reports an aborted provider call as aborted, not failed', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({ status: 'aborted' })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(events).toEqual([])
+  })
+
+  it('surfaces a resolver race as a config-resolver failure naming the suggestion agent', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'not-configured',
+      kind: 'profile-missing',
+    })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: {
+        kind: 'config-resolver',
+        failure: 'profile-missing',
+        target: 'suggestion',
+        phaseName: SUGGESTION_EMISSION_PHASE,
+      },
+    })
+    expect(events).toEqual([])
+  })
+
+  it('surfaces an exhausted provider call as a failure so the strip can show Retry', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({ status: 'failed', detail: 'boom' })
+
+    const { events, result } = await runEmission()
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: { kind: 'provider', reason: 'unknown', detail: 'boom' },
+    })
+    expect(events).toEqual([])
+  })
+
+  it('generates from the window ending at the target, not from a turn that landed after it', async () => {
+    openStory()
+    hydrate([
+      TARGET_ENTRY,
+      { ...TARGET_ENTRY, id: 'entry-2', position: 2, content: 'A LATER TURN LANDED.' },
+    ])
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    const { events } = await runEmission()
+
+    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    expect(prompt).toContain('The gate groans open.')
+    expect(prompt).not.toContain('A LATER TURN LANDED.')
+    expect(events[0]).toMatchObject({ entryId: 'entry-1' })
+  })
+})

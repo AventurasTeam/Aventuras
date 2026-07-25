@@ -38,7 +38,14 @@ class ActionRejectedError extends ActionLayerError {
   }
 }
 
-export type RunCtx = { storyId: string | null; branchId: string; actionId?: string } & DbCtx
+export type RunCtx = {
+  storyId: string | null
+  branchId: string
+  actionId?: string
+  // Kind-specific run parameters the starting action hands to the phases
+  // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
+  inputs?: unknown
+} & DbCtx
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
@@ -54,6 +61,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     branchId: ctx.branchId,
     abortController: new AbortController(),
     currentPhase: '',
+    inputs: ctx.inputs,
     intermediates: {},
     terminal,
     resolveTerminal,
@@ -155,6 +163,7 @@ function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
   return {
     actionId: run.actionId,
     abortSignal: run.abortController.signal,
+    inputs: run.inputs,
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
     db: ctx.db,
@@ -233,7 +242,11 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  const successor = nextPipeline ? newRunState(nextPipeline.kind, ctx) : undefined
+  // A chained kind gets its own context, so the predecessor's inputs stop here
+  // (generation-pipeline.md → Run-scoped state); nothing supplies the successor's.
+  const successor = nextPipeline
+    ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined })
+    : undefined
   generationStore.finishRun(run.runId, successor)
   try {
     await ctx.db

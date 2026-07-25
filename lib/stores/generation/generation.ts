@@ -10,6 +10,8 @@ export type RunState = {
   branchId: string
   abortController: AbortController
   currentPhase: string
+  // Caller-supplied run parameters (RunCtx.inputs), read-only for phases.
+  inputs?: unknown
   intermediates: Record<string, unknown>
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
   // Resolves when the run reaches commit or abort. Lets a context that did not

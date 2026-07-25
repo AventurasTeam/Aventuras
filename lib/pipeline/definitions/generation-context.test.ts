@@ -273,6 +273,37 @@ describe('buildGenerationContext', () => {
     expect(ctx.suggestionCount).toBe(5)
   })
 
+  it('defaults refreshGuidance to empty and normalizes a whitespace-only steer', () => {
+    const empty = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(empty.refreshGuidance).toBe('')
+
+    const blank = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+      refreshGuidance: '   ',
+    })
+    expect(blank.refreshGuidance).toBe('')
+
+    const steered = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+      refreshGuidance: 'I sneak around the back',
+    })
+    expect(steered.refreshGuidance).toBe('I sneak around the back')
+  })
+
   it('resolves calendarVocabulary for known calendar id and null for unknown', () => {
     const knownCtx = buildGenerationContext({
       entries: [],

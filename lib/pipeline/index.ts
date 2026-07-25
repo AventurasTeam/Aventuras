@@ -5,6 +5,14 @@ export {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
 } from './definitions/per-turn-piggyback'
+export {
+  ensureSuggestionRefreshPipelineRegistered,
+  SUGGESTION_EMISSION_PHASE,
+  SUGGESTION_REFRESH_KIND,
+  SUGGESTION_TRANSLATION_PHASE,
+  suggestionRefreshSchema,
+  type SuggestionRefreshInput,
+} from './definitions/suggestion-refresh'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export {

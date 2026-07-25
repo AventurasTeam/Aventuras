@@ -24,6 +24,10 @@ type BuildArgs = {
   // rather than computed here. Defaults false for every other
   // generationContext consumer.
   suggestionsFire?: boolean
+  // Composer text at the moment the reader hit ⟳ on the chip strip
+  // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
+  // phase has it; blank everywhere else.
+  refreshGuidance?: string
 }
 
 // Defense-in-depth: emit '' for whitespace-only definitional prose so a header
@@ -46,6 +50,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     idMap,
     piggybackFires = false,
     suggestionsFire = false,
+    refreshGuidance = '',
   } = args
 
   // System entries are technical-only rows (removed on generate) — templates
@@ -82,6 +87,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
     suggestionSlots,
     suggestionCount: settings.suggestionCount,
+    refreshGuidance: blankIfWhitespace(refreshGuidance),
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

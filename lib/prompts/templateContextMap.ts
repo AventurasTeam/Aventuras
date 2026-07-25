@@ -97,6 +97,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description: 'Chips to emit this turn (stories.settings.suggestionCount, 1-6).',
       required: false,
     },
+    {
+      name: 'refreshGuidance',
+      type: 'string',
+      category: 'Generation Results',
+      description:
+        'Composer text at the moment the reader hit ⟳, steering a suggestion-refresh re-roll. Blank on every other call and on an empty composer.',
+      required: false,
+    },
   ],
   wizard: [
     {
@@ -145,6 +153,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
   [TEMPLATE_IDS.perTurnNarrative]: 'generationContext',
   [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
+  [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
@@ -168,6 +177,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'guidance',
     'piggybackFires',
     'suggestionsFire',
+    'refreshGuidance',
   ],
 }
 

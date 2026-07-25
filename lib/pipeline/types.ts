@@ -51,6 +51,10 @@ export type PhaseContext = {
   actionId: string
   abortSignal: AbortSignal
   intermediates: Record<string, unknown>
+  // The run's caller-supplied parameters, distinct from `intermediates`
+  // (phase-to-phase scratch) per generation-pipeline.md → Run-scoped state. Kind-
+  // specific and unknown here until per-kind contexts land; the phase narrows it.
+  inputs?: unknown
   // Run-bound logger so a phase's logs are turn-attributed without a global.
   log: Logger
   // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)

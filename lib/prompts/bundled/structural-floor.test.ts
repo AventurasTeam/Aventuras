@@ -5,6 +5,7 @@ import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
 import { PER_TURN_NARRATIVE } from './per-turn'
 import { STATE_EMISSION } from './state-emission'
+import { SUGGESTION_REFRESH } from './suggestion-refresh'
 
 const sceneEntity = {
   id: 'char_1',
@@ -60,6 +61,11 @@ describe('structural-floor invariant — active + in-scene always inject', () =>
   it('bundled per-turn template injects a disabled-but-active-in-scene entity', () => {
     expect(injectsSceneEntity(PER_TURN_NARRATIVE)).toBe(true)
     expect(render(PER_TURN_NARRATIVE)).toContain('A wary scout.')
+  })
+
+  it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
+    expect(injectsSceneEntity(SUGGESTION_REFRESH)).toBe(true)
+    expect(render(SUGGESTION_REFRESH)).toContain('A wary scout.')
   })
 
   it('permanent negative fixture: an injectionMode-respecting variant DROPS it', () => {
