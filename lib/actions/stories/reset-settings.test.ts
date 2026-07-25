@@ -43,6 +43,33 @@ afterEach(() => {
   resetAllStores()
 })
 
+// Distinct from DEFAULT_SUGGESTION_CATEGORIES so the "rebuilds current
+// defaults" assertions can tell "seeded from the current app store" apart
+// from "fell back to the module constant" — both would otherwise produce the
+// same palette and the test couldn't distinguish them.
+const CURRENT_SUGGESTION_CATEGORIES = {
+  adventure: [
+    {
+      id: 'cat_current',
+      label: 'Current',
+      promptHint: 'h',
+      color: 'pink',
+      enabled: true,
+      order: 0,
+    },
+  ],
+  creative: [
+    {
+      id: 'cat_current',
+      label: 'Current',
+      promptHint: 'h',
+      color: 'orange',
+      enabled: true,
+      order: 0,
+    },
+  ],
+}
+
 async function hydrateCurrentDefaults(): Promise<void> {
   await hydrateAppSettings(async () => ({
     ...APP_SETTINGS_DEFAULTS,
@@ -52,6 +79,7 @@ async function hydrateCurrentDefaults(): Promise<void> {
       classifierCadence: 11,
       chapterAutoClose: false,
     },
+    defaultSuggestionCategories: CURRENT_SUGGESTION_CATEGORIES,
   }))
 }
 
@@ -67,7 +95,7 @@ function currentAppDefaults() {
     },
     embeddingModelId: 'app-embed',
     embeddingProviderId: null,
-    defaultSuggestionCategories: APP_SETTINGS_DEFAULTS.defaultSuggestionCategories,
+    defaultSuggestionCategories: CURRENT_SUGGESTION_CATEGORIES,
   }
 }
 
@@ -210,7 +238,7 @@ describe('resetStorySettings', () => {
     expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
   })
 
-  it('falls back to the wizard default mode when resetting a draft with no definition yet', async () => {
+  it('falls back to the wizard default mode when resetting a row with a null definition', async () => {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({
       id: 'story_draft',

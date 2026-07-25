@@ -16,8 +16,8 @@ export async function resetStorySettings(
 
   const appSettings = appSettingsStore.getAppSettings()
   const settings = buildStorySettings(
-    // A draft row has no definition yet, so there is no mode to seed a palette
-    // from; creative is the wizard's own starting mode.
+    // definition is nullable at the column level; creative is the wizard's
+    // starting mode, used if a row somehow has none.
     story.definition?.mode ?? 'creative',
     appSettings,
   )
