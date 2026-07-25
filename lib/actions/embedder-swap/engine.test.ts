@@ -250,8 +250,30 @@ function opsOf(runSpy: ReturnType<typeof vi.fn>): SqlOp[][] {
   return runSpy.mock.calls.map((c) => c[0] as SqlOp[])
 }
 
-function callsWith(runSpy: ReturnType<typeof vi.fn>, needle: string): SqlOp[][] {
-  return opsOf(runSpy).filter((ops) => ops.some((op) => op.sql.includes(needle)))
+// Settings transitions are json_patch, so the keys they touch live in the JSON
+// payload rather than the SQL text — a `sql.includes('embedding_model_id')`
+// needle would match nothing and pass vacuously.
+function patchOf(op: SqlOp): Record<string, unknown> | undefined {
+  if (!op.sql.includes('json_patch')) return undefined
+  return JSON.parse(op.params[0] as string) as Record<string, unknown>
+}
+
+type PatchPredicate = (patch: Record<string, unknown>) => boolean
+
+const clearsMarker: PatchPredicate = (patch) =>
+  'embedding_swap_target' in patch && patch.embedding_swap_target === null
+
+const flipsModel: PatchPredicate = (patch) => typeof patch.embedding_model_id === 'string'
+
+function hasPatch(ops: SqlOp[], predicate: PatchPredicate): boolean {
+  return ops.some((op) => {
+    const patch = patchOf(op)
+    return patch !== undefined && predicate(patch)
+  })
+}
+
+function callsPatching(runSpy: ReturnType<typeof vi.fn>, predicate: PatchPredicate): SqlOp[][] {
+  return opsOf(runSpy).filter((ops) => hasPatch(ops, predicate))
 }
 
 // ---------------------------------------------------------------------------
@@ -281,15 +303,49 @@ describe('embedder-swap engine', () => {
     expect(s?.embedding_model_id).toBe(NEW)
     expect(s?.embedding_swap_target).toBeUndefined()
 
-    const flips = callsWith(runSpy, 'json_remove')
+    const flips = callsPatching(runSpy, clearsMarker)
     expect(flips).toHaveLength(1)
     const flip = flips[0]
-    expect(
-      flip.some((op) => op.sql.includes('json_set') && op.sql.includes('embedding_model_id')),
-    ).toBe(true)
+    expect(hasPatch(flip, flipsModel)).toBe(true)
     expect(flip.some((op) => op.sql.startsWith('DELETE FROM') && op.sql.includes('model_id'))).toBe(
       true,
     )
+  })
+
+  it('1b. cross-backend swap: the flip writes backend and provider id with the model', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    const result = await startSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      targetConfig: { backend: 'provider', providerId: 'prov1', modelId: NEW, dim: DIM },
+    })
+
+    expect(result).toBe('completed')
+    const s = storySettings(sqlite)
+    // A model-id-only flip would leave the story pointing at a provider model
+    // under its old local backend — the shape that resolves as
+    // `unknown-local-model` on the next embed.
+    expect(s?.embedding_model_id).toBe(NEW)
+    expect(s?.embeddingBackend).toBe('provider')
+    expect(s?.embedding_provider_id).toBe('prov1')
+
+    // The marker carried the target's backend while the swap was in flight, so a
+    // crash-resume can resolve it without guessing.
+    const markerWrite = callsPatching(
+      runSpy,
+      (patch) => patch.embedding_swap_target === NEW,
+    )[0].map(patchOf)
+    expect(markerWrite).toContainEqual({
+      embedding_swap_target: NEW,
+      embedding_swap_backend: 'provider',
+      embedding_swap_provider_id: 'prov1',
+    })
   })
 
   it('2. same-dim swap: OLD and NEW coexist in the same family mid-phase-1', async () => {
@@ -426,10 +482,8 @@ describe('embedder-swap engine', () => {
 
     expect(runSpy).toHaveBeenCalledTimes(1)
     const ops = opsOf(runSpy)[0]
-    expect(ops.some((op) => op.sql.includes('json_remove'))).toBe(true)
-    expect(
-      ops.some((op) => op.sql.includes('json_set') && op.sql.includes('embedding_model_id')),
-    ).toBe(false)
+    expect(hasPatch(ops, clearsMarker)).toBe(true)
+    expect(hasPatch(ops, flipsModel)).toBe(false)
     expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
   })
 
@@ -512,7 +566,12 @@ describe('embedder-swap engine', () => {
     const embed = makeEmbedRows(sqlite)
     const { deps } = makeDeps(sqlite, runInTransaction, embed.fn)
 
-    await relabelModel(deps, { storyId: 's1', branchIds: ['b1'], oldModelId: OLD, newModelId: NEW })
+    await relabelModel(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      oldModelId: OLD,
+      target: { modelId: NEW, backend: 'local' },
+    })
 
     expect(embed.calls).toHaveLength(0)
     expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual([])
@@ -543,7 +602,12 @@ describe('embedder-swap engine', () => {
     const { deps } = makeDeps(sqlite, runInTransaction, embed.fn)
 
     await expect(
-      relabelModel(deps, { storyId: 's1', branchIds: ['b1'], oldModelId: OLD, newModelId: NEW }),
+      relabelModel(deps, {
+        storyId: 's1',
+        branchIds: ['b1'],
+        oldModelId: OLD,
+        target: { modelId: NEW, backend: 'local' },
+      }),
     ).resolves.toBeUndefined()
 
     expect(embed.calls).toHaveLength(0)
@@ -587,10 +651,10 @@ describe('embedder-swap engine', () => {
     expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
     expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(1)
 
-    const cancelCalls = callsWith(runSpy, 'json_remove')
+    const cancelCalls = callsPatching(runSpy, clearsMarker)
     expect(cancelCalls).toHaveLength(1)
     expect(cancelCalls[0].filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
-    expect(cancelCalls[0].some((op) => op.sql.includes('embedding_model_id'))).toBe(false)
+    expect(hasPatch(cancelCalls[0], flipsModel)).toBe(false)
   })
 
   it('10. deleted-story guard: throws SwapStoryMissingError, no phase-2 transaction runs', async () => {
@@ -620,10 +684,10 @@ describe('embedder-swap engine', () => {
 
     // marker-set + one batch only; the flip transaction never ran.
     expect(runSpy).toHaveBeenCalledTimes(2)
-    expect(callsWith(runSpy, 'embedding_model_id')).toHaveLength(0)
+    expect(callsPatching(runSpy, flipsModel)).toHaveLength(0)
   })
 
-  it('10b. null-settings guard: json_set no-ops, so the flip is refused', async () => {
+  it('10b. null-settings guard: json_patch no-ops, so the flip is refused', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ settingsNull: true })
     seedOldVectors(sqlite, embedded)
     const { fn } = makeEmbedRows(sqlite)

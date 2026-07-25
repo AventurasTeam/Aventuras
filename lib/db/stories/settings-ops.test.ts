@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { clearSwapTargetOp, setSwapTargetOp, setEmbeddingModelIdOp } from './settings-ops'
+import { clearSwapTargetOp, setSwapTargetOp, setEmbeddingTargetOp } from './settings-ops'
 import { storySettingsSchema, type StorySettings } from './story-config-schema'
 import { createTestDb } from '../__tests__/test-db'
 
@@ -11,6 +11,12 @@ describe('story settings ops', () => {
   let runInTransaction: (ops: { sql: string; params: unknown[] }[]) => Promise<void>
   const now = Date.now()
   const NOW = now
+  const LOCAL_TARGET = { modelId: 'new-model', backend: 'local' } as const
+  const PROVIDER_TARGET = {
+    modelId: 'text-embedding-3-small',
+    backend: 'provider',
+    providerId: 'prov1',
+  } as const
 
   beforeEach(async () => {
     const testDb = await createTestDb()
@@ -75,52 +81,97 @@ describe('story settings ops', () => {
   }
 
   it('setSwapTargetOp writes the marker and preserves sibling keys', async () => {
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
     const settings = readSettings('s1')
     expect(settings.embedding_swap_target).toBe('new-model')
     expect(settings.embedding_model_id).toBe('old-model')
   })
 
   it('clearSwapTargetOp removes the key entirely', async () => {
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
     await runInTransaction([clearSwapTargetOp('s1', NOW)])
     const settings = readSettings('s1')
     expect('embedding_swap_target' in settings).toBe(false)
   })
 
+  it('setSwapTargetOp records the target backend and provider id', async () => {
+    await runInTransaction([setSwapTargetOp('s1', PROVIDER_TARGET, NOW)])
+    const settings = readSettings('s1')
+    expect(settings.embedding_swap_target).toBe('text-embedding-3-small')
+    expect(settings.embedding_swap_backend).toBe('provider')
+    expect(settings.embedding_swap_provider_id).toBe('prov1')
+    // The flip has not happened yet: the story is still on its own backend.
+    expect(settings.embeddingBackend).toBe('local')
+  })
+
+  it('setSwapTargetOp omits the provider id for a local target', async () => {
+    await runInTransaction([setSwapTargetOp('s1', PROVIDER_TARGET, NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
+    const settings = readSettings('s1')
+    // A null in a json_patch DELETES the key rather than writing a JSON null,
+    // which the settings Zod would reject — a stale provider id must not survive.
+    expect('embedding_swap_provider_id' in settings).toBe(false)
+    expect(settings.embedding_swap_backend).toBe('local')
+  })
+
+  it('clearSwapTargetOp removes all three marker keys', async () => {
+    await runInTransaction([setSwapTargetOp('s1', PROVIDER_TARGET, NOW)])
+    await runInTransaction([clearSwapTargetOp('s1', NOW)])
+    const settings = readSettings('s1')
+    expect('embedding_swap_target' in settings).toBe(false)
+    expect('embedding_swap_backend' in settings).toBe(false)
+    expect('embedding_swap_provider_id' in settings).toBe(false)
+  })
+
+  it('setEmbeddingTargetOp flips backend and provider id with the model', async () => {
+    await runInTransaction([setEmbeddingTargetOp('s1', PROVIDER_TARGET, NOW)])
+    const settings = readSettings('s1')
+    expect(settings.embedding_model_id).toBe('text-embedding-3-small')
+    expect(settings.embeddingBackend).toBe('provider')
+    expect(settings.embedding_provider_id).toBe('prov1')
+  })
+
+  it('setEmbeddingTargetOp drops the provider id when flipping to local', async () => {
+    await runInTransaction([setEmbeddingTargetOp('s1', PROVIDER_TARGET, NOW)])
+    await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, NOW)])
+    const settings = readSettings('s1')
+    expect(settings.embeddingBackend).toBe('local')
+    expect('embedding_provider_id' in settings).toBe(false)
+  })
+
   it('setEmbeddingModelIdOp flips the recorded model', async () => {
-    await runInTransaction([setEmbeddingModelIdOp('s1', 'new-model', NOW)])
+    await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, NOW)])
     const settings = readSettings('s1')
     expect(settings.embedding_model_id).toBe('new-model')
   })
 
   it('setSwapTargetOp updates updated_at to the given timestamp', async () => {
     const laterTime = NOW + 1000
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', laterTime)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, laterTime)])
     expect(readUpdatedAt('s1')).toBe(laterTime)
   })
 
   it('clearSwapTargetOp updates updated_at to the given timestamp', async () => {
     const laterTime = NOW + 1000
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
     await runInTransaction([clearSwapTargetOp('s1', laterTime)])
     expect(readUpdatedAt('s1')).toBe(laterTime)
   })
 
   it('setEmbeddingModelIdOp updates updated_at to the given timestamp', async () => {
     const laterTime = NOW + 1000
-    await runInTransaction([setEmbeddingModelIdOp('s1', 'new-model', laterTime)])
+    await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, laterTime)])
     expect(readUpdatedAt('s1')).toBe(laterTime)
   })
 
   it('settings blob remains schema-valid after json_set', async () => {
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
     // readSettings calls storySettingsSchema.parse, which throws if invalid
     expect(() => readSettings('s1')).not.toThrow()
   })
 
   it('settings blob remains schema-valid after json_remove', async () => {
-    await runInTransaction([setSwapTargetOp('s1', 'new-model', NOW)])
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
     await runInTransaction([clearSwapTargetOp('s1', NOW)])
     // readSettings calls storySettingsSchema.parse, which throws if invalid
     expect(() => readSettings('s1')).not.toThrow()

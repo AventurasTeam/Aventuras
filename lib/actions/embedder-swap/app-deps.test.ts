@@ -129,7 +129,7 @@ describe('stale cancel-flag isolation across operations', () => {
       return 'completed'
     })
 
-    const result = await startStorySwap('s1', MINILM, ctx)
+    const result = await startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)
 
     expect(startSwap).toHaveBeenCalledOnce()
     expect(firstPoll).toBe(false)

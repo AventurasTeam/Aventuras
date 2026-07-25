@@ -14,7 +14,16 @@ import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-type SwapCandidate = { id: string; label: string; isCurrent: boolean }
+// `backend` (+ `providerId` when it is 'provider') travels with the candidate so
+// the host can name a swap target unambiguously: a model id alone cannot say
+// which backend is meant to serve it, and the two id spaces can collide.
+type SwapCandidate = {
+  id: string
+  label: string
+  isCurrent: boolean
+  backend: 'provider' | 'local'
+  providerId?: string | null
+}
 
 type SwapDialogProps = {
   open: boolean

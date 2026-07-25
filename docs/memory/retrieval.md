@@ -365,6 +365,13 @@ surfaces three options:
      `stories.settings.embedding_swap_target = NEW_MODEL_ID`.
      Commit. From this moment, the marker is the source of truth
      for "swap in flight; expect partial NEW-model rows."
+     A swap may cross backends (a local model to a provider one or
+     back), and a model id alone does not say which backend serves it —
+     so when the target's backend differs from the story's, the marker
+     also records `embedding_swap_backend` and
+     `embedding_swap_provider_id`. Absent, they mean "same backend as
+     the story", which is what crash recovery assumes for any marker
+     written without them.
   2. **Phase 1 — re-embed non-destructively.** Foreground job
      (re-index runs in the user's view, not a background queue)
      embeds each row under the new model and INSERTs alongside
@@ -379,7 +386,12 @@ surfaces three options:
   3. **Phase 2 — atomic flip (transaction).** Single SQLite txn:
      - `DELETE FROM *_vec_<old dim> WHERE branch_id IN (...) AND model_id = OLD`
      - `UPDATE stories SET settings = jsonb_set(settings, '$.embedding_model_id', NEW_MODEL_ID)`
+       — together with `$.embeddingBackend` and
+       `$.embedding_provider_id`, so a cross-backend swap lands a
+       coherent trio instead of a provider model recorded under the
+       story's old local backend
      - `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`
+       and its two companion marker keys
 
      Commit. Story is now consistently on NEW.
 
@@ -394,6 +406,10 @@ surfaces three options:
 
   **Cancel during a live swap (not a crash)** follows the same
   Cancel path — partial NEW vectors are deleted, marker cleared.
+  One exception: the standalone re-index, where NEW and OLD are the
+  same model. Staging upserts in place there, so the rows a cancel
+  would delete are the story's only vectors — it clears the marker and
+  re-flags staleness without deleting anything.
 
   **Block second swap while marker is set.** Re-index is a
   foreground job, so the in-app flow naturally prevents a second

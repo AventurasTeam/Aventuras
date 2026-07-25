@@ -57,7 +57,12 @@ export {
   suggestionCategorySchema,
 } from './stories/story-config-schema'
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
-export { clearSwapTargetOp, setEmbeddingModelIdOp, setSwapTargetOp } from './stories/settings-ops'
+export {
+  clearSwapTargetOp,
+  setEmbeddingTargetOp,
+  setSwapTargetOp,
+  type EmbeddingTarget,
+} from './stories/settings-ops'
 export {
   appearanceSchema,
   appSettingsConfigSchema,

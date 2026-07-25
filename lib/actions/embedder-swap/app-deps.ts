@@ -17,6 +17,7 @@ import {
   VEC_FAMILIES,
   type DbCtx,
   type EmbeddedFieldRow,
+  type EmbeddingTarget,
   type StorySettings,
   type VecTargetKind,
 } from '@/lib/db'
@@ -134,24 +135,53 @@ function appEmbedderDefaults(app: AppSettingsSnapshot): EmbedderAppDefaults {
   }
 }
 
+/**
+ * The in-flight swap's target, read back from the marker. An absent
+ * `embedding_swap_backend` means the target shares the story's current backend —
+ * which is both the same-backend case and what a marker written before
+ * cross-backend swaps existed meant, so no migration is needed.
+ */
+function markerTarget(settings: StorySettings): EmbeddingTarget {
+  const backend = settings.embedding_swap_backend ?? settings.embeddingBackend
+  return {
+    modelId: settings.embedding_swap_target ?? settings.embedding_model_id,
+    backend,
+    providerId:
+      settings.embedding_swap_backend != null
+        ? settings.embedding_swap_provider_id
+        : settings.embedding_provider_id,
+  }
+}
+
 export function resolveStorySwapConfig(
   storyId: string,
-  targetModelId: string,
+  target: EmbeddingTarget,
 ): EmbedderConfigResolution {
   const app = appSettingsStore.getAppSettings()
   const story = storiesStore.getStories().rows.find((row) => row.id === storyId)
   const settings = story?.settings ?? null
   if (settings == null) return { ok: false, reason: 'no-model' }
 
-  const providerId = settings.embedding_provider_id
+  // The TARGET's provider, not the story's: a cross-backend swap resolves a
+  // provider model whose capabilities live under the provider it is served by.
+  const providerId =
+    target.backend === 'provider' ? target.providerId : settings.embedding_provider_id
   const caps =
     providerId != null
-      ? resolveModelCapabilities(providerId, targetModelId, app.providers)
+      ? resolveModelCapabilities(providerId, target.modelId, app.providers)
       : undefined
-  // Target model overrides the story's recorded id; effectiveDim is the story's
-  // locked dim (canon: re-index reuses the stored dim, never re-picks).
+  // Target overrides the story's recorded backend / id / provider — resolving a
+  // provider model against the story's still-current local backend is the
+  // `unknown-local-model` failure cross-backend swaps exist to avoid.
+  // effectiveDim stays the story's locked dim (canon: re-index reuses the stored
+  // dim, never re-picks).
   return resolveEmbedderConfig(
-    { ...settings, embedding_model_id: targetModelId },
+    {
+      ...settings,
+      embeddingBackend: target.backend,
+      embedding_model_id: target.modelId,
+      embedding_provider_id: providerId ?? undefined,
+    },
     appEmbedderDefaults(app),
     caps?.matryoshkaSupported != null
       ? { matryoshkaSupported: caps.matryoshkaSupported }
@@ -253,12 +283,12 @@ async function runStagingSwap(
   storyId: string,
   ctx: DbCtx,
   invoke: (deps: SwapDeps, params: SwapParams) => Promise<'completed' | 'cancelled'>,
-  resolveTarget: (settings: StorySettings) => string,
+  resolveTarget: (settings: StorySettings) => EmbeddingTarget,
 ): Promise<'completed' | 'cancelled'> {
   return runExclusive(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
-    const targetModelId = resolveTarget(settings)
-    const resolution = resolveStorySwapConfig(storyId, targetModelId)
+    const target = resolveTarget(settings)
+    const resolution = resolveStorySwapConfig(storyId, target)
     if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
     const deps = composeSwapDeps(storyId, ctx)
     // cancelRequested is a global flag; a prior cancel that ended without a
@@ -287,10 +317,10 @@ async function runStagingSwap(
 
 export function startStorySwap(
   storyId: string,
-  targetModelId: string,
+  target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled'> {
-  return runStagingSwap(storyId, ctx, startSwap, () => targetModelId)
+  return runStagingSwap(storyId, ctx, startSwap, () => target)
 }
 
 export function resumeStorySwap(
@@ -299,7 +329,7 @@ export function resumeStorySwap(
 ): Promise<'completed' | 'cancelled'> {
   return runStagingSwap(storyId, ctx, resumeSwap, (settings) => {
     if (settings.embedding_swap_target == null) throw new SwapNotInProgressError(storyId)
-    return settings.embedding_swap_target
+    return markerTarget(settings)
   })
 }
 
@@ -307,7 +337,11 @@ export function reindexStoryNow(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled'> {
-  return runStagingSwap(storyId, ctx, reindexStory, (settings) => settings.embedding_model_id)
+  return runStagingSwap(storyId, ctx, reindexStory, (settings) => ({
+    modelId: settings.embedding_model_id,
+    backend: settings.embeddingBackend,
+    providerId: settings.embedding_provider_id,
+  }))
 }
 
 export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()): Promise<void> {
@@ -325,14 +359,14 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
   await runExclusive(storyId, async () => {
     try {
       const { settings, branchIds } = await loadSwapContext(storyId, ctx)
-      const target = settings.embedding_swap_target
-      if (target == null) return
+      if (settings.embedding_swap_target == null) return
+      const target = markerTarget(settings)
       const resolution = resolveStorySwapConfig(storyId, target)
       if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
       await cancelSwap(composeSwapDeps(storyId, ctx), {
         storyId,
         branchIds,
-        targetModelId: target,
+        targetModelId: target.modelId,
         currentModelId: settings.embedding_model_id,
       })
       await refreshStores(storyId, ctx)
@@ -345,7 +379,7 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
 
 export async function relabelStory(
   storyId: string,
-  newModelId: string,
+  target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<void> {
   await runExclusive(storyId, async () => {
@@ -357,7 +391,7 @@ export async function relabelStory(
       storyId,
       branchIds,
       oldModelId: settings.embedding_model_id,
-      newModelId,
+      target,
     })
     await refreshStores(storyId, ctx)
   })
@@ -402,7 +436,11 @@ function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
   // A swap in flight owns the vec tables; let its batched embeds and the blocking
   // sync stage handle staleness rather than racing them from the warm-cache worker.
   if (open.settings.embedding_swap_target != null) return { ok: false, reason: 'no-model' }
-  return resolveStorySwapConfig(storyId, open.settings.embedding_model_id)
+  return resolveStorySwapConfig(storyId, {
+    modelId: open.settings.embedding_model_id,
+    backend: open.settings.embeddingBackend,
+    providerId: open.settings.embedding_provider_id,
+  })
 }
 
 export function buildDrainController(

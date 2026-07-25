@@ -16,7 +16,7 @@ import {
   startStorySwap,
   SwapBusyError,
 } from '@/lib/actions'
-import { db, runInTransaction, type StorySettings } from '@/lib/db'
+import { db, runInTransaction, type EmbeddingTarget, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   getCatalogEntry,
@@ -82,6 +82,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       id: model.id,
       label: getCatalogEntry(model.id)?.displayName ?? model.id,
       isCurrent: model.id === settings.embedding_model_id,
+      backend: 'local',
     }))
     const provider = providers.find((p) => p.id === appEmbeddingProviderId)
     const providerUsable =
@@ -97,6 +98,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         id: appEmbeddingModelId,
         label: appEmbeddingModelId,
         isCurrent: appEmbeddingModelId === settings.embedding_model_id,
+        backend: 'provider',
+        providerId: appEmbeddingProviderId,
       },
     ]
     // A provider model id and an installed local model id are both free-form
@@ -152,18 +155,32 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     embedderSwapStore.requestCancel()
   }, [])
 
+  // The dialog reports the picked id; the candidate list is what knows which
+  // backend serves it, and ids are unique there (see the dedupe above).
+  const targetFor = useCallback(
+    (targetId: string): EmbeddingTarget => {
+      const candidate = candidates.find((c) => c.id === targetId)
+      return {
+        modelId: targetId,
+        backend: candidate?.backend ?? settings.embeddingBackend,
+        providerId: candidate?.providerId,
+      }
+    },
+    [candidates, settings.embeddingBackend],
+  )
+
   const handleReindexTarget = useCallback(
     async (targetId: string) => {
       embedderSwapStore.closeDialog()
       try {
-        await startStorySwap(storyId, targetId, ctx)
+        await startStorySwap(storyId, targetFor(targetId), ctx)
       } catch (error) {
         reportEngineFailure('swap_start', error)
       } finally {
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure],
+    [storyId, reportEngineFailure, targetFor],
   )
 
   const handleKeep = useCallback(() => {
@@ -176,7 +193,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     async (targetId: string) => {
       embedderSwapStore.closeDialog()
       try {
-        await relabelStory(storyId, targetId, ctx)
+        await relabelStory(storyId, targetFor(targetId), ctx)
       } catch (error) {
         if (error instanceof RelabelBlockedError)
           toast.info(t('storySettings:memory.relabelBlocked'))
@@ -185,7 +202,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure],
+    [storyId, reportEngineFailure, targetFor],
   )
 
   const handleDismissDialog = useCallback(() => {

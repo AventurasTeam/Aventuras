@@ -3,13 +3,14 @@ import {
   clearSwapTargetOp,
   deleteBranchModelVecOps,
   isVecFamilyTable,
-  setEmbeddingModelIdOp,
+  setEmbeddingTargetOp,
   setSwapTargetOp,
   SOURCE_TABLES,
   toEmbeddedFieldRow,
   VEC_FAMILIES,
   type DbCtx,
   type EmbeddedFieldRow,
+  type EmbeddingTarget,
   type SqlOp,
   type VecTargetKind,
 } from '@/lib/db'
@@ -66,11 +67,20 @@ export class SwapStoryMissingError extends Error {
 
 const BATCH_SIZE = 16
 
+// The resolved config already carries the backend and (for provider) the
+// provider id, so the marker and the phase-2 flip read the target off it rather
+// than taking a second, separately-threaded copy that could disagree.
+function targetOf(config: EmbedderConfig): EmbeddingTarget {
+  return config.backend === 'provider'
+    ? { modelId: config.modelId, backend: 'provider', providerId: config.providerId }
+    : { modelId: config.modelId, backend: 'local' }
+}
+
 export async function startSwap(deps: SwapDeps, p: SwapParams): Promise<'completed' | 'cancelled'> {
   if (p.currentSwapTarget != null) throw new SwapInProgressError(p.storyId, p.currentSwapTarget)
   // The marker is committed in its own transaction BEFORE phase 1 — from here on
   // it is the crash-recovery source of truth for "swap in flight, expect NEW rows".
-  await deps.runInTransaction([setSwapTargetOp(p.storyId, p.targetConfig.modelId, deps.now())])
+  await deps.runInTransaction([setSwapTargetOp(p.storyId, targetOf(p.targetConfig), deps.now())])
   return runPhases(deps, p)
 }
 
@@ -140,7 +150,7 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
     : deleteBranchModelVecOps(tables, p.branchIds, p.currentModelId)
   await deps.runInTransaction([
     ...deleteOldOps,
-    setEmbeddingModelIdOp(p.storyId, targetModelId, deps.now()),
+    setEmbeddingTargetOp(p.storyId, targetOf(p.targetConfig), deps.now()),
     clearSwapTargetOp(p.storyId, deps.now()),
   ])
   return 'completed'
@@ -181,9 +191,15 @@ export async function relabelModel(
     storyId,
     branchIds,
     oldModelId,
-    newModelId,
-  }: { storyId: string; branchIds: readonly string[]; oldModelId: string; newModelId: string },
+    target,
+  }: {
+    storyId: string
+    branchIds: readonly string[]
+    oldModelId: string
+    target: EmbeddingTarget
+  },
 ): Promise<void> {
+  const newModelId = target.modelId
   if (newModelId === oldModelId) return
 
   const ops: SqlOp[] = []
@@ -216,7 +232,7 @@ export async function relabelModel(
       )
     }
   }
-  ops.push(setEmbeddingModelIdOp(storyId, newModelId, deps.now()))
+  ops.push(setEmbeddingTargetOp(storyId, target, deps.now()))
   await deps.runInTransaction(ops)
 }
 

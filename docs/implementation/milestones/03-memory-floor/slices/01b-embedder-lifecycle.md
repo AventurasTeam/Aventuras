@@ -205,6 +205,23 @@ Notable deviations and constraints for future slices:
   for the story's branches; the next sync or drain revalidates by
   `source_hash` with no re-embed where the old vector still
   matches.
+- **Swaps cross backends** — the picker offers the app's provider
+  embedding model to a local-backend story, so a swap target is a
+  `{ modelId, backend, providerId }` triple rather than a bare model id
+  (found by manual smoke, 2026-07-25: resolving a provider model against
+  the story's own backend failed as `unknown-local-model`). The marker
+  carries the target's backend and provider id when they differ from the
+  story's, since crash recovery has only the marker to resolve from, and
+  phase-2 flips all three keys together. An absent
+  `embedding_swap_backend` means "same backend as the story", so markers
+  written before this change resolve unchanged. Canon amended
+  ([`retrieval.md → Model swap UX`](../../../../memory/retrieval.md#model-swap-ux))
+  plus the `data-model.md` settings shape. Settings transitions moved to
+  `json_patch` because these writes must also _clear_ a key (a local
+  target carries no provider id) and merge-patch deletes on null where
+  `json_set` would write a JSON null the settings Zod rejects. Candidate
+  ids are deduped with local winning, so a model id installed locally
+  _and_ offered by the provider resolves to the local copy.
 - **Swap concurrency** — the engine takes resolved inputs and does
   not enforce single-flight; the app-deps layer serializes per
   story and owns the callback guards. `cancelRequested` is a

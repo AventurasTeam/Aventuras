@@ -10,9 +10,15 @@ import { t } from '@/lib/i18n'
 import { SwapDialog, type SwapCandidate, type SwapDialogProps } from './swap-dialog'
 
 const candidates: SwapCandidate[] = [
-  { id: 'minilm-l6', label: 'MiniLM-L6 (lightweight)', isCurrent: true },
-  { id: 'bge-small', label: 'BGE-small-en-v1.5', isCurrent: false },
-  { id: 'embedding-gemma', label: 'EmbeddingGemma', isCurrent: false },
+  { id: 'minilm-l6', label: 'MiniLM-L6 (lightweight)', isCurrent: true, backend: 'local' },
+  { id: 'bge-small', label: 'BGE-small-en-v1.5', isCurrent: false, backend: 'local' },
+  {
+    id: 'text-embedding-3-small',
+    label: 'text-embedding-3-small',
+    isCurrent: false,
+    backend: 'provider',
+    providerId: 'prov-openai-compat',
+  },
 ]
 
 const handlers = {
@@ -84,11 +90,11 @@ export const KeepFires: Story = {
 export const RelabelShowsDisclaimer: Story = {
   args: { open: true, candidates, ...handlers },
   play: async ({ args }) => {
-    await userEvent.click(screen.getByTestId('swap-candidate-embedding-gemma'))
+    await userEvent.click(screen.getByTestId('swap-candidate-text-embedding-3-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     expect(screen.getByText(t('storySettings:swap.relabelDisclaimer'))).toBeInTheDocument()
     await userEvent.click(await screen.findByTestId('swap-relabel'))
-    await waitFor(() => expect(args.onRelabel).toHaveBeenCalledWith('embedding-gemma'))
+    await waitFor(() => expect(args.onRelabel).toHaveBeenCalledWith('text-embedding-3-small'))
   },
 }
 
