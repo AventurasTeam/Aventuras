@@ -478,7 +478,9 @@ export default function ReaderComposerRoute() {
   // Read at settle time, not from the closure. A refresh outlives what it was
   // fired on: per-turn doesn't block on it, so a turn can move the tail
   // mid-run, and a branch-switch abort whose reverse-replay fails resolves
-  // 'failed' well after the switch.
+  // 'failed' well after the switch. The entry ref alone would cover both (ids
+  // are globally unique, and a switch nulls the tail); the branch ref stays so
+  // the guard is legible without trusting that cross-module invariant.
   const branchIdRef = useRef(branchId)
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   branchIdRef.current = branchId
@@ -489,10 +491,10 @@ export default function ReaderComposerRoute() {
     const story = openForBranch
     if (target == null || story == null) return
     setStripError(false)
-    const startedFor = branchId
-    const startedOn = target.id
+    const startedBranchId = branchId
+    const startedEntryId = target.id
     const fail = () => {
-      if (branchIdRef.current === startedFor && terminalEntryIdRef.current === startedOn)
+      if (branchIdRef.current === startedBranchId && terminalEntryIdRef.current === startedEntryId)
         setStripError(true)
     }
     void refreshSuggestions(
