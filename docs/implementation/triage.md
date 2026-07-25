@@ -410,6 +410,65 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
   Task 12 (2026-07-24).
 
+- **A local model whose files are gone still resolves as healthy.**
+  `resolveEmbedderConfig` validates a local backend by looking the model id
+  up in the bundled catalog (`localModelDim`); it never checks that the
+  model's directory exists. So a model removed from disk resolves `ok`, is
+  offered as a swap candidate, and produces no reason line — the Memory
+  panel's `modelMissing` reason only fires for an id absent from the
+  _catalog_, which is the one shape a real removal never produces.
+  [`model-management.md → Removal`](../memory/model-management.md#removal)
+  expects the panel to explain "model missing"; today the failure surfaces
+  only per-embed, as a generic `That didn't work` toast with the cause in
+  a `logger.error` the user cannot see. Wants a files-exist check in the
+  resolution path (or an `installed`-set intersection at the panel), which
+  also gates the swap picker from offering an uninstallable target. Owner
+  is plausibly the M7.1 removal flow, but the gap is live now, since the
+  directory can vanish without going through any app flow. Surfaced by
+  M3.1b manual smoke (2026-07-25).
+
+- **The swap resume dialog can trap the user when the target cannot
+  embed.** A staging failure leaves the marker set — `runStagingSwap`
+  reaches `refreshStores` only on success — so the story-open resume
+  prompt fires correctly. But the dialog is non-dismissible and its
+  primary action re-runs the identical embed, so when the target model is
+  the reason staging failed (files removed, provider unreachable), Resume
+  can never succeed and each attempt reports only the generic
+  `actionFailed` toast. The escape exists and is correct — `Cancel switch`
+  never embeds, so it clears the marker and re-flags rows — but nothing in
+  the copy distinguishes "retry a transient failure" from "this target is
+  unusable, abandon it", and the failure reason is never surfaced.
+  Confirmed by hand on desktop (2026-07-25): resume → generic toast →
+  dialog persists. Wants the dialog to carry the last failure reason, or
+  Resume to pre-flight the target's resolvability and steer to Cancel when
+  it can't be met. Pairs with the files-exist gap above — a resolvability
+  pre-flight fixes both surfaces at once. Surfaced by M3.1b manual smoke
+  (2026-07-25).
+
+- **A probed embedding dim is displayed once and thrown away.** Provider
+  dim detection already works — `testEmbedder` returns the native dim and
+  the card prints it (`OK · dim 1024 · 12 ms`) — but nothing persists it,
+  and the consequences compound. `providerCapabilitiesSchema` has no field
+  to hold it; `resolveEmbedderConfig`'s `providerDim` option therefore has
+  **no production caller**, so every provider config carries `dim: null`
+  and the service's dim-mismatch guard is permanently inert in provider
+  mode (a provider that silently changes dim mid-story would be caught by
+  nothing). The wizard's Matryoshka surface inherits the same blindness:
+  `dimLadder` falls back to a hardcoded `[512, 1024, 2048]` when the
+  provider reports no `matryoshkaDims`, which can offer rungs above the
+  model's native dim, and `validateCustomDim` has no upper bound at all —
+  an over-declared dim is silently clamped at embed time
+  (`min(effectiveDim, native)`), so the wizard's storage preview promises a
+  size that never materializes. One coherent fix: persist the probed dim on
+  the cached model (an `embeddingDim` capability written by the probe and by
+  the first successful embed), then thread it as `providerDim`, bound the
+  ladder and the custom-dim validator by it, and re-arm the guard. The local
+  side has the mirror gap: `InstalledModelInfo` carries only `id` and
+  `sizeBytes`, so a custom-imported model has no dim source either — which
+  is why `embedder-default-card`'s local branch still falls back to
+  `dim: 0` and cannot Test a non-catalog model. Surfaced by M3.1b manual
+  smoke (2026-07-25).
+
 - **Staleness pill can stay lit for stale rows on non-open branches.**
   The drain worker warms only the open branch while the pill's mount
   refresh counts story-wide; a story with stale embeddable rows on a
