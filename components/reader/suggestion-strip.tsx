@@ -59,8 +59,8 @@ function tintOf(hex: string, alpha: number): string {
 }
 
 // Split like Skeleton: Tailwind's animate-pulse doesn't run on native, and
-// Storybook's Vite bundler skips Reanimated's worklet plugin (Metro applies it to
-// both native and the web export), where a deps-array-less useAnimatedStyle throws.
+// Reanimated throws on a deps-array-less useAnimatedStyle under Storybook's
+// bundler — the web branch is what keeps this compound renderable there.
 function Pulsing({ active, children }: { active: boolean; children: ReactNode }) {
   if (Platform.OS === 'web') {
     return <View className={cn(active && 'animate-pulse')}>{children}</View>
