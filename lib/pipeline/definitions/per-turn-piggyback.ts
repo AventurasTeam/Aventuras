@@ -225,15 +225,28 @@ export async function* piggybackFallbackClassifierPhase(
   // or color to render with. Clamped to suggestionEmission.count even on an
   // over-emit — reader-composer.md: suggestionCount "drives literal chip
   // count per emission".
-  const suggestionItems =
-    askForSuggestions && hasSuggestions(result.value)
-      ? result.value.suggestions
-          .flatMap((item) => {
-            const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
-            return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
-          })
-          .slice(0, suggestionEmission.count)
-      : []
+  const rawSuggestions =
+    askForSuggestions && hasSuggestions(result.value) ? result.value.suggestions : []
+  const resolvedSuggestions = rawSuggestions.flatMap((item) => {
+    const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
+    return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
+  })
+  const suggestionItems = resolvedSuggestions.slice(0, suggestionEmission.count)
+  const droppedCount = rawSuggestions.length - resolvedSuggestions.length
+  // A malformed suggestions array is already indistinguishable from a
+  // genuinely-empty one by the time we get here — .catch([]) collapses both
+  // to [] at parse time, and unlike the narrative fold there's no sibling
+  // blockFound/failed signal on this isolated structured call to tell them
+  // apart. Warn on either zero-captured or any drop so a model that
+  // consistently emits malformed chips doesn't fail silently forever
+  // (callWithRetry's parse-retry never sees this: .catch() means the parse
+  // itself never fails).
+  if (askForSuggestions && (suggestionItems.length === 0 || droppedCount > 0)) {
+    ctx.log.warn('classifier.suggestions_parse_failed', {
+      received: rawSuggestions.length,
+      dropped: droppedCount,
+    })
+  }
 
   yield {
     type: 'delta_emitted',
