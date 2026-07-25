@@ -109,7 +109,12 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
 
   for (let i = 0; i < pending.length; i += BATCH_SIZE) {
     if (deps.isCancelRequested()) {
-      await cancelSwap(deps, { storyId: p.storyId, branchIds: p.branchIds, targetModelId })
+      await cancelSwap(deps, {
+        storyId: p.storyId,
+        branchIds: p.branchIds,
+        targetModelId,
+        currentModelId: p.currentModelId,
+      })
       return 'cancelled'
     }
     const batch = pending.slice(i, i + BATCH_SIZE)
@@ -147,11 +152,24 @@ export async function cancelSwap(
     storyId,
     branchIds,
     targetModelId,
-  }: { storyId: string; branchIds: readonly string[]; targetModelId: string },
+    currentModelId,
+  }: {
+    storyId: string
+    branchIds: readonly string[]
+    targetModelId: string
+    currentModelId: string
+  },
 ): Promise<void> {
-  const tables = await deps.listVecTables()
+  // Same-model re-index stages in place, so the "staged NEW rows" a cancel unwinds
+  // ARE the story's only vectors — deleting them wipes the vector space rather than
+  // restoring it. Mirrors the phase-2 old-model delete skip. The stale re-flag below
+  // still runs, so the next sync revalidates each row by source_hash.
+  const deleteStagedOps =
+    targetModelId === currentModelId
+      ? []
+      : deleteBranchModelVecOps(await deps.listVecTables(), branchIds, targetModelId)
   await deps.runInTransaction([
-    ...deleteBranchModelVecOps(tables, branchIds, targetModelId),
+    ...deleteStagedOps,
     clearSwapTargetOp(storyId, deps.now()),
     ...reflagStaleOps(branchIds),
   ])

@@ -333,6 +333,7 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
         storyId,
         branchIds,
         targetModelId: target,
+        currentModelId: settings.embedding_model_id,
       })
       await refreshStores(storyId, ctx)
       await refreshEmbeddingStatus(storyId, ctx)

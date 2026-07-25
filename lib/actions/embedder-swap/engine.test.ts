@@ -405,7 +405,12 @@ describe('embedder-swap engine', () => {
     const { fn } = makeEmbedRows(sqlite)
     const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
 
-    await cancelSwap(deps, { storyId: 's1', branchIds: ['b1'], targetModelId: NEW })
+    await cancelSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      targetModelId: NEW,
+      currentModelId: OLD,
+    })
 
     expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual([])
     expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
@@ -425,6 +430,31 @@ describe('embedder-swap engine', () => {
     expect(
       ops.some((op) => op.sql.includes('json_set') && op.sql.includes('embedding_model_id')),
     ).toBe(false)
+    expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
+  })
+
+  it('5b. cancelSwap on a same-model re-index: keeps every vector, still re-flags', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: OLD })
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    await cancelSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      targetModelId: OLD,
+      currentModelId: OLD,
+    })
+
+    // Staging upserted in place, so the target's rows ARE the story's only
+    // vectors — a delete here would wipe the vector space, not unwind a stage.
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+    expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
+
+    const ops = opsOf(runSpy)[0]
+    expect(ops.some((op) => op.sql.includes('DELETE'))).toBe(false)
     expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
   })
 

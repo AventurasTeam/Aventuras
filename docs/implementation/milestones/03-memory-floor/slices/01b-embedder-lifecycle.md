@@ -195,7 +195,12 @@ Notable deviations and constraints for future slices:
   the `model_id` KNN filter.
 - **Same-model re-index is upsert-in-place** — one vector space, so
   partial progress is harmless; resume re-embeds everything
-  (idempotent), and the phase-2 old-model delete is skipped.
+  (idempotent), and both vector deletes are skipped: the phase-2
+  old-model delete _and_ the cancel path's staged-row delete, since with
+  `target === current` the "staged" rows are the story's only vectors and
+  deleting them would wipe the vector space rather than unwind a stage
+  (found by manual smoke, 2026-07-25). Cancel still re-flags stale, so
+  the next sync revalidates each row by `source_hash`.
 - **Cancel re-flags `embedding_stale = 1`** across all five tables
   for the story's branches; the next sync or drain revalidates by
   `source_hash` with no re-embed where the old vector still
