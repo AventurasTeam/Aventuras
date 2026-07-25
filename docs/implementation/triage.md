@@ -447,27 +447,50 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
 
 - **A probed embedding dim is displayed once and thrown away.** Provider
   dim detection already works — `testEmbedder` returns the native dim and
-  the card prints it (`OK · dim 1024 · 12 ms`) — but nothing persists it,
-  and the consequences compound. `providerCapabilitiesSchema` has no field
-  to hold it; `resolveEmbedderConfig`'s `providerDim` option therefore has
-  **no production caller**, so every provider config carries `dim: null`
-  and the service's dim-mismatch guard is permanently inert in provider
-  mode (a provider that silently changes dim mid-story would be caught by
-  nothing). The wizard's Matryoshka surface inherits the same blindness:
-  `dimLadder` falls back to a hardcoded `[512, 1024, 2048]` when the
-  provider reports no `matryoshkaDims`, which can offer rungs above the
-  model's native dim, and `validateCustomDim` has no upper bound at all —
-  an over-declared dim is silently clamped at embed time
-  (`min(effectiveDim, native)`), so the wizard's storage preview promises a
-  size that never materializes. One coherent fix: persist the probed dim on
-  the cached model (an `embeddingDim` capability written by the probe and by
-  the first successful embed), then thread it as `providerDim`, bound the
-  ladder and the custom-dim validator by it, and re-arm the guard. The local
-  side has the mirror gap: `InstalledModelInfo` carries only `id` and
-  `sizeBytes`, so a custom-imported model has no dim source either — which
-  is why `embedder-default-card`'s local branch still falls back to
-  `dim: 0` and cannot Test a non-catalog model. Surfaced by M3.1b manual
-  smoke (2026-07-25).
+  the card prints it (`OK · dim 1024 · 12 ms`) — but nothing persists it.
+  `providerCapabilitiesSchema` has no field to hold it, so
+  `resolveEmbedderConfig`'s `providerDim` option has **no production
+  caller**: every provider config carries `dim: null` and the service's
+  dim-mismatch guard is permanently inert in provider mode, meaning a
+  provider that silently changed dim mid-story would be caught by nothing.
+  `validateCustomDim` has no upper bound for the same reason — an
+  over-declared dim is silently clamped at embed time
+  (`min(effectiveDim, native)`), so the wizard's storage preview can promise
+  a size that never materializes. Fix: persist the probed dim on the cached
+  model (an `embeddingDim` capability written by the probe and by the first
+  successful embed), thread it as `providerDim`, bound the custom-dim
+  validator by it, and re-arm the guard. The local side has the mirror gap —
+  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a
+  custom-imported model has no dim source either, which is why
+  `embedder-default-card`'s local branch still falls back to `dim: 0` and
+  cannot Test a non-catalog model. Needs no new UI, so it is independent of
+  the Matryoshka item below. Surfaced by M3.1b manual smoke (2026-07-25).
+
+- **Matryoshka support is not detectable, so M7 should let the user
+  assert it.** No OpenAI-compatible endpoint advertises MRL training, and
+  the obvious probe is a false-positive machine: sending `dimensions: N`
+  and getting N floats back proves only that the _server_ honoured the
+  parameter, which a naive slice of a non-MRL model satisfies identically
+  while returning quality-destroyed vectors. The property that actually
+  distinguishes MRL is rank preservation under truncation, which is
+  measurable — embed a fixed probe set at native and at candidate dims,
+  then rank-correlate the pairwise-similarity matrices — but it yields a
+  statistical result against a judgment threshold, not a boolean, and a
+  wrong answer degrades retrieval silently. So the contract stays capability
+  flag plus user assertion (matching the relabel disclaimer this slice
+  already ships), with **manual override as the primary path**: an advanced
+  user who knows a model is Matryoshka-trained enables the flag and fills in
+  the dims directly. A rank-preservation sweep, if built, belongs beside that
+  control as evidence shown to the user rather than a gate that decides for
+  them — and the sweep is also how the curated ladder's rungs would be found
+  rather than assumed. Deferred to **M7** (developer decision 2026-07-25):
+  the override needs the model-capability editing surface to host it, and
+  most users will never touch the feature. Note for whoever builds it:
+  `dimLadder`'s hardcoded `[512, 1024, 2048]` fallback becomes wrong under
+  a user-assertion model, since enabling the flag would always come with
+  user-supplied dims — the fallback currently fabricates rungs nobody
+  asserted, and can offer dims above the model's native size. Surfaced by
+  M3.1b manual smoke (2026-07-25).
 
 - **Staleness pill can stay lit for stale rows on non-open branches.**
   The drain worker warms only the open branch while the pill's mount
