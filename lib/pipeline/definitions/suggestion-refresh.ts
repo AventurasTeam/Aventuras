@@ -154,7 +154,7 @@ async function* suggestionEmissionPhase(
   // action layer and fail the run over a reversal the user asked for.
   const current = entriesStore.getById(target.id)
   if (!current) {
-    ctx.log.warn('classifier.suggestions_refresh_target_missing', { targetEntryId: target.id })
+    ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
     return { status: 'completed' }
   }
   // The empty-state ⟳ Generate fires on entries that carry no metadata at all

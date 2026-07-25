@@ -72,6 +72,49 @@ describe('reverseReplayDeltas', () => {
     expect((await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))).length).toBe(2)
   })
 
+  it('restores a schema-backed column that was NULL before the update', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(storyEntries).values({
+      id: 'entry_1',
+      branchId: 'b1',
+      position: 1,
+      kind: 'system',
+      content: 'hi',
+      metadata: null,
+      createdAt: 1,
+    })
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'ai_classifier',
+          payload: {
+            branchId: 'b1',
+            id: 'entry_1',
+            metadata: { sceneEntities: [], currentLocationId: null, worldTime: 0 },
+          },
+        },
+        actionId: 'act_1',
+        branchId: 'b1',
+        entryId: 'entry_1',
+      },
+      ctx,
+    )
+
+    await reverseReplayDeltas('act_1', ctx)
+
+    // A field-wise undo diff cannot express "the column was null" — restoring it
+    // key-by-key yields {sceneEntities: null, worldTime: null, ...}, which no
+    // longer parses as EntryMetadata and sticks (the next update sees an object).
+    const [row] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
+    expect(row.metadata).toBeNull()
+  })
+
   it('returns 0 for an actionId with no deltas', async () => {
     const { db, runInTransaction } = await createTestDb()
     expect(await reverseReplayDeltas('act_none', { db, runInTransaction })).toBe(0)

@@ -12,6 +12,7 @@ import {
   resetAllStores,
 } from '@/lib/stores'
 
+import { fallbackClassifierWithSuggestionsSchema } from './per-turn-piggyback'
 import {
   ensureSuggestionRefreshPipelineRegistered,
   SUGGESTION_EMISSION_PHASE,
@@ -234,6 +235,29 @@ describe('suggestion-refresh declaration', () => {
       storySettings: baseSettings(),
     }
     expect(runPreflight(getPipeline(SUGGESTION_REFRESH_KIND), snapshot as never)).toBeNull()
+  })
+})
+
+describe('suggestionRefreshSchema', () => {
+  const malformed = { suggestions: [{ categoryRef: 'cat1' }, 'not an object'] }
+
+  it('fails the parse on a malformed suggestions array', () => {
+    // Deliberately no .catch([]): chips are this call's only output, so a bad
+    // array must reach callWithRetry's re-ask and then the strip's error state.
+    // With .catch the parse SUCCEEDS as [] and the phase completes silently —
+    // every phase test mocks generateStructured, so nothing else pins this.
+    expect(suggestionRefreshSchema.safeParse(malformed).success).toBe(false)
+  })
+
+  it('is deliberately asymmetric with the classifier fold, which degrades to []', () => {
+    const parsed = fallbackClassifierWithSuggestionsSchema.safeParse({
+      sceneEntities: [],
+      worldTimeDelta: 0,
+      ...malformed,
+    })
+    // There, .catch protects the sibling scene-state fields from a bad array.
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.suggestions).toEqual([])
   })
 })
 

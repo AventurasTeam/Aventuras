@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   APP_SETTINGS_DEFAULTS,
   deltas,
+  entryMetadataSchema,
   storyEntries,
   STORY_SETTINGS_DEFAULTS,
   type StorySettings,
@@ -12,6 +13,7 @@ import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
+import { undoLastAction } from '../story-entries/undo'
 
 const { generateStructuredMock } = vi.hoisted(() => ({ generateStructuredMock: vi.fn() }))
 
@@ -133,6 +135,35 @@ describe('refreshSuggestions', () => {
       entryId: 'entry-1',
     })
     expect(entriesStore.getById('entry-1')?.metadata?.nextTurnSuggestions?.source).toBe('refresh')
+  })
+
+  it('survives a CTRL-Z round trip on an entry that had no metadata at all', async () => {
+    const { db, ctx } = await makeHarness()
+    // The empty-state ⟳ Generate path: a system / legacy terminal entry.
+    const bare = { ...ENTRY, kind: 'system' as const, metadata: null }
+    await db.insert(storyEntries).values(bare)
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings: settings() })
+    entriesStore.hydrate('b1', [bare])
+    entitiesStore.hydrate('b1', [])
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue({
+      status: 'ok',
+      value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw the blade.' }] },
+    })
+    const ids = { storyId: 's1', branchId: 'b1' }
+    const input = { targetEntryId: 'entry-1', refreshGuidance: '' }
+
+    await refreshSuggestions(ids, input, ctx)
+    expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
+
+    const [undone] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry-1'))
+    expect(undone?.metadata).toBeNull()
+
+    // Not sticky: the next re-roll still sees "no metadata" and re-applies the
+    // scene floor, rather than inheriting a half-restored, unparseable blob.
+    await refreshSuggestions(ids, input, ctx)
+    const [again] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry-1'))
+    expect(entryMetadataSchema.safeParse(again?.metadata).success).toBe(true)
   })
 
   it('self-blocks a second re-roll while one is in flight', async () => {
