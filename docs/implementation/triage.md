@@ -370,3 +370,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   i18n pass is a one-line locator change. Fix is to move the strings into
   the `reader` / `common` namespaces and swap the locators to `t()`.
   Surfaced by the coverage-expansion pass (2026-07-24).
+- **`GenerationStatusPill` hardcodes its user-facing copy.**
+  `components/compounds/generation-status-pill.tsx` hardcodes English
+  across `PHASE_COPY`, `errorCopy`, and `cancelCopy` — every phase label,
+  error message, and cancel-button string — rather than routing through
+  `t()` like the i18n discipline requires. No user-facing regression yet
+  (English-only today), but it's the same class of violation as
+  `EntryCard` above. Fix is to move the strings into the appropriate
+  namespace and swap call sites to `t()`. Surfaced by M3.7a Task 8
+  (2026-07-25).

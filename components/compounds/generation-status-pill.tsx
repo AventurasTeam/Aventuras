@@ -7,7 +7,12 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 
-type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
+type GenerationPhase =
+  | 'reasoning'
+  | 'generating-narrative'
+  | 'classifying'
+  | 'closing-chapter'
+  | 'refreshing-suggestions'
 
 type ErrorState = { code: 'embedder-offline'; pendingRows: number } | { code: 'classifier-offline' }
 
@@ -23,6 +28,7 @@ const PHASE_COPY: Record<GenerationPhase, string> = {
   'generating-narrative': 'generating narrative…',
   classifying: 'classifying…',
   'closing-chapter': 'closing chapter…',
+  'refreshing-suggestions': 'refreshing suggestions…',
 }
 
 function errorCopy(error: ErrorState): string {
@@ -35,7 +41,16 @@ function errorCopy(error: ErrorState): string {
 }
 
 function cancelCopy(phase: GenerationPhase): string {
-  return phase === 'closing-chapter' ? 'Cancel chapter close' : 'Cancel generation'
+  switch (phase) {
+    case 'reasoning':
+    case 'generating-narrative':
+    case 'classifying':
+      return 'Cancel generation'
+    case 'closing-chapter':
+      return 'Cancel chapter close'
+    case 'refreshing-suggestions':
+      return 'Cancel suggestion refresh'
+  }
 }
 
 export function GenerationStatusPill({
