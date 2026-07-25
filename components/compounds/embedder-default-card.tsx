@@ -188,7 +188,10 @@ export function EmbedderDefaultCard({
     }
     const provider = providers.find((p) => p.id === providerIdDraft)
     const result = await runTest(
-      { backend: 'provider', providerId: providerIdDraft, modelId: modelIdDraft, dim: 0 },
+      // null, not 0: a probe is exactly the call that discovers the dim, and 0
+      // sits in the same numeric slot as a real one, so the service's
+      // dim-mismatch guard would reject every response.
+      { backend: 'provider', providerId: providerIdDraft, modelId: modelIdDraft, dim: null },
       provider,
     )
     setTestState(result)

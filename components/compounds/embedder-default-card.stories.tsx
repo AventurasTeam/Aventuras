@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { fn } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { EMBEDDER_CATALOG } from '@/lib/embedder'
+import { t } from '@/lib/i18n'
 import { hydrateAppSettings } from '@/lib/stores'
 
 import { EmbedderDefaultCard } from './embedder-default-card'
@@ -101,4 +102,31 @@ export const ProviderFreeTextFallback: Story = {
 export const ProviderEmpty: Story = {
   args: { listInstalled: noneInstalled, onManage: fn() },
   beforeEach: seed({ defaultStorySettings: { embeddingBackend: 'provider' } }),
+}
+
+// A provider probe must declare an unknown dim, since the probe is what
+// discovers it. Pinned because 0 type-checks in the same slot as a real dim
+// and silently makes the service reject every response.
+export const ProviderProbeDeclaresUnknownDim: Story = {
+  args: {
+    listInstalled: noneInstalled,
+    onManage: fn(),
+    runTest: fn(async () => ({ ok: true as const, dim: 1024, ms: 1 })),
+  },
+  beforeEach: seed({
+    providers: [PROVIDER_WITH_EMBEDDING_MODELS],
+    embeddingProviderId: PROVIDER_WITH_EMBEDDING_MODELS.id,
+    embeddingModelId: 'text-embedding-3-small',
+    defaultStorySettings: { embeddingBackend: 'provider' },
+  }),
+  play: async ({ args }) => {
+    await userEvent.click(
+      screen.getByRole('button', { name: t('settings:embedderDefault.testButton') }),
+    )
+    await waitFor(() => expect(args.runTest).toHaveBeenCalled())
+    expect(args.runTest).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: 'provider', dim: null }),
+      expect.anything(),
+    )
+  },
 }
