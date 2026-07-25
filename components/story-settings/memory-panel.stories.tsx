@@ -2,12 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
-import { storySettingsSchema, type StorySettings } from '@/lib/db'
+import { APP_SETTINGS_DEFAULTS, storySettingsSchema, type StorySettings } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
   appSettingsStore,
   embedderSwapStore,
   embeddingStatusStore,
+  hydrateAppSettings,
   openEmbedderSwapDialog,
 } from '@/lib/stores'
 
@@ -229,6 +230,37 @@ export const SwapPendingMarker: Story = {
     expect(
       screen.getByText(t('storySettings:swap.resumeBody', { model: GEMMA })),
     ).toBeInTheDocument()
+  },
+}
+
+export const DuplicateCandidateIds: Story = {
+  // The app's provider embedding model id set to an id that is ALSO installed
+  // locally — the shape the seeded app-settings row produces. Both sources feed
+  // the picker, so without a dedupe the row renders twice under one React key.
+  args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
+  beforeEach: async () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    await hydrateAppSettings(async () => ({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          id: 'prov_local',
+          type: 'openai-compatible',
+          displayName: 'Local',
+          apiKey: '',
+          endpoint: 'http://localhost:1234/v1',
+          favoriteModelIds: [],
+        },
+      ],
+      embeddingProviderId: 'prov_local',
+      embeddingModelId: MINILM,
+    }))
+    openEmbedderSwapDialog(STORY_ID)
+  },
+  play: async () => {
+    await waitFor(() => expect(screen.getAllByTestId(`swap-candidate-${MINILM}`)).toHaveLength(1))
+    expect(screen.getByTestId(`swap-candidate-${GEMMA}`)).toBeInTheDocument()
   },
 }
 

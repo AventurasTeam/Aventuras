@@ -91,7 +91,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       providerTypeSupportsEmbedding(provider.type) &&
       providerHasEmbeddingEndpoint(provider)
     if (!providerUsable) return local
-    return [
+    const all: SwapCandidate[] = [
       ...local,
       {
         id: appEmbeddingModelId,
@@ -99,6 +99,12 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         isCurrent: appEmbeddingModelId === settings.embedding_model_id,
       },
     ]
+    // A provider model id and an installed local model id are both free-form
+    // strings and can be equal, which would render two rows under one React
+    // key. Local wins the collision — it carries the catalog display label.
+    const byId = new Map<string, SwapCandidate>()
+    for (const candidate of all) if (!byId.has(candidate.id)) byId.set(candidate.id, candidate)
+    return [...byId.values()]
   }, [
     installed,
     providers,
