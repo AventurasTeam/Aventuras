@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import type { Entity } from '@/lib/db'
+import { DEFAULT_SUGGESTION_CATEGORIES, type Entity } from '@/lib/db'
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 import {
   appSettingsStore,
@@ -127,7 +127,10 @@ describe('lib/stores public surface', () => {
     expect(settings.uiLanguage).toBe('en')
     expect(settings.appearance.density).toBe('default')
     expect(settings.defaultStorySettings).toEqual({ activePackId: BUNDLED_PACK_ID })
-    expect(settings.defaultSuggestionCategories).toEqual({ adventure: [], creative: [] })
+    expect(settings.defaultSuggestionCategories).toEqual({
+      adventure: DEFAULT_SUGGESTION_CATEGORIES.adventure,
+      creative: DEFAULT_SUGGESTION_CATEGORIES.creative,
+    })
     expect(settings.diagnostics).toEqual({ enabled: false, debug_level_enabled: false })
   })
 })

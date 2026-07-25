@@ -31,6 +31,7 @@ import {
   translations,
   vaultCalendars,
 } from '../schema'
+import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-categories'
 import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
 import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
 import { entryMetadataSchema } from '../story-entries/entry-metadata'
@@ -1535,7 +1536,10 @@ const appSettingsRow: NewAppSettings = {
   embeddingProviderId: 'prov_local',
   defaultStorySettings: { activePackId: BUNDLED_PACK_ID },
   defaultCalendarId: CAL,
-  defaultSuggestionCategories: { adventure: [], creative: [] },
+  defaultSuggestionCategories: {
+    adventure: [...DEFAULT_SUGGESTION_CATEGORIES.adventure],
+    creative: [...DEFAULT_SUGGESTION_CATEGORIES.creative],
+  },
   appearance: appearanceSchema.parse({ themeId: 'system', readerFontScale: 1, density: 'default' }),
   uiLanguage: 'en',
   onboardingCompletedAt: BASE,

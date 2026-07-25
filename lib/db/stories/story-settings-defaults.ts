@@ -1,5 +1,6 @@
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
+import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
 import { storySettingsSchema, type StorySettings } from './story-config-schema'
 
 export const STORY_SETTINGS_DEFAULTS: StorySettings = {
@@ -16,7 +17,7 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',
-  suggestionsEnabled: false,
+  suggestionsEnabled: true,
   suggestionCount: 3,
   suggestionCategories: [],
   translation: {
@@ -39,15 +40,25 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
 
 // A story copies the embedder selection at creation and never re-reads the app
 // default, so both halves must be captured here or a provider-backend story
-// resolves to 'no-provider' for the rest of its life.
+// resolves to 'no-provider' for the rest of its life. `mode` drives the
+// suggestion palette, which is per-mode and therefore can't live in the
+// Partial<StorySettings> template.
 export function buildStorySettings(
+  mode: 'adventure' | 'creative',
   appDefault: Partial<StorySettings>,
   appEmbeddingModelId: string | null,
   appEmbeddingProviderId: string | null,
 ): StorySettings {
+  const appCategories = appDefault.suggestionCategories
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
     ...appDefault,
+    // An empty app-level palette means "not configured", not "the user wants
+    // none" — App Settings ships it empty until its editor lands.
+    suggestionCategories:
+      appCategories != null && appCategories.length > 0
+        ? appCategories
+        : DEFAULT_SUGGESTION_CATEGORIES[mode],
     // Both halves override unconditionally: appDefault is a template for the
     // other fields, but the embedder selection has its own app-level columns,
     // and a stale copy in the template must not outrank them.

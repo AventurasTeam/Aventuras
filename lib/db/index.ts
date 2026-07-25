@@ -57,6 +57,7 @@ export {
   suggestionCategorySchema,
 } from './stories/story-config-schema'
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
+export { DEFAULT_SUGGESTION_CATEGORIES } from './stories/default-suggestion-categories'
 export {
   appearanceSchema,
   appSettingsConfigSchema,

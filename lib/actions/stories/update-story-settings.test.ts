@@ -28,9 +28,13 @@ afterEach(() => {
 async function seed() {
   const { db, sqlite, runInTransaction } = await createTestDb()
   const settings = buildStorySettings(
+    'adventure',
     {
       classifierCadence: 2,
       suggestionCount: 6,
+      // Pinned false so the currentStoryStore test below can observe a real
+      // false→true transition; the new story-creation default is true.
+      suggestionsEnabled: false,
       models: { narrative: 'model-a', classifier: 'model-b' },
     },
     'embed-a',

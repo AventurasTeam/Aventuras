@@ -58,8 +58,13 @@ async function hydrateCurrentDefaults(): Promise<void> {
 describe('resetStorySettings', () => {
   it('rebuilds current defaults and preserves definition, entries, entities, and deltas', async () => {
     const { db, sqlite, runInTransaction } = await createTestDb()
-    const oldSettings = buildStorySettings({ classifierCadence: 2 }, 'old-embed', null)
-    const healthySettings = buildStorySettings({ classifierCadence: 4 }, 'other-embed', null)
+    const oldSettings = buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null)
+    const healthySettings = buildStorySettings(
+      'creative',
+      { classifierCadence: 4 },
+      'other-embed',
+      null,
+    )
 
     await db.insert(stories).values([
       {
@@ -133,6 +138,7 @@ describe('resetStorySettings', () => {
 
     expect(recovered.settings).toEqual(
       buildStorySettings(
+        'adventure',
         {
           ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
           classifierCadence: 11,
@@ -170,7 +176,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed', null),
+      settings: buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null),
       createdAt: 1,
       updatedAt: 1,
     })
@@ -188,6 +194,34 @@ describe('resetStorySettings', () => {
     expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
   })
 
+  it('falls back to the wizard default mode when resetting a draft with no definition yet', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_draft',
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await hydrateCurrentDefaults()
+
+    await resetStorySettings('story_draft', { db, runInTransaction }, 99)
+
+    const [recovered] = await db.select().from(stories).where(eq(stories.id, 'story_draft'))
+    expect(recovered.settings).toEqual(
+      buildStorySettings(
+        'creative',
+        {
+          ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
+          classifierCadence: 11,
+          chapterAutoClose: false,
+        },
+        'app-embed',
+        null,
+      ),
+    )
+  })
+
   it('retains a definition failure after successfully resetting settings', async () => {
     const { db, runInTransaction } = await createTestDb()
     await db.insert(stories).values({
@@ -195,7 +229,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings({ classifierCadence: 2 }, 'old-embed', null),
+      settings: buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null),
       createdAt: 1,
       updatedAt: 1,
     })

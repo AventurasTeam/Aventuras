@@ -77,6 +77,7 @@ export async function finishWizard(
   }
 
   const settings = buildStorySettings(
+    definition.mode,
     appDefaults.defaultStorySettings,
     appDefaults.embeddingModelId,
     appDefaults.embeddingProviderId,

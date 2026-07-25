@@ -9,13 +9,16 @@ export async function resetStorySettings(
   nowMs: number = Date.now(),
 ): Promise<void> {
   const [story] = await ctx.db
-    .select({ id: stories.id })
+    .select({ id: stories.id, definition: stories.definition })
     .from(stories)
     .where(eq(stories.id, storyId))
   if (!story) throw new Error('Story not found')
 
   const appSettings = appSettingsStore.getAppSettings()
   const settings = buildStorySettings(
+    // A draft row has no definition yet, so there is no mode to seed a palette
+    // from; creative is the wizard's own starting mode.
+    story.definition?.mode ?? 'creative',
     appSettings.defaultStorySettings,
     appSettings.embeddingModelId,
     appSettings.embeddingProviderId,

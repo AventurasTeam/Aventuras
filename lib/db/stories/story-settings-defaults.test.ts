@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
 import { storySettingsSchema } from './story-config-schema'
 import { STORY_SETTINGS_DEFAULTS, buildStorySettings } from './story-settings-defaults'
 
@@ -9,7 +10,6 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
   })
   it('has all M2-inert features off', () => {
     expect(STORY_SETTINGS_DEFAULTS.translation.enabled).toBe(false)
-    expect(STORY_SETTINGS_DEFAULTS.suggestionsEnabled).toBe(false)
     expect(STORY_SETTINGS_DEFAULTS.composerModesEnabled).toBe(false)
     expect(STORY_SETTINGS_DEFAULTS.models).toEqual({})
   })
@@ -17,23 +17,25 @@ describe('STORY_SETTINGS_DEFAULTS', () => {
 
 describe('buildStorySettings', () => {
   it('produces a complete settings from an empty app default', () => {
-    const s = buildStorySettings({}, null, null)
+    const s = buildStorySettings('adventure', {}, null, null)
     expect(s.embedding_model_id).toBe('Xenova/all-MiniLM-L6-v2')
     expect(s.retrievalBudgets.entities).toBe(8)
   })
   it('lets the app embedding model id win', () => {
-    expect(buildStorySettings({}, 'text-embedding-3-small', null).embedding_model_id).toBe(
-      'text-embedding-3-small',
-    )
+    expect(
+      buildStorySettings('adventure', {}, 'text-embedding-3-small', null).embedding_model_id,
+    ).toBe('text-embedding-3-small')
   })
   it('lets the app default partial override base fields', () => {
     expect(
-      buildStorySettings({ chapterTokenThreshold: 9999 }, null, null).chapterTokenThreshold,
+      buildStorySettings('adventure', { chapterTokenThreshold: 9999 }, null, null)
+        .chapterTokenThreshold,
     ).toBe(9999)
   })
 
   it('captures the app provider id so a provider-backend story stays resolvable', () => {
     const s = buildStorySettings(
+      'adventure',
       { embeddingBackend: 'provider' },
       'text-embedding-3-small',
       'prov-1',
@@ -42,21 +44,77 @@ describe('buildStorySettings', () => {
   })
 
   it('omits the provider id when the app has none', () => {
-    expect(buildStorySettings({}, null, null).embedding_provider_id).toBeUndefined()
+    expect(buildStorySettings('adventure', {}, null, null).embedding_provider_id).toBeUndefined()
   })
 
   it('does not let a stale app-default model id outrank the app selection', () => {
-    const s = buildStorySettings({ embedding_model_id: 'stale/model' }, 'fresh/model', null)
+    const s = buildStorySettings(
+      'adventure',
+      { embedding_model_id: 'stale/model' },
+      'fresh/model',
+      null,
+    )
     expect(s.embedding_model_id).toBe('fresh/model')
   })
 
   it('does not let a stale app-default provider id survive an empty app selection', () => {
-    const s = buildStorySettings({ embedding_provider_id: 'stale-prov' }, 'fresh/model', null)
+    const s = buildStorySettings(
+      'adventure',
+      { embedding_provider_id: 'stale-prov' },
+      'fresh/model',
+      null,
+    )
     expect(s.embedding_provider_id).toBeUndefined()
   })
 
   it('does not let a stale app-default provider id outrank the app selection', () => {
-    const s = buildStorySettings({ embedding_provider_id: 'stale-prov' }, 'fresh/model', 'prov-1')
+    const s = buildStorySettings(
+      'adventure',
+      { embedding_provider_id: 'stale-prov' },
+      'fresh/model',
+      'prov-1',
+    )
     expect(s.embedding_provider_id).toBe('prov-1')
+  })
+})
+
+describe('buildStorySettings — suggestion palette', () => {
+  it('seeds the adventure palette when the app default carries none', () => {
+    const settings = buildStorySettings('adventure', {}, null, null)
+    expect(settings.suggestionCategories.map((c) => c.label)).toEqual([
+      'Action',
+      'Dialogue',
+      'Examine',
+      'Move',
+    ])
+  })
+
+  it('seeds the creative palette for a creative story', () => {
+    const settings = buildStorySettings('creative', {}, null, null)
+    expect(settings.suggestionCategories.map((c) => c.label)).toEqual([
+      'Action',
+      'Dialogue',
+      'Revelation',
+      'Twist',
+    ])
+  })
+
+  it('lets a non-empty app default win over the mode palette', () => {
+    const custom = [
+      { id: 'x', label: 'Custom', promptHint: 'h', color: 'blue', enabled: true, order: 0 },
+    ]
+    const settings = buildStorySettings('adventure', { suggestionCategories: custom }, null, null)
+    expect(settings.suggestionCategories).toEqual(custom)
+  })
+
+  it('falls back to the mode palette when the app default is an empty array', () => {
+    const settings = buildStorySettings('adventure', { suggestionCategories: [] }, null, null)
+    expect(settings.suggestionCategories).toHaveLength(
+      DEFAULT_SUGGESTION_CATEGORIES.adventure.length,
+    )
+  })
+
+  it('enables suggestions by default', () => {
+    expect(buildStorySettings('adventure', {}, null, null).suggestionsEnabled).toBe(true)
   })
 })
