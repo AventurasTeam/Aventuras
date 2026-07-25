@@ -25,16 +25,28 @@ function isVisualChangeType(value: string): value is VisualChangeType {
   return (VISUAL_CHANGE_TYPES as readonly string[]).includes(value)
 }
 
+// Unterminated recovery must stop at the next sibling block — otherwise one
+// block's markup bleeds into the other's fields (C2).
+function boundedEnd(raw: string, from: number, selfTag: string): number {
+  const siblings = TRAILING_ROOT_TAGS.filter((t) => t !== selfTag)
+    .map((t) => raw.indexOf(`<${t}>`, from))
+    .filter((i) => i !== -1)
+  return siblings.length === 0 ? raw.length : Math.min(...siblings)
+}
+
 // Segment isolation: extract the raw inner text of one top-level tag from a
 // well-formed-or-truncated outer block. Returns undefined if the OPEN tag
 // itself is missing (nothing to attempt); returns the inner text (possibly
-// truncated / unterminated) if the open tag is present.
-function extractSegment(source: string, tag: string): string | undefined {
+// truncated / unterminated) if the open tag is present. `rootTag` bounds
+// unterminated recovery at the enclosing block's sibling boundary.
+function extractSegment(source: string, tag: string, rootTag: string): string | undefined {
   const openIdx = source.indexOf(`<${tag}>`)
   if (openIdx === -1) return undefined
   const start = openIdx + tag.length + 2
   const closeIdx = source.indexOf(`</${tag}>`, start)
-  return closeIdx === -1 ? source.slice(start) : source.slice(start, closeIdx)
+  return closeIdx === -1
+    ? source.slice(start, boundedEnd(source, start, rootTag))
+    : source.slice(start, closeIdx)
 }
 
 function parseIdList(segment: string): string[] {
@@ -157,14 +169,14 @@ const FIELD_PARSERS: readonly FieldParser[] = [
 // never blocks another (docs/memory/piggyback.md, C2 contract). Called on the
 // FULL raw model output (prose + trailing block) — extracts <state> first.
 export function parseStateBlock(raw: string): ParseStateBlockResult {
-  const stateSegment = extractSegment(raw, STATE_ROOT_TAG)
+  const stateSegment = extractSegment(raw, STATE_ROOT_TAG, STATE_ROOT_TAG)
   if (stateSegment === undefined) return { block: {}, failures: [], blockFound: false }
 
   const block: ParsedStateBlock = {}
   const failures: ParseFieldFailure[] = []
 
   for (const { field, tag, parse } of FIELD_PARSERS) {
-    const segment = extractSegment(stateSegment, tag)
+    const segment = extractSegment(stateSegment, tag, STATE_ROOT_TAG)
     if (segment === undefined) continue
     try {
       const value = parse(segment)
@@ -185,7 +197,7 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
 // Independent of <state> by construction: a separate root-tag extraction, so
 // neither block's failure can reach the other (C2).
 export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult {
-  const segment = extractSegment(raw, SUGGESTIONS_ROOT_TAG)
+  const segment = extractSegment(raw, SUGGESTIONS_ROOT_TAG, SUGGESTIONS_ROOT_TAG)
   if (segment === undefined) return { items: [], blockFound: false, failed: false }
 
   const items: ParsedSuggestion[] = []
@@ -213,7 +225,9 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
 
 // Separates narrative prose from every trailing block the model appended.
 // Cuts at the EARLIEST block so a reordered emission can't leak the other
-// block's markup into the rendered prose.
+// block's markup into the rendered prose. TRAILING_ROOT_TAGS drives the cut
+// generically, but the returned raws are named per tag — a third block needs
+// an edit here too.
 export function stripTrailingBlocks(raw: string): {
   prose: string
   stateRaw?: string
@@ -227,7 +241,8 @@ export function stripTrailingBlocks(raw: string): {
     const open = raw.indexOf(`<${tag}>`)
     if (open === -1) return undefined
     const close = raw.indexOf(`</${tag}>`, open)
-    return (close === -1 ? raw.slice(open) : raw.slice(open, close + tag.length + 3)).trim()
+    const end = close === -1 ? boundedEnd(raw, open + 1, tag) : close + tag.length + 3
+    return raw.slice(open, end).trim()
   }
 
   const stateRaw = sliceBlock(STATE_ROOT_TAG)

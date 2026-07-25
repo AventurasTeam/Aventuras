@@ -11,6 +11,5 @@ export const STATE_TAGS = {
 export const SUGGESTIONS_ROOT_TAG = 'suggestions'
 export const SUGGESTION_ITEM_TAG = 'item'
 
-// Every top-level block the model may append after prose. Order matters:
-// stripTrailingBlocks cuts from the earliest one present.
+// Every top-level block the model may append after prose.
 export const TRAILING_ROOT_TAGS = [STATE_ROOT_TAG, SUGGESTIONS_ROOT_TAG] as const

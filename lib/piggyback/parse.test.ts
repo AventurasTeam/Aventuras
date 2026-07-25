@@ -142,22 +142,6 @@ describe('parseStateBlock', () => {
     expect(result.block).toEqual({})
     expect(result.failures).toEqual([])
   })
-
-  describe('stripTrailingBlocks (state-only cases)', () => {
-    it('returns raw prose when no <state> block is present', () => {
-      const { prose, stateRaw } = stripTrailingBlocks('Once upon a time...')
-      expect(prose).toBe('Once upon a time...')
-      expect(stateRaw).toBeUndefined()
-    })
-
-    it('separates prose from trailing <state> block', () => {
-      const raw =
-        'The knight drew his sword.\n\n<state>\n<scene_entities>c1</scene_entities>\n</state>'
-      const { prose, stateRaw } = stripTrailingBlocks(raw)
-      expect(prose).toBe('The knight drew his sword.')
-      expect(stateRaw).toBe('<state>\n<scene_entities>c1</scene_entities>\n</state>')
-    })
-  })
 })
 
 describe('parseSuggestionsBlock', () => {
@@ -245,6 +229,20 @@ describe('parse independence — the four outcome combinations', () => {
 })
 
 describe('stripTrailingBlocks', () => {
+  it('returns raw prose when no <state> block is present', () => {
+    const { prose, stateRaw } = stripTrailingBlocks('Once upon a time...')
+    expect(prose).toBe('Once upon a time...')
+    expect(stateRaw).toBeUndefined()
+  })
+
+  it('separates prose from trailing <state> block', () => {
+    const raw =
+      'The knight drew his sword.\n\n<state>\n<scene_entities>c1</scene_entities>\n</state>'
+    const { prose, stateRaw } = stripTrailingBlocks(raw)
+    expect(prose).toBe('The knight drew his sword.')
+    expect(stateRaw).toBe('<state>\n<scene_entities>c1</scene_entities>\n</state>')
+  })
+
   it('cuts prose at the earliest trailing block and returns both raws', () => {
     const raw =
       'The rain falls.\n<state><summary>x</summary></state>\n<suggestions><item category="cat1">go</item></suggestions>'
@@ -262,5 +260,60 @@ describe('stripTrailingBlocks', () => {
 
   it('returns prose untouched when no block is present', () => {
     expect(stripTrailingBlocks('Just prose.')).toEqual({ prose: 'Just prose.' })
+  })
+
+  it('leaves stateRaw undefined for a suggestions-only turn', () => {
+    // entry-card gates its state viewer on stateRaw != null; a regression here
+    // lights the viewer on an entry that has no state.
+    const { stateRaw, suggestionsRaw } = stripTrailingBlocks(
+      'p\n<suggestions><item category="cat1">go</item></suggestions>',
+    )
+    expect(stateRaw).toBeUndefined()
+    expect(suggestionsRaw).toContain('cat1')
+  })
+
+  it('assigns each raw to its own block when suggestions precede state', () => {
+    const raw =
+      'p\n<suggestions><item category="cat1">go</item></suggestions>\n<state><summary>x</summary></state>'
+    const { stateRaw, suggestionsRaw } = stripTrailingBlocks(raw)
+    expect(stateRaw).toContain('<summary>x</summary>')
+    expect(stateRaw).not.toContain('cat1')
+    expect(suggestionsRaw).toContain('cat1')
+    expect(suggestionsRaw).not.toContain('<summary>')
+  })
+})
+
+describe('unterminated blocks do not bleed into their sibling', () => {
+  const unterminatedState =
+    'Prose.\n<state><summary>The knight rides on.\n<suggestions><item category="cat1">go north</item></suggestions>'
+
+  it('keeps a following suggestions block out of stateRaw', () => {
+    expect(stripTrailingBlocks(unterminatedState).stateRaw).not.toContain('cat1')
+  })
+
+  it('keeps a following suggestions block out of a persisted summary', () => {
+    // metadata.summary feeds the memory pipeline — markup here is silent
+    // corruption, not a display blemish.
+    expect(parseStateBlock(unterminatedState).block.summary).toBe('The knight rides on.')
+  })
+
+  it('keeps a following suggestions block out of sceneEntities', () => {
+    const raw =
+      'p\n<state><scene_entities>c1, c2\n<suggestions><item category="cat1">go</item></suggestions>'
+    expect(parseStateBlock(raw).block.sceneEntities).toEqual(['c1', 'c2'])
+  })
+})
+
+describe('<item> tag collision between transfers and suggestions', () => {
+  const raw =
+    'Prose.\n<state><transfers><item id="i1" slot="inventory" to="c2" /></transfers></state>\n' +
+    '<suggestions><item category="cat1">Draw the blade.</item></suggestions>'
+
+  it('routes transfer items and suggestion items to their own parsers', () => {
+    const state = parseStateBlock(raw)
+    expect(state.block.transfers?.items).toEqual([{ id: 'i1', slot: 'inventory', to: 'c2' }])
+    expect(parseSuggestionsBlock(raw).items).toEqual([
+      { categoryRef: 'cat1', text: 'Draw the blade.' },
+    ])
   })
 })
