@@ -1,6 +1,7 @@
 import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { buildSuggestionSlots } from '@/lib/piggyback'
 
 type BuildArgs = {
   // Caller-scoped entry window, ascending by position (per-turn: the open
@@ -17,6 +18,12 @@ type BuildArgs = {
   // every other generationContext consumer, which never emits state-emission
   // instructions in the first place.
   piggybackFires?: boolean
+  // Whether THIS call should emit the <suggestions> fragment — only the
+  // calling fold knows this (suggestionsEnabled + enabled categories + no
+  // suggestions already in hand), so it's caller-supplied like piggybackFires
+  // rather than computed here. Defaults false for every other
+  // generationContext consumer.
+  suggestionsFire?: boolean
 }
 
 // Defense-in-depth: emit '' for whitespace-only definitional prose so a header
@@ -31,7 +38,15 @@ function blankIfWhitespace(value: string): string {
 // agent's phase calls this and its template picks from the same variable set
 // (pinned in templateContextMap; parity-tested here).
 export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
-  const { entries, entities, definition, settings, idMap, piggybackFires = false } = args
+  const {
+    entries,
+    entities,
+    definition,
+    settings,
+    idMap,
+    piggybackFires = false,
+    suggestionsFire = false,
+  } = args
 
   // System entries are technical-only rows (removed on generate) — templates
   // must never see them, so exclusion is unconditional defense-in-depth.
@@ -57,6 +72,11 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     userSettings: { partialChapterBuffer: settings.partialChapterBuffer },
     intermediates: {},
     piggybackFires,
+    suggestionsFire,
+    suggestionSlots: suggestionsFire
+      ? buildSuggestionSlots(settings.suggestionCategories).slots
+      : [],
+    suggestionCount: settings.suggestionCount,
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

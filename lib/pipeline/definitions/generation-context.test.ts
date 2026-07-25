@@ -180,6 +180,74 @@ describe('buildGenerationContext', () => {
     expect(prompt).not.toContain('second-line')
   })
 
+  it('omits suggestionSlots when suggestionsFire is false', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings: {
+        partialChapterBuffer: 3,
+        suggestionCategories: [
+          {
+            id: 'cat_a',
+            label: 'Action',
+            promptHint: 'Do something.',
+            color: 'red',
+            enabled: true,
+            order: 0,
+          },
+        ],
+      } as never,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.suggestionSlots).toEqual([])
+  })
+
+  it('emits placeholder-ref slots for the enabled categories, in order, when suggestionsFire is true', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings: {
+        partialChapterBuffer: 3,
+        suggestionCategories: [
+          {
+            id: 'cat_a',
+            label: 'Action',
+            promptHint: 'Do something.',
+            color: 'red',
+            enabled: true,
+            order: 0,
+          },
+          {
+            id: 'cat_b',
+            label: 'Dialogue',
+            promptHint: 'Say something.',
+            color: 'blue',
+            enabled: false,
+            order: 1,
+          },
+        ],
+      } as never,
+      idMap: new IdBiMap(),
+      suggestionsFire: true,
+    })
+    expect(ctx.suggestionSlots).toEqual([
+      { ref: 'cat1', label: 'Action', promptHint: 'Do something.' },
+    ])
+  })
+
+  it('passes suggestionCount through from settings regardless of whether suggestions fire', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings: { partialChapterBuffer: 3, suggestionCount: 5 } as never,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.suggestionCount).toBe(5)
+  })
+
   it('resolves calendarVocabulary for known calendar id and null for unknown', () => {
     const knownCtx = buildGenerationContext({
       entries: [],

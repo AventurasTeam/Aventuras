@@ -68,4 +68,9 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 {% include 'macro_output_format_narrative' %}
 {% if piggybackFires -%}
 {% include 'macro_state_emission' %}
+{%- endif -%}
+{%- if piggybackFires and suggestionsFire %}
+{% endif -%}
+{%- if suggestionsFire -%}
+{% include 'macro_suggestion_emission' %}
 {%- endif %}`

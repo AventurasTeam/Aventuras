@@ -191,3 +191,45 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     expect(rendered).toContain('<state>')
   })
 })
+
+describe('bundled per-turn template — suggestionsFire gating', () => {
+  const suggestionContext = {
+    ...m2Context,
+    suggestionsFire: true,
+    suggestionCount: 2,
+    suggestionSlots: [
+      { ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' },
+      { ref: 'cat2', label: 'Dialogue', promptHint: 'A line of speech.' },
+    ],
+  }
+
+  it('includes the suggestion-emission macro when suggestionsFire is true', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(rendered).toContain('<suggestions>')
+    expect(rendered).toContain('[cat1] Action: A decisive move.')
+  })
+
+  it('omits the suggestion-emission macro when suggestionsFire is false', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      suggestionsFire: false,
+    })
+    expect(rendered).not.toContain('<suggestions>')
+  })
+
+  it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(rendered).toContain('off-scene).\nAfter the state block')
+  })
+
+  it('places the suggestions block directly after the narrative instruction when piggybackFires is false', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      piggybackFires: false,
+    })
+    expect(rendered).not.toContain('<state>')
+    expect(rendered).toContain(
+      'Do not break character or address the reader.\nAfter the state block',
+    )
+  })
+})

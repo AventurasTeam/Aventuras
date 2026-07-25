@@ -15,6 +15,7 @@ export const TEMPLATE_IDS = {
 export const MACRO_IDS = {
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
+  suggestionEmission: 'macro_suggestion_emission',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

@@ -74,6 +74,29 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         'True when this turn expects the tagged trailing block to actually be used (piggybackMode on + resolved narrative model capability-flagged reliable). False means the per-turn fallback classifier will redo extraction from scratch, so state-emission instructions are omitted.',
       required: true,
     },
+    {
+      name: 'suggestionsFire',
+      type: 'boolean',
+      category: 'Generation Results',
+      description:
+        'True when this call should emit the <suggestions> block (suggestionsEnabled + at least one enabled category, and no suggestions already in hand). False omits the fragment entirely.',
+      required: true,
+    },
+    {
+      name: 'suggestionSlots',
+      type: 'SuggestionSlot[]',
+      category: 'Story Config',
+      description:
+        'Enabled suggestion categories as { ref, label, promptHint }, ref being the per-emission cat1..catN placeholder.',
+      required: false,
+    },
+    {
+      name: 'suggestionCount',
+      type: 'number',
+      category: 'Story Config',
+      description: 'Chips to emit this turn (stories.settings.suggestionCount, 1-6).',
+      required: false,
+    },
   ],
   wizard: [
     {
@@ -132,8 +155,20 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries'],
   Entities: ['entities', 'sceneEntities', 'leadName', 'leadEntityId'],
-  'Story Config': ['definition', 'calendarVocabulary', 'userSettings'],
-  'Generation Results': ['intermediates', 'opening', 'guidance', 'piggybackFires'],
+  'Story Config': [
+    'definition',
+    'calendarVocabulary',
+    'userSettings',
+    'suggestionSlots',
+    'suggestionCount',
+  ],
+  'Generation Results': [
+    'intermediates',
+    'opening',
+    'guidance',
+    'piggybackFires',
+    'suggestionsFire',
+  ],
 }
 
 export type RegistryIssue =
