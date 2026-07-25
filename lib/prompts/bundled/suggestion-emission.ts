@@ -1,4 +1,4 @@
-export const SUGGESTION_EMISSION = `Append exactly one <suggestions> block offering the reader {{ suggestionCount }} distinct options for what to do next. Each option is COMPLETE prose written as the reader's own next turn — not a description of an option, and not a question.
+export const SUGGESTION_EMISSION = `Append exactly one <suggestions> block after everything else you write, never inside the prose itself. It offers the reader {{ suggestionCount }} distinct options for what to do next. Each option is COMPLETE prose written as the reader's own next turn — not a description of an option, and not a question.
 
 Categories are listed below with a bracketed ref, e.g. "[cat1] Action" — reference that ref below WITHOUT the brackets, as the \`category\` attribute. You may reuse a category or skip one; vary the categories across the options rather than repeating the same one:
 {% for slot in suggestionSlots -%}

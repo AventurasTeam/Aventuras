@@ -209,6 +209,21 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     expect(rendered).toContain('[cat1] Action: A decisive move.')
   })
 
+  // stripTrailingBlocks (lib/piggyback/parse.ts) cuts prose at the EARLIEST
+  // trailing-tag occurrence anywhere in the raw output — a fragment that
+  // doesn't forbid mid-prose emission risks the model burying <suggestions>
+  // inside the narrative and silently truncating everything after it.
+  it('forbids mid-prose emission regardless of whether the state block is present', () => {
+    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(withState).toContain('never inside the prose itself')
+
+    const withoutState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      piggybackFires: false,
+    })
+    expect(withoutState).toContain('never inside the prose itself')
+  })
+
   it('omits the suggestion-emission macro when suggestionsFire is false', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...suggestionContext,

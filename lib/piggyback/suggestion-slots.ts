@@ -23,11 +23,17 @@ export function buildSuggestionSlots(categories: readonly SuggestionCategory[]):
   return { slots, resolveCategoryId: (ref) => byRef.get(ref) }
 }
 
-export type SuggestionEmission = SuggestionSlotMap & { fires: boolean; count: number }
+export type SuggestionEmission = SuggestionSlotMap & {
+  settingsAllowEmission: boolean
+  count: number
+}
 
-// The single gate both folds consult: the fragment is omitted from the prompt
-// entirely unless the feature is on AND something is enabled to pick from
-// (reader-composer.md → Zero enabled categories).
+// The SETTINGS-level half of the emission gate — the story wants chips and has
+// something enabled to pick from (reader-composer.md → Zero enabled
+// categories). Callers AND their own run-level condition on top: the narrative
+// fold also requires the tagged block to be firing at all, and the classifier
+// fold also requires that no chips were already captured this turn.
+// `settingsAllowEmission` alone is never sufficient to emit.
 export function resolveSuggestionEmission(settings: {
   suggestionsEnabled: boolean
   suggestionCount: number
@@ -36,7 +42,7 @@ export function resolveSuggestionEmission(settings: {
   const map = buildSuggestionSlots(settings.suggestionCategories)
   return {
     ...map,
-    fires: settings.suggestionsEnabled && map.slots.length > 0,
+    settingsAllowEmission: settings.suggestionsEnabled && map.slots.length > 0,
     count: settings.suggestionCount,
   }
 }

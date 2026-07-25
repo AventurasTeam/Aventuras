@@ -69,6 +69,10 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 {% if piggybackFires -%}
 {% include 'macro_state_emission' %}
 {%- endif -%}
+{%- comment -%}
+Emits nothing — exists only to collapse the join to exactly one newline
+between the state and suggestions blocks when both fire.
+{%- endcomment -%}
 {%- if piggybackFires and suggestionsFire %}
 {% endif -%}
 {%- if suggestionsFire -%}

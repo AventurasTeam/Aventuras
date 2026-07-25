@@ -45,22 +45,27 @@ describe('buildSuggestionSlots', () => {
 describe('resolveSuggestionEmission', () => {
   const base = { suggestionsEnabled: true, suggestionCount: 3, suggestionCategories: [cat('a')] }
 
-  it('fires when enabled with at least one enabled category', () => {
-    expect(resolveSuggestionEmission(base).fires).toBe(true)
+  it('allows emission when enabled with at least one enabled category', () => {
+    expect(resolveSuggestionEmission(base).settingsAllowEmission).toBe(true)
   })
 
-  it('does not fire when the master toggle is off', () => {
-    expect(resolveSuggestionEmission({ ...base, suggestionsEnabled: false }).fires).toBe(false)
-  })
-
-  it('does not fire when every category is disabled', () => {
+  it('disallows emission when the master toggle is off', () => {
     expect(
-      resolveSuggestionEmission({ ...base, suggestionCategories: [cat('a', false)] }).fires,
+      resolveSuggestionEmission({ ...base, suggestionsEnabled: false }).settingsAllowEmission,
     ).toBe(false)
   })
 
-  it('does not fire when the palette is empty', () => {
-    expect(resolveSuggestionEmission({ ...base, suggestionCategories: [] }).fires).toBe(false)
+  it('disallows emission when every category is disabled', () => {
+    expect(
+      resolveSuggestionEmission({ ...base, suggestionCategories: [cat('a', false)] })
+        .settingsAllowEmission,
+    ).toBe(false)
+  })
+
+  it('disallows emission when the palette is empty', () => {
+    expect(
+      resolveSuggestionEmission({ ...base, suggestionCategories: [] }).settingsAllowEmission,
+    ).toBe(false)
   })
 
   it('carries the chip count through', () => {
