@@ -631,12 +631,12 @@ export default function ReaderComposerRoute() {
           activePhase={isGenerating ? 'generating-narrative' : undefined}
           error={
             staleTotal > 0 && !isGenerating
-              ? { code: 'embedder-offline', pendingRows: staleTotal }
+              ? { code: 'memory-incomplete', pendingRows: staleTotal }
               : undefined
           }
           onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
           onErrorTap={(code) => {
-            if (code === 'embedder-offline' && storyId != null)
+            if (code === 'memory-incomplete' && storyId != null)
               router.push(`/story-settings/${storyId}?tab=memory`)
           }}
         />

@@ -102,7 +102,7 @@ The compound owns phase → copy and error → copy:
 
 | Error code                            | Label                                                                          |
 | ------------------------------------- | ------------------------------------------------------------------------------ |
-| `embedder-offline`                    | `Embedder offline — {pendingRows} rows pending`                                |
+| `memory-incomplete`                   | `Memory incomplete — {pendingRows} rows pending`                               |
 | `classifier-offline`                  | `Classifier offline — retrieval coverage thinning`                             |
 | `classifier-no-profile`               | `Classifier has no profile — retrieval coverage thinning`                      |
 | `classifier-profile-provider-missing` | `Classifier profile's provider is missing — retrieval coverage thinning`       |

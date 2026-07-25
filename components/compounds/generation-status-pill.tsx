@@ -10,7 +10,12 @@ import { t } from '@/lib/i18n'
 
 type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
 
-type ErrorState = { code: 'embedder-offline'; pendingRows: number } | { code: 'classifier-offline' }
+// `memory-incomplete` names the observable state, not a cause: the pill fires
+// off a non-zero stale-row count, which an available embedder can produce too
+// (a swap cancel re-flags every row).
+type ErrorState =
+  | { code: 'memory-incomplete'; pendingRows: number }
+  | { code: 'classifier-offline' }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -34,8 +39,8 @@ function phaseCopy(phase: GenerationPhase): string {
 
 function errorCopy(error: ErrorState): string {
   switch (error.code) {
-    case 'embedder-offline':
-      return t('chrome.generationStatusPill.error.embedderOffline', {
+    case 'memory-incomplete':
+      return t('chrome.generationStatusPill.error.memoryIncomplete', {
         count: error.pendingRows,
       })
     case 'classifier-offline':

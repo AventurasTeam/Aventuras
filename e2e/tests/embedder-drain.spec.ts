@@ -80,7 +80,7 @@ test.describe('embedder — drain on story open', () => {
     // wrote last. They agree with the branch-scoped poll above only because
     // every embeddable seeded row lives on br_hero_main; one on the fork branch
     // would leave a story-wide count the drain never clears.
-    await expect(reader.embedderOfflinePill(app.window)).toBeHidden()
+    await expect(reader.memoryIncompletePill(app.window)).toBeHidden()
   })
 })
 
@@ -106,7 +106,7 @@ test.describe('embedder — offline status pill', () => {
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    await expect(reader.embedderOfflinePill(app.window)).toBeVisible({ timeout: 20_000 })
+    await expect(reader.memoryIncompletePill(app.window)).toBeVisible({ timeout: 20_000 })
     expect(await staleTotal(app)).toBeGreaterThan(0)
   })
 })

@@ -58,18 +58,18 @@ export const reader = {
   hydrationFailed: (page: Page): Locator =>
     page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
 
-  // The generation status pill in its embedder-offline state (a warning-tone
+  // The generation status pill in its memory-incomplete state (a warning-tone
   // Tag; interactive, so role=button). The accessible name interpolates the
   // pending-row count, so only the lead-in shared by both plural forms is
   // matched.
-  embedderOfflinePill: (page: Page): Locator => {
-    const copy = t('chrome.generationStatusPill.error.embedderOffline', { count: 1 })
+  memoryIncompletePill: (page: Page): Locator => {
+    const copy = t('chrome.generationStatusPill.error.memoryIncomplete', { count: 1 })
     const [prefix, ...rest] = copy.split(' — ')
     // Without the separator the "lead-in" is the whole count-bearing string,
     // which silently stops matching. Fail loudly on the copy change instead.
     if (rest.length === 0) {
       throw new Error(
-        `embedderOfflinePill: no " — " separator in "${copy}"; the count-free lead-in can no longer be isolated`,
+        `memoryIncompletePill: no " — " separator in "${copy}"; the count-free lead-in can no longer be isolated`,
       )
     }
     return page.getByRole('button', { name: prefix, exact: false })

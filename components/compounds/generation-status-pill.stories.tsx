@@ -70,7 +70,7 @@ export const ActiveClosingChapter: Story = {
 export const ErrorEmbedder: Story = {
   render: () => (
     <GenerationStatusPill
-      error={{ code: 'embedder-offline', pendingRows: 142 }}
+      error={{ code: 'memory-incomplete', pendingRows: 142 }}
       onCancel={onCancel}
       onErrorTap={onErrorTap}
     />
@@ -96,7 +96,7 @@ export const ActivePlusError: Story = {
       </Text>
       <GenerationStatusPill
         activePhase="generating-narrative"
-        error={{ code: 'embedder-offline', pendingRows: 3 }}
+        error={{ code: 'memory-incomplete', pendingRows: 3 }}
         onCancel={onCancel}
         onErrorTap={onErrorTap}
       />

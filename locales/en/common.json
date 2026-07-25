@@ -34,8 +34,8 @@
         "closingChapter": "closing chapter…"
       },
       "error": {
-        "embedderOffline_one": "Embedder offline — {{count}} row pending",
-        "embedderOffline_other": "Embedder offline — {{count}} rows pending",
+        "memoryIncomplete_one": "Memory incomplete — {{count}} row pending",
+        "memoryIncomplete_other": "Memory incomplete — {{count}} rows pending",
         "classifierOffline": "Classifier offline — retrieval coverage thinning"
       },
       "cancelGeneration": "Cancel generation",
