@@ -36,3 +36,13 @@ export type ParseStateBlockResult = {
   failures: ParseFieldFailure[]
   blockFound: boolean
 }
+
+// `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category
+// id — the emission map resolves it (lib/piggyback/suggestion-slots.ts).
+export type ParsedSuggestion = { categoryRef: string; text: string }
+
+export type ParseSuggestionsBlockResult = {
+  items: ParsedSuggestion[]
+  blockFound: boolean
+  failed: boolean
+}

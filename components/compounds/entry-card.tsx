@@ -26,7 +26,7 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
-import { stripStateBlock } from '@/lib/piggyback'
+import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -158,7 +158,7 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
 
-  const { prose, stateRaw } = useMemo(() => stripStateBlock(content), [content])
+  const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
   const hasState = stateRaw != null && stateRaw.length > 0
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'

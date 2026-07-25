@@ -1,13 +1,21 @@
 import { jsonrepair } from 'jsonrepair'
 
-import { STATE_ROOT_TAG, STATE_TAGS } from './tags'
+import {
+  STATE_ROOT_TAG,
+  STATE_TAGS,
+  SUGGESTION_ITEM_TAG,
+  SUGGESTIONS_ROOT_TAG,
+  TRAILING_ROOT_TAGS,
+} from './tags'
 import { VISUAL_CHANGE_TYPES } from './types'
 import type {
   ItemTransfer,
+  ParsedSuggestion,
   ParseFieldFailure,
   ParsedStateBlock,
   ParsedTransfers,
   ParseStateBlockResult,
+  ParseSuggestionsBlockResult,
   StackableTransfer,
   VisualChangeNote,
   VisualChangeType,
@@ -173,11 +181,61 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
   return { block, failures, blockFound: true }
 }
 
-// Separates the narrative prose from any trailing <state>...</state> block.
-export function stripStateBlock(raw: string): { prose: string; stateRaw?: string } {
-  const openIdx = raw.indexOf('<state>')
-  if (openIdx === -1) return { prose: raw }
-  const prose = raw.slice(0, openIdx).trimEnd()
-  const stateRaw = raw.slice(openIdx).trim()
-  return { prose, stateRaw }
+// <item category="cat1">complete prose</item> — one entry per chip slot.
+// Independent of <state> by construction: a separate root-tag extraction, so
+// neither block's failure can reach the other (C2).
+export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult {
+  const segment = extractSegment(raw, SUGGESTIONS_ROOT_TAG)
+  if (segment === undefined) return { items: [], blockFound: false, failed: false }
+
+  const items: ParsedSuggestion[] = []
+  const re = new RegExp(
+    `<${SUGGESTION_ITEM_TAG}\\s+([^>]*)>([\\s\\S]*?)</${SUGGESTION_ITEM_TAG}>`,
+    'g',
+  )
+  for (const match of segment.matchAll(re)) {
+    const [, attrText, text] = match
+    if (attrText === undefined || text === undefined) continue
+    const attrs = parseAttributes(attrText)
+    if (attrs.category === undefined) continue
+    const trimmed = text.trim()
+    if (trimmed.length === 0) continue
+    items.push({ categoryRef: attrs.category, text: trimmed })
+  }
+
+  try {
+    assertNotTruncated(segment, items.length, SUGGESTIONS_ROOT_TAG)
+  } catch {
+    return { items: [], blockFound: true, failed: true }
+  }
+  return { items, blockFound: true, failed: false }
+}
+
+// Separates narrative prose from every trailing block the model appended.
+// Cuts at the EARLIEST block so a reordered emission can't leak the other
+// block's markup into the rendered prose.
+export function stripTrailingBlocks(raw: string): {
+  prose: string
+  stateRaw?: string
+  suggestionsRaw?: string
+} {
+  const indices = TRAILING_ROOT_TAGS.map((tag) => raw.indexOf(`<${tag}>`)).filter((i) => i !== -1)
+  if (indices.length === 0) return { prose: raw }
+  const cut = Math.min(...indices)
+
+  const sliceBlock = (tag: string): string | undefined => {
+    const open = raw.indexOf(`<${tag}>`)
+    if (open === -1) return undefined
+    const close = raw.indexOf(`</${tag}>`, open)
+    return (close === -1 ? raw.slice(open) : raw.slice(open, close + tag.length + 3)).trim()
+  }
+
+  const stateRaw = sliceBlock(STATE_ROOT_TAG)
+  const suggestionsRaw = sliceBlock(SUGGESTIONS_ROOT_TAG)
+
+  return {
+    prose: raw.slice(0, cut).trimEnd(),
+    ...(stateRaw !== undefined ? { stateRaw } : {}),
+    ...(suggestionsRaw !== undefined ? { suggestionsRaw } : {}),
+  }
 }

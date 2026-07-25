@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { parseStateBlock, stripStateBlock } from './parse'
+import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from './parse'
 
 const WELL_FORMED = `Some narrative prose here.
 <state>
@@ -143,9 +143,9 @@ describe('parseStateBlock', () => {
     expect(result.failures).toEqual([])
   })
 
-  describe('stripStateBlock', () => {
+  describe('stripTrailingBlocks (state-only cases)', () => {
     it('returns raw prose when no <state> block is present', () => {
-      const { prose, stateRaw } = stripStateBlock('Once upon a time...')
+      const { prose, stateRaw } = stripTrailingBlocks('Once upon a time...')
       expect(prose).toBe('Once upon a time...')
       expect(stateRaw).toBeUndefined()
     })
@@ -153,9 +153,114 @@ describe('parseStateBlock', () => {
     it('separates prose from trailing <state> block', () => {
       const raw =
         'The knight drew his sword.\n\n<state>\n<scene_entities>c1</scene_entities>\n</state>'
-      const { prose, stateRaw } = stripStateBlock(raw)
+      const { prose, stateRaw } = stripTrailingBlocks(raw)
       expect(prose).toBe('The knight drew his sword.')
       expect(stateRaw).toBe('<state>\n<scene_entities>c1</scene_entities>\n</state>')
     })
+  })
+})
+
+describe('parseSuggestionsBlock', () => {
+  const block = `Prose here.
+<state><summary>x</summary></state>
+<suggestions>
+  <item category="cat1">Draw the blade and step into the light.</item>
+  <item category="cat2">"Who sent you?"</item>
+</suggestions>`
+
+  it('extracts items with their category refs', () => {
+    const result = parseSuggestionsBlock(block)
+    expect(result.blockFound).toBe(true)
+    expect(result.failed).toBe(false)
+    expect(result.items).toEqual([
+      { categoryRef: 'cat1', text: 'Draw the blade and step into the light.' },
+      { categoryRef: 'cat2', text: '"Who sent you?"' },
+    ])
+  })
+
+  it('reports blockFound false when no suggestions block is present', () => {
+    const result = parseSuggestionsBlock('Prose only.<state><summary>x</summary></state>')
+    expect(result.blockFound).toBe(false)
+    expect(result.failed).toBe(false)
+    expect(result.items).toEqual([])
+  })
+
+  it('fails when the block has content but no well-formed items', () => {
+    const result = parseSuggestionsBlock('<suggestions>garbage, no items at all</suggestions>')
+    expect(result.blockFound).toBe(true)
+    expect(result.failed).toBe(true)
+    expect(result.items).toEqual([])
+  })
+
+  it('treats an empty block as a legitimate zero-suggestion emission', () => {
+    const result = parseSuggestionsBlock('<suggestions></suggestions>')
+    expect(result.blockFound).toBe(true)
+    expect(result.failed).toBe(false)
+    expect(result.items).toEqual([])
+  })
+
+  it('skips an item missing its category attribute without failing the rest', () => {
+    const result = parseSuggestionsBlock(
+      '<suggestions><item>orphan</item><item category="cat1">kept</item></suggestions>',
+    )
+    expect(result.failed).toBe(false)
+    expect(result.items).toEqual([{ categoryRef: 'cat1', text: 'kept' }])
+  })
+
+  it('recovers items from an unterminated block', () => {
+    const result = parseSuggestionsBlock('<suggestions><item category="cat1">kept</item>')
+    expect(result.items).toEqual([{ categoryRef: 'cat1', text: 'kept' }])
+  })
+})
+
+describe('parse independence — the four outcome combinations', () => {
+  const good = '<state><summary>fine</summary></state>'
+  const badState = '<state><world_time_delta>not-a-number-at-all</world_time_delta></state>'
+  const goodSug = '<suggestions><item category="cat1">go</item></suggestions>'
+  const badSug = '<suggestions>garbage</suggestions>'
+
+  it('both ok', () => {
+    const raw = `p\n${good}\n${goodSug}`
+    expect(parseStateBlock(raw).failures).toEqual([])
+    expect(parseSuggestionsBlock(raw).failed).toBe(false)
+  })
+
+  it('state fails, suggestions survive', () => {
+    const raw = `p\n${badState}\n${goodSug}`
+    expect(parseStateBlock(raw).failures.length).toBeGreaterThan(0)
+    expect(parseSuggestionsBlock(raw).items).toHaveLength(1)
+  })
+
+  it('suggestions fail, state survives', () => {
+    const raw = `p\n${good}\n${badSug}`
+    expect(parseStateBlock(raw).failures).toEqual([])
+    expect(parseSuggestionsBlock(raw).failed).toBe(true)
+  })
+
+  it('both fail independently', () => {
+    const raw = `p\n${badState}\n${badSug}`
+    expect(parseStateBlock(raw).failures.length).toBeGreaterThan(0)
+    expect(parseSuggestionsBlock(raw).failed).toBe(true)
+  })
+})
+
+describe('stripTrailingBlocks', () => {
+  it('cuts prose at the earliest trailing block and returns both raws', () => {
+    const raw =
+      'The rain falls.\n<state><summary>x</summary></state>\n<suggestions><item category="cat1">go</item></suggestions>'
+    const { prose, stateRaw, suggestionsRaw } = stripTrailingBlocks(raw)
+    expect(prose).toBe('The rain falls.')
+    expect(stateRaw).toContain('<summary>x</summary>')
+    expect(suggestionsRaw).toContain('cat1')
+  })
+
+  it('cuts at suggestions when it precedes state', () => {
+    const raw =
+      'Prose.\n<suggestions><item category="cat1">go</item></suggestions>\n<state><summary>x</summary></state>'
+    expect(stripTrailingBlocks(raw).prose).toBe('Prose.')
+  })
+
+  it('returns prose untouched when no block is present', () => {
+    expect(stripTrailingBlocks('Just prose.')).toEqual({ prose: 'Just prose.' })
   })
 })
