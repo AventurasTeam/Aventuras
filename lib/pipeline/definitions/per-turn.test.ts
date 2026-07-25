@@ -707,3 +707,150 @@ describe('per-turn pipeline declaration', () => {
     expect(fallbackResult).toEqual({ done: true, value: { status: 'completed' } })
   })
 })
+
+const SUGGESTION_CATEGORIES = [
+  { id: 'cat_action', label: 'Action', promptHint: 'act', color: 'red', enabled: true, order: 0 },
+  {
+    id: 'cat_dialogue',
+    label: 'Dialogue',
+    promptHint: 'say',
+    color: 'blue',
+    enabled: true,
+    order: 1,
+  },
+]
+
+async function runNarrativeWith(opts: { narrative: string; settings?: Record<string, unknown> }) {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId: 'b1',
+    definition,
+    settings: {
+      partialChapterBuffer: 3,
+      models: {},
+      piggybackMode: 'on',
+      suggestionsEnabled: true,
+      suggestionCount: 2,
+      suggestionCategories: SUGGESTION_CATEGORIES,
+      ...opts.settings,
+    } as never,
+  })
+  entriesStore.hydrate('b1', [])
+  entitiesStore.hydrate('b1', [])
+  vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+    ...APP_SETTINGS_DEFAULTS,
+    providers: [
+      {
+        ...provider,
+        cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+      },
+    ],
+    profiles: [
+      {
+        id: 'prof-narrative',
+        kind: 'narrative',
+        name: 'Narrative',
+        modelRef: { providerId: provider.id, modelId: 'model-1' },
+      },
+    ],
+    defaultProviderId: provider.id,
+  } as never)
+  streamTextMock.mockReturnValue({
+    ok: true,
+    modelId: 'model-1',
+    providerId: 'prov-1',
+    stream: {
+      fullStream: (async function* () {
+        yield { type: 'text-delta', text: opts.narrative }
+      })(),
+    },
+  })
+
+  ensurePerTurnPipelineRegistered()
+  const phase = getPipeline(PER_TURN_KIND).phases[1]
+  if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+  const gen = phase.run({
+    actionId: 'act_1',
+    abortSignal: new AbortController().signal,
+    intermediates: {},
+    log: makeLogger('act_1'),
+    db: {
+      select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
+    } as never,
+    storyId: 's1',
+    branchId: 'b1',
+  })
+  const events = []
+  let next = await gen.next()
+  while (!next.done) {
+    events.push(next.value)
+    next = await gen.next()
+  }
+  const created = events.find(
+    (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+  )
+  if (!created || created.type !== 'delta_emitted' || created.action.kind !== 'createStoryEntry')
+    throw new Error('expected a createStoryEntry delta')
+  const { metadata } = created.action.payload.entry
+  if (!metadata) throw new Error('expected entry metadata')
+  return {
+    events,
+    metadata,
+    prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
+  }
+}
+
+describe('narrative fold — suggestions', () => {
+  it('persists parsed chips with source piggyback on the created entry', async () => {
+    const { metadata } = await runNarrativeWith({
+      narrative:
+        'The rain falls.\n<state><summary>rain</summary></state>\n' +
+        '<suggestions><item category="cat1">Draw the blade.</item>' +
+        '<item category="cat2">"Who sent you?"</item></suggestions>',
+    })
+    expect(metadata.nextTurnSuggestions).toEqual({
+      items: [
+        { categoryId: 'cat_action', text: 'Draw the blade.' },
+        { categoryId: 'cat_dialogue', text: '"Who sent you?"' },
+      ],
+      source: 'piggyback',
+    })
+  })
+
+  it('drops an item whose category ref does not resolve, keeping the rest', async () => {
+    const { metadata } = await runNarrativeWith({
+      narrative:
+        'p\n<state><summary>s</summary></state>\n' +
+        '<suggestions><item category="cat9">orphan</item>' +
+        '<item category="cat1">kept</item></suggestions>',
+    })
+    expect(metadata.nextTurnSuggestions?.items).toEqual([
+      { categoryId: 'cat_action', text: 'kept' },
+    ])
+  })
+
+  it('leaves nextTurnSuggestions undefined when the block fails to parse', async () => {
+    const { metadata } = await runNarrativeWith({
+      narrative: 'p\n<state><summary>s</summary></state>\n<suggestions>garbage</suggestions>',
+    })
+    expect(metadata.nextTurnSuggestions).toBeUndefined()
+    expect(metadata.summary).toBe('s')
+  })
+
+  it('omits the fragment and writes nothing when suggestions are disabled', async () => {
+    const { metadata, prompt } = await runNarrativeWith({
+      settings: { suggestionsEnabled: false },
+      narrative: 'p\n<state><summary>s</summary></state>',
+    })
+    expect(metadata.nextTurnSuggestions).toBeUndefined()
+    expect(prompt).not.toContain('<suggestions>')
+  })
+
+  it('does not request suggestions when the state block is not requested either', async () => {
+    const { prompt } = await runNarrativeWith({
+      settings: { piggybackMode: 'off' },
+      narrative: 'p',
+    })
+    expect(prompt).not.toContain('<suggestions>')
+  })
+})

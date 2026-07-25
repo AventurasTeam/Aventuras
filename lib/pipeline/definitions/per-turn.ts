@@ -3,7 +3,13 @@ import { eq, sql } from 'drizzle-orm'
 import { resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
-import { buildPiggybackActions, parseStateBlock, substitutePiggybackIds } from '@/lib/piggyback'
+import {
+  buildPiggybackActions,
+  parseStateBlock,
+  parseSuggestionsBlock,
+  resolveSuggestionEmission,
+  substitutePiggybackIds,
+} from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -72,6 +78,17 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     narrativeModelCapabilities: narrativeCapabilities,
   })
 
+  // Suggestions ride the same tagged emission as <state>, so they require it to
+  // be firing at all — separate from whether the story wants chips. Defaulted
+  // the same way as piggybackMode above: older in-memory settings snapshots
+  // predating this feature may omit these fields entirely.
+  const suggestionEmission = resolveSuggestionEmission({
+    suggestionsEnabled: open.settings.suggestionsEnabled ?? false,
+    suggestionCount: open.settings.suggestionCount ?? 3,
+    suggestionCategories: open.settings.suggestionCategories ?? [],
+  })
+  const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
+
   const idMap = new IdBiMap()
   ctx.intermediates.idMap = idMap
   const context = buildGenerationContext({
@@ -81,6 +98,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     settings: open.settings,
     idMap,
     piggybackFires: piggybackShouldFire,
+    suggestionsFire: suggestionsShouldFire,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
@@ -198,6 +216,27 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     succeeded: piggybackShouldFire && piggybackParseSucceeded,
   }
 
+  const parsedSuggestions = suggestionsShouldFire
+    ? parseSuggestionsBlock(content)
+    : { items: [], blockFound: false, failed: false }
+  // Refs that don't resolve are dropped, not defaulted: a chip pointing at a
+  // category the prompt never showed has no label or color to render with.
+  const suggestionItems = parsedSuggestions.items.flatMap((item) => {
+    const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
+    return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
+  })
+  // Keys on items actually resolved, never on blockFound alone — a literal
+  // "<suggestions>" string anywhere in prose would otherwise read as captured.
+  const suggestionsCaptured = !parsedSuggestions.failed && suggestionItems.length > 0
+  if (suggestionsShouldFire && !suggestionsCaptured) {
+    ctx.log.warn('classifier.suggestions_parse_failed', {
+      blockFound: parsedSuggestions.blockFound,
+      failed: parsedSuggestions.failed,
+      dropped: parsedSuggestions.items.length - suggestionItems.length,
+    })
+  }
+  ctx.intermediates.suggestionsCaptured = suggestionsCaptured
+
   const metadata: EntryMetadata = {
     ...(usage
       ? {
@@ -214,6 +253,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     ...(piggybackApplied?.metadata ?? inherited),
+    ...(suggestionsCaptured
+      ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
+      : {}),
   }
 
   const [next] = await ctx.db
