@@ -7,6 +7,7 @@ import type { IdBiMap } from '@/lib/ids'
 import {
   buildPiggybackActions,
   resolveSuggestionEmission,
+  resolveSuggestionItems,
   substitutePiggybackIds,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
@@ -220,19 +221,12 @@ export async function* piggybackFallbackClassifierPhase(
     source: 'per_turn_classifier',
   })
 
-  // Refs that don't resolve are dropped, not defaulted (mirrors the narrative
-  // fold): a chip pointing at a category the prompt never showed has no label
-  // or color to render with. Clamped to suggestionEmission.count even on an
-  // over-emit — reader-composer.md: suggestionCount "drives literal chip
-  // count per emission".
   const rawSuggestions =
     askForSuggestions && hasSuggestions(result.value) ? result.value.suggestions : []
-  const resolvedSuggestions = rawSuggestions.flatMap((item) => {
-    const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
-    return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
-  })
-  const suggestionItems = resolvedSuggestions.slice(0, suggestionEmission.count)
-  const droppedCount = rawSuggestions.length - resolvedSuggestions.length
+  const { items: suggestionItems, droppedCount } = resolveSuggestionItems(
+    rawSuggestions,
+    suggestionEmission,
+  )
   // A malformed suggestions array is already indistinguishable from a
   // genuinely-empty one by the time we get here — .catch([]) collapses both
   // to [] at parse time, and unlike the narrative fold there's no sibling

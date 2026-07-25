@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildSuggestionSlots, resolveSuggestionEmission } from './suggestion-slots'
+import {
+  buildSuggestionSlots,
+  resolveSuggestionEmission,
+  resolveSuggestionItems,
+} from './suggestion-slots'
 
 const cat = (id: string, enabled = true, order = 0) => ({
   id,
@@ -70,5 +74,53 @@ describe('resolveSuggestionEmission', () => {
 
   it('carries the chip count through', () => {
     expect(resolveSuggestionEmission({ ...base, suggestionCount: 5 }).count).toBe(5)
+  })
+})
+
+describe('resolveSuggestionItems', () => {
+  function emission(count: number) {
+    return {
+      ...buildSuggestionSlots([cat('a', true, 0), cat('b', true, 1)]),
+      settingsAllowEmission: true,
+      count,
+    }
+  }
+
+  it('resolves refs to category ids, preserving order', () => {
+    const { items } = resolveSuggestionItems(
+      [
+        { categoryRef: 'cat1', text: 'one' },
+        { categoryRef: 'cat2', text: 'two' },
+      ],
+      emission(5),
+    )
+    expect(items).toEqual([
+      { categoryId: 'a', text: 'one' },
+      { categoryId: 'b', text: 'two' },
+    ])
+  })
+
+  it('drops an item whose ref does not resolve, keeping the rest', () => {
+    const { items, droppedCount } = resolveSuggestionItems(
+      [
+        { categoryRef: 'cat9', text: 'orphan' },
+        { categoryRef: 'cat1', text: 'kept' },
+      ],
+      emission(5),
+    )
+    expect(items).toEqual([{ categoryId: 'a', text: 'kept' }])
+    expect(droppedCount).toBe(1)
+  })
+
+  it('clamps to emission.count without counting the truncation as a drop', () => {
+    const { items, droppedCount } = resolveSuggestionItems(
+      [
+        { categoryRef: 'cat1', text: 'one' },
+        { categoryRef: 'cat2', text: 'two' },
+      ],
+      emission(1),
+    )
+    expect(items).toEqual([{ categoryId: 'a', text: 'one' }])
+    expect(droppedCount).toBe(0)
   })
 })

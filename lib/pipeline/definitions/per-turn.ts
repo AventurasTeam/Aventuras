@@ -8,6 +8,7 @@ import {
   parseStateBlock,
   parseSuggestionsBlock,
   resolveSuggestionEmission,
+  resolveSuggestionItems,
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -213,19 +214,13 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const parsedSuggestions = suggestionsShouldFire
     ? parseSuggestionsBlock(content)
     : { items: [], blockFound: false, failed: false }
-  // Refs that don't resolve are dropped, not defaulted: a chip pointing at a
-  // category the prompt never showed has no label or color to render with.
-  const resolvedItems = parsedSuggestions.items.flatMap((item) => {
-    const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
-    return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
-  })
-  // Persisted chip count must honor suggestionCount even if the model
-  // over-emits (reader-composer.md: "drives literal chip count per emission").
-  const suggestionItems = resolvedItems.slice(0, suggestionEmission.count)
+  const { items: suggestionItems, droppedCount } = resolveSuggestionItems(
+    parsedSuggestions.items,
+    suggestionEmission,
+  )
   // Keys on items actually resolved, never on blockFound alone — a literal
   // "<suggestions>" string anywhere in prose would otherwise read as captured.
   const suggestionsCaptured = !parsedSuggestions.failed && suggestionItems.length > 0
-  const droppedCount = parsedSuggestions.items.length - resolvedItems.length
   if (suggestionsShouldFire && (!suggestionsCaptured || droppedCount > 0)) {
     ctx.log.warn('classifier.suggestions_parse_failed', {
       blockFound: parsedSuggestions.blockFound,

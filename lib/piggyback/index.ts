@@ -7,7 +7,10 @@ export { substitutePiggybackIds } from './substitute'
 export {
   buildSuggestionSlots,
   resolveSuggestionEmission,
+  resolveSuggestionItems,
   type SuggestionSlot,
   type SuggestionSlotMap,
   type SuggestionEmission,
+  type SuggestionRef,
+  type SuggestionItem,
 } from './suggestion-slots'

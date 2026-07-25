@@ -12,9 +12,11 @@ import { fallbackClassifierSchema, fallbackClassifierWithSuggestionsSchema } fro
 //   - stream: true          → an SSE prose stream (the narrative call).
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
-//     (schemaToTypeScriptBlock over the agent's zod schema). Each structured
-//     agent is one STRUCTURED_AGENTS entry; adding one is mechanical and the
-//     match can't drift because it reuses the app's own renderer.
+//     (schemaToTypeScriptBlock over the agent's zod schema). Each reply shape
+//     is one STRUCTURED_AGENTS entry — an agent with more than one possible
+//     schema (e.g. the classifier with/without suggestions) gets one entry per
+//     shape; adding one is mechanical and the match can't drift because it
+//     reuses the app's own renderer.
 // Exercises the real transport (lib/ai/transport), unlike the __DEV__-gated
 // stub provider. See docs/testing.md → Mock LLM.
 
@@ -25,8 +27,10 @@ export type MockRequest = {
   agent: string | null
 }
 
-// One entry per structured agent. `block` is the exact string the app renders
-// into the prompt for this schema; `example` is a schema-valid default reply.
+// One entry per reply shape; `name` is unique per entry (`overrides` and
+// `MockRequest.agent` both key on it) even when two shapes belong to the same
+// logical agent. `block` is the exact string the app renders into the prompt
+// for this schema; `example` is a schema-valid default reply.
 type StructuredAgent = { name: string; block: string; example: unknown }
 
 const STRUCTURED_AGENTS: StructuredAgent[] = [
@@ -37,11 +41,13 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
     example: { sceneEntities: [], worldTimeDelta: 0 },
   },
   {
-    // Same agent, second reply shape: the classifier's schema grows a
+    // Same logical agent, second reply shape: the classifier's schema grows a
     // `suggestions` field whenever the run asks for chips (suggestionsEnabled
     // + no chips already in hand), which changes the injected TS block enough
-    // that it no longer matches the base entry above (see per-turn-piggyback.ts).
-    name: 'per-turn-classifier',
+    // that it no longer matches the entry above (see per-turn-piggyback.ts).
+    // Distinct name so setStructured can target this shape without also
+    // overriding the base-schema entry's reply.
+    name: 'per-turn-classifier-suggestions',
     block: schemaToTypeScriptBlock(
       z.toJSONSchema(fallbackClassifierWithSuggestionsSchema) as JsonSchema,
     ),
