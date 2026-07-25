@@ -4,7 +4,12 @@ import { generateStructured, resolveModel, resolveModelCapabilities } from '@/li
 import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
 import type { IdBiMap } from '@/lib/ids'
-import { buildPiggybackActions, substitutePiggybackIds, VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
+import {
+  buildPiggybackActions,
+  resolveSuggestionEmission,
+  substitutePiggybackIds,
+  VISUAL_CHANGE_TYPES,
+} from '@/lib/piggyback'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -74,32 +79,45 @@ export const fallbackClassifierSchema = z.object({
   summary: z.string().optional(),
 })
 
+// Structured output validates the whole object in one shot, so without
+// .catch([]) a malformed suggestions array would fail the entire classifier
+// parse and take the (unrelated) scene-state fields down with it.
+const suggestionFieldSchema = z
+  .array(
+    z.object({
+      categoryRef: z.string().describe('category ref from the prompt list, without brackets'),
+      text: z.string().describe("complete prose for the reader's next turn"),
+    }),
+  )
+  .catch([])
+
+export const fallbackClassifierWithSuggestionsSchema = fallbackClassifierSchema.extend({
+  suggestions: suggestionFieldSchema,
+})
+
+function hasSuggestions(
+  value:
+    | z.infer<typeof fallbackClassifierSchema>
+    | z.infer<typeof fallbackClassifierWithSuggestionsSchema>,
+): value is z.infer<typeof fallbackClassifierWithSuggestionsSchema> {
+  return 'suggestions' in value
+}
+
 // architecture.md → Classifier contract — metadata fields: reject a negative
 // worldTimeDelta, re-roll the classification once, then let
 // resolvePiggybackWorldTimeDelta clamp-and-warn if it's still negative. A
 // re-roll here means redoing the whole structured call (this is an isolated
 // classifier call, unlike the narrative path where the delta rides the same
 // call as the prose and can't be re-rolled alone).
-async function generateClassifierState(
+async function generateClassifierState<T extends { worldTimeDelta: number }>(
   prompt: string,
+  schema: z.ZodType<T>,
   config: ResolveModelConfig,
   abortSignal: AbortSignal,
-): Promise<GenerateStructuredResult<z.infer<typeof fallbackClassifierSchema>>> {
-  const first = await generateStructured(
-    'classifier',
-    prompt,
-    fallbackClassifierSchema,
-    config,
-    abortSignal,
-  )
+): Promise<GenerateStructuredResult<T>> {
+  const first = await generateStructured('classifier', prompt, schema, config, abortSignal)
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
-  const reroll = await generateStructured(
-    'classifier',
-    prompt,
-    fallbackClassifierSchema,
-    config,
-    abortSignal,
-  )
+  const reroll = await generateStructured('classifier', prompt, schema, config, abortSignal)
   return reroll.status === 'ok' ? reroll : first
 }
 
@@ -127,6 +145,13 @@ export async function* piggybackFallbackClassifierPhase(
     (e) => e.branchId === ctx.branchId,
   )
 
+  const suggestionEmission = resolveSuggestionEmission(open.settings)
+  // Only ask when chips aren't already in hand: a <state>-failed /
+  // <suggestions>-ok turn fires this phase for state alone, and re-rolling
+  // would overwrite good chips with a second opinion.
+  const suggestionsAlreadyCaptured = ctx.intermediates.suggestionsCaptured === true
+  const askForSuggestions = suggestionEmission.settingsAllowEmission && !suggestionsAlreadyCaptured
+
   // Same context builder + template pattern as the narrative phase
   // (lib/pipeline/definitions/per-turn.ts) — the classifier is a
   // story-related prompt like any other, not a special case. Reuses the
@@ -141,21 +166,31 @@ export async function* piggybackFallbackClassifierPhase(
     definition: open.definition,
     settings: open.settings,
     idMap,
+    suggestionsFire: askForSuggestions,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
 
   const appSettings = appSettingsStore.getAppSettings()
-  const result = await generateClassifierState(
-    prompt,
-    {
-      providers: appSettings.providers,
-      profiles: appSettings.profiles,
-      assignments: appSettings.assignments,
-      defaultProviderId: appSettings.defaultProviderId,
-      storyModels: open.settings.models,
-    },
-    ctx.abortSignal,
-  )
+  const classifierConfig: ResolveModelConfig = {
+    providers: appSettings.providers,
+    profiles: appSettings.profiles,
+    assignments: appSettings.assignments,
+    defaultProviderId: appSettings.defaultProviderId,
+    storyModels: open.settings.models,
+  }
+  const result = askForSuggestions
+    ? await generateClassifierState(
+        prompt,
+        fallbackClassifierWithSuggestionsSchema,
+        classifierConfig,
+        ctx.abortSignal,
+      )
+    : await generateClassifierState(
+        prompt,
+        fallbackClassifierSchema,
+        classifierConfig,
+        ctx.abortSignal,
+      )
   if (result.status !== 'ok') {
     ctx.log.warn('classifier.piggyback_fallback_failed', {
       status: result.status,
@@ -185,6 +220,21 @@ export async function* piggybackFallbackClassifierPhase(
     source: 'per_turn_classifier',
   })
 
+  // Refs that don't resolve are dropped, not defaulted (mirrors the narrative
+  // fold): a chip pointing at a category the prompt never showed has no label
+  // or color to render with. Clamped to suggestionEmission.count even on an
+  // over-emit — reader-composer.md: suggestionCount "drives literal chip
+  // count per emission".
+  const suggestionItems =
+    askForSuggestions && hasSuggestions(result.value)
+      ? result.value.suggestions
+          .flatMap((item) => {
+            const categoryId = suggestionEmission.resolveCategoryId(item.categoryRef)
+            return categoryId === undefined ? [] : [{ categoryId, text: item.text }]
+          })
+          .slice(0, suggestionEmission.count)
+      : []
+
   yield {
     type: 'delta_emitted',
     action: {
@@ -193,7 +243,13 @@ export async function* piggybackFallbackClassifierPhase(
       payload: {
         branchId: ctx.branchId,
         id: tail.id,
-        metadata: { ...tail.metadata, ...scenePatch },
+        metadata: {
+          ...tail.metadata,
+          ...scenePatch,
+          ...(suggestionItems.length > 0
+            ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }
+            : {}),
+        },
       },
     },
   }

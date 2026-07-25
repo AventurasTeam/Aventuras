@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
+import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
@@ -8,6 +8,8 @@ import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
 import { currentStoryStore, entitiesStore, entriesStore, resetAllStores } from '@/lib/stores'
 
 import {
+  fallbackClassifierSchema,
+  fallbackClassifierWithSuggestionsSchema,
   piggybackFallbackClassifierPhase,
   PIGGYBACK_FALLBACK_RESOLVES,
   resolvePiggybackFires,
@@ -25,6 +27,25 @@ const definition = {
   calendarSystemId: 'gregorian',
   worldTimeOrigin: { year: 0 },
 }
+
+// Both settings writers gate on storySettingsSchema.parse before
+// currentStoryStore.set, so a partial settings object never reaches
+// production — fixtures use a full default instead of `as never`.
+function baseSettings(overrides: Partial<StorySettings> = {}): StorySettings {
+  return { ...STORY_SETTINGS_DEFAULTS, ...overrides }
+}
+
+const SUGGESTION_CATEGORIES = [
+  { id: 'cat_action', label: 'Action', promptHint: 'act', color: 'red', enabled: true, order: 0 },
+  {
+    id: 'cat_dialogue',
+    label: 'Dialogue',
+    promptHint: 'say',
+    color: 'blue',
+    enabled: true,
+    order: 1,
+  },
+]
 
 const { generateStructuredMock } = vi.hoisted(() => ({
   generateStructuredMock: vi.fn(),
@@ -128,7 +149,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { piggybackMode: 'on' } as never,
+        settings: baseSettings({ piggybackMode: 'on' }),
       })
 
       const ctx = {
@@ -155,7 +176,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { piggybackMode: 'off' } as never,
+        settings: baseSettings({ piggybackMode: 'off' }),
       })
       entriesStore.hydrate('b1', [])
 
@@ -181,7 +202,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -223,7 +244,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -297,7 +318,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -380,7 +401,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -449,7 +470,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -520,7 +541,7 @@ describe('per-turn-piggyback', () => {
         storyId: 's1',
         branchId: 'b1',
         definition,
-        settings: { models: {} } as never,
+        settings: baseSettings({ models: {} }),
       })
       entriesStore.hydrate('b1', [
         {
@@ -578,6 +599,425 @@ describe('per-turn-piggyback', () => {
           }),
         }),
       })
+    })
+  })
+
+  describe('classifier fold — suggestions', () => {
+    function runningEntries() {
+      entriesStore.hydrate('b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+    }
+
+    it('asks the classifier for chips and persists them with source classifier, as one metadata delta', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: true,
+          suggestionCount: 2,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+          suggestions: [
+            { categoryRef: 'cat1', text: 'Draw the blade.' },
+            { categoryRef: 'cat2', text: '"Who sent you?"' },
+          ],
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(result.value).toEqual({ status: 'completed' })
+      expect(generateStructuredMock).toHaveBeenCalledWith(
+        'classifier',
+        expect.any(String),
+        fallbackClassifierWithSuggestionsSchema,
+        expect.anything(),
+        ctx.abortSignal,
+      )
+      // One delta carries both scene state and chips — a second
+      // updateStoryEntryMetadata delta here would mean the fold is patching
+      // the entry twice for what must be a single write.
+      expect(events).toHaveLength(1)
+      expect(events[0]).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          payload: expect.objectContaining({
+            metadata: expect.objectContaining({
+              nextTurnSuggestions: {
+                items: [
+                  { categoryId: 'cat_action', text: 'Draw the blade.' },
+                  { categoryId: 'cat_dialogue', text: '"Who sent you?"' },
+                ],
+                source: 'classifier',
+              },
+            }),
+          }),
+        }),
+      })
+    })
+
+    it('does not ask for or write chips when suggestionsCaptured is already true (state-only refire)', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: true,
+          suggestionCount: 2,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap: new IdBiMap(),
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+          suggestionsCaptured: true,
+        },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(result.value).toEqual({ status: 'completed' })
+      expect(generateStructuredMock).toHaveBeenCalledWith(
+        'classifier',
+        expect.any(String),
+        fallbackClassifierSchema,
+        expect.anything(),
+        ctx.abortSignal,
+      )
+      const created = events[0]
+      if (
+        !created ||
+        created.type !== 'delta_emitted' ||
+        created.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(created.action.payload.metadata.nextTurnSuggestions).toBeUndefined()
+    })
+
+    it('does not fire the phase at all when state succeeded, regardless of suggestionsCaptured (purely state-driven)', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: true,
+          suggestionCount: 2,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap: new IdBiMap(),
+          piggybackOutcome: { attempted: true, succeeded: true } satisfies PiggybackOutcome,
+          // Chips failed to parse on the narrative fold, but state itself is
+          // fine — shouldFallbackFire must not fire just to chase chips.
+          suggestionsCaptured: false,
+        },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const res = await gen.next()
+
+      expect(res).toEqual({ done: true, value: { status: 'completed' } })
+      expect(generateStructuredMock).not.toHaveBeenCalled()
+    })
+
+    it('uses the base schema and omits chips when suggestionsEnabled is false', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: false,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 0,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      expect(generateStructuredMock).toHaveBeenCalledWith(
+        'classifier',
+        expect.any(String),
+        fallbackClassifierSchema,
+        expect.anything(),
+        ctx.abortSignal,
+      )
+      const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+      expect(prompt).not.toContain('Action')
+      const created = events[0]
+      if (
+        !created ||
+        created.type !== 'delta_emitted' ||
+        created.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(created.action.payload.metadata.nextTurnSuggestions).toBeUndefined()
+    })
+
+    it('drops an item whose category ref does not resolve, keeping the rest', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: true,
+          suggestionCount: 2,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 0,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+          suggestions: [
+            { categoryRef: 'cat9', text: 'orphan' },
+            { categoryRef: 'cat1', text: 'kept' },
+          ],
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const created = events[0]
+      if (
+        !created ||
+        created.type !== 'delta_emitted' ||
+        created.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(created.action.payload.metadata.nextTurnSuggestions).toEqual({
+        items: [{ categoryId: 'cat_action', text: 'kept' }],
+        source: 'classifier',
+      })
+    })
+
+    it('clamps persisted chips to suggestionCount when the model over-emits', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({
+          models: {},
+          suggestionsEnabled: true,
+          suggestionCount: 2,
+          suggestionCategories: SUGGESTION_CATEGORIES,
+        }),
+      })
+      runningEntries()
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 0,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+          suggestions: [
+            { categoryRef: 'cat1', text: 'one' },
+            { categoryRef: 'cat2', text: 'two' },
+            { categoryRef: 'cat1', text: 'three' },
+          ],
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const created = events[0]
+      if (
+        !created ||
+        created.type !== 'delta_emitted' ||
+        created.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(created.action.payload.metadata.nextTurnSuggestions).toEqual({
+        items: [
+          { categoryId: 'cat_action', text: 'one' },
+          { categoryId: 'cat_dialogue', text: 'two' },
+        ],
+        source: 'classifier',
+      })
+    })
+  })
+
+  describe('fallbackClassifierWithSuggestionsSchema', () => {
+    it('degrades a malformed (non-array) suggestions value to [] without failing the parse', () => {
+      const result = fallbackClassifierWithSuggestionsSchema.safeParse({
+        sceneEntities: [],
+        worldTimeDelta: 5,
+        suggestions: 'not-an-array',
+      })
+
+      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('expected parse to succeed')
+      expect(result.data.suggestions).toEqual([])
+      // The .catch([]) guarantee: a malformed suggestions value must not take
+      // the sibling scene-state field down with it.
+      expect(result.data.worldTimeDelta).toBe(5)
+    })
+
+    it('degrades an array with one malformed item to [] wholesale (no itemwise recovery)', () => {
+      const result = fallbackClassifierWithSuggestionsSchema.safeParse({
+        sceneEntities: [],
+        worldTimeDelta: 5,
+        suggestions: [{ categoryRef: 'cat1', text: 'ok' }, { oops: true }],
+      })
+
+      expect(result.success).toBe(true)
+      if (!result.success) throw new Error('expected parse to succeed')
+      expect(result.data.suggestions).toEqual([])
+    })
+
+    it('still fails the whole parse when a sibling scene-state field is malformed', () => {
+      const result = fallbackClassifierWithSuggestionsSchema.safeParse({
+        sceneEntities: [],
+        worldTimeDelta: 'not-a-number',
+        suggestions: [{ categoryRef: 'cat1', text: 'ok' }],
+      })
+
+      expect(result.success).toBe(false)
     })
   })
 

@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { z } from 'zod'
 
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
-import { fallbackClassifierSchema } from '@/lib/pipeline'
+import { fallbackClassifierSchema, fallbackClassifierWithSuggestionsSchema } from '@/lib/pipeline'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -35,6 +35,17 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
     block: schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
     // No-op: empty scene, no time change — parses and applies cleanly.
     example: { sceneEntities: [], worldTimeDelta: 0 },
+  },
+  {
+    // Same agent, second reply shape: the classifier's schema grows a
+    // `suggestions` field whenever the run asks for chips (suggestionsEnabled
+    // + no chips already in hand), which changes the injected TS block enough
+    // that it no longer matches the base entry above (see per-turn-piggyback.ts).
+    name: 'per-turn-classifier',
+    block: schemaToTypeScriptBlock(
+      z.toJSONSchema(fallbackClassifierWithSuggestionsSchema) as JsonSchema,
+    ),
+    example: { sceneEntities: [], worldTimeDelta: 0, suggestions: [] },
   },
 ]
 

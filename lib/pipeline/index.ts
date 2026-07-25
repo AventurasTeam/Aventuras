@@ -1,7 +1,10 @@
 export { toPipelineError } from './call-error'
 export { definePhase, definePipeline } from './authoring/define'
 export { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './definitions/per-turn'
-export { fallbackClassifierSchema } from './definitions/per-turn-piggyback'
+export {
+  fallbackClassifierSchema,
+  fallbackClassifierWithSuggestionsSchema,
+} from './definitions/per-turn-piggyback'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export {
