@@ -43,6 +43,13 @@ const LOCAL_CONFIG: EmbedderConfig = {
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 
+const NO_APP_DEFAULTS = {
+  defaultStorySettings: {},
+  embeddingModelId: null,
+  embeddingProviderId: null,
+  defaultSuggestionCategories: { adventure: [], creative: [] },
+}
+
 function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefinition {
   return {
     mode: 'creative',
@@ -78,7 +85,7 @@ describe('createStoryWithBranch', () => {
         title: 'The Floating Isles',
         description: 'A grand tale',
         definition: makeDefinition(),
-        settings: buildStorySettings('creative', {}, null, null),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
         openingContent: 'Once upon a time',
         openingMetadata: metadata,
       },
@@ -119,7 +126,7 @@ describe('createStoryWithBranch', () => {
           narration: 'first',
           leadEntityId: LEAD_ID,
         }),
-        settings: buildStorySettings('adventure', {}, null, null),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
         lead: { id: LEAD_ID, name: 'Aria' },
@@ -155,7 +162,7 @@ describe('createStoryWithBranch', () => {
           storyId: existingId,
           title: 'Conflict',
           definition: makeDefinition(),
-          settings: buildStorySettings('creative', {}, null, null),
+          settings: buildStorySettings('creative', NO_APP_DEFAULTS),
           openingContent: 'boom',
           openingMetadata: metadata,
         },
@@ -184,7 +191,7 @@ describe('createStoryWithBranch', () => {
             narration: 'first',
             leadEntityId: LEAD_ID,
           }),
-          settings: buildStorySettings('adventure', {}, null, null),
+          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'x',
           openingMetadata: metadata,
         },
@@ -207,7 +214,7 @@ describe('createStoryWithBranch', () => {
         {
           title: 'Broken',
           definition: makeDefinition({ mode: 'adventure', leadEntityId: null }),
-          settings: buildStorySettings('adventure', {}, null, null),
+          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'x',
           openingMetadata: metadata,
         },
@@ -237,7 +244,7 @@ describe('createStoryWithBranch', () => {
         replaceExistingStoryId: true,
         title: 'Promoted Draft',
         definition: makeDefinition(),
-        settings: buildStorySettings('creative', {}, null, null),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
         openingContent: 'The draft becomes real.',
         openingMetadata: metadata,
       },
@@ -293,7 +300,7 @@ describe('createStoryWithBranch', () => {
           replaceExistingStoryId: true,
           title: 'Should not land',
           definition: makeDefinition(),
-          settings: buildStorySettings('creative', {}, null, null),
+          settings: buildStorySettings('creative', NO_APP_DEFAULTS),
           openingContent: 'x',
           openingMetadata: metadata,
         },
@@ -365,7 +372,7 @@ describe('createStoryWithBranch — embed step', () => {
           narration: 'first',
           leadEntityId: LEAD_ID,
         }),
-        settings: buildStorySettings('adventure', {}, null, null),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
         lead: { id: LEAD_ID, name: 'Aria' },
@@ -406,7 +413,7 @@ describe('createStoryWithBranch — embed step', () => {
             narration: 'first',
             leadEntityId: LEAD_ID,
           }),
-          settings: buildStorySettings('adventure', {}, null, null),
+          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'You wake.',
           openingMetadata: metadata,
           lead: { id: LEAD_ID, name: 'Aria' },
@@ -430,7 +437,7 @@ describe('createStoryWithBranch — embed step', () => {
       {
         title: 'No embed',
         definition: makeDefinition(),
-        settings: buildStorySettings('creative', {}, null, null),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
         openingContent: 'Once.',
         openingMetadata: metadata,
       },

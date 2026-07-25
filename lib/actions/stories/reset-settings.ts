@@ -19,9 +19,7 @@ export async function resetStorySettings(
     // A draft row has no definition yet, so there is no mode to seed a palette
     // from; creative is the wizard's own starting mode.
     story.definition?.mode ?? 'creative',
-    appSettings.defaultStorySettings,
-    appSettings.embeddingModelId,
-    appSettings.embeddingProviderId,
+    appSettings,
   )
 
   await ctx.runInTransaction([

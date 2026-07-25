@@ -27,9 +27,8 @@ afterEach(() => {
 // preserved value from a re-defaulted one while those differ.
 async function seed() {
   const { db, sqlite, runInTransaction } = await createTestDb()
-  const settings = buildStorySettings(
-    'adventure',
-    {
+  const settings = buildStorySettings('adventure', {
+    defaultStorySettings: {
       classifierCadence: 2,
       suggestionCount: 6,
       // Pinned false so the currentStoryStore test below can observe a real
@@ -37,9 +36,10 @@ async function seed() {
       suggestionsEnabled: false,
       models: { narrative: 'model-a', classifier: 'model-b' },
     },
-    'embed-a',
-    null,
-  )
+    embeddingModelId: 'embed-a',
+    embeddingProviderId: null,
+    defaultSuggestionCategories: { adventure: [], creative: [] },
+  })
   await db.insert(stories).values({
     id: 'story_1',
     title: 'Aria',

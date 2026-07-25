@@ -1,7 +1,11 @@
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
 import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
-import { storySettingsSchema, type StorySettings } from './story-config-schema'
+import {
+  storySettingsSchema,
+  type StorySettings,
+  type SuggestionCategory,
+} from './story-config-schema'
 
 export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   chapterTokenThreshold: 24000,
@@ -38,31 +42,34 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   packVariables: {},
 }
 
-// A story copies the embedder selection at creation and never re-reads the app
-// default, so both halves must be captured here or a provider-backend story
-// resolves to 'no-provider' for the rest of its life. `mode` drives the
-// suggestion palette, which is per-mode and therefore can't live in the
-// Partial<StorySettings> template.
+// A story copies the embedder selection and the per-mode suggestion palette at
+// creation and never re-reads the app defaults, so all three must be captured
+// here or a provider-backend story resolves to 'no-provider' / an empty
+// palette for the rest of its life.
 export function buildStorySettings(
   mode: 'adventure' | 'creative',
-  appDefault: Partial<StorySettings>,
-  appEmbeddingModelId: string | null,
-  appEmbeddingProviderId: string | null,
+  app: {
+    defaultStorySettings: Partial<StorySettings>
+    embeddingModelId: string | null
+    embeddingProviderId: string | null
+    defaultSuggestionCategories: {
+      adventure: readonly SuggestionCategory[]
+      creative: readonly SuggestionCategory[]
+    }
+  },
 ): StorySettings {
-  const appCategories = appDefault.suggestionCategories
+  const appPalette = app.defaultSuggestionCategories[mode]
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
-    ...appDefault,
-    // An empty app-level palette means "not configured", not "the user wants
-    // none" — App Settings ships it empty until its editor lands.
-    suggestionCategories:
-      appCategories != null && appCategories.length > 0
-        ? appCategories
-        : DEFAULT_SUGGESTION_CATEGORIES[mode],
-    // Both halves override unconditionally: appDefault is a template for the
-    // other fields, but the embedder selection has its own app-level columns,
-    // and a stale copy in the template must not outrank them.
-    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
-    embedding_provider_id: appEmbeddingProviderId ?? undefined,
+    ...app.defaultStorySettings,
+    // An empty stored palette means "not configured" — a row written before the
+    // per-mode seed landed, or one whose Zod default filled in empty arrays —
+    // not "the user wants none".
+    suggestionCategories: appPalette.length > 0 ? appPalette : DEFAULT_SUGGESTION_CATEGORIES[mode],
+    // Both halves override unconditionally: defaultStorySettings is a template
+    // for the other fields, but the embedder selection has its own app-level
+    // columns, and a stale copy in the template must not outrank them.
+    embedding_model_id: app.embeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
+    embedding_provider_id: app.embeddingProviderId ?? undefined,
   })
 }

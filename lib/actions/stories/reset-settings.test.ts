@@ -55,16 +55,43 @@ async function hydrateCurrentDefaults(): Promise<void> {
   }))
 }
 
+// Mirrors what hydrateCurrentDefaults() puts in the app-settings store, so the
+// "rebuilds current defaults" assertions can reconstruct resetStorySettings'
+// expected output byte-for-byte.
+function currentAppDefaults() {
+  return {
+    defaultStorySettings: {
+      ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
+      classifierCadence: 11,
+      chapterAutoClose: false,
+    },
+    embeddingModelId: 'app-embed',
+    embeddingProviderId: null,
+    defaultSuggestionCategories: APP_SETTINGS_DEFAULTS.defaultSuggestionCategories,
+  }
+}
+
+// Seeds a story row's pre-reset settings; the specific values are overwritten
+// by resetStorySettings in every test that reaches it, so the palette content
+// doesn't matter here.
+function seedSettings(
+  mode: 'adventure' | 'creative',
+  classifierCadence: number,
+  embeddingModelId: string,
+) {
+  return buildStorySettings(mode, {
+    defaultStorySettings: { classifierCadence },
+    embeddingModelId,
+    embeddingProviderId: null,
+    defaultSuggestionCategories: { adventure: [], creative: [] },
+  })
+}
+
 describe('resetStorySettings', () => {
   it('rebuilds current defaults and preserves definition, entries, entities, and deltas', async () => {
     const { db, sqlite, runInTransaction } = await createTestDb()
-    const oldSettings = buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null)
-    const healthySettings = buildStorySettings(
-      'creative',
-      { classifierCadence: 4 },
-      'other-embed',
-      null,
-    )
+    const oldSettings = seedSettings('adventure', 2, 'old-embed')
+    const healthySettings = seedSettings('creative', 4, 'other-embed')
 
     await db.insert(stories).values([
       {
@@ -136,18 +163,7 @@ describe('resetStorySettings', () => {
     const entityRows = await db.select().from(entities)
     const deltaRows = await db.select().from(deltas)
 
-    expect(recovered.settings).toEqual(
-      buildStorySettings(
-        'adventure',
-        {
-          ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
-          classifierCadence: 11,
-          chapterAutoClose: false,
-        },
-        'app-embed',
-        null,
-      ),
-    )
+    expect(recovered.settings).toEqual(buildStorySettings('adventure', currentAppDefaults()))
     expect(recovered.definition).toEqual(STORY_DEFINITION)
     expect(recovered.updatedAt).toBe(99)
     expect(healthy.settings).toEqual(healthySettings)
@@ -176,7 +192,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null),
+      settings: seedSettings('adventure', 2, 'old-embed'),
       createdAt: 1,
       updatedAt: 1,
     })
@@ -208,18 +224,7 @@ describe('resetStorySettings', () => {
     await resetStorySettings('story_draft', { db, runInTransaction }, 99)
 
     const [recovered] = await db.select().from(stories).where(eq(stories.id, 'story_draft'))
-    expect(recovered.settings).toEqual(
-      buildStorySettings(
-        'creative',
-        {
-          ...APP_SETTINGS_DEFAULTS.defaultStorySettings,
-          classifierCadence: 11,
-          chapterAutoClose: false,
-        },
-        'app-embed',
-        null,
-      ),
-    )
+    expect(recovered.settings).toEqual(buildStorySettings('creative', currentAppDefaults()))
   })
 
   it('retains a definition failure after successfully resetting settings', async () => {
@@ -229,7 +234,7 @@ describe('resetStorySettings', () => {
       title: 'Broken',
       status: 'active',
       definition: STORY_DEFINITION,
-      settings: buildStorySettings('adventure', { classifierCadence: 2 }, 'old-embed', null),
+      settings: seedSettings('adventure', 2, 'old-embed'),
       createdAt: 1,
       updatedAt: 1,
     })

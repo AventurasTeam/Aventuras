@@ -37,6 +37,7 @@ const APP_DEFAULTS: FinishAppDefaults = {
   defaultStorySettings: {},
   embeddingModelId: LOCAL_MODEL,
   embeddingProviderId: null,
+  defaultSuggestionCategories: { adventure: [], creative: [] },
   providers: [],
   installedLocalIds: [LOCAL_MODEL],
 }
