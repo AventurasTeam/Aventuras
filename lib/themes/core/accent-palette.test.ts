@@ -21,6 +21,12 @@ describe('CURATED_ACCENT_PALETTE', () => {
     ])
     expect(CURATED_ACCENT_PALETTE.blue).toBe('#2563eb')
   })
+
+  it('pins the neutral fallback to a real value', () => {
+    // Every other fallback case compares against the imported constant, so
+    // without this the suite still passes if NEUTRAL_ACCENT becomes garbage.
+    expect(NEUTRAL_ACCENT).toBe('#71717a')
+  })
 })
 
 describe('resolveAccentColor', () => {
@@ -30,6 +36,10 @@ describe('resolveAccentColor', () => {
 
   it('passes a custom hex through', () => {
     expect(resolveAccentColor('#7c3aed')).toBe('#7c3aed')
+  })
+
+  it('passes 3-digit shorthand hex through', () => {
+    expect(resolveAccentColor('#abc')).toBe('#abc')
   })
 
   it('falls back to neutral for an unknown value', () => {
