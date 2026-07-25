@@ -22,6 +22,17 @@
     "think": "internal monologue",
     "free": "no wrapping"
   },
+  "suggestions": {
+    "refresh": "Refresh suggestions",
+    "generate": "Generate suggestions",
+    "collapse": "Collapse suggestions",
+    "expand": "Expand suggestions",
+    "orphanCategory": "(removed)",
+    "errorBody": "Couldn't generate suggestions.",
+    "retry": "Retry",
+    "loading": "Generating suggestions…",
+    "chipLabel": "{{category}}: {{text}}"
+  },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "spellcheckSuggestion": "→ {{text}}",
