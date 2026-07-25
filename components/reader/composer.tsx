@@ -1,4 +1,11 @@
-import { forwardRef, useEffect, useImperativeHandle, useState, type ForwardedRef } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ForwardedRef,
+} from 'react'
 import { View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
@@ -25,6 +32,8 @@ type ComposerProps = {
 type ComposerHandle = {
   /** Refill the input (e.g. after a cancelled turn) so the user can edit/re-send. */
   restoreDraft: (text: string, mode: ComposerMode) => void
+  /** The live draft, read on demand — a suggestion refresh sends it as `refreshGuidance`. */
+  getDraft: () => { text: string; mode: ComposerMode }
 }
 
 function getModeOptions(): SelectOption[] {
@@ -64,13 +73,25 @@ export const Composer = forwardRef(function Composer(
   const [mode, setMode] = useState<ComposerMode>('free')
   const [lints, setLints] = useState<Lint[]>([])
 
+  // Mirrored during render: the handle is built once, so reading `text` /
+  // `mode` through its closure would hand back mount-time values forever.
+  const textRef = useRef(text)
+  const modeRef = useRef(mode)
+  textRef.current = text
+  modeRef.current = mode
+
   useImperativeHandle(
     ref,
     () => ({
       restoreDraft: (nextText, nextMode) => {
         setText(nextText)
         setMode(nextMode)
+        // Lints carry offsets into the text they were computed from; keeping
+        // them across a wholesale replacement underlines the wrong spans until
+        // the debounce re-runs.
+        setLints([])
       },
+      getDraft: () => ({ text: textRef.current, mode: modeRef.current }),
     }),
     [],
   )

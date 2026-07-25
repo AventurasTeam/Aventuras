@@ -44,6 +44,8 @@ type SuggestionStripProps = {
   /** In-flight per-turn generation: blocks chip taps and refresh, never collapse. */
   disabled?: boolean
   className?: string
+  /** Inner measure. The band (border + surface) stays full-bleed; only the content is constrained. */
+  contentClassName?: string
 }
 
 // The overline sits on the chip surface, so the tint has to carry further on dark.
@@ -139,6 +141,7 @@ export function SuggestionStrip({
   onToggleCollapsed,
   disabled = false,
   className,
+  contentClassName,
 }: SuggestionStripProps) {
   const { theme } = useTheme()
   const tintAlpha = OVERLINE_TINT_ALPHA[theme.mode]
@@ -209,29 +212,31 @@ export function SuggestionStrip({
     <View
       aria-busy={busy}
       accessibilityState={{ busy }}
-      className={cn('gap-1.5 border-t border-border bg-bg-sunken px-4 py-2', className)}
+      className={cn('border-t border-border bg-bg-sunken px-4 py-2', className)}
     >
-      {body}
-      <View className="flex-row items-center justify-end gap-1">
-        {emptyStateOwnsRefresh ? null : (
-          <Pulsing active={busy}>
-            <IconAction
-              icon={RefreshCw}
-              label={t('reader:suggestions.refresh')}
-              size="sm"
-              aria-busy={busy}
-              disabled={locked}
-              onPress={onRefresh}
-            />
-          </Pulsing>
-        )}
-        <IconAction
-          icon={collapsed ? ChevronUp : ChevronDown}
-          label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}
-          size="sm"
-          aria-expanded={!collapsed}
-          onPress={onToggleCollapsed}
-        />
+      <View className={cn('gap-1.5', contentClassName)}>
+        {body}
+        <View className="flex-row items-center justify-end gap-1">
+          {emptyStateOwnsRefresh ? null : (
+            <Pulsing active={busy}>
+              <IconAction
+                icon={RefreshCw}
+                label={t('reader:suggestions.refresh')}
+                size="sm"
+                aria-busy={busy}
+                disabled={locked}
+                onPress={onRefresh}
+              />
+            </Pulsing>
+          )}
+          <IconAction
+            icon={collapsed ? ChevronUp : ChevronDown}
+            label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}
+            size="sm"
+            aria-expanded={!collapsed}
+            onPress={onToggleCollapsed}
+          />
+        </View>
       </View>
     </View>
   )

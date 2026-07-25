@@ -28,7 +28,7 @@ import { StorySettingsStaleStoreError, updateStorySettings } from '@/lib/actions
 import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { awaitRunTerminal, PER_TURN_KIND } from '@/lib/pipeline'
+import { awaitRunTerminal, PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -113,8 +113,17 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
+  // Split by kind so the pill names what is actually running: a refresh started
+  // in the reader stays cancellable after a jump here.
   const isGenerating = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some((r) => r.storyId === storyId),
+    [...s.txState.runs.values()].some(
+      (r) => r.storyId === storyId && r.kind !== SUGGESTION_REFRESH_KIND,
+    ),
+  )
+  const refreshingSuggestions = generationStore.useGeneration((s) =>
+    [...s.txState.runs.values()].some(
+      (r) => r.storyId === storyId && r.kind === SUGGESTION_REFRESH_KIND,
+    ),
   )
 
   const isDirty = session.snapshot.dirtyFields.length > 0
@@ -202,8 +211,16 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       actions={<AppActionsMenu />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={isGenerating ? 'generating-narrative' : undefined}
-          onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+          activePhase={
+            isGenerating
+              ? 'generating-narrative'
+              : refreshingSuggestions
+                ? 'refreshing-suggestions'
+                : undefined
+          }
+          onCancel={() =>
+            void awaitRunTerminal(isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND, 'cancel')
+          }
           onErrorTap={() => {}}
         />
       }
