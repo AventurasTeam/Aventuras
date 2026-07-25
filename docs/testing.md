@@ -80,10 +80,14 @@ settled and load-bearing:
 
 ### Launch modes
 
-| Mode      | Renderer source                         | Electron main | Used for                           |
-| --------- | --------------------------------------- | ------------- | ---------------------------------- |
-| **Local** | `expo start --web` dev server           | unpackaged    | Authoring tests; hot reload        |
-| **CI**    | `electron-builder --linux --dir` bundle | packaged      | The suite of record; real `app://` |
+| Mode      | Renderer source                            | Electron main | Used for                           |
+| --------- | ------------------------------------------ | ------------- | ---------------------------------- |
+| **Local** | static `dist/` export, served on localhost | unpackaged    | Authoring tests; fast              |
+| **CI**    | `electron-builder --linux --dir` bundle    | packaged      | The suite of record; real `app://` |
+
+Neither mode runs a Metro dev server, and **neither hot-reloads**: local
+mode serves a prebuilt `dist/` through `serveDist()`, so a renderer
+change is invisible to it until `pnpm build:web` runs again.
 
 The packaged build is the target of record because it is the only
 mode that exercises `app://bundle` protocol handling, asar packing,
@@ -91,14 +95,22 @@ the `asarUnpack` native modules (`sqlite-vec`, `onnxruntime-node`),
 and the `extraResources` migrations — the code paths that break in
 production and nowhere else.
 
-Three launch gotchas the harness must handle:
+Three launch gotchas — the first is yours to handle, the other two the
+harness absorbs:
 
-- **`pnpm test:e2e:packaged` builds nothing.** The project launches
-  whatever binary already sits in `release/linux-unpacked/` — there is
-  no `globalSetup` and no pretest hook — so a stale bundle runs
-  silently, passing every spec that predates your branch and failing
-  only the newest ones. Run steps 1-3 of [CI](#ci) before the packaged
-  suite. CI itself is safe, because its job always builds first.
+- **Neither suite builds anything.** There is no `globalSetup` and no
+  pretest hook in either project, so both run whatever artifact is
+  already on disk: `pnpm test:e2e:packaged` launches the binary sitting
+  in `release/linux-unpacked/`, and `pnpm test:e2e` serves the `dist/`
+  export plus the compiled `electron/dist/main.js`. A stale artifact
+  fails **silently and selectively** — every spec predating your branch
+  passes, only the newest ones fail, and the failure looks like a
+  product bug rather than a build one. The tell is a locator that
+  matches copy or a testID you just changed: assert against the artifact
+  (`grep` the new string in `dist/`) before debugging the code. Run
+  `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
+  the local suite, and steps 1-3 of [CI](#ci) before the packaged one.
+  CI itself is safe, because its job always builds first.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open
