@@ -593,7 +593,7 @@ describe('suggestion-refresh emission phase', () => {
     wireAppSettings()
     const controller = new AbortController()
     // The provider call resolves normally and the cancel lands in the window
-    // between its return and the write — canon discards the result.
+    // between its return and the write (generation-pipeline.md → Abort).
     generateStructuredMock.mockImplementation(async () => {
       controller.abort()
       return okChips([{ categoryRef: 'cat1', text: 'Too late.' }])

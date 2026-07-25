@@ -37,11 +37,7 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 {% endfor %}
 {%- if suggestionsFire %}
 # Next-turn options
-Populate the "suggestions" field of your JSON response with exactly {{ suggestionCount }} distinct entries, one per option for what the reader does next. Each entry's \`text\` is COMPLETE prose written as the reader's own next turn — not a description of an option, and not a question. Categories are listed below with a bracketed ref, e.g. "[cat1] Action" — reference that ref below WITHOUT the brackets, as the \`categoryRef\` value. You may reuse a category or skip one; vary the categories across entries rather than repeating the same one:
-{% for slot in suggestionSlots -%}
-- [{{ slot.ref }}] {{ slot.label }}: {{ slot.promptHint }}
-{% endfor %}
-Keep each entry's text to one or two sentences.
+{% include 'macro_suggestion_emission_json' %}
 {%- endif -%}
 {%- if refreshGuidance != blank %}
 

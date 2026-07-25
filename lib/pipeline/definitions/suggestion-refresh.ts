@@ -70,8 +70,16 @@ async function* suggestionEmissionPhase(
 
   const emission = resolveSuggestionEmission(open.settings)
   // Nothing to pick from is a legitimate no-op, not a failure
-  // (reader-composer.md → Zero enabled categories).
-  if (!emission.settingsAllowEmission) return { status: 'completed' }
+  // (reader-composer.md → Edge cases → Zero enabled categories). debug, not warn: the UI
+  // shouldn't offer ⟳ at all here, so reaching it is defensive — but a silent
+  // exit would be the one completed-with-no-delta path leaving no trace.
+  if (!emission.settingsAllowEmission) {
+    ctx.log.debug('classifier.suggestions_refresh_emission_disabled', {
+      suggestionsEnabled: open.settings.suggestionsEnabled,
+      enabledCategories: emission.slots.length,
+    })
+    return { status: 'completed' }
+  }
 
   const entries = [...entriesStore.getEntries().values()]
     .filter((e) => e.branchId === ctx.branchId)
@@ -136,7 +144,8 @@ async function* suggestionEmissionPhase(
     }
 
   // A cancel that lands between the call returning and the write must discard the
-  // result, not commit it (reader-composer.md → click-to-cancel before write).
+  // result, not commit it (generation-pipeline.md → Abort: poll at every
+  // suspension point, return aborted).
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const { items, droppedCount } = resolveSuggestionItems(result.value.suggestions, emission)
