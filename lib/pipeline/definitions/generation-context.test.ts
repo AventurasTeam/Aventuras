@@ -237,6 +237,31 @@ describe('buildGenerationContext', () => {
     ])
   })
 
+  it('forces suggestionsFire back to false when the caller says true but every category is disabled', () => {
+    const ctx = buildGenerationContext({
+      entries: [],
+      entities: [],
+      definition,
+      settings: {
+        partialChapterBuffer: 3,
+        suggestionCategories: [
+          {
+            id: 'cat_a',
+            label: 'Action',
+            promptHint: 'Do something.',
+            color: 'red',
+            enabled: false,
+            order: 0,
+          },
+        ],
+      } as never,
+      idMap: new IdBiMap(),
+      suggestionsFire: true,
+    })
+    expect(ctx.suggestionsFire).toBe(false)
+    expect(ctx.suggestionSlots).toEqual([])
+  })
+
   it('passes suggestionCount through from settings regardless of whether suggestions fire', () => {
     const ctx = buildGenerationContext({
       entries: [],

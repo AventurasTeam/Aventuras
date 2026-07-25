@@ -219,7 +219,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
 
   it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
-    expect(rendered).toContain('off-scene).\nAfter the state block')
+    expect(rendered).toContain('off-scene).\nAppend exactly one <suggestions> block')
   })
 
   it('places the suggestions block directly after the narrative instruction when piggybackFires is false', () => {
@@ -229,7 +229,7 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
     })
     expect(rendered).not.toContain('<state>')
     expect(rendered).toContain(
-      'Do not break character or address the reader.\nAfter the state block',
+      'Do not break character or address the reader.\nAppend exactly one <suggestions> block',
     )
   })
 })

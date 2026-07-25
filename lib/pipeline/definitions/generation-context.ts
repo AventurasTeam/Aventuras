@@ -61,6 +61,10 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   const calendar = getCalendar(definition.calendarSystemId)
 
+  const suggestionSlots = suggestionsFire
+    ? buildSuggestionSlots(settings.suggestionCategories).slots
+    : []
+
   const context = {
     entries: narrative.map((e) => ({ content: e.content })),
     entities,
@@ -72,10 +76,11 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     userSettings: { partialChapterBuffer: settings.partialChapterBuffer },
     intermediates: {},
     piggybackFires,
-    suggestionsFire,
-    suggestionSlots: suggestionsFire
-      ? buildSuggestionSlots(settings.suggestionCategories).slots
-      : [],
+    // Re-gated on the derived slots, not just the caller's flag: a caller
+    // passing suggestionsFire=true against an all-disabled palette must still
+    // omit the fragment rather than render it with an empty pick list.
+    suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
+    suggestionSlots,
     suggestionCount: settings.suggestionCount,
   }
 
