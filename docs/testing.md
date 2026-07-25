@@ -116,7 +116,7 @@ harness absorbs:
   app window. Select the app window by URL prefix, not by first-open
   order. (Packaged mode has no DevTools window, so `firstWindow()` is
   safe there — but the harness selects by URL uniformly.)
-- **`__DEV__` differs by mode.** It is `true` under the dev server
+- **`__DEV__` differs by mode.** It is `true` in unpackaged/local mode
   and `false` in the packaged bundle. Tests must never depend on it —
   in particular the `stub` provider (`lib/ai/providers.ts`) throws
   when `__DEV__` is false, so it is unavailable to E2E. Use the mock
