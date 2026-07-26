@@ -1,37 +1,38 @@
-# Slice 3.7 — Next-turn suggestions: emission folds, chip strip, refresh pipeline
+# Slice 3.7a — Next-turn suggestions: emission folds, chip strip, refresh pipeline
 
 ## Metadata
 
 - **Milestone:** [Milestone 3 — Memory floor](../milestone.md)
 - **Depends on:** [Slice 3.2](./02-piggyback.md) (both on-turn
   emission folds ride its per-turn paths; `<suggestions>` parses
-  through C2); [Slice 3.11](./11-story-settings-shell.md) —
-  partial: only the settings section's host waits on the shell
-  (C7); emission, persistence, and the chip strip proceed
-  regardless
-- **Blocks:** none in M3 (the `models.suggestion` slot in the app
-  settings models tab extends in M7.1)
+  through C2)
+- **Blocks:** [Slice 3.7b](./07b-suggestion-settings.md) — the
+  settings section edits the palette this slice seeds and gates
+  emission on. No other M3 slice (the `models.suggestion` slot in
+  the app settings models tab extends in M7.1)
 
 ## Goal
 
 After each AI reply, tappable suggestion chips seed the user's next
-turn: a sibling `<suggestions>` block emits in the narrative fold
-(piggyback on) or the classifier fold (piggyback off), persists on
-the entry's metadata, and renders as the reader's chip strip with
-category overlines, a refresh re-roll through the new
-`suggestion-refresh` pipeline, and an empty-state Generate. Story
-Settings gains the Generation tab's Authoring aids categories
-editor (wiring the shipped
-`SuggestionCategoriesEditor`) plus the `suggestionsEnabled` toggle
-and `suggestionCount` stepper.
+turn: a `<suggestions>` block rides the narrative fold's tagged
+emission (piggyback on) or a `suggestions` field on the classifier
+fold's structured output (piggyback off), persists on the entry's
+metadata, and renders as the reader's chip strip with category
+overlines, a refresh re-roll through the new `suggestion-refresh`
+pipeline, and an empty-state Generate. Editing the category palette
+is [Slice 3.7b](./07b-suggestion-settings.md).
 
 ## Background
 
 Suggestions are user-customizable per story: a category palette
-(seeded at creation from
-`app_settings.default_suggestion_categories[mode]` — the column and
-seed landed in the M1.5 gate) whose enabled entries the model picks
-from per slot; chip count is decoupled from category count.
+(copied at creation from
+`app_settings.default_suggestion_categories[mode]`) whose enabled
+entries the model picks from per slot; chip count is decoupled from
+category count. **The M1.5 gate landed the column but not the seed
+data** — both mode arrays were empty and `buildStorySettings` took
+no `mode`, so this slice lands the palettes and the copy-at-creation
+path as well.
+
 Emissions persist on `story_entries.metadata.nextTurnSuggestions`,
 so chips are reload-, branch-, and rollback-safe through the
 existing metadata delta log. The re-roll path is a dedicated
@@ -56,19 +57,25 @@ tap-after-typing draft loss is a documented v1 wart.
   `blockedBy: ['per-turn', 'suggestion-refresh']`).
 - [`generation-pipeline.md → Config pre-flight validation`](../../../../generation-pipeline.md#config-pre-flight-validation)
   — resolver-input declaration for the `suggestion` agent.
-- [`story-settings.md → Suggestion categories`](../../../../ui/screens/story-settings/story-settings.md#suggestion-categories)
-  — the editor's placement and bound data.
 - [`ui/patterns/generation-status-pill.md`](../../../../ui/patterns/generation-status-pill.md)
   — the refresh pipeline's pill presence at low priority.
+- [`ui/foundations/color.md → Curated accent palette`](../../../../ui/foundations/color.md#curated-accent-palette)
+  — the fixed, mode-agnostic swatch set a category's `color` names.
 
 ## Scope: in
 
-- **Emission fragment:** the shared `<suggestions>` prompt fragment
+- **Creation-time seed:** the per-mode default palettes, threaded
+  into `buildStorySettings` so a new story copies
+  `app_settings.default_suggestion_categories[mode]`. Closes the gap
+  the Background names.
+- **Emission fragment:** the `<suggestions>` prompt fragment
   (enabled categories with `cat<N>` placeholders, `suggestionCount`
   slots, diversity nudge) appended to the narrative fold (3.2's
-  piggyback call) and the classifier fold (3.2's fallback pass);
-  category-id placeholder swap post-parse; parse independence from
-  `<state>` in all four outcome combinations (via C2).
+  piggyback call), and its JSON-shaped counterpart on the classifier
+  fold (3.2's fallback pass is a structured call, so chips arrive as
+  a schema field, not a sibling block); category-id placeholder swap
+  post-parse; parse independence from `<state>` in all four outcome
+  combinations (via C2).
 - **Persistence:** metadata write with `source` tag
   (`piggyback` / `classifier` / `refresh`), `refreshGuidance` when
   present; delta-logged like any metadata mutation.
@@ -80,23 +87,15 @@ tap-after-typing draft loss is a documented v1 wart.
   pill copy "Refreshing suggestions" at low priority;
   click-to-cancel before write.
 - **Chip strip:** panel between entries and composer on terminal
-  AI entries; chip anatomy (overline, prose body, accent strip,
-  theme-resolved palette slot); states
-  (`visible / loading / error / collapsed / hidden / empty-state`);
-  chrome row (⟳ refresh with composer text as guidance, ⌄
-  collapse); tap → composer fill + `Free` mode; orphan-category
+  AI entries; chip anatomy (overline, prose body, accent strip
+  resolved from the curated palette); a `phase`
+  (`visible / loading / error / empty-state`) with `collapsed`
+  orthogonal to it, and `hidden` owned by the route not the
+  compound; chrome row (⟳ refresh with composer text as guidance,
+  ⌄ collapse); tap → composer fill + `Free` mode; orphan-category
   `(removed)` fallback; disabled-category render rules;
   accessibility (chip = button with category label, `aria-busy`
   loading, refresh `aria-label`).
-- **Settings surface:** the Generation tab's Authoring aids section
-  hosted by the Story Settings shell per C7
-  ([Slice 3.11](./11-story-settings-shell.md) hosts), with
-  `suggestionsEnabled` master toggle, `suggestionCount` stepper,
-  and the categories editor wiring the shipped
-  `SuggestionCategoriesEditor` over
-  `stories.settings.suggestionCategories` (drag order, enable,
-  label validation, ColorPicker, prompt hint, delete confirm,
-  reset-to-mode-defaults).
 - **Pre-flight:** resolver-input declarations so an unassigned
   `suggestion` agent halts the refresh pipeline before phase 0
   with the M2 vocabulary; the on-turn folds ride the narrative /
@@ -104,9 +103,16 @@ tap-after-typing draft loss is a documented v1 wart.
 
 ## Scope: out
 
+- The Story Settings Authoring aids section — the
+  `suggestionsEnabled` toggle, the `suggestionCount` stepper, and
+  the categories editor. [Slice 3.7b](./07b-suggestion-settings.md).
+  Until it ships, a story's palette is whatever creation seeded and
+  the feature is unreachable on stories created before this slice
+  (`suggestionsEnabled` is a persisted boolean and those rows carry
+  `false`).
 - The App Settings → Story Defaults categories editor (per-mode
   tabs over `default_suggestion_categories`) — M7.1 settings depth;
-  the seed data flows from M1.5 regardless.
+  this slice seeds that column's data.
 - The `models.suggestion` assignment UI — M7.1 models tab; the
   resolution chain + failure vocabulary cover M3.
 - Chip-text translation (stage 2 active path) — M8.1/M8.2.
@@ -122,8 +128,13 @@ tap-after-typing draft loss is a documented v1 wart.
   strip in empty-state Generate; the inverse leaves chips rendered
   (vitest over the four combinations).
 - Classifier fold: with `piggybackMode='off'`, the fallback pass
-  emits both blocks in one call; chips persist with
-  `source: 'classifier'` (vitest).
+  carries state and chips in one structured call; chips persist
+  with `source: 'classifier'`, and a turn whose `<state>` failed
+  while chips already landed does **not** re-roll and clobber them
+  (vitest).
+- Creation: a new story of each mode is seeded with that mode's
+  palette, and a story whose app-level palette is empty falls back
+  to the module constant (vitest).
 - Refresh: ⟳ with composer text passes it as `refreshGuidance`
   (persisted), strip shows loading, second click no-ops
   (self-block), result overwrites chips with `source: 'refresh'`
@@ -135,10 +146,9 @@ tap-after-typing draft loss is a documented v1 wart.
   still taps.
 - Rollback: after CTRL-Z of a turn, the prior terminal entry's
   chips become the active strip (vitest over the metadata delta).
-- Settings: category edits round-trip; zero enabled categories
-  stops emission but historical chips still render;
-  `suggestionsEnabled` toggles per the mid-story matrix (vitest on
-  the emission gate; manual on the editor).
+- Emission gate: zero enabled categories stops emission but
+  historical chips still render, and the strip hides entirely only
+  when there is also nothing to show (vitest).
 - Pre-flight: unassigned `suggestion` agent blocks the refresh
   pipeline before phase 0 with a system entry naming the failure.
 
@@ -149,72 +159,29 @@ tap-after-typing draft loss is a documented v1 wart.
   abort, pre-flight halt for an unassigned `suggestion` agent,
   emission gating (enabled categories, master toggle),
   placeholder swap for category ids.
-- Storybook: chip strip in all six states; categories-editor
-  binding story if the wiring extracts a new compound.
+- Storybook: chip strip across every phase and both collapsed
+  states, plus orphan-category, disabled-category, and custom-hex
+  renders.
+- E2E: a turn persists chips and renders them without leaking the
+  trailing block into prose; tap fills the composer in `Free`; ⟳
+  re-rolls with guidance; CTRL-Z reverses the re-roll; the
+  classifier fold produces `source: 'classifier'`.
 - Manual smoke: real-provider turns with chips on desktop +
   Android; refresh with guidance.
 
 ## Open questions
 
-All three remaining questions concern the Story Settings section and
-therefore travel with **3.7b**; none blocked 3.7a. The two questions
-this slice did resolve are recorded under Implementation notes.
-
-- **Which navigate-away intercepts the settings section needs.**
-  [`save-sessions.md → Navigate-away guard`](../../../../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
-  lists window-close intent (electron close, web `beforeunload`)
-  and Actions-menu route jumps among its required categories, and
-  [Slice 3.11](./11-story-settings-shell.md) wired neither — only
-  the surface's own back path (chrome Return, Android hardware
-  back). Window-close was left out deliberately: cross-cutting
-  infra no surface wires today, and wiring it would pull a UI slice
-  into `electron/`. The shell anticipates one anyway —
-  `resolveLeave` is documented as reachable directly, because a
-  `beforeunload` handler cannot route through a React modal. Both
-  gaps are inert while the session has no sections and so can never
-  be dirty; the Authoring aids section makes them live — the route
-  jump everywhere, window-close on desktop. Decide at planning
-  whether to wire them or accept that a window close or a
-  Diagnostics jump drops unsaved category edits. Surfaced by M3.11
-  (2026-07-22).
-- **The save bar is invisible in the phone collapsed state.** The
-  shell renders it inside the detail pane, and `MasterDetailLayout`
-  hides that pane on phone whenever no tab is selected — so a dirty
-  session collapsed back to the rail shows no bar, no dirty count,
-  and no way to save or discard. Nothing is lost (every panel stays
-  mounted, and leaving still routes through the guard), but the
-  user cannot see or act on the unsaved changes.
-  [`save-sessions.md → Save bar`](../../../../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
-  does not cover the collapsed case, and its positioning rule
-  ("spans the editable pane only — never the rail or the
-  surrounding chrome") argues against the obvious fix. This slice
-  is the first that can make the session dirty, so it inherits the
-  call: lift the bar to the surface footer on phone, or accept
-  rail-state invisibility. Surfaced by M3.11 (2026-07-22).
-- **The route-to-session wiring has no test coverage.**
-  [Slice 3.11](./11-story-settings-shell.md)'s route mounts the
-  save bar on `snapshot.isDirty` and the guard dialog on
-  `pendingLeave && isFocused`, then maps their actions onto
-  `resolveLeave`. With zero registered sections none of that can
-  execute, so deleting both blocks outright passes typecheck, lint,
-  and all 1928 tests across the unit and storybook vitest
-  projects — and running the app cannot catch it either. This slice
-  is the first able to exercise the path end to end; decide whether
-  to pin the seam with a story or test that mounts the provider
-  over a fixture section and asserts the wiring. Surfaced by M3.11
-  (2026-07-22).
+None. The two this slice resolved are recorded under Implementation
+notes; the three concerning the settings surface moved to
+[Slice 3.7b](./07b-suggestion-settings.md).
 
 ## Implementation notes
 
-**The slice was split at planning.** 3.7a shipped emission,
-persistence, the `suggestion-refresh` pipeline, the chip strip, and
-the creation-time seed; **3.7b** owns the Story Settings Authoring
-aids section. The cut falls on the C7 partial-gate line this doc
-already declared — 3.7a needs no Story Settings shell at all. The
-brief above still reads as the unsplit slice: **Scope: in**'s
-"Settings surface" bullet, the "Settings:" acceptance criterion, and
-the three remaining Open questions are all 3.7b's. Dividing this doc
-into two is outstanding and developer-owned.
+**The slice was split at planning**, on the C7 partial-gate line the
+original brief already declared: 3.7a needs no Story Settings shell
+at all, so emission, persistence, the pipeline, the strip, and the
+seed ship here while the editor moves to
+[3.7b](./07b-suggestion-settings.md).
 
 **Resolved developer decisions.**
 

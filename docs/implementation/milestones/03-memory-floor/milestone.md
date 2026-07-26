@@ -74,9 +74,10 @@ with its owner.
 The **reader / wizard track** ships what users touch:
 [Slice 3.6](./slices/06-wizard-world-cast.md) completes the wizard
 (World and Cast steps, refine / regenerate on the opening);
-[Slice 3.7](./slices/07-suggestions.md) adds next-turn suggestion
+[Slice 3.7a](./slices/07a-suggestions.md) adds next-turn suggestion
 chips over both emission folds plus the `suggestion-refresh`
-pipeline; [Slice 3.8](./slices/08-worldtime-edit.md) adds the
+pipeline, with [Slice 3.7b](./slices/07b-suggestion-settings.md)
+following for their Story Settings editor; [Slice 3.8](./slices/08-worldtime-edit.md) adds the
 per-entry world-time click-to-edit overlay and monotonicity flag;
 [Slice 3.9](./slices/09-undo-batched.md) extends CTRL-Z so undoing
 a prose turn reverses the positional suffix through the survival
@@ -88,7 +89,7 @@ dropped: canon defines no reader-entry refine (refine is a
 wizard-opening affordance, 3.6).
 [Slice 3.11](./slices/11-story-settings-shell.md) (also added at
 promotion, from an audit finding) ships the minimal Story Settings
-host that 3.1b's embedding-status panel and 3.7's Generation-tab
+host that 3.1b's embedding-status panel and 3.7b's Generation-tab
 Authoring aids section register into — the real basic surface
 remains M4.4.
 
@@ -119,8 +120,11 @@ browsable.
   probe: first `probe_captures` writes, parity test
 - [Slice 3.6](./slices/06-wizard-world-cast.md) — wizard steps 3
   (World) and 4 (Cast), refine / regenerate on the opening
-- [Slice 3.7](./slices/07-suggestions.md) — next-turn suggestions:
+- [Slice 3.7a](./slices/07a-suggestions.md) — next-turn suggestions:
   emission folds, chip strip, `suggestion-refresh` pipeline,
+  creation-time palette seed
+- [Slice 3.7b](./slices/07b-suggestion-settings.md) — the Generation
+  tab's Authoring aids section: master toggle, count stepper,
   categories editor
 - [Slice 3.8](./slices/08-worldtime-edit.md) — per-entry worldTime
   click-to-edit overlay, monotonicity-break flag
@@ -140,17 +144,17 @@ day-one: 3.1a   3.2   3.6   3.8   3.11
       ├→ 3.3 ─┬→ 3.9
       │       └→ 3.10
       └→ 3.4 ──→ 3.5
-3.2 ───→ 3.7
-3.11 ┄┬→ 3.1b   (partial: settings-section portions only)
-     └→ 3.7
+3.2 ───→ 3.7a ──→ 3.7b
+3.11 ┄─→ 3.1b   (partial: settings-section portions only)
+3.11 ───→ 3.7b
 ```
 
 - **3.1a** gates 3.1b (lifecycle extends the service), 3.3 (the
   disambiguation flow embeds extracted descriptions at decision
   time), and 3.4 (vec0 + query embeds).
-- **3.2** gates 3.7 — both emission folds ride the per-turn paths
+- **3.2** gates 3.7a — both emission folds ride the per-turn paths
   3.2 owns, and `<suggestions>` parses through 3.2's trailing-block
-  utility (C2). The roadmap sketch also gated 3.7 on 3.3; that gate
+  utility (C2). The roadmap sketch also gated 3.7a on 3.3; that gate
   is dropped — the classifier fold is 3.2's per-turn fallback pass,
   not the periodic classifier.
 - **3.3** gates 3.9 and 3.10 — both consume the shared reversal
@@ -175,10 +179,12 @@ day-one: 3.1a   3.2   3.6   3.8   3.11
   piggyback layer writes non-zero `worldTime` values, so its
   milestone-level validation follows 3.2 without blocking its
   build.
-- **3.11** is a thin day-one shell; its edges to 3.1b and 3.7 are
-  **partial** — only their settings-section portions wait on it
-  (M2's partial-gate precedent); swap flow, drain worker, emission,
-  and the chip strip proceed regardless.
+- **3.11** is a thin day-one shell. Its edge to 3.1b stays
+  **partial** — only the embedding-status panel waits on it (M2's
+  partial-gate precedent); swap flow and drain worker proceed
+  regardless. Its edge to **3.7b** is a full gate, because that
+  slice is nothing but a settings section; 3.7a's emission and chip
+  strip never touch the shell.
 
 ## Slice contracts
 
@@ -210,7 +216,7 @@ failing never blocks another), jsonrepair-equivalent repair,
 per-field best-effort fallback, and placeholder substitution
 integration per
 [`generation-pipeline.md → ID placeholder substitution`](../../../generation-pipeline.md#id-placeholder-substitution).
-[Slice 3.7](./slices/07-suggestions.md) consumes it for
+[Slice 3.7a](./slices/07a-suggestions.md) consumes it for
 `<suggestions>` (including category-id placeholder swap) rather
 than writing a second parser.
 
@@ -298,7 +304,7 @@ M3.1a extended the App Settings route — and the shell's
 `{ dirtyFields, getPatch, reset }` into the surface's single save
 bar.
 Consumers: 3.1b registers the Memory tab's embedding-status panel;
-3.7 registers the Generation tab's Authoring aids section
+3.7b registers the Generation tab's Authoring aids section
 (categories editor, master toggle, count stepper). Story Settings
 saves write `stories.settings` directly — `stories` is absent from
 `deltas.target_table`, so a settings save carries no delta and is

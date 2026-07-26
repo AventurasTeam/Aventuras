@@ -394,30 +394,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   behavior sends the model, so it needs an owner and a token-cost
   measurement before anyone touches it. Surfaced by M3.7a Task 1
   (2026-07-25).
-- **`SuggestionCategoriesEditor` hardcodes its "add" affordance in
-  English.** `components/compounds/suggestion-categories-editor.tsx`
-  hardcodes the visible add-row label and its accessible name rather
-  than routing through `t()`. No user-facing regression today — the
-  component isn't wired into the real Story Settings Generation tab
-  yet; it only mounts via its Storybook story and the `/dev` harness
-  route — but Slice 3.7b is expected to wire it per
-  [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories),
-  and it needs label props (or direct `t()` call sites) before then.
-  Surfaced during M3.7a planning, before implementation began.
-- **`story-settings.md`'s "Collision blocks save with inline error" is
-  unimplementable against the shipped save-session contract.**
-  [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories)
-  specifies that a case-insensitive label collision blocks save with an
-  inline error on the conflicting row, but `SectionRegistration`
-  (`components/story-settings/save-session.tsx`) carries no validity
-  channel — a section publishes `dirtyFields` and a `getPatch` /
-  `reset` pair, nothing that can say "I'm dirty but invalid" — and
-  `SaveBar` (`components/compounds/save-bar.tsx`) has no invalid state
-  to render even if it did. A collision today would have to be caught
-  by disabling Save from outside the save-session pattern entirely, or
-  not at all. Blocks Slice 3.7b, which is expected to wire
-  `SuggestionCategoriesEditor` into this tab. Surfaced during M3.7a
-  planning, before implementation began.
 - **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
   builds, so a story-level model override can't satisfy pre-flight even
   though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
