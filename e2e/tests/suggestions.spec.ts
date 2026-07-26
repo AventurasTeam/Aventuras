@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+import type { EntryMetadata } from '@/lib/db'
+
 import { queryApp } from '../harness/db'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -25,11 +27,10 @@ import { reader } from '../locators/reader'
 // strip's render variants (loading / error / empty-state) — none of that is
 // re-driven here. See docs/testing.md → Coverage.
 
-type PersistedSuggestions = {
-  items: { categoryId: string; text: string }[]
-  source: 'piggyback' | 'classifier' | 'refresh'
-  refreshGuidance?: string
-}
+// Derived, not hand-duplicated: the first spec to parse the metadata column,
+// so a future rename/variant on the real schema fails typecheck here instead
+// of silently drifting until some assertion fails for a confusing reason.
+type PersistedSuggestions = NonNullable<EntryMetadata['nextTurnSuggestions']>
 
 async function currentBranchId(page: Page): Promise<string> {
   const rows = await queryApp(page, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
@@ -101,101 +102,110 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
   test('a turn emits chips via the tagged block, tap fills the composer, refresh re-rolls, and CTRL-Z undoes the re-roll', async () => {
     test.setTimeout(120_000)
 
-    await home.openStory(app.window, 'The Veilstone Courier').click()
-    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
-    await reader.composer(app.window).fill('E2E-SUGGEST-USER I listen at the door.')
-    await reader.send(app.window).click()
+    // Steps split the sequential journey in the reporter/trace: a failure at
+    // step 3 shouldn't read as "unknown state somewhere in a 100-line test" —
+    // it should point straight at "refresh" with steps 1-2 marked passed.
+    let branchId = ''
+    let entryId = ''
 
-    // --- 1. The turn persists chips and renders the strip; the trailing
-    // blocks don't leak into the rendered prose (Task 1's bug). ---
-    await expect(app.window.getByText('E2E-SUGGEST-TURN', { exact: false })).toBeVisible({
-      timeout: 30_000,
+    await test.step('send a turn with a piggyback-tagged narrative reply', async () => {
+      await home.openStory(app.window, 'The Veilstone Courier').click()
+      await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+      await reader.composer(app.window).fill('E2E-SUGGEST-USER I listen at the door.')
+      await reader.send(app.window).click()
+      await expect(app.window.getByText('E2E-SUGGEST-TURN', { exact: false })).toBeVisible({
+        timeout: 30_000,
+      })
+      branchId = await currentBranchId(app.window)
     })
 
-    const branchId = await currentBranchId(app.window)
-    const { id: entryId, suggestions } = await readTerminalEntry(app.window, branchId)
-    expect(suggestions?.source).toBe('piggyback')
-    expect(suggestions?.items).toEqual([
-      { categoryId: 'act', text: CHIP_ACT_1 },
-      { categoryId: 'speak', text: CHIP_SPEAK_1 },
-      { categoryId: 'act', text: CHIP_ACT_2 },
-    ])
-
-    await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toBeVisible()
-    await expect(reader.suggestionChip(app.window, 'Speak', CHIP_SPEAK_1)).toBeVisible()
-    await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_2)).toBeVisible()
-
-    // The entry's own rendered row must show only the prose — not the raw
-    // tag markup, and not the chip prose the tags carried (the exact leak
-    // stripTrailingBlocks (feat(piggyback) d56026bb) exists to prevent).
-    const entryRow = reader.row(app.window, entryId)
-    await expect(entryRow).toContainText('E2E-SUGGEST-TURN')
-    await expect(entryRow).not.toContainText('<suggestions>')
-    await expect(entryRow).not.toContainText('<state>')
-    await expect(entryRow).not.toContainText(CHIP_ACT_1)
-
-    // --- 2. Tap fills the composer in Free mode. ---
-    // Switch away from Free first so the forced-Free-on-tap behavior is
-    // actually exercised, not just coincidentally already true.
-    await reader.modeTrigger(app.window).click()
-    await reader.modeOption(app.window, 'do').click()
-
-    await reader.suggestionChip(app.window, 'Act', CHIP_ACT_1).click()
-    await expect(reader.composer(app.window)).toHaveValue(CHIP_ACT_1)
-    await expect(reader.modeTrigger(app.window)).toHaveText(
-      new RegExp(t('reader:composerMode.free')),
-    )
-
-    // --- 3. Refresh re-rolls through the dedicated pipeline, passing the
-    // composer's current text (the just-tapped chip) as refreshGuidance. ---
-    mock.setStructured('suggestion-refresh', {
-      suggestions: [
-        { categoryRef: 'cat1', text: REFRESH_CHIP_ACT },
-        { categoryRef: 'cat2', text: REFRESH_CHIP_SPEAK },
-      ],
-    })
-    await reader.suggestionRefresh(app.window).click()
-
-    await expect(reader.suggestionChip(app.window, 'Act', REFRESH_CHIP_ACT)).toBeVisible({
-      timeout: 15_000,
-    })
-    await expect(reader.suggestionChip(app.window, 'Speak', REFRESH_CHIP_SPEAK)).toBeVisible()
-    await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toHaveCount(0)
-
-    const refreshed = await readTerminalEntry(app.window, branchId)
-    expect(refreshed.id).toBe(entryId)
-    expect(refreshed.suggestions).toEqual({
-      items: [
-        { categoryId: 'act', text: REFRESH_CHIP_ACT },
-        { categoryId: 'speak', text: REFRESH_CHIP_SPEAK },
-      ],
-      source: 'refresh',
-      refreshGuidance: CHIP_ACT_1,
-    })
-
-    // --- 4. CTRL-Z reverses the re-roll as its own unit, restoring the prior
-    // (piggyback) chips — the refresh shares no actionId with the turn, so
-    // undo must not touch the AI reply itself. ---
-    // Blur first: the global shortcut ignores editable targets (so native
-    // textarea undo wins there), and the composer may still hold focus from
-    // the chip tap.
-    await app.window.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
-    await app.window.keyboard.press('Control+z')
-
-    await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toBeVisible({
-      timeout: 15_000,
-    })
-    await expect(reader.suggestionChip(app.window, 'Act', REFRESH_CHIP_ACT)).toHaveCount(0)
-
-    const undone = await readTerminalEntry(app.window, branchId)
-    expect(undone.id).toBe(entryId)
-    expect(undone.suggestions).toEqual({
-      items: [
+    await test.step('chips persist via the piggyback fold and render without leaking trailing blocks', async () => {
+      const terminal = await readTerminalEntry(app.window, branchId)
+      entryId = terminal.id
+      expect(terminal.suggestions?.source).toBe('piggyback')
+      expect(terminal.suggestions?.items).toEqual([
         { categoryId: 'act', text: CHIP_ACT_1 },
         { categoryId: 'speak', text: CHIP_SPEAK_1 },
         { categoryId: 'act', text: CHIP_ACT_2 },
-      ],
-      source: 'piggyback',
+      ])
+
+      await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toBeVisible()
+      await expect(reader.suggestionChip(app.window, 'Speak', CHIP_SPEAK_1)).toBeVisible()
+      await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_2)).toBeVisible()
+
+      // The entry's own rendered row must show only the prose — not the raw
+      // tag markup, and not the chip prose the tags carried (the exact leak
+      // stripTrailingBlocks (feat(piggyback) d56026bb) exists to prevent).
+      const entryRow = reader.row(app.window, entryId)
+      await expect(entryRow).toContainText('E2E-SUGGEST-TURN')
+      await expect(entryRow).not.toContainText('<suggestions>')
+      await expect(entryRow).not.toContainText('<state>')
+      await expect(entryRow).not.toContainText(CHIP_ACT_1)
+    })
+
+    await test.step('tap fills the composer in Free mode', async () => {
+      // Switch away from Free first so the forced-Free-on-tap behavior is
+      // actually exercised, not just coincidentally already true.
+      await reader.modeTrigger(app.window).click()
+      await reader.modeOption(app.window, 'do').click()
+
+      await reader.suggestionChip(app.window, 'Act', CHIP_ACT_1).click()
+      await expect(reader.composer(app.window)).toHaveValue(CHIP_ACT_1)
+      await expect(reader.modeTrigger(app.window)).toHaveText(
+        new RegExp(t('reader:composerMode.free')),
+      )
+    })
+
+    await test.step('refresh re-rolls through the dedicated pipeline, passing the composer text as refreshGuidance', async () => {
+      mock.setStructured('suggestion-refresh', {
+        suggestions: [
+          { categoryRef: 'cat1', text: REFRESH_CHIP_ACT },
+          { categoryRef: 'cat2', text: REFRESH_CHIP_SPEAK },
+        ],
+      })
+      await reader.suggestionRefresh(app.window).click()
+
+      await expect(reader.suggestionChip(app.window, 'Act', REFRESH_CHIP_ACT)).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(reader.suggestionChip(app.window, 'Speak', REFRESH_CHIP_SPEAK)).toBeVisible()
+      await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toHaveCount(0)
+
+      const refreshed = await readTerminalEntry(app.window, branchId)
+      expect(refreshed.id).toBe(entryId)
+      expect(refreshed.suggestions).toEqual({
+        items: [
+          { categoryId: 'act', text: REFRESH_CHIP_ACT },
+          { categoryId: 'speak', text: REFRESH_CHIP_SPEAK },
+        ],
+        source: 'refresh',
+        refreshGuidance: CHIP_ACT_1,
+      })
+    })
+
+    await test.step('CTRL-Z reverses the re-roll as its own unit, restoring the prior chips', async () => {
+      // The refresh shares no actionId with the turn, so undo must not touch
+      // the AI reply itself. Blur first: the global shortcut ignores editable
+      // targets (so native textarea undo wins there), and the composer may
+      // still hold focus from the chip tap.
+      await app.window.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+      await app.window.keyboard.press('Control+z')
+
+      await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toBeVisible({
+        timeout: 15_000,
+      })
+      await expect(reader.suggestionChip(app.window, 'Act', REFRESH_CHIP_ACT)).toHaveCount(0)
+
+      const undone = await readTerminalEntry(app.window, branchId)
+      expect(undone.id).toBe(entryId)
+      expect(undone.suggestions).toEqual({
+        items: [
+          { categoryId: 'act', text: CHIP_ACT_1 },
+          { categoryId: 'speak', text: CHIP_SPEAK_1 },
+          { categoryId: 'act', text: CHIP_ACT_2 },
+        ],
+        source: 'piggyback',
+      })
     })
   })
 })
