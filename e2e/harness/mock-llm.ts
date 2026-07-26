@@ -4,7 +4,11 @@ import type { AddressInfo } from 'node:net'
 import { z } from 'zod'
 
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
-import { fallbackClassifierSchema, fallbackClassifierWithSuggestionsSchema } from '@/lib/pipeline'
+import {
+  fallbackClassifierSchema,
+  fallbackClassifierWithSuggestionsSchema,
+  suggestionRefreshSchema,
+} from '@/lib/pipeline'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -52,6 +56,17 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
       z.toJSONSchema(fallbackClassifierWithSuggestionsSchema) as JsonSchema,
     ),
     example: { sceneEntities: [], worldTimeDelta: 0, suggestions: [] },
+  },
+  {
+    // The ⟳ refresh pipeline's own agent target ('suggestion'), a distinct
+    // schema from both classifier shapes above — no suggestions.catch([]) here
+    // (suggestion-refresh.ts), so an unmatched request would 404 into `{}` and
+    // fail every refresh test as a provider error instead of exercising it.
+    name: 'suggestion-refresh',
+    block: schemaToTypeScriptBlock(z.toJSONSchema(suggestionRefreshSchema) as JsonSchema),
+    // No-op: zero chips is schema-valid and parses cleanly, same convention as
+    // the classifier entries above.
+    example: { suggestions: [] },
   },
 ]
 

@@ -57,4 +57,12 @@ export const reader = {
   // Bad-branch hydration failure state.
   hydrationFailed: (page: Page): Locator =>
     page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
+
+  // Next-turn suggestion strip (components/reader/suggestion-strip.tsx). The
+  // chip's accessible name is the interpolated chipLabel ("Category: text"),
+  // not the chip prose alone, so the locator takes both parts.
+  suggestionChip: (page: Page, category: string, text: string): Locator =>
+    page.getByRole('button', { name: t('reader:suggestions.chipLabel', { category, text }) }),
+  suggestionRefresh: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:suggestions.refresh') }),
 }
