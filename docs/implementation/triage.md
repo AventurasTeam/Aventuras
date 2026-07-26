@@ -512,11 +512,11 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   (2026-07-25).
 - **Two of the three suggestion-emission paths share a log event name with
   different payload shapes.** `classifier.suggestions_parse_failed` is
-  emitted by the narrative fold (`lib/pipeline/definitions/per-turn.ts:225`,
-  payload `{blockFound, failed, dropped}`) and by the classifier fold
-  (`lib/pipeline/definitions/per-turn-piggyback.ts:239`, payload `{received,
-dropped}`) — two structurally different shapes under one event name —
-  while the refresh path
+  emitted by the narrative fold (`lib/pipeline/definitions/per-turn.ts:225`)
+  with `blockFound`, `failed`, and `dropped` fields, and by the classifier
+  fold (`lib/pipeline/definitions/per-turn-piggyback.ts:239`) with `received`
+  and `dropped` fields — two structurally different shapes under one event
+  name — while the refresh path
   (`lib/pipeline/definitions/suggestion-refresh.ts:153`) uses a distinct
   `classifier.suggestions_refresh_unusable`. Filtering diagnostics by event
   name can't separate the two folds sharing one. Either all three emission
