@@ -490,15 +490,19 @@ the categories editor lives in
 this section covers the reader surface end-to-end.
 
 **Categories are user-customizable per story.** The palette is
-authored in Story Settings → Composer → Suggestion categories;
+authored in
+[Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories);
 defaults seeded at story creation from
 `app_settings.default_suggestion_categories[mode]`. Adventure ships
 Action / Dialogue / Examine / Move; Creative ships Action / Dialogue
 / Revelation / Twist. Users can add, edit, reorder, recolor, or
-disable categories. Custom categories carry their own
+disable categories. Every category carries its own
 [`ColorPicker`](../../patterns/color-picker.md) selection (curated
-palette + custom hex); the chip's color is theme-resolved at render
-from the stored palette slot.
+palette + custom hex); a chip's color resolves through
+`resolveAccentColor` (`lib/themes`), which accepts either a curated
+palette slot key or a raw custom hex — the palette itself is fixed
+hex per mode, not theme-derived (see
+[`color.md → Curated accent palette`](../../foundations/color.md#curated-accent-palette)).
 
 **Chip count is decoupled from category count.**
 `stories.settings.suggestionCount` (default 3, range 1-6) drives
@@ -517,8 +521,11 @@ existing metadata delta-log:
   block in the narrative model's trailing emission, parsed
   independently of `<state>`.
 - **Classifier fold** (`piggybackMode='off'`) — the per-turn
-  classifier pass emits both `<state>` and `<suggestions>` in one
-  call.
+  classifier pass is a structured-output call; chips arrive as a
+  `suggestions` field on the classifier's Zod schema (`.catch([])`-
+  wrapped so a malformed array can't take the scene-state fields down
+  with it), not a `<suggestions>` text block. Still one call — a
+  different wire shape from the narrative fold's tagged block.
 - **Refresh re-roll** — user-triggered `suggestion-refresh` pipeline
   using the dedicated `models.suggestion` agent (single-shot
   emission + conditional translation; see
@@ -553,11 +560,18 @@ type. Different axes.
   pulses; chips dim; taps no-op. Second click while loading is a
   no-op (concurrency policy self-blocks; see
   [`generation-pipeline.md`](../../../generation-pipeline.md)).
+  **Hidden while `empty-state` is expanded** — the body's ⟳ Generate
+  button below is the refresh affordance there, and the two side by
+  side would read as different actions. Reappears once the strip is
+  collapsed, since collapsing hides the body button along with the
+  rest of the content and the chrome row becomes the only refresh
+  affordance left.
 - **⌄ collapse** — existing affordance; flips between `visible` and
   `collapsed`. Chrome row persists when collapsed.
 
-Disabling the feature lives in Story Settings → Composer →
-Suggestions via the `suggestionsEnabled` master toggle, not inline.
+Disabling the feature lives in
+[Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories)
+via the `suggestionsEnabled` master toggle, not inline.
 
 **Empty-state ⟳ Generate.** Terminal entries without
 `nextTurnSuggestions` (opening entries, `user_action` entries
@@ -569,8 +583,9 @@ pipeline as the refresh button.
 **States:**
 
 - `visible` — normal
-- `loading` — suggestion emission in flight (chip-strip emission OR
-  re-roll). Chips dim; refresh icon pulses
+- `loading` — a re-roll is in flight (the chrome ⟳ or the
+  empty-state ⟳ Generate button fired `suggestion-refresh`). Chips
+  dim; refresh icon pulses
 - `error` — generation failed (inline error with Retry)
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
@@ -578,6 +593,16 @@ pipeline as the refresh button.
   appears
 - `empty-state` — terminal entry has no `nextTurnSuggestions`;
   single ⟳ Generate affordance rendered where chips would be
+
+**Not a `loading` state: the per-turn lock.** While a per-turn
+pipeline is in flight, the strip locks chip taps and the refresh
+affordance through a separate `disabled` prop rather than switching
+to `loading`. The route can't know in advance whether this turn's
+piggyback or classifier-fold emission will actually produce chips —
+zero enabled categories or capability gating can silently skip it —
+so claiming "Generating suggestions…" could lie. Whatever the strip
+was already showing (chips, or the `empty-state` ⟳ Generate button)
+just locks until the turn resolves.
 
 **Orphan categories.** A chip whose stored `categoryId` no longer
 resolves (user deleted the category since emission) renders with

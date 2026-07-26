@@ -379,3 +379,147 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `EntryCard` above. Fix is to move the strings into the appropriate
   namespace and swap call sites to `t()`. Surfaced by M3.7a Task 8
   (2026-07-25).
+- **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
+  `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
+  `{{ entry.content }}` (inside the `recentEntries` loop) renders the
+  persisted `story_entries.content` column verbatim; nothing strips a
+  trailing `<state>` or `<suggestions>` block before it's re-injected —
+  those blocks are stripped only for display, by `stripTrailingBlocks`
+  in `entry-card.tsx`, which never touches what's stored. So every
+  prior AI turn's trailing block(s) re-enter the next prompt as if they
+  were narrative prose. Pre-existing for `<state>`; this slice's
+  `<suggestions>` block is a second instance of the same leak.
+  Stripping in the `recent` filter that windows entries into
+  `recentEntries` would fix it but changes what already-merged piggyback
+  behavior sends the model, so it needs an owner and a token-cost
+  measurement before anyone touches it. Surfaced by M3.7a Task 1
+  (2026-07-25).
+- **`SuggestionCategoriesEditor` hardcodes its "add" affordance in
+  English.** `components/compounds/suggestion-categories-editor.tsx`
+  hardcodes the visible add-row label and its accessible name rather
+  than routing through `t()`. No user-facing regression today — the
+  component isn't wired into the real Story Settings Generation tab
+  yet; it only mounts via its Storybook story and the `/dev` harness
+  route — but Slice 3.7b is expected to wire it per
+  [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories),
+  and it needs label props (or direct `t()` call sites) before then.
+  Surfaced by M3.7a Task 3 (2026-07-25).
+- **`story-settings.md`'s "Collision blocks save with inline error" is
+  unimplementable against the shipped save-session contract.**
+  [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories)
+  specifies that a case-insensitive label collision blocks save with an
+  inline error on the conflicting row, but `SectionRegistration`
+  (`components/story-settings/save-session.tsx`) carries no validity
+  channel — a section publishes `dirtyFields` and a `getPatch` /
+  `reset` pair, nothing that can say "I'm dirty but invalid" — and
+  `SaveBar` (`components/compounds/save-bar.tsx`) has no invalid state
+  to render even if it did. A collision today would have to be caught
+  by disabling Save from outside the save-session pattern entirely, or
+  not at all. Blocks Slice 3.7b, which is expected to wire
+  `SuggestionCategoriesEditor` into this tab. Surfaced by M3.7a Task 3
+  (2026-07-25).
+- **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
+  builds, so a story-level model override can't satisfy pre-flight even
+  though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
+  constructs its `config: ResolveModelConfig` from only `providers`,
+  `profiles`, `assignments`, and `defaultProviderId` off
+  `snapshot.appSettings` — never `snapshot.storySettings?.models` —
+  even though `resolveModel` (`lib/ai/resolve-model.ts`) checks
+  `config.storyModels?.[target]` for story-override targets, and every
+  runtime call site (`per-turn.ts`, `per-turn-piggyback.ts`,
+  `suggestion-refresh.ts`) already passes `storyModels: open.settings.models`
+  correctly. A story that overrides `narrative` or `classifier` (or,
+  once wired, `suggestion`) at the story level therefore resolves fine
+  when the call actually fires, but pre-flight — which runs first and
+  gates the whole run — halts on config that works. Affects
+  `narrative` / `classifier` today; inert until a UI writes story-level
+  model overrides. One-line fix: add
+  `storyModels: snapshot.storySettings?.models` to the config passed
+  into `resolveModel`. Surfaced by M3.7a Task 7 (2026-07-25).
+- **`Compounds/EntryCard → StreamingReasoning` reportedly renders empty
+  in the Storybook dev server while passing under
+  `vitest --project storybook` (20/20).** The vitest harness is not
+  blind to render throws — verified with a deliberately-throwing story,
+  which it does fail. A browser probe against `pnpm storybook` reported
+  `#storybook-root` empty with a `ReanimatedError` about a missing
+  dependency array, the same shape as an unguarded `useAnimatedStyle`
+  with no deps array — the pattern the reader's `SuggestionStrip`
+  splits web/native specifically to avoid. Real desktop is unaffected
+  (Metro applies the worklet plugin there), and both the dev-server and
+  vitest-storybook paths load the same `.storybook` config directory,
+  so it isn't an obvious config split. Mechanism unresolved; worth ten
+  minutes with `pnpm storybook` open. Surfaced by M3.7a Task 9
+  (2026-07-26).
+- **The status pill is single-slot, so a turn started during a refresh
+  strands the refresh.** `GenerationStatusPill`'s `GenerationPhase`
+  union (`components/compounds/generation-status-pill.tsx`) now
+  includes `refreshing-suggestions` alongside the per-turn phases, but
+  the pill only ever shows one `currentPhase`. If a turn starts while a
+  `suggestion-refresh` is still in flight, the pill shows
+  `generating-narrative`, its cancel targets the turn, and the
+  still-running refresh has no cancel affordance until the turn ends —
+  the refresh isn't blocked (`per-turn` deliberately doesn't gate on the
+  no-gate `suggestion-refresh` kind), it's just invisible to the pill
+  while a turn owns the slot. A designed state, not a bug the phase
+  addition introduced; recorded so a future multi-slot pill redesign
+  has the scenario on record. Surfaced by M3.7a Task 8 (2026-07-25).
+- **A typed `PipelineInputMap` via declaration merging is the shape to
+  reach for once a second pipeline needs caller inputs.**
+  `suggestion-refresh` is the first pipeline kind to give a phase
+  caller-supplied parameters (`targetEntryId`, `refreshGuidance`), and
+  it rides the base `PhaseContext.inputs?: unknown`
+  (`lib/pipeline/types.ts`) narrowed by its own type guard
+  (`readRefreshInput` in `lib/pipeline/definitions/suggestion-refresh.ts`)
+  rather than a typed per-kind context. That's the right amount of
+  machinery for one consumer. `lib/actions/action-map.ts`'s
+  `PipelineActionMap` already establishes the declaration-merging idiom
+  this repo uses for the analogous per-domain-additive problem; a
+  `PipelineInputMap` keyed by pipeline kind is the natural generic seam
+  once a second pipeline kind needs its own caller inputs. Not needed
+  yet — recorded so the next consumer doesn't have to rediscover the
+  idiom. Surfaced by M3.7a Task 7 (2026-07-25).
+- **`lib/actions/entities/register.ts` carries the same null-flattening
+  shape that produced this slice's undo defect, but lands on the safe
+  side of it.** Task 7 fixed a real bug in
+  `lib/actions/story-entries/register.ts`: a field-wise undo partial
+  can't express "this column was NULL," so reversing onto a NULL
+  `metadata` produced an unparseable blob. `entities/register.ts` has
+  the analogous shape for entity `state`, but its flattened default is
+  a schema-valid empty object rather than an invalid one, so undo there
+  restores an empty-but-parseable `state` rather than breaking the next
+  read — and a NULL `state` row is only reachable via legacy import or
+  a manual DB edit, not any path this slice touches. Deliberately left
+  alone; recorded so the asymmetry with `story_entries.metadata` is a
+  known, chosen difference rather than an oversight the next reader
+  "fixes" into inconsistency. Surfaced by M3.7a Task 7 (2026-07-25).
+- **The reversal barrier (`awaitRunTerminal(kind, 'cancel')`) is
+  specified in `generation-pipeline.md` but never invoked by any
+  reversal path, and `applyDeltaAction` never consults
+  `reversalInProgress`.** Both exist in
+  `lib/pipeline/runtime/orchestrator.ts` /
+  `lib/stores/generation/generation.ts` and predate this slice, but
+  nothing made them reachable until now: `suggestion-refresh` is the
+  first `no-gate` pipeline kind (`gateBehavior: 'no-gate'`,
+  `lib/pipeline/definitions/suggestion-refresh.ts`), so it's the first
+  run that can genuinely be mid-flight while a user reversal (CTRL-Z /
+  rollback) fires against the same entry. The dominant race window is
+  closed in practice by the phase re-reading its target row after the
+  call completes rather than trusting a stale in-memory copy; the
+  residual gap is a microtask window between that re-read and the
+  write, which is upstream of this pipeline. Surfaced by M3.7a Task 7
+  (2026-07-25).
+- **`abortRun` reverse-replays every delta under a run's `actionId`,
+  which would reverse a `suggestion-refresh` run's already-committed
+  stage-1 emission.**
+  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)'s
+  "Re-roll cancel during translation stage" edge case states that on a
+  translation-stage cancel "the stage-1 emission has already
+  committed" — but `abortRun` (`lib/pipeline/runtime/orchestrator.ts`)
+  doesn't distinguish committed-and-chained-forward deltas from
+  in-flight ones; it reverses everything tagged with the run's
+  `actionId`. Unobservable today because `suggestionTranslationPhase`
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) is a synchronous
+  no-op — there's no window between stage 1 committing and stage 2
+  finishing for a cancel to land in. Becomes real once the M8.1
+  translation call replaces that no-op. Surfaced by M3.7a Task 7
+  (2026-07-25).

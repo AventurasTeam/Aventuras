@@ -1205,10 +1205,10 @@ stories.settings: {
   // Next-turn suggestions — user-customizable category palette + literal count
   suggestionCount: number           // chips per emission; default 3, range 1-6. Decoupled from #enabled categories: model picks per-slot from the enabled palette
   suggestionCategories: {           // ordered palette; copied at story creation from app_settings.default_suggestion_categories[mode] (sibling field — per-mode shape doesn't fit Partial<StorySettings>)
-    id: string                      // stable per-story uuid
+    id: string                      // stable per-story handle, not necessarily a uuid; DEFAULT_SUGGESTION_CATEGORIES seeds fixed literals (cat_action, cat_dialogue, ...) since uniqueness is only required within one palette
     label: string                   // visible chip overline ("Action", "Confront", user-edited)
     promptHint: string              // prose snippet fed to the suggestion agent for this slot
-    color: string                   // slot key from the curated accent palette (theme-resolved at render; not raw hex)
+    color: string                   // curated palette slot key OR a raw custom hex; resolveAccentColor (lib/themes) accepts either, falling back to neutral otherwise. Palette itself is fixed hex, not theme-derived — see docs/ui/foundations/color.md → Curated accent palette
     enabled: boolean                // emission gate; disabled-but-defined entries stay editable in settings
     order: number                   // explicit ordering; user-draggable
   }[]

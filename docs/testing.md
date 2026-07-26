@@ -80,10 +80,23 @@ settled and load-bearing:
 
 ### Launch modes
 
-| Mode      | Renderer source                         | Electron main | Used for                           |
-| --------- | --------------------------------------- | ------------- | ---------------------------------- |
-| **Local** | `expo start --web` dev server           | unpackaged    | Authoring tests; hot reload        |
-| **CI**    | `electron-builder --linux --dir` bundle | packaged      | The suite of record; real `app://` |
+| Mode         | Renderer source                         | Electron main | Used for                           |
+| ------------ | --------------------------------------- | ------------- | ---------------------------------- |
+| **dev**      | static `dist/` snapshot (`serveDist()`) | unpackaged    | Authoring tests; fast iteration    |
+| **packaged** | `electron-builder --linux --dir` bundle | packaged      | The suite of record; real `app://` |
+
+**Neither mode runs a live Metro/`expo start` dev server.** Both
+serve the same pre-built `dist/` produced by `pnpm build:web`
+(`expo export --platform web`) — `dev` mode via a local static HTTP
+server the harness spins up (`serveDist()` in `e2e/harness/launch.ts`),
+`packaged` via the `app://bundle` protocol inside the packaged
+binary. `dev` is a shortcut around packaging, not hot reload: **a
+renderer source edit has no effect on a `dev`-mode run until
+`pnpm build:web` re-runs.** This is a false-confidence trap, not a
+cosmetic gap — it produced a real false pass during Slice 3.7a, where
+a mutation test succeeded silently against a stale bundle. Re-run
+`pnpm build:web` before trusting a `dev`-mode result that touches
+renderer code.
 
 The packaged build is the target of record because it is the only
 mode that exercises `app://bundle` protocol handling, asar packing,
@@ -98,11 +111,13 @@ Two launch gotchas the harness must handle:
   app window. Select the app window by URL prefix, not by first-open
   order. (Packaged mode has no DevTools window, so `firstWindow()` is
   safe there — but the harness selects by URL uniformly.)
-- **`__DEV__` differs by mode.** It is `true` under the dev server
-  and `false` in the packaged bundle. Tests must never depend on it —
-  in particular the `stub` provider (`lib/ai/providers.ts`) throws
-  when `__DEV__` is false, so it is unavailable to E2E. Use the mock
-  LLM server instead (below).
+- **`__DEV__` is `false` in both modes.** The `build:web` script runs
+  `expo export` without a `--dev` flag, so the exported bundle both
+  `dev` and `packaged` load has `__DEV__ = false` baked in at build
+  time — there is no live dev server to make it otherwise. In
+  particular the `stub` provider (`lib/ai/providers.ts`) throws when
+  `__DEV__` is false, so it is unavailable to E2E in either mode. Use
+  the mock LLM server instead (below).
 
 ## Harness structure
 

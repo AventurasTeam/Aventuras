@@ -137,9 +137,13 @@ hex field = Apply (when valid). Esc = Cancel.
 ## Consumer wiring shape
 
 ```tsx
+// Both consumers derive the render-order array from the palette record —
+// CURATED_ACCENT_PALETTE is a Record<CuratedAccentSlot, string>, not an array.
+const curatedSwatches = CURATED_ACCENT_SLOTS.map((slot) => CURATED_ACCENT_PALETTE[slot])
+
 // App Settings — Appearance · Accent override
 <ColorPicker
-  swatches={CURATED_ACCENT_PALETTE}
+  swatches={curatedSwatches}
   value={appSettings.appearance.accentOverride ?? null}
   onChange={(next) => updateAccentOverride(next)}
   fallbackColor={activeTheme.accent}
@@ -150,7 +154,7 @@ hex field = Apply (when valid). Esc = Cancel.
 
 // Story Settings — About · Accent color
 <ColorPicker
-  swatches={CURATED_ACCENT_PALETTE}
+  swatches={curatedSwatches}
   value={story.accent_color ?? null}
   onChange={(next) => setDraftAccent(next)}
   fallbackColor={modeDerivedStripColor(story.mode, activeTheme)}

@@ -212,10 +212,23 @@ type ClassifierContext = BaseContext & {
 The orchestrator hands each phase its run's typed context —
 `PerTurnContext`, `ClassifierContext`, etc. — narrowing the generic
 `PhaseContext` base; a phase typed for the wrong kind is a type error.
-(M1 ships the minimal base `{ actionId, abortSignal, intermediates }`;
-the per-kind `inputs` / `story` / `settings` fields land with their
-milestones.) **Chained transactions (per-turn → chapter-close) do not
-inherit intermediates** — each chained pipeline has its own context and
+(M1 ships the minimal base `{ actionId, abortSignal, intermediates }`.)
+
+**What shipped for `inputs` instead of the sketch above.** The base
+`PhaseContext` (`lib/pipeline/types.ts`) carries an untyped
+`inputs?: unknown` rather than a typed field landing per milestone.
+Slice 3.7a is the first milestone to give a phase caller-supplied
+inputs — `suggestion-refresh`'s `targetEntryId` / `refreshGuidance` —
+and the phase narrows `unknown` with its own type guard
+(`readRefreshInput` in
+`lib/pipeline/definitions/suggestion-refresh.ts`) rather than reading
+a typed `PerTurnContext`/`ClassifierContext`-shaped field; neither of
+those types exists in the codebase yet. Adequate for one consumer; a
+second pipeline kind needing caller inputs is the trigger to revisit
+a generic seam.
+
+**Chained transactions (per-turn → chapter-close) do not inherit
+intermediates** — each chained pipeline has its own context and
 writes a fresh set.
 
 A given piece of phase output may be both an intermediate AND
@@ -528,13 +541,17 @@ What gets validated is **selective per pipeline kind** — the
 pre-flight walks only the resolver inputs of phases this pipeline
 actually fires. The per-turn pipeline validates retrieval +
 narrative + classifier (if a separate classifier call is in the
-phase list, e.g. piggyback mode is off) + suggestions (if
-`stories.settings.suggestionsEnabled`); the chapter-close pipeline
-validates the chapter-close agent's resolved config; the periodic
-classifier validates classifier's config at its scheduled fire
-time. The memory probe is not a pipeline — it captures as a
-side-effect of the per-turn pipeline's retrieval phase, covered by
-that pipeline's pre-flight.
+phase list, e.g. piggyback mode is off). Suggestion emission is not
+a separate resolver target here — on both folds it rides whichever
+of those two calls fires, so it adds nothing to the per-turn
+pre-flight; the dedicated `suggestion` agent belongs to the
+`suggestion-refresh` pipeline kind and is pre-flighted independently
+when that pipeline runs. The chapter-close pipeline validates the
+chapter-close agent's resolved config; the periodic classifier
+validates classifier's config at its scheduled fire time. The memory
+probe is not a pipeline — it captures as a side-effect of the
+per-turn pipeline's retrieval phase, covered by that pipeline's
+pre-flight.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
