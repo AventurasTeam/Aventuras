@@ -46,6 +46,7 @@ import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
+import { shouldShowSuggestionStrip } from '@/lib/piggyback'
 import {
   awaitRunTerminal,
   PER_TURN_KIND,
@@ -146,6 +147,12 @@ export default function ReaderComposerRoute() {
   const suggestionsEnabled = openForBranch?.settings.suggestionsEnabled ?? false
   const suggestionCategories = openForBranch?.settings.suggestionCategories ?? []
   const chips = terminalEntry?.metadata?.nextTurnSuggestions?.items ?? []
+  const stripVisible = shouldShowSuggestionStrip({
+    suggestionsEnabled,
+    hasTerminalEntry: terminalEntry != null,
+    hasChips: chips.length > 0,
+    categories: suggestionCategories,
+  })
   const stripPhase: SuggestionStripPhase = refreshingSuggestions
     ? 'loading'
     : stripError
@@ -719,7 +726,7 @@ export default function ReaderComposerRoute() {
               </View>
             )}
           </View>
-          {suggestionsEnabled && terminalEntry != null ? (
+          {stripVisible ? (
             <SuggestionStrip
               contentClassName="mx-auto w-full max-w-[860px]"
               phase={stripPhase}

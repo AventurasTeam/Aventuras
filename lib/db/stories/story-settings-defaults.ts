@@ -21,6 +21,10 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',
+  // Paired with an empty palette, this combination alone allows zero enabled
+  // categories with the toggle on — buildStorySettings below always overrides
+  // suggestionCategories with a real per-mode seed before a story persists
+  // these; don't spread this constant directly as a valid settings shape.
   suggestionsEnabled: true,
   suggestionCount: 3,
   suggestionCategories: [],

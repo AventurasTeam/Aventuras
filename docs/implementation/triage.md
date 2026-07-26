@@ -510,3 +510,26 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   finishing for a cancel to land in. Becomes real once the M8.1
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
+- **Two of the three suggestion-emission paths share a log event name with
+  different payload shapes.** `classifier.suggestions_parse_failed` is
+  emitted by the narrative fold (`lib/pipeline/definitions/per-turn.ts:225`,
+  payload `{blockFound, failed, dropped}`) and by the classifier fold
+  (`lib/pipeline/definitions/per-turn-piggyback.ts:239`, payload `{received,
+dropped}`) — two structurally different shapes under one event name —
+  while the refresh path
+  (`lib/pipeline/definitions/suggestion-refresh.ts:153`) uses a distinct
+  `classifier.suggestions_refresh_unusable`. Filtering diagnostics by event
+  name can't separate the two folds sharing one. Either all three emission
+  paths should share a name or none should; two-of-three is the
+  inconsistency. Surfaced by the M3.7a whole-slice review (2026-07-26).
+- **The next-turn-suggestions feature is invisible to every story created
+  before this slice.** `suggestionsEnabled` (`stories.settings`) is a
+  non-optional persisted boolean, so pre-slice stories carry whatever
+  `false` they were written with, and 3.7a ships no toggle to flip it — the
+  Story Settings editor lands in 3.7b. Today the only route to `true` on an
+  existing story is `resetStorySettings` ("Reset settings to defaults"),
+  which discards every other story setting to get there. This is a correct
+  consequence of the copy-at-creation rule
+  (`story-settings-defaults.ts → buildStorySettings`) rather than a defect,
+  but it means existing users see nothing new until 3.7b ships, and nothing
+  records that today. Surfaced by the M3.7a whole-slice review (2026-07-26).

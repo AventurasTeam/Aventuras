@@ -47,6 +47,24 @@ export function resolveSuggestionEmission(settings: {
   }
 }
 
+// The UI-level half of the strip's mount gate (reader-composer.md → Edge
+// cases → Zero enabled categories). settingsAllowEmission alone would hide
+// the strip whenever categories are all disabled, even on a terminal entry
+// that already carries chips from before they were disabled — those must
+// keep rendering (with orphan-label handling). Only the case with nothing to
+// show AND nothing to generate should hide the strip; suggestionsEnabled:
+// false is a hard hide regardless of historical chips (toggling it back off
+// mid-story hides the strip even though the persisted data survives).
+export function shouldShowSuggestionStrip(params: {
+  suggestionsEnabled: boolean
+  hasTerminalEntry: boolean
+  hasChips: boolean
+  categories: readonly SuggestionCategory[]
+}): boolean {
+  if (!params.suggestionsEnabled || !params.hasTerminalEntry) return false
+  return params.hasChips || buildSuggestionSlots(params.categories).slots.length > 0
+}
+
 export type SuggestionRef = { categoryRef: string; text: string }
 export type SuggestionItem = { categoryId: string; text: string }
 

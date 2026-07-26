@@ -4,6 +4,7 @@ import {
   buildSuggestionSlots,
   resolveSuggestionEmission,
   resolveSuggestionItems,
+  shouldShowSuggestionStrip,
 } from './suggestion-slots'
 
 const cat = (id: string, enabled = true, order = 0) => ({
@@ -74,6 +75,39 @@ describe('resolveSuggestionEmission', () => {
 
   it('carries the chip count through', () => {
     expect(resolveSuggestionEmission({ ...base, suggestionCount: 5 }).count).toBe(5)
+  })
+})
+
+describe('shouldShowSuggestionStrip', () => {
+  const base = {
+    suggestionsEnabled: true,
+    hasTerminalEntry: true,
+    hasChips: false,
+    categories: [cat('a')],
+  }
+
+  it('shows when enabled with at least one enabled category, even with no chips yet', () => {
+    expect(shouldShowSuggestionStrip(base)).toBe(true)
+  })
+
+  it('hides when the master toggle is off, even with historical chips', () => {
+    expect(shouldShowSuggestionStrip({ ...base, suggestionsEnabled: false, hasChips: true })).toBe(
+      false,
+    )
+  })
+
+  it('hides when there is no terminal entry', () => {
+    expect(shouldShowSuggestionStrip({ ...base, hasTerminalEntry: false })).toBe(false)
+  })
+
+  it('hides on zero enabled categories with no chips ever emitted (dead Generate button)', () => {
+    expect(shouldShowSuggestionStrip({ ...base, categories: [cat('a', false)] })).toBe(false)
+  })
+
+  it('still shows historical chips on zero enabled categories', () => {
+    expect(
+      shouldShowSuggestionStrip({ ...base, categories: [cat('a', false)], hasChips: true }),
+    ).toBe(true)
   })
 })
 

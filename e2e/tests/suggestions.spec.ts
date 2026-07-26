@@ -134,8 +134,8 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
       await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_2)).toBeVisible()
 
       // The entry's own rendered row must show only the prose — not the raw
-      // tag markup, and not the chip prose the tags carried (the exact leak
-      // stripTrailingBlocks (feat(piggyback) d56026bb) exists to prevent).
+      // tag markup, and not the chip prose the tags carried — the exact leak
+      // stripTrailingBlocks exists to prevent.
       const entryRow = reader.row(app.window, entryId)
       await expect(entryRow).toContainText('E2E-SUGGEST-TURN')
       await expect(entryRow).not.toContainText('<suggestions>')

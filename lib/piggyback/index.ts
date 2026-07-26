@@ -8,6 +8,7 @@ export {
   buildSuggestionSlots,
   resolveSuggestionEmission,
   resolveSuggestionItems,
+  shouldShowSuggestionStrip,
   type SuggestionSlot,
   type SuggestionSlotMap,
   type SuggestionEmission,
