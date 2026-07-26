@@ -2106,3 +2106,18 @@ tap-with-non-empty-composer, OR an AlertDialog "Replace your typed
 text?" confirm gate. Toast is lighter-weight and uses the existing
 [`patterns/toast.md`](./ui/patterns/toast.md) primitive; dialog is
 more explicit. Surface on user reports.
+
+#### Status pill is single-slot, so a turn started during a refresh strands the refresh
+
+`GenerationStatusPill`'s `GenerationPhase` union
+(`components/compounds/generation-status-pill.tsx`) now includes
+`refreshing-suggestions` alongside the per-turn phases, but the pill
+only ever shows one `currentPhase`. If a turn starts while a
+`suggestion-refresh` is still in flight, the pill shows
+`generating-narrative`, its cancel targets the turn, and the
+still-running refresh has no cancel affordance until the turn ends —
+the refresh isn't blocked (`per-turn` deliberately doesn't gate on the
+no-gate `suggestion-refresh` kind), it's just invisible to the pill
+while a turn owns the slot. A designed state, not a bug the phase
+addition introduced; recorded so a future multi-slot pill redesign
+has the scenario on record. Surfaced by M3.7a Task 8, 2026-07-25.

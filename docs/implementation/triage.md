@@ -403,7 +403,7 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   route — but Slice 3.7b is expected to wire it per
   [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories),
   and it needs label props (or direct `t()` call sites) before then.
-  Surfaced by M3.7a Task 3 (2026-07-25).
+  Surfaced during M3.7a planning, before implementation began.
 - **`story-settings.md`'s "Collision blocks save with inline error" is
   unimplementable against the shipped save-session contract.**
   [`story-settings.md → Suggestion categories`](../ui/screens/story-settings/story-settings.md#suggestion-categories)
@@ -416,8 +416,8 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   to render even if it did. A collision today would have to be caught
   by disabling Save from outside the save-session pattern entirely, or
   not at all. Blocks Slice 3.7b, which is expected to wire
-  `SuggestionCategoriesEditor` into this tab. Surfaced by M3.7a Task 3
-  (2026-07-25).
+  `SuggestionCategoriesEditor` into this tab. Surfaced during M3.7a
+  planning, before implementation began.
 - **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
   builds, so a story-level model override can't satisfy pre-flight even
   though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
@@ -450,19 +450,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   so it isn't an obvious config split. Mechanism unresolved; worth ten
   minutes with `pnpm storybook` open. Surfaced by M3.7a Task 9
   (2026-07-26).
-- **The status pill is single-slot, so a turn started during a refresh
-  strands the refresh.** `GenerationStatusPill`'s `GenerationPhase`
-  union (`components/compounds/generation-status-pill.tsx`) now
-  includes `refreshing-suggestions` alongside the per-turn phases, but
-  the pill only ever shows one `currentPhase`. If a turn starts while a
-  `suggestion-refresh` is still in flight, the pill shows
-  `generating-narrative`, its cancel targets the turn, and the
-  still-running refresh has no cancel affordance until the turn ends —
-  the refresh isn't blocked (`per-turn` deliberately doesn't gate on the
-  no-gate `suggestion-refresh` kind), it's just invisible to the pill
-  while a turn owns the slot. A designed state, not a bug the phase
-  addition introduced; recorded so a future multi-slot pill redesign
-  has the scenario on record. Surfaced by M3.7a Task 8 (2026-07-25).
 - **A typed `PipelineInputMap` via declaration merging is the shape to
   reach for once a second pipeline needs caller inputs.**
   `suggestion-refresh` is the first pipeline kind to give a phase

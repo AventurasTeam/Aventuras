@@ -41,10 +41,21 @@ turns fail on the placeholder return trip — mnemonic IDs like
 
 ## No `__DEV__` dependence; no `stub` provider
 
-`__DEV__` is `true` locally and `false` in the packaged build, and
-the `stub` provider throws when it's false. Mock the LLM with the
-local HTTP server + a seeded `openai-compatible` provider. See
+`__DEV__` is `false` in both E2E launch modes — `dev` serves a
+static, pre-built `dist/` snapshot rather than a live dev server, so
+there's no mode where it's `true` — and the `stub` provider throws
+when it's false. Mock the LLM with the local HTTP server + a seeded
+`openai-compatible` provider. See
 [testing.md → Mock LLM](../../docs/testing.md#mock-llm).
+
+## `dev` mode needs a rebuild to see renderer changes
+
+Both `dev` and `packaged` E2E modes load the same `pnpm build:web`
+output; neither runs `expo start`. A renderer source edit has no
+effect on a `dev`-mode run until `pnpm build:web` re-runs — this
+caused a real false pass in Slice 3.7a. Rebuild before trusting a
+`dev`-mode result that touches renderer code. See
+[testing.md → Launch modes](../../docs/testing.md#launch-modes).
 
 ## Selectors: DB first, then i18n role/name, then testID
 
