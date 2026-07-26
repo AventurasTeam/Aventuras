@@ -156,14 +156,10 @@ tap-after-typing draft loss is a documented v1 wart.
 
 ## Open questions
 
-- **Fragment placement in the classifier-fold call** — one call
-  emitting `<state>` + `<suggestions>` is canon; confirm ordering
-  and token budget interaction with 3.2's fallback prompt at
-  planning.
-- **Strip virtualization interaction** — the strip sits between the
-  virtualized entry list and the composer; confirm it lives outside
-  the scroll container (reader-document pattern) rather than as a
-  list row.
+All three remaining questions concern the Story Settings section and
+therefore travel with **3.7b**; none blocked 3.7a. The two questions
+this slice did resolve are recorded under Implementation notes.
+
 - **Which navigate-away intercepts the settings section needs.**
   [`save-sessions.md → Navigate-away guard`](../../../../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
   lists window-close intent (electron close, web `beforeunload`)
@@ -210,4 +206,77 @@ tap-after-typing draft loss is a documented v1 wart.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**The slice was split at planning.** 3.7a shipped emission,
+persistence, the `suggestion-refresh` pipeline, the chip strip, and
+the creation-time seed; **3.7b** owns the Story Settings Authoring
+aids section. The cut falls on the C7 partial-gate line this doc
+already declared — 3.7a needs no Story Settings shell at all. The
+brief above still reads as the unsplit slice: **Scope: in**'s
+"Settings surface" bullet, the "Settings:" acceptance criterion, and
+the three remaining Open questions are all 3.7b's. Dividing this doc
+into two is outstanding and developer-owned.
+
+**Resolved developer decisions.**
+
+- _Classifier-fold wire shape._ 3.2's fallback pass is a
+  `generateStructured` call, not a tagged-block call, so there is no
+  `<suggestions>` block to sit beside `<state>` there. Chips ride a
+  `suggestions` field on the classifier's schema, `.catch([])`-wrapped
+  so a malformed array can't take scene state down with it. Still one
+  call; different wire shape. `shouldFallbackFire` stays purely
+  state-driven — the suggestion portion is added only when no chips
+  were already captured this turn, which is what stops a
+  `<state>`-failed / `<suggestions>`-ok turn from clobbering good
+  chips. Canon updated in
+  [`reader-composer.md`](../../../../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions).
+- _Creation-time seed._ The Background's claim that the seed landed
+  in the M1.5 gate was wrong: only the column did. Both mode arrays
+  were empty, `buildStorySettings` took no `mode`, and
+  `suggestionsEnabled` defaulted false — no story could ever emit a
+  chip. 3.7a lands the per-mode palettes, threads `mode` through
+  `buildStorySettings`, and defaults the toggle on. The palette is
+  copied from `app_settings.default_suggestion_categories[mode]` per
+  canon, with the module constant as the fallback for rows written
+  before the seed existed.
+- _Category colour._ Stored as a curated-palette slot key for a
+  curated pick and a raw hex for a custom one; `resolveAccentColor`
+  resolves either, with a neutral fallback. `data-model.md`'s
+  "theme-resolved at render" phrasing was wrong — the palette is
+  fixed and mode-agnostic per `color.md` — and has been corrected.
+
+**Deviations worth carrying forward.**
+
+- The strip's state is `phase` **plus an orthogonal `collapsed`**, not
+  one enum. Canon's chrome row persists when collapsed, so ⟳ is
+  reachable there; a single enum makes collapsed-and-loading
+  unrepresentable.
+- `suggestion-refresh` is the **first `no-gate` pipeline kind in the
+  codebase**. That made two specified-but-unreachable framework paths
+  reachable for the first time (the reversal barrier, and a
+  reversal landing mid-run); both are filed in
+  [`triage.md`](../../../triage.md).
+- Caller input reaches a pipeline through a new `inputs?: unknown` on
+  `PhaseContext` with a per-phase narrowing guard —
+  `intermediates` is for state flowing _between_ phases and seeding it
+  from `RunCtx` would leak a predecessor's inputs into a chained
+  successor.
+- The refresh's delta stamps `DeltaSource: 'ai_classifier'`. Not
+  `user_edit` (a model-authored chip must not claim a human wrote it)
+  and not a new member (no consumer needs the distinction; the
+  classifier-specific values were split out of `ai_classifier` only
+  when undo needed one).
+- Fixing null-metadata undo required a matching change in
+  `reverse-replay.ts`, not just `register.ts`. Existing persisted
+  delta rows replay bit-identically — `computeUndoPayload` cannot
+  emit a null at column level, so the new decode arm was previously
+  unreachable.
+
+**Deferrals.** Roughly a dozen cross-cutting items surfaced during
+implementation and are queued in
+[`triage.md`](../../../triage.md); one accepted limitation (the
+single-slot status pill stranding a refresh behind a turn) is in
+[`parked.md`](../../../../parked.md). Two of the triage items block
+3.7b: the categories editor hard-codes its English chrome, and
+3.11's section contract has no validity channel, which makes
+`story-settings.md`'s "Collision blocks save with inline error"
+unimplementable as shipped.
