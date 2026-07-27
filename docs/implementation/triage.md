@@ -500,3 +500,18 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   clears it). Cosmetic-only; resolve if per-branch status or a
   story-wide drain scope lands. Surfaced by M3.1b final review
   (2026-07-25).
+
+- **`recomputeStaleOp` is dead code, and canon requires what it does.**
+  [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
+  specifies that an edit or rollback returning content to its embedded
+  value "revalidates to 0 with no re-embed, since the existing vector is
+  still correct". `recomputeStaleOp` implements exactly that hash
+  comparison and has **zero callers** — the drain loads
+  `WHERE embedding_stale = 1` and hands every row to
+  `embedAndBuildVecOps`, which embeds unconditionally. So a rollback to
+  previously-embedded content re-embeds instead of revalidating, and any
+  code commenting that a re-flag is cheap "because the next drain
+  revalidates by `source_hash`" is wrong. Either wire it into the drain
+  (and the cross-model cancel, which currently over-flags rows whose old
+  vector still matches) or delete it and correct canon — but the two
+  must stop disagreeing. Surfaced by M3.1b manual smoke (2026-07-27).
