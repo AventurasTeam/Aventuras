@@ -242,21 +242,18 @@ export const SwapPendingMarker: Story = {
     embeddingStatusStore.setStatus(STORY_ID, 5)
   },
   play: async () => {
-    // The resume dialog is modal and marks the rest of the panel aria-hidden,
-    // so the (still-present, still-disabled) Switch-embedder button has to be
-    // queried with `hidden: true` to see past that.
     expect(
-      await screen.findByRole('button', {
-        name: t('storySettings:memory.switchEmbedder'),
-        hidden: true,
-      }),
+      await screen.findByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
     ).toBeDisabled()
     expect(screen.getByText(t('storySettings:memory.swapPending'))).toBeInTheDocument()
-    // The resume dialog surfaces the raw swap_target marker value, not a
-    // catalog-resolved label — no progress is running for this story yet.
-    expect(await screen.findByTestId('swap-resume')).toBeInTheDocument()
+    // Inline, not modal: the app-level SwapResumeHost owns the dialog, so this
+    // surface stays reachable when Story Settings is opened by a cold reload.
+    // It surfaces the raw swap_target marker value, not a catalog-resolved label.
+    expect(await screen.findByTestId('memory-swap-pending')).toBeInTheDocument()
+    expect(screen.getByTestId('swap-resume')).toBeInTheDocument()
+    expect(screen.getByTestId('swap-cancel-swap')).toBeInTheDocument()
     expect(
-      screen.getByText(t('storySettings:swap.resumeBody', { model: GEMMA })),
+      screen.getByText(t('storySettings:memory.swapPendingBody', { model: GEMMA })),
     ).toBeInTheDocument()
   },
 }

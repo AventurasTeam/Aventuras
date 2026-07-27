@@ -3,7 +3,6 @@ import { View } from 'react-native'
 
 import { ReindexConfirmDialog } from '@/components/embedder/reindex-confirm-dialog'
 import { SwapDialog, type SwapCandidate } from '@/components/embedder/swap-dialog'
-import { SwapResumeDialog } from '@/components/embedder/swap-resume-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
@@ -313,12 +312,32 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         onDismiss={handleDismissDialog}
       />
 
-      <SwapResumeDialog
-        open={resumeOpen}
-        targetModelName={settings.embedding_swap_target ?? ''}
-        onResume={() => void handleResume()}
-        onCancelSwap={() => void handleCancelSwap()}
-      />
+      {resumeOpen ? (
+        // Inline, not a modal: the app-level SwapResumeHost owns the prompt, and
+        // a second dialog here portalled a duplicate of it onto the same body.
+        // This row is also the only affordance when Story Settings is reached by
+        // a cold reload, where there is no open story for the host to key on.
+        <View testID="memory-swap-pending" className="gap-2 rounded-md border border-border p-3">
+          <Text className="font-semibold">{t('storySettings:memory.swapPendingTitle')}</Text>
+          <Text size="sm" variant="muted">
+            {t('storySettings:memory.swapPendingBody', {
+              model: settings.embedding_swap_target ?? '',
+            })}
+          </Text>
+          <View className="flex-row gap-2">
+            <Button testID="swap-resume" variant="primary" onPress={() => void handleResume()}>
+              <Text>{t('storySettings:swap.resume')}</Text>
+            </Button>
+            <Button
+              testID="swap-cancel-swap"
+              variant="destructive"
+              onPress={() => void handleCancelSwap()}
+            >
+              <Text>{t('storySettings:swap.cancelSwap')}</Text>
+            </Button>
+          </View>
+        </View>
+      ) : null}
     </View>
   )
 }

@@ -46,6 +46,24 @@ describe('embedderSwapStore', () => {
     expect(embedderSwapStore.isCancelRequested()).toBe(false)
   })
 
+  it('deferResume records one story and is replaced, not accumulated', () => {
+    embedderSwapStore.deferResume('story-1')
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBe('story-1')
+    // Single slot: deferring another story releases the first, so returning to it
+    // prompts again rather than inheriting a suppression it never asked for.
+    embedderSwapStore.deferResume('story-2')
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBe('story-2')
+    embedderSwapStore.clearDeferredResume()
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBeNull()
+  })
+
+  it('deferring does not touch the swap marker or progress', () => {
+    embedderSwapStore.beginProgress('story-1')
+    embedderSwapStore.deferResume('story-1')
+    // Later hides the prompt, never the condition behind it.
+    expect(embedderSwapStore.getState().progress?.storyId).toBe('story-1')
+  })
+
   it('requestCancel with no run in flight cannot leave a flag behind', () => {
     embedderSwapStore.requestCancel()
     expect(embedderSwapStore.getState().progress).toBeNull()

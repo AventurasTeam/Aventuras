@@ -7,7 +7,6 @@ import { Platform, View } from 'react-native'
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
-import { SwapResumeDialog } from '@/components/embedder/swap-resume-dialog'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -27,7 +26,6 @@ import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { useTier } from '@/hooks/use-tier'
 import {
-  cancelStorySwap,
   clearSystemEntry,
   ENTRIES_WINDOW_SIZE,
   getRollbackCounts,
@@ -35,10 +33,8 @@ import {
   readRecentEntries,
   redoLastAction,
   refreshEmbeddingStatus,
-  resumeStorySwap,
   rollbackToEntry,
   submitTurn,
-  SwapBusyError,
   undoLastAction,
   updateStoryEntryContent,
   writeSystemEntry,
@@ -47,7 +43,6 @@ import {
 } from '@/lib/actions'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import {
@@ -140,42 +135,15 @@ export default function ReaderComposerRoute() {
   // Narrow selector: subscribing to the whole `progress` object would re-render
   // the entire reader on every embed-batch tick (onProgress fires per batch).
   const swapProgressStoryId = embedderSwapStore.useSwap((s) => s.progress?.storyId ?? null)
-  const swapTarget = openForBranch?.settings.embedding_swap_target ?? null
-  // No progress running FOR THIS STORY: a swap loop live elsewhere must not
-  // suppress this story's own resume prompt.
-  const resumeSwapOpen = storyId != null && swapTarget != null && swapProgressStoryId !== storyId
-
-  const reportSwapFailure = useCallback(
-    (op: string, error: unknown) => {
-      if (error instanceof SwapBusyError) {
-        toast.info(t('storySettings:memory.busy'))
-        return
-      }
-      logger.error(`embedder.${op}_failed`, {
-        storyId,
-        error: error instanceof Error ? error.message : String(error),
-      })
-      toast.error(t('storySettings:memory.actionFailed'))
-    },
-    [storyId],
-  )
-
-  const handleResumeSwap = useCallback(() => {
-    if (storyId == null) return
-    // Progress renders in the Memory panel, not here — navigate first, then
-    // kick the resume so the panel's own mount picks up the live progress.
-    router.push(`/story-settings/${storyId}?tab=memory`)
-    void resumeStorySwap(storyId, ctx)
-      .catch((error: unknown) => reportSwapFailure('resume', error))
-      .finally(() => void refreshEmbeddingStatus(storyId))
-  }, [storyId, router, reportSwapFailure])
-
-  const handleCancelSwap = useCallback(() => {
-    if (storyId == null) return
-    void cancelStorySwap(storyId, ctx)
-      .catch((error: unknown) => reportSwapFailure('cancel_swap', error))
-      .finally(() => void refreshEmbeddingStatus(storyId))
-  }, [storyId, reportSwapFailure])
+  // A paused swap is signalled off the MARKER, not the stale count: phase-1
+  // staging clears embedding_stale row by row, so a half-finished swap drives
+  // that count toward zero and a healthy story sits at exactly zero throughout.
+  // No progress running FOR THIS STORY — a live loop reports through the Memory
+  // panel's own progress row instead.
+  const swapPaused =
+    storyId != null &&
+    openForBranch?.settings.embedding_swap_target != null &&
+    swapProgressStoryId !== storyId
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -630,13 +598,17 @@ export default function ReaderComposerRoute() {
         <GenerationStatusPill
           activePhase={isGenerating ? 'generating-narrative' : undefined}
           error={
-            staleTotal > 0 && !isGenerating
-              ? { code: 'memory-incomplete', pendingRows: staleTotal }
-              : undefined
+            isGenerating
+              ? undefined
+              : swapPaused
+                ? { code: 'swap-paused' }
+                : staleTotal > 0
+                  ? { code: 'memory-incomplete', pendingRows: staleTotal }
+                  : undefined
           }
           onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
           onErrorTap={(code) => {
-            if (code === 'memory-incomplete' && storyId != null)
+            if (code !== 'classifier-offline' && storyId != null)
               router.push(`/story-settings/${storyId}?tab=memory`)
           }}
         />
@@ -728,12 +700,6 @@ export default function ReaderComposerRoute() {
           onConfirm={() => void confirmRollback()}
         />
       ) : null}
-      <SwapResumeDialog
-        open={resumeSwapOpen}
-        targetModelName={swapTarget ?? ''}
-        onResume={handleResumeSwap}
-        onCancelSwap={handleCancelSwap}
-      />
     </ScreenShell>
   )
 }

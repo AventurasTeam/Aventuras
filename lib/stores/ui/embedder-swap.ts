@@ -15,9 +15,17 @@ type SwapProgress = { storyId: string; done: number; total: number; cancelReques
 type EmbedderSwapState = {
   dialog: SwapDialogState
   progress: SwapProgress | null
+  /**
+   * Story whose resume prompt the user deferred with "Later". A single slot, not
+   * a set: one story is in view at a time, so deferring another simply replaces
+   * this one — no id can linger to suppress a prompt for a story the user came
+   * back to. The marker survives regardless; deferring hides the modal, not the
+   * condition.
+   */
+  resumeDeferredFor: string | null
 }
 
-const INITIAL: EmbedderSwapState = { dialog: null, progress: null }
+const INITIAL: EmbedderSwapState = { dialog: null, progress: null, resumeDeferredFor: null }
 
 const store = createStore<EmbedderSwapState>()(() => INITIAL)
 
@@ -47,6 +55,9 @@ export const embedderSwapStore = {
   requestCancel: (): void =>
     store.setState((s) => ({ progress: s.progress && { ...s.progress, cancelRequested: true } })),
   isCancelRequested: (): boolean => store.getState().progress?.cancelRequested ?? false,
+  deferResume: (storyId: string): void => store.setState({ resumeDeferredFor: storyId }),
+  /** Cleared on resume/cancel so a later interruption prompts again. */
+  clearDeferredResume: (): void => store.setState({ resumeDeferredFor: null }),
   __reset: (): void => store.setState(INITIAL),
 }
 

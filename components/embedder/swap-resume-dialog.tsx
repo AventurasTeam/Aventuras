@@ -15,6 +15,9 @@ type SwapResumeDialogProps = {
   targetModelName: string
   onResume: () => void
   onCancelSwap: () => void
+  /** Dismiss without deciding. Both other actions can fail, so the modal needs
+   *  an exit that cannot — the memory state it reports stays visible on the pill. */
+  onLater: () => void
 }
 
 export function SwapResumeDialog({
@@ -22,9 +25,15 @@ export function SwapResumeDialog({
   targetModelName,
   onResume,
   onCancelSwap,
+  onLater,
 }: SwapResumeDialogProps) {
   return (
-    <AlertDialog open={open} onOpenChange={() => undefined}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onLater()
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('storySettings:swap.resumeTitle')}</AlertDialogTitle>
@@ -33,6 +42,9 @@ export function SwapResumeDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
+          <Button testID="swap-resume-later" variant="ghost" onPress={onLater}>
+            <Text>{t('storySettings:swap.resumeLater')}</Text>
+          </Button>
           <Button testID="swap-cancel-swap" variant="destructive" onPress={onCancelSwap}>
             <Text>{t('storySettings:swap.cancelSwap')}</Text>
           </Button>

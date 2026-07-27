@@ -36,7 +36,8 @@
       "error": {
         "memoryIncomplete_one": "Memory incomplete — {{count}} row pending",
         "memoryIncomplete_other": "Memory incomplete — {{count}} rows pending",
-        "classifierOffline": "Classifier offline — retrieval coverage thinning"
+        "classifierOffline": "Classifier offline — retrieval coverage thinning",
+        "swapPaused": "Embedder switch paused — waiting on you"
       },
       "cancelGeneration": "Cancel generation",
       "cancelChapterClose": "Cancel chapter close"

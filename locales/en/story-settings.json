@@ -50,7 +50,8 @@
     "resumeTitle": "Re-index interrupted",
     "resumeBody": "Switching this story to {{model}} was interrupted, likely by a crash or force-quit. Resume to pick up where it left off, or cancel to keep this story on its current model.",
     "resume": "Resume",
-    "cancelSwap": "Cancel switch"
+    "cancelSwap": "Cancel switch",
+    "resumeLater": "Later"
   },
   "reindexConfirm": {
     "title": "Re-index this story?",
@@ -77,6 +78,8 @@
     "cancel": "Cancel",
     "busy": "An embedder operation is already running for this story.",
     "actionFailed": "That didn't work. Please try again.",
-    "relabelBlocked": "Can't relabel while a switch is in progress."
+    "relabelBlocked": "Can't relabel while a switch is in progress.",
+    "swapPendingTitle": "Embedder switch paused",
+    "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel."
   }
 }

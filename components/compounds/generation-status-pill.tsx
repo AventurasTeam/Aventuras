@@ -13,8 +13,14 @@ type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'c
 // `memory-incomplete` names the observable state, not a cause: the pill fires
 // off a non-zero stale-row count, which an available embedder can produce too
 // (a swap cancel re-flags every row).
+//
+// `swap-paused` is a separate code rather than more of the same, because staging
+// CLEARS embedding_stale as it goes: a half-finished swap drives the stale count
+// toward zero, so the story most in need of a signal is the one least likely to
+// raise one. Its cause is the marker, and its remedy is a decision, not waiting.
 type ErrorState =
   | { code: 'memory-incomplete'; pendingRows: number }
+  | { code: 'swap-paused' }
   | { code: 'classifier-offline' }
 
 type GenerationStatusPillProps = {
@@ -43,6 +49,8 @@ function errorCopy(error: ErrorState): string {
       return t('chrome.generationStatusPill.error.memoryIncomplete', {
         count: error.pendingRows,
       })
+    case 'swap-paused':
+      return t('chrome.generationStatusPill.error.swapPaused')
     case 'classifier-offline':
       return t('chrome.generationStatusPill.error.classifierOffline')
   }
