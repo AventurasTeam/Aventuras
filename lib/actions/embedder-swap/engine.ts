@@ -25,7 +25,7 @@ import type { EmbedderConfig } from '@/lib/embedder'
  * engine calls for one story could both pass it and stage vectors under
  * different targets, orphaning the loser's rows (a storage leak — reads stay
  * correct because retrieval filters by model_id). Callers MUST serialize all
- * engine calls per story; the app-deps layer (next task) owns that lock.
+ * engine calls per story; `app-deps.runExclusive` owns that lock.
  */
 export type SwapDeps = {
   runInTransaction: DbCtx['runInTransaction']
@@ -142,9 +142,22 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
     deps.onProgress(done, total)
   }
 
+  // Polling only at the top of each batch dropped a cancel issued during the last
+  // one: the flip committed and the model changed under a user who asked to stop.
+  // Re-checking here narrows the unavoidable race to the phase-2 transaction.
+  if (deps.isCancelRequested()) {
+    await cancelSwap(deps, {
+      storyId: p.storyId,
+      branchIds: p.branchIds,
+      targetModelId,
+      currentModelId: p.currentModelId,
+    })
+    return 'cancelled'
+  }
+
   // A deleted story or one with null settings would let the flip's json_set no-op
   // silently: it would stage vectors, change nothing, and drop the marker, stranding
-  // the swap. Refuse before committing phase 2. (Task 6 review hazards.)
+  // the swap. Refuse before committing phase 2.
   await assertStoryLive(deps, p.storyId)
 
   const tables = await deps.listVecTables()

@@ -595,6 +595,38 @@ describe('embedder-swap engine', () => {
     expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
   })
 
+  it('5c. cancel during the FINAL batch still unwinds instead of flipping', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    // 8 rows, BATCH_SIZE 16 — one batch, so the only poll before this cancel is
+    // the loop-entry one. Requesting after it lands the cancel with staging done
+    // and phase 2 not yet committed: the window the post-loop check exists for.
+    let staged = false
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, async (config, rows) => {
+      const ops = await fn(config, rows)
+      staged = true
+      return ops
+    })
+    deps.isCancelRequested = () => staged
+
+    const result = await startSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      targetConfig: cfg(NEW),
+    })
+
+    expect(result).toBe('cancelled')
+    // The flip must not have happened: old model still recorded, staged NEW rows gone.
+    expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
+    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+    expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual([])
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(hasPatch(opsOf(runSpy).flat(), (patch) => patch.embedding_model_id === NEW)).toBe(false)
+  })
+
   it('6. startSwap while marker set: throws SwapInProgressError, no writes', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: NEW })
     seedOldVectors(sqlite, embedded)

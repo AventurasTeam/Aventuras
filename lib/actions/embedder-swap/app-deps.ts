@@ -487,7 +487,7 @@ export function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
 export function buildDrainController(
   ctx: DbCtx = defaultCtx(),
 ): ReturnType<typeof createDrainController> {
-  // Attaches the Task 8 seam to the status store so the Memory panel / reader
+  // Attaches the drain's progress seam to the status store so the Memory panel / reader
   // pill see the worker's progress without either polling it directly. The
   // drain only ever drains the open story, so a mismatch here means the user
   // navigated away mid-drain — drop the write rather than clobber the newly

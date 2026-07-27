@@ -52,7 +52,7 @@ function buildEmbeddingModel(
  * Embed `texts` through `provider`'s configured embedding endpoint. Returns
  * raw vectors at the model's native dim — prefixing and Matryoshka
  * truncation are still the caller's job, not this transport. `dimensions` is
- * only a server-side hint (sent as `providerOptions[provider.displayName].dimensions`
+ * only a server-side hint (sent as `providerOptions.openaiCompatible.dimensions`
  * when the model honors OpenAI's Matryoshka `dimensions` param); client-side
  * truncation runs regardless, so correctness never depends on the server
  * honoring it.
@@ -72,9 +72,11 @@ export async function embedViaProvider(
       await embedMany({
         model,
         values: texts,
-        ...(dimensions != null
-          ? { providerOptions: { [provider.displayName]: { dimensions } } }
-          : {}),
+        // Literal key, not the provider's display name: the SDK resolves its
+        // lookup as `provider.split('.')[0].trim()` over `<displayName>.embedding`,
+        // so any display name carrying a dot or padding (`api.openai.com`) would
+        // silently drop the option. `openaiCompatible` is checked unconditionally.
+        ...(dimensions != null ? { providerOptions: { openaiCompatible: { dimensions } } } : {}),
       })
     ).embeddings
   } catch (err) {
