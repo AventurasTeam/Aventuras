@@ -27,6 +27,9 @@ export const storySettings = {
   reindexNow: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:memory.reindexNow') }),
 
+  // The standalone re-index is gated by a confirm dialog; this is its start button.
+  reindexConfirmStart: (page: Page): Locator => page.getByTestId('reindex-confirm-start'),
+
   // SwapDialog's CandidateRow testID embeds the raw candidate model id.
   // getByTestId matches through Playwright's own selector engine rather than a
   // literal CSS string, so ids containing "/" need no escaping.

@@ -15,6 +15,7 @@ export {
   buildDrainController,
   cancelStorySwap,
   kickStoryDrain,
+  countStoryEmbeddableRows,
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,

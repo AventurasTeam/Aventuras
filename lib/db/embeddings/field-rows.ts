@@ -58,16 +58,23 @@ export function toEmbeddedFieldRow(kind: VecTargetKind, raw: readonly unknown[])
   return { kind, id, branchId, fields: [a, b] }
 }
 
-export async function countStaleRows(
-  /**
-   * Row-array seam, not a drizzle handle: each returned row must be a
-   * positional value-array (the sqlite-proxy shape — see
-   * `lib/db/runtime/exec.ts`'s `listTableNames`), not a column-keyed object.
-   * A native/expo-sqlite caller must normalize before handing this in.
-   */
-  queryAll: (sql: string, params: unknown[]) => Promise<unknown[][]>,
+/**
+ * Row-array seam, not a drizzle handle: each returned row must be a positional
+ * value-array (the sqlite-proxy shape — see `lib/db/runtime/exec.ts`'s
+ * `listTableNames`), not a column-keyed object. A native/expo-sqlite caller
+ * must normalize before handing this in.
+ */
+type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
+
+type RowCounts = { total: number; byKind: Record<VecTargetKind, number> }
+
+// Counts through the same query builders the row fetches use, so a predicate
+// can't drift between what a worker embeds and what the UI reports.
+async function countRows(
+  queryAll: QueryAll,
   branchIds: readonly string[],
-): Promise<{ total: number; byKind: Record<VecTargetKind, number> }> {
+  build: (kind: VecTargetKind, branchIds: readonly string[]) => RowQuery,
+): Promise<RowCounts> {
   const kinds = Object.keys(KIND_FIELDS) as VecTargetKind[]
   const byKind = Object.fromEntries(kinds.map((kind) => [kind, 0])) as Record<VecTargetKind, number>
 
@@ -77,9 +84,7 @@ export async function countStaleRows(
 
   let total = 0
   for (const kind of kinds) {
-    // Wraps staleRowsQuery so the stale predicate can't drift between the
-    // drain worker's row fetch and this count.
-    const { sql, params } = staleRowsQuery(kind, branchIds)
+    const { sql, params } = build(kind, branchIds)
     const rows = await queryAll(`SELECT count(*) FROM (${sql})`, params)
     const count = Number(rows[0]?.[0] ?? 0)
     byKind[kind] = count
@@ -87,4 +92,19 @@ export async function countStaleRows(
   }
 
   return { total, byKind }
+}
+
+export function countStaleRows(
+  queryAll: QueryAll,
+  branchIds: readonly string[],
+): Promise<RowCounts> {
+  return countRows(queryAll, branchIds, staleRowsQuery)
+}
+
+/** Every embeddable row, stale or not — what a full re-index will re-embed. */
+export function countEmbeddableRows(
+  queryAll: QueryAll,
+  branchIds: readonly string[],
+): Promise<RowCounts> {
+  return countRows(queryAll, branchIds, branchRowsQuery)
 }

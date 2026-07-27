@@ -4,6 +4,7 @@ export {
   cancelStorySwap,
   cancelSwap,
   kickStoryDrain,
+  countStoryEmbeddableRows,
   refreshEmbeddingStatus,
   reindexStory,
   reindexStoryNow,

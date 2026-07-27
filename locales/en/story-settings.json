@@ -52,6 +52,14 @@
     "resume": "Resume",
     "cancelSwap": "Cancel switch"
   },
+  "reindexConfirm": {
+    "title": "Re-index this story?",
+    "body_one": "Re-embeds all {{count}} entry in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "body_other": "Re-embeds all {{count}} entries in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "bodyUnknownCount": "Re-embeds every entry in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "cancelSemantics": "You can cancel while it runs. Cancelling keeps the entries already rebuilt and queues the rest.",
+    "confirm": "Re-index"
+  },
   "memory": {
     "heading": "Memory",
     "staleCount_one": "{{count}} row pending re-embed.",
@@ -65,7 +73,6 @@
     "switchEmbedder": "Switch embedder",
     "swapPending": "A switch is already pending for this story.",
     "reindexNow": "Re-index this story now",
-    "reindexNowHint": "Replaces every embedding in this story. Cancelling keeps the ones already rebuilt and queues the rest.",
     "reindexing": "Re-indexing {{done}} / {{total}}",
     "cancel": "Cancel",
     "busy": "An embedder operation is already running for this story.",

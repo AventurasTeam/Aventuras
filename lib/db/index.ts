@@ -178,6 +178,7 @@ export {
   clearEmbeddingStaleOp,
   compositeText,
   countStaleRows,
+  countEmbeddableRows,
   deleteBranchModelVecOps,
   deleteBranchVecOps,
   deleteVecOps,

@@ -150,6 +150,34 @@ export const ReasonRetrying: Story = {
   },
 }
 
+export const ReindexConfirmGate: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings(),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByTestId('reindex-now'))
+
+    // Pressing the button must open the gate rather than start embedding.
+    const dialog = await screen.findByTestId('reindex-confirm')
+    // No DB bridge in Storybook, so the count resolves null — the copy falls back
+    // to the countless variant instead of claiming the story has zero entries.
+    expect(
+      within(dialog).getByText(
+        t('storySettings:reindexConfirm.bodyUnknownCount', { model: MINILM }),
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: t('cancel') }))
+    await waitFor(() => expect(screen.queryByTestId('reindex-confirm')).not.toBeInTheDocument())
+  },
+}
+
 export const SwapInProgress: Story = {
   args: {
     storyId: STORY_ID,

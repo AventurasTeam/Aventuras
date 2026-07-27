@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { View } from 'react-native'
 
+import { ReindexConfirmDialog } from '@/components/embedder/reindex-confirm-dialog'
 import { SwapDialog, type SwapCandidate } from '@/components/embedder/swap-dialog'
 import { SwapResumeDialog } from '@/components/embedder/swap-resume-dialog'
 import { Button } from '@/components/ui/button'
@@ -8,6 +9,7 @@ import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import {
   cancelStorySwap,
+  countStoryEmbeddableRows,
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,
@@ -63,6 +65,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     s.storyId === storyId ? s.staleTotal : 0,
   )
+  const [reindexConfirmOpen, setReindexConfirmOpen] = useState(false)
+  const [reindexRowCount, setReindexRowCount] = useState<number | null>(null)
   const dialogOpen = embedderSwapStore.useSwap((s) => s.dialog?.storyId === storyId)
   const progress = embedderSwapStore.useSwap((s) =>
     s.progress?.storyId === storyId ? s.progress : null,
@@ -141,7 +145,16 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     [storyId],
   )
 
+  const openReindexConfirm = useCallback(() => {
+    setReindexRowCount(null)
+    setReindexConfirmOpen(true)
+    // Fetched on open rather than on mount: the panel renders on every Memory
+    // tab visit, and the count only matters once the user reaches for the button.
+    void countStoryEmbeddableRows(storyId, ctx).then(setReindexRowCount)
+  }, [storyId])
+
   const handleReindexNow = useCallback(async () => {
+    setReindexConfirmOpen(false)
     try {
       await reindexStoryNow(storyId, ctx)
     } catch (error) {
@@ -258,19 +271,22 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         ) : null}
       </View>
 
-      <View className="gap-1">
-        <Button
-          testID="reindex-now"
-          variant="secondary"
-          disabled={settings.embedding_swap_target != null || progress != null}
-          onPress={() => void handleReindexNow()}
-        >
-          <Text>{t('storySettings:memory.reindexNow')}</Text>
-        </Button>
-        <Text size="xs" variant="muted" className="px-1">
-          {t('storySettings:memory.reindexNowHint')}
-        </Text>
-      </View>
+      <Button
+        testID="reindex-now"
+        variant="secondary"
+        disabled={settings.embedding_swap_target != null || progress != null}
+        onPress={openReindexConfirm}
+      >
+        <Text>{t('storySettings:memory.reindexNow')}</Text>
+      </Button>
+
+      <ReindexConfirmDialog
+        open={reindexConfirmOpen}
+        onOpenChange={setReindexConfirmOpen}
+        rowCount={reindexRowCount}
+        modelLabel={settings.embedding_model_id}
+        onConfirm={() => void handleReindexNow()}
+      />
 
       {progress != null ? (
         <View className="flex-row items-center gap-3">

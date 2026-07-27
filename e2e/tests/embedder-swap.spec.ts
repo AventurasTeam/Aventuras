@@ -107,6 +107,7 @@ test.describe('embedder — story settings swap flow', () => {
     await expect(storySettings.memoryPanel(app.window)).toBeVisible()
 
     await storySettings.reindexNow(app.window).click()
+    await storySettings.reindexConfirmStart(app.window).click()
 
     // The drain only embeds stale rows on the open branch; re-index re-embeds
     // every row of every branch, so a completed run strictly grows the vec set.

@@ -4,6 +4,7 @@ import type { ProviderInstanceWithStub } from '@/lib/ai'
 import { resolveModelCapabilities } from '@/lib/ai'
 import {
   branches,
+  countEmbeddableRows,
   countStaleRows,
   db,
   execRaw,
@@ -276,6 +277,26 @@ export async function refreshEmbeddingStatus(
     embeddingStatusStore.setStatus(storyId, total)
   } catch (error) {
     logger.warn('embedder.status_refresh_failed', { storyId, error: messageOf(error) })
+  }
+}
+
+/**
+ * How many rows a full re-index would re-embed — every embeddable row across
+ * the story's branches, not just the stale ones the drain sees. Returns null
+ * when the count can't be taken, so a caller can drop the magnitude rather than
+ * present a confident zero.
+ */
+export async function countStoryEmbeddableRows(
+  storyId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<number | null> {
+  try {
+    const { branchIds } = await loadSwapContext(storyId, ctx)
+    const { total } = await countEmbeddableRows(queryRows, branchIds)
+    return total
+  } catch (error) {
+    logger.warn('embedder.embeddable_count_failed', { storyId, error: messageOf(error) })
+    return null
   }
 }
 

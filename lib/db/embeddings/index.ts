@@ -22,4 +22,10 @@ export {
 export { compositeText, parseSourceHash, sourceHash } from './source-hash'
 export type { SourceHash } from './source-hash'
 export type { RowQuery } from './field-rows'
-export { branchRowsQuery, countStaleRows, staleRowsQuery, toEmbeddedFieldRow } from './field-rows'
+export {
+  branchRowsQuery,
+  countEmbeddableRows,
+  countStaleRows,
+  staleRowsQuery,
+  toEmbeddedFieldRow,
+} from './field-rows'

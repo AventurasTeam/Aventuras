@@ -464,6 +464,16 @@ re-index without changing the model. It uses the same
 stage-then-flip flow (target = current model, same crash-recovery
 contract).
 
+**The standalone re-index is confirm-gated.** Every other path to a
+re-index is reached by deliberate navigation (pick a model, then
+choose Re-index from the options pane), while this one is a single
+press that costs a full embed pass over the story — provider spend
+the user never opted into. The dialog states the row count it will
+re-embed, that nothing is deleted, and what cancelling leaves
+behind. It reports the count rather than a token or currency
+estimate: the row total is exact and free to compute, whereas a cost
+figure depends on per-model tokenization the app doesn't model.
+
 ### Matryoshka effective dim
 
 Provider models trained with **Matryoshka representation learning**
