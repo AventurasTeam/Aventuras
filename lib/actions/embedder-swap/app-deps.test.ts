@@ -5,6 +5,8 @@ import {
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   buildStorySettings,
+  setSwapTargetOp,
+  storyDefinitionSchema,
   type DbCtx,
   type ProviderInstance,
   type StorySettings,
@@ -23,6 +25,7 @@ import {
   makeCallbackGuards,
   RelabelBlockedError,
   relabelStory,
+  resolveDrainConfig,
   resolveStorySwapConfig,
   runExclusive,
   startStorySwap,
@@ -346,5 +349,90 @@ describe('relabelStory', () => {
         ctx,
       ),
     ).rejects.toBeInstanceOf(RelabelBlockedError)
+  })
+})
+
+describe('store refresh on every engine exit', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    embedderSwapStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  it('publishes a marker committed by a swap that then failed', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+
+    vi.mocked(startSwap).mockImplementation(async () => {
+      // The engine commits the marker in its own transaction before phase 1, so
+      // a phase-1 failure leaves it behind.
+      await ctx.runInTransaction([
+        setSwapTargetOp('s1', { modelId: MINILM, backend: 'local' }, 2000),
+      ])
+      throw new Error('phase 1 blew up')
+    })
+
+    await expect(startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)).rejects.toThrow(
+      'phase 1 blew up',
+    )
+
+    // Refreshing only on success leaves the panel offering a swap the DB says is
+    // already pending: both buttons enabled, no Resume, every retry throwing.
+    const settings = storiesStore.getStories().rows.find((row) => row.id === 's1')?.settings
+    expect(settings?.embedding_swap_target).toBe(MINILM)
+  })
+})
+
+describe('resolveDrainConfig swap guards', () => {
+  const definition = storyDefinitionSchema.parse({
+    mode: 'adventure',
+    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
+    narration: 'first',
+    genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+    tone: { label: 'Wry', promptBody: 'wry' },
+    setting: 'A keep on a hill.',
+    calendarSystemId: 'gregorian',
+    worldTimeOrigin: { year: 0 },
+  })
+
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  it('refuses to drain while an embedder op holds the story lock', async () => {
+    const settings = buildStorySettings({ embeddingBackend: 'local' }, MINILM, null)
+    await seedStores(settings)
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+    expect(resolveDrainConfig('s1').ok).toBe(true)
+
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const held = runExclusive('s1', () => gate)
+
+    // The open-story snapshot cannot see the swap: the marker reaches this store
+    // only after the engine settles, which is exactly when it stops mattering.
+    expect(currentStoryStore.getCurrentStory()?.settings.embedding_swap_target).toBeUndefined()
+    expect(resolveDrainConfig('s1')).toEqual({ ok: false, reason: 'no-model' })
+
+    release()
+    await held
+    expect(resolveDrainConfig('s1').ok).toBe(true)
+  })
+
+  it('still refuses for a crash-recovered marker with no run in flight', async () => {
+    const settings = {
+      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      embedding_swap_target: MINILM,
+    }
+    await seedStores(settings)
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+
+    expect(resolveDrainConfig('s1')).toEqual({ ok: false, reason: 'no-model' })
   })
 })

@@ -234,6 +234,24 @@ async function loadSwapContext(
   return { settings: parsed.data, branchIds: branchRows.map((branch) => branch.id) }
 }
 
+/**
+ * Republishes committed DB state to the stores after ANY engine exit. The swap
+ * marker commits before phase 1, so a thrown phase-1 leaves the DB holding a
+ * marker the stores have never seen — the panel then keeps both actions enabled,
+ * never offers Resume, and every retry throws SwapInProgressError.
+ *
+ * Never throws: it runs on the failure path, where replacing the engine's error
+ * with a refresh error would lose the only useful diagnosis.
+ */
+async function syncStoresAfterEngine(storyId: string, ctx: DbCtx): Promise<void> {
+  try {
+    await refreshStores(storyId, ctx)
+  } catch (error) {
+    logger.warn('embedder.swap_store_refresh_failed', { storyId, error: messageOf(error) })
+  }
+  await refreshEmbeddingStatus(storyId, ctx)
+}
+
 // Mirrors updateStorySettings' tail: the write already committed, so a failed
 // rehydrate is logged rather than thrown — the swap succeeded regardless.
 async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
@@ -318,7 +336,7 @@ async function runStagingSwap(
     embedderSwapStore.clearProgress()
     embedderSwapStore.setProgress({ storyId, done: 0, total: 0 })
     try {
-      const outcome = await invoke(deps, {
+      return await invoke(deps, {
         storyId,
         branchIds,
         // Current recorded model id — stays OLD until phase-2 commits, so both
@@ -327,10 +345,8 @@ async function runStagingSwap(
         currentSwapTarget: settings.embedding_swap_target ?? null,
         targetConfig: resolution.config,
       })
-      await refreshStores(storyId, ctx)
-      await refreshEmbeddingStatus(storyId, ctx)
-      return outcome
     } finally {
+      await syncStoresAfterEngine(storyId, ctx)
       embedderSwapStore.clearProgress()
     }
   })
@@ -390,9 +406,8 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
         targetModelId: target.modelId,
         currentModelId: settings.embedding_model_id,
       })
-      await refreshStores(storyId, ctx)
-      await refreshEmbeddingStatus(storyId, ctx)
     } finally {
+      await syncStoresAfterEngine(storyId, ctx)
       embedderSwapStore.clearProgress()
     }
   })
@@ -451,11 +466,20 @@ async function loadStaleRows(branchIds: readonly string[]): Promise<EmbeddedFiel
   return out
 }
 
-function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
+export function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId !== storyId) return { ok: false, reason: 'no-model' }
   // A swap in flight owns the vec tables; let its batched embeds and the blocking
   // sync stage handle staleness rather than racing them from the warm-cache worker.
+  //
+  // Two authorities, because neither covers the other: the marker only reaches
+  // this store once syncStoresAfterEngine runs (i.e. after the engine settles),
+  // so a swap started this session is invisible in `settings` while it matters
+  // most; the in-process lock in turn knows nothing about a marker left by a
+  // previous process. Draining under the old model during a swap would clear
+  // embedding_stale on rows phase 2 then deletes — vectors gone, flags clean,
+  // and nothing re-derives staleness today.
+  if (inFlight.has(storyId)) return { ok: false, reason: 'no-model' }
   if (open.settings.embedding_swap_target != null) return { ok: false, reason: 'no-model' }
   return resolveStorySwapConfig(storyId, {
     modelId: open.settings.embedding_model_id,

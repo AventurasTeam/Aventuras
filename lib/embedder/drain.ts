@@ -43,7 +43,11 @@ export function createDrainController(deps: DrainDeps) {
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         // A torn-down controller (HMR / re-boot) must not keep draining; bail
         // like the hasActiveRun guard so no further batches or retries fire.
-        if (stopped || deps.hasActiveRun()) return
+        //
+        // resolveConfig is re-read per batch, not just at entry: a swap can start
+        // mid-drain, and further batches would embed under the outgoing model and
+        // clear embedding_stale on rows the swap's phase-2 flip then deletes.
+        if (stopped || deps.hasActiveRun() || !deps.resolveConfig(storyId).ok) return
         const batch = rows.slice(i, i + BATCH_SIZE)
         const ops = await deps.embedRows(resolution.config, batch)
         await deps.runInTransaction(ops)
