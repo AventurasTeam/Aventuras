@@ -49,15 +49,13 @@ async function embedRaw(
   // never pulls the AI SDK into module-eval; provider embedding is v1 prefix-free.
   const { embedViaProvider } = await import('@/lib/ai')
   const dimensions =
-    config.requestDimensions === true && config.effectiveDim != null
-      ? config.effectiveDim
-      : undefined
+    config.truncation?.serverSide === true ? config.truncation.effectiveDim : undefined
   return embedViaProvider(provider, config.modelId, texts, undefined, dimensions)
 }
 
 /**
  * Embed `texts` and return unit-norm vectors at the model's native dim, or at
- * `config.effectiveDim` (provider Matryoshka truncation) when set.
+ * `config.truncation.effectiveDim` (provider Matryoshka) when set.
  *
  * Every returned vector is L2-normalized here so vec0's L2 KNN stays
  * rank-equivalent to cosine — truncation runs before normalization, so a
@@ -97,12 +95,11 @@ export async function embedTexts(
   // native dim (param ignored) or effectiveDim (param honored) — the server's
   // compliance isn't guaranteed, so both are accepted only when the param was
   // actually sent; any other value is still rejected.
+  const truncation = config.backend === 'provider' ? config.truncation : null
   const dimOk =
     config.dim === null ||
     raw.dim === config.dim ||
-    (config.backend === 'provider' &&
-      config.requestDimensions === true &&
-      raw.dim === config.effectiveDim)
+    (truncation?.serverSide === true && raw.dim === truncation.effectiveDim)
   if (!dimOk) {
     throw new EmbedderCallError(`embedding dim mismatch: expected ${config.dim}, got ${raw.dim}`)
   }
@@ -110,10 +107,7 @@ export async function embedTexts(
   // Matryoshka: truncate to the story's effective dim BEFORE normalization —
   // cosine on truncated vectors requires re-norm. Clamped to the native dim so
   // an over-declared custom dim degrades to a no-op instead of lying about N.
-  const targetDim =
-    config.backend === 'provider' && config.effectiveDim != null
-      ? Math.min(config.effectiveDim, raw.dim)
-      : raw.dim
+  const targetDim = truncation != null ? Math.min(truncation.effectiveDim, raw.dim) : raw.dim
   // .slice (not .subarray): l2Normalize may return its input untouched, and
   // packFloat32 packs the backing view — a shared view is a latent packing hazard.
   const vectors = raw.vectors.map((vector) =>

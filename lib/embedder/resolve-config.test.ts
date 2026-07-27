@@ -168,8 +168,7 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
-        effectiveDim: null,
-        requestDimensions: false,
+        truncation: null,
       },
     })
   })
@@ -190,13 +189,12 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: null,
-        effectiveDim: null,
-        requestDimensions: false,
+        truncation: null,
       },
     })
   })
 
-  it('provider story with effectiveDim + matryoshkaSupported resolves requestDimensions true', () => {
+  it('provider story with effectiveDim + matryoshkaSupported resolves serverSide truncation', () => {
     const story: StoryInput & { effectiveDim: number } = {
       embeddingBackend: 'provider',
       embedding_model_id: 'text-embedding-3-small',
@@ -216,13 +214,12 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
-        effectiveDim: 1024,
-        requestDimensions: true,
+        truncation: { effectiveDim: 1024, serverSide: true },
       },
     })
   })
 
-  it('provider story with effectiveDim but no matryoshkaSupported resolves requestDimensions false', () => {
+  it('provider story with effectiveDim but no matryoshkaSupported resolves client-only truncation', () => {
     const story: StoryInput & { effectiveDim: number } = {
       embeddingBackend: 'provider',
       embedding_model_id: 'text-embedding-3-small',
@@ -239,8 +236,7 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
-        effectiveDim: 1024,
-        requestDimensions: false,
+        truncation: { effectiveDim: 1024, serverSide: false },
       },
     })
   })
@@ -280,8 +276,7 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
-        effectiveDim: null,
-        requestDimensions: false,
+        truncation: null,
       },
     })
   })

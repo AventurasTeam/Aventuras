@@ -19,23 +19,40 @@ describe('embedderSwapStore', () => {
       storyId: 'story-1',
       done: 3,
       total: 10,
+      cancelRequested: false,
     })
   })
 
   it('requestCancel flips the cancel flag the engine polls', () => {
-    embedderSwapStore.setProgress({ storyId: 'story-1', done: 0, total: 10 })
+    embedderSwapStore.beginProgress('story-1')
     embedderSwapStore.requestCancel()
-    expect(embedderSwapStore.getState().cancelRequested).toBe(true)
+    expect(embedderSwapStore.isCancelRequested()).toBe(true)
     embedderSwapStore.clearProgress()
-    expect(embedderSwapStore.getState().cancelRequested).toBe(false)
+    expect(embedderSwapStore.isCancelRequested()).toBe(false)
     expect(embedderSwapStore.getState().progress).toBeNull()
   })
 
-  it('openEmbedderSwapDialog resets stale cancelRequested from previous session', () => {
+  it('per-batch setProgress keeps a cancel already requested against the run', () => {
+    embedderSwapStore.beginProgress('story-1')
     embedderSwapStore.requestCancel()
-    expect(embedderSwapStore.getState().cancelRequested).toBe(true)
+    embedderSwapStore.setProgress({ storyId: 'story-1', done: 16, total: 64 })
+    expect(embedderSwapStore.isCancelRequested()).toBe(true)
+  })
+
+  it('beginProgress opens a run that is necessarily un-cancelled', () => {
+    embedderSwapStore.beginProgress('story-1')
+    embedderSwapStore.requestCancel()
+    embedderSwapStore.beginProgress('story-2')
+    expect(embedderSwapStore.isCancelRequested()).toBe(false)
+  })
+
+  it('requestCancel with no run in flight cannot leave a flag behind', () => {
+    embedderSwapStore.requestCancel()
+    expect(embedderSwapStore.getState().progress).toBeNull()
     openEmbedderSwapDialog('story-2')
-    expect(embedderSwapStore.getState().cancelRequested).toBe(false)
+    // Nesting the flag under `progress` is what makes this structural: there is
+    // no slot for a cancel to sit in while nothing is running.
+    expect(embedderSwapStore.isCancelRequested()).toBe(false)
     expect(embedderSwapStore.getState().dialog).toEqual({ storyId: 'story-2' })
   })
 })

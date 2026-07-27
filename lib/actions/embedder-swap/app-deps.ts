@@ -119,7 +119,7 @@ export function makeCallbackGuards(
     },
     isCancelRequested: () => {
       try {
-        return embedderSwapStore.getState().cancelRequested
+        return embedderSwapStore.isCancelRequested()
       } catch (error) {
         logger.debug('embedder.swap_cancel_read_failed', { error: messageOf(error) })
         return false
@@ -330,11 +330,7 @@ async function runStagingSwap(
     const resolution = resolveStorySwapConfig(storyId, target)
     if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
     const deps = composeSwapDeps(storyId, ctx)
-    // cancelRequested is a global flag; a prior cancel that ended without a
-    // running loop leaves it set. Clear it before staging so the engine's first
-    // batch poll can't silently cancel this fresh swap.
-    embedderSwapStore.clearProgress()
-    embedderSwapStore.setProgress({ storyId, done: 0, total: 0 })
+    embedderSwapStore.beginProgress(storyId)
     try {
       return await invoke(deps, {
         storyId,

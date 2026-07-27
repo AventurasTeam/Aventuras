@@ -97,9 +97,15 @@ describe('callback guards', () => {
     expect(() => guards.onProgress(1, 4)).not.toThrow()
   })
 
-  it('isCancelRequested reflects the store flag', () => {
+  it('isCancelRequested reflects the flag on the running swap', () => {
     const guards = makeCallbackGuards('s1')
     expect(guards.isCancelRequested()).toBe(false)
+    // A cancel only exists against a live run, so the guard reads false until
+    // one is open — there is no slot for a flag to sit in beforehand.
+    embedderSwapStore.requestCancel()
+    expect(guards.isCancelRequested()).toBe(false)
+
+    embedderSwapStore.beginProgress('s1')
     embedderSwapStore.requestCancel()
     expect(guards.isCancelRequested()).toBe(true)
   })
@@ -138,10 +144,10 @@ describe('stale cancel-flag isolation across operations', () => {
   it('a cancel with nothing running does not poison the next swap', async () => {
     const ctx = await seedStory()
 
-    // A cancel against a story with no in-flight swap sets the global flag, then
-    // must clear it before returning.
+    // A cancel against a story with no in-flight swap must not leave a flag the
+    // next swap's first batch poll would read.
     await cancelStorySwap('s1', ctx)
-    expect(embedderSwapStore.getState().cancelRequested).toBe(false)
+    expect(embedderSwapStore.isCancelRequested()).toBe(false)
 
     let firstPoll: boolean | undefined
     vi.mocked(startSwap).mockImplementation(async (deps) => {
@@ -267,7 +273,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
     // entirely and silently drop the server-side dimensions request.
     expect(resolution).toMatchObject({
       ok: true,
-      config: { providerId: 'prov2', requestDimensions: true, effectiveDim: 256 },
+      config: { providerId: 'prov2', truncation: { effectiveDim: 256, serverSide: true } },
     })
   })
 
@@ -283,7 +289,10 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
       providerId: 'prov1',
     })
 
-    expect(resolution).toMatchObject({ ok: true, config: { effectiveDim: 512 } })
+    expect(resolution).toMatchObject({
+      ok: true,
+      config: { truncation: { effectiveDim: 512, serverSide: false } },
+    })
   })
 
   it('reports no-model for a story that is not in the store', async () => {

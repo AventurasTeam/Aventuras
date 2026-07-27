@@ -201,7 +201,7 @@ export const SwapInProgress: Story = {
     ).toBeDisabled()
     expect(screen.getByTestId('reindex-now')).toBeDisabled()
     await userEvent.click(cancel)
-    await waitFor(() => expect(embedderSwapStore.getState().cancelRequested).toBe(true))
+    await waitFor(() => expect(embedderSwapStore.isCancelRequested()).toBe(true))
   },
 }
 

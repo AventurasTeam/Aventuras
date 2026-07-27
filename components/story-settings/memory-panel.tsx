@@ -63,7 +63,7 @@ type MemoryPanelProps = {
  */
 export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelProps) {
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
-    s.storyId === storyId ? s.staleTotal : 0,
+    embeddingStatusStore.staleTotalFor(s, storyId),
   )
   const [reindexConfirmOpen, setReindexConfirmOpen] = useState(false)
   const [reindexRowCount, setReindexRowCount] = useState<number | null>(null)

@@ -190,8 +190,16 @@ export function EmbedderDefaultCard({
     const result = await runTest(
       // null, not 0: a probe is exactly the call that discovers the dim, and 0
       // sits in the same numeric slot as a real one, so the service's
-      // dim-mismatch guard would reject every response.
-      { backend: 'provider', providerId: providerIdDraft, modelId: modelIdDraft, dim: null },
+      // dim-mismatch guard would reject every response. Truncation is null for
+      // the same reason — a probe must report the model's native dim, not a
+      // story's locked one.
+      {
+        backend: 'provider',
+        providerId: providerIdDraft,
+        modelId: modelIdDraft,
+        dim: null,
+        truncation: null,
+      },
       provider,
     )
     setTestState(result)

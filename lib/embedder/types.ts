@@ -1,6 +1,18 @@
 export type EmbedderBackend = 'local' | 'provider'
 
 /**
+ * Matryoshka truncation for one provider config, or `null` for native dim.
+ *
+ * One value rather than a dim field beside a boolean: the two are only ever
+ * meaningful together, and "send `dimensions: N` while truncating to something
+ * else" — or to nothing — is not a state the embedder has any answer for.
+ * `serverSide` additionally sends the provider's `dimensions` param (gated on
+ * matryoshkaSupported); client-side truncation runs either way, so correctness
+ * never depends on the server honouring it.
+ */
+export type EmbedderTruncation = { effectiveDim: number; serverSide: boolean }
+
+/**
  * A local model's dim always comes from the catalog. A provider's is unknown
  * until the first embed call answers it, which is `null` — not 0, which would
  * sit in the same numeric slot as a real dim and silently disable the
@@ -13,10 +25,8 @@ export type EmbedderConfig =
       providerId: string
       modelId: string
       dim: number | null
-      /** Story-locked Matryoshka dim; null/absent = native. Local mode never truncates. */
-      effectiveDim?: number | null
-      /** Send the server-side `dimensions` param (gated on matryoshkaSupported). */
-      requestDimensions?: boolean
+      /** Story-locked Matryoshka truncation; null = native. Local never truncates. */
+      truncation: EmbedderTruncation | null
     }
 
 // Init-vs-call split lets consumers distinguish "session never came up"

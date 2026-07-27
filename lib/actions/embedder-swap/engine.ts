@@ -43,7 +43,8 @@ export type SwapParams = {
   storyId: string
   branchIds: readonly string[]
   currentModelId: string
-  currentSwapTarget: string | null | undefined
+  /** `null` = no swap in flight. Absent and null meant the same thing; only one does now. */
+  currentSwapTarget: string | null
   targetConfig: EmbedderConfig
 }
 

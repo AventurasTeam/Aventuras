@@ -135,7 +135,7 @@ export default function ReaderComposerRoute() {
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
-    s.storyId === storyId ? s.staleTotal : 0,
+    embeddingStatusStore.staleTotalFor(s, storyId),
   )
   // Narrow selector: subscribing to the whole `progress` object would re-render
   // the entire reader on every embed-batch tick (onProgress fires per batch).

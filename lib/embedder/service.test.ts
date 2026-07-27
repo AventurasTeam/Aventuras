@@ -84,6 +84,7 @@ describe('embedTexts routing + prefixing', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
 
     const result = await embedTexts(config, ['x'], 'document', provider)
@@ -99,6 +100,7 @@ describe('embedTexts routing + prefixing', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
     await expect(embedTexts(config, ['x'])).rejects.toBeInstanceOf(EmbedderInitError)
     await expect(embedTexts(config, ['x'])).rejects.toThrow('provider instance not supplied')
@@ -121,6 +123,7 @@ describe('embedTexts dim verification', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
 
     await expect(embedTexts(config, ['a', 'b'], 'document', provider)).rejects.toThrow(
@@ -135,6 +138,7 @@ describe('embedTexts dim verification', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: null,
+      truncation: null,
     }
 
     const result = await embedTexts(config, ['a'], 'document', provider)
@@ -166,8 +170,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: 8,
-      effectiveDim: 4,
-      requestDimensions: false,
+      truncation: { effectiveDim: 4, serverSide: false },
     }
 
     const { vectors, dim } = await embedTexts(config, ['x'], 'document', provider)
@@ -189,8 +192,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: null,
-      effectiveDim: 4096,
-      requestDimensions: false,
+      truncation: { effectiveDim: 4096, serverSide: false },
     }
 
     const { dim } = await embedTexts(config, ['x'], 'document', provider)
@@ -208,6 +210,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: 8,
+      truncation: null,
     }
 
     const { dim } = await embedTexts(config, ['x'], 'document', provider)
@@ -215,7 +218,7 @@ describe('matryoshka truncation', () => {
     expect(dim).toBe(8)
   })
 
-  it('requests the provider-side dimensions param only when requestDimensions is true', async () => {
+  it('requests the provider-side dimensions param only when truncation is serverSide', async () => {
     vi.mocked(embedViaProvider).mockResolvedValue({
       vectors: [new Float32Array([1, 1, 1, 1, 1, 1, 1, 1])],
       dim: 8,
@@ -225,8 +228,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: 8,
-      effectiveDim: 4,
-      requestDimensions: true,
+      truncation: { effectiveDim: 4, serverSide: true },
     }
 
     await embedTexts(config, ['x'], 'document', provider)
@@ -244,8 +246,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: 8,
-      effectiveDim: 4,
-      requestDimensions: true,
+      truncation: { effectiveDim: 4, serverSide: true },
     }
 
     const { vectors, dim } = await embedTexts(config, ['x'], 'document', provider)
@@ -265,8 +266,7 @@ describe('matryoshka truncation', () => {
       providerId: 'p',
       modelId: 'm',
       dim: 8,
-      effectiveDim: 4,
-      requestDimensions: true,
+      truncation: { effectiveDim: 4, serverSide: true },
     }
 
     await expect(embedTexts(config, ['x'], 'document', provider)).rejects.toBeInstanceOf(

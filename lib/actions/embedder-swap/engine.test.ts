@@ -323,7 +323,13 @@ describe('embedder-swap engine', () => {
       branchIds: ['b1'],
       currentModelId: OLD,
       currentSwapTarget: null,
-      targetConfig: { backend: 'provider', providerId: 'prov1', modelId: NEW, dim: DIM },
+      targetConfig: {
+        backend: 'provider',
+        providerId: 'prov1',
+        modelId: NEW,
+        dim: DIM,
+        truncation: null,
+      },
     })
 
     expect(result).toBe('completed')

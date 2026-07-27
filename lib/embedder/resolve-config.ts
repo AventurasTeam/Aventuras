@@ -60,8 +60,10 @@ export function resolveEmbedderConfig(
       providerId,
       modelId,
       dim,
-      effectiveDim,
-      requestDimensions: effectiveDim != null && (opts?.matryoshkaSupported ?? false),
+      truncation:
+        effectiveDim != null
+          ? { effectiveDim, serverSide: opts?.matryoshkaSupported ?? false }
+          : null,
     },
   }
 }
