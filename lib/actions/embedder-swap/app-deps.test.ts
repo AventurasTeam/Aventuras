@@ -1,12 +1,29 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { buildStorySettings, type DbCtx } from '@/lib/db'
+import {
+  APP_SETTINGS_DEFAULTS,
+  APP_SETTINGS_SINGLETON_ID,
+  appSettings,
+  buildStorySettings,
+  type DbCtx,
+  type ProviderInstance,
+  type StorySettings,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { currentStoryStore, embedderSwapStore, rehydrateStories, storiesStore } from '@/lib/stores'
+import {
+  currentStoryStore,
+  embedderSwapStore,
+  rehydrateAppSettings,
+  rehydrateStories,
+  storiesStore,
+} from '@/lib/stores'
 
 import {
   cancelStorySwap,
   makeCallbackGuards,
+  RelabelBlockedError,
+  relabelStory,
+  resolveStorySwapConfig,
   runExclusive,
   startStorySwap,
   SwapBusyError,
@@ -134,5 +151,200 @@ describe('stale cancel-flag isolation across operations', () => {
     expect(startSwap).toHaveBeenCalledOnce()
     expect(firstPoll).toBe(false)
     expect(result).toBe('completed')
+  })
+})
+
+const PROVIDER_MODEL = 'text-embedding-3-small'
+const TARGET_MODEL = 'text-embedding-3-large'
+
+function cachedProvider(
+  id: string,
+  models: { id: string; capabilities?: { matryoshkaSupported?: boolean } }[],
+): ProviderInstance {
+  return {
+    id,
+    type: 'openai-compatible',
+    displayName: id,
+    apiKey: 'k',
+    endpoint: 'http://localhost:1234/v1',
+    favoriteModelIds: [],
+    cachedModels: models,
+  }
+}
+
+async function seedStores(
+  settings: StorySettings,
+  providers: ProviderInstance[] = [],
+): Promise<{ ctx: DbCtx; sqlite: Awaited<ReturnType<typeof createTestDb>>['sqlite'] }> {
+  const { db, sqlite, runInTransaction } = await createTestDb()
+  await db.insert(appSettings).values({
+    id: APP_SETTINGS_SINGLETON_ID,
+    ...APP_SETTINGS_DEFAULTS,
+    providers,
+  })
+  await rehydrateAppSettings(db)
+  sqlite
+    .prepare('INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)')
+    .run('s1', 'S', JSON.stringify(settings), 1000, 1000)
+  await rehydrateStories(db)
+  return { ctx: { db, runInTransaction }, sqlite }
+}
+
+function settingsOf(
+  sqlite: Awaited<ReturnType<typeof createTestDb>>['sqlite'],
+): Record<string, unknown> {
+  const row = sqlite.prepare('SELECT settings FROM stories WHERE id = ?').get('s1') as {
+    settings: string
+  }
+  return JSON.parse(row.settings) as Record<string, unknown>
+}
+
+describe('resolveStorySwapConfig cross-backend targets', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  it('resolves a provider target for a local-backend story', async () => {
+    await seedStores(buildStorySettings({ embeddingBackend: 'local' }, MINILM, null), [
+      cachedProvider('prov1', [{ id: TARGET_MODEL }]),
+    ])
+
+    const resolution = resolveStorySwapConfig('s1', {
+      modelId: TARGET_MODEL,
+      backend: 'provider',
+      providerId: 'prov1',
+    })
+
+    // Resolving the target against the story's still-local backend is the
+    // `unknown-local-model` failure cross-backend targets exist to avoid.
+    expect(resolution).toMatchObject({
+      ok: true,
+      config: { backend: 'provider', providerId: 'prov1', modelId: TARGET_MODEL },
+    })
+  })
+
+  it('resolves a local target for a provider-backed story', async () => {
+    await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
+      [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])],
+    )
+
+    const resolution = resolveStorySwapConfig('s1', { modelId: MINILM, backend: 'local' })
+
+    // Keeping the story's provider backend here would resolve a local model id as
+    // a provider model: ok at resolve time, a 4xx on the first embed.
+    expect(resolution).toMatchObject({
+      ok: true,
+      config: { backend: 'local', modelId: MINILM, dim: 384 },
+    })
+  })
+
+  it('reads capabilities from the target provider, not the story provider', async () => {
+    await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 256),
+      [
+        cachedProvider('prov1', [
+          { id: PROVIDER_MODEL, capabilities: { matryoshkaSupported: false } },
+        ]),
+        cachedProvider('prov2', [
+          { id: TARGET_MODEL, capabilities: { matryoshkaSupported: true } },
+        ]),
+      ],
+    )
+
+    const resolution = resolveStorySwapConfig('s1', {
+      modelId: TARGET_MODEL,
+      backend: 'provider',
+      providerId: 'prov2',
+    })
+
+    // Capabilities looked up under the story's prov1 would miss TARGET_MODEL
+    // entirely and silently drop the server-side dimensions request.
+    expect(resolution).toMatchObject({
+      ok: true,
+      config: { providerId: 'prov2', requestDimensions: true, effectiveDim: 256 },
+    })
+  })
+
+  it('keeps the story locked effectiveDim rather than re-picking it', async () => {
+    await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 512),
+      [cachedProvider('prov1', [{ id: TARGET_MODEL }])],
+    )
+
+    const resolution = resolveStorySwapConfig('s1', {
+      modelId: TARGET_MODEL,
+      backend: 'provider',
+      providerId: 'prov1',
+    })
+
+    expect(resolution).toMatchObject({ ok: true, config: { effectiveDim: 512 } })
+  })
+
+  it('reports no-model for a story that is not in the store', async () => {
+    await seedStores(buildStorySettings({ embeddingBackend: 'local' }, MINILM, null))
+
+    expect(resolveStorySwapConfig('missing', { modelId: MINILM, backend: 'local' })).toEqual({
+      ok: false,
+      reason: 'no-model',
+    })
+  })
+})
+
+describe('relabelStory', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  it('writes model id, backend and provider id as one triple', async () => {
+    // Branch-less on purpose: relabelModel's vec identity rewrite is pinned by the
+    // engine tests, so this isolates the settings write the app layer owns.
+    const { ctx, sqlite } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+
+    await relabelStory(
+      's1',
+      { modelId: PROVIDER_MODEL, backend: 'provider', providerId: 'prov1' },
+      ctx,
+    )
+
+    expect(settingsOf(sqlite)).toMatchObject({
+      embedding_model_id: PROVIDER_MODEL,
+      embeddingBackend: 'provider',
+      embedding_provider_id: 'prov1',
+    })
+  })
+
+  it('clears the provider id when relabelling onto a local target', async () => {
+    const { ctx, sqlite } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
+    )
+
+    await relabelStory('s1', { modelId: MINILM, backend: 'local' }, ctx)
+
+    const settings = settingsOf(sqlite)
+    expect(settings).toMatchObject({ embedding_model_id: MINILM, embeddingBackend: 'local' })
+    expect(settings.embedding_provider_id).toBeUndefined()
+  })
+
+  it('refuses while a swap marker is set', async () => {
+    const { ctx } = await seedStores({
+      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      embedding_swap_target: TARGET_MODEL,
+    })
+
+    // Relabel's pre-delete targets exactly the rows a swap has staged.
+    await expect(
+      relabelStory(
+        's1',
+        { modelId: PROVIDER_MODEL, backend: 'provider', providerId: 'prov1' },
+        ctx,
+      ),
+    ).rejects.toBeInstanceOf(RelabelBlockedError)
   })
 })

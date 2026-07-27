@@ -348,6 +348,49 @@ describe('embedder-swap engine', () => {
     })
   })
 
+  it('1c. provider→local swap: the flip writes the local backend and clears the provider id', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    // Start provider-backed so the flip has a provider id to clear: a model-id-only
+    // flip would strand a local model under a provider backend and provider id.
+    sqlite.prepare('UPDATE stories SET settings = ? WHERE id = ?').run(
+      JSON.stringify({
+        embedding_model_id: OLD,
+        embeddingBackend: 'provider',
+        embedding_provider_id: 'prov1',
+      }),
+      's1',
+    )
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    const result = await startSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      targetConfig: cfg(NEW),
+    })
+
+    expect(result).toBe('completed')
+    const s = storySettings(sqlite)
+    expect(s?.embedding_model_id).toBe(NEW)
+    expect(s?.embeddingBackend).toBe('local')
+    // json_patch deletes on null, so the provider id is gone rather than left
+    // pointing at a provider that no longer serves this story.
+    expect(s?.embedding_provider_id).toBeUndefined()
+
+    const markerWrite = callsPatching(
+      runSpy,
+      (patch) => patch.embedding_swap_target === NEW,
+    )[0].map(patchOf)
+    expect(markerWrite).toContainEqual({
+      embedding_swap_target: NEW,
+      embedding_swap_backend: 'local',
+      embedding_swap_provider_id: null,
+    })
+  })
+
   it('2. same-dim swap: OLD and NEW coexist in the same family mid-phase-1', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ extraEntities: 20 })
     seedOldVectors(sqlite, embedded)
