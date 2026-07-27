@@ -199,12 +199,17 @@ Notable deviations and constraints for future slices:
   old-model delete _and_ the cancel path's staged-row delete, since with
   `target === current` the "staged" rows are the story's only vectors and
   deleting them would wipe the vector space rather than unwind a stage
-  (found by manual smoke, 2026-07-25). Cancel still re-flags stale, so
-  the next sync revalidates each row by `source_hash`.
-- **Cancel re-flags `embedding_stale = 1`** across all five tables
-  for the story's branches; the next sync or drain revalidates by
-  `source_hash` with no re-embed where the old vector still
-  matches.
+  (found by manual smoke, 2026-07-25).
+- **Cancel flags only the rows a cancel actually dirties**, not all
+  five tables. Cross-model flags the staged set (staging cleared their
+  flag, but it described the old-model vector being reverted to);
+  same-model flags only the not-yet-re-embedded tail. Blanket flagging
+  claimed rows were pending whose vectors were current, and the drain
+  re-embeds anything flagged — no `source_hash` revalidation runs on
+  that path — so a cancel silently completed the re-index it had just
+  cancelled (found by manual smoke, 2026-07-27). A crash-recovered
+  same-model cancel keeps the blanket flag: with `target === current`,
+  a re-embedded row is indistinguishable from an untouched one.
 - **Swaps cross backends** — the picker offers the app's provider
   embedding model to a local-backend story, so a swap target is a
   `{ modelId, backend, providerId }` triple rather than a bare model id

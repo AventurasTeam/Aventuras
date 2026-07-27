@@ -453,11 +453,13 @@ describe('embedder-swap engine', () => {
     expect([...new Set(modelIdsIn(sqlite, 'entities_vec_384'))]).toEqual([NEW])
   })
 
-  it('5. cancelSwap: deletes NEW, clears marker, re-flags all five source tables, one transaction', async () => {
+  it('5. cancelSwap cross-model: deletes NEW, clears marker, flags only the staged rows', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: NEW })
     seedOldVectors(sqlite, embedded)
-    // Simulate a partial stage: NEW vectors present and stale flags cleared.
-    seedOldVectors(sqlite, embedded, NEW)
+    // Partial stage: only these rows reached the target model, so only these had
+    // their flag cleared by staging.
+    const staged = embedded.filter((row) => ['e1', 'e2', 'l1'].includes(row.id))
+    seedOldVectors(sqlite, staged, NEW)
     const { fn } = makeEmbedRows(sqlite)
     const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
 
@@ -475,19 +477,54 @@ describe('embedder-swap engine', () => {
     expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
 
     expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
+    expect(staleFlag(sqlite, 'entities', 'e2')).toBe(1)
     expect(staleFlag(sqlite, 'lore', 'l1')).toBe(1)
-    expect(staleFlag(sqlite, 'happenings', 'h1')).toBe(1)
-    expect(staleFlag(sqlite, 'threads', 't1')).toBe(1)
-    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(1)
+    // Never staged, so staging never cleared their flag — nothing to restore.
+    expect(staleFlag(sqlite, 'entities', 'e3')).toBe(0)
+    expect(staleFlag(sqlite, 'happenings', 'h1')).toBe(0)
+    expect(staleFlag(sqlite, 'threads', 't1')).toBe(0)
+    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(0)
 
     expect(runSpy).toHaveBeenCalledTimes(1)
     const ops = opsOf(runSpy)[0]
     expect(hasPatch(ops, clearsMarker)).toBe(true)
     expect(hasPatch(ops, flipsModel)).toBe(false)
-    expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
   })
 
-  it('5b. cancelSwap on a same-model re-index: keeps every vector, still re-flags', async () => {
+  it('5b. cancelSwap same-model with live run state: keeps every vector, flags only the tail', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: OLD })
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    await cancelSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      targetModelId: OLD,
+      currentModelId: OLD,
+      unprocessed: embedded.filter((row) => ['h1', 't1', 'c1'].includes(row.id)),
+    })
+
+    // Staging upserted in place, so the target's rows ARE the story's only
+    // vectors — a delete here would wipe the vector space, not unwind a stage.
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+    expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
+
+    // Re-embedded before the cancel: current, so queueing them again would both
+    // lie about coverage and redo work the user explicitly stopped.
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
+    expect(staleFlag(sqlite, 'lore', 'l1')).toBe(0)
+    // Still holding the embedding the re-index was asked to replace.
+    expect(staleFlag(sqlite, 'happenings', 'h1')).toBe(1)
+    expect(staleFlag(sqlite, 'threads', 't1')).toBe(1)
+    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(1)
+
+    const ops = opsOf(runSpy)[0]
+    expect(ops.some((op) => op.sql.includes('DELETE'))).toBe(false)
+  })
+
+  it('5c. cancelSwap same-model without run state: queues the whole story, deletes nothing', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: OLD })
     seedOldVectors(sqlite, embedded)
     const { fn } = makeEmbedRows(sqlite)
@@ -500,12 +537,9 @@ describe('embedder-swap engine', () => {
       currentModelId: OLD,
     })
 
-    // Staging upserted in place, so the target's rows ARE the story's only
-    // vectors — a delete here would wipe the vector space, not unwind a stage.
     expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
-    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
-    expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
     expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
+    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(1)
 
     const ops = opsOf(runSpy)[0]
     expect(ops.some((op) => op.sql.includes('DELETE'))).toBe(false)
@@ -648,12 +682,14 @@ describe('embedder-swap engine', () => {
     expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual([])
     expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
     expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
+    // Batch 1 covered e1 (staged, so its flag was cleared and must be restored);
+    // c1 sits past the cancel point and was never touched.
     expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
-    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(1)
+    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(0)
 
     const cancelCalls = callsPatching(runSpy, clearsMarker)
     expect(cancelCalls).toHaveLength(1)
-    expect(cancelCalls[0].filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
+    expect(cancelCalls[0].filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(1)
     expect(hasPatch(cancelCalls[0], flipsModel)).toBe(false)
   })
 

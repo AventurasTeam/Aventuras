@@ -258,14 +258,19 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         ) : null}
       </View>
 
-      <Button
-        testID="reindex-now"
-        variant="secondary"
-        disabled={settings.embedding_swap_target != null || progress != null}
-        onPress={() => void handleReindexNow()}
-      >
-        <Text>{t('storySettings:memory.reindexNow')}</Text>
-      </Button>
+      <View className="gap-1">
+        <Button
+          testID="reindex-now"
+          variant="secondary"
+          disabled={settings.embedding_swap_target != null || progress != null}
+          onPress={() => void handleReindexNow()}
+        >
+          <Text>{t('storySettings:memory.reindexNow')}</Text>
+        </Button>
+        <Text size="xs" variant="muted" className="px-1">
+          {t('storySettings:memory.reindexNowHint')}
+        </Text>
+      </View>
 
       {progress != null ? (
         <View className="flex-row items-center gap-3">

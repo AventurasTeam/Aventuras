@@ -408,8 +408,27 @@ surfaces three options:
   Cancel path — partial NEW vectors are deleted, marker cleared.
   One exception: the standalone re-index, where NEW and OLD are the
   same model. Staging upserts in place there, so the rows a cancel
-  would delete are the story's only vectors — it clears the marker and
-  re-flags staleness without deleting anything.
+  would delete are the story's only vectors — it clears the marker
+  without deleting anything.
+
+  **Which rows a cancel leaves dirty** depends on the direction,
+  because `embedding_stale` describes the vector the story is left
+  _on_:
+  - **Cross-model** — staging cleared the flag on every row it
+    embedded under NEW, but the story reverts to OLD, so exactly
+    those rows lost a flag that described their OLD vector. Flag the
+    staged set (derivable from vec0, so this also covers a
+    crash-recovered cancel).
+  - **Same-model** — rows re-embedded before the cancel are current;
+    the rest still hold the embedding the re-index was asked to
+    replace. Flag only that tail. A crash-recovered cancel has no run
+    state and a same-model re-embed leaves no trace to recover the
+    split from (same `model_id`, and unchanged content hashes to the
+    same `source_hash`), so it conservatively queues the whole story.
+
+  Flagging rows whose vectors are current would both overstate the
+  dirty set to the staleness UI and make the drain silently redo work
+  the user just stopped.
 
   **Block second swap while marker is set.** Re-index is a
   foreground job, so the in-app flow naturally prevents a second

@@ -2,6 +2,8 @@ import {
   branchRowsQuery,
   clearSwapTargetOp,
   deleteBranchModelVecOps,
+  familyTablesFor,
+  flagEmbeddingStaleOps,
   isVecFamilyTable,
   setEmbeddingTargetOp,
   setSwapTargetOp,
@@ -12,6 +14,7 @@ import {
   type EmbeddedFieldRow,
   type EmbeddingTarget,
   type SqlOp,
+  type StaleTargetRow,
   type VecTargetKind,
 } from '@/lib/db'
 import type { EmbedderConfig } from '@/lib/embedder'
@@ -124,6 +127,7 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
         branchIds: p.branchIds,
         targetModelId,
         currentModelId: p.currentModelId,
+        unprocessed: pending.slice(i),
       })
       return 'cancelled'
     }
@@ -163,25 +167,33 @@ export async function cancelSwap(
     branchIds,
     targetModelId,
     currentModelId,
+    unprocessed,
   }: {
     storyId: string
     branchIds: readonly string[]
     targetModelId: string
     currentModelId: string
+    /** Rows the live run had not re-embedded yet. Absent for a crash-recovered cancel. */
+    unprocessed?: readonly StaleTargetRow[]
   },
 ): Promise<void> {
+  const sameModel = targetModelId === currentModelId
   // Same-model re-index stages in place, so the "staged NEW rows" a cancel unwinds
   // ARE the story's only vectors — deleting them wipes the vector space rather than
-  // restoring it. Mirrors the phase-2 old-model delete skip. The stale re-flag below
-  // still runs, so the next sync revalidates each row by source_hash.
-  const deleteStagedOps =
-    targetModelId === currentModelId
-      ? []
-      : deleteBranchModelVecOps(await deps.listVecTables(), branchIds, targetModelId)
+  // restoring it. Mirrors the phase-2 old-model delete skip.
+  const deleteStagedOps = sameModel
+    ? []
+    : deleteBranchModelVecOps(await deps.listVecTables(), branchIds, targetModelId)
+  const staleOps = await cancelStaleOps(deps, {
+    branchIds,
+    targetModelId,
+    sameModel,
+    unprocessed,
+  })
   await deps.runInTransaction([
     ...deleteStagedOps,
     clearSwapTargetOp(storyId, deps.now()),
-    ...reflagStaleOps(branchIds),
+    ...staleOps,
   ])
 }
 
@@ -249,27 +261,42 @@ async function loadAllRows(
   return out
 }
 
+/**
+ * Rows already carrying a target-model vector. A cancel must read this BEFORE
+ * its delete, which removes exactly this set.
+ */
+async function stagedRows(
+  deps: SwapDeps,
+  branchIds: readonly string[],
+  modelId: string,
+): Promise<StaleTargetRow[]> {
+  const out: StaleTargetRow[] = []
+  if (branchIds.length === 0) return out
+
+  // familyTablesFor screens out the vec0 shadow tables (`_info`, `_chunks`, …)
+  // that listVecTables returns, which reject or mis-serve these queries.
+  const tables = await deps.listVecTables()
+  const ph = branchIds.map(() => '?').join(', ')
+  for (const kind of Object.keys(VEC_FAMILIES) as VecTargetKind[]) {
+    for (const table of familyTablesFor(kind, tables)) {
+      const rows = await deps.queryAll(
+        `SELECT branch_id, id FROM ${table} WHERE branch_id IN (${ph}) AND model_id = ?`,
+        [...branchIds, modelId],
+      )
+      for (const [branchId, id] of rows as [string, string][]) out.push({ kind, branchId, id })
+    }
+  }
+  return out
+}
+
 // Rows already staged under the target model — resume skips them.
 async function stagedIds(
   deps: SwapDeps,
   branchIds: readonly string[],
   modelId: string,
 ): Promise<Set<string>> {
-  const staged = new Set<string>()
-  if (branchIds.length === 0) return staged
-
-  // listVecTables can return vec0 shadow tables (`_info`, `_chunks`, …) that reject
-  // or mis-serve these queries, so only real family tables are queried.
-  const tables = (await deps.listVecTables()).filter(isVecFamilyTable)
-  const ph = branchIds.map(() => '?').join(', ')
-  for (const table of tables) {
-    const rows = await deps.queryAll(
-      `SELECT branch_id, id FROM ${table} WHERE branch_id IN (${ph}) AND model_id = ?`,
-      [...branchIds, modelId],
-    )
-    for (const [branchId, id] of rows as [string, string][]) staged.add(`${branchId}:${id}`)
-  }
-  return staged
+  const rows = await stagedRows(deps, branchIds, modelId)
+  return new Set(rows.map((row) => `${row.branchId}:${row.id}`))
 }
 
 async function assertStoryLive(deps: SwapDeps, storyId: string): Promise<void> {
@@ -278,13 +305,41 @@ async function assertStoryLive(deps: SwapDeps, storyId: string): Promise<void> {
   if (row === undefined || row[1] == null) throw new SwapStoryMissingError(storyId)
 }
 
-function reflagStaleOps(branchIds: readonly string[]): SqlOp[] {
+/**
+ * Which rows a cancel leaves dirty depends on the direction, because the flag
+ * describes the vector the story is left ON.
+ *
+ * Same-model: rows re-embedded before the cancel are current, and the tail still
+ * holds the embedding the user asked to replace — so only the tail is queued.
+ * Cross-model: staging cleared the flag on every row it embedded under the
+ * target, but the story reverts to the old model, so exactly those rows lost a
+ * flag that described their old-model vector.
+ */
+async function cancelStaleOps(
+  deps: SwapDeps,
+  {
+    branchIds,
+    targetModelId,
+    sameModel,
+    unprocessed,
+  }: {
+    branchIds: readonly string[]
+    targetModelId: string
+    sameModel: boolean
+    unprocessed?: readonly StaleTargetRow[]
+  },
+): Promise<SqlOp[]> {
   if (branchIds.length === 0) return []
+  if (!sameModel) return flagEmbeddingStaleOps(await stagedRows(deps, branchIds, targetModelId))
+  // A same-model re-embed leaves nothing to recover the split from — same
+  // model_id, and unchanged content hashes to the same source_hash — so a cancel
+  // with no live run state (crash recovery) queues the whole story instead.
+  if (unprocessed == null) return reflagAllOps(branchIds)
+  return flagEmbeddingStaleOps(unprocessed)
+}
+
+function reflagAllOps(branchIds: readonly string[]): SqlOp[] {
   const ph = branchIds.map(() => '?').join(', ')
-  // Staging cleared embedding_stale for rows it re-embedded under the target model,
-  // but their OLD-model vector may still be outdated. Re-flag so the next sync/drain
-  // revalidates each by source_hash — cheap, and it re-embeds nothing when the old
-  // vector still matches.
   return Object.values(SOURCE_TABLES).map((table) => ({
     sql: `UPDATE ${table} SET embedding_stale = 1 WHERE branch_id IN (${ph})`,
     params: [...branchIds],
