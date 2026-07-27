@@ -151,6 +151,36 @@ host, same-dim staging under the two-part vec0 pk, multi-family
 vector cleanup) were resolved in slice planning on 2026-07-24; the
 decisions are recorded under Implementation notes below.
 
+One question opened during review on 2026-07-28:
+
+- **`EmbeddingTarget` stops at the action boundary — the UI above it
+  still identifies an embedder by bare `modelId`.** The cross-backend
+  fix threaded a model / backend / provider triple through the action
+  layer, engine, settings write, and crash marker, but `SwapDialog`
+  still hands its caller `target.id` alone, and `MemoryPanel`'s
+  `targetFor` rebuilds the triple by looking that id back up in
+  `candidates`. Four defects follow from that single narrowing:
+  - the candidate dedupe keys on `id`, so a provider model sharing an
+    installed local model's id is dropped and can never be picked;
+  - `isCurrent` compares model id only, so a story on model X sees X
+    disabled as "current" even when the candidate is served by a
+    different backend or provider instance;
+  - `relabelModel` returns early on `newModelId === oldModelId`, so a
+    provider-only relabel writes nothing — the exact move relabel is
+    named for ("same model, now served elsewhere");
+  - `targetFor` falls back to the story's own backend when the picked
+    id is absent from `candidates`, silently rebuilding the pre-fix
+    shape.
+
+  Passing the candidate rather than its id, and keying dedupe and
+  `isCurrent` on the whole target, resolves all four; patching them
+  one at a time does not.
+
+  **Deliberate exception:** vec row identity stays model-id-only
+  (`vecRowPk`). Vectors from the same weights are interchangeable
+  regardless of which backend served them — that is the premise
+  relabel rests on, so the triple must not reach vector identity.
+
 ## Implementation notes
 
 Resolved developer decisions (slice planning, 2026-07-24):
