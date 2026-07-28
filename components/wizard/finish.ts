@@ -12,6 +12,7 @@ import { logger } from '@/lib/diagnostics'
 import {
   EmbedderCallError,
   EmbedderInitError,
+  resolveEmbedderConfig,
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
@@ -129,6 +130,25 @@ export async function finishWizard(
   )
   if (!gate.usable) return { status: 'embed-blocked', reason: gate.reason, backend: gate.backend }
 
+  // Resolved against the settings about to be committed, not the gate's config:
+  // the gate resolves with no story, so it carries no Matryoshka truncation and
+  // would land this vector in the native-dim family nothing else ever queries.
+  const embedResolution = resolveEmbedderConfig(
+    settings,
+    {
+      embeddingModelId: appDefaults.embeddingModelId,
+      embeddingProviderId: appDefaults.embeddingProviderId,
+      defaultStorySettings: appDefaults.defaultStorySettings,
+    },
+    { matryoshkaSupported: matryoshkaApplicable },
+  )
+  if (!embedResolution.ok) {
+    const reason =
+      embedResolution.reason === 'unknown-local-model' ? 'unknown-model' : embedResolution.reason
+    return { status: 'embed-blocked', reason, backend: settings.embeddingBackend }
+  }
+  const embedConfig = embedResolution.config
+
   let commit: { storyId: string; branchId: string }
   try {
     commit = await createStoryWithBranch(
@@ -144,11 +164,11 @@ export async function finishWizard(
         openingMetadata,
         lead,
         embed: {
-          config: gate.config,
+          config: embedConfig,
           exec: embedCtx.exec,
           provider:
-            gate.config.backend === 'provider'
-              ? embedCtx.resolveProvider(gate.config.providerId)
+            embedConfig.backend === 'provider'
+              ? embedCtx.resolveProvider(embedConfig.providerId)
               : undefined,
         },
       },

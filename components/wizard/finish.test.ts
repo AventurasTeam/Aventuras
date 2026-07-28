@@ -312,6 +312,36 @@ describe('finishWizard', () => {
     expect(storyRow.settings!.effectiveDim).toBe(1024)
   })
 
+  it('embeds the lead with the committed effectiveDim, not the native-dim gate config', async () => {
+    const { ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Truncated Lead',
+        leadName: 'Aria',
+        leadEntityId: LEAD_ID,
+        opening: { content: 'Once.', sceneEntities: [LEAD_ID] },
+        effectiveDim: 512,
+      }),
+      ctx,
+      vi.fn(),
+      MATRYOSHKA_PROVIDER_DEFAULTS,
+      EMBED_CTX,
+      6100,
+    )
+
+    expect(result.status).toBe('ok')
+    expect(mockedEmbed).toHaveBeenCalledTimes(1)
+    // The gate resolves with no story, so its config truncates nothing — the
+    // lead's vector would land in a dim family the story never queries again.
+    expect(mockedEmbed.mock.calls[0][0]).toMatchObject({
+      backend: 'provider',
+      truncation: { effectiveDim: 512, serverSide: true },
+    })
+  })
+
   it('drops a stale effectiveDim when the app default model is not Matryoshka', async () => {
     const { db, ctx } = await setup()
 
