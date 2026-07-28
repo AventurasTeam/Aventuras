@@ -31,7 +31,9 @@ export function SwapResumeHost() {
   const target = currentStoryStore.useCurrentStory(
     (open) => open?.settings.embedding_swap_target ?? null,
   )
-  const running = embedderSwapStore.useSwap((s) => s.progress != null)
+  const running = embedderSwapStore.useSwap(
+    (s) => embedderSwapStore.progressFor(s, storyId) != null,
+  )
   const deferred = embedderSwapStore.useSwap((s) => s.resumeDeferredFor)
 
   const open = storyId != null && target != null && !running && deferred !== storyId

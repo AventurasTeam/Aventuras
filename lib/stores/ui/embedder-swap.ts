@@ -14,7 +14,12 @@ type SwapProgress = { storyId: string; done: number; total: number; cancelReques
 
 type EmbedderSwapState = {
   dialog: SwapDialogState
-  progress: SwapProgress | null
+  /**
+   * Keyed by story because the swap lock is per-story (`runExclusive`), so two
+   * stories can legitimately stage at once. Sharing one slot let a second story's
+   * run clear the first's pending cancel and made every cancel read unscoped.
+   */
+  progress: Record<string, SwapProgress>
   /**
    * Story whose resume prompt the user deferred with "Later". A single slot, not
    * a set: one story is in view at a time, so deferring another simply replaces
@@ -25,7 +30,7 @@ type EmbedderSwapState = {
   resumeDeferredFor: string | null
 }
 
-const INITIAL: EmbedderSwapState = { dialog: null, progress: null, resumeDeferredFor: null }
+const INITIAL: EmbedderSwapState = { dialog: null, progress: {}, resumeDeferredFor: null }
 
 const store = createStore<EmbedderSwapState>()(() => INITIAL)
 
@@ -42,19 +47,47 @@ export const embedderSwapStore = {
   useSwap: <T>(selector: (s: EmbedderSwapState) => T): T => useStore(store, selector),
   getState: (): EmbedderSwapState => store.getState(),
   closeDialog: (): void => store.setState({ dialog: null }),
-  /** Opens a fresh run's progress slot — necessarily un-cancelled. */
+  /** This story's live run, or null — the read every consumer scopes through. */
+  progressFor: (s: EmbedderSwapState, storyId: string | null): SwapProgress | null =>
+    storyId == null ? null : (s.progress[storyId] ?? null),
+  /** Opens a fresh run's progress entry — necessarily un-cancelled. */
   beginProgress: (storyId: string): void =>
-    store.setState({ progress: { storyId, done: 0, total: 0, cancelRequested: false } }),
+    store.setState((s) => ({
+      progress: {
+        ...s.progress,
+        [storyId]: { storyId, done: 0, total: 0, cancelRequested: false },
+      },
+    })),
   /** Per-batch counts. Preserves a cancel already requested against this run. */
   setProgress: ({ storyId, done, total }: Omit<SwapProgress, 'cancelRequested'>): void =>
     store.setState((s) => ({
-      progress: { storyId, done, total, cancelRequested: s.progress?.cancelRequested ?? false },
+      progress: {
+        ...s.progress,
+        [storyId]: {
+          storyId,
+          done,
+          total,
+          cancelRequested: s.progress[storyId]?.cancelRequested ?? false,
+        },
+      },
     })),
-  clearProgress: (): void => store.setState({ progress: null }),
+  clearProgress: (storyId: string): void =>
+    store.setState((s) => {
+      if (s.progress[storyId] == null) return { progress: s.progress }
+      const next = { ...s.progress }
+      delete next[storyId]
+      return { progress: next }
+    }),
   /** No-op with no run in flight — there is nothing to cancel, and nothing to leak. */
-  requestCancel: (): void =>
-    store.setState((s) => ({ progress: s.progress && { ...s.progress, cancelRequested: true } })),
-  isCancelRequested: (): boolean => store.getState().progress?.cancelRequested ?? false,
+  requestCancel: (storyId: string): void =>
+    store.setState((s) => {
+      const run = s.progress[storyId]
+      return run == null
+        ? { progress: s.progress }
+        : { progress: { ...s.progress, [storyId]: { ...run, cancelRequested: true } } }
+    }),
+  isCancelRequested: (storyId: string): boolean =>
+    store.getState().progress[storyId]?.cancelRequested ?? false,
   deferResume: (storyId: string): void => store.setState({ resumeDeferredFor: storyId }),
   /** Cleared on resume/cancel so a later interruption prompts again. */
   clearDeferredResume: (): void => store.setState({ resumeDeferredFor: null }),

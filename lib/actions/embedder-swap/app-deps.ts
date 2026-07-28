@@ -120,7 +120,7 @@ export function makeCallbackGuards(
     },
     isCancelRequested: () => {
       try {
-        return embedderSwapStore.isCancelRequested()
+        return embedderSwapStore.isCancelRequested(storyId)
       } catch (error) {
         logger.debug('embedder.swap_cancel_read_failed', { error: messageOf(error) })
         return false
@@ -348,7 +348,7 @@ async function runStagingSwap(
       })
     } finally {
       await syncStoresAfterEngine(storyId, ctx)
-      embedderSwapStore.clearProgress()
+      embedderSwapStore.clearProgress(storyId)
     }
   })
 }
@@ -395,7 +395,7 @@ export async function cancelStorySwap(
   ctx: DbCtx = defaultCtx(),
 ): Promise<SwapCancelOutcome> {
   // Signal a running staging loop to unwind itself via its isCancelRequested check.
-  embedderSwapStore.requestCancel()
+  embedderSwapStore.requestCancel(storyId)
   const active = inFlight.get(storyId)
   // The loop owns its own unwind (delete NEW rows, clear marker, re-flag), so
   // wait for it — but take its verdict from the resolved value rather than from
@@ -432,7 +432,7 @@ export async function cancelStorySwap(
       return 'cancelled'
     } finally {
       await syncStoresAfterEngine(storyId, ctx)
-      embedderSwapStore.clearProgress()
+      embedderSwapStore.clearProgress(storyId)
     }
   })
 }

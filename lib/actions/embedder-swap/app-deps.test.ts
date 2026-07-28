@@ -102,11 +102,11 @@ describe('callback guards', () => {
     expect(guards.isCancelRequested()).toBe(false)
     // A cancel only exists against a live run, so the guard reads false until
     // one is open — there is no slot for a flag to sit in beforehand.
-    embedderSwapStore.requestCancel()
+    embedderSwapStore.requestCancel('s1')
     expect(guards.isCancelRequested()).toBe(false)
 
     embedderSwapStore.beginProgress('s1')
-    embedderSwapStore.requestCancel()
+    embedderSwapStore.requestCancel('s1')
     expect(guards.isCancelRequested()).toBe(true)
   })
 
@@ -147,7 +147,7 @@ describe('stale cancel-flag isolation across operations', () => {
     // A cancel against a story with no in-flight swap must not leave a flag the
     // next swap's first batch poll would read.
     await cancelStorySwap('s1', ctx)
-    expect(embedderSwapStore.isCancelRequested()).toBe(false)
+    expect(embedderSwapStore.isCancelRequested('s1')).toBe(false)
 
     let firstPoll: boolean | undefined
     vi.mocked(startSwap).mockImplementation(async (deps) => {

@@ -73,9 +73,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
   const [reindexConfirmOpen, setReindexConfirmOpen] = useState(false)
   const [reindexRowCount, setReindexRowCount] = useState<number | null>(null)
   const dialogOpen = embedderSwapStore.useSwap((s) => s.dialog?.storyId === storyId)
-  const progress = embedderSwapStore.useSwap((s) =>
-    s.progress?.storyId === storyId ? s.progress : null,
-  )
+  const progress = embedderSwapStore.useSwap((s) => embedderSwapStore.progressFor(s, storyId))
 
   const { installed } = useInstalledModels(listInstalled)
   const appEmbeddingProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
@@ -180,8 +178,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
   }, [storyId, reportEngineFailure])
 
   const handleCancelProgress = useCallback(() => {
-    embedderSwapStore.requestCancel()
-  }, [])
+    embedderSwapStore.requestCancel(storyId)
+  }, [storyId])
 
   const handleReindexTarget = useCallback(
     async (target: EmbeddingTarget) => {

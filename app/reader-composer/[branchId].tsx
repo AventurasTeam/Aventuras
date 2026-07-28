@@ -132,18 +132,17 @@ export default function ReaderComposerRoute() {
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     embeddingStatusStore.staleTotalFor(s, storyId),
   )
-  // Narrow selector: subscribing to the whole `progress` object would re-render
-  // the entire reader on every embed-batch tick (onProgress fires per batch).
-  const swapProgressStoryId = embedderSwapStore.useSwap((s) => s.progress?.storyId ?? null)
+  // Narrow selector: a boolean stays stable across embed-batch ticks, where the
+  // run's own entry changes identity on every one (onProgress fires per batch).
+  const swapRunningHere = embedderSwapStore.useSwap(
+    (s) => embedderSwapStore.progressFor(s, storyId) != null,
+  )
   // A paused swap is signalled off the MARKER, not the stale count: phase-1
   // staging clears embedding_stale row by row, so a half-finished swap drives
   // that count toward zero and a healthy story sits at exactly zero throughout.
-  // No progress running FOR THIS STORY — a live loop reports through the Memory
-  // panel's own progress row instead.
+  // A live loop reports through the Memory panel's own progress row instead.
   const swapPaused =
-    storyId != null &&
-    openForBranch?.settings.embedding_swap_target != null &&
-    swapProgressStoryId !== storyId
+    storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
