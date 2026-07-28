@@ -6,13 +6,16 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
   createSeededUserDataDir,
   markEntitiesEmbeddingStale,
+  markSwapPending,
   removeUserDataDir,
 } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
+import { storySettings } from '../locators/story-settings'
 
 const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
+const HERO_STORY = 'story_hero'
 
 // Scoped to the branch the drain warms: the worker only covers the open branch,
 // so an unscoped count would also wait on rows nothing in this spec drains.
@@ -108,5 +111,41 @@ test.describe('embedder — offline status pill', () => {
 
     await expect(reader.memoryIncompletePill(app.window)).toBeVisible({ timeout: 20_000 })
     expect(await staleTotal(app)).toBeGreaterThan(0)
+  })
+})
+
+// A swap interrupted mid-phase-1 leaves only the marker behind. Staging clears
+// embedding_stale as it goes, so the count-driven pill cannot be relied on to
+// raise this state — the marker is the signal, and it outranks the count.
+test.describe('embedder — swap-paused status pill', () => {
+  let app: LaunchedApp
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    markSwapPending(seeded.dbPath, HERO_STORY, 'onnx-community/embeddinggemma-300m-ONNX')
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('surfaces the paused swap ahead of the seeded stale rows', async () => {
+    await home.openStory(app.window, HERO_TITLE).click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+
+    // Opening the story prompts first; the pill is what carries the state once the
+    // user defers that decision, and is then the only signal left.
+    await expect(storySettings.resumePrompt(app.window)).toBeVisible({ timeout: 20_000 })
+    await storySettings.resumeLater(app.window).click()
+
+    await expect(reader.swapPausedPill(app.window)).toBeVisible({ timeout: 20_000 })
+    // The seed leaves rows stale, so both conditions hold — a wedged swap is the
+    // one the user has to act on, and it must not be masked by the count.
+    expect(await staleTotal(app)).toBeGreaterThan(0)
+    await expect(reader.memoryIncompletePill(app.window)).toBeHidden()
   })
 })

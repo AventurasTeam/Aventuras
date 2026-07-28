@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, fn, screen, userEvent } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { themes } from '@/lib/themes'
 
 import { GenerationStatusPill, type ErrorState } from './generation-status-pill'
@@ -12,6 +14,10 @@ const onCancel = () => {
 const onErrorTap = (code: ErrorState['code']) => {
   console.log('[story] error tap:', code)
 }
+
+// Assigned by the stories that assert routing, so their play can reach the spy
+// the render created.
+let tapSpy: ReturnType<typeof fn>
 
 const meta: Meta<typeof GenerationStatusPill> = {
   title: 'Compounds/GenerationStatusPill',
@@ -68,13 +74,43 @@ export const ActiveClosingChapter: Story = {
 }
 
 export const ErrorEmbedder: Story = {
-  render: () => (
-    <GenerationStatusPill
-      error={{ code: 'memory-incomplete', pendingRows: 142 }}
-      onCancel={onCancel}
-      onErrorTap={onErrorTap}
-    />
-  ),
+  render: () => {
+    const tap = fn()
+    tapSpy = tap
+    return (
+      <GenerationStatusPill
+        error={{ code: 'memory-incomplete', pendingRows: 142 }}
+        onCancel={onCancel}
+        onErrorTap={tap}
+      />
+    )
+  },
+  play: async () => {
+    const pill = await screen.findByText(
+      t('chrome.generationStatusPill.error.memoryIncomplete', { count: 142 }),
+    )
+    await userEvent.click(pill)
+    // The pill's whole job past display is routing to the resolution panel.
+    expect(tapSpy).toHaveBeenCalledWith('memory-incomplete')
+  },
+}
+
+// Staging CLEARS embedding_stale row by row, so a half-finished swap drives the
+// stale count toward zero — this code exists because the story most in need of a
+// signal is the one least able to raise the count-driven one.
+export const ErrorSwapPaused: Story = {
+  render: () => {
+    const tap = fn()
+    tapSpy = tap
+    return (
+      <GenerationStatusPill error={{ code: 'swap-paused' }} onCancel={onCancel} onErrorTap={tap} />
+    )
+  },
+  play: async () => {
+    const pill = await screen.findByText(t('chrome.generationStatusPill.error.swapPaused'))
+    await userEvent.click(pill)
+    expect(tapSpy).toHaveBeenCalledWith('swap-paused')
+  },
 }
 
 export const ErrorClassifier: Story = {

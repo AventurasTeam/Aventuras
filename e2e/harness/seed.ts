@@ -89,6 +89,20 @@ export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): vo
   }
 }
 
+// Leave a story mid-swap: the marker is exactly what a crash mid-phase-1 leaves
+// behind, and the state the swap-paused pill exists to surface. Runs before launch.
+export function markSwapPending(dbPath: string, storyId: string, targetModelId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.prepare(`UPDATE stories SET settings = json_patch(settings, json(?)) WHERE id = ?`).run(
+      JSON.stringify({ embedding_swap_target: targetModelId }),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Clear taggedBlockReliable on every cached model so piggyback can't ride
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.

@@ -12,7 +12,7 @@ type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'c
 
 // `memory-incomplete` names the observable state, not a cause: the pill fires
 // off a non-zero stale-row count, which an available embedder can produce too
-// (a swap cancel re-flags every row).
+// (a crash-recovered same-model cancel re-flags the whole story).
 //
 // `swap-paused` is a separate code rather than more of the same, because staging
 // CLEARS embedding_stale as it goes: a half-finished swap drives the stale count

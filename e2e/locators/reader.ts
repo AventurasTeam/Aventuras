@@ -74,4 +74,9 @@ export const reader = {
     }
     return page.getByRole('button', { name: prefix, exact: false })
   },
+
+  // The same pill in its swap-paused state. No count to interpolate, so the copy
+  // matches whole.
+  swapPausedPill: (page: Page): Locator =>
+    page.getByRole('button', { name: t('chrome.generationStatusPill.error.swapPaused') }),
 }

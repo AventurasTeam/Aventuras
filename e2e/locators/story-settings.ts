@@ -48,4 +48,11 @@ export const storySettings = {
   // locator for an uncovered control reads as coverage.
   swapRelabel: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.relabel') }),
+
+  // The story-open resume prompt (components/embedder/swap-resume-host.tsx),
+  // mounted app-wide off the open story rather than by any one route.
+  resumePrompt: (page: Page): Locator => page.getByText(t('storySettings:swap.resumeTitle')),
+
+  resumeLater: (page: Page): Locator =>
+    page.getByRole('button', { name: t('storySettings:swap.resumeLater') }),
 }
