@@ -136,7 +136,22 @@ export async function embedAndBuildVecOps(
   exec: (sql: string) => Promise<void>,
   provider?: ProviderInstanceWithStub,
 ): Promise<SqlOp[]> {
-  if (rows.length === 0) return []
+  return (await embedRowsToVecOps(config, rows, exec, provider)).ops
+}
+
+/**
+ * As `embedAndBuildVecOps`, but also reports the dim the vectors were written at.
+ * A swap needs it: the served dim can differ from the declared one (clamped to
+ * native), and phase 2 must know which family it staged into before deleting the
+ * story's other rows under the same model id. `dim` is null when nothing embedded.
+ */
+export async function embedRowsToVecOps(
+  config: EmbedderConfig,
+  rows: EmbeddedFieldRow[],
+  exec: (sql: string) => Promise<void>,
+  provider?: ProviderInstanceWithStub,
+): Promise<{ ops: SqlOp[]; dim: number | null }> {
+  if (rows.length === 0) return { ops: [], dim: null }
 
   const composites = rows.map((row) => compositeText(row.fields))
   const { vectors, dim } = await embedTexts(config, composites, 'document', provider)
@@ -166,7 +181,7 @@ export async function embedAndBuildVecOps(
       clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
     )
   }
-  return ops
+  return { ops, dim }
 }
 
 /**

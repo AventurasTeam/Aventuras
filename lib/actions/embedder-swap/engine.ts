@@ -2,6 +2,7 @@ import {
   branchRowsQuery,
   clearSwapTargetOp,
   deleteBranchModelVecOps,
+  dimFamilyTables,
   familyTablesFor,
   flagEmbeddingStaleOps,
   isVecFamilyTable,
@@ -32,7 +33,10 @@ export type SwapDeps = {
   /** Positional value-array rows (sqlite-proxy shape) — see field-rows.ts seam docs. */
   queryAll: (sql: string, params: unknown[]) => Promise<unknown[][]>
   /** `embedAndBuildVecOps` behind a seam so tests fault-inject per batch. */
-  embedRows: (config: EmbedderConfig, rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
+  embedRows: (
+    config: EmbedderConfig,
+    rows: EmbeddedFieldRow[],
+  ) => Promise<{ ops: SqlOp[]; dim: number | null }>
   listVecTables: () => Promise<string[]>
   onProgress: (done: number, total: number) => void
   isCancelRequested: () => boolean
@@ -110,6 +114,10 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
   const targetModelId = p.targetConfig.modelId
   const sameModel = p.currentModelId === targetModelId
 
+  // The dim phase 1 actually wrote at, which the served vector decides — not the
+  // declared effectiveDim, which the service clamps to native.
+  let stagedDim: number | null = null
+
   const rows = await loadAllRows(deps, p.branchIds)
   // Same-model re-index: stagedIds can't tell a pre-existing vector from a freshly
   // re-embedded one (identical model_id), so don't skip anything — re-embed every
@@ -135,8 +143,10 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
     const batch = pending.slice(i, i + BATCH_SIZE)
     // embedRows ensures the dim family exists (DDL outside the batch) and returns
     // upsert + stale-clear ops. Each batch is its own small txn, so a crash loses
-    // at most one batch; old vectors stay intact until the phase-2 flip.
-    const ops = await deps.embedRows(p.targetConfig, batch)
+    // at most one batch. Cross-model, the old vectors sit untouched under their own
+    // model id until phase 2; same-model, upserts replace them in place as they go.
+    const { ops, dim } = await deps.embedRows(p.targetConfig, batch)
+    stagedDim = dim ?? stagedDim
     await deps.runInTransaction(ops)
     done += batch.length
     deps.onProgress(done, total)
@@ -161,11 +171,22 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
   await assertStoryLive(deps, p.storyId)
 
   const tables = await deps.listVecTables()
-  // Skip the old-model delete when re-indexing on the SAME model — those "old" rows
-  // ARE the rows phase 1 just re-staged, so deleting them would wipe the re-index.
-  const deleteOldOps = sameModel
-    ? []
-    : deleteBranchModelVecOps(tables, p.branchIds, p.currentModelId)
+  // Under one model id the old rows and the staged ones are told apart only by dim
+  // family, so the sweep has to spare the family phase 1 wrote into — swapping a
+  // story between a provider copy and a local copy of the same model changes the
+  // family without changing the id. With no staged dim (a resume that found
+  // everything already staged) nothing can be safely excluded, so keep it all.
+  let deleteOldOps: SqlOp[] = []
+  if (!sameModel) {
+    deleteOldOps = deleteBranchModelVecOps(tables, p.branchIds, p.currentModelId)
+  } else if (stagedDim != null) {
+    const spared = new Set(dimFamilyTables(stagedDim))
+    deleteOldOps = deleteBranchModelVecOps(
+      tables.filter((name) => !spared.has(name)),
+      p.branchIds,
+      p.currentModelId,
+    )
+  }
   await deps.runInTransaction([
     ...deleteOldOps,
     setEmbeddingTargetOp(p.storyId, targetOf(p.targetConfig), deps.now()),

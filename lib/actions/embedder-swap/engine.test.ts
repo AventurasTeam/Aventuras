@@ -74,7 +74,7 @@ function makeEmbedRows(
         clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
       )
     })
-    return ops
+    return { ops, dim }
   }
   return { fn, calls }
 }
@@ -669,6 +669,31 @@ describe('embedder-swap engine', () => {
     expect([...new Set(modelIdsIn(sqlite, 'entities_vec_384'))]).toEqual([OLD])
     expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
     expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+  })
+
+  it('7b. same model id, new dim family: phase 2 sweeps the old family, spares the staged one', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, fn)
+
+    // Swapping a story between a provider copy and a local copy of one model keeps
+    // the model id while the truncation (and so the dim family) changes.
+    const result = await startSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      targetConfig: cfg(OLD, 768),
+    })
+
+    expect(result).toBe('completed')
+    expect(idsForModel(sqlite, 'entities_vec_768', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(idsForModel(sqlite, 'lore_vec_768', OLD)).toEqual(['l1'])
+    // The pre-swap family must not survive under the same model id — retrieval
+    // resolves one family, so leftovers there are unreachable orphans.
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual([])
+    expect(idsForModel(sqlite, 'lore_vec_384', OLD)).toEqual([])
   })
 
   it('8. relabelModel: rewrites vec identity in SQL, preserves source_hash + embedding, never embeds', async () => {

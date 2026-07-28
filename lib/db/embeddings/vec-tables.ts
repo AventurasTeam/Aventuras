@@ -61,6 +61,11 @@ export function vecRowPk(branchId: string, id: string, modelId: string): string 
   return `${branchId}:${id}:${modelId}`
 }
 
+// The five family tables a single dim writes into, across every kind.
+export function dimFamilyTables(dim: number): string[] {
+  return (Object.keys(VEC_FAMILIES) as VecTargetKind[]).map((kind) => vecTableName(kind, dim))
+}
+
 export function familyTablesFor(kind: VecTargetKind, tableNames: readonly string[]): string[] {
   const prefix = `${VEC_FAMILIES[kind]}_`
   return tableNames.filter((name) => isVecFamilyTable(name) && name.startsWith(prefix))

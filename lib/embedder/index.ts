@@ -30,7 +30,7 @@ export type { LocalEmbedResult } from './local/runtime'
 
 export { sanitizeModelDirName } from './local/sanitize'
 
-export { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
+export { embedAndBuildVecOps, embedRowsToVecOps, embedTexts, testEmbedder } from './service'
 export type { EmbedIntent } from './service'
 
 export { createEmbedderDownloadDriver } from './download/driver'

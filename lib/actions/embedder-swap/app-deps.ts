@@ -25,7 +25,8 @@ import {
 import { logger } from '@/lib/diagnostics'
 import {
   createDrainController,
-  embedAndBuildVecOps,
+  embedRowsToVecOps,
+  type DrainDeps,
   resolveEmbedderConfig,
   type EmbedderAppDefaults,
   type EmbedderConfig,
@@ -198,9 +199,13 @@ function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefin
 }
 
 // Single-sources the engine/drain embed composition: raw DDL through execRaw,
-// provider instance resolved from the config's own providerId.
+// provider instance resolved from the config's own providerId. The drain takes the
+// ops alone — only a swap's phase-2 sweep needs the dim its staging landed on.
 const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
-  embedAndBuildVecOps(config, rows, execRaw, providerFor(config))
+  embedRowsToVecOps(config, rows, execRaw, providerFor(config))
+
+const makeDrainEmbedRows = (): DrainDeps['embedRows'] => async (config, rows) =>
+  (await embedRowsToVecOps(config, rows, execRaw, providerFor(config))).ops
 
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
   return {
@@ -532,7 +537,7 @@ export function buildDrainController(
     },
     loadStaleRows,
     resolveConfig: resolveDrainConfig,
-    embedRows: makeEmbedRows(),
+    embedRows: makeDrainEmbedRows(),
     runInTransaction: ctx.runInTransaction,
     onDrained: (storyId) => {
       drainStatusSink?.(storyId)

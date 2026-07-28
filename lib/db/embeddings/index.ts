@@ -5,6 +5,7 @@ export {
   deleteBranchVecOps,
   ensureVecTables,
   ensureVecTablesSql,
+  dimFamilyTables,
   familyTablesFor,
   isVecFamilyTable,
   vecRowPk,

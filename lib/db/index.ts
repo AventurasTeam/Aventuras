@@ -187,6 +187,7 @@ export {
   isVecFamilyTable,
   ensureVecTables,
   ensureVecTablesSql,
+  dimFamilyTables,
   familyTablesFor,
   flagEmbeddingStaleOps,
   packFloat32,
