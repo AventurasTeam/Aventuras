@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router'
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 
 import {
   cancelStorySwap,
@@ -35,6 +35,10 @@ export function SwapResumeHost() {
   )
   const deferred = embedderSwapStore.useSwap((s) => s.resumeDeferredFor)
 
+  useEffect(() => {
+    embedderSwapStore.expireDeferredResume(storyId, target)
+  }, [storyId, target])
+
   const open = storyId != null && target != null && !running && deferred !== storyId
 
   const router = useRouter()
@@ -56,7 +60,7 @@ export function SwapResumeHost() {
 
   const onResume = useCallback(() => {
     if (storyId == null) return
-    embedderSwapStore.clearDeferredResume()
+    embedderSwapStore.clearDeferredResumeFor(storyId)
     // Progress renders in the Memory panel, not wherever the prompt fired —
     // navigate first so that panel is mounted to receive it.
     router.navigate(`/story-settings/${storyId}?tab=memory`)
@@ -67,7 +71,7 @@ export function SwapResumeHost() {
 
   const onCancelSwap = useCallback(() => {
     if (storyId == null) return
-    embedderSwapStore.clearDeferredResume()
+    embedderSwapStore.clearDeferredResumeFor(storyId)
     void cancelStorySwap(storyId, ctx)
       .then((outcome) => {
         // The swap can cross the finish line between the click and the loop's

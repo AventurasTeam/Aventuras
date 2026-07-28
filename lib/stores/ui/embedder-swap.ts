@@ -85,6 +85,17 @@ export const embedderSwapStore = {
   deferResume: (storyId: string): void => store.setState({ resumeDeferredFor: storyId }),
   /** Cleared on resume/cancel so a later interruption prompts again. */
   clearDeferredResume: (): void => store.setState({ resumeDeferredFor: null }),
+  clearDeferredResumeFor: (storyId: string): void =>
+    store.setState((s) => ({
+      resumeDeferredFor: s.resumeDeferredFor === storyId ? null : s.resumeDeferredFor,
+    })),
+  expireDeferredResume: (storyId: string | null, target: string | null): void =>
+    store.setState((s) => ({
+      resumeDeferredFor:
+        s.resumeDeferredFor != null && (s.resumeDeferredFor !== storyId || target == null)
+          ? null
+          : s.resumeDeferredFor,
+    })),
   __reset: (): void => store.setState(INITIAL),
 }
 

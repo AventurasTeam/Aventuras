@@ -86,6 +86,30 @@ describe('embedderSwapStore', () => {
     expect(embedderSwapStore.getState().progress['story-1']?.storyId).toBe('story-1')
   })
 
+  it('expires a resume deferral when another story becomes current', () => {
+    embedderSwapStore.deferResume('story-1')
+
+    embedderSwapStore.expireDeferredResume('story-2', 'model-b')
+
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBeNull()
+  })
+
+  it('expires a resume deferral when its swap marker clears', () => {
+    embedderSwapStore.deferResume('story-1')
+
+    embedderSwapStore.expireDeferredResume('story-1', null)
+
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBeNull()
+  })
+
+  it('keeps a resume deferral while its story and marker still match', () => {
+    embedderSwapStore.deferResume('story-1')
+
+    embedderSwapStore.expireDeferredResume('story-1', 'model-a')
+
+    expect(embedderSwapStore.getState().resumeDeferredFor).toBe('story-1')
+  })
+
   it('requestCancel with no run in flight cannot leave a flag behind', () => {
     embedderSwapStore.requestCancel('story-1')
     expect(embedderSwapStore.getState().progress['story-1']).toBeUndefined()
