@@ -246,11 +246,11 @@ Notable deviations and constraints for future slices:
   `{ modelId, backend, providerId }` triple rather than a bare model id
   (found by manual smoke, 2026-07-25: resolving a provider model against
   the story's own backend failed as `unknown-local-model`). The marker
-  carries the target's backend and provider id when they differ from the
-  story's, since crash recovery has only the marker to resolve from, and
-  phase-2 flips all three keys together. An absent
-  `embedding_swap_backend` means "same backend as the story", so markers
-  written before this change resolve unchanged. Canon amended
+  carries the target's backend and provider id unconditionally, since crash
+  recovery has only the marker to resolve from, and phase-2 flips all three
+  keys together. An absent `embedding_swap_backend` is therefore only ever a
+  marker written before this change; it reads as "same backend as the story",
+  so those resolve unchanged without a migration. Canon amended
   ([`retrieval.md → Model swap UX`](../../../../memory/retrieval.md#model-swap-ux))
   plus the `data-model.md` settings shape. Settings transitions moved to
   `json_patch` because these writes must also _clear_ a key (a local

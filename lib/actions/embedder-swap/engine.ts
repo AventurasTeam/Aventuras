@@ -67,6 +67,15 @@ export class SwapNotInProgressError extends Error {
   }
 }
 
+export class SwapMarkerChangedError extends Error {
+  constructor(storyId: string, expected: string, found: string | null) {
+    super(
+      `Story ${storyId} no longer records a swap toward ${expected} (found ${found ?? 'none'}); refusing to flip`,
+    )
+    this.name = 'SwapMarkerChangedError'
+  }
+}
+
 export class SwapStoryMissingError extends Error {
   constructor(storyId: string) {
     super(`Story ${storyId} is gone or has null settings; refusing to flip`)
@@ -168,7 +177,7 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
   // A deleted story or one with null settings would let the flip's json_set no-op
   // silently: it would stage vectors, change nothing, and drop the marker, stranding
   // the swap. Refuse before committing phase 2.
-  await assertStoryLive(deps, p.storyId)
+  await assertStoryLive(deps, p.storyId, targetModelId)
 
   const tables = await deps.listVecTables()
   // Under one model id the old rows and the staged ones are told apart only by dim
@@ -335,10 +344,25 @@ async function stagedIds(
   return new Set(rows.map((row) => `${row.branchId}:${row.id}`))
 }
 
-async function assertStoryLive(deps: SwapDeps, storyId: string): Promise<void> {
+/**
+ * Phase-2 preflight. Beyond "the story still exists", this re-reads the marker:
+ * `updateStorySettings` merges the whole settings blob in a separate transaction
+ * (docs/implementation/triage.md), so a save that landed during phase 1 can carry
+ * a pre-swap snapshot that the flip would then silently overwrite — vectors gone,
+ * flags clean, settings naming the old model. Failing here instead leaves the
+ * marker intact and the swap resumable.
+ */
+async function assertStoryLive(
+  deps: SwapDeps,
+  storyId: string,
+  expectedTarget: string,
+): Promise<void> {
   const rows = await deps.queryAll('SELECT id, settings FROM stories WHERE id = ?', [storyId])
   const row = rows[0]
   if (row === undefined || row[1] == null) throw new SwapStoryMissingError(storyId)
+  const settings = JSON.parse(String(row[1])) as { embedding_swap_target?: string | null }
+  const marker = settings.embedding_swap_target ?? null
+  if (marker !== expectedTarget) throw new SwapMarkerChangedError(storyId, expectedTarget, marker)
 }
 
 /**

@@ -22,6 +22,7 @@ import {
   resumeSwap,
   startSwap,
   SwapInProgressError,
+  SwapMarkerChangedError,
   SwapStoryMissingError,
   type SwapDeps,
 } from './engine'
@@ -855,6 +856,40 @@ describe('embedder-swap engine', () => {
 
     // marker-set + one batch only; the flip transaction never ran.
     expect(runSpy).toHaveBeenCalledTimes(2)
+    expect(callsPatching(runSpy, flipsModel)).toHaveLength(0)
+  })
+
+  it('10c. a settings write dropping the marker mid-phase-1 blocks the flip', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite, {
+      beforeBatch: (call) => {
+        if (call !== 1) return
+        // updateStorySettings merges the whole settings blob in a separate
+        // transaction, so a save that read before the marker was written commits
+        // a snapshot without it (docs/implementation/triage.md).
+        sqlite
+          .prepare('UPDATE stories SET settings = ? WHERE id = ?')
+          .run(JSON.stringify({ embedding_model_id: OLD }), 's1')
+      },
+    })
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    await expect(
+      startSwap(deps, {
+        storyId: 's1',
+        branchIds: ['b1'],
+        currentModelId: OLD,
+        currentSwapTarget: null,
+        targetConfig: cfg(NEW),
+      }),
+    ).rejects.toBeInstanceOf(SwapMarkerChangedError)
+
+    // Flipping regardless would delete every OLD vector and then have the stale
+    // snapshot name the old model again: vectors gone, flags clean, nothing to
+    // re-derive from. Failing loudly leaves the story exactly as it was.
+    expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
     expect(callsPatching(runSpy, flipsModel)).toHaveLength(0)
   })
 

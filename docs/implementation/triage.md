@@ -235,7 +235,15 @@ slice-planning gate forces its resolution before that slice is planned.
   a compare-and-set (`WHERE updated_at = ?`) cannot be verified
   without a row count. Needs a bridge capability — a transaction that
   can read, or one that returns `changes` — before the action can do
-  better. Surfaced by M3.11 review (2026-07-22).
+  better. Surfaced by M3.11 review (2026-07-22). **Blast radius grew in
+  M3.1b:** the loser is no longer just a settings key. A save landing
+  during a swap's phase 1 can carry a pre-swap snapshot that the flip then
+  overwrites, leaving every vector re-embedded under the new model, the
+  flags clean, and the settings still naming the old one — with nothing
+  that re-derives staleness. Phase 2 now re-asserts the marker in its
+  preflight (`assertStoryLive`), which converts that silent loss into a
+  loud, resumable failure but does not close the race
+  (M3.1b review, 2026-07-28).
 - **Electron reload is unguarded while a save session is dirty.**
   M3.11 routes the desktop window-close intent through the main
   process (`native:set-close-guard` / `native:close-requested`), so
@@ -501,17 +509,15 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   story-wide drain scope lands. Surfaced by M3.1b final review
   (2026-07-25).
 
-- **`recomputeStaleOp` is dead code, and canon requires what it does.**
+- **The drain still embeds unconditionally instead of revalidating.**
   [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
   specifies that an edit or rollback returning content to its embedded
   value "revalidates to 0 with no re-embed, since the existing vector is
-  still correct". `recomputeStaleOp` implements exactly that hash
-  comparison and has **zero callers** — the drain loads
-  `WHERE embedding_stale = 1` and hands every row to
-  `embedAndBuildVecOps`, which embeds unconditionally. So a rollback to
-  previously-embedded content re-embeds instead of revalidating, and any
-  code commenting that a re-flag is cheap "because the next drain
-  revalidates by `source_hash`" is wrong. Either wire it into the drain
-  (and the cross-model cancel, which currently over-flags rows whose old
-  vector still matches) or delete it and correct canon — but the two
-  must stop disagreeing. Surfaced by M3.1b manual smoke (2026-07-27).
+  still correct". `recomputeStaleOps` implements exactly that hash
+  comparison, and the cross-model cancel now uses it — but the drain still
+  loads `WHERE embedding_stale = 1` and hands every row to
+  `embedAndBuildVecOps`, so a rollback to previously-embedded content
+  re-embeds rather than revalidating. Wire the same helper into the drain's
+  row load, or narrow canon to say revalidation happens only where a caller
+  already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
+  the cancel half resolved in M3.1b review (2026-07-28).
