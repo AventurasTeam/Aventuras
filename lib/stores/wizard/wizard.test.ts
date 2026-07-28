@@ -74,4 +74,29 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().state.step).toBe(1)
     expect(before).not.toBe(after)
   })
+
+  it('a valid dim clears the invalid-draft flag', () => {
+    wizardStore.setCustomDimInvalid(true)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(true)
+    // Clearing lives inside setEffectiveDim, so every path that commits a dim —
+    // ladder radio, Native, a corrected custom entry — releases the gate without
+    // each caller having to remember to.
+    wizardStore.setEffectiveDim(512)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.setEffectiveDim(null)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+  })
+
+  it('the invalid-draft flag is ephemeral: reset and hydrate drop it', () => {
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.reset()
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.hydrate(wizardStore.getWizard().state)
+    // A resumed draft persists the dim, never an unparseable keystroke.
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+  })
 })

@@ -176,10 +176,46 @@ One question opened during review on 2026-07-28:
   `isCurrent` on the whole target, resolves all four; patching them
   one at a time does not.
 
+  **Agreed resolution (2026-07-28):** a shared model id must stop
+  collapsing rows at all — the user is offered every place a model
+  can be served from, each row labelled by its backend, keyed on the
+  whole target rather than the id. `isCurrent` compares the same
+  triple, so the variant a story is already using is the only one
+  disabled. The Implementation-notes line recording the current
+  local-wins dedupe is superseded when this lands and must be
+  rewritten in the same commit.
+
   **Deliberate exception:** vec row identity stays model-id-only
   (`vecRowPk`). Vectors from the same weights are interchangeable
   regardless of which backend served them — that is the premise
   relabel rests on, so the triple must not reach vector identity.
+
+- **Custom effective dim has no upper bound, and the bound cannot be
+  known here.** Canon specifies `1 ≤ N ≤ native_dim`
+  ([`wizard.md`](../../../../ui/screens/wizard/wizard.md#memory-cost--matryoshka-effective-dim),
+  [`retrieval.md`](../../../../memory/retrieval.md#matryoshka-effective-dim)),
+  but `validateCustomDim` enforces only "positive integer". A
+  provider's native dim is unknown until the first embed answers it,
+  so at wizard time there is nothing to compare against, and
+  `matryoshkaSupported` and `matryoshkaDims` are independent flags —
+  a model can pass the visibility gate advertising no ladder at all.
+
+  **Direction (2026-07-28):** deferred to M7, which owns the dim
+  selection and detection UI. A native-dim probe is required
+  regardless and is the prerequisite for any real bound; ladders are
+  most likely manual user input as an advanced feature, with
+  auto-detection plausible on top. Nothing here should invent a
+  ceiling in the meantime.
+
+  **Carried knowingly:** a user on a Matryoshka-capable provider can
+  still enter an absurd dim and lock it into `settings.effectiveDim`
+  at creation, where the service clamps the response to native — so
+  the stored value misdescribes the vectors, and a `serverSide`
+  request may be rejected outright. What did land is the validity
+  gate: an unparseable draft now blocks Finish through the wizard
+  store's ephemeral `customDimInvalid`, because only a valid dim ever
+  reaches the working state and the last good value was otherwise
+  committing silently behind an error message.
 
 ## Implementation notes
 
@@ -271,5 +307,16 @@ Notable deviations and constraints for future slices:
 - **E2E** — the cross-model swap re-index path is uncovered end to
   end (triaged); the staging engine is covered by same-model
   re-index plus the vitest marker matrix, and dialog wiring by the
-  relabel path. Manual smoke (desktop kill-mid-re-index, Android
-  pill round-trip) recorded in the PR.
+  relabel path.
+- **Manual smoke — desktop kill-mid-re-index, 2026-07-25 and
+  2026-07-27.** Ran; it is the evidence behind the two acceptance
+  criteria vitest and E2E do not reach. It found the same-model
+  cancel wipe, the blanket cancel re-flagging, and the cross-backend
+  resolution failure — all three written up under the deviations
+  above — plus five entries in
+  [triage](../../../triage.md) dated to the same runs.
+- **Manual smoke — Android staleness-pill round-trip: not yet run.**
+  The remaining acceptance criterion with no automated coverage;
+  E2E is desktop-only by
+  [testing.md](../../../../testing.md#e2e-target-desktop-only), so
+  nothing else exercises it.

@@ -102,6 +102,13 @@ export function MemoryCostDisclosure({
     else wizardStore.setEffectiveDim(null)
   }, [visible, touched, suggestion])
 
+  // An unparseable draft must not outlive the field that produced it: switching
+  // to a local backend or a non-Matryoshka model hides this disclosure, and a
+  // flag left set would block Finish over an input the user can no longer see.
+  useEffect(() => {
+    if (!visible) wizardStore.setCustomDimInvalid(false)
+  }, [visible])
+
   if (!visible) return null
 
   const onLadder = effectiveDim != null && ladder.includes(effectiveDim)
@@ -137,8 +144,11 @@ export function MemoryCostDisclosure({
       setCustomError(null)
       wizardStore.setEffectiveDim(result.dim)
     } else {
-      // Keep the last valid dim in the store; the Finish gate is the hard stop.
       setCustomError(t('wizard:memoryCost.customError'))
+      // The store only ever receives a VALID dim, so the previous one is still
+      // sitting there — flag the draft as unparseable or Finish would commit a
+      // number the field is no longer showing.
+      wizardStore.setCustomDimInvalid(true)
     }
   }
 
