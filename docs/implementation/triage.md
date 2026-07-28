@@ -453,26 +453,16 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   pre-flight fixes both surfaces at once. Surfaced by M3.1b manual smoke
   (2026-07-25).
 
-- **A probed embedding dim is displayed once and thrown away.** Provider
-  dim detection already works — `testEmbedder` returns the native dim and
-  the card prints it (`OK · dim 1024 · 12 ms`) — but nothing persists it.
-  `providerCapabilitiesSchema` has no field to hold it, so
-  `resolveEmbedderConfig`'s `providerDim` option has **no production
-  caller**: every provider config carries `dim: null` and the service's
-  dim-mismatch guard is permanently inert in provider mode, meaning a
-  provider that silently changed dim mid-story would be caught by nothing.
-  `validateCustomDim` has no upper bound for the same reason — an
-  over-declared dim is silently clamped at embed time
-  (`min(effectiveDim, native)`), so the wizard's storage preview can promise
-  a size that never materializes. Fix: persist the probed dim on the cached
-  model (an `embeddingDim` capability written by the probe and by the first
-  successful embed), thread it as `providerDim`, bound the custom-dim
-  validator by it, and re-arm the guard. The local side has the mirror gap —
-  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a
-  custom-imported model has no dim source either, which is why
-  `embedder-default-card`'s local branch still falls back to `dim: 0` and
-  cannot Test a non-catalog model. Needs no new UI, so it is independent of
-  the Matryoshka item below. Surfaced by M3.1b manual smoke (2026-07-25).
+- **Native-dim-dependent M7 validation remains.** M3.1b now persists a
+  provider model's successful native probe as `embeddingDim` and threads
+  it through production config resolution. The wizard still does not bound
+  Custom by that value; an over-declared dim can therefore make its storage
+  preview overpromise even though the service clamps to native. The local
+  side also still needs a dim source for future custom imports:
+  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a non-catalog
+  model cannot be tested. M7 owns both UI-facing gaps. The original provider
+  persistence defect was surfaced by M3.1b manual smoke (2026-07-25) and
+  resolved by the 2026-07-28 review followup.
 
 - **Matryoshka support is not detectable, so M7 should let the user
   assert it.** No OpenAI-compatible endpoint advertises MRL training, and

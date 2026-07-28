@@ -372,6 +372,12 @@ surfaces three options:
      `embedding_swap_provider_id`. Absent, they mean "same backend as
      the story", which is what crash recovery assumes for any marker
      written without them.
+     The same marker snapshots `embedding_swap_source_dim` and
+     `embedding_swap_target_dim`. They distinguish an in-place
+     same-model/same-dim re-index from a same-model-id swap staged into
+     another vec family. The target dim starts from resolved capability
+     data; if the served vector lands at another dimension, the first
+     staged batch corrects the marker in that batch's transaction.
   2. **Phase 1 — re-embed non-destructively.** Foreground job
      (re-index runs in the user's view, not a background queue)
      embeds each row under the new model and INSERTs alongside
@@ -391,7 +397,8 @@ surfaces three options:
        coherent trio instead of a provider model recorded under the
        story's old local backend
      - `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`
-       and its two companion marker keys
+       and its backend, provider, source-dim, and target-dim companion
+       keys
 
      Commit. Story is now consistently on NEW.
 
@@ -400,16 +407,18 @@ surfaces three options:
   - **Resume.** If any rows lack a `model_id = NEW` counterpart,
     continue Phase 1 (skip rows that already have one). Then run
     Phase 2.
-  - **Cancel.**
-    `DELETE FROM *_vec_<new dim> WHERE branch_id IN (...) AND model_id = NEW; clear embedding_swap_target;`
-    Story stays on old model.
+  - **Cancel.** Delete staged rows from the recorded target family,
+    clear every swap-marker key, and keep the story on its recorded
+    source family.
 
   **Cancel during a live swap (not a crash)** follows the same
   Cancel path — partial NEW vectors are deleted, marker cleared.
-  One exception: the standalone re-index, where NEW and OLD are the
-  same model. Staging upserts in place there, so the rows a cancel
-  would delete are the story's only vectors — it clears the marker
-  without deleting anything.
+  One exception is a standalone same-model, same-dim re-index.
+  Staging upserts in place there, so the rows a cancel would delete
+  are the story's only vectors — it clears the marker without
+  deleting anything. Matching model ids at different dimensions are
+  not this exception: the target family is disposable staging and
+  the source family remains the rollback copy.
 
   **Which rows a cancel leaves dirty** depends on the direction,
   because `embedding_stale` describes the vector the story is left
@@ -425,6 +434,9 @@ surfaces three options:
     state and a same-model re-embed leaves no trace to recover the
     split from (same `model_id`, and unchanged content hashes to the
     same `source_hash`), so it conservatively queues the whole story.
+  - **Same-model, cross-dimension** — use the recorded target family
+    to identify the staged set, delete that family only, and recompute
+    those rows' flags against hashes in the preserved source family.
 
   Flagging rows whose vectors are current would both overstate the
   dirty set to the staleness UI and make the drain silently redo work
@@ -515,10 +527,19 @@ The provider-model capability JSON gains two fields:
 app_settings.providers[].cachedModels[].capabilities = {
   reasoning?: boolean,
   structuredOutput?: boolean,
+  embeddingDim?: number,             // native output dimension learned by a probe
   matryoshkaSupported?: boolean,    // NEW
   matryoshkaDims?: number[],        // NEW; curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
 }
 ```
+
+Selecting a provider embedding model in App Settings or the
+per-story swap picker runs a native, untruncated probe when
+`embeddingDim` is not already cached. A successful probe persists the
+positive dimension on that cached model. Provider config resolution
+then threads it into the service's dimension guard and derives the
+actual storage family as `min(effectiveDim, embeddingDim)` when a
+story truncates.
 
 Capability flags are detected from the provider's `/models`
 metadata where available and **always user-overridable** in App

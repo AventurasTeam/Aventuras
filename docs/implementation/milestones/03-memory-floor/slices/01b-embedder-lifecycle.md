@@ -165,12 +165,12 @@ day and its decision is under Implementation notes below.
   `matryoshkaSupported` and `matryoshkaDims` are independent flags —
   a model can pass the visibility gate advertising no ladder at all.
 
-  **Direction (2026-07-28):** deferred to M7, which owns the dim
-  selection and detection UI. A native-dim probe is required
-  regardless and is the prerequisite for any real bound; ladders are
-  most likely manual user input as an advanced feature, with
-  auto-detection plausible on top. Nothing here should invent a
-  ceiling in the meantime.
+  **Direction (updated 2026-07-28):** native-dim probing and
+  persistence landed as an M3.1b review followup: selecting a provider
+  model probes once when its cached capability has no `embeddingDim`.
+  The Custom control's native upper-bound UI and curated-ladder editing
+  remain deferred to M7. Ladders are most likely manual user input as
+  an advanced feature, with auto-detection plausible on top.
 
   **Carried knowingly:** a user on a Matryoshka-capable provider can
   still enter an absurd dim and lock it into `settings.effectiveDim`
@@ -200,6 +200,9 @@ Resolved developer decisions (slice planning, 2026-07-24):
   120 s) while the embedder is unavailable. Embedder-recovery kicks
   (after test-embedder success or a download) are a ready seam
   (`kickStoryDrain`) deliberately left unwired to those surfaces.
+  A kick received while another story's async pass is active is
+  retained and scheduled as soon as that pass releases single-flight;
+  it is not dropped at the `running` guard.
   The worker drains only the open branch; the blocking sync stage
   covers everything else on read.
 - **Phase-1 progress host** — inline in Story Settings · Memory;
@@ -224,7 +227,7 @@ Notable deviations and constraints for future slices:
   not "vec0 untouched"; canon's relabel wording was amended to
   match. A pure settings relabel would orphan every vector behind
   the `model_id` KNN filter.
-- **Same-model re-index is upsert-in-place** — one vector space, so
+- **Same-model, same-dim re-index is upsert-in-place** — one vector space, so
   partial progress is harmless; resume re-embeds everything
   (idempotent), and both vector deletes are skipped: the phase-2
   old-model delete _and_ the cancel path's staged-row delete, since with
@@ -241,6 +244,11 @@ Notable deviations and constraints for future slices:
   cancelled (found by manual smoke, 2026-07-27). A crash-recovered
   same-model cancel keeps the blanket flag: with `target === current`,
   a re-embedded row is indistinguishable from an untouched one.
+- **Same-model id can still be cross-dimension.** The swap marker
+  snapshots both storage families. Cancellation deletes only the
+  staged target family and re-derives touched-row staleness from the
+  preserved source family; crash recovery therefore does not confuse
+  a provider/local same-id move with an in-place re-index.
 - **Swaps cross backends** — the picker offers the app's provider
   embedding model to a local-backend story, so a swap target is a
   `{ modelId, backend, providerId }` triple rather than a bare model id
@@ -278,6 +286,18 @@ Notable deviations and constraints for future slices:
   matryoshka applicability, so a stale mid-session pick silently
   falls back to native instead of truncating a non-MRL model's
   vectors. The settings schema now requires a positive integer.
+  Activating Custom immediately validates and applies its current
+  draft: blank/invalid drafts block Finish, while reselecting a valid
+  retained draft restores that value instead of committing a prior
+  ladder choice.
+- **Provider native dimensions are durable capabilities.** Successful
+  provider probes persist `embeddingDim`; App Settings and the
+  per-story target picker ensure it on selection, and swap/wizard
+  resolution threads it as `providerDim`.
+- **Resume-prompt deferral is context-scoped.** "Later" suppresses the
+  current story only while that story stays open with the same pending
+  marker. Navigation or marker resolution clears the deferral, so a
+  later interruption prompts again.
 - **C8 caveat carried to 3.4** — `openEmbedderSwapDialog` only has
   a mount host in the story-settings route; a pointer question was
   added to [Slice 3.4](./04-retrieval.md#open-questions).

@@ -1186,8 +1186,10 @@ stories.settings: {
   embeddingBackend: 'provider' | 'local'   // embedding runtime (provider endpoint OR bundled local ONNX); both produce identical retrieval algorithm
   embedding_model_id: string        // canonical embedding model id; copied from app_settings.embedding_model_id at story creation. Locked thereafter unless the user explicitly re-indexes via the model swap UX. Different stories may carry different model ids; vec0 partitions per branch. See docs/memory/retrieval.md → Storage and Model swap UX
   embedding_swap_target?: string    // model id of the in-flight re-index target. Non-null while a stage-then-flip swap is in progress; cleared atomically with the swap's Phase 2 commit. Crash recovery on story open surfaces a resume/cancel prompt when this is set. See docs/memory/retrieval.md → Model swap UX
-  embedding_swap_backend?: 'provider' | 'local'  // target's backend, written only when the swap crosses backends. Absent means the target shares the story's current embeddingBackend — a model id alone can't say which backend serves it, and crash recovery has only the marker to go on
+  embedding_swap_backend?: 'provider' | 'local'  // target's backend, written with the marker. Absent means the target shares the story's current embeddingBackend for compatibility with older interrupted markers
   embedding_swap_provider_id?: string  // target's provider, set alongside embedding_swap_backend='provider'; cleared with the rest of the marker at Phase 2
+  embedding_swap_source_dim?: number   // storage family the story reads before Phase 2; lets cancellation distinguish in-place same-dim re-indexing from a same-model-id swap staged into another dim family
+  embedding_swap_target_dim?: number   // storage family Phase 1 stages into. Seeded from resolved config and corrected atomically with the first batch if the served dimension differs
   embedding_provider_id?: string    // required when embeddingBackend === 'provider'; FK into app_settings.providers[].id picking which provider supplies the embedding endpoint. Distinct from the narrative-side provider routing (a user may run e.g. OpenAI for narrative and a local embedding provider, or vice versa). Null / undefined when embeddingBackend === 'local'.
   retrievalBudgets: {                // per-type token budgets, hard partitions in v1 (no spillover); see docs/memory/retrieval.md → Per-type retrieval budgets
     entities: number
@@ -1373,6 +1375,7 @@ app_settings.providers: Array<{
       reasoning?: boolean
       structuredOutput?: boolean
       embedding?: boolean                    // model serves the provider's embedding endpoint; drives the Providers-tab Embedding models split and the Memory-tab embedder picker. Detected from /models metadata where reported; user-overridable like every capability flag
+      embeddingDim?: number                  // positive native output dimension, persisted from a successful native-dimension probe when this model is selected
       matryoshkaSupported?: boolean          // NEW: model supports Matryoshka representation truncation. See docs/memory/retrieval.md → Matryoshka effective dim
       matryoshkaDims?: number[]              // NEW: curated dim ladder declared by the model card (e.g., [256, 512, 1024, 1536, 2048, 3072]). Picker surfaces these first; Custom… accepts any N up to native.
     }
