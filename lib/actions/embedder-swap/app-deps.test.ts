@@ -394,6 +394,61 @@ describe('store refresh on every engine exit', () => {
   })
 })
 
+describe('cancelStorySwap outcome', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    embedderSwapStore.__reset()
+    vi.restoreAllMocks()
+  })
+
+  it('reports nothing-pending when no swap is in flight and no marker is set', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+
+    await expect(cancelStorySwap('s1', ctx)).resolves.toBe('nothing-pending')
+  })
+
+  it('reports already-completed when the run finished past its last cancel poll', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+    vi.mocked(startSwap).mockResolvedValue('completed')
+
+    // Cancel races a run that completes: awaiting it returns, but nothing was
+    // unwound and the model changed. Reporting void here read as success.
+    const run = startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)
+    const outcome = await cancelStorySwap('s1', ctx)
+    await run
+
+    expect(outcome).toBe('already-completed')
+  })
+
+  it('falls through to a direct unwind when the run rejected before its poll', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+    vi.mocked(startSwap).mockImplementation(async () => {
+      // The engine commits the marker before phase 1, so a throw here leaves it.
+      await ctx.runInTransaction([
+        setSwapTargetOp('s1', { modelId: MINILM, backend: 'local' }, 2000),
+      ])
+      throw new Error('provider down')
+    })
+
+    const run = startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx).catch(() => {})
+    const outcome = await cancelStorySwap('s1', ctx)
+    await run
+
+    // Swallowing the rejection and returning would have left this marker set
+    // while telling the user the cancel worked.
+    expect(outcome).toBe('cancelled')
+    const settings = storiesStore.getStories().rows.find((row) => row.id === 's1')?.settings
+    expect(settings?.embedding_swap_target).toBeUndefined()
+  })
+})
+
 describe('resolveDrainConfig swap guards', () => {
   const definition = storyDefinitionSchema.parse({
     mode: 'adventure',

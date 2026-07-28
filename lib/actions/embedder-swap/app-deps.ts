@@ -377,22 +377,44 @@ export function reindexStoryNow(
   }))
 }
 
-export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()): Promise<void> {
+/**
+ * What a cancel actually achieved. `void` hid three outcomes behind one silent
+ * success: a running loop can end by unwinding, but it can also COMPLETE past
+ * its last cancel poll (the model changes anyway) or throw before reaching one
+ * (the marker survives untouched). The caller has to be able to tell the user.
+ */
+export type SwapCancelOutcome = 'cancelled' | 'already-completed' | 'nothing-pending'
+
+export async function cancelStorySwap(
+  storyId: string,
+  ctx: DbCtx = defaultCtx(),
+): Promise<SwapCancelOutcome> {
   // Signal a running staging loop to unwind itself via its isCancelRequested check.
   embedderSwapStore.requestCancel()
   const active = inFlight.get(storyId)
-  if (active != null) {
-    // The loop owns the unwind (delete NEW rows, clear marker, re-flag); just wait.
-    await active.catch(() => {})
-    return
-  }
-  // No loop running (a paused / crash-recovered swap with the marker still set):
-  // run the engine's cancel directly. clearProgress in finally covers both the
-  // no-marker no-op and the ran-cancel paths, so the global flag can't leak.
-  await runExclusive(storyId, async () => {
+  // The loop owns its own unwind (delete NEW rows, clear marker, re-flag), so
+  // wait for it — but take its verdict from the resolved value rather than from
+  // the fact that awaiting returned. A rejection tells us nothing was unwound.
+  const loopOutcome =
+    active != null
+      ? await active.then(
+          (value) => value,
+          () => undefined,
+        )
+      : undefined
+  if (loopOutcome === 'cancelled') return 'cancelled'
+  if (loopOutcome === 'completed') return 'already-completed'
+
+  // Either no loop was running (a paused / crash-recovered swap with the marker
+  // still set) or the loop died before its poll. The marker is the only truth
+  // left, so re-read it and unwind directly if it survived. clearProgress in
+  // finally covers both the no-marker no-op and the ran-cancel paths.
+  return runExclusive(storyId, async (): Promise<SwapCancelOutcome> => {
     try {
       const { settings, branchIds } = await loadSwapContext(storyId, ctx)
-      if (settings.embedding_swap_target == null) return
+      if (settings.embedding_swap_target == null) {
+        return active != null ? 'already-completed' : 'nothing-pending'
+      }
       const target = markerTarget(settings)
       const resolution = resolveStorySwapConfig(storyId, target)
       if (!resolution.ok) throw new SwapConfigError(storyId, resolution.reason)
@@ -402,6 +424,7 @@ export async function cancelStorySwap(storyId: string, ctx: DbCtx = defaultCtx()
         targetModelId: target.modelId,
         currentModelId: settings.embedding_model_id,
       })
+      return 'cancelled'
     } finally {
       await syncStoresAfterEngine(storyId, ctx)
       embedderSwapStore.clearProgress()
@@ -432,11 +455,9 @@ export async function relabelStory(
 // --- drain worker composition (boot wires the controller via buildDrainController,
 // which self-attaches the status sink below) ------------------------------------
 
-let drainStatusSink: ((storyId: string, remaining: number) => void) | null = null
+let drainStatusSink: ((storyId: string) => void) | null = null
 
-export function setDrainStatusSink(
-  sink: ((storyId: string, remaining: number) => void) | null,
-): void {
+export function setDrainStatusSink(sink: ((storyId: string) => void) | null): void {
   drainStatusSink = sink
 }
 
@@ -487,14 +508,18 @@ export function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
 export function buildDrainController(
   ctx: DbCtx = defaultCtx(),
 ): ReturnType<typeof createDrainController> {
-  // Attaches the drain's progress seam to the status store so the Memory panel / reader
-  // pill see the worker's progress without either polling it directly. The
-  // drain only ever drains the open story, so a mismatch here means the user
-  // navigated away mid-drain — drop the write rather than clobber the newly
-  // open story's slot (this sink bypasses statusRequestGeneration).
-  setDrainStatusSink((storyId, remaining) => {
+  // The drain triggers a recount rather than publishing its own number.
+  // It walks the OPEN BRANCH only, while refreshEmbeddingStatus counts every
+  // branch of the story — writing both into one slot meant a drain finishing on
+  // a multi-branch story wrote 0 and darkened the pill while other branches were
+  // still stale. One producer, one meaning; the recount is five indexed counts
+  // against a batch that just paid for an embedding call.
+  //
+  // A story mismatch means the user navigated away mid-drain: drop it rather
+  // than recount for a story nobody is looking at.
+  setDrainStatusSink((storyId) => {
     if (currentStoryStore.getCurrentStory()?.storyId !== storyId) return
-    embeddingStatusStore.setStatus(storyId, remaining)
+    void refreshEmbeddingStatus(storyId, ctx)
   })
   return createDrainController({
     hasActiveRun: generationStore.hasActiveRun,
@@ -509,9 +534,9 @@ export function buildDrainController(
     resolveConfig: resolveDrainConfig,
     embedRows: makeEmbedRows(),
     runInTransaction: ctx.runInTransaction,
-    onDrained: (storyId, remaining) => {
-      drainStatusSink?.(storyId, remaining)
-      logger.debug('embedder.drain_progress', { storyId, remaining })
+    onDrained: (storyId) => {
+      drainStatusSink?.(storyId)
+      logger.debug('embedder.drain_progress', { storyId })
     },
     setTimer: (fn, ms) => setTimeout(fn, ms),
     clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),

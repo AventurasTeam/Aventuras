@@ -11,7 +11,8 @@ export type DrainDeps = {
   resolveConfig: (storyId: string) => EmbedderConfigResolution
   embedRows: (config: EmbedderConfig, rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
   runInTransaction: DbCtx['runInTransaction']
-  onDrained: (storyId: string, remaining: number) => void
+  /** A batch landed. Carries no count: the story-wide total has one owner. */
+  onDrained: (storyId: string) => void
   setTimer: (fn: () => void, ms: number) => unknown
   clearTimer: (handle: unknown) => void
 }
@@ -39,7 +40,9 @@ export function createDrainController(deps: DrainDeps) {
       const resolution = deps.resolveConfig(storyId)
       if (!resolution.ok) return // unconfigured is not an error here
       const rows = await deps.loadStaleRows(branchIds)
-      let remaining = rows.length
+      let failedRows = 0
+      let firstError: string | null = null
+
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
         // A torn-down controller (HMR / re-boot) must not keep draining; bail
         // like the hasActiveRun guard so no further batches or retries fire.
@@ -49,15 +52,41 @@ export function createDrainController(deps: DrainDeps) {
         // clear embedding_stale on rows the swap's phase-2 flip then deletes.
         if (stopped || deps.hasActiveRun() || !deps.resolveConfig(storyId).ok) return
         const batch = rows.slice(i, i + BATCH_SIZE)
-        const ops = await deps.embedRows(resolution.config, batch)
-        await deps.runInTransaction(ops)
-        remaining -= batch.length
-        deps.onDrained(storyId, remaining)
+        try {
+          const ops = await deps.embedRows(resolution.config, batch)
+          await deps.runInTransaction(ops)
+          deps.onDrained(storyId)
+        } catch (error) {
+          // Per batch, not per pass: every attempt restarts at row 0, so aborting
+          // the whole drain on one bad row meant a single un-embeddable row — an
+          // oversized composite, a content-filter trip — blocked every other row
+          // in the story forever, retrying it at 120s intervals in total silence.
+          // Failed rows keep embedding_stale = 1 and are retried next pass.
+          failedRows += batch.length
+          firstError ??= error instanceof Error ? error.message : String(error)
+        }
       }
-      backoffIdx = -1 // full success resets backoff
+
+      if (failedRows === 0) {
+        backoffIdx = -1 // full success resets backoff
+        return
+      }
+      // warn, not debug: nothing else reports this. The blocking sync stage that
+      // canon puts in charge of user-facing embed errors is not built yet, so a
+      // debug-gated line was the only trace a stuck story left anywhere.
+      logger.warn('embedder.drain_batches_failed', {
+        storyId,
+        failedRows,
+        totalRows: rows.length,
+        error: firstError,
+      })
+      backoffIdx = Math.min(backoffIdx + 1, BACKOFF_MS.length - 1)
+      if (!stopped) schedule(storyId, BACKOFF_MS[backoffIdx])
     } catch (error) {
-      // Never surfaces: the blocking sync stage owns user-facing embed errors.
-      logger.debug('embedder.drain_failed', {
+      // Reaching here means the pass itself failed (row load, config), not one
+      // batch — nothing was drained, so it is a plain backoff-and-retry.
+      logger.warn('embedder.drain_failed', {
+        storyId,
         error: error instanceof Error ? error.message : String(error),
       })
       backoffIdx = Math.min(backoffIdx + 1, BACKOFF_MS.length - 1)

@@ -68,6 +68,11 @@ export function SwapResumeHost() {
     if (storyId == null) return
     embedderSwapStore.clearDeferredResume()
     void cancelStorySwap(storyId, ctx)
+      .then((outcome) => {
+        // The swap can cross the finish line between the click and the loop's
+        // last cancel poll; reporting nothing would imply it was stopped.
+        if (outcome === 'already-completed') toast.info(t('storySettings:memory.cancelTooLate'))
+      })
       .catch((error: unknown) => report('cancel_swap', error))
       .finally(() => void refreshEmbeddingStatus(storyId))
   }, [storyId, report])

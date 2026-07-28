@@ -65,7 +65,7 @@ describe('drain controller', () => {
     expect(embedRows).toHaveBeenCalledOnce()
     expect(embedRows).toHaveBeenCalledWith(cfg, rows)
     expect(runInTransaction).toHaveBeenCalledOnce()
-    expect(onDrained).toHaveBeenCalledWith('s1', 0)
+    expect(onDrained).toHaveBeenCalledWith('s1')
   })
 
   it('skips while a run is active and retries after the next noteIdle', async () => {
@@ -120,7 +120,7 @@ describe('drain controller', () => {
   })
 
   it('never throws to the caller when embed fails (logs and re-schedules)', async () => {
-    const debugSpy = vi.spyOn(logger, 'debug').mockImplementation(() => {})
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
     const embedRows = vi.fn(async () => {
       throw new Error('boom')
@@ -135,8 +135,46 @@ describe('drain controller', () => {
     await expect(vi.advanceTimersByTimeAsync(0)).resolves.not.toThrow()
 
     expect(embedRows).toHaveBeenCalled()
-    expect(debugSpy).toHaveBeenCalledWith('embedder.drain_failed', expect.objectContaining({}))
+    expect(warnSpy).toHaveBeenCalledWith(
+      'embedder.drain_batches_failed',
+      expect.objectContaining({
+        storyId: 's1',
+        failedRows: 1,
+        error: expect.stringContaining('boom'),
+      }),
+    )
     // Re-scheduled at the first backoff step after the failure.
+    expect(setTimer.mock.calls.at(-1)?.[1]).toBe(5_000)
+  })
+
+  it('a failing batch does not block the batches behind it', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    // 40 rows -> 3 batches of 16/16/8. The FIRST one fails, which is the shape
+    // that used to abort the pass: every attempt restarts at row 0, so one
+    // un-embeddable row starved the whole story indefinitely.
+    const rows = Array.from({ length: 40 }, (_, i) => row(`e${i + 1}`))
+    let call = 0
+    const embedRows = vi.fn(async () => {
+      call += 1
+      if (call === 1) throw new Error('poison row')
+      return [] as SqlOp[]
+    })
+    const { ctrl, onDrained, setTimer } = makeController({
+      loadStaleRows: async () => rows,
+      embedRows,
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(embedRows).toHaveBeenCalledTimes(3)
+    // Batches 2 and 3 landed despite batch 1 failing.
+    expect(onDrained).toHaveBeenCalledTimes(2)
+    expect(warnSpy).toHaveBeenCalledWith(
+      'embedder.drain_batches_failed',
+      expect.objectContaining({ failedRows: 16, totalRows: 40 }),
+    )
+    // Still retried, so the failed rows get another pass.
     expect(setTimer.mock.calls.at(-1)?.[1]).toBe(5_000)
   })
 
@@ -189,7 +227,7 @@ describe('drain controller', () => {
 
     expect(embedRows).toHaveBeenCalledOnce()
     expect(runInTransaction).toHaveBeenCalledOnce()
-    expect(onDrained).toHaveBeenCalledExactlyOnceWith('s1', 4)
+    expect(onDrained).toHaveBeenCalledExactlyOnceWith('s1')
   })
 
   it('drained vectors match a direct embed of the same rows', async () => {

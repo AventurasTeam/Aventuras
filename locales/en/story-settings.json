@@ -80,6 +80,7 @@
     "actionFailed": "That didn't work. Please try again.",
     "relabelBlocked": "Can't relabel while a switch is in progress.",
     "swapPendingTitle": "Embedder switch paused",
-    "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel."
+    "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel.",
+    "cancelTooLate": "The switch finished before it could be cancelled."
   }
 }

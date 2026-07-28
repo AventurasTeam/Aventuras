@@ -235,7 +235,12 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
   const handleCancelSwap = useCallback(async () => {
     try {
-      await cancelStorySwap(storyId, ctx)
+      // A swap can finish between the click and the loop's last cancel poll, in
+      // which case the model changed — saying nothing would let the user believe
+      // they stopped it.
+      if ((await cancelStorySwap(storyId, ctx)) === 'already-completed') {
+        toast.info(t('storySettings:memory.cancelTooLate'))
+      }
     } catch (error) {
       reportEngineFailure('cancel_swap', error)
     } finally {
