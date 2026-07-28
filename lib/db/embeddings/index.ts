@@ -17,7 +17,7 @@ export type { EmbeddedFieldRow, StaleTargetRow } from './stale'
 export {
   clearEmbeddingStaleOp,
   flagEmbeddingStaleOps,
-  recomputeStaleOp,
+  recomputeStaleOps,
   SOURCE_TABLES,
 } from './stale'
 export { compositeText, parseSourceHash, sourceHash } from './source-hash'

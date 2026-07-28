@@ -191,7 +191,7 @@ export {
   familyTablesFor,
   flagEmbeddingStaleOps,
   packFloat32,
-  recomputeStaleOp,
+  recomputeStaleOps,
   SOURCE_TABLES,
   sourceHash,
   staleRowsQuery,

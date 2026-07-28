@@ -502,13 +502,15 @@ describe('embedder-swap engine', () => {
     expect([...new Set(modelIdsIn(sqlite, 'entities_vec_384'))]).toEqual([NEW])
   })
 
-  it('5. cancelSwap cross-model: deletes NEW, clears marker, flags only the staged rows', async () => {
+  it('5. cancelSwap cross-model: deletes NEW, clears marker, re-derives staleness', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ markerTarget: NEW })
     seedOldVectors(sqlite, embedded)
     // Partial stage: only these rows reached the target model, so only these had
     // their flag cleared by staging.
     const staged = embedded.filter((row) => ['e1', 'e2', 'l1'].includes(row.id))
     seedOldVectors(sqlite, staged, NEW)
+    // e2 was edited while the swap ran, so its OLD vector no longer describes it.
+    sqlite.prepare('UPDATE entities SET description = ? WHERE id = ?').run('Rewritten', 'e2')
     const { fn } = makeEmbedRows(sqlite)
     const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
 
@@ -525,9 +527,13 @@ describe('embedder-swap engine', () => {
     expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
     expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
 
-    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
+    // Cross-model staging overwrote nothing, so the OLD vectors the story reverts
+    // to are still current — flagging them queued a full re-embed, on a paid
+    // provider, of exactly the work the user just cancelled.
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
+    expect(staleFlag(sqlite, 'lore', 'l1')).toBe(0)
+    // Edited mid-swap: this one's old vector really is out of date.
     expect(staleFlag(sqlite, 'entities', 'e2')).toBe(1)
-    expect(staleFlag(sqlite, 'lore', 'l1')).toBe(1)
     // Never staged, so staging never cleared their flag — nothing to restore.
     expect(staleFlag(sqlite, 'entities', 'e3')).toBe(0)
     expect(staleFlag(sqlite, 'happenings', 'h1')).toBe(0)
@@ -811,14 +817,14 @@ describe('embedder-swap engine', () => {
     expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual([])
     expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
     expect(storySettings(sqlite)?.embedding_model_id).toBe(OLD)
-    // Batch 1 covered e1 (staged, so its flag was cleared and must be restored);
+    // Batch 1 covered e1, so staging cleared its flag — but nothing overwrote its
+    // OLD vector, and the content has not moved, so the cancel leaves it current.
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
     // c1 sits past the cancel point and was never touched.
-    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(1)
     expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(0)
 
     const cancelCalls = callsPatching(runSpy, clearsMarker)
     expect(cancelCalls).toHaveLength(1)
-    expect(cancelCalls[0].filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(1)
     expect(hasPatch(cancelCalls[0], flipsModel)).toBe(false)
   })
 

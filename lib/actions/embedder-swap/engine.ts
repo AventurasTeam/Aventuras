@@ -6,6 +6,7 @@ import {
   familyTablesFor,
   flagEmbeddingStaleOps,
   isVecFamilyTable,
+  recomputeStaleOps,
   setEmbeddingTargetOp,
   setSwapTargetOp,
   SOURCE_TABLES,
@@ -222,6 +223,7 @@ export async function cancelSwap(
   const staleOps = await cancelStaleOps(deps, {
     branchIds,
     targetModelId,
+    currentModelId,
     sameModel,
     unprocessed,
   })
@@ -349,26 +351,36 @@ async function assertStoryLive(deps: SwapDeps, storyId: string): Promise<void> {
  *
  * Same-model: rows re-embedded before the cancel are current, and the tail still
  * holds the embedding the user asked to replace — so only the tail is queued.
- * Cross-model: staging cleared the flag on every row it embedded under the
- * target, but the story reverts to the old model, so exactly those rows lost a
- * flag that described their old-model vector.
+ * Cross-model: nothing was overwritten (staging wrote under the target's own
+ * model id), so the old vectors the story reverts to are still there. Staging
+ * cleared flags as it went, so the truth is re-derived from each row's stored
+ * hash rather than assumed — blanket-flagging queued a full re-embed of rows
+ * whose old vectors were current, at the user's expense.
  */
 async function cancelStaleOps(
   deps: SwapDeps,
   {
     branchIds,
     targetModelId,
+    currentModelId,
     sameModel,
     unprocessed,
   }: {
     branchIds: readonly string[]
     targetModelId: string
+    currentModelId: string
     sameModel: boolean
     unprocessed?: readonly StaleTargetRow[]
   },
 ): Promise<SqlOp[]> {
   if (branchIds.length === 0) return []
-  if (!sameModel) return flagEmbeddingStaleOps(await stagedRows(deps, branchIds, targetModelId))
+  if (!sameModel) {
+    const staged = await stagedIds(deps, branchIds, targetModelId)
+    const touched = (await loadAllRows(deps, branchIds)).filter((row) =>
+      staged.has(`${row.branchId}:${row.id}`),
+    )
+    return recomputeStaleOps(touched, currentModelId, await deps.listVecTables(), deps.queryAll)
+  }
   // A same-model re-embed leaves nothing to recover the split from — same
   // model_id, and unchanged content hashes to the same source_hash — so a cancel
   // with no live run state (crash recovery) queues the whole story instead.
