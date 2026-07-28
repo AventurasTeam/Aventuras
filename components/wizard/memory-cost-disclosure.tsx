@@ -89,11 +89,11 @@ export function MemoryCostDisclosure({
   )
   const [customError, setCustomError] = useState<string | null>(null)
 
-  // Platform-suggested pre-selection: fires once per wizard session while
-  // visible and untouched. The persisted `touched` flag (not a mount-scoped
-  // ref) is the gate, so a deliberate Native pick survives step-nav remounts
-  // rather than being re-suggested. Desktop suggestion is null → since even
-  // that null pick marks touched, the store stays at native dim without loop.
+  // Platform-suggested pre-selection, once per wizard session. Two gates, both
+  // load-bearing: the PERSISTED `touched` flag survives step-nav remounts so a
+  // deliberate Native pick is not re-suggested, and the ref stops the effect
+  // re-firing within one mount (a desktop suggestion is null, and writing null
+  // marks touched).
   const preselectedRef = useRef(false)
   useEffect(() => {
     if (!visible || touched || preselectedRef.current) return

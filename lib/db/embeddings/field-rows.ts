@@ -38,8 +38,6 @@ export function staleRowsQuery(kind: VecTargetKind, branchIds: readonly string[]
 
 export function branchRowsQuery(kind: VecTargetKind, branchIds: readonly string[]): RowQuery {
   const base = embeddedRowQuery(kind)
-  // `IN ()` is a SQLite syntax error, so an empty branch set falls back to an
-  // always-false predicate that still parses and yields zero rows.
   if (branchIds.length === 0) {
     return { sql: `${base.sql} WHERE 0`, params: [] }
   }
@@ -58,12 +56,7 @@ export function toEmbeddedFieldRow(kind: VecTargetKind, raw: readonly unknown[])
   return { kind, id, branchId, fields: [a, b] }
 }
 
-/**
- * Row-array seam, not a drizzle handle: each returned row must be a positional
- * value-array (the sqlite-proxy shape — see `lib/db/runtime/exec.ts`'s
- * `listTableNames`), not a column-keyed object. A native/expo-sqlite caller
- * must normalize before handing this in.
- */
+/** Row-array seam, not a drizzle handle — same positional shape as above. */
 type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
 
 type RowCounts = { total: number; byKind: Record<VecTargetKind, number> }

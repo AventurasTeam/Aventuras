@@ -18,9 +18,8 @@ import { SwapResumeDialog } from './swap-resume-dialog'
 const ctx = { db, runInTransaction }
 
 /**
- * The one mount of the resume prompt. It used to render from both the reader and
- * the Memory panel off the same marker, so navigating between them could portal
- * two copies of an identical, non-dismissable dialog onto `document.body`.
+ * The ONE mount of the resume prompt: a second host rendering off the same marker
+ * portals a duplicate of a non-dismissable dialog onto the same body.
  *
  * Keyed on the open story rather than a route, so it follows the user. Story
  * Settings reached by a cold reload has no open story and so no modal — that

@@ -40,12 +40,12 @@ export function ensureDeltaActionPort(): void {
   })
 }
 
-// The opportunistic stale-row drain worker: warm-cache only, never surfaces
-// errors (the blocking pre-retrieval sync stage owns correctness). Idempotent
-// across boot re-runs — tears the prior wiring down first so re-mounts don't leak
-// a second subscription.
 let teardownDrainWorker: (() => void) | null = null
 
+// The opportunistic stale-row drain worker: warm-cache only, so it reports
+// nothing to the user (the blocking pre-retrieval sync stage owns correctness).
+// Idempotent across boot re-runs — tears the prior wiring down first so a
+// re-mount cannot leak a second subscription.
 export function wireDrainWorker(ctx: DbCtx): void {
   teardownDrainWorker?.()
   const controller = buildDrainController(ctx)

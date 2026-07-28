@@ -383,10 +383,10 @@ export function reindexStoryNow(
 }
 
 /**
- * What a cancel actually achieved. `void` hid three outcomes behind one silent
- * success: a running loop can end by unwinding, but it can also COMPLETE past
- * its last cancel poll (the model changes anyway) or throw before reaching one
- * (the marker survives untouched). The caller has to be able to tell the user.
+ * What a cancel actually achieved, because the caller has to tell the user apart:
+ * `cancelled` unwound a staged swap, `already-completed` means the run crossed the
+ * finish line past its last cancel poll and the model changed anyway, and
+ * `nothing-pending` means there was no swap to stop.
  */
 export type SwapCancelOutcome = 'cancelled' | 'already-completed' | 'nothing-pending'
 
@@ -513,11 +513,9 @@ export function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
 export function buildDrainController(
   ctx: DbCtx = defaultCtx(),
 ): ReturnType<typeof createDrainController> {
-  // The drain triggers a recount rather than publishing its own number.
-  // It walks the OPEN BRANCH only, while refreshEmbeddingStatus counts every
-  // branch of the story — writing both into one slot meant a drain finishing on
-  // a multi-branch story wrote 0 and darkened the pill while other branches were
-  // still stale. One producer, one meaning; the recount is five indexed counts
+  // The drain triggers a recount rather than publishing its own number: it walks
+  // the OPEN BRANCH only, while refreshEmbeddingStatus counts every branch, and one
+  // slot can hold only one of those meanings. The recount is five indexed counts
   // against a batch that just paid for an embedding call.
   //
   // A story mismatch means the user navigated away mid-drain: drop it rather

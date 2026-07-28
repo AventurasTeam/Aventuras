@@ -70,9 +70,8 @@ export function createDrainController(deps: DrainDeps) {
         backoffIdx = -1 // full success resets backoff
         return
       }
-      // warn, not debug: nothing else reports this. The blocking sync stage that
-      // canon puts in charge of user-facing embed errors is not built yet, so a
-      // debug-gated line was the only trace a stuck story left anywhere.
+      // warn, not debug: a story stuck in backoff leaves no other trace. Canon puts
+      // user-facing embed errors on the blocking sync stage, not here.
       logger.warn('embedder.drain_batches_failed', {
         storyId,
         failedRows,

@@ -149,9 +149,9 @@ describe('drain controller', () => {
 
   it('a failing batch does not block the batches behind it', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    // 40 rows -> 3 batches of 16/16/8. The FIRST one fails, which is the shape
-    // that used to abort the pass: every attempt restarts at row 0, so one
-    // un-embeddable row starved the whole story indefinitely.
+    // 40 rows -> 3 batches of 16/16/8, and the FIRST one fails — the shape that
+    // matters, because every attempt restarts at row 0, so aborting the pass on a
+    // batch failure would starve the rows behind it indefinitely.
     const rows = Array.from({ length: 40 }, (_, i) => row(`e${i + 1}`))
     let call = 0
     const embedRows = vi.fn(async () => {

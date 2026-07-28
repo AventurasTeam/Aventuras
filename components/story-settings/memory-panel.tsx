@@ -120,9 +120,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       providerHasEmbeddingEndpoint(provider)
     if (!providerUsable) return local
 
-    // Deliberately NOT de-duplicated by model id. A model installed locally and
-    // also served by the provider is two embedders the user can choose between;
-    // collapsing them made one of the two unreachable.
+    // Deliberately NOT de-duplicated by model id: a model installed locally and
+    // also served by the provider is two embedders the user can choose between.
     return [
       ...local,
       candidate(
@@ -318,10 +317,9 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       />
 
       {resumeOpen ? (
-        // Inline, not a modal: the app-level SwapResumeHost owns the prompt, and
-        // a second dialog here portalled a duplicate of it onto the same body.
-        // This row is also the only affordance when Story Settings is reached by
-        // a cold reload, where there is no open story for the host to key on.
+        // Inline, not a modal: the app-level SwapResumeHost owns the prompt. This
+        // row is also the only affordance when Story Settings is reached by a cold
+        // reload, where there is no open story for the host to key on.
         <View testID="memory-swap-pending" className="gap-2 rounded-md border border-border p-3">
           <Text className="font-semibold">{t('storySettings:memory.swapPendingTitle')}</Text>
           <Text size="sm" variant="muted">

@@ -16,10 +16,9 @@ import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 /**
- * The whole target travels with the candidate, and the whole target comes back
- * out. Handing the host a bare model id meant it had to re-resolve which
- * embedder was meant by looking the id up again — a lookup that cannot succeed
- * when a model id names two of them.
+ * The whole target travels with the candidate and comes back out whole: a bare
+ * model id would force the host to re-resolve which embedder was meant, and that
+ * lookup cannot succeed when one id names both a local and a provider copy.
  */
 type SwapCandidate = {
   target: EmbeddingTarget

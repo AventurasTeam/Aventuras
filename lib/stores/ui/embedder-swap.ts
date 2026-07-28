@@ -4,11 +4,9 @@ import { createStore } from 'zustand/vanilla'
 type SwapDialogState = { storyId: string } | null
 
 /**
- * `cancelRequested` lives INSIDE the progress slot, not beside it: a cancel is
+ * `cancelRequested` lives INSIDE the progress entry, not beside it: a cancel is
  * only meaningful against a staging loop that is actually running, so clearing
- * progress must clear the flag. Held as a sibling it outlived its run and armed
- * the next swap's first batch poll, which cost two separate fixes and a reset
- * inside `openEmbedderSwapDialog` before the shape was the thing that changed.
+ * the entry necessarily clears the flag and none can outlive its run.
  */
 type SwapProgress = { storyId: string; done: number; total: number; cancelRequested: boolean }
 
@@ -16,8 +14,8 @@ type EmbedderSwapState = {
   dialog: SwapDialogState
   /**
    * Keyed by story because the swap lock is per-story (`runExclusive`), so two
-   * stories can legitimately stage at once. Sharing one slot let a second story's
-   * run clear the first's pending cancel and made every cancel read unscoped.
+   * stories can legitimately stage at once and must not share one run's counts
+   * or its cancel flag.
    */
   progress: Record<string, SwapProgress>
   /**
@@ -34,11 +32,7 @@ const INITIAL: EmbedderSwapState = { dialog: null, progress: {}, resumeDeferredF
 
 const store = createStore<EmbedderSwapState>()(() => INITIAL)
 
-/**
- * C8 (milestone 3 slice contract): the single named action that opens the
- * model-swap dialog for a story. 3.4's sync-failure surface imports this —
- * the name is fixed; renaming is a cross-slice break.
- */
+/** The single named action that opens the model-swap dialog for a story. */
 export function openEmbedderSwapDialog(storyId: string): void {
   store.setState({ dialog: { storyId } })
 }

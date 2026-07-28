@@ -48,7 +48,7 @@ export type SwapParams = {
   storyId: string
   branchIds: readonly string[]
   currentModelId: string
-  /** `null` = no swap in flight. Absent and null meant the same thing; only one does now. */
+  /** `null` = no swap in flight. */
   currentSwapTarget: string | null
   targetConfig: EmbedderConfig
 }
@@ -153,9 +153,8 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
     deps.onProgress(done, total)
   }
 
-  // Polling only at the top of each batch dropped a cancel issued during the last
-  // one: the flip committed and the model changed under a user who asked to stop.
-  // Re-checking here narrows the unavoidable race to the phase-2 transaction.
+  // A cancel issued during the final batch would otherwise land after the last
+  // poll and flip the model anyway. This narrows the race to phase 2 itself.
   if (deps.isCancelRequested()) {
     await cancelSwap(deps, {
       storyId: p.storyId,
@@ -252,16 +251,13 @@ export async function relabelModel(
   // Only the vec IDENTITY rewrite is model-id-scoped: `model_id` is baked into
   // the pk and the KNN filter, so an unchanged id leaves every vector where it
   // belongs. The settings write is not — a relabel can move a story between
-  // backends or provider instances at the same model id, and returning early on
-  // the id alone silently wrote nothing at all for exactly that case.
+  // backends or provider instances at the same model id.
   const ops: SqlOp[] = []
   if (newModelId !== oldModelId && branchIds.length > 0) {
     const tables = (await deps.listVecTables()).filter(isVecFamilyTable)
     const ph = branchIds.map(() => '?').join(', ')
-    // model_id is baked into the pk (vecRowPk) and is the KNN filter, so a plain
-    // settings relabel would orphan every stored vector. Rewrite identity in SQL —
-    // new pk + model_id, same source_hash + embedding — preserving "no recompute"
-    // while keeping the story's recorded model id and its rows consistent.
+    // Rewrite identity in place — new pk + model_id, same source_hash + embedding —
+    // preserving "no recompute" while keeping the story and its rows consistent.
     for (const table of tables) {
       ops.push(
         // Relabel wins: clear any leftover newModelId rows first (e.g. staged

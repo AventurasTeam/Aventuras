@@ -10,9 +10,8 @@ type WizardSnapshot = {
   // working-state blob; a resumed draft seeds it from its saved step.
   furthestStep: number
   // The custom effective-dim input currently holds something unparseable. Also
-  // ephemeral: only a VALID dim ever reaches `state.effectiveDim`, so without
-  // this the last good value silently committed while the field showed an
-  // error, and the Finish gate's `effectiveDim` reason was unreachable.
+  // ephemeral: only a VALID dim ever reaches `state.effectiveDim`, so this flag is
+  // what tells Finish the field disagrees with the value it would commit.
   customDimInvalid: boolean
 }
 
