@@ -90,6 +90,25 @@ export const RespectsTouchedSelection: Story = {
   },
 }
 
+// Emptying the custom field leaves an unparseable draft while the store keeps the
+// last valid dim. If that dim is on the ladder, a step-nav remount renders the
+// ladder pick and no custom input — so the flag must not survive to block Finish
+// over an error message that is nowhere on screen.
+export const InvalidDraftClearedOnRemount: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    wizardStore.setEffectiveDim(512)
+    wizardStore.setCustomDimInvalid(true)
+  },
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
+  play: async () => {
+    await screen.findByTestId('memory-cost-disclosure')
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(512)
+    expect(screen.queryByTestId('memory-cost-custom')).not.toBeInTheDocument()
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+  },
+}
+
 export const CustomInputError: Story = {
   render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
   play: async () => {

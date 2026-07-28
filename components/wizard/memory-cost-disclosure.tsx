@@ -102,18 +102,19 @@ export function MemoryCostDisclosure({
     else wizardStore.setEffectiveDim(null)
   }, [visible, touched, suggestion])
 
-  // An unparseable draft must not outlive the field that produced it: switching
-  // to a local backend or a non-Matryoshka model hides this disclosure, and a
-  // flag left set would block Finish over an input the user can no longer see.
-  useEffect(() => {
-    if (!visible) wizardStore.setCustomDimInvalid(false)
-  }, [visible])
-
-  if (!visible) return null
-
   const onLadder = effectiveDim != null && ladder.includes(effectiveDim)
   const isCustomValue = effectiveDim != null && !onLadder
   const customActive = customOpen || isCustomValue
+
+  // An unparseable draft must not outlive the field that produced it. The custom
+  // input renders only while it is the active choice, so a hidden disclosure — or
+  // a step-nav remount landing on a ladder pick — would otherwise block Finish
+  // over an error message that is nowhere on screen.
+  useEffect(() => {
+    if (!visible || !customActive) wizardStore.setCustomDimInvalid(false)
+  }, [visible, customActive])
+
+  if (!visible) return null
 
   const headerSelection =
     effectiveDim != null
