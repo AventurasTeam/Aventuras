@@ -133,13 +133,7 @@ export function MemoryCostDisclosure({
     wizardStore.setEffectiveDim(null)
   }
 
-  const openCustom = () => {
-    setCustomOpen(true)
-    setCustomError(null)
-  }
-
-  const onCustomChange = (raw: string) => {
-    setCustomRaw(raw)
+  const applyCustomDraft = (raw: string) => {
     const result = validateCustomDim(raw)
     if (result.ok) {
       setCustomError(null)
@@ -151,6 +145,16 @@ export function MemoryCostDisclosure({
       // number the field is no longer showing.
       wizardStore.setCustomDimInvalid(true)
     }
+  }
+
+  const openCustom = () => {
+    setCustomOpen(true)
+    applyCustomDraft(customRaw)
+  }
+
+  const onCustomChange = (raw: string) => {
+    setCustomRaw(raw)
+    applyCustomDraft(raw)
   }
 
   const previewLabel = (dim: number) =>

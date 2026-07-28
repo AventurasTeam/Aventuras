@@ -125,3 +125,31 @@ export const CustomInputError: Story = {
     expect(wizardStore.getWizard().state.effectiveDim).not.toBe(12.5)
   },
 }
+
+export const BlankCustomSelectionIsInvalid: Story = {
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button'))
+    await userEvent.click(await screen.findByText('Custom…'))
+
+    expect(wizardStore.getWizard().customDimInvalid).toBe(true)
+    expect(await screen.findByText('Enter a positive whole number.')).toBeInTheDocument()
+  },
+}
+
+export const ReselectingCustomRestoresItsValidDraft: Story = {
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button'))
+    await userEvent.click(await screen.findByText('Custom…'))
+    await userEvent.type(await screen.findByTestId('memory-cost-custom'), '768')
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(768)
+
+    await userEvent.click(screen.getByText('512 dim'))
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(512)
+
+    await userEvent.click(screen.getByText('Custom…'))
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(768)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+  },
+}
