@@ -55,16 +55,15 @@ export function createDrainController(deps: DrainDeps) {
         try {
           const ops = await deps.embedRows(resolution.config, batch)
           await deps.runInTransaction(ops)
-          deps.onDrained(storyId)
         } catch (error) {
-          // Per batch, not per pass: every attempt restarts at row 0, so aborting
-          // the whole drain on one bad row meant a single un-embeddable row — an
-          // oversized composite, a content-filter trip — blocked every other row
-          // in the story forever, retrying it at 120s intervals in total silence.
-          // Failed rows keep embedding_stale = 1 and are retried next pass.
+          // Per batch, not per pass: one un-embeddable row must not block the rows
+          // behind it. Failed rows keep embedding_stale = 1 and retry next pass.
           failedRows += batch.length
           firstError ??= error instanceof Error ? error.message : String(error)
+          continue
         }
+        // Outside the try: a throwing sink must not mark a committed batch failed.
+        deps.onDrained(storyId)
       }
 
       if (failedRows === 0) {
