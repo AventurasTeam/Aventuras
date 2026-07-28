@@ -195,7 +195,7 @@ export const SwapInProgress: Story = {
     const cancel = screen.getByTestId('memory-cancel-swap')
     // No resume prompt while a loop is live for this story, even though the
     // swap-target marker is set.
-    expect(screen.queryByTestId('swap-resume')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('memory-swap-pending-resume')).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: t('storySettings:memory.switchEmbedder'), hidden: true }),
     ).toBeDisabled()
@@ -250,8 +250,8 @@ export const SwapPendingMarker: Story = {
     // surface stays reachable when Story Settings is opened by a cold reload.
     // It surfaces the raw swap_target marker value, not a catalog-resolved label.
     expect(await screen.findByTestId('memory-swap-pending')).toBeInTheDocument()
-    expect(screen.getByTestId('swap-resume')).toBeInTheDocument()
-    expect(screen.getByTestId('swap-cancel-swap')).toBeInTheDocument()
+    expect(screen.getByTestId('memory-swap-pending-resume')).toBeInTheDocument()
+    expect(screen.getByTestId('memory-swap-pending-cancel')).toBeInTheDocument()
     expect(
       screen.getByText(t('storySettings:memory.swapPendingBody', { model: GEMMA })),
     ).toBeInTheDocument()

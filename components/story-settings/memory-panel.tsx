@@ -332,11 +332,15 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
             })}
           </Text>
           <View className="flex-row gap-2">
-            <Button testID="swap-resume" variant="primary" onPress={() => void handleResume()}>
+            <Button
+              testID="memory-swap-pending-resume"
+              variant="primary"
+              onPress={() => void handleResume()}
+            >
               <Text>{t('storySettings:swap.resume')}</Text>
             </Button>
             <Button
-              testID="swap-cancel-swap"
+              testID="memory-swap-pending-cancel"
               variant="destructive"
               onPress={() => void handleCancelSwap()}
             >
