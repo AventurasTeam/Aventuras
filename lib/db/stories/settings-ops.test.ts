@@ -146,6 +146,43 @@ describe('story settings ops', () => {
     expect('embedding_provider_id' in settings).toBe(false)
   })
 
+  it('setEmbeddingTargetOp drops effectiveDim when flipping to local', async () => {
+    await runInTransaction([
+      setEmbeddingTargetOp('s1', PROVIDER_TARGET, NOW),
+      {
+        sql: `UPDATE stories SET settings = json_patch(settings, json(?)) WHERE id = ?`,
+        params: [JSON.stringify({ effectiveDim: 512 }), 's1'],
+      },
+    ])
+    expect(readSettings('s1').effectiveDim).toBe(512)
+
+    await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, NOW)])
+
+    // Truncation is provider-only, so on a local story the dim describes nothing
+    // while still reading as a live setting to anything that forgets to check.
+    expect('effectiveDim' in readSettings('s1')).toBe(false)
+  })
+
+  it('setEmbeddingTargetOp keeps effectiveDim when flipping to another provider', async () => {
+    await runInTransaction([
+      setEmbeddingTargetOp('s1', PROVIDER_TARGET, NOW),
+      {
+        sql: `UPDATE stories SET settings = json_patch(settings, json(?)) WHERE id = ?`,
+        params: [JSON.stringify({ effectiveDim: 512 }), 's1'],
+      },
+    ])
+
+    await runInTransaction([
+      setEmbeddingTargetOp(
+        's1',
+        { modelId: 'other', backend: 'provider', providerId: 'prov2' },
+        NOW,
+      ),
+    ])
+
+    expect(readSettings('s1').effectiveDim).toBe(512)
+  })
+
   it('setEmbeddingModelIdOp flips the recorded model', async () => {
     await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, NOW)])
     const settings = readSettings('s1')

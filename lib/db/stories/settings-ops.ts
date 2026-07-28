@@ -74,18 +74,25 @@ export function clearSwapTargetOp(storyId: string, nowMs: number): SqlOp {
  * Phase-2's flip. Writes the backend and provider id alongside the model id so a
  * cross-backend swap lands a coherent trio — a model-id-only flip would leave
  * the story pointing at a provider model under its old local backend.
+ *
+ * A local target also drops `effectiveDim`: truncation is provider-only, so on a
+ * local story the value describes nothing while still reading as a live setting.
+ * Note this is one-way — dim selection is wizard-only until M7, so a story that
+ * moves to a local backend cannot get its truncation preference back.
  */
 export function setEmbeddingTargetOp(
   storyId: string,
   target: EmbeddingTarget,
   nowMs: number,
 ): SqlOp {
+  const isProvider = target.backend === 'provider'
   return patchSettingsOp(
     storyId,
     {
       embedding_model_id: target.modelId,
       embeddingBackend: target.backend,
-      embedding_provider_id: target.backend === 'provider' ? (target.providerId ?? null) : null,
+      embedding_provider_id: isProvider ? (target.providerId ?? null) : null,
+      ...(isProvider ? {} : { effectiveDim: null }),
     },
     nowMs,
   )
