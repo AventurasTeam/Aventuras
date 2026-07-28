@@ -2,6 +2,7 @@ export {
   cancelSwap,
   reindexStory,
   relabelModel,
+  RelabelDimMismatchError,
   resumeSwap,
   startSwap,
   SwapInProgressError,

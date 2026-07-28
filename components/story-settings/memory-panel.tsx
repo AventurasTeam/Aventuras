@@ -13,6 +13,7 @@ import {
   reindexStoryNow,
   relabelStory,
   RelabelBlockedError,
+  RelabelDimMismatchError,
   resumeStorySwap,
   startStorySwap,
   SwapBusyError,
@@ -208,6 +209,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       } catch (error) {
         if (error instanceof RelabelBlockedError)
           toast.info(t('storySettings:memory.relabelBlocked'))
+        else if (error instanceof RelabelDimMismatchError)
+          toast.error(t('storySettings:memory.relabelDimMismatch'))
         else reportEngineFailure('relabel', error)
       } finally {
         void refreshEmbeddingStatus(storyId)

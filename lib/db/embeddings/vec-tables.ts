@@ -66,6 +66,40 @@ export function dimFamilyTables(dim: number): string[] {
   return (Object.keys(VEC_FAMILIES) as VecTargetKind[]).map((kind) => vecTableName(kind, dim))
 }
 
+export function vecTableDim(name: string): number | null {
+  if (!isVecFamilyTable(name)) return null
+  const match = /_(\d+)$/.exec(name)
+  return match === null ? null : Number(match[1])
+}
+
+/**
+ * Which dim families actually hold vectors for `modelId` on these branches.
+ * Discovered rather than derived: a provider's native dim is only learned from a
+ * response, so where a story's vectors LIVE is the one answer available offline —
+ * and it is what a relabel has to compare against, since relabel rewrites the
+ * recorded model without moving a single row between families.
+ */
+export async function findVecDims(
+  tableNames: readonly string[],
+  branchIds: readonly string[],
+  modelId: string,
+  queryAll: (sql: string, params: unknown[]) => Promise<unknown[][]>,
+): Promise<number[]> {
+  if (branchIds.length === 0) return []
+  const placeholders = branchIds.map(() => '?').join(', ')
+  const dims = new Set<number>()
+  for (const table of tableNames.filter(isVecFamilyTable)) {
+    const dim = vecTableDim(table)
+    if (dim === null) continue
+    const rows = await queryAll(
+      `SELECT 1 FROM ${table} WHERE branch_id IN (${placeholders}) AND model_id = ? LIMIT 1`,
+      [...branchIds, modelId],
+    )
+    if (rows.length > 0) dims.add(dim)
+  }
+  return [...dims].sort((a, b) => a - b)
+}
+
 export function familyTablesFor(kind: VecTargetKind, tableNames: readonly string[]): string[] {
   const prefix = `${VEC_FAMILIES[kind]}_`
   return tableNames.filter((name) => isVecFamilyTable(name) && name.startsWith(prefix))

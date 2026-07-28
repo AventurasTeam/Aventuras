@@ -11,6 +11,7 @@ export {
   relabelModel,
   relabelStory,
   RelabelBlockedError,
+  RelabelDimMismatchError,
   resolveStorySwapConfig,
   resumeStorySwap,
   resumeSwap,

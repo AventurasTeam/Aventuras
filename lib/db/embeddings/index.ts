@@ -7,6 +7,7 @@ export {
   ensureVecTablesSql,
   dimFamilyTables,
   familyTablesFor,
+  findVecDims,
   isVecFamilyTable,
   vecRowPk,
   vecTableName,

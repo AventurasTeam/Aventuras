@@ -4,6 +4,7 @@ import {
   deleteBranchModelVecOps,
   dimFamilyTables,
   familyTablesFor,
+  findVecDims,
   flagEmbeddingStaleOps,
   isVecFamilyTable,
   recomputeStaleOps,
@@ -73,6 +74,25 @@ export class SwapMarkerChangedError extends Error {
       `Story ${storyId} no longer records a swap toward ${expected} (found ${found ?? 'none'}); refusing to flip`,
     )
     this.name = 'SwapMarkerChangedError'
+  }
+}
+
+/**
+ * The target would be read at a different dim than the story's vectors are stored
+ * at, so relabelling would orphan every one of them. Relabel exists to keep the
+ * stored vectors readable; when it cannot, the honest operation is a re-index.
+ */
+export class RelabelDimMismatchError extends Error {
+  readonly storedDims: readonly number[]
+  readonly targetDim: number
+
+  constructor(storyId: string, storedDims: readonly number[], targetDim: number) {
+    super(
+      `Story ${storyId} stores vectors at dim ${storedDims.join('/')}, but the relabel target reads at ${targetDim}`,
+    )
+    this.name = 'RelabelDimMismatchError'
+    this.storedDims = storedDims
+    this.targetDim = targetDim
   }
 }
 
@@ -250,14 +270,29 @@ export async function relabelModel(
     branchIds,
     oldModelId,
     target,
+    targetReadDim,
   }: {
     storyId: string
     branchIds: readonly string[]
     oldModelId: string
     target: EmbeddingTarget
+    /** Dim the target would be read at, or null when only an embed could answer. */
+    targetReadDim?: number | null
   },
 ): Promise<void> {
   const newModelId = target.modelId
+
+  // Rewriting model_id never moves a row between dim families, so a target read at
+  // a different dim would leave every vector in a table nothing queries — silent
+  // total loss on the one path that exists to avoid re-embedding. A story
+  // truncating to effectiveDim on a provider, relabelled onto the local copy of
+  // that model, is exactly that shape: stored at 512, read at the catalog's 384.
+  if (targetReadDim != null && branchIds.length > 0) {
+    const dims = await findVecDims(await deps.listVecTables(), branchIds, oldModelId, deps.queryAll)
+    if (dims.length > 0 && (dims.length > 1 || dims[0] !== targetReadDim)) {
+      throw new RelabelDimMismatchError(storyId, dims, targetReadDim)
+    }
+  }
   // Only the vec IDENTITY rewrite is model-id-scoped: `model_id` is baked into
   // the pk and the KNN filter, so an unchanged id leaves every vector where it
   // belongs. The settings write is not — a relabel can move a story between

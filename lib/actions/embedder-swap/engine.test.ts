@@ -21,6 +21,7 @@ import {
   relabelModel,
   resumeSwap,
   startSwap,
+  RelabelDimMismatchError,
   SwapInProgressError,
   SwapMarkerChangedError,
   SwapStoryMissingError,
@@ -701,6 +702,49 @@ describe('embedder-swap engine', () => {
     // resolves one family, so leftovers there are unreachable orphans.
     expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual([])
     expect(idsForModel(sqlite, 'lore_vec_384', OLD)).toEqual([])
+  })
+
+  it('8z. relabel refuses when the target would be read at another dim', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    // The story's vectors live at 384 — say a provider truncating to effectiveDim.
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps, runSpy } = makeDeps(sqlite, runInTransaction, fn)
+
+    await expect(
+      relabelModel(deps, {
+        storyId: 's1',
+        branchIds: ['b1'],
+        oldModelId: OLD,
+        target: { modelId: OLD, backend: 'local' },
+        // The local copy of the same model reads at its full catalog dim.
+        targetReadDim: 768,
+      }),
+    ).rejects.toBeInstanceOf(RelabelDimMismatchError)
+
+    // Relabel never moves a row between families, so going through would have left
+    // every vector in a table the story no longer reads — total silent loss on the
+    // one path whose whole purpose is to avoid re-embedding.
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(runSpy).not.toHaveBeenCalled()
+  })
+
+  it('8y. relabel proceeds when the target reads at the dim the vectors already use', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, fn)
+
+    await relabelModel(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      oldModelId: OLD,
+      target: { modelId: NEW, backend: 'local' },
+      targetReadDim: DIM,
+    })
+
+    expect(idsForModel(sqlite, 'entities_vec_384', NEW)).toEqual(['e1', 'e2', 'e3'])
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual([])
   })
 
   it('8. relabelModel: rewrites vec identity in SQL, preserves source_hash + embedding, never embeds', async () => {

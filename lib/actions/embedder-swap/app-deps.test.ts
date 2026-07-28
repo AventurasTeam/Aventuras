@@ -361,6 +361,19 @@ describe('relabelStory', () => {
     expect(settings.embedding_provider_id).toBeUndefined()
   })
 
+  it('relabels onto a model the catalog has never heard of', async () => {
+    const { ctx, sqlite } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+
+    // A renamed local copy resolves no catalog entry. Relabel is the one path that
+    // may name such a model, so an unresolvable target must not become a refusal —
+    // it just leaves the dim guard with nothing to compare.
+    await relabelStory('s1', { modelId: 'e2e/minilm-copy', backend: 'local' }, ctx)
+
+    expect(settingsOf(sqlite)).toMatchObject({ embedding_model_id: 'e2e/minilm-copy' })
+  })
+
   it('refuses while a swap marker is set', async () => {
     const { ctx } = await seedStores({
       ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),

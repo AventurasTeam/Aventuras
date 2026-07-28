@@ -82,6 +82,7 @@
     "relabelBlocked": "Can't relabel while a switch is in progress.",
     "swapPendingTitle": "Embedder switch paused",
     "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel.",
-    "cancelTooLate": "The switch finished before it could be cancelled."
+    "cancelTooLate": "The switch finished before it could be cancelled.",
+    "relabelDimMismatch": "These vectors are stored at a different size than that model reads. Re-index this story instead — relabelling would leave every embedding unreadable."
   }
 }

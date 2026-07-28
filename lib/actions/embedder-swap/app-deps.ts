@@ -437,6 +437,16 @@ export async function cancelStorySwap(
   })
 }
 
+/**
+ * The dim a target would be READ at, or null when only an embed could answer.
+ * A local target's dim is the catalog's; a provider target truncating to the
+ * story's locked `effectiveDim` is read at that dim, and an untruncated provider
+ * target is native — unknowable until it responds.
+ */
+function targetReadDim(config: EmbedderConfig): number | null {
+  return config.backend === 'local' ? config.dim : (config.truncation?.effectiveDim ?? config.dim)
+}
+
 export async function relabelStory(
   storyId: string,
   target: EmbeddingTarget,
@@ -447,11 +457,21 @@ export async function relabelStory(
     // Relabel's pre-delete is destructive toward target-model rows; a swap in
     // flight would have staged exactly those, so refuse until it settles.
     if (settings.embedding_swap_target != null) throw new RelabelBlockedError(storyId)
+
+    // Relabel rewrites the recorded model and the vec rows' model_id but never moves
+    // a row between dim families, so it only holds while the target is READ at the
+    // dim the vectors already live at. The engine refuses when it is not.
+    //
+    // Unresolvable is NOT a refusal here: relabel is the one path that may name a
+    // model the catalog has never heard of (a renamed local copy, an id served
+    // elsewhere), so an unknown target simply yields an unknown dim and no guard.
+    const resolution = resolveStorySwapConfig(storyId, target)
     await relabelModel(composeSwapDeps(storyId, ctx), {
       storyId,
       branchIds,
       oldModelId: settings.embedding_model_id,
       target,
+      targetReadDim: resolution.ok ? targetReadDim(resolution.config) : null,
     })
     await refreshStores(storyId, ctx)
   })
