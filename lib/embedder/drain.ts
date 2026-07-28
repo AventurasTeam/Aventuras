@@ -27,6 +27,7 @@ export function createDrainController(deps: DrainDeps) {
   let timer: unknown = null
   let running = false
   let stopped = false
+  let pendingKickStoryId: string | null = null
   // Rows that failed alone while their batch-mates succeeded. Runtime-only and
   // per open story: a quarantine that outlived the session would silently keep a
   // row unembedded forever, so reopening the story is always a clean retry.
@@ -153,6 +154,11 @@ export function createDrainController(deps: DrainDeps) {
       if (!stopped) schedule(storyId, BACKOFF_MS[backoffIdx])
     } finally {
       running = false
+      if (!stopped && pendingKickStoryId != null) {
+        const storyId = pendingKickStoryId
+        pendingKickStoryId = null
+        schedule(storyId, 0)
+      }
     }
   }
 
@@ -165,10 +171,12 @@ export function createDrainController(deps: DrainDeps) {
       // An explicit kick (embedder recovered, model downloaded) is the signal that
       // the reason a row failed may be gone, so nothing stays quarantined.
       resetQuarantine()
-      if (!running) schedule(storyId, 0)
+      if (running) pendingKickStoryId = storyId
+      else schedule(storyId, 0)
     },
     stop(): void {
       stopped = true
+      pendingKickStoryId = null
       if (timer != null) deps.clearTimer(timer)
       timer = null
     },

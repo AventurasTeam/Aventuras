@@ -208,6 +208,40 @@ describe('drain controller', () => {
     expect(setTimer.mock.calls.at(-1)?.[1]).toBe(5_000)
   })
 
+  it('replays a kick received while another story drain is running', async () => {
+    let releaseStoryA: () => void = () => {}
+    const storyAGate = new Promise<void>((resolve) => {
+      releaseStoryA = resolve
+    })
+    const scheduled: (() => void)[] = []
+    const setTimer = vi.fn((fn: () => void) => {
+      scheduled.push(fn)
+      return fn
+    })
+    const embedRows = vi.fn(async (_config: EmbedderConfig, rows: EmbeddedFieldRow[]) => {
+      if (rows[0]?.id === 'story-a') await storyAGate
+      return [] as SqlOp[]
+    })
+    const { ctrl } = makeController({
+      branchIdsFor: (storyId) => [storyId],
+      loadStaleRows: async ([storyId]) => [row(storyId)],
+      embedRows,
+      setTimer,
+    })
+
+    ctrl.kick('story-a')
+    scheduled.shift()?.()
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalledWith(cfg, [row('story-a')]))
+
+    ctrl.kick('story-b')
+    expect(scheduled).toHaveLength(0)
+
+    releaseStoryA()
+    await vi.waitFor(() => expect(scheduled).toHaveLength(1))
+    scheduled.shift()?.()
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalledWith(cfg, [row('story-b')]))
+  })
+
   it('aborts between batches when a run starts mid-drain', async () => {
     const rows = Array.from({ length: 20 }, (_, i) => row(`e${i}`))
     let checks = 0
