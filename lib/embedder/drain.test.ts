@@ -327,3 +327,110 @@ function loadStaleEntities(sqlite: DatabaseSync): EmbeddedFieldRow[] {
     fields: [r.name, r.description],
   }))
 }
+
+describe('poison-row isolation', () => {
+  const warn = () => vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+  // 20 rows -> batches of 16 + 4; `e7` can never be embedded.
+  function poisonSetup() {
+    const rows = Array.from({ length: 20 }, (_, i) => row(`e${i + 1}`))
+    const embedRows = vi.fn(async (_c: EmbedderConfig, batch: EmbeddedFieldRow[]) => {
+      if (batch.some((r) => r.id === 'e7')) throw new Error('input too long')
+      return [] as SqlOp[]
+    })
+    return { rows, embedRows }
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('leaves the first failing pass alone, then isolates on the second', async () => {
+    warn()
+    const { rows, embedRows } = poisonSetup()
+    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    // Pass 1: two batch calls, the poisoned one failing whole. No single-row calls,
+    // because one transient provider outage must not cost BATCH_SIZE calls a cycle.
+    const firstPass = embedRows.mock.calls.length
+    expect(embedRows.mock.calls.every(([, batch]) => batch.length > 1)).toBe(true)
+
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows.mock.calls.length).toBeGreaterThan(firstPass + 2))
+    // Pass 2 re-runs the failing batch row by row to find what is actually at fault.
+    const singles = embedRows.mock.calls.filter(([, batch]) => batch.length === 1)
+    expect(singles).toHaveLength(16)
+    ctrl.stop()
+  })
+
+  it('quarantines only the row that fails alone, and drains its batch-mates', async () => {
+    warn()
+    const { rows, embedRows } = poisonSetup()
+    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() =>
+      expect(embedRows.mock.calls.some(([, b]) => b.length === 1 && b[0].id === 'e7')).toBe(true),
+    )
+
+    embedRows.mockClear()
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    // e7 is out of the working set; the 15 rows it was batched with are not.
+    const seen = embedRows.mock.calls.flatMap(([, batch]) => batch.map((r) => r.id))
+    expect(seen).not.toContain('e7')
+    expect(seen).toContain('e1')
+    ctrl.stop()
+  })
+
+  it('an explicit kick clears the quarantine', async () => {
+    warn()
+    const { rows, embedRows } = poisonSetup()
+    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() =>
+      expect(embedRows.mock.calls.some(([, b]) => b.length === 1 && b[0].id === 'e7')).toBe(true),
+    )
+
+    embedRows.mockClear()
+    // The kick means the reason a row failed may be gone (embedder recovered, model
+    // downloaded), so nothing may stay excluded on the strength of an old failure.
+    ctrl.kick('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    expect(embedRows.mock.calls.flatMap(([, b]) => b.map((r) => r.id))).toContain('e7')
+    ctrl.stop()
+  })
+
+  it('quarantines nothing when every row in the batch fails alone', async () => {
+    warn()
+    const rows = Array.from({ length: 4 }, (_, i) => row(`e${i + 1}`))
+    // A provider outage, not a content problem: isolating finds no innocent rows.
+    const embedRows = vi.fn(
+      async (_c: EmbedderConfig, _batch: EmbeddedFieldRow[]): Promise<SqlOp[]> => {
+        throw new Error('connection refused')
+      },
+    )
+    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows.mock.calls.some(([, b]) => b.length === 1)).toBe(true))
+
+    embedRows.mockClear()
+    ctrl.noteIdle('s1')
+    await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
+    // Every row is still in play — quarantining the batch would strand rows that
+    // are perfectly embeddable once the embedder is back.
+    const seen = embedRows.mock.calls.flatMap(([, b]) => b.map((r) => r.id))
+    expect(new Set(seen)).toEqual(new Set(['e1', 'e2', 'e3', 'e4']))
+    ctrl.stop()
+  })
+})

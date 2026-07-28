@@ -20,15 +20,64 @@ export type DrainDeps = {
 const BACKOFF_MS = [5_000, 30_000, 120_000] as const
 const BATCH_SIZE = 16
 
+const rowKey = (row: EmbeddedFieldRow): string => `${row.kind}:${row.branchId}:${row.id}`
+
 export function createDrainController(deps: DrainDeps) {
   let backoffIdx = -1
   let timer: unknown = null
   let running = false
   let stopped = false
+  // Rows that failed alone while their batch-mates succeeded. Runtime-only and
+  // per open story: a quarantine that outlived the session would silently keep a
+  // row unembedded forever, so reopening the story is always a clean retry.
+  const quarantined = new Set<string>()
+  let lastStoryId: string | null = null
+  // A batch failure only earns per-row isolation on the SECOND consecutive failing
+  // pass — a provider outage fails every batch, and isolating it immediately would
+  // spend BATCH_SIZE single calls per cycle discovering nothing.
+  let isolateOnFailure = false
 
   function schedule(storyId: string, ms: number): void {
     if (timer != null) deps.clearTimer(timer)
     timer = deps.setTimer(() => void drain(storyId), ms)
+  }
+
+  function resetQuarantine(): void {
+    quarantined.clear()
+    isolateOnFailure = false
+  }
+
+  /**
+   * Re-runs a failed batch one row at a time. Rows that fail alone are quarantined
+   * ONLY if a batch-mate succeeded — if every row fails, the cause is the embedder
+   * or the provider, not the content, and quarantining the batch would strand rows
+   * that are perfectly embeddable. Returns how many rows are still undrained.
+   */
+  async function isolateBatch(
+    storyId: string,
+    config: EmbedderConfig,
+    batch: EmbeddedFieldRow[],
+  ): Promise<number> {
+    const failed: EmbeddedFieldRow[] = []
+    for (const [i, row] of batch.entries()) {
+      // A teardown mid-isolation leaves the rest undrained, but still flagged.
+      if (stopped) return failed.length + (batch.length - i)
+      try {
+        const ops = await deps.embedRows(config, [row])
+        await deps.runInTransaction(ops)
+        deps.onDrained(storyId)
+      } catch {
+        failed.push(row)
+      }
+    }
+    if (failed.length > 0 && failed.length < batch.length) {
+      for (const row of failed) quarantined.add(rowKey(row))
+      logger.warn('embedder.drain_rows_quarantined', {
+        storyId,
+        rows: failed.map(rowKey),
+      })
+    }
+    return failed.length
   }
 
   async function drain(storyId: string): Promise<void> {
@@ -39,7 +88,13 @@ export function createDrainController(deps: DrainDeps) {
       const branchIds = deps.branchIdsFor(storyId)
       const resolution = deps.resolveConfig(storyId)
       if (!resolution.ok) return // unconfigured is not an error here
-      const rows = await deps.loadStaleRows(branchIds)
+      if (storyId !== lastStoryId) {
+        lastStoryId = storyId
+        resetQuarantine()
+      }
+      const rows = (await deps.loadStaleRows(branchIds)).filter(
+        (row) => !quarantined.has(rowKey(row)),
+      )
       let failedRows = 0
       let firstError: string | null = null
 
@@ -58,8 +113,10 @@ export function createDrainController(deps: DrainDeps) {
         } catch (error) {
           // Per batch, not per pass: one un-embeddable row must not block the rows
           // behind it. Failed rows keep embedding_stale = 1 and retry next pass.
-          failedRows += batch.length
           firstError ??= error instanceof Error ? error.message : String(error)
+          failedRows += isolateOnFailure
+            ? await isolateBatch(storyId, resolution.config, batch)
+            : batch.length
           continue
         }
         // Outside the try: a throwing sink must not mark a committed batch failed.
@@ -68,8 +125,12 @@ export function createDrainController(deps: DrainDeps) {
 
       if (failedRows === 0) {
         backoffIdx = -1 // full success resets backoff
+        isolateOnFailure = false
         return
       }
+      // Next failing pass isolates: one clean retry has already been spent, so a
+      // still-failing batch is worth the per-row calls to find what is at fault.
+      isolateOnFailure = true
       // warn, not debug: a story stuck in backoff leaves no other trace. Canon puts
       // user-facing embed errors on the blocking sync stage, not here.
       logger.warn('embedder.drain_batches_failed', {
@@ -101,6 +162,9 @@ export function createDrainController(deps: DrainDeps) {
     },
     kick(storyId: string): void {
       backoffIdx = -1
+      // An explicit kick (embedder recovered, model downloaded) is the signal that
+      // the reason a row failed may be gone, so nothing stays quarantined.
+      resetQuarantine()
       if (!running) schedule(storyId, 0)
     },
     stop(): void {
