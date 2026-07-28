@@ -226,10 +226,13 @@ export async function relabelModel(
   },
 ): Promise<void> {
   const newModelId = target.modelId
-  if (newModelId === oldModelId) return
-
+  // Only the vec IDENTITY rewrite is model-id-scoped: `model_id` is baked into
+  // the pk and the KNN filter, so an unchanged id leaves every vector where it
+  // belongs. The settings write is not — a relabel can move a story between
+  // backends or provider instances at the same model id, and returning early on
+  // the id alone silently wrote nothing at all for exactly that case.
   const ops: SqlOp[] = []
-  if (branchIds.length > 0) {
+  if (newModelId !== oldModelId && branchIds.length > 0) {
     const tables = (await deps.listVecTables()).filter(isVecFamilyTable)
     const ph = branchIds.map(() => '?').join(', ')
     // model_id is baked into the pk (vecRowPk) and is the KNN filter, so a plain

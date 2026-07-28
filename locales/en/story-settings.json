@@ -51,7 +51,8 @@
     "resumeBody": "Switching this story to {{model}} was interrupted, likely by a crash or force-quit. Resume to pick up where it left off, or cancel to keep this story on its current model.",
     "resume": "Resume",
     "cancelSwap": "Cancel switch",
-    "resumeLater": "Later"
+    "resumeLater": "Later",
+    "sourceLocal": "On this device"
   },
   "reindexConfirm": {
     "title": "Re-index this story?",

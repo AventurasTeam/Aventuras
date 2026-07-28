@@ -2,7 +2,14 @@ import type { DatabaseSync } from 'node:sqlite'
 
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { clearSwapTargetOp, setSwapTargetOp, setEmbeddingTargetOp } from './settings-ops'
+import {
+  clearSwapTargetOp,
+  embeddingTargetKey,
+  sameEmbeddingTarget,
+  setSwapTargetOp,
+  setEmbeddingTargetOp,
+  type EmbeddingTarget,
+} from './settings-ops'
 import { storySettingsSchema, type StorySettings } from './story-config-schema'
 import { createTestDb } from '../__tests__/test-db'
 
@@ -175,5 +182,54 @@ describe('story settings ops', () => {
     await runInTransaction([clearSwapTargetOp('s1', NOW)])
     // readSettings calls storySettingsSchema.parse, which throws if invalid
     expect(() => readSettings('s1')).not.toThrow()
+  })
+})
+
+describe('embeddingTargetKey / sameEmbeddingTarget', () => {
+  it('separates a locally installed model from a provider-served one', () => {
+    const local: EmbeddingTarget = { modelId: 'shared-id', backend: 'local' }
+    const served: EmbeddingTarget = {
+      modelId: 'shared-id',
+      backend: 'provider',
+      providerId: 'prov1',
+    }
+    // The whole point: these are two embedders wearing the same name, and any
+    // key that collapses them makes one of them unreachable.
+    expect(embeddingTargetKey(local)).not.toBe(embeddingTargetKey(served))
+    expect(sameEmbeddingTarget(local, served)).toBe(false)
+  })
+
+  it('separates the same model served by two different providers', () => {
+    const a: EmbeddingTarget = { modelId: 'm', backend: 'provider', providerId: 'prov1' }
+    const b: EmbeddingTarget = { modelId: 'm', backend: 'provider', providerId: 'prov2' }
+    expect(sameEmbeddingTarget(a, b)).toBe(false)
+  })
+
+  it('ignores a provider id on a local target', () => {
+    // A local model is the same local model whatever provider row happens to sit
+    // beside it in settings, so a stray id must not fork its identity.
+    expect(
+      sameEmbeddingTarget(
+        { modelId: 'm', backend: 'local' },
+        {
+          modelId: 'm',
+          backend: 'local',
+          providerId: 'prov1',
+        },
+      ),
+    ).toBe(true)
+  })
+
+  it('treats an absent and a null provider id as the same target', () => {
+    expect(
+      sameEmbeddingTarget(
+        { modelId: 'm', backend: 'provider' },
+        {
+          modelId: 'm',
+          backend: 'provider',
+          providerId: null,
+        },
+      ),
+    ).toBe(true)
   })
 })

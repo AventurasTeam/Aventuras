@@ -258,10 +258,11 @@ export const SwapPendingMarker: Story = {
   },
 }
 
-export const DuplicateCandidateIds: Story = {
+export const SharedModelIdOffersBothSources: Story = {
   // The app's provider embedding model id set to an id that is ALSO installed
-  // locally — the shape the seeded app-settings row produces. Both sources feed
-  // the picker, so without a dedupe the row renders twice under one React key.
+  // locally. These are two different embedders that happen to share a name, so
+  // both are offered and told apart by their source label; collapsing them to
+  // one row made the provider copy unreachable.
   args: { storyId: STORY_ID, settings: buildSettings(), listInstalled },
   beforeEach: async () => {
     resetStores()
@@ -284,8 +285,18 @@ export const DuplicateCandidateIds: Story = {
     openEmbedderSwapDialog(STORY_ID)
   },
   play: async () => {
-    await waitFor(() => expect(screen.getAllByTestId(`swap-candidate-${MINILM}`)).toHaveLength(1))
-    expect(screen.getByTestId(`swap-candidate-${GEMMA}`)).toBeInTheDocument()
+    const localRow = await screen.findByTestId(`swap-candidate-local:${MINILM}`)
+    const providerRow = screen.getByTestId(`swap-candidate-provider:prov_local:${MINILM}`)
+
+    // Same model id, two rows, distinguished by where each is served from.
+    expect(within(localRow).getByText(t('storySettings:swap.sourceLocal'))).toBeInTheDocument()
+    expect(within(providerRow).getByText('Local')).toBeInTheDocument()
+
+    // The story runs on the local copy, so only that row is the current one —
+    // the provider copy stays selectable.
+    expect(within(localRow).getByText(t('storySettings:swap.current'))).toBeInTheDocument()
+    expect(providerRow).not.toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByTestId(`swap-candidate-local:${GEMMA}`)).toBeInTheDocument()
   },
 }
 
@@ -297,10 +308,10 @@ export const TargetPickerVisible: Story = {
     openEmbedderSwapDialog(STORY_ID)
   },
   play: async () => {
-    const minilmRow = await screen.findByTestId(`swap-candidate-${MINILM}`)
+    const minilmRow = await screen.findByTestId(`swap-candidate-local:${MINILM}`)
     expect(within(minilmRow).getByText(t('storySettings:swap.current'))).toBeInTheDocument()
 
-    const gemmaRow = screen.getByTestId(`swap-candidate-${GEMMA}`)
+    const gemmaRow = screen.getByTestId(`swap-candidate-local:${GEMMA}`)
     await userEvent.click(gemmaRow)
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())

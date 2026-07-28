@@ -59,6 +59,8 @@ export {
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
 export {
   clearSwapTargetOp,
+  embeddingTargetKey,
+  sameEmbeddingTarget,
   setEmbeddingTargetOp,
   setSwapTargetOp,
   type EmbeddingTarget,

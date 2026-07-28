@@ -739,6 +739,29 @@ describe('embedder-swap engine', () => {
     expect(storySettings(sqlite)?.embedding_model_id).toBe(NEW)
   })
 
+  it('8c. relabelModel at the same model id still writes the backend and provider', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, fn)
+
+    // "Same model, now served elsewhere" — the move relabel exists for. Returning
+    // early on the model id alone wrote nothing at all for exactly this case.
+    await relabelModel(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      oldModelId: OLD,
+      target: { modelId: OLD, backend: 'provider', providerId: 'prov1' },
+    })
+
+    const s = storySettings(sqlite)
+    expect(s?.embedding_model_id).toBe(OLD)
+    expect(s?.embeddingBackend).toBe('provider')
+    expect(s?.embedding_provider_id).toBe('prov1')
+    // Identity is model-scoped, so an unchanged id leaves every vector in place.
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+  })
+
   it('9. cancel-requested mid-phase-1: loop stops, cancel path runs, returns cancelled', async () => {
     const { sqlite, runInTransaction, embedded } = await setup({ extraEntities: 20 })
     seedOldVectors(sqlite, embedded)

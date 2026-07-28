@@ -147,7 +147,9 @@ test.describe('embedder — story settings swap flow', () => {
     // this, a click on the still-disabled button would hang to the test timeout.
     await expect(storySettings.switchEmbedder(app.window)).toBeEnabled()
     await storySettings.switchEmbedder(app.window).click()
-    await storySettings.swapCandidate(app.window, COPY_MODEL_ID).click()
+    await storySettings
+      .swapCandidate(app.window, { modelId: COPY_MODEL_ID, backend: 'local' })
+      .click()
     await storySettings.swapNext(app.window).click()
     await storySettings.swapRelabel(app.window).click()
 

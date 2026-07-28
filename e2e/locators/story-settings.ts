@@ -1,5 +1,7 @@
 import type { Locator, Page } from '@playwright/test'
 
+import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
+
 import { t } from '../harness/i18n'
 
 // Story Settings + the embedder swap surfaces (components/story-settings/memory-panel.tsx,
@@ -30,11 +32,13 @@ export const storySettings = {
   // The standalone re-index is gated by a confirm dialog; this is its start button.
   reindexConfirmStart: (page: Page): Locator => page.getByTestId('reindex-confirm-start'),
 
-  // SwapDialog's CandidateRow testID embeds the raw candidate model id.
-  // getByTestId matches through Playwright's own selector engine rather than a
-  // literal CSS string, so ids containing "/" need no escaping.
-  swapCandidate: (page: Page, modelId: string): Locator =>
-    page.getByTestId(`swap-candidate-${modelId}`),
+  // SwapDialog's CandidateRow testID embeds the whole target, not the model id:
+  // a model installed locally AND served by the provider is two rows, and a bare
+  // id would match both and trip strict mode. getByTestId matches through
+  // Playwright's own selector engine rather than a literal CSS string, so ids
+  // containing "/" or ":" need no escaping.
+  swapCandidate: (page: Page, target: EmbeddingTarget): Locator =>
+    page.getByTestId(`swap-candidate-${embeddingTargetKey(target)}`),
 
   swapNext: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.next') }),

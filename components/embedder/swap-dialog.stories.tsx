@@ -5,19 +5,36 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { embeddingTargetKey } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
 import { SwapDialog, type SwapCandidate, type SwapDialogProps } from './swap-dialog'
 
+const LOCAL_SOURCE = t('storySettings:swap.sourceLocal')
+const PROVIDER_SOURCE = 'OpenAI-compatible'
+
 const candidates: SwapCandidate[] = [
-  { id: 'minilm-l6', label: 'MiniLM-L6 (lightweight)', isCurrent: true, backend: 'local' },
-  { id: 'bge-small', label: 'BGE-small-en-v1.5', isCurrent: false, backend: 'local' },
   {
-    id: 'text-embedding-3-small',
-    label: 'text-embedding-3-small',
+    target: { modelId: 'minilm-l6', backend: 'local' },
+    label: 'MiniLM-L6 (lightweight)',
+    sourceLabel: LOCAL_SOURCE,
+    isCurrent: true,
+  },
+  {
+    target: { modelId: 'bge-small', backend: 'local' },
+    label: 'BGE-small-en-v1.5',
+    sourceLabel: LOCAL_SOURCE,
     isCurrent: false,
-    backend: 'provider',
-    providerId: 'prov-openai-compat',
+  },
+  {
+    target: {
+      modelId: 'text-embedding-3-small',
+      backend: 'provider',
+      providerId: 'prov-openai-compat',
+    },
+    label: 'text-embedding-3-small',
+    sourceLabel: PROVIDER_SOURCE,
+    isCurrent: false,
   },
 ]
 
@@ -47,7 +64,7 @@ export const PickPane: Story = {
 export const CurrentCandidateUnselectable: Story = {
   args: { open: true, candidates, ...handlers },
   play: async () => {
-    const current = screen.getByTestId('swap-candidate-minilm-l6')
+    const current = screen.getByTestId('swap-candidate-local:minilm-l6')
     expect(current).toHaveAttribute('aria-disabled', 'true')
 
     // The row is `pointer-events: none`, so userEvent's actionability
@@ -60,7 +77,7 @@ export const CurrentCandidateUnselectable: Story = {
 export const OptionsPane: Story = {
   args: { open: true, candidates, ...handlers },
   play: async () => {
-    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
     expect(screen.getByText('Switch to BGE-small-en-v1.5')).toBeInTheDocument()
@@ -70,17 +87,19 @@ export const OptionsPane: Story = {
 export const ReindexFires: Story = {
   args: { open: true, candidates, ...handlers },
   play: async ({ args }) => {
-    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await userEvent.click(await screen.findByTestId('swap-reindex'))
-    await waitFor(() => expect(args.onReindex).toHaveBeenCalledWith('bge-small'))
+    await waitFor(() =>
+      expect(args.onReindex).toHaveBeenCalledWith({ modelId: 'bge-small', backend: 'local' }),
+    )
   },
 }
 
 export const KeepFires: Story = {
   args: { open: true, candidates, ...handlers },
   play: async ({ args }) => {
-    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await userEvent.click(await screen.findByTestId('swap-keep'))
     await waitFor(() => expect(args.onKeep).toHaveBeenCalledTimes(1))
@@ -90,23 +109,33 @@ export const KeepFires: Story = {
 export const RelabelShowsDisclaimer: Story = {
   args: { open: true, candidates, ...handlers },
   play: async ({ args }) => {
-    await userEvent.click(screen.getByTestId('swap-candidate-text-embedding-3-small'))
+    await userEvent.click(
+      screen.getByTestId('swap-candidate-provider:prov-openai-compat:text-embedding-3-small'),
+    )
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     expect(screen.getByText(t('storySettings:swap.relabelDisclaimer'))).toBeInTheDocument()
     await userEvent.click(await screen.findByTestId('swap-relabel'))
-    await waitFor(() => expect(args.onRelabel).toHaveBeenCalledWith('text-embedding-3-small'))
+    await waitFor(() =>
+      expect(args.onRelabel).toHaveBeenCalledWith({
+        modelId: 'text-embedding-3-small',
+        backend: 'provider',
+        providerId: 'prov-openai-compat',
+      }),
+    )
   },
 }
 
 export const BackReturnsToPickPane: Story = {
   args: { open: true, candidates, ...handlers },
   play: async () => {
-    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.back') }))
-    await waitFor(() => expect(screen.getByTestId('swap-candidate-bge-small')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByTestId('swap-candidate-local:bge-small')).toBeInTheDocument(),
+    )
   },
 }
 
@@ -138,7 +167,7 @@ export const ReopenResetsPickPane: Story = {
     <ReopenHarness candidates={candidates} onReindex={fn()} onKeep={fn()} onRelabel={fn()} />
   ),
   play: async () => {
-    await userEvent.click(screen.getByTestId('swap-candidate-bge-small'))
+    await userEvent.click(screen.getByTestId('swap-candidate-local:bge-small'))
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
 
@@ -146,13 +175,14 @@ export const ReopenResetsPickPane: Story = {
     await waitFor(() => expect(screen.queryByTestId('swap-reindex')).not.toBeInTheDocument())
 
     await userEvent.click(screen.getByTestId('reopen-trigger'))
-    await waitFor(() => expect(screen.getByTestId('swap-candidate-bge-small')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByTestId('swap-candidate-local:bge-small')).toBeInTheDocument(),
+    )
 
     for (const candidate of candidates) {
-      expect(screen.getByTestId(`swap-candidate-${candidate.id}`)).toHaveAttribute(
-        'aria-checked',
-        'false',
-      )
+      expect(
+        screen.getByTestId(`swap-candidate-${embeddingTargetKey(candidate.target)}`),
+      ).toHaveAttribute('aria-checked', 'false')
     }
     expect(screen.getByRole('button', { name: t('storySettings:swap.next') })).toBeDisabled()
   },

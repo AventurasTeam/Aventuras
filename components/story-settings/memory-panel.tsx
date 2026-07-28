@@ -17,7 +17,13 @@ import {
   startStorySwap,
   SwapBusyError,
 } from '@/lib/actions'
-import { db, runInTransaction, type EmbeddingTarget, type StorySettings } from '@/lib/db'
+import {
+  db,
+  runInTransaction,
+  sameEmbeddingTarget,
+  type EmbeddingTarget,
+  type StorySettings,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   getCatalogEntry,
@@ -80,13 +86,33 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     void refreshEmbeddingStatus(storyId)
   }, [storyId])
 
+  const storyTarget = useMemo<EmbeddingTarget>(
+    () => ({
+      modelId: settings.embedding_model_id,
+      backend: settings.embeddingBackend,
+      providerId: settings.embedding_provider_id,
+    }),
+    [settings.embedding_model_id, settings.embeddingBackend, settings.embedding_provider_id],
+  )
+
   const candidates = useMemo<SwapCandidate[]>(() => {
-    const local: SwapCandidate[] = (installed ?? []).map((model) => ({
-      id: model.id,
-      label: getCatalogEntry(model.id)?.displayName ?? model.id,
-      isCurrent: model.id === settings.embedding_model_id,
-      backend: 'local',
-    }))
+    const candidate = (target: EmbeddingTarget, label: string, sourceLabel: string) => ({
+      target,
+      label,
+      sourceLabel,
+      // The whole target, not the model id: a story on a provider's copy of a
+      // model must still be offered the local copy, which is a different
+      // embedder that happens to share a name.
+      isCurrent: sameEmbeddingTarget(target, storyTarget),
+    })
+
+    const local = (installed ?? []).map((model) =>
+      candidate(
+        { modelId: model.id, backend: 'local' },
+        getCatalogEntry(model.id)?.displayName ?? model.id,
+        t('storySettings:swap.sourceLocal'),
+      ),
+    )
     const provider = providers.find((p) => p.id === appEmbeddingProviderId)
     const providerUsable =
       provider != null &&
@@ -95,29 +121,19 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       providerTypeSupportsEmbedding(provider.type) &&
       providerHasEmbeddingEndpoint(provider)
     if (!providerUsable) return local
-    const all: SwapCandidate[] = [
+
+    // Deliberately NOT de-duplicated by model id. A model installed locally and
+    // also served by the provider is two embedders the user can choose between;
+    // collapsing them made one of the two unreachable.
+    return [
       ...local,
-      {
-        id: appEmbeddingModelId,
-        label: appEmbeddingModelId,
-        isCurrent: appEmbeddingModelId === settings.embedding_model_id,
-        backend: 'provider',
-        providerId: appEmbeddingProviderId,
-      },
+      candidate(
+        { modelId: appEmbeddingModelId, backend: 'provider', providerId: appEmbeddingProviderId },
+        appEmbeddingModelId,
+        provider.displayName,
+      ),
     ]
-    // A provider model id and an installed local model id are both free-form
-    // strings and can be equal, which would render two rows under one React
-    // key. Local wins the collision — it carries the catalog display label.
-    const byId = new Map<string, SwapCandidate>()
-    for (const candidate of all) if (!byId.has(candidate.id)) byId.set(candidate.id, candidate)
-    return [...byId.values()]
-  }, [
-    installed,
-    providers,
-    appEmbeddingProviderId,
-    appEmbeddingModelId,
-    settings.embedding_model_id,
-  ])
+  }, [installed, providers, appEmbeddingProviderId, appEmbeddingModelId, storyTarget])
 
   const reasonLine = useMemo(() => {
     // resolveEmbedderConfig reads `settings` (the panel's own prop) directly rather
@@ -167,32 +183,18 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     embedderSwapStore.requestCancel()
   }, [])
 
-  // The dialog reports the picked id; the candidate list is what knows which
-  // backend serves it, and ids are unique there (see the dedupe above).
-  const targetFor = useCallback(
-    (targetId: string): EmbeddingTarget => {
-      const candidate = candidates.find((c) => c.id === targetId)
-      return {
-        modelId: targetId,
-        backend: candidate?.backend ?? settings.embeddingBackend,
-        providerId: candidate?.providerId,
-      }
-    },
-    [candidates, settings.embeddingBackend],
-  )
-
   const handleReindexTarget = useCallback(
-    async (targetId: string) => {
+    async (target: EmbeddingTarget) => {
       embedderSwapStore.closeDialog()
       try {
-        await startStorySwap(storyId, targetFor(targetId), ctx)
+        await startStorySwap(storyId, target, ctx)
       } catch (error) {
         reportEngineFailure('swap_start', error)
       } finally {
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure, targetFor],
+    [storyId, reportEngineFailure],
   )
 
   const handleKeep = useCallback(() => {
@@ -202,10 +204,10 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
   }, [])
 
   const handleRelabel = useCallback(
-    async (targetId: string) => {
+    async (target: EmbeddingTarget) => {
       embedderSwapStore.closeDialog()
       try {
-        await relabelStory(storyId, targetFor(targetId), ctx)
+        await relabelStory(storyId, target, ctx)
       } catch (error) {
         if (error instanceof RelabelBlockedError)
           toast.info(t('storySettings:memory.relabelBlocked'))
@@ -214,7 +216,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure, targetFor],
+    [storyId, reportEngineFailure],
   )
 
   const handleDismissDialog = useCallback(() => {
@@ -311,9 +313,9 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       <SwapDialog
         open={dialogOpen}
         candidates={candidates}
-        onReindex={(targetId) => void handleReindexTarget(targetId)}
+        onReindex={(target) => void handleReindexTarget(target)}
         onKeep={handleKeep}
-        onRelabel={(targetId) => void handleRelabel(targetId)}
+        onRelabel={(target) => void handleRelabel(target)}
         onDismiss={handleDismissDialog}
       />
 

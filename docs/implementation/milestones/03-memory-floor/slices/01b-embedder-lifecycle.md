@@ -151,44 +151,9 @@ host, same-dim staging under the two-part vec0 pk, multi-family
 vector cleanup) were resolved in slice planning on 2026-07-24; the
 decisions are recorded under Implementation notes below.
 
-One question opened during review on 2026-07-28:
-
-- **`EmbeddingTarget` stops at the action boundary — the UI above it
-  still identifies an embedder by bare `modelId`.** The cross-backend
-  fix threaded a model / backend / provider triple through the action
-  layer, engine, settings write, and crash marker, but `SwapDialog`
-  still hands its caller `target.id` alone, and `MemoryPanel`'s
-  `targetFor` rebuilds the triple by looking that id back up in
-  `candidates`. Four defects follow from that single narrowing:
-  - the candidate dedupe keys on `id`, so a provider model sharing an
-    installed local model's id is dropped and can never be picked;
-  - `isCurrent` compares model id only, so a story on model X sees X
-    disabled as "current" even when the candidate is served by a
-    different backend or provider instance;
-  - `relabelModel` returns early on `newModelId === oldModelId`, so a
-    provider-only relabel writes nothing — the exact move relabel is
-    named for ("same model, now served elsewhere");
-  - `targetFor` falls back to the story's own backend when the picked
-    id is absent from `candidates`, silently rebuilding the pre-fix
-    shape.
-
-  Passing the candidate rather than its id, and keying dedupe and
-  `isCurrent` on the whole target, resolves all four; patching them
-  one at a time does not.
-
-  **Agreed resolution (2026-07-28):** a shared model id must stop
-  collapsing rows at all — the user is offered every place a model
-  can be served from, each row labelled by its backend, keyed on the
-  whole target rather than the id. `isCurrent` compares the same
-  triple, so the variant a story is already using is the only one
-  disabled. The Implementation-notes line recording the current
-  local-wins dedupe is superseded when this lands and must be
-  rewritten in the same commit.
-
-  **Deliberate exception:** vec row identity stays model-id-only
-  (`vecRowPk`). Vectors from the same weights are interchangeable
-  regardless of which backend served them — that is the premise
-  relabel rests on, so the triple must not reach vector identity.
+One question opened during review on 2026-07-28 and remains open; the
+target-threading question raised alongside it was resolved the same
+day and its decision is under Implementation notes below.
 
 - **Custom effective dim has no upper bound, and the bound cannot be
   known here.** Canon specifies `1 ≤ N ≤ native_dim`
@@ -290,9 +255,21 @@ Notable deviations and constraints for future slices:
   plus the `data-model.md` settings shape. Settings transitions moved to
   `json_patch` because these writes must also _clear_ a key (a local
   target carries no provider id) and merge-patch deletes on null where
-  `json_set` would write a JSON null the settings Zod rejects. Candidate
-  ids are deduped with local winning, so a model id installed locally
-  _and_ offered by the provider resolves to the local copy.
+  `json_set` would write a JSON null the settings Zod rejects. The target
+  travels whole from the picker to the settings write — `SwapCandidate`
+  carries one, `onReindex` / `onRelabel` hand one back, and
+  `embeddingTargetKey` is the identity everything keys, compares and
+  React-keys on. A model id installed locally _and_ offered by the
+  provider is therefore two selectable rows told apart by a source label,
+  rather than one row with the other copy unreachable; `isCurrent`
+  compares the same triple, so only the variant a story actually runs on
+  is disabled. Relabel's vec identity rewrite stays model-id-scoped — an
+  unchanged id leaves every vector in place — while its settings write is
+  not, so "same model, now served elsewhere" is expressible at all.
+  **The triple deliberately stops short of vec row identity**
+  (`vecRowPk`): vectors from the same weights are interchangeable
+  whichever backend served them, which is the premise relabel rests on,
+  so widening the pk would orphan exactly what relabel exists to keep.
 - **Swap concurrency** — the engine takes resolved inputs and does
   not enforce single-flight; the app-deps layer serializes per
   story and owns the callback guards. `cancelRequested` is a

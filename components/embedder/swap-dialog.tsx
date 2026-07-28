@@ -11,26 +11,31 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-// `backend` (+ `providerId` when it is 'provider') travels with the candidate so
-// the host can name a swap target unambiguously: a model id alone cannot say
-// which backend is meant to serve it, and the two id spaces can collide.
+/**
+ * The whole target travels with the candidate, and the whole target comes back
+ * out. Handing the host a bare model id meant it had to re-resolve which
+ * embedder was meant by looking the id up again — a lookup that cannot succeed
+ * when a model id names two of them.
+ */
 type SwapCandidate = {
-  id: string
+  target: EmbeddingTarget
+  /** Model display name. */
   label: string
+  /** Where this copy is served from — what tells two same-id rows apart. */
+  sourceLabel: string
   isCurrent: boolean
-  backend: 'provider' | 'local'
-  providerId?: string | null
 }
 
 type SwapDialogProps = {
   open: boolean
   candidates: readonly SwapCandidate[]
-  onReindex: (targetModelId: string) => void
+  onReindex: (target: EmbeddingTarget) => void
   onKeep: () => void
-  onRelabel: (targetModelId: string) => void
+  onRelabel: (target: EmbeddingTarget) => void
   onDismiss: () => void
 }
 
@@ -45,14 +50,14 @@ export function SwapDialog({
   onDismiss,
 }: SwapDialogProps) {
   const [stage, setStage] = useState<Stage>('pick')
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
 
   // Reopening must not resurrect a selection from a prior pass at the
   // dialog — the caller may reuse one `open` state across candidates.
   useEffect(() => {
     if (open) {
       setStage('pick')
-      setSelectedId(null)
+      setSelectedKey(null)
     }
   }, [open])
 
@@ -60,25 +65,25 @@ export function SwapDialog({
     if (!next) onDismiss()
   }
 
-  const target = candidates.find((c) => c.id === selectedId) ?? null
+  const selected = candidates.find((c) => embeddingTargetKey(c.target) === selectedKey) ?? null
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent>
-        {stage === 'options' && target != null ? (
+        {stage === 'options' && selected != null ? (
           <OptionsPane
-            target={target}
+            target={selected}
             onBack={() => setStage('pick')}
-            onReindex={() => onReindex(target.id)}
+            onReindex={() => onReindex(selected.target)}
             onKeep={onKeep}
-            onRelabel={() => onRelabel(target.id)}
+            onRelabel={() => onRelabel(selected.target)}
             onDismiss={onDismiss}
           />
         ) : (
           <PickPane
             candidates={candidates}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
+            selectedKey={selectedKey}
+            onSelect={setSelectedKey}
             onNext={() => setStage('options')}
             onDismiss={onDismiss}
           />
@@ -90,13 +95,13 @@ export function SwapDialog({
 
 type PickPaneProps = {
   candidates: readonly SwapCandidate[]
-  selectedId: string | null
-  onSelect: (id: string) => void
+  selectedKey: string | null
+  onSelect: (key: string) => void
   onNext: () => void
   onDismiss: () => void
 }
 
-function PickPane({ candidates, selectedId, onSelect, onNext, onDismiss }: PickPaneProps) {
+function PickPane({ candidates, selectedKey, onSelect, onNext, onDismiss }: PickPaneProps) {
   return (
     <>
       <AlertDialogHeader>
@@ -105,21 +110,24 @@ function PickPane({ candidates, selectedId, onSelect, onNext, onDismiss }: PickP
       </AlertDialogHeader>
 
       <View role="radiogroup" className="gap-2">
-        {candidates.map((candidate) => (
-          <CandidateRow
-            key={candidate.id}
-            candidate={candidate}
-            selected={candidate.id === selectedId}
-            onPress={() => onSelect(candidate.id)}
-          />
-        ))}
+        {candidates.map((candidate) => {
+          const key = embeddingTargetKey(candidate.target)
+          return (
+            <CandidateRow
+              key={key}
+              candidate={candidate}
+              selected={key === selectedKey}
+              onPress={() => onSelect(key)}
+            />
+          )
+        })}
       </View>
 
       <AlertDialogFooter>
         <Button variant="secondary" onPress={onDismiss}>
           <Text>{t('storySettings:swap.cancel')}</Text>
         </Button>
-        <Button variant="primary" onPress={onNext} disabled={selectedId == null}>
+        <Button variant="primary" onPress={onNext} disabled={selectedKey == null}>
           <Text>{t('storySettings:swap.next')}</Text>
         </Button>
       </AlertDialogFooter>
@@ -137,7 +145,7 @@ function CandidateRow({ candidate, selected, onPress }: CandidateRowProps) {
   const disabled = candidate.isCurrent
   return (
     <Pressable
-      testID={`swap-candidate-${candidate.id}`}
+      testID={`swap-candidate-${embeddingTargetKey(candidate.target)}`}
       role="radio"
       accessibilityRole="radio"
       aria-checked={selected}
@@ -165,9 +173,16 @@ function CandidateRow({ candidate, selected, onPress }: CandidateRowProps) {
       >
         {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
       </View>
-      <Text size="sm" className="flex-1 font-medium">
-        {candidate.label}
-      </Text>
+      <View className="flex-1 gap-0.5">
+        <Text size="sm" className="font-medium">
+          {candidate.label}
+        </Text>
+        {/* Load-bearing, not decoration: two rows can share a model id, and this
+            is the only thing distinguishing which embedder they mean. */}
+        <Text size="xs" variant="muted">
+          {candidate.sourceLabel}
+        </Text>
+      </View>
       {candidate.isCurrent ? (
         <Text size="xs" variant="muted">
           {t('storySettings:swap.current')}

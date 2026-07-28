@@ -12,6 +12,27 @@ export type EmbeddingTarget = {
   providerId?: string | null
 }
 
+/**
+ * Stable identity for a target. A model id alone is NOT unique: the same id can
+ * be installed locally and offered by a provider, and the two are different
+ * embedders that happen to share a name. Anything keying, comparing or
+ * de-duplicating targets must go through this rather than `modelId`.
+ *
+ * Provider id participates only for provider targets — a local model is the same
+ * local model whatever provider row happens to be configured alongside it. It
+ * deliberately does NOT reach vec row identity (`vecRowPk`), where vectors from
+ * the same weights stay interchangeable regardless of who served them.
+ */
+export function embeddingTargetKey(target: EmbeddingTarget): string {
+  return target.backend === 'provider'
+    ? `provider:${target.providerId ?? ''}:${target.modelId}`
+    : `local:${target.modelId}`
+}
+
+export function sameEmbeddingTarget(a: EmbeddingTarget, b: EmbeddingTarget): boolean {
+  return embeddingTargetKey(a) === embeddingTargetKey(b)
+}
+
 // json_patch, not json_set: these writes have to CLEAR a key as well as set one
 // (a local target carries no provider id), and merge-patch semantics delete on a
 // null value where json_set would write a JSON null the settings Zod rejects.
