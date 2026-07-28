@@ -183,8 +183,9 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
   // Under one model id the old rows and the staged ones are told apart only by dim
   // family, so the sweep has to spare the family phase 1 wrote into — swapping a
   // story between a provider copy and a local copy of the same model changes the
-  // family without changing the id. With no staged dim (a resume that found
-  // everything already staged) nothing can be safely excluded, so keep it all.
+  // family without changing the id. Same-model staging skips nothing, so a null
+  // staged dim means the story had no embeddable rows and there is nothing to
+  // sweep either.
   let deleteOldOps: SqlOp[] = []
   if (!sameModel) {
     deleteOldOps = deleteBranchModelVecOps(tables, p.branchIds, p.currentModelId)
