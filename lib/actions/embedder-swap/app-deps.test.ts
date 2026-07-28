@@ -23,19 +23,36 @@ import {
 import {
   cancelStorySwap,
   makeCallbackGuards,
+  reindexStoryNow,
   RelabelBlockedError,
   relabelStory,
   resolveDrainConfig,
   resolveStorySwapConfig,
+  resumeStorySwap,
   runExclusive,
   startStorySwap,
   SwapBusyError,
 } from './app-deps'
-import { startSwap } from './engine'
+import {
+  cancelSwap,
+  reindexStory,
+  resumeSwap,
+  startSwap,
+  SwapNotInProgressError,
+  type SwapParams,
+} from './engine'
 
 vi.mock('./engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  return { ...actual, startSwap: vi.fn() }
+  return {
+    ...actual,
+    startSwap: vi.fn(),
+    resumeSwap: vi.fn(),
+    reindexStory: vi.fn(),
+    // Defaults to the real unwind so marker-clearing assertions keep working;
+    // tests that only need the resolved call args override it for one call.
+    cancelSwap: vi.fn(actual.cancelSwap as typeof cancelSwap),
+  }
 })
 
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
@@ -498,5 +515,120 @@ describe('resolveDrainConfig swap guards', () => {
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
 
     expect(resolveDrainConfig('s1')).toEqual({ ok: false, reason: 'no-model' })
+  })
+})
+
+describe('crash recovery resolves its target from the marker', () => {
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    embedderSwapStore.__reset()
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  function captureResume(): { seen: () => SwapParams | undefined } {
+    let params: SwapParams | undefined
+    vi.mocked(resumeSwap).mockImplementation(async (_deps, p) => {
+      params = p
+      return 'completed'
+    })
+    return { seen: () => params }
+  }
+
+  it('resumes a cross-backend swap against the marker backend, not the story backend', async () => {
+    const { ctx } = await seedStores(
+      {
+        ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+        embedding_swap_target: TARGET_MODEL,
+        embedding_swap_backend: 'provider',
+        embedding_swap_provider_id: 'prov1',
+      },
+      [cachedProvider('prov1', [{ id: TARGET_MODEL }])],
+    )
+    const { seen } = captureResume()
+
+    await expect(resumeStorySwap('s1', ctx)).resolves.toBe('completed')
+
+    // The marker is the only record a crash leaves behind. Resolving it against
+    // the story's still-local backend fails as `unknown-local-model`, which wedges
+    // resume AND cancel and leaves the marker disabling every other action.
+    expect(seen()?.targetConfig).toMatchObject({
+      backend: 'provider',
+      providerId: 'prov1',
+      modelId: TARGET_MODEL,
+    })
+    expect(seen()?.currentModelId).toBe(MINILM)
+  })
+
+  it('treats an absent swap backend as the story own backend', async () => {
+    const { ctx } = await seedStores({
+      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      embedding_swap_target: MINILM,
+    })
+    const { seen } = captureResume()
+
+    await expect(resumeStorySwap('s1', ctx)).resolves.toBe('completed')
+
+    // Markers written before cross-backend swaps carry no backend at all; they
+    // have to keep resolving rather than needing a migration.
+    expect(seen()?.targetConfig).toMatchObject({ backend: 'local', modelId: MINILM })
+  })
+
+  it('refuses to resume a story with no marker', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+
+    await expect(resumeStorySwap('s1', ctx)).rejects.toBeInstanceOf(SwapNotInProgressError)
+    expect(resumeSwap).not.toHaveBeenCalled()
+  })
+
+  it('cancels a crash-recovered swap from the marker with no loop running', async () => {
+    const { ctx } = await seedStores(
+      {
+        ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+        embedding_swap_target: TARGET_MODEL,
+        embedding_swap_backend: 'provider',
+        embedding_swap_provider_id: 'prov1',
+      },
+      [cachedProvider('prov1', [{ id: TARGET_MODEL }])],
+    )
+
+    // The real unwind needs a vec0 bridge this layer's tests do not have; the
+    // resolution under test happens before it.
+    vi.mocked(cancelSwap).mockImplementationOnce(async () => {})
+
+    // Resolving the marker against the story's local backend would fail as
+    // `unknown-local-model` and throw SwapConfigError before reaching the unwind,
+    // so getting 'cancelled' at all is half the assertion.
+    await expect(cancelStorySwap('s1', ctx)).resolves.toBe('cancelled')
+
+    expect(vi.mocked(cancelSwap).mock.calls[0][1]).toMatchObject({
+      storyId: 's1',
+      targetModelId: TARGET_MODEL,
+      currentModelId: MINILM,
+    })
+  })
+
+  it('re-indexes on the story own backend, not a bare model id', async () => {
+    const { ctx } = await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
+      [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])],
+    )
+    let params: SwapParams | undefined
+    vi.mocked(reindexStory).mockImplementation(async (_deps, p) => {
+      params = p
+      return 'completed'
+    })
+
+    await expect(reindexStoryNow('s1', ctx)).resolves.toBe('completed')
+
+    // Dropping the backend here resolves a provider model as a local one.
+    expect(params?.targetConfig).toMatchObject({
+      backend: 'provider',
+      providerId: 'prov1',
+      modelId: PROVIDER_MODEL,
+    })
   })
 })
