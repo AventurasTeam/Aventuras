@@ -40,6 +40,7 @@ const candidates: SwapCandidate[] = [
 
 const handlers = {
   onReindex: fn(),
+  onTargetSelected: fn(),
   onKeep: fn(),
   onRelabel: fn(),
   onDismiss: fn(),
@@ -81,6 +82,20 @@ export const OptionsPane: Story = {
     await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
     await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeInTheDocument())
     expect(screen.getByText('Switch to BGE-small-en-v1.5')).toBeInTheDocument()
+  },
+}
+
+export const SelectionAnnouncesWholeTarget: Story = {
+  args: { open: true, candidates, ...handlers },
+  play: async ({ args }) => {
+    await userEvent.click(
+      screen.getByTestId('swap-candidate-provider:prov-openai-compat:text-embedding-3-small'),
+    )
+    expect(args.onTargetSelected).toHaveBeenCalledWith({
+      modelId: 'text-embedding-3-small',
+      backend: 'provider',
+      providerId: 'prov-openai-compat',
+    })
   },
 }
 

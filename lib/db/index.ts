@@ -62,8 +62,10 @@ export {
   embeddingTargetKey,
   sameEmbeddingTarget,
   setEmbeddingTargetOp,
+  setSwapTargetDimOp,
   setSwapTargetOp,
   type EmbeddingTarget,
+  type SwapDimensions,
 } from './stories/settings-ops'
 export {
   appearanceSchema,

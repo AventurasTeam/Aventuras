@@ -9,6 +9,7 @@ import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-install
 import {
   cancelStorySwap,
   countStoryEmbeddableRows,
+  ensureProviderEmbeddingDim,
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,
@@ -158,6 +159,28 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     [storyId],
   )
 
+  const ensureTargetDimension = useCallback(async (target: EmbeddingTarget) => {
+    if (target.backend !== 'provider' || target.providerId == null) return
+    const result = await ensureProviderEmbeddingDim(
+      { providerId: target.providerId, modelId: target.modelId },
+      { db },
+    )
+    if (!result.ok) throw new Error(result.message)
+  }, [])
+
+  const handleTargetSelected = useCallback(
+    (target: EmbeddingTarget) => {
+      void ensureTargetDimension(target).catch((error: unknown) => {
+        logger.warn('embedder.swap_target_dim_probe_failed', {
+          storyId,
+          modelId: target.modelId,
+          error: messageOf(error),
+        })
+      })
+    },
+    [storyId, ensureTargetDimension],
+  )
+
   const openReindexConfirm = useCallback(() => {
     setReindexRowCount(null)
     setReindexConfirmOpen(true)
@@ -169,13 +192,14 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
   const handleReindexNow = useCallback(async () => {
     setReindexConfirmOpen(false)
     try {
+      await ensureTargetDimension(storyTarget)
       await reindexStoryNow(storyId, ctx)
     } catch (error) {
       reportEngineFailure('reindex_now', error)
     } finally {
       void refreshEmbeddingStatus(storyId)
     }
-  }, [storyId, reportEngineFailure])
+  }, [storyId, storyTarget, reportEngineFailure, ensureTargetDimension])
 
   const handleCancelProgress = useCallback(() => {
     embedderSwapStore.requestCancel(storyId)
@@ -185,6 +209,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     async (target: EmbeddingTarget) => {
       embedderSwapStore.closeDialog()
       try {
+        await ensureTargetDimension(target)
         await startStorySwap(storyId, target, ctx)
       } catch (error) {
         reportEngineFailure('swap_start', error)
@@ -192,7 +217,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure],
+    [storyId, reportEngineFailure, ensureTargetDimension],
   )
 
   const handleKeep = useCallback(() => {
@@ -205,6 +230,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     async (target: EmbeddingTarget) => {
       embedderSwapStore.closeDialog()
       try {
+        await ensureTargetDimension(target)
         await relabelStory(storyId, target, ctx)
       } catch (error) {
         if (error instanceof RelabelBlockedError)
@@ -216,7 +242,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure],
+    [storyId, reportEngineFailure, ensureTargetDimension],
   )
 
   const handleDismissDialog = useCallback(() => {
@@ -313,6 +339,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       <SwapDialog
         open={dialogOpen}
         candidates={candidates}
+        onTargetSelected={handleTargetSelected}
         onReindex={(target) => void handleReindexTarget(target)}
         onKeep={handleKeep}
         onRelabel={(target) => void handleRelabel(target)}

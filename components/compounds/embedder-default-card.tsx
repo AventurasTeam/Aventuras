@@ -6,7 +6,11 @@ import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
-import { setEmbedderDefaults } from '@/lib/actions'
+import {
+  ensureProviderEmbeddingDim,
+  probeProviderEmbeddingDim,
+  setEmbedderDefaults,
+} from '@/lib/actions'
 import { db } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { getCatalogEntry, testEmbedder, type EmbedderConfig } from '@/lib/embedder'
@@ -133,20 +137,41 @@ export function EmbedderDefaultCard({
     })
   }, [])
 
-  const persistProvider = useCallback((providerId: string, modelId: string) => {
-    void setEmbedderDefaults(
-      {
-        backend: 'provider',
-        modelId: modelId.trim() === '' ? null : modelId.trim(),
-        providerId: providerId === '' ? null : providerId,
-      },
-      { db },
-    ).catch((e: unknown) => {
-      logger.error('embedder.default_save_failed', {
-        error: e instanceof Error ? e.message : String(e),
-      })
-    })
-  }, [])
+  const persistProvider = useCallback(
+    async (providerId: string, modelId: string) => {
+      const normalizedModelId = modelId.trim()
+      try {
+        await setEmbedderDefaults(
+          {
+            backend: 'provider',
+            modelId: normalizedModelId === '' ? null : normalizedModelId,
+            providerId: providerId === '' ? null : providerId,
+          },
+          { db },
+        )
+        if (providerId !== '' && normalizedModelId !== '') {
+          const result = await ensureProviderEmbeddingDim(
+            { providerId, modelId: normalizedModelId },
+            { db },
+            runTest,
+          )
+          if (!result.ok) {
+            logger.warn('embedder.default_dim_probe_failed', {
+              providerId,
+              modelId: normalizedModelId,
+              kind: result.kind,
+              error: result.message,
+            })
+          }
+        }
+      } catch (e: unknown) {
+        logger.error('embedder.default_save_failed', {
+          error: e instanceof Error ? e.message : String(e),
+        })
+      }
+    },
+    [runTest],
+  )
 
   const onBackendChange = (next: string) => {
     if (next !== 'local' && next !== 'provider') return
@@ -156,22 +181,22 @@ export function EmbedderDefaultCard({
       const firstProviderId = providerOptions[0]?.value ?? ''
       setProviderIdDraft(firstProviderId)
       setModelIdDraft('')
-      persistProvider(firstProviderId, '')
+      void persistProvider(firstProviderId, '')
     }
   }
 
   const onProviderChange = (nextProviderId: string) => {
     setProviderIdDraft(nextProviderId)
-    persistProvider(nextProviderId, modelIdDraft)
+    void persistProvider(nextProviderId, modelIdDraft)
   }
 
   const onProviderModelPick = (nextModelId: string) => {
     setModelIdDraft(nextModelId)
-    persistProvider(providerIdDraft, nextModelId)
+    void persistProvider(providerIdDraft, nextModelId)
   }
 
   const onModelIdBlur = () => {
-    persistProvider(providerIdDraft, modelIdDraft)
+    void persistProvider(providerIdDraft, modelIdDraft)
   }
 
   const onTest = useCallback(async () => {
@@ -186,24 +211,21 @@ export function EmbedderDefaultCard({
       setTestState(result)
       return
     }
-    const provider = providers.find((p) => p.id === providerIdDraft)
-    const result = await runTest(
-      // null, not 0: a probe is exactly the call that discovers the dim, and 0
-      // sits in the same numeric slot as a real one, so the service's
-      // dim-mismatch guard would reject every response. Truncation is null for
-      // the same reason — a probe must report the model's native dim, not a
-      // story's locked one.
-      {
-        backend: 'provider',
-        providerId: providerIdDraft,
-        modelId: modelIdDraft,
-        dim: null,
-        truncation: null,
-      },
-      provider,
-    )
-    setTestState(result)
-  }, [backend, embeddingModelId, runTest, providers, providerIdDraft, modelIdDraft])
+    try {
+      const result = await probeProviderEmbeddingDim(
+        { providerId: providerIdDraft, modelId: modelIdDraft },
+        { db },
+        runTest,
+      )
+      setTestState(result)
+    } catch (error) {
+      setTestState({
+        ok: false,
+        kind: 'init',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [backend, embeddingModelId, runTest, providerIdDraft, modelIdDraft])
 
   const backendOptions: SelectOption[] = [
     { value: 'local', label: t('settings:embedderDefault.backendLocal') },

@@ -33,6 +33,7 @@ type SwapDialogProps = {
   open: boolean
   candidates: readonly SwapCandidate[]
   onReindex: (target: EmbeddingTarget) => void
+  onTargetSelected?: (target: EmbeddingTarget) => void
   onKeep: () => void
   onRelabel: (target: EmbeddingTarget) => void
   onDismiss: () => void
@@ -44,6 +45,7 @@ export function SwapDialog({
   open,
   candidates,
   onReindex,
+  onTargetSelected,
   onKeep,
   onRelabel,
   onDismiss,
@@ -65,6 +67,11 @@ export function SwapDialog({
   }
 
   const selected = candidates.find((c) => embeddingTargetKey(c.target) === selectedKey) ?? null
+  const selectTarget = (key: string) => {
+    setSelectedKey(key)
+    const candidate = candidates.find((item) => embeddingTargetKey(item.target) === key)
+    if (candidate != null) onTargetSelected?.(candidate.target)
+  }
 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
@@ -82,7 +89,7 @@ export function SwapDialog({
           <PickPane
             candidates={candidates}
             selectedKey={selectedKey}
-            onSelect={setSelectedKey}
+            onSelect={selectTarget}
             onNext={() => setStage('options')}
             onDismiss={onDismiss}
           />

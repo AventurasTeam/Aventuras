@@ -185,8 +185,11 @@ export function resolveStorySwapConfig(
       embedding_provider_id: providerId ?? undefined,
     },
     appEmbedderDefaults(app),
-    caps?.matryoshkaSupported != null
-      ? { matryoshkaSupported: caps.matryoshkaSupported }
+    caps != null
+      ? {
+          providerDim: caps.embeddingDim,
+          matryoshkaSupported: caps.matryoshkaSupported,
+        }
       : undefined,
   )
 }
@@ -344,6 +347,8 @@ async function runStagingSwap(
         // resume and re-index read the same value the flip will replace.
         currentModelId: settings.embedding_model_id,
         currentSwapTarget: settings.embedding_swap_target ?? null,
+        sourceDim: settings.embedding_swap_source_dim,
+        targetDim: settings.embedding_swap_target_dim,
         targetConfig: resolution.config,
       })
     } finally {
@@ -428,6 +433,8 @@ export async function cancelStorySwap(
         branchIds,
         targetModelId: target.modelId,
         currentModelId: settings.embedding_model_id,
+        sourceDim: settings.embedding_swap_source_dim,
+        targetDim: settings.embedding_swap_target_dim,
       })
       return 'cancelled'
     } finally {
@@ -444,7 +451,10 @@ export async function cancelStorySwap(
  * target is native — unknowable until it responds.
  */
 function targetReadDim(config: EmbedderConfig): number | null {
-  return config.backend === 'local' ? config.dim : (config.truncation?.effectiveDim ?? config.dim)
+  if (config.backend === 'local' || config.truncation == null) return config.dim
+  return config.dim == null
+    ? config.truncation.effectiveDim
+    : Math.min(config.truncation.effectiveDim, config.dim)
 }
 
 export async function relabelStory(

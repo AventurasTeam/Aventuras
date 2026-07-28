@@ -66,15 +66,17 @@ export async function finishWizard(
   // the app default swapped to a non-Matryoshka model/backend mid-session, the
   // hidden disclosure can't clear the stale pick, so drop it to native (canon:
   // the flag governs new-story creation) rather than committing/validating it.
-  const matryoshkaApplicable =
+  const embeddingCapabilities =
     appDefaults.defaultStorySettings.embeddingBackend === 'provider' &&
     appDefaults.embeddingProviderId != null &&
-    appDefaults.embeddingModelId != null &&
-    resolveModelCapabilities(
-      appDefaults.embeddingProviderId,
-      appDefaults.embeddingModelId,
-      appDefaults.providers,
-    )?.matryoshkaSupported === true
+    appDefaults.embeddingModelId != null
+      ? resolveModelCapabilities(
+          appDefaults.embeddingProviderId,
+          appDefaults.embeddingModelId,
+          appDefaults.providers,
+        )
+      : undefined
+  const matryoshkaApplicable = embeddingCapabilities?.matryoshkaSupported === true
   const effectiveDim = matryoshkaApplicable ? s.effectiveDim : null
   // Backstop: the disclosure keeps only valid dims (or null), but a corrupt
   // working state must never commit a dim that truncates vectors to garbage.
@@ -140,7 +142,10 @@ export async function finishWizard(
       embeddingProviderId: appDefaults.embeddingProviderId,
       defaultStorySettings: appDefaults.defaultStorySettings,
     },
-    { matryoshkaSupported: matryoshkaApplicable },
+    {
+      providerDim: embeddingCapabilities?.embeddingDim,
+      matryoshkaSupported: matryoshkaApplicable,
+    },
   )
   if (!embedResolution.ok) {
     const reason =

@@ -54,6 +54,35 @@ export async function updateProvider(
   await persistConfig(ctx, { providers: next })
 }
 
+export async function recordProviderEmbeddingDim(
+  providerId: string,
+  modelId: string,
+  embeddingDim: number,
+  ctx: SettingsActionCtx,
+): Promise<void> {
+  if (!Number.isInteger(embeddingDim) || embeddingDim < 1) {
+    throw new Error(`Invalid embedding dimension: ${embeddingDim}`)
+  }
+  const provider = appSettingsStore.getAppSettings().providers.find((p) => p.id === providerId)
+  if (provider == null) throw new Error(`Provider with id "${providerId}" not found`)
+
+  const cachedModels = [...(provider.cachedModels ?? [])]
+  const index = cachedModels.findIndex((model) => model.id === modelId)
+  const existing = index >= 0 ? cachedModels[index] : { id: modelId }
+  const next = {
+    ...existing,
+    capabilities: {
+      ...existing.capabilities,
+      embedding: true,
+      embeddingDim,
+    },
+  }
+  if (index >= 0) cachedModels[index] = next
+  else cachedModels.push(next)
+
+  await updateProvider(providerId, { cachedModels }, ctx)
+}
+
 export async function setDefaultProvider(id: string | null, ctx: SettingsActionCtx): Promise<void> {
   await persistConfig(ctx, { defaultProviderId: id })
 }

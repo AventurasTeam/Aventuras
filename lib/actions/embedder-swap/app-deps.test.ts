@@ -185,7 +185,10 @@ const TARGET_MODEL = 'text-embedding-3-large'
 
 function cachedProvider(
   id: string,
-  models: { id: string; capabilities?: { matryoshkaSupported?: boolean } }[],
+  models: {
+    id: string
+    capabilities?: { matryoshkaSupported?: boolean; embeddingDim?: number }
+  }[],
 ): ProviderInstance {
   return {
     id,
@@ -309,6 +312,34 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
     expect(resolution).toMatchObject({
       ok: true,
       config: { truncation: { effectiveDim: 512, serverSide: false } },
+    })
+  })
+
+  it('threads the probed provider native dimension into the resolved target config', async () => {
+    await seedStores(
+      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 2048),
+      [
+        cachedProvider('prov1', [
+          {
+            id: TARGET_MODEL,
+            capabilities: { embeddingDim: 1536, matryoshkaSupported: false },
+          },
+        ]),
+      ],
+    )
+
+    const resolution = resolveStorySwapConfig('s1', {
+      modelId: TARGET_MODEL,
+      backend: 'provider',
+      providerId: 'prov1',
+    })
+
+    expect(resolution).toMatchObject({
+      ok: true,
+      config: {
+        dim: 1536,
+        truncation: { effectiveDim: 2048, serverSide: false },
+      },
     })
   })
 
@@ -572,6 +603,22 @@ describe('crash recovery resolves its target from the marker', () => {
       modelId: TARGET_MODEL,
     })
     expect(seen()?.currentModelId).toBe(MINILM)
+    expect(seen()?.sourceDim).toBeUndefined()
+    expect(seen()?.targetDim).toBeUndefined()
+  })
+
+  it('threads persisted swap dimensions into resume parameters', async () => {
+    const { ctx } = await seedStores({
+      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      embedding_swap_target: MINILM,
+      embedding_swap_source_dim: 384,
+      embedding_swap_target_dim: 768,
+    })
+    const { seen } = captureResume()
+
+    await expect(resumeStorySwap('s1', ctx)).resolves.toBe('completed')
+
+    expect(seen()).toMatchObject({ sourceDim: 384, targetDim: 768 })
   })
 
   it('treats an absent swap backend as the story own backend', async () => {
@@ -604,6 +651,8 @@ describe('crash recovery resolves its target from the marker', () => {
         embedding_swap_target: TARGET_MODEL,
         embedding_swap_backend: 'provider',
         embedding_swap_provider_id: 'prov1',
+        embedding_swap_source_dim: 384,
+        embedding_swap_target_dim: 1536,
       },
       [cachedProvider('prov1', [{ id: TARGET_MODEL }])],
     )
@@ -621,6 +670,8 @@ describe('crash recovery resolves its target from the marker', () => {
       storyId: 's1',
       targetModelId: TARGET_MODEL,
       currentModelId: MINILM,
+      sourceDim: 384,
+      targetDim: 1536,
     })
   })
 

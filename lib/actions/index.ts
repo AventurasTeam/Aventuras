@@ -35,8 +35,11 @@ export { type RedoSnapshot } from './delta/redo'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
 export {
   addProvider,
+  ensureProviderEmbeddingDim,
   normalizeAppSettingsRow,
+  probeProviderEmbeddingDim,
   quickWireModel,
+  recordProviderEmbeddingDim,
   resetAppSettings,
   setAppearanceThemeId,
   setAssignments,

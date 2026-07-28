@@ -88,9 +88,13 @@ describe('story settings ops', () => {
   }
 
   it('setSwapTargetOp writes the marker and preserves sibling keys', async () => {
-    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
+    await runInTransaction([
+      setSwapTargetOp('s1', LOCAL_TARGET, NOW, { sourceDim: 384, targetDim: 768 }),
+    ])
     const settings = readSettings('s1')
     expect(settings.embedding_swap_target).toBe('new-model')
+    expect(settings.embedding_swap_source_dim).toBe(384)
+    expect(settings.embedding_swap_target_dim).toBe(768)
     expect(settings.embedding_model_id).toBe('old-model')
   })
 
@@ -121,13 +125,17 @@ describe('story settings ops', () => {
     expect(settings.embedding_swap_backend).toBe('local')
   })
 
-  it('clearSwapTargetOp removes all three marker keys', async () => {
-    await runInTransaction([setSwapTargetOp('s1', PROVIDER_TARGET, NOW)])
+  it('clearSwapTargetOp removes every marker key, including source and target dimensions', async () => {
+    await runInTransaction([
+      setSwapTargetOp('s1', PROVIDER_TARGET, NOW, { sourceDim: 384, targetDim: 1536 }),
+    ])
     await runInTransaction([clearSwapTargetOp('s1', NOW)])
     const settings = readSettings('s1')
     expect('embedding_swap_target' in settings).toBe(false)
     expect('embedding_swap_backend' in settings).toBe(false)
     expect('embedding_swap_provider_id' in settings).toBe(false)
+    expect('embedding_swap_source_dim' in settings).toBe(false)
+    expect('embedding_swap_target_dim' in settings).toBe(false)
   })
 
   it('setEmbeddingTargetOp flips backend and provider id with the model', async () => {

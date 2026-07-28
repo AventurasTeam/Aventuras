@@ -33,6 +33,11 @@ export function sameEmbeddingTarget(a: EmbeddingTarget, b: EmbeddingTarget): boo
   return embeddingTargetKey(a) === embeddingTargetKey(b)
 }
 
+export type SwapDimensions = {
+  sourceDim?: number | null
+  targetDim?: number | null
+}
+
 // json_patch, not json_set: these writes have to CLEAR a key as well as set one
 // (a local target carries no provider id), and merge-patch semantics delete on a
 // null value where json_set would write a JSON null the settings Zod rejects.
@@ -46,16 +51,27 @@ function patchSettingsOp(storyId: string, patch: Record<string, unknown>, nowMs:
   }
 }
 
-export function setSwapTargetOp(storyId: string, target: EmbeddingTarget, nowMs: number): SqlOp {
+export function setSwapTargetOp(
+  storyId: string,
+  target: EmbeddingTarget,
+  nowMs: number,
+  dimensions: SwapDimensions = {},
+): SqlOp {
   return patchSettingsOp(
     storyId,
     {
       embedding_swap_target: target.modelId,
       embedding_swap_backend: target.backend,
       embedding_swap_provider_id: target.providerId ?? null,
+      embedding_swap_source_dim: dimensions.sourceDim ?? null,
+      embedding_swap_target_dim: dimensions.targetDim ?? null,
     },
     nowMs,
   )
+}
+
+export function setSwapTargetDimOp(storyId: string, targetDim: number, nowMs: number): SqlOp {
+  return patchSettingsOp(storyId, { embedding_swap_target_dim: targetDim }, nowMs)
 }
 
 export function clearSwapTargetOp(storyId: string, nowMs: number): SqlOp {
@@ -65,6 +81,8 @@ export function clearSwapTargetOp(storyId: string, nowMs: number): SqlOp {
       embedding_swap_target: null,
       embedding_swap_backend: null,
       embedding_swap_provider_id: null,
+      embedding_swap_source_dim: null,
+      embedding_swap_target_dim: null,
     },
     nowMs,
   )

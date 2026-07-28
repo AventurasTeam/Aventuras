@@ -87,6 +87,8 @@ export const storySettingsSchema = z.object({
   // before cross-backend swaps existed also means.
   embedding_swap_backend: z.enum(['provider', 'local']).optional(),
   embedding_swap_provider_id: z.string().optional(),
+  embedding_swap_source_dim: z.number().int().positive().optional(),
+  embedding_swap_target_dim: z.number().int().positive().optional(),
   embedding_provider_id: z.string().optional(),
   retrievalBudgets: retrievalBudgetsSchema,
   effectiveDim: z.number().int().positive().optional(),

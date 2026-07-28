@@ -109,7 +109,13 @@ function makeDeps(
   return { deps, runSpy }
 }
 
-type SeedOpts = { extraEntities?: number; settingsNull?: boolean; markerTarget?: string | null }
+type SeedOpts = {
+  extraEntities?: number
+  settingsNull?: boolean
+  markerTarget?: string | null
+  markerSourceDim?: number
+  markerTargetDim?: number
+}
 
 async function setup(opts: SeedOpts = {}) {
   const { sqlite, runInTransaction } = await createTestDb()
@@ -120,6 +126,8 @@ async function setup(opts: SeedOpts = {}) {
     : JSON.stringify({
         embedding_model_id: OLD,
         ...(opts.markerTarget ? { embedding_swap_target: opts.markerTarget } : {}),
+        ...(opts.markerSourceDim ? { embedding_swap_source_dim: opts.markerSourceDim } : {}),
+        ...(opts.markerTargetDim ? { embedding_swap_target_dim: opts.markerTargetDim } : {}),
       })
   sqlite
     .prepare(
@@ -192,7 +200,12 @@ async function setup(opts: SeedOpts = {}) {
   return { sqlite, runInTransaction, embedded }
 }
 
-function seedOldVectors(sqlite: DatabaseSync, rows: EmbeddedFieldRow[], modelId = OLD): void {
+function seedVectors(
+  sqlite: DatabaseSync,
+  rows: EmbeddedFieldRow[],
+  modelId: string,
+  dim: number,
+): void {
   sqlite.exec('BEGIN')
   try {
     rows.forEach((row, i) => {
@@ -202,9 +215,9 @@ function seedOldVectors(sqlite: DatabaseSync, rows: EmbeddedFieldRow[], modelId 
         id: row.id,
         branchId: row.branchId,
         modelId,
-        dim: DIM,
+        dim,
         sourceHash: sourceHash(composite),
-        vector: fakeVec(DIM, i),
+        vector: fakeVec(dim, i),
       })) {
         sqlite.prepare(op.sql).run(...(op.params as SQLInputValue[]))
       }
@@ -214,6 +227,19 @@ function seedOldVectors(sqlite: DatabaseSync, rows: EmbeddedFieldRow[], modelId 
     sqlite.exec('ROLLBACK')
     throw err
   }
+}
+
+function seedOldVectors(sqlite: DatabaseSync, rows: EmbeddedFieldRow[], modelId = OLD): void {
+  seedVectors(sqlite, rows, modelId, DIM)
+}
+
+function seedDimVectors(
+  sqlite: DatabaseSync,
+  rows: EmbeddedFieldRow[],
+  modelId: string,
+  dim: number,
+): void {
+  seedVectors(sqlite, rows, modelId, dim)
 }
 
 // --- assertion helpers -----------------------------------------------------
@@ -353,6 +379,8 @@ describe('embedder-swap engine', () => {
       embedding_swap_target: NEW,
       embedding_swap_backend: 'provider',
       embedding_swap_provider_id: 'prov1',
+      embedding_swap_source_dim: 384,
+      embedding_swap_target_dim: 384,
     })
   })
 
@@ -396,6 +424,8 @@ describe('embedder-swap engine', () => {
       embedding_swap_target: NEW,
       embedding_swap_backend: 'local',
       embedding_swap_provider_id: null,
+      embedding_swap_source_dim: 384,
+      embedding_swap_target_dim: 384,
     })
   })
 
@@ -603,7 +633,80 @@ describe('embedder-swap engine', () => {
     expect(ops.filter((op) => op.sql.includes('embedding_stale = 1'))).toHaveLength(5)
   })
 
-  it('5c. cancel during the FINAL batch still unwinds instead of flipping', async () => {
+  it('5d. live same-model cross-dimension cancel removes staged family and restores source truth', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup({ extraEntities: 20 })
+    seedOldVectors(sqlite, embedded)
+    // The old 384-dim vector for e2 is stale before phase 1. Staging at 768 clears
+    // the source flag, so cancellation must derive it again from the preserved
+    // 384 family rather than treating this as an in-place same-model re-index.
+    sqlite.prepare('UPDATE entities SET description = ? WHERE id = ?').run('Rewritten', 'e2')
+    let checks = 0
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, fn, {
+      isCancelRequested: () => {
+        checks += 1
+        return checks > 1
+      },
+    })
+
+    const result = await startSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      sourceDim: 384,
+      targetDim: 768,
+      targetConfig: cfg(OLD, 768),
+    })
+
+    expect(result).toBe('cancelled')
+    expect(idsForModel(sqlite, 'entities_vec_768', OLD)).toEqual([])
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(
+      embedded
+        .filter((row) => row.kind === 'entity')
+        .map((row) => row.id)
+        .sort(),
+    )
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
+    expect(staleFlag(sqlite, 'entities', 'e2')).toBe(1)
+    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+  })
+
+  it('5e. crash-recovered same-model cross-dimension cancel unwinds only the target family', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup({
+      markerTarget: OLD,
+      markerSourceDim: 384,
+      markerTargetDim: 768,
+    })
+    seedOldVectors(sqlite, embedded)
+    const staged = embedded.filter((row) => ['e1', 'e2', 'l1'].includes(row.id))
+    await ensureVecTables(768, async (sql) => sqlite.exec(sql))
+    seedDimVectors(sqlite, staged, OLD, 768)
+    sqlite.prepare('UPDATE entities SET description = ? WHERE id = ?').run('Rewritten', 'e2')
+    const { fn } = makeEmbedRows(sqlite)
+    const { deps } = makeDeps(sqlite, runInTransaction, fn)
+
+    await cancelSwap(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      targetModelId: OLD,
+      currentModelId: OLD,
+      sourceDim: 384,
+      targetDim: 768,
+    })
+
+    expect(idsForModel(sqlite, 'entities_vec_768', OLD)).toEqual([])
+    expect(idsForModel(sqlite, 'lore_vec_768', OLD)).toEqual([])
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
+    expect(staleFlag(sqlite, 'entities', 'e2')).toBe(1)
+    const settings = storySettings(sqlite)
+    expect(settings?.embedding_swap_target).toBeUndefined()
+    expect(settings?.embedding_swap_source_dim).toBeUndefined()
+    expect(settings?.embedding_swap_target_dim).toBeUndefined()
+  })
+
+  it('5f. cancel during the FINAL batch still unwinds instead of flipping', async () => {
     const { sqlite, runInTransaction, embedded } = await setup()
     seedOldVectors(sqlite, embedded)
     const { fn } = makeEmbedRows(sqlite)

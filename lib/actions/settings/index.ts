@@ -1,9 +1,17 @@
 export { setAppearanceThemeId } from './appearance'
 export { setDebugLevelEnabled, setDiagnosticsEnabled } from './diagnostics'
-export { setEmbedderDefaults } from './embedder'
+export {
+  ensureProviderEmbeddingDim,
+  probeProviderEmbeddingDim,
+  setEmbedderDefaults,
+  type ProviderEmbeddingDimInput,
+  type ProviderEmbeddingDimResult,
+  type RunEmbedderProbe,
+} from './embedder'
 export {
   addProvider,
   quickWireModel,
+  recordProviderEmbeddingDim,
   setAssignments,
   setDefaultProvider,
   updateProvider,

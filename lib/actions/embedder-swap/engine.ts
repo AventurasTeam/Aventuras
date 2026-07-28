@@ -9,6 +9,7 @@ import {
   isVecFamilyTable,
   recomputeStaleOps,
   setEmbeddingTargetOp,
+  setSwapTargetDimOp,
   setSwapTargetOp,
   SOURCE_TABLES,
   toEmbeddedFieldRow,
@@ -51,6 +52,10 @@ export type SwapParams = {
   currentModelId: string
   /** `null` = no swap in flight. */
   currentSwapTarget: string | null
+  /** Storage family the story reads before the flip. */
+  sourceDim?: number | null
+  /** Storage family phase 1 is expected to write; the embed response remains authoritative. */
+  targetDim?: number | null
   targetConfig: EmbedderConfig
 }
 
@@ -114,12 +119,35 @@ function targetOf(config: EmbedderConfig): EmbeddingTarget {
     : { modelId: config.modelId, backend: 'local' }
 }
 
+function configStorageDim(config: EmbedderConfig): number | null {
+  if (config.backend === 'local') return config.dim
+  if (config.dim == null) return null
+  return config.truncation == null
+    ? config.dim
+    : Math.min(config.truncation.effectiveDim, config.dim)
+}
+
+async function inferSourceDim(deps: SwapDeps, p: SwapParams): Promise<number | null> {
+  if (p.sourceDim != null) return p.sourceDim
+  const dims = await findVecDims(
+    await deps.listVecTables(),
+    p.branchIds,
+    p.currentModelId,
+    deps.queryAll,
+  )
+  return dims.length === 1 ? dims[0] : null
+}
+
 export async function startSwap(deps: SwapDeps, p: SwapParams): Promise<'completed' | 'cancelled'> {
   if (p.currentSwapTarget != null) throw new SwapInProgressError(p.storyId, p.currentSwapTarget)
+  const sourceDim = await inferSourceDim(deps, p)
+  const targetDim = p.targetDim ?? configStorageDim(p.targetConfig)
   // The marker is committed in its own transaction BEFORE phase 1 — from here on
   // it is the crash-recovery source of truth for "swap in flight, expect NEW rows".
-  await deps.runInTransaction([setSwapTargetOp(p.storyId, targetOf(p.targetConfig), deps.now())])
-  return runPhases(deps, p)
+  await deps.runInTransaction([
+    setSwapTargetOp(p.storyId, targetOf(p.targetConfig), deps.now(), { sourceDim, targetDim }),
+  ])
+  return runPhases(deps, { ...p, sourceDim, targetDim })
 }
 
 export async function resumeSwap(
@@ -146,7 +174,8 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
 
   // The dim phase 1 actually wrote at, which the served vector decides — not the
   // declared effectiveDim, which the service clamps to native.
-  let stagedDim: number | null = null
+  let stagedDim: number | null = p.targetDim ?? configStorageDim(p.targetConfig)
+  let persistedTargetDim: number | null = p.targetDim ?? null
 
   const rows = await loadAllRows(deps, p.branchIds)
   // Same-model re-index: stagedIds can't tell a pre-existing vector from a freshly
@@ -166,6 +195,8 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
         branchIds: p.branchIds,
         targetModelId,
         currentModelId: p.currentModelId,
+        sourceDim: p.sourceDim,
+        targetDim: stagedDim,
         unprocessed: pending.slice(i),
       })
       return 'cancelled'
@@ -177,7 +208,12 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
     // model id until phase 2; same-model, upserts replace them in place as they go.
     const { ops, dim } = await deps.embedRows(p.targetConfig, batch)
     stagedDim = dim ?? stagedDim
-    await deps.runInTransaction(ops)
+    const dimensionOps =
+      dim != null && dim !== persistedTargetDim
+        ? [setSwapTargetDimOp(p.storyId, dim, deps.now())]
+        : []
+    await deps.runInTransaction([...ops, ...dimensionOps])
+    if (dim != null) persistedTargetDim = dim
     done += batch.length
     deps.onProgress(done, total)
   }
@@ -190,6 +226,8 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
       branchIds: p.branchIds,
       targetModelId,
       currentModelId: p.currentModelId,
+      sourceDim: p.sourceDim,
+      targetDim: stagedDim,
     })
     return 'cancelled'
   }
@@ -232,28 +270,45 @@ export async function cancelSwap(
     branchIds,
     targetModelId,
     currentModelId,
+    sourceDim,
+    targetDim,
     unprocessed,
   }: {
     storyId: string
     branchIds: readonly string[]
     targetModelId: string
     currentModelId: string
+    sourceDim?: number | null
+    targetDim?: number | null
     /** Rows the live run had not re-embedded yet. Absent for a crash-recovered cancel. */
     unprocessed?: readonly StaleTargetRow[]
   },
 ): Promise<void> {
   const sameModel = targetModelId === currentModelId
-  // Same-model re-index stages in place, so the "staged NEW rows" a cancel unwinds
-  // ARE the story's only vectors — deleting them wipes the vector space rather than
-  // restoring it. Mirrors the phase-2 old-model delete skip.
-  const deleteStagedOps = sameModel
-    ? []
-    : deleteBranchModelVecOps(await deps.listVecTables(), branchIds, targetModelId)
+  const crossDimension =
+    sameModel && sourceDim != null && targetDim != null && sourceDim !== targetDim
+  const tables =
+    branchIds.length > 0 && (!sameModel || crossDimension) ? await deps.listVecTables() : []
+  const targetTables =
+    crossDimension && targetDim != null
+      ? tables.filter((table) => dimFamilyTables(targetDim).includes(table))
+      : tables
+  // A same-model/same-dimension re-index stages in place, so those rows are the
+  // story's only vectors. A known cross-dimension run is different: its target
+  // family is disposable staging and the source family remains the rollback copy.
+  const deleteStagedOps =
+    sameModel && !crossDimension
+      ? []
+      : deleteBranchModelVecOps(targetTables, branchIds, targetModelId)
   const staleOps = await cancelStaleOps(deps, {
     branchIds,
     targetModelId,
     currentModelId,
     sameModel,
+    crossDimension,
+    sourceDim,
+    targetDim,
+    tables,
     unprocessed,
   })
   await deps.runInTransaction([
@@ -350,13 +405,14 @@ async function stagedRows(
   deps: SwapDeps,
   branchIds: readonly string[],
   modelId: string,
+  tableNames?: readonly string[],
 ): Promise<StaleTargetRow[]> {
   const out: StaleTargetRow[] = []
   if (branchIds.length === 0) return out
 
   // familyTablesFor screens out the vec0 shadow tables (`_info`, `_chunks`, …)
   // that listVecTables returns, which reject or mis-serve these queries.
-  const tables = await deps.listVecTables()
+  const tables = tableNames ?? (await deps.listVecTables())
   const ph = branchIds.map(() => '?').join(', ')
   for (const kind of Object.keys(VEC_FAMILIES) as VecTargetKind[]) {
     for (const table of familyTablesFor(kind, tables)) {
@@ -375,8 +431,9 @@ async function stagedIds(
   deps: SwapDeps,
   branchIds: readonly string[],
   modelId: string,
+  tableNames?: readonly string[],
 ): Promise<Set<string>> {
-  const rows = await stagedRows(deps, branchIds, modelId)
+  const rows = await stagedRows(deps, branchIds, modelId, tableNames)
   return new Set(rows.map((row) => `${row.branchId}:${row.id}`))
 }
 
@@ -420,22 +477,39 @@ async function cancelStaleOps(
     targetModelId,
     currentModelId,
     sameModel,
+    crossDimension,
+    sourceDim,
+    targetDim,
+    tables,
     unprocessed,
   }: {
     branchIds: readonly string[]
     targetModelId: string
     currentModelId: string
     sameModel: boolean
+    crossDimension: boolean
+    sourceDim?: number | null
+    targetDim?: number | null
+    tables: readonly string[]
     unprocessed?: readonly StaleTargetRow[]
   },
 ): Promise<SqlOp[]> {
   if (branchIds.length === 0) return []
+  if (crossDimension && sourceDim != null && targetDim != null) {
+    const targetTables = tables.filter((table) => dimFamilyTables(targetDim).includes(table))
+    const sourceTables = tables.filter((table) => dimFamilyTables(sourceDim).includes(table))
+    const staged = await stagedIds(deps, branchIds, targetModelId, targetTables)
+    const touched = (await loadAllRows(deps, branchIds)).filter((row) =>
+      staged.has(`${row.branchId}:${row.id}`),
+    )
+    return recomputeStaleOps(touched, currentModelId, sourceTables, deps.queryAll)
+  }
   if (!sameModel) {
     const staged = await stagedIds(deps, branchIds, targetModelId)
     const touched = (await loadAllRows(deps, branchIds)).filter((row) =>
       staged.has(`${row.branchId}:${row.id}`),
     )
-    return recomputeStaleOps(touched, currentModelId, await deps.listVecTables(), deps.queryAll)
+    return recomputeStaleOps(touched, currentModelId, tables, deps.queryAll)
   }
   // A same-model re-embed leaves nothing to recover the split from — same
   // model_id, and unchanged content hashes to the same source_hash — so a cancel
