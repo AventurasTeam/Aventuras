@@ -122,6 +122,56 @@ harness absorbs:
   when `__DEV__` is false, so it is unavailable to E2E. Use the mock
   LLM server instead (below).
 
+### Virtual display
+
+Both `pnpm test:e2e` scripts route through
+[`scripts/e2e.ts`](../scripts/e2e.ts), which wraps the Playwright run
+in `xvfb-run` on Linux. Electron has no working headless mode there —
+`--ozone-platform=headless` segfaults in the GLX stack, with or
+without `--disable-gpu` — so a virtual X server is the only way to
+keep the app off the developer's screen. Without it every run steals
+focus for its duration, which makes an agent-initiated suite
+unusable alongside other work.
+
+The wrapper pins `-screen 0 1920x1080x24` rather than inheriting the
+distro default: Arch's `xvfb-run` defaults to 640x480, which clips the
+1280x800 `BrowserWindow` and drops the renderer below the 1024px
+desktop breakpoint — the suite would silently exercise the narrow
+layout.
+
+**Xvfb alone is not sufficient on a Wayland session.** It only sets
+`DISPLAY`, which Electron ignores in favour of the compositor — the
+window opens on the developer's real screen while the virtual server
+sits empty, and every symptom of the problem remains. The fix is
+`--ozone-platform=x11`, applied in
+[`e2e/harness/launch.ts`](../e2e/harness/launch.ts) when the wrapper
+sets `E2E_VIRTUAL_DISPLAY=1`. The two halves are load-bearing
+together: neither works alone. Note that `ELECTRON_OZONE_PLATFORM_HINT`
+does **not** substitute for the switch, and clearing `WAYLAND_DISPLAY`
+does not either — Wayland clients fall back to the default `wayland-0`
+socket.
+
+Verifying a change here means checking that the app window actually
+landed on the virtual display, not that `Xvfb` is running — those come
+apart exactly in the Wayland case above. During a run,
+`DISPLAY=:99 xdotool search --name '.*'` should list the 1280x800
+`Aventuras` window and the 800x600 `Developer Tools` one.
+
+Two consequences worth knowing:
+
+- **Install is per-machine.** Arch: `xorg-server-xvfb`;
+  Debian/Ubuntu: `xvfb` (also pulled by `playwright install-deps`).
+  Missing, the wrapper warns and runs headed rather than failing.
+  On macOS/Windows it is a no-op passthrough.
+- **There is no window manager under Xvfb**, so no OS-level window
+  focus. Playwright drives input over CDP, and DOM focus is
+  unaffected — but a spec asserting on `win.isFocused()` or
+  WM-mediated blur would pass here while being effectively untested.
+  Set `E2E_HEADED=1` to run on the real display when watching a run
+  or debugging one of those. `--ui`, `--debug`, `--headed` and
+  `PWDEBUG=1` opt out on their own — hiding the inspector a developer
+  just asked for would be the wrapper defeating its own user.
+
 ## Harness structure
 
 E2E lives under `e2e/`, structured so tests compose reusable pieces
@@ -324,10 +374,11 @@ every PR alongside `check` and `test`:
    builder downloads are cached, keyed on the lockfile.
 4. `playwright install-deps chromium` — Electron's shared libraries
    (no browser download).
-5. `xvfb-run -a pnpm test:e2e:packaged` (the `packaged` Playwright
-   project) — Electron has no true headless mode on Linux, so it runs
-   under a virtual display. The harness seeds a throwaway `userData` per run
-   and launches the packaged binary against it.
+5. `pnpm test:e2e:packaged` (the `packaged` Playwright project) — the
+   script supplies the [virtual display](#virtual-display) itself, so
+   CI and local runs invoke the same command. The harness seeds a
+   throwaway `userData` per run and launches the packaged binary
+   against it.
 
 The embedder model cache (for the retrieval/turn tiers) is added when
 those tests land.
