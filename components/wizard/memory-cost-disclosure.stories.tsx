@@ -7,6 +7,9 @@ import { wizardStore } from '@/lib/stores'
 import { MemoryCostDisclosure } from './memory-cost-disclosure'
 
 const MATRYOSHKA_CAPS = { matryoshkaSupported: true, matryoshkaDims: [512, 1024, 2048] }
+// `embeddingDim` only lands once a probe has run, so it is the flag that
+// distinguishes a known ceiling from an unmeasured one.
+const PROBED_CAPS = { ...MATRYOSHKA_CAPS, embeddingDim: 2048 }
 
 const meta: Meta<typeof MemoryCostDisclosure> = {
   title: 'Compounds/Wizard/MemoryCostDisclosure',
@@ -66,9 +69,9 @@ export const ExpandedWithLadder: Story = {
     // The platform suggestion annotates exactly one row (native on desktop,
     // a curated dim on mobile) — either way the tag renders once.
     expect(screen.getByText('← suggested')).toBeInTheDocument()
-    // Per-row storage preview uses the canon "~{size} / 30 ch" format
+    // Per-row storage preview quotes the projected story length
     // (512 dim × 4 bytes × 2250 rows ≈ 5 MB).
-    expect(screen.getByText('~5 MB / 30 ch')).toBeInTheDocument()
+    expect(screen.getByText('~5 MB over 30 chapters')).toBeInTheDocument()
   },
 }
 
@@ -123,6 +126,35 @@ export const CustomInputError: Story = {
     expect(await screen.findByText('Enter a positive whole number.')).toBeInTheDocument()
     // The store keeps the last valid dim (never a fractional one).
     expect(wizardStore.getWizard().state.effectiveDim).not.toBe(12.5)
+  },
+}
+
+// Once a probe has answered the native dim, a custom pick above it is rejected:
+// truncation only shortens, so the service would clamp it and the stored setting
+// would misdescribe the vectors it produced.
+export const CustomAboveNativeDimIsRejected: Story = {
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={PROBED_CAPS} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button'))
+    await userEvent.click(await screen.findByText('Custom…'))
+    await userEvent.type(await screen.findByTestId('memory-cost-custom'), '4096')
+
+    expect(await screen.findByText(/no larger than 2048/)).toBeInTheDocument()
+    expect(wizardStore.getWizard().customDimInvalid).toBe(true)
+    expect(wizardStore.getWizard().state.effectiveDim).not.toBe(4096)
+  },
+}
+
+// An unprobed model has no ceiling to compare against, so the same value stands.
+export const CustomAboveLadderPassesWhenNativeDimUnknown: Story = {
+  render: () => <MemoryCostDisclosure embeddingBackend="provider" capabilities={MATRYOSHKA_CAPS} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button'))
+    await userEvent.click(await screen.findByText('Custom…'))
+    await userEvent.type(await screen.findByTestId('memory-cost-custom'), '4096')
+
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(4096)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
   },
 }
 

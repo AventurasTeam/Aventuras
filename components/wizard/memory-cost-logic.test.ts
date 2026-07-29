@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  PROJECTED_ROWS_30CH,
+  PROJECTED_ROWS,
+  clampEffectiveDim,
   dimLadder,
   disclosureVisible,
   storagePreviewBytes,
@@ -37,7 +38,7 @@ describe('memory-cost-logic', () => {
   })
 
   it('storage preview is dim × 4 bytes × projected rows', () => {
-    expect(storagePreviewBytes(1024)).toBe(1024 * 4 * PROJECTED_ROWS_30CH)
+    expect(storagePreviewBytes(1024)).toBe(1024 * 4 * PROJECTED_ROWS)
   })
 
   it('custom dim validation: positive integer required', () => {
@@ -52,5 +53,21 @@ describe('memory-cost-logic', () => {
     expect(validateCustomDim('12.5')).toEqual({ ok: false, reason: 'not-integer' })
     expect(validateCustomDim('0')).toEqual({ ok: false, reason: 'not-positive' })
     expect(validateCustomDim('1024')).toEqual({ ok: true, dim: 1024 })
+  })
+
+  it('custom dim validation rejects above the native ceiling, but only once it is known', () => {
+    expect(validateCustomDim('4096', 2048)).toEqual({ ok: false, reason: 'above-native' })
+    expect(validateCustomDim('2048', 2048)).toEqual({ ok: true, dim: 2048 })
+    // Unprobed model: no ceiling exists to compare against, so the pick stands.
+    expect(validateCustomDim('4096')).toEqual({ ok: true, dim: 4096 })
+  })
+
+  it('clamps an above-native dim to native, and leaves anything else alone', () => {
+    expect(clampEffectiveDim(4096, 2048)).toBeNull()
+    expect(clampEffectiveDim(1024, 2048)).toBe(1024)
+    expect(clampEffectiveDim(2048, 2048)).toBe(2048)
+    expect(clampEffectiveDim(null, 2048)).toBeNull()
+    // An unknown ceiling cannot clamp: the dim rides through untouched.
+    expect(clampEffectiveDim(4096, undefined)).toBe(4096)
   })
 })

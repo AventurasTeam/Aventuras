@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import {
   dimLadder,
   disclosureVisible,
+  PROJECTED_CHAPTERS,
   storagePreviewBytes,
   suggestedDim,
   validateCustomDim,
@@ -79,6 +80,7 @@ export function MemoryCostDisclosure({
 
   const ladder = useMemo(() => dimLadder(capabilities), [capabilities])
   const suggestion = useMemo(() => suggestedDim(ladder, platform), [ladder, platform])
+  const nativeDim = capabilities?.embeddingDim
 
   const [expanded, setExpanded] = useState(false)
   const [customOpen, setCustomOpen] = useState(false)
@@ -134,12 +136,16 @@ export function MemoryCostDisclosure({
   }
 
   const applyCustomDraft = (raw: string) => {
-    const result = validateCustomDim(raw)
+    const result = validateCustomDim(raw, nativeDim)
     if (result.ok) {
       setCustomError(null)
       wizardStore.setEffectiveDim(result.dim)
     } else {
-      setCustomError(t('wizard:memoryCost.customError'))
+      setCustomError(
+        result.reason === 'above-native' && nativeDim != null
+          ? t('wizard:memoryCost.customErrorTooLarge', { max: nativeDim })
+          : t('wizard:memoryCost.customError'),
+      )
       // The store only ever receives a VALID dim, so the previous one is still
       // sitting there — flag the draft as unparseable or Finish would commit a
       // number the field is no longer showing.
@@ -158,10 +164,15 @@ export function MemoryCostDisclosure({
   }
 
   const previewLabel = (dim: number) =>
-    t('wizard:memoryCost.storagePreview', { size: formatStorage(storagePreviewBytes(dim)) })
+    t('wizard:memoryCost.storagePreview', {
+      size: formatStorage(storagePreviewBytes(dim)),
+      chapters: PROJECTED_CHAPTERS,
+    })
 
   const customPreview =
-    customActive && validateCustomDim(customRaw).ok ? previewLabel(Number(customRaw)) : undefined
+    customActive && validateCustomDim(customRaw, nativeDim).ok
+      ? previewLabel(Number(customRaw))
+      : undefined
 
   return (
     <View testID="memory-cost-disclosure" className="rounded-md border border-border">
@@ -240,7 +251,7 @@ export function MemoryCostDisclosure({
           ) : null}
 
           <Text size="xs" variant="muted">
-            {t('wizard:memoryCost.footer')}
+            {t('wizard:memoryCost.footer', { chapters: PROJECTED_CHAPTERS })}
           </Text>
         </View>
       ) : null}

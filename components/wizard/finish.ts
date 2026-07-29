@@ -18,6 +18,7 @@ import {
 } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 
+import { clampEffectiveDim } from './memory-cost-logic'
 import { needsLead } from './step-frame-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
@@ -77,7 +78,14 @@ export async function finishWizard(
         )
       : undefined
   const matryoshkaApplicable = embeddingCapabilities?.matryoshkaSupported === true
-  const effectiveDim = matryoshkaApplicable ? s.effectiveDim : null
+  // Clamped, not rejected: the disclosure is hidden on a non-applicable model and
+  // collapsed by default, so a working state carrying a dim above the CURRENT
+  // model's native ceiling would fail an invisible field. Degrading to native
+  // matches what the embed service produces either way.
+  const effectiveDim = clampEffectiveDim(
+    matryoshkaApplicable ? s.effectiveDim : null,
+    embeddingCapabilities?.embeddingDim,
+  )
   // Backstop: the disclosure keeps only valid dims (or null), but a corrupt
   // working state must never commit a dim that truncates vectors to garbage.
   if (effectiveDim != null && (!Number.isInteger(effectiveDim) || effectiveDim < 1))

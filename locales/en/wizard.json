@@ -50,11 +50,12 @@
     "nativeOption": "Native dim",
     "customOption": "Custom…",
     "suggested": "← suggested",
-    "storagePreview": "~{{size}} / 30 ch",
+    "storagePreview": "~{{size}} over {{chapters}} chapters",
     "customPlaceholder": "e.g. 1536",
     "customError": "Enter a positive whole number.",
+    "customErrorTooLarge": "Enter a whole number no larger than {{max}}, the model's native dim.",
     "customCaveat": "Custom dims not on the model's curated ladder may exhibit quality cliffs.",
-    "footer": "Storage estimate assumes a 30-chapter story at the default chapter-token threshold; scales linearly with story length."
+    "footer": "Storage estimate assumes a {{chapters}}-chapter story at the default chapter-token threshold; scales linearly with story length."
   },
   "finish": {
     "invalidList": "Add {{fields}} before finishing.",

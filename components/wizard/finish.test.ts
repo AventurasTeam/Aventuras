@@ -312,6 +312,46 @@ describe('finishWizard', () => {
     expect(storyRow.settings!.effectiveDim).toBe(1024)
   })
 
+  it('drops a working-state dim above the probed model native dim to native', async () => {
+    const { db, ctx } = await setup()
+    // The app default moved to a model with a smaller native dim after the pick
+    // was made; the disclosure is collapsed by default, so nothing on screen
+    // would have corrected it before Finish.
+    const probedDefaults: FinishAppDefaults = {
+      ...MATRYOSHKA_PROVIDER_DEFAULTS,
+      providers: [
+        {
+          ...MATRYOSHKA_PROVIDER_DEFAULTS.providers[0],
+          cachedModels: [
+            {
+              id: PROVIDER_MODEL,
+              capabilities: {
+                matryoshkaSupported: true,
+                matryoshkaDims: [512, 1024],
+                embeddingDim: 1536,
+              },
+            },
+          ],
+        },
+      ],
+    }
+
+    const result = await finishWizard(
+      makeState({ title: 'Oversized', opening: { content: 'Once.' }, effectiveDim: 4096 }),
+      ctx,
+      vi.fn(),
+      probedDefaults,
+      EMBED_CTX,
+      6050,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    // Storing 4096 would misdescribe vectors the embedder can only make 1536 long.
+    expect(storyRow.settings!.effectiveDim).toBeUndefined()
+  })
+
   it('embeds the lead with the committed effectiveDim, not the native-dim gate config', async () => {
     const { ctx } = await setup()
 

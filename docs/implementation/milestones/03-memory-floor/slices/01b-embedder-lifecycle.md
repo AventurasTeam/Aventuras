@@ -155,15 +155,13 @@ One question opened during review on 2026-07-28 and remains open; the
 target-threading question raised alongside it was resolved the same
 day and its decision is under Implementation notes below.
 
-- **Custom effective dim has no upper bound, and the bound cannot be
-  known here.** Canon specifies `1 ≤ N ≤ native_dim`
+- **Custom effective dim is bounded only once the model has been
+  probed.** Canon specifies `1 ≤ N ≤ native_dim`
   ([`wizard.md`](../../../../ui/screens/wizard/wizard.md#memory-cost--matryoshka-effective-dim),
-  [`retrieval.md`](../../../../memory/retrieval.md#matryoshka-effective-dim)),
-  but `validateCustomDim` enforces only "positive integer". A
-  provider's native dim is unknown until the first embed answers it,
-  so at wizard time there is nothing to compare against, and
+  [`retrieval.md`](../../../../memory/retrieval.md#matryoshka-effective-dim)).
   `matryoshkaSupported` and `matryoshkaDims` are independent flags —
-  a model can pass the visibility gate advertising no ladder at all.
+  a model can pass the visibility gate advertising no ladder at all —
+  so the ladder cannot stand in for the ceiling.
 
   **Direction (updated 2026-07-28):** native-dim probing and
   persistence landed as an M3.1b review followup: selecting a provider
@@ -172,15 +170,18 @@ day and its decision is under Implementation notes below.
   remain deferred to M7. Ladders are most likely manual user input as
   an advanced feature, with auto-detection plausible on top.
 
-  **Carried knowingly:** a user on a Matryoshka-capable provider can
-  still enter an absurd dim and lock it into `settings.effectiveDim`
-  at creation, where the service clamps the response to native — so
-  the stored value misdescribes the vectors, and a `serverSide`
-  request may be rejected outright. What did land is the validity
-  gate: an unparseable draft now blocks Finish through the wizard
-  store's ephemeral `customDimInvalid`, because only a valid dim ever
-  reaches the working state and the last good value was otherwise
-  committing silently behind an error message.
+  **Resolved (2026-07-29, PR #401 review):** the probe made the
+  ceiling knowable, so `capabilities.embeddingDim` now bounds the
+  pick at both ends of the wizard. `validateCustomDim` takes an
+  optional `nativeDim` and rejects above it; Finish runs
+  `clampEffectiveDim`, which resolves an over-ceiling dim to `null`
+  (native) rather than rejecting — the disclosure is collapsed by
+  default and hidden on a non-applicable model, so a working state
+  carrying a stale pick would otherwise fail an invisible field.
+  Resolving to `null` also suppresses a `serverSide` `dimensions`
+  hint the provider would reject. An UNPROBED model still has no
+  ceiling and stays permissive; that residue is what M7's
+  upper-bound UI closes.
 
 ## Implementation notes
 
@@ -202,7 +203,11 @@ Resolved developer decisions (slice planning, 2026-07-24):
   (`kickStoryDrain`) deliberately left unwired to those surfaces.
   A kick received while another story's async pass is active is
   retained and scheduled as soon as that pass releases single-flight;
-  it is not dropped at the `running` guard.
+  it is not dropped at the `running` guard. An idle note defers to a
+  retry already armed for the SAME story, so a story emitting idle
+  events faster than the ladder cannot retry a down embedder at the
+  idle cadence; a kick still overrides, being the explicit "the cause
+  may be gone" signal.
   The worker drains only the open branch; the blocking sync stage
   covers everything else on read.
 - **Phase-1 progress host** — inline in Story Settings · Memory;
