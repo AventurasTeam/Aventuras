@@ -6,8 +6,8 @@ import { SwapDialog, type SwapCandidate } from '@/components/embedder/swap-dialo
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
+import { useSwapResumeActions } from '@/hooks/use-swap-resume-actions'
 import {
-  cancelStorySwap,
   countStoryEmbeddableRows,
   ensureProviderEmbeddingDim,
   refreshEmbeddingStatus,
@@ -15,9 +15,7 @@ import {
   relabelStory,
   RelabelBlockedError,
   RelabelDimMismatchError,
-  resumeStorySwap,
   startStorySwap,
-  SwapBusyError,
 } from '@/lib/actions'
 import {
   db,
@@ -147,17 +145,11 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     return staleTotal > 0 ? t('storySettings:memory.reason.retrying') : null
   }, [settings, appEmbeddingModelId, appEmbeddingProviderId, staleTotal])
 
-  const reportEngineFailure = useCallback(
-    (op: string, error: unknown) => {
-      if (error instanceof SwapBusyError) {
-        toast.info(t('storySettings:memory.busy'))
-        return
-      }
-      logger.error(`embedder.${op}_failed`, { storyId, error: messageOf(error) })
-      toast.error(t('storySettings:memory.actionFailed'))
-    },
-    [storyId],
-  )
+  const {
+    report: reportEngineFailure,
+    resume: handleResume,
+    cancelSwap: handleCancelSwap,
+  } = useSwapResumeActions(storyId)
 
   const ensureTargetDimension = useCallback(async (target: EmbeddingTarget) => {
     if (target.backend !== 'provider' || target.providerId == null) return
@@ -251,31 +243,6 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
   const resumeOpen = settings.embedding_swap_target != null && progress == null
 
-  const handleResume = useCallback(async () => {
-    try {
-      await resumeStorySwap(storyId, ctx)
-    } catch (error) {
-      reportEngineFailure('resume', error)
-    } finally {
-      void refreshEmbeddingStatus(storyId)
-    }
-  }, [storyId, reportEngineFailure])
-
-  const handleCancelSwap = useCallback(async () => {
-    try {
-      // A swap can finish between the click and the loop's last cancel poll, in
-      // which case the model changed — saying nothing would let the user believe
-      // they stopped it.
-      if ((await cancelStorySwap(storyId, ctx)) === 'already-completed') {
-        toast.info(t('storySettings:memory.cancelTooLate'))
-      }
-    } catch (error) {
-      reportEngineFailure('cancel_swap', error)
-    } finally {
-      void refreshEmbeddingStatus(storyId)
-    }
-  }, [storyId, reportEngineFailure])
-
   return (
     <View testID="memory-panel" className="gap-4">
       <Text className="font-semibold">{t('storySettings:memory.heading')}</Text>
@@ -358,17 +325,13 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
             })}
           </Text>
           <View className="flex-row gap-2">
-            <Button
-              testID="memory-swap-pending-resume"
-              variant="primary"
-              onPress={() => void handleResume()}
-            >
+            <Button testID="memory-swap-pending-resume" variant="primary" onPress={handleResume}>
               <Text>{t('storySettings:swap.resume')}</Text>
             </Button>
             <Button
               testID="memory-swap-pending-cancel"
               variant="destructive"
-              onPress={() => void handleCancelSwap()}
+              onPress={handleCancelSwap}
             >
               <Text>{t('storySettings:swap.cancelSwap')}</Text>
             </Button>
