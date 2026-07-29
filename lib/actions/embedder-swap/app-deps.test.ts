@@ -666,7 +666,7 @@ describe('crash recovery resolves its target from the marker', () => {
     // so getting 'cancelled' at all is half the assertion.
     await expect(cancelStorySwap('s1', ctx)).resolves.toBe('cancelled')
 
-    expect(vi.mocked(cancelSwap).mock.calls[0][1]).toMatchObject({
+    expect(vi.mocked(cancelSwap).mock.lastCall?.[1]).toMatchObject({
       storyId: 's1',
       targetModelId: TARGET_MODEL,
       currentModelId: MINILM,
