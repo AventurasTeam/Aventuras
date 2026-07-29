@@ -59,4 +59,13 @@ describe('buildStorySettings', () => {
     const s = buildStorySettings({ embedding_provider_id: 'stale-prov' }, 'fresh/model', 'prov-1')
     expect(s.embedding_provider_id).toBe('prov-1')
   })
+
+  it('stores a positive effectiveDim from the 4th param', () => {
+    expect(buildStorySettings({}, null, null, 1024).effectiveDim).toBe(1024)
+  })
+
+  it('omits effectiveDim when null (native dim) so the field stays absent', () => {
+    expect(buildStorySettings({}, null, null, null).effectiveDim).toBeUndefined()
+    expect(buildStorySettings({}, null, null).effectiveDim).toBeUndefined()
+  })
 })

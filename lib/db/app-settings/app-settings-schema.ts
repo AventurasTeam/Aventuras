@@ -23,6 +23,7 @@ export const providerCapabilitiesSchema = z.object({
   matryoshkaSupported: z.boolean().optional(),
   matryoshkaDims: z.array(z.number()).optional(),
   embedding: z.boolean().optional(),
+  embeddingDim: z.number().int().positive().optional(),
 })
 
 export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>

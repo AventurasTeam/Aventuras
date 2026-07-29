@@ -25,7 +25,23 @@
     "actions": "Actions",
     "back": "Back",
     "chapterProgress": "Chapter progress",
-    "onThisScreen": "On this screen"
+    "onThisScreen": "On this screen",
+    "generationStatusPill": {
+      "phase": {
+        "reasoning": "reasoning…",
+        "generatingNarrative": "generating narrative…",
+        "classifying": "classifying…",
+        "closingChapter": "closing chapter…"
+      },
+      "error": {
+        "memoryIncomplete_one": "Memory incomplete — {{count}} row pending",
+        "memoryIncomplete_other": "Memory incomplete — {{count}} rows pending",
+        "classifierOffline": "Classifier offline — retrieval coverage thinning",
+        "swapPaused": "Embedder switch paused — waiting on you"
+      },
+      "cancelGeneration": "Cancel generation",
+      "cancelChapterClose": "Cancel chapter close"
+    }
   },
   "modelPicker": {
     "placeholder": "Pick a model",

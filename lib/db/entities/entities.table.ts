@@ -36,7 +36,12 @@ export const entities = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    index('entities_stale_idx')
+      .on(t.branchId)
+      .where(sql`${t.embeddingStale} = 1`),
+  ],
 )
 
 export const characterRelationships = sqliteTable(

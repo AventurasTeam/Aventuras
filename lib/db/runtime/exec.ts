@@ -15,3 +15,11 @@ export async function listTableNames(): Promise<string[]> {
   const result = await bridgeQuery("SELECT name FROM sqlite_master WHERE type = 'table'", [], 'all')
   return (result.rows as unknown[][]).map((row) => String(row[0]))
 }
+
+// Positional value-array query seam (see exec.native.ts for the counterpart).
+// The proxy hands back rows as arrays-of-values indexed by column position —
+// the shape the embedder-swap engine's `queryAll` and `countStaleRows` require.
+export async function queryRows(sql: string, params: unknown[]): Promise<unknown[][]> {
+  const result = await bridgeQuery(sql, params, 'all')
+  return result.rows as unknown[][]
+}

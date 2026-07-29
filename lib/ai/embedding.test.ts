@@ -50,6 +50,51 @@ describe('embedViaProvider', () => {
     expect(Array.from(result.vectors[1])).toEqual([0.4, 0.5, 0.6].map((n) => Math.fround(n)))
   })
 
+  it('threads a dimensions param through to the request body', async () => {
+    let requestBody: unknown
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestBody = await new Request(input).json()
+      return embeddingsResponse([[0.1, 0.2, 0.3, 0.4]])
+    })
+
+    await embedViaProvider(provider, 'text-embedding-3-small', ['a'], undefined, 4)
+
+    expect(requestBody).toMatchObject({ dimensions: 4 })
+  })
+
+  it('still sends dimensions when the display name contains a dot', async () => {
+    let requestBody: unknown
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestBody = await new Request(input).json()
+      return embeddingsResponse([[0.1, 0.2, 0.3, 0.4]])
+    })
+
+    // The SDK derives its providerOptions key by cutting the provider string at
+    // the first dot, so keying the option by display name drops it for any host
+    // -shaped name — silently losing the server-side saving.
+    await embedViaProvider(
+      { ...provider, displayName: 'api.openai.com' },
+      'text-embedding-3-small',
+      ['a'],
+      undefined,
+      4,
+    )
+
+    expect(requestBody).toMatchObject({ dimensions: 4 })
+  })
+
+  it('omits the dimensions param from the request body when not passed', async () => {
+    let requestBody: unknown
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestBody = await new Request(input).json()
+      return embeddingsResponse([[0.1, 0.2, 0.3]])
+    })
+
+    await embedViaProvider(provider, 'text-embedding-3-small', ['a'])
+
+    expect(requestBody).not.toHaveProperty('dimensions')
+  })
+
   it('rejects anthropic providers with an init error (no embedding endpoint)', async () => {
     const anthropicProvider: ProviderInstanceWithStub = {
       id: 'prov-anthropic',

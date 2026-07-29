@@ -23,10 +23,10 @@ function nonEmpty(value: string | null | undefined): value is string {
 export function resolveEmbedderConfig(
   story: Pick<
     StorySettings,
-    'embeddingBackend' | 'embedding_model_id' | 'embedding_provider_id'
+    'embeddingBackend' | 'embedding_model_id' | 'embedding_provider_id' | 'effectiveDim'
   > | null,
   app: EmbedderAppDefaults,
-  opts?: { providerDim?: number },
+  opts?: { providerDim?: number; matryoshkaSupported?: boolean },
 ): EmbedderConfigResolution {
   const backend =
     story !== null ? story.embeddingBackend : (app.defaultStorySettings.embeddingBackend ?? 'local')
@@ -52,5 +52,18 @@ export function resolveEmbedderConfig(
   }
   // null = unknown until first embed; the facade skips the dim check for it.
   const dim = opts?.providerDim ?? null
-  return { ok: true, config: { backend: 'provider', providerId, modelId, dim } }
+  const effectiveDim = story?.effectiveDim ?? null
+  return {
+    ok: true,
+    config: {
+      backend: 'provider',
+      providerId,
+      modelId,
+      dim,
+      truncation:
+        effectiveDim != null
+          ? { effectiveDim, serverSide: opts?.matryoshkaSupported ?? false }
+          : null,
+    },
+  }
 }

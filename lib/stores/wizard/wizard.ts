@@ -9,6 +9,10 @@ type WizardSnapshot = {
   // forward. Ephemeral nav state, deliberately not part of the persisted
   // working-state blob; a resumed draft seeds it from its saved step.
   furthestStep: number
+  // The custom effective-dim input currently holds something unparseable. Also
+  // ephemeral: only a VALID dim ever reaches `state.effectiveDim`, so this flag is
+  // what tells Finish the field disagrees with the value it would commit.
+  customDimInvalid: boolean
 }
 
 type WizardState = WizardSnapshot & {
@@ -17,6 +21,8 @@ type WizardState = WizardSnapshot & {
   patchOpening: (patch: Partial<WizardWorkingState['opening']>) => void
   setLeadName: (leadName: string) => void
   setLeadEntityId: (leadEntityId: string | null) => void
+  setEffectiveDim: (effectiveDim: number | null) => void
+  setCustomDimInvalid: (invalid: boolean) => void
   hydrate: (state: WizardWorkingState) => void
   reset: () => void
 }
@@ -26,6 +32,7 @@ const store = createStore<WizardState>()((set) => {
   return {
     state: fresh,
     furthestStep: fresh.step,
+    customDimInvalid: false,
     setStep: (step) =>
       set((s) => ({ state: { ...s.state, step }, furthestStep: Math.max(s.furthestStep, step) })),
     patchDefinition: (patch) =>
@@ -34,10 +41,16 @@ const store = createStore<WizardState>()((set) => {
       set((s) => ({ state: { ...s.state, opening: { ...s.state.opening, ...patch } } })),
     setLeadName: (leadName) => set((s) => ({ state: { ...s.state, leadName } })),
     setLeadEntityId: (leadEntityId) => set((s) => ({ state: { ...s.state, leadEntityId } })),
-    hydrate: (state) => set({ state, furthestStep: state.step }),
+    setEffectiveDim: (effectiveDim) =>
+      set((s) => ({
+        state: { ...s.state, effectiveDim, effectiveDimTouched: true },
+        customDimInvalid: false,
+      })),
+    setCustomDimInvalid: (customDimInvalid) => set({ customDimInvalid }),
+    hydrate: (state) => set({ state, furthestStep: state.step, customDimInvalid: false }),
     reset: () => {
       const r = emptyWorkingState()
-      set({ state: r, furthestStep: r.step })
+      set({ state: r, furthestStep: r.step, customDimInvalid: false })
     },
   }
 })
@@ -48,7 +61,7 @@ function useWizard<T>(selector: (s: WizardSnapshot) => T): T {
 
 function getWizard(): WizardSnapshot {
   const s = store.getState()
-  return { state: s.state, furthestStep: s.furthestStep }
+  return { state: s.state, furthestStep: s.furthestStep, customDimInvalid: s.customDimInvalid }
 }
 
 const api = store.getState()
@@ -60,6 +73,8 @@ export const wizardStore = {
   patchOpening: api.patchOpening,
   setLeadName: api.setLeadName,
   setLeadEntityId: api.setLeadEntityId,
+  setEffectiveDim: api.setEffectiveDim,
+  setCustomDimInvalid: api.setCustomDimInvalid,
   hydrate: api.hydrate,
   reset: api.reset,
   subscribe: store.subscribe,

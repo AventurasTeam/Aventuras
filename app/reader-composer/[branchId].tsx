@@ -32,6 +32,7 @@ import {
   loadOpenStory,
   readRecentEntries,
   redoLastAction,
+  refreshEmbeddingStatus,
   rollbackToEntry,
   submitTurn,
   undoLastAction,
@@ -53,6 +54,8 @@ import {
 import {
   appSettingsStore,
   currentStoryStore,
+  embedderSwapStore,
+  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
@@ -125,6 +128,21 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
+
+  const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
+    embeddingStatusStore.staleTotalFor(s, storyId),
+  )
+  // Narrow selector: a boolean stays stable across embed-batch ticks, where the
+  // run's own entry changes identity on every one (onProgress fires per batch).
+  const swapRunningHere = embedderSwapStore.useSwap(
+    (s) => embedderSwapStore.progressFor(s, storyId) != null,
+  )
+  // A paused swap is signalled off the MARKER, not the stale count: phase-1
+  // staging clears embedding_stale row by row, so a half-finished swap drives
+  // that count toward zero and a healthy story sits at exactly zero throughout.
+  // A live loop reports through the Memory panel's own progress row instead.
+  const swapPaused =
+    storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -256,6 +274,10 @@ export default function ReaderComposerRoute() {
       cancelled = true
     }
   }, [branchId])
+
+  useEffect(() => {
+    if (storyId != null) void refreshEmbeddingStatus(storyId)
+  }, [storyId])
 
   useEffect(() => {
     let cancelled = false
@@ -574,8 +596,20 @@ export default function ReaderComposerRoute() {
       statusSlot={
         <GenerationStatusPill
           activePhase={isGenerating ? 'generating-narrative' : undefined}
+          error={
+            isGenerating
+              ? undefined
+              : swapPaused
+                ? { code: 'swap-paused' }
+                : staleTotal > 0
+                  ? { code: 'memory-incomplete', pendingRows: staleTotal }
+                  : undefined
+          }
           onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
-          onErrorTap={() => {}}
+          onErrorTap={(code) => {
+            if (code !== 'classifier-offline' && storyId != null)
+              router.push(`/story-settings/${storyId}?tab=memory`)
+          }}
         />
       }
     >

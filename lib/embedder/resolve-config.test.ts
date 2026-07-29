@@ -168,6 +168,7 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
+        truncation: null,
       },
     })
   })
@@ -188,8 +189,75 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: null,
+        truncation: null,
       },
     })
+  })
+
+  it('provider story with effectiveDim + matryoshkaSupported resolves serverSide truncation', () => {
+    const story: StoryInput & { effectiveDim: number } = {
+      embeddingBackend: 'provider',
+      embedding_model_id: 'text-embedding-3-small',
+      embedding_provider_id: 'openai',
+      effectiveDim: 1024,
+    }
+
+    const result = resolveEmbedderConfig(story, appDefaults(), {
+      providerDim: 1536,
+      matryoshkaSupported: true,
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      config: {
+        backend: 'provider',
+        providerId: 'openai',
+        modelId: 'text-embedding-3-small',
+        dim: 1536,
+        truncation: { effectiveDim: 1024, serverSide: true },
+      },
+    })
+  })
+
+  it('provider story with effectiveDim but no matryoshkaSupported resolves client-only truncation', () => {
+    const story: StoryInput & { effectiveDim: number } = {
+      embeddingBackend: 'provider',
+      embedding_model_id: 'text-embedding-3-small',
+      embedding_provider_id: 'openai',
+      effectiveDim: 1024,
+    }
+
+    const result = resolveEmbedderConfig(story, appDefaults(), { providerDim: 1536 })
+
+    expect(result).toEqual({
+      ok: true,
+      config: {
+        backend: 'provider',
+        providerId: 'openai',
+        modelId: 'text-embedding-3-small',
+        dim: 1536,
+        truncation: { effectiveDim: 1024, serverSide: false },
+      },
+    })
+  })
+
+  it('local backend ignores effectiveDim entirely', () => {
+    const story: StoryInput & { effectiveDim: number } = {
+      embeddingBackend: 'local',
+      embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
+      embedding_provider_id: undefined,
+      effectiveDim: 1024,
+    }
+
+    const result = resolveEmbedderConfig(story, appDefaults(), { matryoshkaSupported: true })
+
+    expect(result).toEqual({
+      ok: true,
+      config: { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 384 },
+    })
+    if (result.ok) {
+      expect(result.config).not.toHaveProperty('effectiveDim')
+    }
   })
 
   it('null story falls back to app defaults, provider path', () => {
@@ -208,6 +276,7 @@ describe('resolveEmbedderConfig', () => {
         providerId: 'openai',
         modelId: 'text-embedding-3-small',
         dim: 1536,
+        truncation: null,
       },
     })
   })

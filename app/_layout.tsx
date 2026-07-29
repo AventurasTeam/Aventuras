@@ -8,6 +8,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { KeyboardProvider } from 'react-native-keyboard-controller'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
+import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
 import { SettingsRecoveryScreen } from '@/components/shells/settings-recovery-screen'
 import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-host'
 import { Toaster } from '@/components/ui/toast'
@@ -75,6 +76,7 @@ export default function RootLayout() {
                   <BottomSheetModalProvider>
                     <Stack screenOptions={{ headerShown: false }} />
                     <CrashRecoveryModalHost />
+                    <SwapResumeHost />
                     <Toaster />
                     <PortalHost />
                     <DrizzleStudioDevTools />

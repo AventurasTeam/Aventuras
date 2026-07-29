@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 import type { EntryMetadata } from './entry-metadata'
 import { branches } from '../stories/stories.table'
@@ -48,5 +48,10 @@ export const chapters = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    index('chapters_stale_idx')
+      .on(t.branchId)
+      .where(sql`${t.embeddingStale} = 1`),
+  ],
 )

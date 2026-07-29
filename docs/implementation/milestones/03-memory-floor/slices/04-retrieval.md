@@ -173,6 +173,16 @@ simulator re-runs it bit-for-bit.
 
 ## Open questions
 
+- **Where does the sync-failure `Switch embedder` action land the
+  user?** The C8 import (`openEmbedderSwapDialog`, carried from
+  [Slice 3.1b](./01b-embedder-lifecycle.md#implementation-notes))
+  opens dialog state whose only mount host is the Story Settings
+  route's Memory panel — calling it from a reader-side failure
+  surface without navigating first is a silent no-op. 3.1b's own
+  pill routes via the story-settings route with the memory tab
+  preselected; decide whether the sync-failure surface navigates
+  the same way before opening the dialog, or grows a reader-side
+  dialog host.
 - **Entity-name / keyword index shape** — in-memory per-branch
   index rebuilt on hydrate vs SQL-side matching; Q3 and Layer A
   share it.

@@ -5,11 +5,12 @@ import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import type { GenerateStructuredResult } from '@/lib/ai'
+import { resolveModelCapabilities, type GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
-import { wizardStore } from '@/lib/stores'
+import { appSettingsStore, wizardStore } from '@/lib/stores'
 
 import { AiAssist } from './ai-assist'
+import { MemoryCostDisclosure } from './memory-cost-disclosure'
 import {
   resolveWizardAssistModelId,
   runDescriptionAssist,
@@ -59,6 +60,17 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
       ? leadName
       : null
   const metadataLabel = isAiGenerated && hasContent && sceneName != null ? sceneName : null
+
+  // An absent default-story-setting tracks the code default, which is 'local'.
+  const embeddingBackend =
+    appSettingsStore.useAppSettings((s) => s.defaultStorySettings.embeddingBackend) ?? 'local'
+  const embeddingModelId = appSettingsStore.useAppSettings((s) => s.embeddingModelId)
+  const embeddingProviderId = appSettingsStore.useAppSettings((s) => s.embeddingProviderId)
+  const providers = appSettingsStore.useAppSettings((s) => s.providers)
+  const memoryCapabilities =
+    embeddingProviderId != null && embeddingModelId != null
+      ? resolveModelCapabilities(embeddingProviderId, embeddingModelId, providers)
+      : undefined
 
   return (
     <View className="gap-6">
@@ -146,6 +158,8 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
           </View>
         </FormRow>
       </View>
+
+      <MemoryCostDisclosure embeddingBackend={embeddingBackend} capabilities={memoryCapabilities} />
     </View>
   )
 }

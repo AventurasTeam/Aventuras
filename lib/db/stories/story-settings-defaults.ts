@@ -44,6 +44,7 @@ export function buildStorySettings(
   appDefault: Partial<StorySettings>,
   appEmbeddingModelId: string | null,
   appEmbeddingProviderId: string | null,
+  effectiveDim?: number | null,
 ): StorySettings {
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
@@ -53,5 +54,8 @@ export function buildStorySettings(
     // and a stale copy in the template must not outrank them.
     embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
     embedding_provider_id: appEmbeddingProviderId ?? undefined,
+    // Omit when null so the field stays absent (native dim), not stored as a
+    // value the tightened positive-int schema would reject.
+    ...(effectiveDim != null ? { effectiveDim } : {}),
   })
 }

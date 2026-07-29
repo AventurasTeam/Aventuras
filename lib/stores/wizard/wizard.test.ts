@@ -28,6 +28,25 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().state.leadName).toBe('Aria')
   })
 
+  it('setEffectiveDim stores the dim and marks it touched (incl. Native/null)', () => {
+    wizardStore.setEffectiveDim(1024)
+    expect(wizardStore.getWizard().state.effectiveDim).toBe(1024)
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(true)
+
+    wizardStore.setEffectiveDim(null)
+    expect(wizardStore.getWizard().state.effectiveDim).toBeNull()
+    // An explicit Native pick still counts as touched, so the platform
+    // pre-selection won't re-suggest it on a later disclosure remount.
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(true)
+  })
+
+  it('reset clears the effectiveDim touched flag', () => {
+    wizardStore.setEffectiveDim(512)
+    wizardStore.reset()
+    expect(wizardStore.getWizard().state.effectiveDimTouched).toBe(false)
+    expect(wizardStore.getWizard().state.effectiveDim).toBeNull()
+  })
+
   it('setStep updates the step', () => {
     wizardStore.setStep(2)
     expect(wizardStore.getWizard().state.step).toBe(2)
@@ -54,5 +73,30 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().state.leadName).toBe('')
     expect(wizardStore.getWizard().state.step).toBe(1)
     expect(before).not.toBe(after)
+  })
+
+  it('a valid dim clears the invalid-draft flag', () => {
+    wizardStore.setCustomDimInvalid(true)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(true)
+    // Clearing lives inside setEffectiveDim, so every path that commits a dim —
+    // ladder radio, Native, a corrected custom entry — releases the gate without
+    // each caller having to remember to.
+    wizardStore.setEffectiveDim(512)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.setEffectiveDim(null)
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+  })
+
+  it('the invalid-draft flag is ephemeral: reset and hydrate drop it', () => {
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.reset()
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
+
+    wizardStore.setCustomDimInvalid(true)
+    wizardStore.hydrate(wizardStore.getWizard().state)
+    // A resumed draft persists the dim, never an unparseable keystroke.
+    expect(wizardStore.getWizard().customDimInvalid).toBe(false)
   })
 })

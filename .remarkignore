@@ -4,6 +4,7 @@ node_modules/
 dist/
 release/
 storybook-static/
+test-results/
 electron/dist/
 **/.venv/
 scripts/poc-embedder/.venv/
