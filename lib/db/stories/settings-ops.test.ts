@@ -7,6 +7,7 @@ import {
   embeddingTargetKey,
   sameEmbeddingTarget,
   setSwapTargetOp,
+  setSwapTargetDimOp,
   setEmbeddingTargetOp,
   type EmbeddingTarget,
 } from './settings-ops'
@@ -125,6 +126,23 @@ describe('story settings ops', () => {
     expect(settings.embedding_swap_backend).toBe('local')
   })
 
+  it('setSwapTargetDimOp fills in a target dim the marker was written without', async () => {
+    // A cross-backend swap can only learn the target's dim from its first embed,
+    // so the marker is written with a null and patched once the answer arrives.
+    await runInTransaction([setSwapTargetOp('s1', PROVIDER_TARGET, NOW, { sourceDim: 384 })])
+    expect('embedding_swap_target_dim' in readSettings('s1')).toBe(false)
+
+    const laterTime = NOW + 1000
+    await runInTransaction([setSwapTargetDimOp('s1', 1536, laterTime)])
+
+    const settings = readSettings('s1')
+    expect(settings.embedding_swap_target_dim).toBe(1536)
+    // The rest of the marker is untouched — this patches one key, not the target.
+    expect(settings.embedding_swap_target).toBe('text-embedding-3-small')
+    expect(settings.embedding_swap_source_dim).toBe(384)
+    expect(readUpdatedAt('s1')).toBe(laterTime)
+  })
+
   it('clearSwapTargetOp removes every marker key, including source and target dimensions', async () => {
     await runInTransaction([
       setSwapTargetOp('s1', PROVIDER_TARGET, NOW, { sourceDim: 384, targetDim: 1536 }),
@@ -191,7 +209,7 @@ describe('story settings ops', () => {
     expect(readSettings('s1').effectiveDim).toBe(512)
   })
 
-  it('setEmbeddingModelIdOp flips the recorded model', async () => {
+  it('setEmbeddingTargetOp flips the recorded model', async () => {
     await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, NOW)])
     const settings = readSettings('s1')
     expect(settings.embedding_model_id).toBe('new-model')
@@ -210,7 +228,7 @@ describe('story settings ops', () => {
     expect(readUpdatedAt('s1')).toBe(laterTime)
   })
 
-  it('setEmbeddingModelIdOp updates updated_at to the given timestamp', async () => {
+  it('setEmbeddingTargetOp updates updated_at to the given timestamp', async () => {
     const laterTime = NOW + 1000
     await runInTransaction([setEmbeddingTargetOp('s1', LOCAL_TARGET, laterTime)])
     expect(readUpdatedAt('s1')).toBe(laterTime)

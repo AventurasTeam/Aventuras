@@ -24,8 +24,13 @@ export type EmbeddingTarget = {
  * the same weights stay interchangeable regardless of who served them.
  */
 export function embeddingTargetKey(target: EmbeddingTarget): string {
+  // Only the provider id is encoded: it is a generated `prov_<uuid>`, so this is
+  // the identity for every real one, keeping the key readable as the
+  // swap-candidate testID. The model id is free-form and colon-bearing ids are
+  // common (`nomic-embed-text:latest`), but it is the trailing segment, so it
+  // cannot make one key parse two ways.
   return target.backend === 'provider'
-    ? `provider:${target.providerId ?? ''}:${target.modelId}`
+    ? `provider:${encodeURIComponent(target.providerId ?? '')}:${target.modelId}`
     : `local:${target.modelId}`
 }
 
