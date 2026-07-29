@@ -25,6 +25,7 @@ const rowKey = (row: EmbeddedFieldRow): string => `${row.kind}:${row.branchId}:$
 export function createDrainController(deps: DrainDeps) {
   let backoffIdx = -1
   let timer: unknown = null
+  let timerStoryId: string | null = null
   let running = false
   let stopped = false
   let pendingKickStoryId: string | null = null
@@ -40,6 +41,7 @@ export function createDrainController(deps: DrainDeps) {
 
   function schedule(storyId: string, ms: number): void {
     if (timer != null) deps.clearTimer(timer)
+    timerStoryId = storyId
     timer = deps.setTimer(() => void drain(storyId), ms)
   }
 
@@ -83,6 +85,7 @@ export function createDrainController(deps: DrainDeps) {
 
   async function drain(storyId: string): Promise<void> {
     timer = null
+    timerStoryId = null
     if (stopped || running || deps.hasActiveRun()) return
     running = true
     try {
@@ -164,7 +167,12 @@ export function createDrainController(deps: DrainDeps) {
 
   return {
     noteIdle(storyId: string): void {
-      if (!running) schedule(storyId, 0)
+      // A retry already armed for THIS story outranks an idle note: replacing it
+      // would retry a failing embedder at the idle cadence rather than the
+      // backoff ladder. Another story's timer never blocks this one — it drains
+      // a story nobody has open, and resolveConfig rejects it on arrival.
+      if (running || (timer != null && timerStoryId === storyId)) return
+      schedule(storyId, 0)
     },
     kick(storyId: string): void {
       backoffIdx = -1
@@ -179,6 +187,7 @@ export function createDrainController(deps: DrainDeps) {
       pendingKickStoryId = null
       if (timer != null) deps.clearTimer(timer)
       timer = null
+      timerStoryId = null
     },
   }
 }

@@ -1,6 +1,6 @@
 import { type DatabaseSync } from 'node:sqlite'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 
 import { compositeText, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -41,6 +41,13 @@ function makeController(over: Partial<DrainDeps> = {}) {
   }
   const ctrl = createDrainController(deps)
   return { ctrl, runInTransaction, embedRows, onDrained, setTimer, clearTimer }
+}
+
+// Drives the next pass off the armed retry rather than a fresh idle note: an
+// idle note is deliberately ignored while this story already has one pending.
+async function nextBackoffPass(setTimer: Mock, ms: number): Promise<void> {
+  await vi.waitFor(() => expect(setTimer).toHaveBeenCalledWith(expect.any(Function), ms))
+  await vi.advanceTimersByTimeAsync(ms)
 }
 
 describe('drain controller', () => {
@@ -176,6 +183,52 @@ describe('drain controller', () => {
     )
     // Still retried, so the failed rows get another pass.
     expect(setTimer.mock.calls.at(-1)?.[1]).toBe(5_000)
+  })
+
+  it('an idle note does not replace an armed backoff retry', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const embedRows = vi.fn(async () => {
+      throw new Error('provider down')
+    })
+    const { ctrl, setTimer } = makeController({
+      loadStaleRows: async () => [row('e1')],
+      embedRows,
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+    const afterFirstPass = embedRows.mock.calls.length
+    expect(setTimer.mock.calls.at(-1)?.[1]).toBe(5_000)
+
+    // Idle notes under a down embedder must not pull the retry forward: the
+    // ladder owns the cadence, or a story that emits them often never backs off.
+    ctrl.noteIdle('s1')
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(4_999)
+    expect(embedRows.mock.calls.length).toBe(afterFirstPass)
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(embedRows.mock.calls.length).toBeGreaterThan(afterFirstPass)
+    ctrl.stop()
+  })
+
+  it('a retry armed for another story does not block this one', async () => {
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const embedRows = vi.fn(async () => {
+      throw new Error('provider down')
+    })
+    const { ctrl } = makeController({ loadStaleRows: async () => [row('e1')], embedRows })
+
+    ctrl.noteIdle('sA')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(embedRows).toHaveBeenCalledTimes(1)
+
+    // sA's pending retry drains a story nobody has open; deferring to it would
+    // strand the story the user actually switched to.
+    ctrl.noteIdle('sB')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(embedRows).toHaveBeenCalledTimes(2)
+    ctrl.stop()
   })
 
   it('kick() drains immediately and resets backoff', async () => {
@@ -375,14 +428,19 @@ describe('poison-row isolation', () => {
     return { rows, embedRows }
   }
 
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
   afterEach(() => {
+    vi.clearAllTimers()
+    vi.useRealTimers()
     vi.restoreAllMocks()
   })
 
   it('leaves the first failing pass alone, then isolates on the second', async () => {
     warn()
     const { rows, embedRows } = poisonSetup()
-    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+    const { ctrl, setTimer } = makeController({ loadStaleRows: async () => rows, embedRows })
 
     ctrl.noteIdle('s1')
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
@@ -391,7 +449,7 @@ describe('poison-row isolation', () => {
     const firstPass = embedRows.mock.calls.length
     expect(embedRows.mock.calls.every(([, batch]) => batch.length > 1)).toBe(true)
 
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 5_000)
     await vi.waitFor(() => expect(embedRows.mock.calls.length).toBeGreaterThan(firstPass + 2))
     // Pass 2 re-runs the failing batch row by row to find what is actually at fault.
     const singles = embedRows.mock.calls.filter(([, batch]) => batch.length === 1)
@@ -402,17 +460,17 @@ describe('poison-row isolation', () => {
   it('quarantines only the row that fails alone, and drains its batch-mates', async () => {
     warn()
     const { rows, embedRows } = poisonSetup()
-    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+    const { ctrl, setTimer } = makeController({ loadStaleRows: async () => rows, embedRows })
 
     ctrl.noteIdle('s1')
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 5_000)
     await vi.waitFor(() =>
       expect(embedRows.mock.calls.some(([, b]) => b.length === 1 && b[0].id === 'e7')).toBe(true),
     )
 
     embedRows.mockClear()
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 30_000)
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
     // e7 is out of the working set; the 15 rows it was batched with are not.
     const seen = embedRows.mock.calls.flatMap(([, batch]) => batch.map((r) => r.id))
@@ -424,11 +482,11 @@ describe('poison-row isolation', () => {
   it('an explicit kick clears the quarantine', async () => {
     warn()
     const { rows, embedRows } = poisonSetup()
-    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+    const { ctrl, setTimer } = makeController({ loadStaleRows: async () => rows, embedRows })
 
     ctrl.noteIdle('s1')
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 5_000)
     await vi.waitFor(() =>
       expect(embedRows.mock.calls.some(([, b]) => b.length === 1 && b[0].id === 'e7')).toBe(true),
     )
@@ -451,15 +509,15 @@ describe('poison-row isolation', () => {
         throw new Error('connection refused')
       },
     )
-    const { ctrl } = makeController({ loadStaleRows: async () => rows, embedRows })
+    const { ctrl, setTimer } = makeController({ loadStaleRows: async () => rows, embedRows })
 
     ctrl.noteIdle('s1')
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 5_000)
     await vi.waitFor(() => expect(embedRows.mock.calls.some(([, b]) => b.length === 1)).toBe(true))
 
     embedRows.mockClear()
-    ctrl.noteIdle('s1')
+    await nextBackoffPass(setTimer, 30_000)
     await vi.waitFor(() => expect(embedRows).toHaveBeenCalled())
     // Every row is still in play — quarantining the batch would strand rows that
     // are perfectly embeddable once the embedder is back.
