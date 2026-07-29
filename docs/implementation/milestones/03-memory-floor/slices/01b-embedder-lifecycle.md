@@ -151,9 +151,10 @@ host, same-dim staging under the two-part vec0 pk, multi-family
 vector cleanup) were resolved in slice planning on 2026-07-24; the
 decisions are recorded under Implementation notes below.
 
-One question opened during review on 2026-07-28 and remains open; the
-target-threading question raised alongside it was resolved the same
-day and its decision is under Implementation notes below.
+Two questions opened during review on 2026-07-28. The
+target-threading one was resolved the same day and its decision is
+under Implementation notes below; the dim-ceiling one is resolved
+below, with its remaining unprobed-model residue carried to M7.
 
 - **Custom effective dim is bounded only once the model has been
   probed.** Canon specifies `1 ≤ N ≤ native_dim`
