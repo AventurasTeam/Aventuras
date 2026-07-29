@@ -97,8 +97,7 @@ export function handleEvent(
 
       if (event.phase === 'post') {
         const postResult = event.result as
-          | { suggestions: any[] | null; actionChoices: any[] | null }
-          | undefined
+          { suggestions: any[] | null; actionChoices: any[] | null } | undefined
         if (postResult?.suggestions) {
           callbacks.setSuggestions(postResult.suggestions, state.storyId)
           callbacks.emitSuggestionsReady(

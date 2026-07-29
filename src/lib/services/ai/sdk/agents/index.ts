@@ -6,7 +6,6 @@
 
 export {
   createAgentFromPreset,
-  resolveAgentConfig,
   extractToolResults,
   extractTerminalToolResult,
   type ResolvedAgentConfig,

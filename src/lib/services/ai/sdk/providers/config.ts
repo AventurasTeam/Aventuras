@@ -162,7 +162,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: true,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       modelCapabilityFetching: true,
     },
@@ -254,7 +254,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: true,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       modelCapabilityFetching: true,
     },
@@ -275,7 +275,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -291,7 +291,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -307,7 +307,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -477,7 +477,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
     },
     fallbackModels: [
@@ -499,7 +499,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: true,
+      binaryReasoning: false,
     },
     imageDefaults: {
       defaultModel: 'cogview-3-plus',
@@ -527,7 +527,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: true,
+      binaryReasoning: false,
     },
     fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings
@@ -541,7 +541,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: false,
     },
     fallbackModels: [

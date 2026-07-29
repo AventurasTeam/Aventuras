@@ -219,8 +219,7 @@ export class ContextBuilder {
         const lines: string[] = []
         for (const entity of entities) {
           const runtimeVars = (entity.metadata as Record<string, unknown> | null)?.runtimeVars as
-            | RuntimeVarsMap
-            | undefined
+            RuntimeVarsMap | undefined
           if (!runtimeVars) continue
 
           const pairs: string[] = []

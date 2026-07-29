@@ -619,8 +619,7 @@
         placeholder="SELECT * FROM stories LIMIT 10;"
         spellcheck={false}
         class="bg-surface-950 border-surface-700 text-foreground placeholder:text-muted-foreground w-full rounded-md border p-3 font-mono text-xs leading-relaxed focus:ring-1 focus:ring-amber-500/50 focus:outline-none"
-        rows={4}
-      ></textarea>
+        rows={4}></textarea>
 
       <!-- Actions -->
       <div class="flex items-center gap-2">

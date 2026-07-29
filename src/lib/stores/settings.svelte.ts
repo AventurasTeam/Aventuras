@@ -1320,7 +1320,10 @@ class SettingsStore {
       if (enableThinking) this.apiSettings.enableThinking = enableThinking === 'true'
 
       const reasoningEffort = await database.getSetting('main_reasoning_effort')
-      if (reasoningEffort && ['off', 'low', 'medium', 'high'].includes(reasoningEffort)) {
+      if (
+        reasoningEffort &&
+        ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(reasoningEffort)
+      ) {
         this.apiSettings.reasoningEffort = reasoningEffort as ReasoningEffort
       } else if (this.apiSettings.enableThinking) {
         this.apiSettings.reasoningEffort = 'high'
@@ -2301,11 +2304,9 @@ class SettingsStore {
 
     for (const [profileField, modelField] of Object.entries(profileFieldMap)) {
       const apiProfileId = (imgSettings as unknown as Record<string, unknown>)[profileField] as
-        | string
-        | undefined
+        string | undefined
       const model = (imgSettings as unknown as Record<string, unknown>)[modelField] as
-        | string
-        | undefined
+        string | undefined
 
       if (!apiProfileId || !model) continue
 

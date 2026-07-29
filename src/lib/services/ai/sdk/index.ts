@@ -26,12 +26,11 @@ export {
 } from './generate'
 
 // Provider registry
-export { createProviderFromProfile, PROVIDERS } from './providers'
+export { PROVIDERS } from './providers'
 
 // Agent factory and stop conditions
 export {
   createAgentFromPreset,
-  resolveAgentConfig,
   extractToolResults,
   extractTerminalToolResult,
   stopOnTerminalTool,

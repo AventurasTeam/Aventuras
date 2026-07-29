@@ -3,15 +3,10 @@
   import { Brain, Settings2 } from 'lucide-svelte'
   import type { ReasoningEffort } from '$lib/types'
   import { cn } from '$lib/utils/cn'
-  import {
-    supportsReasoning,
-    supportsBinaryReasoning,
-    supportsCapabilityFetch,
-  } from '$lib/services/ai/sdk/providers'
+  import { supportsReasoning, supportsCapabilityFetch } from '$lib/services/ai/sdk/providers'
 
   import { Label } from '$lib/components/ui/label'
   import { Slider } from '$lib/components/ui/slider'
-  import { Switch } from '$lib/components/ui/switch'
   import { Input } from '$lib/components/ui/input'
   import ModelSelector from './ModelSelector.svelte'
 
@@ -142,12 +137,23 @@
 
   let effectiveProfileId = $derived(profileId || settings.getDefaultProfileIdForProvider())
 
-  const REASONING_LEVELS: ReasoningEffort[] = ['off', 'low', 'medium', 'high']
+  const REASONING_LEVELS: ReasoningEffort[] = [
+    'off',
+    'minimal',
+    'low',
+    'medium',
+    'high',
+    'xhigh',
+    'max',
+  ]
   const REASONING_LABELS: Record<ReasoningEffort, string> = {
     off: 'Off',
+    minimal: 'Minimal',
     low: 'Low',
     medium: 'Medium',
     high: 'High',
+    xhigh: 'Extra',
+    max: 'Max',
   }
 
   function getReasoningIndex(value?: ReasoningEffort): number {
@@ -165,7 +171,8 @@
     const profile = settings.getProfile(effectiveProfileId)
     if (!profile || !model) return 'unsupported'
     const m = settings.getProfileModels(effectiveProfileId).find((x) => x.id === model)
-    if (!!m?.reasoning && profile.providerType === 'nanogpt') return 'enforced'
+    if (!!m?.reasoning && profile.providerType === 'nanogpt')
+      return m?.id.match('/[-:]thinking(?::.+)?$/i') !== null ? 'enforced' : 'supported'
     if (!!m?.reasoning) return 'supported'
     return 'unsupported'
   })
@@ -182,23 +189,17 @@
     return supportsCapabilityFetch(profile.providerType)
   })
 
-  let binaryReasoningProvider = $derived.by(() => {
-    const profile = settings.getProfile(effectiveProfileId)
-    if (!profile) return false
-    return supportsBinaryReasoning(profile.providerType)
-  })
-
   // 1. Reset reasoning to off when the provider/model stops supporting it
   // 2. Force high reasoning for NanoGPT models that require it
   $effect(() => {
-    const _model = model // track model
-    const _profile = effectiveProfileId // track profile
+    // const _model = model // track model
+    // const _profile = effectiveProfileId // track profile
 
     // Enforcement (NanoGPT)
-    if (settings.shouldForceHighReasoning(_profile, _model) && reasoningEffort === 'off') {
-      onReasoningChange('high')
-      return
-    }
+    // if (settings.shouldForceHighReasoning(_profile, _model) && reasoningEffort === 'off') {
+    //   onReasoningChange('high')
+    //   return
+    // }
 
     // Capability check
     const reasoningSupported =
@@ -370,48 +371,44 @@
       )}
     >
       <div class="grid gap-4">
-        {#if binaryReasoningProvider}
-          <div class="flex items-center justify-between">
-            <Label>Thinking</Label>
-            <Switch
-              checked={reasoningEffort !== 'off'}
-              onCheckedChange={(v) => onReasoningChange(v ? 'high' : 'off')}
-            />
+        <div class="flex justify-between">
+          <Label>Thinking: {REASONING_LABELS[reasoningEffort]}</Label>
+        </div>
+        {#if modelReasoningCapability === 'enforced'}
+          <Slider
+            value={reasoningValue}
+            type="single"
+            min={1}
+            max={6}
+            step={1}
+            onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
+          />
+          <div class="text-muted-foreground flex justify-between text-xs">
+            <span>Min</span>
+            <span>Low</span>
+            <span>Med</span>
+            <span>High</span>
+            <span>Extra</span>
+            <span>Max</span>
           </div>
         {:else}
-          <div class="flex justify-between">
-            <Label>Thinking: {REASONING_LABELS[reasoningEffort]}</Label>
+          <Slider
+            value={reasoningValue}
+            type="single"
+            min={0}
+            max={6}
+            step={1}
+            onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
+          />
+          <div class="text-muted-foreground flex justify-between text-xs">
+            <span>Off</span>
+            <span>Min</span>
+            <span>Low</span>
+            <span>Med</span>
+            <span>High</span>
+            <span>Extra</span>
+            <span>Max</span>
           </div>
-          {#if modelReasoningCapability === 'enforced'}
-            <Slider
-              value={reasoningValue}
-              type="single"
-              min={1}
-              max={3}
-              step={1}
-              onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
-            />
-            <div class="text-muted-foreground flex justify-between text-xs">
-              <span>Low</span>
-              <span>Med</span>
-              <span>High</span>
-            </div>
-          {:else}
-            <Slider
-              value={reasoningValue}
-              type="single"
-              min={0}
-              max={3}
-              step={1}
-              onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
-            />
-            <div class="text-muted-foreground flex justify-between text-xs">
-              <span>Off</span>
-              <span>Low</span>
-              <span>Med</span>
-              <span>High</span>
-            </div>
-          {/if}
         {/if}
       </div>
     </div>

@@ -5,43 +5,33 @@
  * Uses explicit provider selection from APIProfile.providerType.
  */
 
+import { createLogger } from '$lib/log'
+import { debug } from '$lib/stores/debug.svelte'
+
+import { settings } from '$lib/stores/settings.svelte'
+import type { APIProfile, GenerationPreset, ProviderType, TextModel } from '$lib/types'
+import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
+import type { GroqProviderOptions } from '@ai-sdk/groq'
+import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
+import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai'
+import type { LanguageModelV3, LanguageModelV3Middleware } from '@ai-sdk/provider'
+import type { ProviderOptions } from '@ai-sdk/provider-utils'
+import type { XaiProviderOptions } from '@ai-sdk/xai'
 import {
   extractJsonMiddleware,
   extractReasoningMiddleware,
   generateText,
-  streamText,
   Output,
+  streamText,
   wrapLanguageModel,
 } from 'ai'
-import type { LanguageModelV3, LanguageModelV3Middleware } from '@ai-sdk/provider'
-import type { ProviderOptions } from '@ai-sdk/provider-utils'
+import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
 import { jsonrepair } from 'jsonrepair'
 import type { z } from 'zod'
-
-import { settings } from '$lib/stores/settings.svelte'
-import type {
-  ProviderType,
-  GenerationPreset,
-  ReasoningEffort,
-  APIProfile,
-  TextModel,
-} from '$lib/types'
-import { createLogger } from '$lib/log'
-import { createModelFromProfile } from './providers'
-import { PROVIDERS, getReasoningExtraction, GOOGLE_SAFETY_SETTINGS } from './providers/config'
-import { promptSchemaMiddleware, patchResponseMiddleware, loggingMiddleware } from './middleware'
+import { loggingMiddleware, patchResponseMiddleware, promptSchemaMiddleware } from './middleware'
 import { retryOn429Middleware } from './middleware/retryMiddleware'
-import { debug } from '$lib/stores/debug.svelte'
-import type { OpenAICompatibleProviderOptions } from '@ai-sdk/openai-compatible'
-import type { DeepSeekChatOptions } from '@ai-sdk/deepseek'
-import type { XaiProviderOptions } from '@ai-sdk/xai'
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic'
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai'
-import type { OpenRouterProviderOptions } from '@openrouter/ai-sdk-provider'
-import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
-import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
-import type { GroqProviderOptions } from '@ai-sdk/groq'
-import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
+import { createModelFromProfile } from './providers'
+import { getReasoningExtraction, GOOGLE_SAFETY_SETTINGS, PROVIDERS } from './providers/config'
 
 const log = createLogger('Generate')
 
@@ -87,13 +77,6 @@ const PROVIDER_OPTIONS_KEY: Record<ProviderType, string> = {
   mistral: 'mistral',
 }
 
-const REASONING_TOKEN_BUDGETS: Record<ReasoningEffort, number> = {
-  off: 0,
-  low: 4000,
-  medium: 8000,
-  high: 16000,
-}
-
 /** Shared middleware instance for extracting reasoning from <think> tags */
 const thinkTagMiddleware = extractReasoningMiddleware({ tagName: 'think' })
 
@@ -103,127 +86,69 @@ const thinkTagMiddleware = extractReasoningMiddleware({ tagName: 'think' })
 export function buildProviderOptions(
   preset: GenerationPreset,
   providerType: ProviderType,
-  structuredOutputs?: boolean,
-  modelInfo?: TextModel,
 ): ProviderOptions | undefined {
   let options: JSONObject = {}
 
-  const budgetTokens = REASONING_TOKEN_BUDGETS[preset.reasoningEffort] ?? 8000
-  const reasoningEffort = preset.reasoningEffort === 'off' ? undefined : preset.reasoningEffort
+  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
 
   if (!settings.advancedRequestSettings.manualMode) {
+    options = { reasoning } satisfies ProviderOptions
     switch (providerType) {
-      case 'openrouter':
-        // OpenRouter uses max_tokens for reasoning budget
-        if (reasoningEffort) {
-          options = { reasoning: { effort: reasoningEffort } } satisfies OpenRouterProviderOptions
-        }
-        break
       case 'openai':
-        if (reasoningEffort) {
-          options = { reasoningEffort: reasoningEffort } satisfies OpenAIResponsesProviderOptions
-        }
-        break
-      case 'anthropic':
-        if (reasoningEffort) {
+        if (reasoning !== 'none') {
           options = {
-            thinking: {
-              type: 'enabled',
-              budgetTokens,
-            },
-          } satisfies AnthropicProviderOptions
+            ...options,
+            reasoningSummary: 'auto',
+          } satisfies OpenAIResponsesProviderOptions
         }
         break
       case 'xai':
-        if (reasoningEffort) {
-          // xAI Chat API supports 'low' | 'high' only (no 'medium')
-          options = {
-            reasoningEffort: reasoningEffort === 'medium' ? 'high' : reasoningEffort,
-          } satisfies XaiProviderOptions
-        }
         options = { ...options, parallel_function_calling: true } satisfies XaiProviderOptions
-        break
-      case 'deepseek':
-        // DeepSeek uses binary thinking: enabled/disabled (no effort levels)
-        if (reasoningEffort) {
-          options = { thinking: { type: 'enabled' } } satisfies DeepSeekChatOptions
-        }
         break
       case 'google': {
         // Reinject safety settings here for complete model-request coverage
         options = {
+          ...options,
           safetySettings: GOOGLE_SAFETY_SETTINGS,
         } satisfies GoogleGenerativeAIProviderOptions
-        // Gemini 2.5 uses thinkingBudget; Gemma 4 uses minimal/high; Gemini 3.x uses low/medium/high
-        const usesBudget = modelInfo?.isBudgetReasoning ?? preset.model.includes('gemini-2.5')
-        if (usesBudget) {
-          // Always send thinkingConfig for Gemini 2.5: 0=disabled, -1=unlimited, otherwise token count
-          const gemini25Budgets: Record<ReasoningEffort, number> = {
-            off: 0,
-            low: 2048,
-            medium: -1,
-            high: 8196,
-          }
+        if (reasoning !== 'none') {
           options = {
             ...options,
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingBudget: gemini25Budgets[preset.reasoningEffort],
-            },
+            thinkingConfig: { includeThoughts: true },
           } satisfies GoogleGenerativeAIProviderOptions
-        } else if (reasoningEffort) {
-          const isGemma = preset.model.toLowerCase().includes('gemma')
-          const thinkingLevel = isGemma
-            ? reasoningEffort === 'high'
-              ? 'high'
-              : 'minimal'
-            : reasoningEffort
-          options = {
-            ...options,
-            thinkingConfig: {
-              includeThoughts: true,
-              thinkingLevel,
-            },
-          } satisfies GoogleGenerativeAIProviderOptions
-        }
-        if (structuredOutputs) {
-          options = { ...options, structuredOutputs } satisfies GoogleGenerativeAIProviderOptions
         }
         break
       }
+      case 'nanogpt':
+        options = { reasoning_effort: reasoning !== 'max' ? reasoning : 'xhigh' }
+        break
       case 'pollinations':
         options = {
-          reasoning_effort: reasoningEffort,
+          reasoning_effort: reasoning !== 'max' ? reasoning : 'xhigh',
           parallel_tool_calls: true,
         } satisfies PollinationsLanguageModelSettings
         break
       case 'groq':
-        options = {
-          reasoningEffort: reasoningEffort,
-          structuredOutputs,
-          parallelToolCalls: true,
-        } satisfies GroqProviderOptions
+        options = { ...options, parallelToolCalls: true } satisfies GroqProviderOptions
         break
       case 'zhipu':
-        if (reasoningEffort) {
-          options = { type: 'enabled', clearThinking: true, doSample: true }
+        if (reasoning !== 'none') {
+          options = {
+            ...options,
+            thinking: { type: 'enabled', clearThinking: true, doSample: true },
+          }
+        } else {
+          options = {
+            thinking: { type: 'disabled' },
+          }
         }
         break
       case 'mistral':
         options = {
+          ...options,
           safePrompt: false,
           parallelToolCalls: true,
-          structuredOutputs,
         } satisfies MistralLanguageModelOptions
-        break
-      case 'chutes':
-      case 'nvidia-nim':
-      case 'nanogpt':
-      case 'ollama':
-      case 'lmstudio':
-      case 'llamacpp':
-      case 'openai-compatible':
-        options = { reasoningEffort: reasoningEffort } satisfies OpenAICompatibleProviderOptions
         break
     }
   }
@@ -269,52 +194,47 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     throw new Error(`Profile not found: ${profileId}`)
   }
 
-  const capabilities = PROVIDERS[profile.providerType].capabilities
-
-  const override = preset.structuredOutputOverride
-  let supportsStructuredOutput: boolean
-  if (override === 'on') {
-    supportsStructuredOutput = true
-  } else if (override === 'off') {
-    supportsStructuredOutput = false
-  } else {
-    // Auto: start with provider-level default, then refine with fetched model data if available
-    const providerDefault = capabilities?.structuredOutput ?? true
-    if (capabilities?.modelCapabilityFetching) {
-      const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
-      supportsStructuredOutput = !!fetchedModel?.structuredOutput
-    } else {
-      supportsStructuredOutput = providerDefault
-    }
-  }
-
   const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
+
+  let structuredOutputs = false
+  switch (preset.structuredOutputOverride) {
+    case 'on':
+      structuredOutputs = true
+      break
+    case 'off':
+      structuredOutputs = false
+      break
+    case 'auto':
+      const capabilities = PROVIDERS[profile.providerType].capabilities
+      structuredOutputs = capabilities?.modelCapabilityFetching
+        ? !!fetchedModel?.structuredOutput
+        : (capabilities?.structuredOutput ?? true)
+      break
+  }
 
   const model = createModelFromProfile({
     profile,
     modelId: preset.model,
     presetId: serviceId,
     debugId,
-    structuredOutputs: supportsStructuredOutput,
+    structuredOutputs,
     manualBody: preset.manualBody ?? '',
+    serviceId,
   })
 
   const useThinkTag =
     profile.providerType === 'openai-compatible' ||
     getReasoningExtraction(profile.providerType) === 'think-tag'
 
+  const providerOptions = buildProviderOptions(preset, profile.providerType)
+
   return {
     preset,
     profile,
     providerType: profile.providerType,
     model,
-    providerOptions: buildProviderOptions(
-      preset,
-      profile.providerType,
-      supportsStructuredOutput,
-      fetchedModel,
-    ),
-    supportsStructuredOutput,
+    providerOptions,
+    supportsStructuredOutput: structuredOutputs,
     useThinkTag,
   }
 }
@@ -329,7 +249,6 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
   }
 
   const baseModelId = settings.apiSettings.defaultModel
-  const fetchedModel = settings.getProfileModels(profile.id).find((m) => m.id === baseModelId)
 
   const model = createModelFromProfile({
     profile,
@@ -362,12 +281,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     model,
     temperature: settings.apiSettings.temperature,
     maxTokens: settings.apiSettings.maxTokens,
-    providerOptions: buildProviderOptions(
-      narrativePreset,
-      profile.providerType,
-      false,
-      fetchedModel,
-    ),
+    providerOptions: buildProviderOptions(narrativePreset, profile.providerType),
     useThinkTag,
   }
 }

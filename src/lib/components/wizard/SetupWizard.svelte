@@ -34,8 +34,7 @@
   // Auto-link embedded lorebook when selecting a vault character
   function autoLinkCharacterLorebook(char: VaultCharacter, isProtagonist = false) {
     const linkedId = (char.metadata as Record<string, unknown>)?.linkedLorebookId as
-      | string
-      | undefined
+      string | undefined
     if (!linkedId) return
     if (isProtagonist) wizard.setProtagonistLinkedLorebook(linkedId)
     const lorebook = lorebookVault.getById(linkedId)

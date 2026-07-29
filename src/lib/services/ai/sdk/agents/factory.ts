@@ -16,7 +16,7 @@ import {
 import type { LanguageModelV3 } from '@ai-sdk/provider'
 import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import { settings } from '$lib/stores/settings.svelte'
-import { createProviderFromProfile } from '../providers'
+import { createModelFromProfile, PROVIDERS } from '../providers'
 import { buildProviderOptions } from '../generate'
 import { uniqueToolCallIdMiddleware } from '../middleware'
 import type { GenerationPreset, APIProfile, ProviderType } from '$lib/types'
@@ -40,8 +40,10 @@ export interface ResolvedAgentConfig {
  * This follows the same pattern as resolveConfig in generate.ts
  *
  * @param presetId - The preset ID (e.g., 'agentic', 'loreManagement')
+ * @param serviceId - The Service ID
+ * @param debugId - Request ID for debug logging
  */
-export function resolveAgentConfig(
+function resolveAgentConfig(
   presetId: string,
   serviceId: string,
   debugId?: string,
@@ -54,14 +56,32 @@ export function resolveAgentConfig(
     throw new Error(`Profile not found: ${profileId}`)
   }
 
-  const provider = createProviderFromProfile({
+  const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
+
+  let structuredOutputs = false
+  switch (preset.structuredOutputOverride) {
+    case 'on':
+      structuredOutputs = true
+      break
+    case 'off':
+      structuredOutputs = false
+      break
+    case 'auto':
+      const capabilities = PROVIDERS[profile.providerType].capabilities
+      structuredOutputs = capabilities?.modelCapabilityFetching
+        ? !!fetchedModel?.structuredOutput
+        : (capabilities?.structuredOutput ?? true)
+      break
+  }
+
+  const baseModel = createModelFromProfile({
     profile,
-    presetId: serviceId,
+    modelId: preset.model,
+    presetId,
     debugId,
-    manualBody: preset.manualBody ?? '',
+    structuredOutputs,
+    serviceId,
   })
-  // Call provider directly - all providers support provider(modelId) syntax
-  const baseModel = provider(preset.model) as LanguageModelV3
   // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps
   // (e.g. Google's `functions.tool:0` scheme) get globally unique tool call IDs.
   const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })

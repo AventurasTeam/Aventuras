@@ -431,8 +431,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       const sizeToUse = parseImageSize(size)
 
       const loraOptions = providerOptions?.lora as
-        | { name: string; strengthModel?: number; strengthClip?: number }
-        | undefined
+        { name: string; strengthModel?: number; strengthClip?: number } | undefined
 
       // Explicit mode always wins. Auto-detection only runs when no mode is set.
       const hasExplicitOverride = !!explicitMode

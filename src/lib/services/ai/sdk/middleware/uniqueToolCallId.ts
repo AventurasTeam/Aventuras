@@ -12,9 +12,9 @@
  * resolve to different UUIDs.
  */
 
-import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+import type { LanguageModelMiddleware } from 'ai'
 
-export function uniqueToolCallIdMiddleware(): LanguageModelV3Middleware {
+export function uniqueToolCallIdMiddleware(): LanguageModelMiddleware {
   return {
     specificationVersion: 'v3',
 
