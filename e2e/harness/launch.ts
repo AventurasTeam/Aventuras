@@ -26,6 +26,12 @@ const PACKAGED_APP = join(REPO_ROOT, 'release', 'linux-unpacked', 'aventuras')
 
 const APP_SCHEME_ORIGIN = 'app://'
 
+// scripts/e2e.ts runs the suite under Xvfb so it never steals focus, but on a
+// Wayland session Electron ignores DISPLAY and connects to the compositor —
+// the window opens on the developer's real screen and Xvfb stays empty. Only
+// this switch pins the backend; the env-var hint is ignored.
+const ozoneArgs = process.env.E2E_VIRTUAL_DISPLAY === '1' ? ['--ozone-platform=x11'] : []
+
 const MIME: Record<string, string> = {
   '.html': 'text/html',
   '.js': 'text/javascript',
@@ -100,7 +106,7 @@ export async function launchApp(opts: {
     try {
       app = await electron.launch({
         executablePath: PACKAGED_APP,
-        args: [`--user-data-dir=${opts.userDataDir}`],
+        args: [...ozoneArgs, `--user-data-dir=${opts.userDataDir}`],
         timeout: 60_000,
       })
       const window = await selectAppWindow(app, APP_SCHEME_ORIGIN)
@@ -128,7 +134,7 @@ export async function launchApp(opts: {
   let app: ElectronApplication | undefined
   try {
     app = await electron.launch({
-      args: ['electron/dist/main.js', `--user-data-dir=${opts.userDataDir}`],
+      args: ['electron/dist/main.js', ...ozoneArgs, `--user-data-dir=${opts.userDataDir}`],
       cwd: REPO_ROOT,
       env: { ...process.env, EXPO_WEB_URL: origin },
       timeout: 60_000,
