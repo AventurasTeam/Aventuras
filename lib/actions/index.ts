@@ -1,31 +1,31 @@
 export { defineAction } from './define-action'
+// The raw engine primitives (startSwap / resumeSwap / cancelSwap / reindexStory /
+// relabelModel) are deliberately absent: each requires the caller to already hold
+// the per-story single-flight lock, and the safe entry points are the *Story*
+// wrappers that take it via runExclusive. They stay reachable inside
+// `./embedder-swap` only, so the unsafe pair is never the more obvious import.
 export {
   buildDrainController,
   cancelStorySwap,
-  cancelSwap,
   kickStoryDrain,
   countStoryEmbeddableRows,
   refreshEmbeddingStatus,
-  reindexStory,
   reindexStoryNow,
-  relabelModel,
   relabelStory,
   RelabelBlockedError,
   RelabelDimMismatchError,
   resolveStorySwapConfig,
   resumeStorySwap,
-  resumeSwap,
   setDrainKickSink,
   setDrainStatusSink,
   startStorySwap,
-  startSwap,
   SwapBusyError,
   SwapConfigError,
   SwapInProgressError,
+  SwapMarkerChangedError,
   SwapNotInProgressError,
   SwapStoryMissingError,
-  type SwapDeps,
-  type SwapParams,
+  type SwapCancelOutcome,
 } from './embedder-swap'
 export { applyDeltaAction } from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'

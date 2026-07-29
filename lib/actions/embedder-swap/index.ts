@@ -6,6 +6,7 @@ export {
   resumeSwap,
   startSwap,
   SwapInProgressError,
+  SwapMarkerChangedError,
   SwapNotInProgressError,
   SwapStoryMissingError,
   type SwapDeps,
@@ -28,4 +29,5 @@ export {
   startStorySwap,
   SwapBusyError,
   SwapConfigError,
+  type SwapCancelOutcome,
 } from './app-deps'
