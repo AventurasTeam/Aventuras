@@ -4,9 +4,10 @@ import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { buildSuggestionSlots } from '@/lib/piggyback'
 
 type BuildArgs = {
-  // Caller-scoped entry window, ascending by position (per-turn: the open
-  // partial chapter; chapter-close: the closing chapter). Recency windowing
-  // is template-side via the `recent` filter, not done here.
+  // The branch's loaded entries, ascending by position. Every consumer draws
+  // from that one set and differs only in how much of it it passes, so this is
+  // a truncation seam, not a per-kind query. Recency windowing is template-side
+  // via the `recent` filter, not done here.
   entries: readonly StoryEntry[]
   entities: readonly Entity[]
   definition: StoryDefinition

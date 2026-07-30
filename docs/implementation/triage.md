@@ -641,3 +641,35 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   row load, or narrow canon to say revalidation happens only where a caller
   already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
   the cancel half resolved in M3.1b review (2026-07-28).
+
+- **`buildGenerationContext` should own the store reads, not receive a
+  finished dataset.** The planned shape is a unified **data source**: call
+  sites hand the builder identity and it reads `entriesStore` /
+  `entitiesStore` itself, with templates doing the shaping in Liquid per
+  [`architecture.md → Formatting lives in Liquid`](../architecture.md#formatting-lives-in-liquid-not-in-the-context-builder).
+  Today all three phases (`per-turn.ts`, `per-turn-piggyback.ts`,
+  `suggestion-refresh.ts`) duplicate the same branch-filter-and-sort and
+  hand in pre-shaped arrays, and the builder flattens entries to
+  `{ content }` — which contradicts that canon in the one place it matters
+  most, since a template can reach neither `entry.position` nor
+  `entry.metadata`. Four things the implementer must handle, none obvious
+  from the call sites: (a) `sceneEntities` is derived from `.at(-1)` of the
+  array the caller passed, so template-side truncation silently makes it
+  describe the branch tail instead of the consumer's own — it has to become
+  template-derived in the same change or the refresh renders the wrong scene
+  block; (b) `entry` is absent from `SUBSTITUTABLE_PREFIXES`
+  (`lib/ids/prefixes.ts`), so raw entries expose real UUIDs where a pack
+  author can print them, against
+  [`data-model.md → ID shape`](../data-model.md#id-shape--kind-prefixed-uuids-throughout)
+  — adding it also makes a `targetEntryId` context variable substitute
+  through the same `IdBiMap`, so a filter can compare placeholder to
+  placeholder; (c) only `suggestion-refresh`'s truncate-at-target needs a
+  new filter (an `up_to`-style one) — per-turn already truncates via
+  `recent`, and the classifier fold's tail pair is exactly `recent: 2`;
+  (d) `generation-context.test.ts` has 17 call sites passing fixtures
+  directly, and the builder is currently pure, so store-reading means
+  hydrating stores in each — the bulk of the mechanical cost. Also needs a
+  clause edit to [`architecture.md → The single-context principle`](../architecture.md#the-single-context-principle),
+  whose "a phase reads the domain stores directly" no longer holds (the
+  "calls the group's context builder per render" half is unchanged).
+  Surfaced by M3.7a post-merge review (2026-07-30).
