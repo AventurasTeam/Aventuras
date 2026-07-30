@@ -152,6 +152,23 @@ for the placement rule.
     (retain `stripStateBlock` as a display-time fallback) over a
     migration.
 
+- **Happening involvements drift when scene membership is edited after
+  the fact.** Involvements record who was present at an entry, so a later
+  edit to that entry's `sceneEntities` can contradict them. Rolling back
+  and re-running the classifier pass is disproportionate: it
+  over-reverses (facts anchored to surviving entries must be spared per
+  the survival anchor), costs a full LLM pass for a small correction, and
+  can silently rewrite happenings the user never touched. Prefer flagging
+  affected involvements for review over recomputing, which also matches
+  the established posture that user edits stick only until the classifier
+  reads contradicting prose
+  ([`data-model.md → Authorship contract`](./data-model.md#authorship-contract)
+  parks the manual-edit-vs-overwrite policy as its own question). Raised
+  as an open question on
+  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md);
+  it outlived the slice because the trigger is the world-state-block edit
+  surface above, not the classifier itself.
+
 - **Entry content edits are irreversible, and that may read as a bug
   from the user's side.** `story_entries.content` is the delta log's
   single per-column side-channel exemption
@@ -169,3 +186,20 @@ for the placement rule.
   question is whether the UX is defensible as-is, wants an editor-local
   undo stack, or wants the redo-clear narrowed. Not scoped to the
   world-state-block work; surfaced alongside it 2026-07-23.
+
+## Tooling
+
+- **`pnpm test:run` over the whole repo cannot be read as a gate.** A
+  full run reports failed test _files_ with zero failed tests: a varying
+  handful of Storybook browser-project files fail to _load_ under
+  parallel contention (`Failed to fetch dynamically imported module`,
+  `Cannot connect to the iframe …`). The same files pass in isolation,
+  and the failing set differs run to run. Reproduced on `main`
+  (`54528591`) from a clean install — 9 files, 0 failed tests — so it is
+  not branch-specific. Until it is fixed, every slice's finish step has
+  to run the `unit` project and the Storybook files separately and argue
+  the residual by hand, which is exactly the shape that lets a real
+  browser-project regression hide. Likely levers: concurrency limits on
+  the browser project, or isolating it from the `unit` project's workers.
+  Surfaced 2026-07-30 finishing
+  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
