@@ -12,6 +12,7 @@ import {
   resetAllStores,
 } from '@/lib/stores'
 
+import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { fallbackClassifierWithSuggestionsSchema } from './per-turn-piggyback'
 import {
   ensureSuggestionRefreshPipelineRegistered,
@@ -22,6 +23,7 @@ import {
   type SuggestionRefreshInput,
 } from './suggestion-refresh'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
+import { checkConcurrencyContract } from '../runtime/concurrency'
 
 const definition = {
   mode: 'adventure' as const,
@@ -177,6 +179,31 @@ describe('suggestion-refresh declaration', () => {
     expect(p.gateBehavior).toBe('no-gate')
     expect(p.concurrencyPolicy.blockedBy).toEqual(['per-turn', 'suggestion-refresh'])
     expect(p.chainsTo).toBeUndefined()
+  })
+
+  it('yields to per-turn so a turn never waits on a refresh whose chips it orphans', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    ensurePerTurnPipelineRegistered()
+    const refresh = getPipeline(SUGGESTION_REFRESH_KIND)
+
+    expect(refresh.concurrencyPolicy.yieldsTo).toEqual([PER_TURN_KIND])
+    // The other direction must stay open, or the yield never fires: a per-turn
+    // that blocks on a running refresh is rejected before it can pre-empt it,
+    // and the reader turns a rejected turn into a system failure entry.
+    expect(getPipeline(PER_TURN_KIND).concurrencyPolicy.blockedBy).not.toContain(
+      SUGGESTION_REFRESH_KIND,
+    )
+  })
+
+  it('resolves a collision by aborting the refresh, not by rejecting the turn', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    ensurePerTurnPipelineRegistered()
+    const running = new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND } as never]])
+
+    expect(checkConcurrencyContract(PER_TURN_KIND, running, false)).toEqual({
+      kind: 'start-after-yields',
+      targets: ['run-1'],
+    })
   })
 
   it('declares the suggestion agent as phase 0 resolver input and nothing for translation', () => {

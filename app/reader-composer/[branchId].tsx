@@ -516,6 +516,10 @@ export default function ReaderComposerRoute() {
 
   const handleToggleStripCollapsed = useCallback(() => setStripCollapsed((prev) => !prev), [])
 
+  const handleCancelSuggestions = useCallback(() => {
+    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
+  }, [])
+
   // Read at settle time, not from the closure. A refresh outlives what it was
   // fired on: per-turn doesn't block on it, so a turn can move the tail
   // mid-run, and a branch-switch abort whose reverse-replay fails resolves
@@ -775,6 +779,7 @@ export default function ReaderComposerRoute() {
               categories={suggestionCategories}
               onTapChip={handleTapChip}
               onRefresh={handleRefreshSuggestions}
+              onCancel={handleCancelSuggestions}
               onToggleCollapsed={handleToggleStripCollapsed}
               disabled={editBlocked}
             />

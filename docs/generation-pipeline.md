@@ -1407,9 +1407,18 @@ const chapterClosePipeline: Pipeline = {
 const suggestionRefreshPipeline: Pipeline = {
   kind: 'suggestion-refresh',
   gateBehavior: 'no-gate', // composer stays usable; only the chip strip shows local loading
-  concurrencyPolicy: { blockedBy: ['per-turn', 'suggestion-refresh'] },
+  concurrencyPolicy: {
+    blockedBy: ['per-turn', 'suggestion-refresh'],
+    yieldsTo: ['per-turn'],
+  },
   // per-turn and self-block are framework backstops; the UI also gates
-  // the re-roll affordance during a turn or while one is already loading
+  // the re-roll affordance during a turn or while one is already loading.
+  // yieldsTo is the collision rule: chips persist on the entry that was
+  // terminal when the re-roll fired, so a turn landing mid-run makes this
+  // run's own output unreachable — the strip reads the new tail, and the
+  // turn emits its own chips. Blocking per-turn instead would put friction
+  // on the primary action to protect provably-dead work, and a rejected
+  // turn surfaces to the reader as a system failure entry.
 }
 
 const periodicClassifierPipeline: Pipeline = {
@@ -1450,6 +1459,10 @@ const translationRetryPipeline: Pipeline = {
 | translation-retry     | chapter-close (chained) | chained start originates from per-turn commit; per-turn can't run during retry, so chain can't fire                                                                                                                                                              |
 | translation-retry     | periodic-classifier     | classifier's blockedBy lacks translation-retry → starts; both run (classifier doesn't write translation rows)                                                                                                                                                    |
 | translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                                                                                                                                                                                |
+| per-turn              | suggestion-refresh      | refresh's blockedBy includes per-turn → blocked (the strip also locks its ⟳ for the turn's duration)                                                                                                                                                             |
+| suggestion-refresh    | suggestion-refresh      | blockedBy includes self → blocked; the strip's ⟳ is swapped for ✕ while loading, so a second re-roll isn't offered                                                                                                                                               |
+| suggestion-refresh    | per-turn                | refresh's yieldsTo includes per-turn → refresh aborts, turn starts; Send is never rejected                                                                                                                                                                       |
+| suggestion-refresh    | chapter-close (chained) | chained start bypasses concurrencyPolicy → starts; the chain originates from a per-turn commit, which already yielded the refresh away                                                                                                                           |
 
 `blockedBy` prevents NEW starts; it does NOT kill running pipelines.
 The architectural premise (`memory/cadence.md → Concurrency`) is that

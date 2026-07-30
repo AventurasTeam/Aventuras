@@ -59,6 +59,7 @@ const meta = {
     categories,
     onTapChip: fn(),
     onRefresh: fn(),
+    onCancel: fn(),
     onToggleCollapsed: fn(),
   },
 } satisfies Meta<typeof SuggestionStrip>

@@ -559,16 +559,23 @@ type. Different axes.
 
 - **⟳ refresh** — primary action. Fires the `suggestion-refresh`
   pipeline with current composer text as `refreshGuidance` (empty
-  string if composer is empty). Strip enters `loading`; refresh icon
-  pulses; chips dim; taps no-op. Second click while loading is a
-  no-op (concurrency policy self-blocks; see
-  [`generation-pipeline.md`](../../../generation-pipeline.md)).
+  string if composer is empty). Strip enters `loading`; chips dim;
+  taps no-op.
   **Hidden while `empty-state` is expanded** — the body's ⟳ Generate
   button below is the refresh affordance there, and the two side by
   side would read as different actions. Reappears once the strip is
   collapsed, since collapsing hides the body button along with the
   rest of the content and the chrome row becomes the only refresh
   affordance left.
+- **✕ cancel** — **replaces** ⟳ in the same slot for as long as the
+  strip is `loading`, and aborts the in-flight run. It swaps rather
+  than sitting beside ⟳ because a live refresh button next to a
+  cancel would offer a re-roll the pipeline self-blocks anyway, and
+  it is not animated: a throbbing control reads as busy rather than
+  pressable, and the dimmed chips already carry the in-flight
+  signal. The chrome ✕ is present even in the `empty-state`-fired
+  case, since the strip is in `loading` (not `empty-state`) while
+  the run is up, so the slot is never empty during a run.
 - **⌄ collapse** — existing affordance; flips between `visible` and
   `collapsed`. Chrome row persists when collapsed.
 
@@ -588,7 +595,7 @@ pipeline as the refresh button.
 - `visible` — normal
 - `loading` — a re-roll is in flight (the chrome ⟳ or the
   empty-state ⟳ Generate button fired `suggestion-refresh`). Chips
-  dim; refresh icon pulses
+  dim; the chrome ⟳ becomes ✕
 - `error` — generation failed (inline error with Retry)
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
@@ -629,6 +636,15 @@ not a deletion.
   before a branch switch fires (existing reader transaction
   behavior). A `suggestion-refresh` in flight aborts on branch
   switch — non-transactional, cancellable.
+- **Send pressed while a re-roll is in flight.** The refresh
+  `yieldsTo` per-turn, so the turn pre-empts it: the refresh aborts,
+  the turn starts, and Send is never rejected or delayed behind a
+  chip call. Nothing is lost that could have been seen — chips
+  persist on the entry that was terminal when ⟳ fired, so a
+  committed refresh racing a turn would land on an entry the strip
+  no longer reads, and the turn emits its own chips regardless. The
+  composer is **not** disabled during a re-roll; the refresh is
+  `no-gate` and the reader stays fully usable.
 - **Rollback semantics.** `story_entries.metadata.nextTurnSuggestions`
   rolls back via the existing metadata delta-log. After rollback,
   the new terminal entry's chips become the active strip. The

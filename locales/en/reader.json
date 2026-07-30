@@ -24,6 +24,7 @@
   },
   "suggestions": {
     "refresh": "Refresh suggestions",
+    "cancel": "Cancel suggestion refresh",
     "generate": "Generate suggestions",
     "collapse": "Collapse suggestions",
     "expand": "Expand suggestions",

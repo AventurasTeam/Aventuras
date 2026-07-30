@@ -1,12 +1,6 @@
-import { AlertTriangle, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react-native'
-import { useEffect, useMemo, type ReactNode } from 'react'
+import { AlertTriangle, ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react-native'
+import { useMemo, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from 'react-native-reanimated'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -40,6 +34,8 @@ type SuggestionStripProps = {
   /** Receives the chip's prose; the route fills the composer and forces `Free` mode. */
   onTapChip: (text: string) => void
   onRefresh: () => void
+  /** Aborts the in-flight refresh. Only reachable while `phase === 'loading'`. */
+  onCancel: () => void
   onToggleCollapsed: () => void
   /** In-flight per-turn generation: blocks chip taps and refresh, never collapse. */
   disabled?: boolean
@@ -56,29 +52,6 @@ function tintOf(hex: string, alpha: number): string {
   const full = body.length === 3 ? body.replace(/./g, (c) => c + c) : body
   const n = Number.parseInt(full, 16)
   return `rgba(${(n >> 16) & 0xff}, ${(n >> 8) & 0xff}, ${n & 0xff}, ${alpha})`
-}
-
-// Split like Skeleton: Tailwind's animate-pulse doesn't run on native, and
-// Reanimated throws on a deps-array-less useAnimatedStyle under Storybook's
-// bundler — the web branch is what keeps this compound renderable there.
-function Pulsing({ active, children }: { active: boolean; children: ReactNode }) {
-  if (Platform.OS === 'web') {
-    return <View className={cn(active && 'animate-pulse')}>{children}</View>
-  }
-  return <NativePulsing active={active}>{children}</NativePulsing>
-}
-
-function NativePulsing({ active, children }: { active: boolean; children: ReactNode }) {
-  const opacity = useSharedValue(1)
-  useEffect(() => {
-    opacity.set(
-      active
-        ? withRepeat(withTiming(0.3, { duration: 600 }), -1, true)
-        : withTiming(1, { duration: 150 }),
-    )
-  }, [active, opacity])
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }), [])
-  return <Animated.View style={style}>{children}</Animated.View>
 }
 
 function SuggestionChipRow({
@@ -138,6 +111,7 @@ export function SuggestionStrip({
   categories,
   onTapChip,
   onRefresh,
+  onCancel,
   onToggleCollapsed,
   disabled = false,
   className,
@@ -217,17 +191,25 @@ export function SuggestionStrip({
       <View className={cn('gap-1.5', contentClassName)}>
         {body}
         <View className="flex-row items-center justify-end gap-1">
-          {emptyStateOwnsRefresh ? null : (
-            <Pulsing active={busy}>
-              <IconAction
-                icon={RefreshCw}
-                label={t('reader:suggestions.refresh')}
-                size="sm"
-                aria-busy={busy}
-                disabled={locked}
-                onPress={onRefresh}
-              />
-            </Pulsing>
+          {busy ? (
+            // Swaps in rather than sitting beside ⟳: a live refresh button next
+            // to a cancel offers a re-roll the pipeline would self-block anyway.
+            // Not pulsed — a throbbing control reads as busy, not as pressable,
+            // and the body's dimmed chips already carry the in-flight signal.
+            <IconAction
+              icon={X}
+              label={t('reader:suggestions.cancel')}
+              size="sm"
+              onPress={onCancel}
+            />
+          ) : emptyStateOwnsRefresh ? null : (
+            <IconAction
+              icon={RefreshCw}
+              label={t('reader:suggestions.refresh')}
+              size="sm"
+              disabled={locked}
+              onPress={onRefresh}
+            />
           )}
           <IconAction
             icon={collapsed ? ChevronUp : ChevronDown}

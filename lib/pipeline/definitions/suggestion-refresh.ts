@@ -91,8 +91,9 @@ async function* suggestionEmissionPhase(
     })
     return { status: 'completed' }
   }
-  // per-turn does not block on a refresh, so a turn can land mid-run. Chips seed
-  // the turn that follows THIS entry — context past it would describe another.
+  // Chips seed the turn that follows THIS entry, so context past it would
+  // describe another. The target is the tail in every path the UI offers, but a
+  // redo landing between the click and this read would put entries after it.
   const window = entries.slice(0, entries.indexOf(target) + 1)
 
   const guidance = input.refreshGuidance.trim()
@@ -226,7 +227,15 @@ export function ensureSuggestionRefreshPipelineRegistered(): void {
       ],
       affordance: 'pill-only',
       gateBehavior: 'no-gate',
-      concurrencyPolicy: { blockedBy: [PER_TURN_KIND, SUGGESTION_REFRESH_KIND] },
+      // Yields rather than blocking per-turn: chips land on the entry that was
+      // terminal when ⟳ fired, so a turn landing mid-run makes this run's own
+      // output unreachable — the strip reads the new tail, and the turn emits
+      // its own chips anyway. Blocking the turn instead would put friction on
+      // the primary action to protect provably-dead work.
+      concurrencyPolicy: {
+        blockedBy: [PER_TURN_KIND, SUGGESTION_REFRESH_KIND],
+        yieldsTo: [PER_TURN_KIND],
+      },
     })
   }
 }
