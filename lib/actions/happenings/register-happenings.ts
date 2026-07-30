@@ -1,7 +1,13 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { Happening, NewHappening } from '@/lib/db'
-import { happenings, happeningWriteObject, happeningWriteSchema } from '@/lib/db'
+import {
+  happenings,
+  happeningWriteObject,
+  happeningWriteSchema,
+  happeningInvolvements,
+  happeningAwareness,
+} from '@/lib/db'
 import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
@@ -151,14 +157,35 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
   if (!current)
     return { status: 'rejected', reason: `delete target happening ${bid}:${id} not found` }
+
+  const involvements = await ctx.db
+    .select()
+    .from(happeningInvolvements)
+    .where(and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.happeningId, id)))
+  const awareness = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
+
   return {
     status: 'ok',
     targetTable: 'happenings',
     targetId: id,
     op: 'delete',
-    // Full row so reverse-replay rebuilds both the SQLite re-insert and the store create-patch.
-    undoPayload: { ...current },
+    // The link rows have no delta of their own here, so the parent's payload is
+    // the only place reverse-replay can rebuild them from.
+    undoPayload: { ...current, involvements, awareness },
     ops: [
+      ctx.db
+        .delete(happeningInvolvements)
+        .where(
+          and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.happeningId, id)),
+        )
+        .toSQL(),
+      ctx.db
+        .delete(happeningAwareness)
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
+        .toSQL(),
       ctx.db
         .delete(happenings)
         .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))

@@ -1,11 +1,23 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, deltas, happenings, stories, type NewHappening } from '@/lib/db'
+import {
+  branches,
+  deltas,
+  happenings,
+  happeningInvolvements,
+  happeningAwareness,
+  stories,
+  type NewHappening,
+  type NewHappeningInvolvement,
+  type NewHappeningAwareness,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { happeningsStore } from '@/lib/stores'
+import { happeningsStore, happeningInvolvementsStore, happeningAwarenessStore } from '@/lib/stores'
 
+import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
+import { registerHappeningInvolvements } from './register-involvements'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { __resetRegistry } from '../delta/registry'
 import { reverseReplayDeltas } from '../delta/reverse-replay'
@@ -13,11 +25,17 @@ import { reverseReplayDeltas } from '../delta/reverse-replay'
 async function setup() {
   __resetRegistry()
   registerHappenings()
+  registerHappeningInvolvements()
+  registerHappeningAwareness()
   const { db, runInTransaction } = await createTestDb()
   await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 })
   happeningsStore.__reset()
   happeningsStore.hydrate('br_1', [])
+  happeningInvolvementsStore.__reset()
+  happeningInvolvementsStore.hydrate('br_1', [])
+  happeningAwarenessStore.__reset()
+  happeningAwarenessStore.hydrate('br_1', [])
   return { db, ctx: { db, runInTransaction } }
 }
 
@@ -34,6 +52,17 @@ const HAP: NewHappening = {
 async function rowFor(db: Awaited<ReturnType<typeof setup>>['db'], id: string) {
   const [r] = await db.select().from(happenings).where(eq(happenings.id, id))
   return r
+}
+
+async function countRows(
+  table: 'happening_involvements' | 'happening_awareness',
+  branchId: string,
+  db: Awaited<ReturnType<typeof setup>>['db'],
+) {
+  const targetTable =
+    table === 'happening_involvements' ? happeningInvolvements : happeningAwareness
+  const rows = await db.select().from(targetTable).where(eq(targetTable.branchId, branchId))
+  return rows.length
 }
 
 describe('happenings CRUD arms', () => {
@@ -180,5 +209,184 @@ describe('happenings CRUD arms', () => {
     expect(await reverseReplayDeltas('act_d', ctx)).toBe(1)
     expect((await rowFor(db, 'hap_1')).title).toBe('The duel')
     expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+  })
+
+  it('deleting a happening also removes its involvements and awareness rows', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const inv: NewHappeningInvolvement = {
+      id: 'inv_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    }
+    const aware: NewHappeningAwareness = {
+      id: 'haw_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      learnedAtEntryId: null,
+      decayResistance: null,
+      source: 'direct',
+    }
+    await db.insert(happeningInvolvements).values(inv)
+    await db.insert(happeningAwareness).values(aware)
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'periodic_classifier',
+          payload: { branchId: 'br_1', id: 'hap_1' },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(await rowFor(db, 'hap_1')).toBeUndefined()
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(0)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(0)
+  })
+
+  it('carries the cascaded rows in the undo payload so reverse-replay restores them', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const inv: NewHappeningInvolvement = {
+      id: 'inv_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    }
+    const aware: NewHappeningAwareness = {
+      id: 'haw_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      learnedAtEntryId: null,
+      decayResistance: null,
+      source: 'direct',
+    }
+    await db.insert(happeningInvolvements).values(inv)
+    await db.insert(happeningAwareness).values(aware)
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'periodic_classifier',
+          payload: { branchId: 'br_1', id: 'hap_1' },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const deltasAfter = await db.select().from(deltas)
+    const deleteDelta = deltasAfter.find((d) => d.actionId === 'act_d')
+    expect(deleteDelta?.undoPayload).toMatchObject({
+      involvements: expect.arrayContaining([
+        expect.objectContaining({ happeningId: 'hap_1', id: 'inv_1' }),
+      ]),
+      awareness: expect.arrayContaining([
+        expect.objectContaining({ happeningId: 'hap_1', id: 'haw_1' }),
+      ]),
+    })
+  })
+
+  it('round-trip delete: undo restores happening and both child tables', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const inv: NewHappeningInvolvement = {
+      id: 'inv_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    }
+    const aware: NewHappeningAwareness = {
+      id: 'haw_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      learnedAtEntryId: null,
+      decayResistance: 0.5,
+      source: 'direct',
+    }
+    await db.insert(happeningInvolvements).values(inv)
+    await db.insert(happeningAwareness).values(aware)
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'periodic_classifier',
+          payload: { branchId: 'br_1', id: 'hap_1' },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect(await rowFor(db, 'hap_1')).toBeUndefined()
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(0)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(0)
+
+    // Reverse the delete
+    await reverseReplayDeltas('act_d', ctx)
+
+    // Verify all three tables are restored
+    const restoredHap = await rowFor(db, 'hap_1')
+    expect(restoredHap).toBeDefined()
+    expect(restoredHap?.title).toBe('The duel')
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(1)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(1)
+
+    // Verify the child rows have correct data
+    const [restoredInv] = await db
+      .select()
+      .from(happeningInvolvements)
+      .where(eq(happeningInvolvements.id, 'inv_1'))
+    expect(restoredInv).toMatchObject({
+      id: 'inv_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    })
+
+    const [restoredAware] = await db
+      .select()
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.id, 'haw_1'))
+    expect(restoredAware).toMatchObject({
+      id: 'haw_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      decayResistance: 0.5,
+      source: 'direct',
+    })
   })
 })

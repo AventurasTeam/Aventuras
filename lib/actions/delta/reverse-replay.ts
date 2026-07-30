@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
-import { deltas } from '@/lib/db'
+import { deltas, happeningInvolvements, happeningAwareness } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload } from './delta-encoding'
@@ -53,13 +53,55 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      working.set(key, { ...full })
-      ops.push(ctx.db.insert(table).values(full).toSQL())
+      const involvements = full.involvements as Record<string, unknown>[] | undefined
+      const awareness = full.awareness as Record<string, unknown>[] | undefined
+
+      // Extract cascaded child rows before re-inserting the parent
+      const rowData = { ...full }
+      delete rowData.involvements
+      delete rowData.awareness
+
+      working.set(key, { ...rowData })
+      ops.push(ctx.db.insert(table).values(rowData).toSQL())
       patches.push({
         table: delta.targetTable,
         branchId: delta.branchId,
-        patch: { op: 'create', id: delta.targetId, row: full },
+        patch: { op: 'create', id: delta.targetId, row: rowData },
       })
+
+      // Re-insert cascaded child rows for happenings
+      if (delta.targetTable === 'happenings') {
+        if (involvements && involvements.length > 0) {
+          ops.push(
+            ctx.db
+              .insert(happeningInvolvements)
+              .values(involvements as any)
+              .toSQL(),
+          )
+          for (const inv of involvements) {
+            patches.push({
+              table: 'happening_involvements',
+              branchId: delta.branchId,
+              patch: { op: 'create', id: inv.id as string, row: inv },
+            })
+          }
+        }
+        if (awareness && awareness.length > 0) {
+          ops.push(
+            ctx.db
+              .insert(happeningAwareness)
+              .values(awareness as any)
+              .toSQL(),
+          )
+          for (const aw of awareness) {
+            patches.push({
+              table: 'happening_awareness',
+              branchId: delta.branchId,
+              patch: { op: 'create', id: aw.id as string, row: aw },
+            })
+          }
+        }
+      }
       continue
     }
 
