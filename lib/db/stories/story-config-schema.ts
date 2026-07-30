@@ -82,9 +82,16 @@ export const storySettingsSchema = z.object({
   embeddingBackend: z.enum(['provider', 'local']),
   embedding_model_id: z.string(),
   embedding_swap_target: z.string().optional(),
+  // Only written when the in-flight swap crosses backends; absent means the
+  // target shares the story's current backend, which is what a marker written
+  // before cross-backend swaps existed also means.
+  embedding_swap_backend: z.enum(['provider', 'local']).optional(),
+  embedding_swap_provider_id: z.string().optional(),
+  embedding_swap_source_dim: z.number().int().positive().optional(),
+  embedding_swap_target_dim: z.number().int().positive().optional(),
   embedding_provider_id: z.string().optional(),
   retrievalBudgets: retrievalBudgetsSchema,
-  effectiveDim: z.number().optional(),
+  effectiveDim: z.number().int().positive().optional(),
   probe_mode_active: z.boolean().default(false),
   composerModesEnabled: z.boolean(),
   composerWrapPov: z.enum(['first', 'third']),

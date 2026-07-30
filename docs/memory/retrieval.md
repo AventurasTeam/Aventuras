@@ -58,9 +58,12 @@ virtual table per (target kind, dimension) pair, named with a dim
 suffix: `entities_vec_384`, `lore_vec_768`, and so on. Prose
 elsewhere refers to a family by its bare name (`entities_vec`); the
 physical table is always dim-suffixed. Each table carries
-`pk TEXT PRIMARY KEY` (the `<branch_id>:<id>` composite — vec0
-enforces primary keys globally across partitions, so a bare
-source-row id would collide when branch forks copy rows), `branch_id`
+`pk TEXT PRIMARY KEY` (the `<branch_id>:<id>:<model_id>` composite —
+vec0 enforces primary keys globally across partitions, and phase-1
+swap staging inserts a NEW-model row next to the OLD-model row for
+the same source row, so identity must carry the model too, not just
+branch and row; deletes always go by the real columns, never by pk
+string, which keeps pre-widen rows forward-compatible), `branch_id`
 as a TEXT partition key, `model_id` and `id` as TEXT metadata columns
 (`id` joins to the source row), `source_hash` as a TEXT auxiliary
 column, and the vector column at the family's dim. There is no
@@ -362,6 +365,19 @@ surfaces three options:
      `stories.settings.embedding_swap_target = NEW_MODEL_ID`.
      Commit. From this moment, the marker is the source of truth
      for "swap in flight; expect partial NEW-model rows."
+     A swap may cross backends (a local model to a provider one or
+     back), and a model id alone does not say which backend serves it —
+     so when the target's backend differs from the story's, the marker
+     also records `embedding_swap_backend` and
+     `embedding_swap_provider_id`. Absent, they mean "same backend as
+     the story", which is what crash recovery assumes for any marker
+     written without them.
+     The same marker snapshots `embedding_swap_source_dim` and
+     `embedding_swap_target_dim`. They distinguish an in-place
+     same-model/same-dim re-index from a same-model-id swap staged into
+     another vec family. The target dim starts from resolved capability
+     data; if the served vector lands at another dimension, the first
+     staged batch corrects the marker in that batch's transaction.
   2. **Phase 1 — re-embed non-destructively.** Foreground job
      (re-index runs in the user's view, not a background queue)
      embeds each row under the new model and INSERTs alongside
@@ -376,7 +392,13 @@ surfaces three options:
   3. **Phase 2 — atomic flip (transaction).** Single SQLite txn:
      - `DELETE FROM *_vec_<old dim> WHERE branch_id IN (...) AND model_id = OLD`
      - `UPDATE stories SET settings = jsonb_set(settings, '$.embedding_model_id', NEW_MODEL_ID)`
+       — together with `$.embeddingBackend` and
+       `$.embedding_provider_id`, so a cross-backend swap lands a
+       coherent trio instead of a provider model recorded under the
+       story's old local backend
      - `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`
+       and its backend, provider, source-dim, and target-dim companion
+       keys
 
      Commit. Story is now consistently on NEW.
 
@@ -385,12 +407,40 @@ surfaces three options:
   - **Resume.** If any rows lack a `model_id = NEW` counterpart,
     continue Phase 1 (skip rows that already have one). Then run
     Phase 2.
-  - **Cancel.**
-    `DELETE FROM *_vec_<new dim> WHERE branch_id IN (...) AND model_id = NEW; clear embedding_swap_target;`
-    Story stays on old model.
+  - **Cancel.** Delete staged rows from the recorded target family,
+    clear every swap-marker key, and keep the story on its recorded
+    source family.
 
   **Cancel during a live swap (not a crash)** follows the same
   Cancel path — partial NEW vectors are deleted, marker cleared.
+  One exception is a standalone same-model, same-dim re-index.
+  Staging upserts in place there, so the rows a cancel would delete
+  are the story's only vectors — it clears the marker without
+  deleting anything. Matching model ids at different dimensions are
+  not this exception: the target family is disposable staging and
+  the source family remains the rollback copy.
+
+  **Which rows a cancel leaves dirty** depends on the direction,
+  because `embedding_stale` describes the vector the story is left
+  _on_:
+  - **Cross-model** — staging cleared the flag on every row it
+    embedded under NEW, but the story reverts to OLD, so exactly
+    those rows lost a flag that described their OLD vector. Flag the
+    staged set (derivable from vec0, so this also covers a
+    crash-recovered cancel).
+  - **Same-model** — rows re-embedded before the cancel are current;
+    the rest still hold the embedding the re-index was asked to
+    replace. Flag only that tail. A crash-recovered cancel has no run
+    state and a same-model re-embed leaves no trace to recover the
+    split from (same `model_id`, and unchanged content hashes to the
+    same `source_hash`), so it conservatively queues the whole story.
+  - **Same-model, cross-dimension** — use the recorded target family
+    to identify the staged set, delete that family only, and recompute
+    those rows' flags against hashes in the preserved source family.
+
+  Flagging rows whose vectors are current would both overstate the
+  dirty set to the staleness UI and make the drain silently redo work
+  the user just stopped.
 
   **Block second swap while marker is set.** Re-index is a
   foreground job, so the in-app flow naturally prevents a second
@@ -407,10 +457,14 @@ surfaces three options:
   default" prompt stops nagging until the next manual swap
   attempt.
 - **Skip with relabel.** Bulk-updates this story's recorded
-  `embedding_model_id` to the new value without recomputing
-  vectors or touching vec0. **Only safe when the user knows the
-  underlying model is unchanged** — relabeling a custom import,
-  canonical-id refactor, filename rename, quant-suffix change.
+  `embedding_model_id` to the new value without recomputing any
+  vectors. `model_id` is part of the vec0 pk and the KNN filter, so
+  a pure settings relabel would orphan every stored vector — the
+  implementation rewrites vec0 row identity in SQL (pk and
+  `model_id` metadata) for the affected rows in the same
+  transaction. **Only safe when the user knows the underlying
+  model is unchanged** — relabeling a custom import, canonical-id
+  refactor, filename rename, quant-suffix change.
   Disclaimer shown that this is the user's assertion; if the new
   id actually points to a different model, retrieval quality
   silently degrades and the system has no way to detect that.
@@ -421,6 +475,16 @@ the same Story Settings panel for users who want to force a
 re-index without changing the model. It uses the same
 stage-then-flip flow (target = current model, same crash-recovery
 contract).
+
+**The standalone re-index is confirm-gated.** Every other path to a
+re-index is reached by deliberate navigation (pick a model, then
+choose Re-index from the options pane), while this one is a single
+press that costs a full embed pass over the story — provider spend
+the user never opted into. The dialog states the row count it will
+re-embed, that nothing is deleted, and what cancelling leaves
+behind. It reports the count rather than a token or currency
+estimate: the row total is exact and free to compute, whereas a cost
+figure depends on per-model tokenization the app doesn't model.
 
 ### Matryoshka effective dim
 
@@ -463,10 +527,19 @@ The provider-model capability JSON gains two fields:
 app_settings.providers[].cachedModels[].capabilities = {
   reasoning?: boolean,
   structuredOutput?: boolean,
+  embeddingDim?: number,             // native output dimension learned by a probe
   matryoshkaSupported?: boolean,    // NEW
   matryoshkaDims?: number[],        // NEW; curated ladder, e.g. [256, 512, 1024, 1536, 2048, 3072]
 }
 ```
+
+Selecting a provider embedding model in App Settings or the
+per-story swap picker runs a native, untruncated probe when
+`embeddingDim` is not already cached. A successful probe persists the
+positive dimension on that cached model. Provider config resolution
+then threads it into the service's dimension guard and derives the
+actual storage family as `min(effectiveDim, embeddingDim)` when a
+story truncates.
 
 Capability flags are detected from the provider's `/models`
 metadata where available and **always user-overridable** in App

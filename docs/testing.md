@@ -80,23 +80,20 @@ settled and load-bearing:
 
 ### Launch modes
 
-| Mode         | Renderer source                         | Electron main | Used for                           |
-| ------------ | --------------------------------------- | ------------- | ---------------------------------- |
-| **dev**      | static `dist/` snapshot (`serveDist()`) | unpackaged    | Authoring tests; fast iteration    |
-| **packaged** | `electron-builder --linux --dir` bundle | packaged      | The suite of record; real `app://` |
+Named for the Playwright projects that select them — `dev` is what
+`pnpm test:e2e` runs, `packaged` what `pnpm test:e2e:packaged` runs.
 
-**Neither mode runs a live Metro/`expo start` dev server.** Both
-serve the same pre-built `dist/` produced by `pnpm build:web`
-(`expo export --platform web`) — `dev` mode via a local static HTTP
-server the harness spins up (`serveDist()` in `e2e/harness/launch.ts`),
-`packaged` via the `app://bundle` protocol inside the packaged
-binary. `dev` is a shortcut around packaging, not hot reload: **a
-renderer source edit has no effect on a `dev`-mode run until
-`pnpm build:web` re-runs.** This is a false-confidence trap, not a
-cosmetic gap — it produced a real false pass during Slice 3.7a, where
-a mutation test succeeded silently against a stale bundle. Re-run
-`pnpm build:web` before trusting a `dev`-mode result that touches
-renderer code.
+| Mode         | Renderer source                            | Electron main | Used for                           |
+| ------------ | ------------------------------------------ | ------------- | ---------------------------------- |
+| **dev**      | static `dist/` export, served on localhost | unpackaged    | Authoring tests; fast              |
+| **packaged** | `electron-builder --linux --dir` bundle    | packaged      | The suite of record; real `app://` |
+
+Neither mode runs a Metro dev server, and **neither hot-reloads**: both
+load the same pre-built `dist/` produced by `pnpm build:web`
+(`expo export --platform web`), `dev` through `serveDist()` and
+`packaged` through the `app://bundle` protocol. A renderer change is
+invisible to either until `pnpm build:web` runs again — see the first
+gotcha below, which this trap has already sprung once for real.
 
 The packaged build is the target of record because it is the only
 mode that exercises `app://bundle` protocol handling, asar packing,
@@ -104,20 +101,84 @@ the `asarUnpack` native modules (`sqlite-vec`, `onnxruntime-node`),
 and the `extraResources` migrations — the code paths that break in
 production and nowhere else.
 
-Two launch gotchas the harness must handle:
+Three launch gotchas — the first is yours to handle, the other two the
+harness absorbs:
 
+- **Neither suite builds anything.** There is no `globalSetup` and no
+  pretest hook in either project, so both run whatever artifact is
+  already on disk: `pnpm test:e2e:packaged` launches the binary sitting
+  in `release/linux-unpacked/`, and `pnpm test:e2e` serves the `dist/`
+  export plus the compiled `electron/dist/main.js`. A stale artifact
+  fails **silently and selectively** — every spec predating your branch
+  passes, only the newest ones fail, and the failure looks like a
+  product bug rather than a build one. The tell is a locator that
+  matches copy or a testID you just changed: assert against the artifact
+  (`grep` the new string in `dist/`) before debugging the code. Run
+  `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
+  the `dev` suite, and steps 1-3 of [CI](#ci) before the packaged one.
+  CI itself is safe, because its job always builds first.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open
   order. (Packaged mode has no DevTools window, so `firstWindow()` is
   safe there — but the harness selects by URL uniformly.)
-- **`__DEV__` is `false` in both modes.** The `build:web` script runs
-  `expo export` without a `--dev` flag, so the exported bundle both
-  `dev` and `packaged` load has `__DEV__ = false` baked in at build
-  time — there is no live dev server to make it otherwise. In
+- **`__DEV__` is `false` in both modes**, despite one of them being
+  named `dev`. `build:web` runs `expo export` with no `--dev` flag, so
+  the bundle prelude both modes load hardcodes `__DEV__=false`; the
+  unpackaged Electron main is what "dev" names, not the renderer. In
   particular the `stub` provider (`lib/ai/providers.ts`) throws when
   `__DEV__` is false, so it is unavailable to E2E in either mode. Use
   the mock LLM server instead (below).
+
+### Virtual display
+
+Both `pnpm test:e2e` scripts route through
+[`scripts/e2e.ts`](../scripts/e2e.ts), which wraps the Playwright run
+in `xvfb-run` on Linux. Electron has no working headless mode there —
+`--ozone-platform=headless` segfaults in the GLX stack, with or
+without `--disable-gpu` — so a virtual X server is the only way to
+keep the app off the developer's screen. Without it every run steals
+focus for its duration, which makes an agent-initiated suite
+unusable alongside other work.
+
+The wrapper pins `-screen 0 1920x1080x24` rather than inheriting the
+distro default: Arch's `xvfb-run` defaults to 640x480, which clips the
+1280x800 `BrowserWindow` and drops the renderer below the 1024px
+desktop breakpoint — the suite would silently exercise the narrow
+layout.
+
+**Xvfb alone is not sufficient on a Wayland session.** It only sets
+`DISPLAY`, which Electron ignores in favour of the compositor — the
+window opens on the developer's real screen while the virtual server
+sits empty, and every symptom of the problem remains. The fix is
+`--ozone-platform=x11`, applied in
+[`e2e/harness/launch.ts`](../e2e/harness/launch.ts) when the wrapper
+sets `E2E_VIRTUAL_DISPLAY=1`. The two halves are load-bearing
+together: neither works alone. Note that `ELECTRON_OZONE_PLATFORM_HINT`
+does **not** substitute for the switch, and clearing `WAYLAND_DISPLAY`
+does not either — Wayland clients fall back to the default `wayland-0`
+socket.
+
+Verifying a change here means checking that the app window actually
+landed on the virtual display, not that `Xvfb` is running — those come
+apart exactly in the Wayland case above. During a run,
+`DISPLAY=:99 xdotool search --name '.*'` should list the 1280x800
+`Aventuras` window and the 800x600 `Developer Tools` one.
+
+Two consequences worth knowing:
+
+- **Install is per-machine.** Arch: `xorg-server-xvfb`;
+  Debian/Ubuntu: `xvfb` (also pulled by `playwright install-deps`).
+  Missing, the wrapper warns and runs headed rather than failing.
+  On macOS/Windows it is a no-op passthrough.
+- **There is no window manager under Xvfb**, so no OS-level window
+  focus. Playwright drives input over CDP, and DOM focus is
+  unaffected — but a spec asserting on `win.isFocused()` or
+  WM-mediated blur would pass here while being effectively untested.
+  Set `E2E_HEADED=1` to run on the real display when watching a run
+  or debugging one of those. `--ui`, `--debug`, `--headed` and
+  `PWDEBUG=1` opt out on their own — hiding the inspector a developer
+  just asked for would be the wrapper defeating its own user.
 
 ## Harness structure
 
@@ -221,8 +282,8 @@ starts the mock, then `setProviderEndpoint` repoints that provider's
 endpoint at the mock's URL before launch (the port is dynamic, so the
 override happens at seed time, not in the dataset). This exercises the
 real transport (`lib/ai/transport`) rather than bypassing it, and works
-identically in local and packaged modes — unlike the `stub` provider,
-which is `__DEV__`-gated and absent from the packaged build. It sends
+identically in `dev` and `packaged` modes — unlike the `stub` provider,
+which is `__DEV__`-gated and so throws in both. It sends
 CORS headers (and answers the preflight) because the renderer's fetch
 is cross-origin.
 
@@ -321,10 +382,11 @@ every PR alongside `check` and `test`:
    builder downloads are cached, keyed on the lockfile.
 4. `playwright install-deps chromium` — Electron's shared libraries
    (no browser download).
-5. `xvfb-run -a pnpm test:e2e:packaged` (the `packaged` Playwright
-   project) — Electron has no true headless mode on Linux, so it runs
-   under a virtual display. The harness seeds a throwaway `userData` per run
-   and launches the packaged binary against it.
+5. `pnpm test:e2e:packaged` (the `packaged` Playwright project) — the
+   script supplies the [virtual display](#virtual-display) itself, so
+   CI and local runs invoke the same command. The harness seeds a
+   throwaway `userData` per run and launches the packaged binary
+   against it.
 
 The embedder model cache (for the retrieval/turn tiers) is added when
 those tests land.

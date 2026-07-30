@@ -30,6 +30,18 @@ Android is out of scope; web-only E2E is impossible (no preload → no
 DB bridge → "settings corrupted"). See
 [testing.md → E2E target: desktop only](../../docs/testing.md#e2e-target-desktop-only).
 
+## E2E runs headless by default
+
+Invoke the suite as `pnpm test:e2e` / `pnpm test:e2e:packaged` —
+never `playwright test` directly and never with your own `xvfb-run`
+prefix. The scripts route through `scripts/e2e.ts`, which supplies the
+virtual display and the `E2E_VIRTUAL_DISPLAY` flag that makes
+`e2e/harness/launch.ts` pin Electron to X11; calling Playwright raw
+opens real windows and takes the developer's focus for the length of
+the run. Both halves are load-bearing — Xvfb alone does not hide
+anything on a Wayland session. See
+[testing.md → Virtual display](../../docs/testing.md#virtual-display).
+
 ## Fixtures build at test time
 
 Seed into a fresh temp `userData` per run via `--user-data-dir`;

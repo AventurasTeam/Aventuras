@@ -1,8 +1,9 @@
 import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
-import type { ProviderInstanceWithStub } from '@/lib/ai'
+import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/ai'
 import {
   buildStorySettings,
   type EntryMetadata,
+  type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
   type SuggestionCategory,
@@ -12,11 +13,13 @@ import { logger } from '@/lib/diagnostics'
 import {
   EmbedderCallError,
   EmbedderInitError,
+  resolveEmbedderConfig,
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 
+import { clampEffectiveDim } from './memory-cost-logic'
 import { needsLead } from './step-frame-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
@@ -35,7 +38,7 @@ export type FinishAppDefaults = {
     adventure: readonly SuggestionCategory[]
     creative: readonly SuggestionCategory[]
   }
-  providers: readonly { id: string; type: string; endpoint?: string }[]
+  providers: readonly ProviderInstance[]
   installedLocalIds: readonly string[]
 }
 
@@ -64,6 +67,34 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
+
+  // effectiveDim only means something for a provider-backed Matryoshka model; if
+  // the app default swapped to a non-Matryoshka model/backend mid-session, the
+  // hidden disclosure can't clear the stale pick, so drop it to native (canon:
+  // the flag governs new-story creation) rather than committing/validating it.
+  const embeddingCapabilities =
+    appDefaults.defaultStorySettings.embeddingBackend === 'provider' &&
+    appDefaults.embeddingProviderId != null &&
+    appDefaults.embeddingModelId != null
+      ? resolveModelCapabilities(
+          appDefaults.embeddingProviderId,
+          appDefaults.embeddingModelId,
+          appDefaults.providers,
+        )
+      : undefined
+  const matryoshkaApplicable = embeddingCapabilities?.matryoshkaSupported === true
+  // Clamped, not rejected: the disclosure is hidden on a non-applicable model and
+  // collapsed by default, so a working state carrying a dim above the CURRENT
+  // model's native ceiling would fail an invisible field. Degrading to native
+  // matches what the embed service produces either way.
+  const effectiveDim = clampEffectiveDim(
+    matryoshkaApplicable ? s.effectiveDim : null,
+    embeddingCapabilities?.embeddingDim,
+  )
+  // Backstop: the disclosure keeps only valid dims (or null), but a corrupt
+  // working state must never commit a dim that truncates vectors to garbage.
+  if (effectiveDim != null && (!Number.isInteger(effectiveDim) || effectiveDim < 1))
+    reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
   const lead = requiresLead
@@ -81,7 +112,7 @@ export async function finishWizard(
     worldTimeOrigin: s.definition.worldTimeOrigin,
   }
 
-  const settings = buildStorySettings(definition.mode, appDefaults)
+  const settings = buildStorySettings(definition.mode, appDefaults, effectiveDim)
 
   // The lead is the only entity the M2 commit materializes, so it's the only id
   // opening refs can legitimately point at: keep the lead in sceneEntities, drop
@@ -109,6 +140,28 @@ export async function finishWizard(
   )
   if (!gate.usable) return { status: 'embed-blocked', reason: gate.reason, backend: gate.backend }
 
+  // Resolved against the settings about to be committed, not the gate's config:
+  // the gate resolves with no story, so it carries no Matryoshka truncation and
+  // would land this vector in the native-dim family nothing else ever queries.
+  const embedResolution = resolveEmbedderConfig(
+    settings,
+    {
+      embeddingModelId: appDefaults.embeddingModelId,
+      embeddingProviderId: appDefaults.embeddingProviderId,
+      defaultStorySettings: appDefaults.defaultStorySettings,
+    },
+    {
+      providerDim: embeddingCapabilities?.embeddingDim,
+      matryoshkaSupported: matryoshkaApplicable,
+    },
+  )
+  if (!embedResolution.ok) {
+    const reason =
+      embedResolution.reason === 'unknown-local-model' ? 'unknown-model' : embedResolution.reason
+    return { status: 'embed-blocked', reason, backend: settings.embeddingBackend }
+  }
+  const embedConfig = embedResolution.config
+
   let commit: { storyId: string; branchId: string }
   try {
     commit = await createStoryWithBranch(
@@ -124,11 +177,11 @@ export async function finishWizard(
         openingMetadata,
         lead,
         embed: {
-          config: gate.config,
+          config: embedConfig,
           exec: embedCtx.exec,
           provider:
-            gate.config.backend === 'provider'
-              ? embedCtx.resolveProvider(gate.config.providerId)
+            embedConfig.backend === 'provider'
+              ? embedCtx.resolveProvider(embedConfig.providerId)
               : undefined,
         },
       },

@@ -47,9 +47,9 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
 }
 
 // A story copies the embedder selection and the per-mode suggestion palette at
-// creation and never re-reads the app defaults, so all three must be captured
-// here or a provider-backend story resolves to 'no-provider' / an empty
-// palette for the rest of its life.
+// creation and never re-reads the app defaults, so every one of them must be
+// captured here or a provider-backend story resolves to 'no-provider' / an
+// empty palette for the rest of its life.
 export function buildStorySettings(
   mode: 'adventure' | 'creative',
   app: {
@@ -61,6 +61,9 @@ export function buildStorySettings(
       creative: readonly SuggestionCategory[]
     }
   },
+  // Not folded into `app`: the dim is resolved per story from the wizard's
+  // Matryoshka pick, not copied off an app-level column like the two above.
+  effectiveDim?: number | null,
 ): StorySettings {
   const appPalette = app.defaultSuggestionCategories[mode]
   return storySettingsSchema.parse({
@@ -75,5 +78,8 @@ export function buildStorySettings(
     // columns, and a stale copy in the template must not outrank them.
     embedding_model_id: app.embeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
     embedding_provider_id: app.embeddingProviderId ?? undefined,
+    // Omit when null so the field stays absent (native dim), not stored as a
+    // value the tightened positive-int schema would reject.
+    ...(effectiveDim != null ? { effectiveDim } : {}),
   })
 }

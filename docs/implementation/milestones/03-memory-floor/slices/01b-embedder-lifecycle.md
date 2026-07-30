@@ -122,8 +122,9 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
   resume skips rows that already have NEW-model counterparts and
   completes; cancel deletes NEW rows and keeps the story on the old
   model (vitest on marker states + manual smoke for the kill).
-- Skip-with-relabel updates the recorded id without touching vec0
-  and shows the user-assertion disclaimer.
+- Skip-with-relabel updates the recorded id without re-embedding
+  (vec0 row identity is rewritten in SQL, since `model_id` is part
+  of the vec0 pk) and shows the user-assertion disclaimer.
 - With a Matryoshka-capable provider model and `effectiveDim = N`:
   stored and query vectors are length-N and unit-norm (float
   tolerance); a non-Matryoshka story stores native dim (vitest).
@@ -145,41 +146,180 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
 
 ## Open questions
 
-- **Worker trigger** — timer-based between turns vs hooked on
-  pipeline-idle events; pick at planning (must not contend with an
-  in-flight sync stage).
-- **Progress UI host for phase-1** — inline panel in Story
-  Settings · Memory vs the generation-status pill; canon says
-  foreground job with progress indicator, host unpinned.
-- **Same-dim swaps can't stage non-destructively under the current
-  vec0 primary key.**
-  [Phase 1](../../../../memory/retrieval.md#model-swap-ux) stages
-  `model_id = NEW` rows alongside `model_id = OLD`, but
-  `lib/db/embeddings/vec-tables.ts` derives the vec0 primary key as
-  `<branchId>:<id>` with no model component, and `upsertVecOps`
-  deletes before inserting. Two same-dim models therefore collide on
-  one pk and the NEW row replaces the OLD one — losing exactly the
-  "old vectors stay intact throughout" property phase 1 depends on.
-  Different-dim swaps are unaffected (separate table family). Pick at
-  planning: widen the pk to include `model_id`, or amend canon to say
-  same-dim swaps are destructive-in-place and drop phase 1 for them.
-  Note `model_id` is written today but read by nothing, so the
-  cache-key / mismatch-detection role the schema section claims for it
-  is not yet real. Surfaced by M3.1a review (2026-07-21).
-- **Vector cleanup on row deletion only clears one dim family.**
-  `deleteVecOps(kind, dim, id, branchId)` takes a single `dim` and
-  nothing records which families actually hold a row's vectors, while
-  vec0 gives no FK cascade. After a `keep` swap (old-model vectors
-  deliberately retained) or an abandoned phase 1, a row legitimately
-  has vectors in two families and deleting the source row orphans one
-  of them permanently. Resolve alongside the swap options this slice
-  owns — either delete across every existing family for the kind, or
-  record the occupied families per row. Note `deleteVecOps` still has
-  no production caller: story deletion clears vectors branch-wide
-  without it, and no per-row deletion path (entity, lore, happening,
-  thread, chapter) calls it at all — so whichever slice introduces
-  one inherits this question. Surfaced by M3.1a review (2026-07-21).
+All four planning-time questions (worker trigger, phase-1 progress
+host, same-dim staging under the two-part vec0 pk, multi-family
+vector cleanup) were resolved in slice planning on 2026-07-24; the
+decisions are recorded under Implementation notes below.
+
+Two questions opened during review on 2026-07-28. The
+target-threading one was resolved the same day and its decision is
+under Implementation notes below; the dim-ceiling one is resolved
+below, with its remaining unprobed-model residue carried to M7.
+
+- **Custom effective dim is bounded only once the model has been
+  probed.** Canon specifies `1 ≤ N ≤ native_dim`
+  ([`wizard.md`](../../../../ui/screens/wizard/wizard.md#memory-cost--matryoshka-effective-dim),
+  [`retrieval.md`](../../../../memory/retrieval.md#matryoshka-effective-dim)).
+  `matryoshkaSupported` and `matryoshkaDims` are independent flags —
+  a model can pass the visibility gate advertising no ladder at all —
+  so the ladder cannot stand in for the ceiling.
+
+  **Direction (updated 2026-07-28):** native-dim probing and
+  persistence landed as an M3.1b review followup: selecting a provider
+  model probes once when its cached capability has no `embeddingDim`.
+  The Custom control's native upper-bound UI and curated-ladder editing
+  remain deferred to M7. Ladders are most likely manual user input as
+  an advanced feature, with auto-detection plausible on top.
+
+  **Resolved (2026-07-29, PR #401 review):** the probe made the
+  ceiling knowable, so `capabilities.embeddingDim` now bounds the
+  pick at both ends of the wizard. `validateCustomDim` takes an
+  optional `nativeDim` and rejects above it; Finish runs
+  `clampEffectiveDim`, which resolves an over-ceiling dim to `null`
+  (native) rather than rejecting — the disclosure is collapsed by
+  default and hidden on a non-applicable model, so a working state
+  carrying a stale pick would otherwise fail an invisible field.
+  Resolving to `null` also suppresses a `serverSide` `dimensions`
+  hint the provider would reject. An UNPROBED model still has no
+  ceiling and stays permissive; that residue is what M7's
+  upper-bound UI closes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+Resolved developer decisions (slice planning, 2026-07-24):
+
+- **vec0 pk widened to `<branchId>:<id>:<modelId>`** — widens the
+  two-part pk recorded in
+  [Slice 3.1a's notes](./01a-embedder-core.md#implementation-notes),
+  so phase-1 swap staging inserts NEW-model rows next to OLD-model
+  rows. All deletes go by real columns (`branch_id`, `id`,
+  `model_id`), never by pk string, so pre-widen rows stayed readable
+  and no destructive migration was needed. Canon updated
+  ([`retrieval.md → Storage`](../../../../memory/retrieval.md#storage)
+  and `data-model.md`).
+- **Drain trigger** — pipeline-idle events (`run_complete` with no
+  active run) plus a story-open kick; capped backoff (5 s / 30 s /
+  120 s) while the embedder is unavailable. Embedder-recovery kicks
+  (after test-embedder success or a download) are a ready seam
+  (`kickStoryDrain`) deliberately left unwired to those surfaces.
+  A kick received while another story's async pass is active is
+  retained and scheduled as soon as that pass releases single-flight;
+  it is not dropped at the `running` guard. An idle note defers to a
+  retry already armed for the SAME story, so a story emitting idle
+  events faster than the ladder cannot retry a down embedder at the
+  idle cadence; a kick still overrides, being the explicit "the cause
+  may be gone" signal.
+  The worker drains only the open branch; the blocking sync stage
+  covers everything else on read.
+- **Phase-1 progress host** — inline in Story Settings · Memory;
+  the story-open resume prompt routes there before resuming. The
+  "upgrade to current default" story-open prompt was deferred to
+  the triage inbox.
+- **Server-side `dimensions`** — sent only when the story has
+  `effectiveDim` and the model's `matryoshkaSupported` flag is set;
+  client-side truncate-and-renorm runs unconditionally, and the
+  service clamps to `min(effectiveDim, native)`. The dim guard
+  accepts either native or effective dim when the param was sent.
+- **Per-row vector cleanup** — `deleteVecOps` sweeps every existing
+  dim family of the kind by columns (mirrors `deleteBranchVecOps`);
+  partial indexes on `embedding_stale = 1` landed for all five
+  embeddable tables (verified missing from M1.5).
+
+Notable deviations and constraints for future slices:
+
+- **Relabel rewrites vec0 identity in SQL** (insert-select with the
+  new pk and `model_id`, then delete-old, plus a relabel-wins
+  pre-delete of leftover target-model rows) — no re-embedding, but
+  not "vec0 untouched"; canon's relabel wording was amended to
+  match. A pure settings relabel would orphan every vector behind
+  the `model_id` KNN filter.
+- **Same-model, same-dim re-index is upsert-in-place** — one vector space, so
+  partial progress is harmless; resume re-embeds everything
+  (idempotent), and both vector deletes are skipped: the phase-2
+  old-model delete _and_ the cancel path's staged-row delete, since with
+  `target === current` the "staged" rows are the story's only vectors and
+  deleting them would wipe the vector space rather than unwind a stage
+  (found by manual smoke, 2026-07-25).
+- **Cancel flags only the rows a cancel actually dirties**, not all
+  five tables. Cross-model flags the staged set (staging cleared their
+  flag, but it described the old-model vector being reverted to);
+  same-model flags only the not-yet-re-embedded tail. Blanket flagging
+  claimed rows were pending whose vectors were current, and the drain
+  re-embeds anything flagged — no `source_hash` revalidation runs on
+  that path — so a cancel silently completed the re-index it had just
+  cancelled (found by manual smoke, 2026-07-27). A crash-recovered
+  same-model cancel keeps the blanket flag: with `target === current`,
+  a re-embedded row is indistinguishable from an untouched one.
+- **Same-model id can still be cross-dimension.** The swap marker
+  snapshots both storage families. Cancellation deletes only the
+  staged target family and re-derives touched-row staleness from the
+  preserved source family; crash recovery therefore does not confuse
+  a provider/local same-id move with an in-place re-index.
+- **Swaps cross backends** — the picker offers the app's provider
+  embedding model to a local-backend story, so a swap target is a
+  `{ modelId, backend, providerId }` triple rather than a bare model id
+  (found by manual smoke, 2026-07-25: resolving a provider model against
+  the story's own backend failed as `unknown-local-model`). The marker
+  carries the target's backend and provider id unconditionally, since crash
+  recovery has only the marker to resolve from, and phase-2 flips all three
+  keys together. An absent `embedding_swap_backend` is therefore only ever a
+  marker written before this change; it reads as "same backend as the story",
+  so those resolve unchanged without a migration. Canon amended
+  ([`retrieval.md → Model swap UX`](../../../../memory/retrieval.md#model-swap-ux))
+  plus the `data-model.md` settings shape. Settings transitions moved to
+  `json_patch` because these writes must also _clear_ a key (a local
+  target carries no provider id) and merge-patch deletes on null where
+  `json_set` would write a JSON null the settings Zod rejects. The target
+  travels whole from the picker to the settings write — `SwapCandidate`
+  carries one, `onReindex` / `onRelabel` hand one back, and
+  `embeddingTargetKey` is the identity everything keys, compares and
+  React-keys on. A model id installed locally _and_ offered by the
+  provider is therefore two selectable rows told apart by a source label,
+  rather than one row with the other copy unreachable; `isCurrent`
+  compares the same triple, so only the variant a story actually runs on
+  is disabled. Relabel's vec identity rewrite stays model-id-scoped — an
+  unchanged id leaves every vector in place — while its settings write is
+  not, so "same model, now served elsewhere" is expressible at all.
+  **The triple deliberately stops short of vec row identity**
+  (`vecRowPk`): vectors from the same weights are interchangeable
+  whichever backend served them, which is the premise relabel rests on,
+  so widening the pk would orphan exactly what relabel exists to keep.
+- **Swap concurrency** — the engine takes resolved inputs and does
+  not enforce single-flight; the app-deps layer serializes per
+  story and owns the callback guards. `cancelRequested` is a
+  deliberate single-swap global, cleared at operation boundaries.
+- **`effectiveDim` is gated at wizard Finish** on current
+  matryoshka applicability, so a stale mid-session pick silently
+  falls back to native instead of truncating a non-MRL model's
+  vectors. The settings schema now requires a positive integer.
+  Activating Custom immediately validates and applies its current
+  draft: blank/invalid drafts block Finish, while reselecting a valid
+  retained draft restores that value instead of committing a prior
+  ladder choice.
+- **Provider native dimensions are durable capabilities.** Successful
+  provider probes persist `embeddingDim`; App Settings and the
+  per-story target picker ensure it on selection, and swap/wizard
+  resolution threads it as `providerDim`.
+- **Resume-prompt deferral is context-scoped.** "Later" suppresses the
+  current story only while that story stays open with the same pending
+  marker. Navigation or marker resolution clears the deferral, so a
+  later interruption prompts again.
+- **C8 caveat carried to 3.4** — `openEmbedderSwapDialog` only has
+  a mount host in the story-settings route; a pointer question was
+  added to [Slice 3.4](./04-retrieval.md#open-questions).
+- **E2E** — the cross-model swap re-index path is uncovered end to
+  end (triaged); the staging engine is covered by same-model
+  re-index plus the vitest marker matrix, and dialog wiring by the
+  relabel path.
+- **Manual smoke — desktop kill-mid-re-index, 2026-07-25 and
+  2026-07-27.** Ran; it is the evidence behind the two acceptance
+  criteria vitest and E2E do not reach. It found the same-model
+  cancel wipe, the blanket cancel re-flagging, and the cross-backend
+  resolution failure — all three written up under the deviations
+  above — plus five entries in
+  [triage](../../../triage.md) dated to the same runs.
+- **Manual smoke — Android staleness-pill round-trip: not yet run.**
+  The remaining acceptance criterion with no automated coverage;
+  E2E is desktop-only by
+  [testing.md](../../../../testing.md#e2e-target-desktop-only), so
+  nothing else exercises it.

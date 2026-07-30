@@ -46,6 +46,7 @@ const FINISH_REASON_KEY = {
   title: 'wizard:finish.missing.title',
   opening: 'wizard:finish.missing.opening',
   lead: 'wizard:finish.missing.lead',
+  effectiveDim: 'wizard:finish.missing.effectiveDim',
 } as const
 
 type GateState =
@@ -222,6 +223,13 @@ export default function WizardRoute() {
 
   const finish = () => {
     if (finishingRef.current) return
+    // Only a valid dim ever reaches the working state, so finishWizard cannot
+    // see an unparseable custom entry — it would commit the last good value
+    // while the field showed an error. The flag is the draft's own verdict.
+    if (wizardStore.getWizard().customDimInvalid) {
+      toast.error(t('wizard:finish.invalidList', { fields: t(FINISH_REASON_KEY.effectiveDim) }))
+      return
+    }
     finishingRef.current = true
     setIsFinishing(true)
     setEmbedFailure(null)

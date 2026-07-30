@@ -1,4 +1,32 @@
 export { defineAction } from './define-action'
+// The raw engine primitives (startSwap / resumeSwap / cancelSwap / reindexStory /
+// relabelModel) are deliberately absent: each requires the caller to already hold
+// the per-story single-flight lock, and the safe entry points are the *Story*
+// wrappers that take it via runExclusive. They stay reachable inside
+// `./embedder-swap` only, so the unsafe pair is never the more obvious import.
+export {
+  buildDrainController,
+  cancelStorySwap,
+  kickStoryDrain,
+  countStoryEmbeddableRows,
+  refreshEmbeddingStatus,
+  reindexStoryNow,
+  relabelStory,
+  RelabelBlockedError,
+  RelabelDimMismatchError,
+  resolveStorySwapConfig,
+  resumeStorySwap,
+  setDrainKickSink,
+  setDrainStatusSink,
+  startStorySwap,
+  SwapBusyError,
+  SwapConfigError,
+  SwapInProgressError,
+  SwapMarkerChangedError,
+  SwapNotInProgressError,
+  SwapStoryMissingError,
+  type SwapCancelOutcome,
+} from './embedder-swap'
 export { applyDeltaAction } from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
@@ -7,8 +35,11 @@ export { type RedoSnapshot } from './delta/redo'
 export { DeltaReplayError, reverseReplayDeltas } from './delta/reverse-replay'
 export {
   addProvider,
+  ensureProviderEmbeddingDim,
   normalizeAppSettingsRow,
+  probeProviderEmbeddingDim,
   quickWireModel,
+  recordProviderEmbeddingDim,
   resetAppSettings,
   setAppearanceThemeId,
   setAssignments,

@@ -14,6 +14,9 @@ export type { EmbedderIntegration } from './integrations'
 export { resolveEmbedderConfig } from './resolve-config'
 export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-config'
 
+export { createDrainController } from './drain'
+export type { DrainDeps } from './drain'
+
 export { resolveEmbedderGate } from './gate'
 export type { EmbedderGateResult } from './gate'
 
@@ -27,7 +30,7 @@ export type { LocalEmbedResult } from './local/runtime'
 
 export { sanitizeModelDirName } from './local/sanitize'
 
-export { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
+export { embedAndBuildVecOps, embedRowsToVecOps, embedTexts, testEmbedder } from './service'
 export type { EmbedIntent } from './service'
 
 export { createEmbedderDownloadDriver } from './download/driver'

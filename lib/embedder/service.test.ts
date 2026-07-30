@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { embedViaProvider } from '@/lib/ai'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
-import { compositeText, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
+import { compositeText, packFloat32, sourceHash, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
 
 import { embedLocal } from './local/runtime'
 import { embedAndBuildVecOps, embedTexts, testEmbedder } from './service'
@@ -84,11 +84,12 @@ describe('embedTexts routing + prefixing', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
 
     const result = await embedTexts(config, ['x'], 'document', provider)
 
-    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm1', ['x'])
+    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm1', ['x'], undefined, undefined)
     expect(normOf(result.vectors[0])).toBeCloseTo(1, 6)
     expect(Array.from(result.vectors[0])).toEqual([0.6, 0.8].map((n) => Math.fround(n)))
   })
@@ -99,6 +100,7 @@ describe('embedTexts routing + prefixing', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
     await expect(embedTexts(config, ['x'])).rejects.toBeInstanceOf(EmbedderInitError)
     await expect(embedTexts(config, ['x'])).rejects.toThrow('provider instance not supplied')
@@ -121,6 +123,7 @@ describe('embedTexts dim verification', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: 2,
+      truncation: null,
     }
 
     await expect(embedTexts(config, ['a', 'b'], 'document', provider)).rejects.toThrow(
@@ -135,6 +138,7 @@ describe('embedTexts dim verification', () => {
       providerId: 'prov-1',
       modelId: 'm1',
       dim: null,
+      truncation: null,
     }
 
     const result = await embedTexts(config, ['a'], 'document', provider)
@@ -151,6 +155,125 @@ describe('embedTexts dim verification', () => {
 
     await expect(embedTexts(config, ['a'])).rejects.toThrow(
       'embedding dim mismatch: expected 384, got 3',
+    )
+  })
+})
+
+describe('matryoshka truncation', () => {
+  it('truncates provider vectors to effectiveDim and re-normalizes to unit length', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1, 1, 1])],
+      dim: 8,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      truncation: { effectiveDim: 4, serverSide: false },
+    }
+
+    const { vectors, dim } = await embedTexts(config, ['x'], 'document', provider)
+
+    expect(dim).toBe(4)
+    expect(vectors[0]).toHaveLength(4)
+    const norm = Math.hypot(...vectors[0])
+    expect(norm).toBeCloseTo(1, 5)
+    expect(packFloat32(vectors[0]).byteLength).toBe(4 * 4)
+  })
+
+  it('clamps effectiveDim above native to native (no-op truncation)', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1, 1, 1])],
+      dim: 8,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: null,
+      truncation: { effectiveDim: 4096, serverSide: false },
+    }
+
+    const { dim } = await embedTexts(config, ['x'], 'document', provider)
+
+    expect(dim).toBe(8)
+  })
+
+  it('non-matryoshka story stores native dim untouched', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1, 1, 1])],
+      dim: 8,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      truncation: null,
+    }
+
+    const { dim } = await embedTexts(config, ['x'], 'document', provider)
+
+    expect(dim).toBe(8)
+  })
+
+  it('requests the provider-side dimensions param only when truncation is serverSide', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1, 1, 1])],
+      dim: 8,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      truncation: { effectiveDim: 4, serverSide: true },
+    }
+
+    await embedTexts(config, ['x'], 'document', provider)
+
+    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm', ['x'], undefined, 4)
+  })
+
+  it('accepts an already-truncated vector when the server honors dimensions', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [unit([1, 1, 1, 1])],
+      dim: 4,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      truncation: { effectiveDim: 4, serverSide: true },
+    }
+
+    const { vectors, dim } = await embedTexts(config, ['x'], 'document', provider)
+
+    expect(dim).toBe(4)
+    expect(vectors[0]).toHaveLength(4)
+    expect(normOf(vectors[0])).toBeCloseTo(1, 6)
+  })
+
+  it('still rejects a dim that matches neither native nor effectiveDim', async () => {
+    vi.mocked(embedViaProvider).mockResolvedValue({
+      vectors: [new Float32Array([1, 1, 1, 1, 1, 1])],
+      dim: 6,
+    })
+    const config: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'p',
+      modelId: 'm',
+      dim: 8,
+      truncation: { effectiveDim: 4, serverSide: true },
+    }
+
+    await expect(embedTexts(config, ['x'], 'document', provider)).rejects.toBeInstanceOf(
+      EmbedderCallError,
+    )
+    await expect(embedTexts(config, ['x'], 'document', provider)).rejects.toThrow(
+      'expected 8, got 6',
     )
   })
 })

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 import { INJECTION_MODES } from '../enums'
 import { branches } from '../stories/stories.table'
@@ -28,5 +28,10 @@ export const lore = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    index('lore_stale_idx')
+      .on(t.branchId)
+      .where(sql`${t.embeddingStale} = 1`),
+  ],
 )

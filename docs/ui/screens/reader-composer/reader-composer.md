@@ -463,8 +463,11 @@ dismissed by the next turn:
 
 - **Embedding staleness** in this story (per
   [`memory/model-management.md → Staleness UI`](../../../memory/model-management.md#staleness-ui)).
-  Pill copy: `Embedder offline — N rows pending`. Tap → routes to
-  Story Settings · Memory's resolution panel.
+  Pill copy: `Memory incomplete — N rows pending`. Tap → routes to
+  Story Settings · Memory's resolution panel. The copy names the state
+  rather than a cause: the trigger is a non-zero stale-row count, which
+  an available embedder also produces (a cancelled swap re-flags every
+  row).
 - **Failed-persistent classifier** (per
   [`memory/classifier.md → Pill priority`](../../../memory/classifier.md#background-task-framing)).
   Pill copy: `Classifier offline — retrieval coverage thinning`.

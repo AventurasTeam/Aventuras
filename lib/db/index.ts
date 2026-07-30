@@ -59,6 +59,16 @@ export {
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
 export { DEFAULT_SUGGESTION_CATEGORIES } from './stories/default-suggestion-categories'
 export {
+  clearSwapTargetOp,
+  embeddingTargetKey,
+  sameEmbeddingTarget,
+  setEmbeddingTargetOp,
+  setSwapTargetDimOp,
+  setSwapTargetOp,
+  type EmbeddingTarget,
+  type SwapDimensions,
+} from './stories/settings-ops'
+export {
   appearanceSchema,
   appSettingsConfigSchema,
   appSettingsDiagnosticsSchema,
@@ -157,22 +167,39 @@ export type {
   WizardSession,
 } from './types'
 export { runInTransaction } from './runtime/transaction'
-export { execRaw, listTableNames } from './runtime/exec'
+export { execRaw, listTableNames, queryRows } from './runtime/exec'
 export type { DbCtx, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
-export type { EmbeddedFieldRow, VecTargetKind, VecWrite } from './embeddings'
+export type {
+  EmbeddedFieldRow,
+  RowQuery,
+  StaleTargetRow,
+  VecTargetKind,
+  VecWrite,
+} from './embeddings'
 export {
   VEC_FAMILIES,
+  branchRowsQuery,
   clearEmbeddingStaleOp,
   compositeText,
+  countStaleRows,
+  countEmbeddableRows,
+  deleteBranchModelVecOps,
   deleteBranchVecOps,
   deleteVecOps,
   isVecFamilyTable,
   ensureVecTables,
   ensureVecTablesSql,
+  dimFamilyTables,
+  familyTablesFor,
+  findVecDims,
+  flagEmbeddingStaleOps,
   packFloat32,
-  recomputeStaleOp,
+  recomputeStaleOps,
+  SOURCE_TABLES,
   sourceHash,
+  staleRowsQuery,
+  toEmbeddedFieldRow,
   upsertVecOps,
   vecRowPk,
   vecTableName,

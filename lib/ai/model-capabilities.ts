@@ -6,6 +6,7 @@ export type ModelCapabilities = {
   matryoshkaSupported?: boolean
   matryoshkaDims?: number[]
   taggedBlockReliable?: boolean
+  embeddingDim?: number
 }
 
 export function resolveModelCapabilities(

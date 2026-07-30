@@ -37,11 +37,23 @@ describe('providerInstanceSchema', () => {
     const ok = providerInstanceSchema.safeParse({
       ...VALID_PROVIDER,
       endpoint: 'https://example.test',
-      cachedModels: [{ id: 'm1', capabilities: { reasoning: true, matryoshkaDims: [256, 512] } }],
+      cachedModels: [
+        {
+          id: 'm1',
+          capabilities: {
+            reasoning: true,
+            matryoshkaDims: [256, 512],
+            embeddingDim: 1536,
+          },
+        },
+      ],
       customModelIds: ['custom-1'],
       cachedAt: 1234,
     })
     expect(ok.success).toBe(true)
+    if (ok.success) {
+      expect(ok.data.cachedModels?.[0].capabilities?.embeddingDim).toBe(1536)
+    }
   })
 
   it('rejects a provider missing apiKey', () => {

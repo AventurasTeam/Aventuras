@@ -182,6 +182,8 @@ describe('storySettingsSchema spec-pinned defaults', () => {
     const r = storySettingsSchema.safeParse({
       ...VALID_SETTINGS,
       embedding_swap_target: 'bge-large',
+      embedding_swap_source_dim: 384,
+      embedding_swap_target_dim: 768,
       embedding_provider_id: 'p1',
       effectiveDim: 256,
       models: { narrative: 'prof1', 'lore-mgmt': 'prof2' },

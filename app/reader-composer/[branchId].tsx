@@ -6,7 +6,10 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import {
+  GenerationStatusPill,
+  type GenerationPhase,
+} from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -33,6 +36,7 @@ import {
   loadOpenStory,
   readRecentEntries,
   redoLastAction,
+  refreshEmbeddingStatus,
   refreshSuggestions,
   rollbackToEntry,
   submitTurn,
@@ -57,6 +61,8 @@ import {
 import {
   appSettingsStore,
   currentStoryStore,
+  embedderSwapStore,
+  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
@@ -164,6 +170,30 @@ export default function ReaderComposerRoute() {
   // The failure belongs to the entry it was fired on; a turn, a rollback or a
   // branch switch replaces the strip's contents, so the error must not ride along.
   useEffect(() => setStripError(false), [branchId, terminalEntry?.id])
+
+  const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
+    embeddingStatusStore.staleTotalFor(s, storyId),
+  )
+  // Narrow selector: a boolean stays stable across embed-batch ticks, where the
+  // run's own entry changes identity on every one (onProgress fires per batch).
+  const swapRunningHere = embedderSwapStore.useSwap(
+    (s) => embedderSwapStore.progressFor(s, storyId) != null,
+  )
+  // A paused swap is signalled off the MARKER, not the stale count: phase-1
+  // staging clears embedding_stale row by row, so a half-finished swap drives
+  // that count toward zero and a healthy story sits at exactly zero throughout.
+  // A live loop reports through the Memory panel's own progress row instead.
+  const swapPaused =
+    storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+
+  // A suggestion refresh occupies the pill exactly like a turn does, and the
+  // pill prioritizes activePhase over error — so the two branches must be
+  // derived from one value, or a refresh would leave the warning tone visible.
+  const activePhase: GenerationPhase | undefined = isGenerating
+    ? 'generating-narrative'
+    : refreshingSuggestions
+      ? 'refreshing-suggestions'
+      : undefined
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -308,6 +338,10 @@ export default function ReaderComposerRoute() {
       cancelled = true
     }
   }, [branchId])
+
+  useEffect(() => {
+    if (storyId != null) void refreshEmbeddingStatus(storyId)
+  }, [storyId])
 
   useEffect(() => {
     let cancelled = false
@@ -668,17 +702,23 @@ export default function ReaderComposerRoute() {
       actions={<AppActionsMenu contextual={contextualActions} />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={
-            isGenerating
-              ? 'generating-narrative'
-              : refreshingSuggestions
-                ? 'refreshing-suggestions'
-                : undefined
+          activePhase={activePhase}
+          error={
+            activePhase != null
+              ? undefined
+              : swapPaused
+                ? { code: 'swap-paused' }
+                : staleTotal > 0
+                  ? { code: 'memory-incomplete', pendingRows: staleTotal }
+                  : undefined
           }
           onCancel={() =>
             void awaitRunTerminal(isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND, 'cancel')
           }
-          onErrorTap={() => {}}
+          onErrorTap={(code) => {
+            if (code !== 'classifier-offline' && storyId != null)
+              router.push(`/story-settings/${storyId}?tab=memory`)
+          }}
         />
       }
     >

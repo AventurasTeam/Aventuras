@@ -81,8 +81,14 @@ slice-planning gate forces its resolution before that slice is planned.
   with `null` meaning clear and `undefined` still meaning leave
   untouched — deliberately left to 3.1b, which owns the semantics and
   is the only consumer. Nullable fields are unaffected — the filter
-  drops only `undefined`, so `null` still writes. Surfaced by M3.11
-  Task 1 (2026-07-22), scoped to 3.1b 2026-07-22.
+  drops only `undefined`, so `null` still writes. Resolved for the
+  swap flow 2026-07-24 by dedicated raw json ops in
+  `lib/db/stories/settings-ops.ts` (`json_set`/`json_remove`, committed
+  atomically with vec0 ops); the swap flow never routes through
+  `updateStorySettings`, so the `StorySettingsPatch` widening remains
+  unneeded until some other writer needs a clear affordance through the
+  action layer. Surfaced by M3.11 Task 1 (2026-07-22), scoped to 3.1b
+  2026-07-22.
 - **`compositeText` space-joins fields, diverging silently from its
   spec.** `lib/db/embeddings/source-hash.ts:104` joins embedded fields
   with a space. `.impl-plans/M03-01a-embedder-core.md:187` specified
@@ -229,7 +235,15 @@ slice-planning gate forces its resolution before that slice is planned.
   a compare-and-set (`WHERE updated_at = ?`) cannot be verified
   without a row count. Needs a bridge capability — a transaction that
   can read, or one that returns `changes` — before the action can do
-  better. Surfaced by M3.11 review (2026-07-22).
+  better. Surfaced by M3.11 review (2026-07-22). **Blast radius grew in
+  M3.1b:** the loser is no longer just a settings key. A save landing
+  during a swap's phase 1 can carry a pre-swap snapshot that the flip then
+  overwrites, leaving every vector re-embedded under the new model, the
+  flags clean, and the settings still naming the old one — with nothing
+  that re-derives staleness. Phase 2 now re-asserts the marker in its
+  preflight (`assertStoryLive`), which converts that silent loss into a
+  loud, resumable failure but does not close the race
+  (M3.1b review, 2026-07-28).
 - **Electron reload is unguarded while a save session is dirty.**
   M3.11 routes the desktop window-close intent through the main
   process (`native:set-close-guard` / `native:close-requested`), so
@@ -370,15 +384,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   i18n pass is a one-line locator change. Fix is to move the strings into
   the `reader` / `common` namespaces and swap the locators to `t()`.
   Surfaced by the coverage-expansion pass (2026-07-24).
-- **`GenerationStatusPill` hardcodes its user-facing copy.**
-  `components/compounds/generation-status-pill.tsx` hardcodes English
-  across `PHASE_COPY`, `errorCopy`, and `cancelCopy` — every phase label,
-  error message, and cancel-button string — rather than routing through
-  `t()` like the i18n discipline requires. No user-facing regression yet
-  (English-only today), but it's the same class of violation as
-  `EntryCard` above. Fix is to move the strings into the appropriate
-  namespace and swap call sites to `t()`. Surfaced by M3.7a Task 8
-  (2026-07-25).
 - **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
   `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
   `{{ entry.content }}` (inside the `recentEntries` loop) renders the
@@ -509,3 +514,130 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   (`story-settings-defaults.ts → buildStorySettings`) rather than a defect,
   but it means existing users see nothing new until 3.7b ships, and nothing
   records that today. Surfaced by the M3.7a whole-slice review (2026-07-26).
+
+- **"Upgrade to current default" story-open prompt deferred from 3.1b.**
+  Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
+  names a second dialog entry point: a prompt when opening a story whose
+  embedding model differs from the current app default; accepting it fires
+  the swap dialog. Slice 3.1b shipped only the Story Settings entry point
+  (planning decision 2026-07-24) — the prompt needs its own "stops nagging
+  until the next manual swap attempt" persistence decision. Owner: a future
+  reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
+
+- **`resetStorySettings` drops creation-locked embedding fields.**
+  `lib/actions` reset flow rebuilds settings via `buildStorySettings` from
+  current app defaults, which (a) relabels `embedding_model_id` to the
+  current app default and (b) drops `effectiveDim` — both violate the
+  locked-at-creation invariant ([`retrieval.md → Matryoshka effective dim`](../memory/retrieval.md#matryoshka-effective-dim))
+  and would silently invalidate every stored vector without a re-index.
+  Pre-existing gap surfaced by M3.1b Task 11 review (2026-07-24); more
+  consequential now that `effectiveDim` is actually written. Fix belongs
+  with whoever next touches the reset flow: preserve the locked trio
+  (`embedding_model_id`, `embedding_provider_id`, `effectiveDim`) across
+  reset, or route a model change through the swap flow. Surfaced by M3.1b
+  Task 11 review (2026-07-24).
+
+- **Cross-model swap re-index has no E2E coverage.**
+  The E2E suite exercises the staging engine via same-model re-index and the
+  dialog wiring via relabel, but the `swap-reindex` dialog action's full
+  cross-model path is uncovered: the harness's second model is an id-copy of
+  MiniLM, and a synthetic id fails catalog dim resolution, while real
+  cross-model coverage needs the 768-dim catalog model (~330 MB) downloaded
+  per CI run. Unit coverage: the engine's cross-model matrix in
+  `lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
+  catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
+  Task 12 (2026-07-24).
+
+- **A local model whose files are gone still resolves as healthy.**
+  `resolveEmbedderConfig` validates a local backend by looking the model id
+  up in the bundled catalog (`localModelDim`); it never checks that the
+  model's directory exists. So a model removed from disk resolves `ok`, is
+  offered as a swap candidate, and produces no reason line — the Memory
+  panel's `modelMissing` reason only fires for an id absent from the
+  _catalog_, which is the one shape a real removal never produces.
+  [`model-management.md → Removal`](../memory/model-management.md#removal)
+  expects the panel to explain "model missing"; today the failure surfaces
+  only per-embed, as a generic `That didn't work` toast with the cause in
+  a `logger.error` the user cannot see. Wants a files-exist check in the
+  resolution path (or an `installed`-set intersection at the panel), which
+  also gates the swap picker from offering an uninstallable target. Owner
+  is plausibly the M7.1 removal flow, but the gap is live now, since the
+  directory can vanish without going through any app flow. Surfaced by
+  M3.1b manual smoke (2026-07-25).
+
+- **The swap resume dialog can trap the user when the target cannot
+  embed.** A staging failure leaves the marker set — `runStagingSwap`
+  reaches `refreshStores` only on success — so the story-open resume
+  prompt fires correctly. But the dialog is non-dismissible and its
+  primary action re-runs the identical embed, so when the target model is
+  the reason staging failed (files removed, provider unreachable), Resume
+  can never succeed and each attempt reports only the generic
+  `actionFailed` toast. The escape exists and is correct — `Cancel switch`
+  never embeds, so it clears the marker and re-flags rows — but nothing in
+  the copy distinguishes "retry a transient failure" from "this target is
+  unusable, abandon it", and the failure reason is never surfaced.
+  Confirmed by hand on desktop (2026-07-25): resume → generic toast →
+  dialog persists. Wants the dialog to carry the last failure reason, or
+  Resume to pre-flight the target's resolvability and steer to Cancel when
+  it can't be met. Pairs with the files-exist gap above — a resolvability
+  pre-flight fixes both surfaces at once. Surfaced by M3.1b manual smoke
+  (2026-07-25).
+
+- **Native-dim-dependent M7 validation remains.** M3.1b now persists a
+  provider model's successful native probe as `embeddingDim` and threads
+  it through production config resolution. The wizard still does not bound
+  Custom by that value; an over-declared dim can therefore make its storage
+  preview overpromise even though the service clamps to native. The local
+  side also still needs a dim source for future custom imports:
+  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a non-catalog
+  model cannot be tested. M7 owns both UI-facing gaps. The original provider
+  persistence defect was surfaced by M3.1b manual smoke (2026-07-25) and
+  resolved by the 2026-07-28 review followup.
+
+- **Matryoshka support is not detectable, so M7 should let the user
+  assert it.** No OpenAI-compatible endpoint advertises MRL training, and
+  the obvious probe is a false-positive machine: sending `dimensions: N`
+  and getting N floats back proves only that the _server_ honoured the
+  parameter, which a naive slice of a non-MRL model satisfies identically
+  while returning quality-destroyed vectors. The property that actually
+  distinguishes MRL is rank preservation under truncation, which is
+  measurable — embed a fixed probe set at native and at candidate dims,
+  then rank-correlate the pairwise-similarity matrices — but it yields a
+  statistical result against a judgment threshold, not a boolean, and a
+  wrong answer degrades retrieval silently. So the contract stays capability
+  flag plus user assertion (matching the relabel disclaimer this slice
+  already ships), with **manual override as the primary path**: an advanced
+  user who knows a model is Matryoshka-trained enables the flag and fills in
+  the dims directly. A rank-preservation sweep, if built, belongs beside that
+  control as evidence shown to the user rather than a gate that decides for
+  them — and the sweep is also how the curated ladder's rungs would be found
+  rather than assumed. Deferred to **M7** (developer decision 2026-07-25):
+  the override needs the model-capability editing surface to host it, and
+  most users will never touch the feature. Note for whoever builds it:
+  `dimLadder`'s hardcoded `[512, 1024, 2048]` fallback becomes wrong under
+  a user-assertion model, since enabling the flag would always come with
+  user-supplied dims — the fallback currently fabricates rungs nobody
+  asserted, and can offer dims above the model's native size. Surfaced by
+  M3.1b manual smoke (2026-07-25).
+
+- **Staleness pill can stay lit for stale rows on non-open branches.**
+  The drain worker warms only the open branch while the pill's mount
+  refresh counts story-wide; a story with stale embeddable rows on a
+  non-open branch keeps a lit pill the drain never clears (the blocking
+  sync stage still covers correctness on read; `Re-index this story now`
+  clears it). Cosmetic-only; resolve if per-branch status or a
+  story-wide drain scope lands. Surfaced by M3.1b final review
+  (2026-07-25).
+
+- **The drain still embeds unconditionally instead of revalidating.**
+  [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
+  specifies that an edit or rollback returning content to its embedded
+  value "revalidates to 0 with no re-embed, since the existing vector is
+  still correct". `recomputeStaleOps` implements exactly that hash
+  comparison, and the cross-model cancel now uses it — but the drain still
+  loads `WHERE embedding_stale = 1` and hands every row to
+  `embedAndBuildVecOps`, so a rollback to previously-embedded content
+  re-embeds rather than revalidating. Wire the same helper into the drain's
+  row load, or narrow canon to say revalidation happens only where a caller
+  already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
+  the cancel half resolved in M3.1b review (2026-07-28).

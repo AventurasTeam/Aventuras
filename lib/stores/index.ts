@@ -16,6 +16,8 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { embedderSwapStore } from './ui/embedder-swap'
+import { embeddingStatusStore } from './ui/embedding-status'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
 import { wizardStore } from './wizard/wizard'
@@ -39,6 +41,8 @@ export function resetAllStores(): void {
   translationsStore.__reset()
   navigationStore.__reset()
   appSettingsStore.__reset()
+  embedderSwapStore.__reset()
+  embeddingStatusStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
   wizardStore.reset()
@@ -49,6 +53,8 @@ export {
   chaptersStore,
   characterRelationshipsStore,
   currentStoryStore,
+  embedderSwapStore,
+  embeddingStatusStore,
   entitiesStore,
   entriesStore,
   entryAssetsStore,
@@ -71,6 +77,8 @@ export {
 }
 
 export { createWorkingSetStore } from './factory/working-set-store'
+
+export { openEmbedderSwapDialog } from './ui/embedder-swap'
 
 export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-settings'
 export type { RelationshipView } from './character-relationships/character-relationships'

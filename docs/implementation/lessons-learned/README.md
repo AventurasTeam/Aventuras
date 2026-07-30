@@ -123,6 +123,10 @@ slice plans when relevant.
 - [A literal NUL in a plan file silently rewrites the code it specifies](./plan-file-nul-corruption.md)
   — `file .impl-plans/*.md` should never say `data`; reading tools disagree
   about a raw NUL and each renders a different separator.
+- [Xvfb does not hide Electron on a Wayland session](./xvfb-does-not-hide-electron-on-wayland.md)
+  — `xvfb-run` sets only `DISPLAY`, which Electron ignores in favour of
+  the compositor; pin `--ozone-platform=x11` at launch, and verify by
+  where the window rendered, not that Xvfb is running.
 - [Vite eagerly bundles a runtime-guarded `require()`, Metro doesn't](./storybook-vite-eager-guarded-require.md)
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias

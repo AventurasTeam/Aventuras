@@ -6,6 +6,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 
 type GenerationPhase =
   | 'reasoning'
@@ -14,7 +15,18 @@ type GenerationPhase =
   | 'closing-chapter'
   | 'refreshing-suggestions'
 
-type ErrorState = { code: 'embedder-offline'; pendingRows: number } | { code: 'classifier-offline' }
+// `memory-incomplete` names the observable state, not a cause: the pill fires
+// off a non-zero stale-row count, which an available embedder can produce too
+// (a crash-recovered same-model cancel re-flags the whole story).
+//
+// `swap-paused` is a separate code rather than more of the same, because staging
+// CLEARS embedding_stale as it goes: a half-finished swap drives the stale count
+// toward zero, so the story most in need of a signal is the one least likely to
+// raise one. Its cause is the marker, and its remedy is a decision, not waiting.
+type ErrorState =
+  | { code: 'memory-incomplete'; pendingRows: number }
+  | { code: 'swap-paused' }
+  | { code: 'classifier-offline' }
 
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
@@ -23,33 +35,46 @@ type GenerationStatusPillProps = {
   onErrorTap: (code: ErrorState['code']) => void
 }
 
-const PHASE_COPY: Record<GenerationPhase, string> = {
-  reasoning: 'reasoning…',
-  'generating-narrative': 'generating narrative…',
-  classifying: 'classifying…',
-  'closing-chapter': 'closing chapter…',
-  'refreshing-suggestions': 'refreshing suggestions…',
+function phaseCopy(phase: GenerationPhase): string {
+  switch (phase) {
+    case 'reasoning':
+      return t('chrome.generationStatusPill.phase.reasoning')
+    case 'generating-narrative':
+      return t('chrome.generationStatusPill.phase.generatingNarrative')
+    case 'classifying':
+      return t('chrome.generationStatusPill.phase.classifying')
+    case 'closing-chapter':
+      return t('chrome.generationStatusPill.phase.closingChapter')
+    case 'refreshing-suggestions':
+      return t('chrome.generationStatusPill.phase.refreshingSuggestions')
+  }
 }
 
 function errorCopy(error: ErrorState): string {
   switch (error.code) {
-    case 'embedder-offline':
-      return `Embedder offline — ${error.pendingRows} rows pending`
+    case 'memory-incomplete':
+      return t('chrome.generationStatusPill.error.memoryIncomplete', {
+        count: error.pendingRows,
+      })
+    case 'swap-paused':
+      return t('chrome.generationStatusPill.error.swapPaused')
     case 'classifier-offline':
-      return 'Classifier offline — retrieval coverage thinning'
+      return t('chrome.generationStatusPill.error.classifierOffline')
   }
 }
 
+// Exhaustive switch rather than a default-carrying ternary: a new phase must
+// fail the build here instead of silently inheriting "Cancel generation".
 function cancelCopy(phase: GenerationPhase): string {
   switch (phase) {
     case 'reasoning':
     case 'generating-narrative':
     case 'classifying':
-      return 'Cancel generation'
+      return t('chrome.generationStatusPill.cancelGeneration')
     case 'closing-chapter':
-      return 'Cancel chapter close'
+      return t('chrome.generationStatusPill.cancelChapterClose')
     case 'refreshing-suggestions':
-      return 'Cancel suggestion refresh'
+      return t('chrome.generationStatusPill.cancelSuggestionRefresh')
   }
 }
 
@@ -69,7 +94,7 @@ export function GenerationStatusPill({
       <Popover>
         <PopoverTrigger ref={triggerRef}>
           <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
-            {isPhone ? null : PHASE_COPY[activePhase]}
+            {isPhone ? null : phaseCopy(activePhase)}
           </Tag>
         </PopoverTrigger>
         <PopoverContent>

@@ -93,12 +93,28 @@ export async function ensureEmbedderModel(): Promise<{ modelId: string; dim: num
   return { modelId: model.id, dim: model.dim }
 }
 
-/** Copy the provisioned model into a run's userData so the app sees it installed. */
+/**
+ * Copy the provisioned model into a run's userData so the app sees it
+ * installed. `idOverride` copies into a second on-disk dir and rewrites that
+ * copy's meta.json id, yielding a second `listInstalled()` entry — a distinct
+ * swap-dialog candidate — without a second download. The id is synthetic, so
+ * it resolves no catalog entry: only paths that don't call
+ * `resolveEmbedderConfig` (relabel) can target it. The cache is never touched.
+ */
 export async function installEmbedderModel(
   userDataDir: string,
+  opts?: { idOverride?: string },
 ): Promise<{ modelId: string; dim: number }> {
   const info = await ensureEmbedderModel()
   const dirName = sanitizeModelDirName(info.modelId)
-  cpSync(join(cacheRoot(), dirName), join(userDataDir, 'embedders', dirName), { recursive: true })
-  return info
+  const modelId = opts?.idOverride ?? info.modelId
+  const destDir = join(userDataDir, 'embedders', sanitizeModelDirName(modelId))
+  cpSync(join(cacheRoot(), dirName), destDir, { recursive: true })
+  if (opts?.idOverride) {
+    const metaPath = join(destDir, 'meta.json')
+    const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as { id: string; installedAt: number }
+    meta.id = modelId
+    writeFileSync(metaPath, JSON.stringify(meta))
+  }
+  return { modelId, dim: info.dim }
 }

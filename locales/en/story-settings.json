@@ -30,5 +30,59 @@
     "unsavedSave": "Save",
     "unsavedDiscard": "Discard"
   },
-  "missingStory": "This story could not be loaded."
+  "missingStory": "This story could not be loaded.",
+  "swap": {
+    "title": "Change embedding model",
+    "pickBody": "Pick a model to switch this story to. The current model can't be selected.",
+    "current": "Current",
+    "next": "Next",
+    "back": "Back",
+    "cancel": "Cancel",
+    "optionsTitle": "Switch to {{model}}",
+    "reindex": "Re-index this story",
+    "reindexHint": "Rebuilds every vector under the new model. Crash-safe; resumable.",
+    "keep": "Keep on the current model",
+    "keepHint": "Stay on the current model. Nothing changes.",
+    "optionsBody": "Choose how to proceed with this switch.",
+    "relabel": "Skip and just relabel",
+    "relabelHint": "Update the recorded model without rebuilding any vectors.",
+    "relabelDisclaimer": "This is your assertion that the underlying model is unchanged. If it differs, retrieval quality degrades silently.",
+    "resumeTitle": "Re-index interrupted",
+    "resumeBody": "Switching this story to {{model}} was interrupted, likely by a crash or force-quit. Resume to pick up where it left off, or cancel to keep this story on its current model.",
+    "resume": "Resume",
+    "cancelSwap": "Cancel switch",
+    "resumeLater": "Later",
+    "sourceLocal": "On this device"
+  },
+  "reindexConfirm": {
+    "title": "Re-index this story?",
+    "body_one": "Re-embeds all {{count}} entry in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "body_other": "Re-embeds all {{count}} entries in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "bodyUnknownCount": "Re-embeds every entry in this story with {{model}}. Nothing is deleted — each embedding is replaced as it is rebuilt.",
+    "cancelSemantics": "You can cancel while it runs. Cancelling keeps the entries already rebuilt and queues the rest.",
+    "confirm": "Re-index"
+  },
+  "memory": {
+    "heading": "Memory",
+    "staleCount_one": "{{count}} row pending re-embed.",
+    "staleCount_other": "{{count}} rows pending re-embed.",
+    "reason": {
+      "modelMissing": "The current embedding model is missing or was removed.",
+      "providerUnconfigured": "The embedding provider isn't configured.",
+      "retrying": "Embed failures — retrying automatically."
+    },
+    "currentModel": "Current model: {{model}}",
+    "switchEmbedder": "Switch embedder",
+    "swapPending": "A switch is already pending for this story.",
+    "reindexNow": "Re-index this story now",
+    "reindexing": "Re-indexing {{done}} / {{total}}",
+    "cancel": "Cancel",
+    "busy": "An embedder operation is already running for this story.",
+    "actionFailed": "That didn't work. Please try again.",
+    "relabelBlocked": "Can't relabel while a switch is in progress.",
+    "swapPendingTitle": "Embedder switch paused",
+    "swapPendingBody": "Switching this story to {{model}} was interrupted. Nothing is being embedded until you resume or cancel.",
+    "cancelTooLate": "The switch finished before it could be cancelled.",
+    "relabelDimMismatch": "These vectors are stored at a different size than that model reads. Re-index this story instead — relabelling would leave every embedding unreadable."
+  }
 }

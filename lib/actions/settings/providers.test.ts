@@ -6,7 +6,7 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { redactHeaderValue, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 import { appSettingsStore, rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { addProvider, quickWireModel } from './providers'
+import { addProvider, quickWireModel, recordProviderEmbeddingDim } from './providers'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
 
@@ -57,6 +57,19 @@ describe('provider mutators', () => {
     }
     expect(resolveModel('narrative', config)).toMatchObject({ ok: true, modelId: 'm-1' })
     expect(resolveModel('wizard-assist', config)).toMatchObject({ ok: true, modelId: 'm-1' })
+  })
+
+  it('keeps both dims when two models on one provider are recorded concurrently', async () => {
+    await addProvider(oaiProvider, { db })
+
+    await Promise.all([
+      recordProviderEmbeddingDim('prov-1', 'm-a', 1024, { db }),
+      recordProviderEmbeddingDim('prov-1', 'm-b', 512, { db }),
+    ])
+
+    const cached = appSettingsStore.getAppSettings().providers[0].cachedModels ?? []
+    expect(cached.find((m) => m.id === 'm-a')?.capabilities?.embeddingDim).toBe(1024)
+    expect(cached.find((m) => m.id === 'm-b')?.capabilities?.embeddingDim).toBe(512)
   })
 
   it('registers the configured provider key for httpCallSink redaction', async () => {
