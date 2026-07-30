@@ -1406,19 +1406,22 @@ const chapterClosePipeline: Pipeline = {
 
 const suggestionRefreshPipeline: Pipeline = {
   kind: 'suggestion-refresh',
-  gateBehavior: 'no-gate', // composer stays usable; only the chip strip shows local loading
+  gateBehavior: 'hard-gate', // chips are delta-logged state built from a context snapshot
   concurrencyPolicy: {
     blockedBy: ['per-turn', 'suggestion-refresh'],
     yieldsTo: ['per-turn'],
   },
-  // per-turn and self-block are framework backstops; the UI also gates
-  // the re-roll affordance during a turn or while one is already loading.
-  // yieldsTo is the collision rule: chips persist on the entry that was
-  // terminal when the re-roll fired, so a turn landing mid-run makes this
-  // run's own output unreachable — the strip reads the new tail, and the
-  // turn emits its own chips. Blocking per-turn instead would put friction
-  // on the primary action to protect provably-dead work, and a rejected
-  // turn surfaces to the reader as a system failure entry.
+  // The gate is what keeps a reversal from racing the write: undo, redo,
+  // edit and rollback all reject on `isUserEditBlocked` for the run's
+  // duration. The post-call re-read of the target can only prove the row
+  // survived — not that an undone edit or a redo appending past it left
+  // the context the chips describe intact. Escapable rather than blocking:
+  // the strip swaps its ⟳ for a ✕ for exactly as long as the gate is held.
+  // per-turn and self-block are framework backstops; the UI also gates the
+  // re-roll affordance during a turn or while one is already loading.
+  // yieldsTo is a backstop too, now that the gate disables Send and the
+  // failure card's Retry — per-turn's own blockedBy still lacks this kind,
+  // so a non-UI caller could otherwise start a turn mid-refresh.
 }
 
 const periodicClassifierPipeline: Pipeline = {
@@ -1461,8 +1464,8 @@ const translationRetryPipeline: Pipeline = {
 | translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                                                                                                                                                                                |
 | per-turn              | suggestion-refresh      | refresh's blockedBy includes per-turn → blocked (the strip also locks its ⟳ for the turn's duration)                                                                                                                                                             |
 | suggestion-refresh    | suggestion-refresh      | blockedBy includes self → blocked; the strip's ⟳ is swapped for ✕ while loading, so a second re-roll isn't offered                                                                                                                                               |
-| suggestion-refresh    | per-turn                | refresh's yieldsTo includes per-turn → refresh aborts, turn starts; Send is never rejected                                                                                                                                                                       |
-| suggestion-refresh    | chapter-close (chained) | chained start bypasses concurrencyPolicy → starts; the chain originates from a per-turn commit, which already yielded the refresh away                                                                                                                           |
+| suggestion-refresh    | per-turn                | refresh's hard-gate disables Send and the failure card's Retry, so the UI cannot get here; a non-UI caller hits yieldsTo → refresh aborts, turn starts                                                                                                           |
+| suggestion-refresh    | chapter-close (chained) | chained start bypasses concurrencyPolicy → starts; the chain originates from a per-turn commit, which the gate already prevented starting                                                                                                                        |
 
 `blockedBy` prevents NEW starts; it does NOT kill running pipelines.
 The architectural premise (`memory/cadence.md → Concurrency`) is that

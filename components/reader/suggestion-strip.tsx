@@ -37,7 +37,7 @@ type SuggestionStripProps = {
   /** Aborts the in-flight refresh. Only reachable while `phase === 'loading'`. */
   onCancel: () => void
   onToggleCollapsed: () => void
-  /** In-flight per-turn generation: blocks chip taps and refresh, never collapse. */
+  /** The reader's edit gate is held: blocks chip taps and refresh, never collapse or cancel. */
   disabled?: boolean
   className?: string
   /** Inner measure. The band (border + surface) stays full-bleed; only the content is constrained. */

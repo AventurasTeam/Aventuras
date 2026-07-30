@@ -617,7 +617,9 @@ the refresh button.
 **Not a `loading` state: the per-turn lock.** While a per-turn
 pipeline is in flight, the strip locks chip taps and the refresh
 affordance through a separate `disabled` prop rather than switching
-to `loading`. The route can't know in advance whether this turn's
+to `loading`. (A re-roll holds the same gate, but drives `loading`
+on its own — the `disabled` prop is what covers a lock this strip
+did not cause.) The route can't know in advance whether this turn's
 piggyback or classifier-fold emission will actually produce chips —
 zero enabled categories or capability gating can silently skip it —
 so claiming "Generating suggestions…" could lie. Whatever the strip
@@ -646,15 +648,19 @@ not a deletion.
   before a branch switch fires (existing reader transaction
   behavior). A `suggestion-refresh` in flight aborts on branch
   switch — non-transactional, cancellable.
-- **Send pressed while a re-roll is in flight.** The refresh
-  `yieldsTo` per-turn, so the turn pre-empts it: the refresh aborts,
-  the turn starts, and Send is never rejected or delayed behind a
-  chip call. Nothing is lost that could have been seen — chips
-  persist on the entry that was terminal when ⟳ fired, so a
-  committed refresh racing a turn would land on an entry the strip
-  no longer reads, and the turn emits its own chips regardless. The
-  composer is **not** disabled during a re-roll; the refresh is
-  `no-gate` and the reader stays fully usable.
+- **A reversal fired while a re-roll is in flight.** The refresh
+  holds the reader's edit gate (`hard-gate`), so undo, redo, entry
+  edit and rollback all reject for its duration, and Send and the
+  failure card's Retry are disabled. Chips are generated from a
+  context snapshot and persisted as a delta, so a reversal landing
+  mid-call would leave them describing a state that no longer holds
+  — and re-reading the target after the call can only prove the row
+  survived, not that the surrounding context did. A redo is the
+  sharpest case: it appends past the target, so the chips land on a
+  non-tail entry, stay invisible, and reappear on a later rollback.
+  The gate is escapable rather than blocking — the chrome ⟳ is a ✕
+  for exactly as long as the gate is held, so the way out is one
+  click at the place the re-roll was fired.
 - **Rollback semantics.** `story_entries.metadata.nextTurnSuggestions`
   rolls back via the existing metadata delta-log. After rollback,
   the new terminal entry's chips become the active strip. The

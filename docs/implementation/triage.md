@@ -465,17 +465,19 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   reversal path, and `applyDeltaAction` never consults
   `reversalInProgress`.** Both exist in
   `lib/pipeline/runtime/orchestrator.ts` /
-  `lib/stores/generation/generation.ts` and predate this slice, but
-  nothing made them reachable until now: `suggestion-refresh` is the
-  first `no-gate` pipeline kind (`gateBehavior: 'no-gate'`,
-  `lib/pipeline/definitions/suggestion-refresh.ts`), so it's the first
-  run that can genuinely be mid-flight while a user reversal (CTRL-Z /
-  rollback) fires against the same entry. The dominant race window is
-  closed in practice by the phase re-reading its target row after the
-  call completes rather than trusting a stale in-memory copy; the
-  residual gap is a microtask window between that re-read and the
-  write, which is upstream of this pipeline. Surfaced by M3.7a Task 7
-  (2026-07-25).
+  `lib/stores/generation/generation.ts` and predate this slice, and
+  nothing reaches them today. `suggestion-refresh` briefly looked like
+  the first consumer — it shipped `no-gate`, which would have made it
+  the first run able to be mid-flight while a user reversal (CTRL-Z /
+  rollback) fired against the same entry — but it was moved to
+  `hard-gate` on 2026-07-30, so reversals now reject at the action
+  layer for its duration. That leaves no live `no-gate` kind: the
+  declared `periodic-classifier` has no pipeline file yet. Whoever
+  lands the first real one inherits this, and should note that
+  re-reading the target after the call (as this phase does) is not
+  equivalent — it proves the row survived, not that the context the
+  call was built from did. Surfaced by M3.7a Task 7 (2026-07-25),
+  re-scoped when the gate flipped (2026-07-30).
 - **`abortRun` reverse-replays every delta under a run's `actionId`,
   which would reverse a `suggestion-refresh` run's already-committed
   stage-1 emission.**

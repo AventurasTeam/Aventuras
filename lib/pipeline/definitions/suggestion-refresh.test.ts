@@ -9,6 +9,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  isUserEditBlocked,
   resetAllStores,
 } from '@/lib/stores'
 
@@ -167,7 +168,7 @@ beforeEach(() => {
 })
 
 describe('suggestion-refresh declaration', () => {
-  it('matches the canonical V1 declaration: no-gate, self-blocking, pill-only, two phases', () => {
+  it('matches the canonical V1 declaration: hard-gate, self-blocking, pill-only, two phases', () => {
     ensureSuggestionRefreshPipelineRegistered()
     const p = getPipeline(SUGGESTION_REFRESH_KIND)
 
@@ -176,9 +177,25 @@ describe('suggestion-refresh declaration', () => {
       SUGGESTION_TRANSLATION_PHASE,
     ])
     expect(p.affordance).toBe('pill-only')
-    expect(p.gateBehavior).toBe('no-gate')
+    // hard-gate is what makes undo / redo / edit / rollback reject for this
+    // run's duration; without it the chips can outlive the context they
+    // describe, and the post-call re-read only proves the target still exists.
+    expect(p.gateBehavior).toBe('hard-gate')
     expect(p.concurrencyPolicy.blockedBy).toEqual(['per-turn', 'suggestion-refresh'])
     expect(p.chainsTo).toBeUndefined()
+  })
+
+  it('holds the reader edit gate while running, so a reversal cannot race the write', () => {
+    ensureSuggestionRefreshPipelineRegistered()
+    // Reads gateBehavior off the registered pipeline rather than restating it,
+    // so this fails alongside the declaration if the kind is ever relaxed —
+    // the point is the consequence, not the literal.
+    const { gateBehavior } = getPipeline(SUGGESTION_REFRESH_KIND)
+    const running = {
+      runs: new Map([['run-1', { runId: 'run-1', kind: SUGGESTION_REFRESH_KIND, gateBehavior }]]),
+      reversalInProgress: false,
+    }
+    expect(isUserEditBlocked(running as never)).toBe(true)
   })
 
   it('yields to per-turn so a turn never waits on a refresh whose chips it orphans', () => {

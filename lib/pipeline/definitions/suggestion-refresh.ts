@@ -166,10 +166,10 @@ async function* suggestionEmissionPhase(
   // Writing an empty list would blank a strip that still holds usable chips.
   if (items.length === 0) return { status: 'completed' }
 
-  // no-gate lets CTRL-Z / rollback run during the call (they only reject against
-  // a hard-gate run), so re-read rather than write from the pre-call snapshot: a
-  // reversed row must not be resurrected, and a deleted one would reject at the
-  // action layer and fail the run over a reversal the user asked for.
+  // Defense in depth behind the hard gate: user reversals reject at the action
+  // layer for this run's duration, but abort paths and any non-UI writer sit
+  // outside that, so re-read rather than write from the pre-call snapshot — a
+  // reversed row must not be resurrected.
   const current = entriesStore.getById(target.id)
   if (!current) {
     ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
@@ -234,12 +234,16 @@ export function ensureSuggestionRefreshPipelineRegistered(): void {
         { name: SUGGESTION_TRANSLATION_PHASE, run: suggestionTranslationPhase },
       ],
       affordance: 'pill-only',
-      gateBehavior: 'no-gate',
-      // Yields rather than blocking per-turn: chips land on the entry that was
-      // terminal when ⟳ fired, so a turn landing mid-run makes this run's own
-      // output unreachable — the strip reads the new tail, and the turn emits
-      // its own chips anyway. Blocking the turn instead would put friction on
-      // the primary action to protect provably-dead work.
+      // Chips are delta-logged, undoable state generated from a context
+      // snapshot, and the post-call existence re-read below can only prove the
+      // target survived — not that an undone edit, an undone entity write, or a
+      // redo appending past it left that context intact. The strip's ✕ is what
+      // keeps the gate from being a trap.
+      gateBehavior: 'hard-gate',
+      // yieldsTo is now a framework backstop rather than the live path: the
+      // gate disables Send and the failure card's Retry, so the UI cannot start
+      // a turn mid-refresh. It stays because per-turn's blockedBy still lacks
+      // this kind, so a non-UI caller could.
       concurrencyPolicy: {
         blockedBy: [PER_TURN_KIND, SUGGESTION_REFRESH_KIND],
         yieldsTo: [PER_TURN_KIND],

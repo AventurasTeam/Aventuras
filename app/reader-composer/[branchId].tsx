@@ -638,8 +638,12 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
+    // editBlocked, not isGenerating: undo/redo reject on the gate, which a
+    // suggestion refresh now holds too. Keyed off the turn alone, the item
+    // would stay enabled and its rejection would toast "nothing to undo" over
+    // an intact history.
     const blocked = {
-      disabled: isGenerating,
+      disabled: editBlocked,
       disabledReason: t('reader:actions.blockedWhileGenerating'),
     }
     return {
@@ -670,7 +674,7 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, isGenerating, menuUndo, menuRedo, entries.length, jumpToBottom])
+  }, [hasRedo, editBlocked, menuUndo, menuRedo, entries.length, jumpToBottom])
 
   const streamingPayload = useMemo(
     () =>
