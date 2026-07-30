@@ -4,6 +4,10 @@ import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { buildSuggestionSlots } from '@/lib/piggyback'
 
 type BuildArgs = {
+  // Scopes both collections below. Callers already read per-branch, but no
+  // generation context has ever wanted a row from another branch, so the
+  // predicate belongs here rather than at each call site.
+  branchId: string
   // The branch's loaded entries, ascending by position. Every consumer draws
   // from that one set and differs only in how much of it it passes, so this is
   // a truncation seam, not a per-kind query. Recency windowing is template-side
@@ -44,6 +48,7 @@ function blankIfWhitespace(value: string): string {
 // (pinned in templateContextMap; parity-tested here).
 export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
   const {
+    branchId,
     entries,
     entities,
     definition,
@@ -54,9 +59,11 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     refreshGuidance = '',
   } = args
 
-  // System entries are technical-only rows (removed on generate) — templates
-  // must never see them, so exclusion is unconditional defense-in-depth.
-  const narrative = entries.filter((e) => e.kind !== 'system')
+  // Both exclusions are unconditional defense-in-depth: system entries are
+  // technical-only rows (removed on generate) that templates must never see,
+  // and a foreign-branch row would describe a story this prompt isn't telling.
+  const narrative = entries.filter((e) => e.kind !== 'system' && e.branchId === branchId)
+  const branchEntities = entities.filter((e) => e.branchId === branchId)
 
   const normalizedDefinition = {
     ...definition,
@@ -67,13 +74,15 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   const calendar = getCalendar(definition.calendarSystemId)
 
-  const suggestionSlots = suggestionsFire
-    ? buildSuggestionSlots(settings.suggestionCategories).slots
-    : []
+  // Built unconditionally: the slots are the story's palette, not an
+  // instruction to emit. Withholding them behind suggestionsFire forced the
+  // suggestion-refresh phase to set a flag whose only other meaning — "ask the
+  // model for chips" — is that call's entire premise.
+  const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
 
   const context = {
     entries: narrative.map((e) => ({ content: e.content })),
-    entities,
+    entities: branchEntities,
     // Writers inherit scene membership forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene state.
     sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],

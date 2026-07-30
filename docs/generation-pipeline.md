@@ -218,7 +218,7 @@ The orchestrator hands each phase its run's typed context —
 `PhaseContext` (`lib/pipeline/types.ts`) carries an untyped
 `inputs?: unknown` rather than a typed field landing per milestone.
 Slice 3.7a is the first milestone to give a phase caller-supplied
-inputs — `suggestion-refresh`'s `targetEntryId` / `refreshGuidance` —
+inputs — `suggestion-refresh`'s `refreshGuidance` —
 and the phase narrows `unknown` with its own type guard
 (`readRefreshInput` in
 `lib/pipeline/definitions/suggestion-refresh.ts`) rather than reading

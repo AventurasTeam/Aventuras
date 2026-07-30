@@ -17,7 +17,10 @@ export const SUGGESTION_REFRESH_KIND = 'suggestion-refresh'
 export const SUGGESTION_EMISSION_PHASE = 'suggestion-emission'
 export const SUGGESTION_TRANSLATION_PHASE = 'suggestion-translation'
 
-export type SuggestionRefreshInput = { targetEntryId: string; refreshGuidance: string }
+// No target entry: the anchor is always the branch's last narrative entry, and
+// the phase resolves it after the run takes the edit gate. Passing it from the
+// reader would capture it a tick earlier, outside the gate, for no gain.
+export type SuggestionRefreshInput = { refreshGuidance: string }
 
 // No .catch([]) on the array (unlike the classifier fold, where it shields the
 // sibling scene-state fields): chips are this call's only output, so a malformed
@@ -34,9 +37,9 @@ export const suggestionRefreshSchema = z.object({
 
 function readRefreshInput(inputs: unknown): SuggestionRefreshInput | null {
   if (typeof inputs !== 'object' || inputs === null) return null
-  const { targetEntryId, refreshGuidance } = inputs as Partial<SuggestionRefreshInput>
-  if (typeof targetEntryId !== 'string' || typeof refreshGuidance !== 'string') return null
-  return { targetEntryId, refreshGuidance }
+  const { refreshGuidance } = inputs as Partial<SuggestionRefreshInput>
+  if (typeof refreshGuidance !== 'string') return null
+  return { refreshGuidance }
 }
 
 async function* suggestionEmissionPhase(
@@ -84,25 +87,16 @@ async function* suggestionEmissionPhase(
   const entries = [...entriesStore.getEntries().values()]
     .filter((e) => e.branchId === ctx.branchId)
     .sort((a, b) => a.position - b.position)
-  const target = entries.find((e) => e.id === input.targetEntryId)
+  // Skips a system entry rather than guarding against one: clearSystemEntry
+  // deletes that row on Retry / Dismiss / next Send, so chips anchored there
+  // are born dead. A system entry is a tail singleton (writeSystemEntry drops
+  // any existing one, then appends), so nothing narrative follows the anchor
+  // and the whole entry list is already the right prompt window.
+  const target = entries.findLast((e) => e.kind !== 'system')
   if (!target) {
-    ctx.log.warn('classifier.suggestions_refresh_target_missing', {
-      targetEntryId: input.targetEntryId,
-    })
+    ctx.log.warn('classifier.suggestions_refresh_no_anchor', { branchId: ctx.branchId })
     return { status: 'completed' }
   }
-  // Unconditional, mirroring the system exclusion in buildGenerationContext: a
-  // system entry is a transient failure card that clearSystemEntry deletes on
-  // Retry / Dismiss / next Send, so chips anchored to one are born dead. The
-  // reader anchors past them; this is the backstop for any other caller.
-  if (target.kind === 'system') {
-    ctx.log.warn('classifier.suggestions_refresh_target_transient', { targetEntryId: target.id })
-    return { status: 'completed' }
-  }
-  // Chips seed the turn that follows THIS entry, so context past it would
-  // describe another. The target is the tail in every path the UI offers, but a
-  // redo landing between the click and this read would put entries after it.
-  const window = entries.slice(0, entries.indexOf(target) + 1)
 
   const guidance = input.refreshGuidance.trim()
   const cfg = appSettingsStore.getAppSettings()
@@ -114,12 +108,12 @@ async function* suggestionEmissionPhase(
     storyModels: open.settings.models,
   }
   const context = buildGenerationContext({
-    entries: window,
-    entities: [...entitiesStore.getEntities().values()].filter((e) => e.branchId === ctx.branchId),
+    branchId: ctx.branchId,
+    entries,
+    entities: [...entitiesStore.getEntities().values()],
     definition: open.definition,
     settings: open.settings,
     idMap: new IdBiMap(),
-    suggestionsFire: true,
     refreshGuidance: guidance,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.suggestionRefresh, context)

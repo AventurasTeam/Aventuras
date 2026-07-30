@@ -111,7 +111,7 @@ describe('refreshSuggestions', () => {
 
     const result = await refreshSuggestions(
       { storyId: 's1', branchId: 'b1' },
-      { targetEntryId: 'entry-1', refreshGuidance: 'sneak around' },
+      { refreshGuidance: 'sneak around' },
       ctx,
     )
 
@@ -153,7 +153,7 @@ describe('refreshSuggestions', () => {
       value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw the blade.' }] },
     })
     const ids = { storyId: 's1', branchId: 'b1' }
-    const input = { targetEntryId: 'entry-1', refreshGuidance: '' }
+    const input = { refreshGuidance: '' }
 
     await refreshSuggestions(ids, input, ctx)
     expect(await undoLastAction('b1', ctx)).toEqual({ status: 'ok' })
@@ -183,14 +183,14 @@ describe('refreshSuggestions', () => {
 
     const inflight = refreshSuggestions(
       { storyId: 's1', branchId: 'b1' },
-      { targetEntryId: 'entry-1', refreshGuidance: '' },
+      { refreshGuidance: '' },
       ctx,
     )
     // Let the first run reserve itself before the second start is attempted.
     await vi.waitFor(() => expect(generateStructuredMock).toHaveBeenCalled())
     const blocked = await refreshSuggestions(
       { storyId: 's1', branchId: 'b1' },
-      { targetEntryId: 'entry-1', refreshGuidance: '' },
+      { refreshGuidance: '' },
       ctx,
     )
 
@@ -207,7 +207,7 @@ describe('refreshSuggestions', () => {
 
     const result = await refreshSuggestions(
       { storyId: 's1', branchId: 'b1' },
-      { targetEntryId: 'entry-1', refreshGuidance: '' },
+      { refreshGuidance: '' },
       ctx,
     )
 

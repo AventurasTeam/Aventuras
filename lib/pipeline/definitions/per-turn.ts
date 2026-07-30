@@ -87,6 +87,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const idMap = new IdBiMap()
   ctx.intermediates.idMap = idMap
   const context = buildGenerationContext({
+    branchId,
     entries,
     entities,
     definition: open.definition,

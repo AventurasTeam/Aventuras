@@ -150,7 +150,7 @@ function emissionPhase() {
   return node.run
 }
 
-const DEFAULT_INPUT: SuggestionRefreshInput = { targetEntryId: 'entry-1', refreshGuidance: '' }
+const DEFAULT_INPUT: SuggestionRefreshInput = { refreshGuidance: '' }
 
 async function runEmission(inputs: unknown = DEFAULT_INPUT, abortSignal?: AbortSignal) {
   return drain(emissionPhase()(phaseCtx(inputs, abortSignal)))
@@ -395,43 +395,40 @@ describe('suggestion-refresh emission phase', () => {
     expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
-  it('completes without a write when the target entry is gone', async () => {
+  it('completes without a call when the branch has no narrative entry to anchor to', async () => {
     openStory()
-    hydrate()
+    hydrate([{ ...TARGET_ENTRY, id: 'entry-system', kind: 'system' }])
+    wireAppSettings()
 
-    const { events, result } = await runEmission({
-      targetEntryId: 'entry-vanished',
-      refreshGuidance: '',
-    })
+    const { events, result } = await runEmission()
 
     expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])
+    // Resolved before the call, so an unanchorable run never spends a token.
     expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
-  it('completes without a call when the target is a system entry', async () => {
+  it('anchors past a system tail to the last narrative entry', async () => {
     openStory()
     // A failed turn's system entry is the branch tail; clearSystemEntry deletes
-    // it on Retry / Dismiss / next Send, so chips anchored there cannot survive.
+    // that row on Retry / Dismiss / next Send, so chips anchored there could
+    // never survive the way out of the failure.
     const systemTail = {
       ...TARGET_ENTRY,
       id: 'entry-system',
       position: 2,
       kind: 'system',
-      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 120 },
+      content: 'THE TURN FAILED.',
     }
     hydrate([TARGET_ENTRY, systemTail])
     wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
 
-    const { events, result } = await runEmission({
-      targetEntryId: 'entry-system',
-      refreshGuidance: '',
-    })
+    const { events } = await runEmission()
 
-    expect(result).toEqual({ status: 'completed' })
-    expect(events).toEqual([])
-    // Guarded before the call, so a doomed target never spends a token.
-    expect(generateStructuredMock).not.toHaveBeenCalled()
+    expect(events[0]).toMatchObject({ entryId: 'entry-1' })
+    const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
+    expect(prompt).not.toContain('THE TURN FAILED.')
   })
 
   it('calls the dedicated suggestion agent with the refresh template and story model overrides', async () => {
@@ -467,7 +464,6 @@ describe('suggestion-refresh emission phase', () => {
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
 
     const { events } = await runEmission({
-      targetEntryId: 'entry-1',
       refreshGuidance: 'I want to sneak around the back',
     })
 
@@ -670,10 +666,7 @@ describe('suggestion-refresh emission phase', () => {
       return okChips([{ categoryRef: 'cat1', text: 'Too late.' }])
     })
 
-    const { events, result } = await runEmission(
-      { targetEntryId: 'entry-1', refreshGuidance: '' },
-      controller.signal,
-    )
+    const { events, result } = await runEmission({ refreshGuidance: '' }, controller.signal)
 
     expect(result).toEqual({ status: 'aborted' })
     expect(events).toEqual([])
@@ -729,20 +722,23 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
-  it('generates from the window ending at the target, not from a turn that landed after it', async () => {
+  it('anchors to the branch tail and prompts with the whole loaded branch', async () => {
     openStory()
     hydrate([
       TARGET_ENTRY,
-      { ...TARGET_ENTRY, id: 'entry-2', position: 2, content: 'A LATER TURN LANDED.' },
+      { ...TARGET_ENTRY, id: 'entry-2', position: 2, content: 'THE LATEST TURN.' },
     ])
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
 
     const { events } = await runEmission()
 
+    // No caller-supplied target to truncate at any more: the anchor is the tail
+    // by construction, so the whole branch is the window and recency windowing
+    // is the template's `recent` filter.
     const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
     expect(prompt).toContain('The gate groans open.')
-    expect(prompt).not.toContain('A LATER TURN LANDED.')
-    expect(events[0]).toMatchObject({ entryId: 'entry-1' })
+    expect(prompt).toContain('THE LATEST TURN.')
+    expect(events[0]).toMatchObject({ entryId: 'entry-2' })
   })
 })

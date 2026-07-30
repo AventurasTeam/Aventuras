@@ -525,31 +525,32 @@ export default function ReaderComposerRoute() {
     void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
   }, [])
 
-  // Read at settle time, not from the closure. A refresh outlives what it was
-  // fired on: per-turn doesn't block on it, so a turn can move the tail
-  // mid-run, and a branch-switch abort whose reverse-replay fails resolves
-  // 'failed' well after the switch. The entry ref alone would cover both (ids
-  // are globally unique, and a switch nulls the tail); the branch ref stays so
-  // the guard is legible without trusting that cross-module invariant.
+  // Read at settle time, not from the closure: a branch-switch abort whose
+  // reverse-replay fails resolves 'failed' well after the switch, and the
+  // error belongs to the strip that fired it. The entry ref alone would cover
+  // it (ids are globally unique, and a switch nulls the tail); the branch ref
+  // stays so the guard is legible without trusting that cross-module invariant.
   const branchIdRef = useRef(branchId)
   const terminalEntryIdRef = useRef(terminalEntry?.id)
   branchIdRef.current = branchId
   terminalEntryIdRef.current = terminalEntry?.id
 
   const handleRefreshSuggestions = useCallback(() => {
-    const target = terminalEntry
+    const anchor = terminalEntry
     const story = openForBranch
-    if (target == null || story == null) return
+    // The phase resolves its own anchor; this only proves there is one to
+    // resolve, and captures which strip an eventual failure belongs to.
+    if (anchor == null || story == null) return
     setStripError(false)
     const startedBranchId = branchId
-    const startedEntryId = target.id
+    const startedEntryId = anchor.id
     const fail = () => {
       if (branchIdRef.current === startedBranchId && terminalEntryIdRef.current === startedEntryId)
         setStripError(true)
     }
     void refreshSuggestions(
       { storyId: story.storyId, branchId },
-      { targetEntryId: target.id, refreshGuidance: composerRef.current?.getDraft().text ?? '' },
+      { refreshGuidance: composerRef.current?.getDraft().text ?? '' },
       ctx,
     )
       // 'rejected' is the self-block a second ⟳ hits while one runs, and

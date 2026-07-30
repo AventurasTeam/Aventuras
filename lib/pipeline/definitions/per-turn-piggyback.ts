@@ -160,6 +160,7 @@ export async function* piggybackFallbackClassifierPhase(
   // consistent across the turn instead of being renumbered from scratch.
   const idMap = ctx.intermediates.idMap as IdBiMap
   const context = buildGenerationContext({
+    branchId: ctx.branchId,
     // The user's action can itself carry state changes ("I put the sword
     // away"), not just the AI's reply — both entries go to the classifier.
     entries: previousEntry ? [previousEntry, tail] : [tail],

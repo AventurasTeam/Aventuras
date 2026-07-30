@@ -590,8 +590,9 @@ Send — runs `clearSystemEntry`, which deletes the row. Chips
 anchored to one could therefore never survive the way out, and
 anchoring past it also keeps the prior reply's chips visible
 through the failure, which is exactly when a retry wants them. The
-emission phase re-checks the entry kind rather than trusting the
-caller.
+emission phase resolves that anchor itself rather than taking one
+from the caller, so the read and the write both sit inside the gate
+the run holds.
 
 **Empty-state ⟳ Generate.** Terminal entries without
 `nextTurnSuggestions` (opening entries, `user_action` entries

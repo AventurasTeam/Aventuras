@@ -434,7 +434,7 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
 - **A typed `PipelineInputMap` via declaration merging is the shape to
   reach for once a second pipeline needs caller inputs.**
   `suggestion-refresh` is the first pipeline kind to give a phase
-  caller-supplied parameters (`targetEntryId`, `refreshGuidance`), and
+  a caller-supplied parameter (`refreshGuidance`), and
   it rides the base `PhaseContext.inputs?: unknown`
   (`lib/pipeline/types.ts`) narrowed by its own type guard
   (`readRefreshInput` in `lib/pipeline/definitions/suggestion-refresh.ts`)
@@ -663,11 +663,11 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   (`lib/ids/prefixes.ts`), so raw entries expose real UUIDs where a pack
   author can print them, against
   [`data-model.md → ID shape`](../data-model.md#id-shape--kind-prefixed-uuids-throughout)
-  — adding it also makes a `targetEntryId` context variable substitute
-  through the same `IdBiMap`, so a filter can compare placeholder to
-  placeholder; (c) only `suggestion-refresh`'s truncate-at-target needs a
-  new filter (an `up_to`-style one) — per-turn already truncates via
-  `recent`, and the classifier fold's tail pair is exactly `recent: 2`;
+  — nothing prints one today, but a pack author could; (c) no consumer
+  needs a new filter: per-turn already truncates via `recent`, the
+  classifier fold's tail pair is exactly `recent: 2`, and
+  `suggestion-refresh` stopped truncating at all once its anchor became
+  the branch tail by construction (2026-07-30);
   (d) `generation-context.test.ts` has 17 call sites passing fixtures
   directly, and the builder is currently pure, so store-reading means
   hydrating stores in each — the bulk of the mechanical cost. Also needs a
