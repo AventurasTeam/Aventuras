@@ -11,6 +11,7 @@ export {
   SUGGESTION_REFRESH_KIND,
   SUGGESTION_TRANSLATION_PHASE,
   suggestionRefreshSchema,
+  SUGGESTIONS_UNUSABLE,
   type SuggestionRefreshInput,
 } from './definitions/suggestion-refresh'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'

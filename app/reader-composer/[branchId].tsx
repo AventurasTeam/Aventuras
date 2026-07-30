@@ -18,10 +18,12 @@ import {
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
+import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
   describeTurnFailure,
   toSystemFailureMeta,
+  useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -48,9 +50,14 @@ import {
 } from '@/lib/actions'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
-import { findSuggestionAnchor, shouldShowSuggestionStrip } from '@/lib/piggyback'
+import {
+  buildSuggestionSlots,
+  findSuggestionAnchor,
+  shouldShowSuggestionStrip,
+} from '@/lib/piggyback'
 import {
   awaitRunTerminal,
   PER_TURN_KIND,
@@ -113,10 +120,10 @@ export default function ReaderComposerRoute() {
   )
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  // A no-gate suggestion refresh is not a turn: per-turn does not block on it, so
-  // both can run at once, and counting it here would swap Send for Cancel, gate
-  // undo/redo, and raise the streaming placeholder over a branch that isn't
-  // streaming.
+  // A suggestion refresh is not a turn: counting it here would swap Send for
+  // Cancel and raise the streaming placeholder over a branch that isn't
+  // streaming. Note this is only about the turn-shaped chrome — the refresh
+  // does hold the edit gate, so `editBlocked` above already covers undo/redo.
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND,
@@ -148,7 +155,7 @@ export default function ReaderComposerRoute() {
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
-  const [stripError, setStripError] = useState(false)
+  const [stripError, setStripError] = useState<PipelineError | null>(null)
   const terminalEntry = findSuggestionAnchor(entries) ?? null
   const suggestionsEnabled = openForBranch?.settings.suggestionsEnabled ?? false
   const suggestionCategories = openForBranch?.settings.suggestionCategories ?? []
@@ -159,17 +166,25 @@ export default function ReaderComposerRoute() {
     hasChips: chips.length > 0,
     categories: suggestionCategories,
   })
+  // The strip stays mounted on historical chips after every category is
+  // disabled, but the phase no-ops in that state — so ⟳ must not offer a run
+  // that cannot produce anything.
+  const canRefreshSuggestions = buildSuggestionSlots(suggestionCategories).slots.length > 0
   const stripPhase: SuggestionStripPhase = refreshingSuggestions
     ? 'loading'
-    : stripError
+    : stripError != null
       ? 'error'
       : chips.length > 0
         ? 'visible'
         : 'empty-state'
+  const stripErrorMessage = describeSuggestionFailure(stripError)
+  const stripErrorFix = useConfigFixAction(
+    stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
+  )
 
   // The failure belongs to the entry it was fired on; a turn, a rollback or a
   // branch switch replaces the strip's contents, so the error must not ride along.
-  useEffect(() => setStripError(false), [branchId, terminalEntry?.id])
+  useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
 
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     embeddingStatusStore.staleTotalFor(s, storyId),
@@ -232,9 +247,10 @@ export default function ReaderComposerRoute() {
     setHasOlder(false)
   }, [branchId])
 
-  // Leaving the branch (switch or unmount) aborts an in-flight refresh: it is
-  // no-gate and non-transactional, and its target entry is on the branch being
-  // left (reader-composer.md → Edge cases → Branch switch with chips in flight).
+  // Leaving the branch (switch or unmount) aborts an in-flight refresh: its
+  // target entry is on the branch being left, and letting it settle would hold
+  // the edit gate on the branch just entered
+  // (reader-composer.md → Edge cases → Branch switch with chips in flight).
   useEffect(
     () => () => {
       const running = [...generationStore.getTxState().runs.values()].some(
@@ -536,12 +552,12 @@ export default function ReaderComposerRoute() {
     // The phase resolves its own anchor; this only proves there is one to
     // resolve, and captures which strip an eventual failure belongs to.
     if (anchor == null || story == null) return
-    setStripError(false)
+    setStripError(null)
     const startedBranchId = branchId
     const startedEntryId = anchor.id
-    const fail = () => {
+    const fail = (error: PipelineError) => {
       if (branchIdRef.current === startedBranchId && terminalEntryIdRef.current === startedEntryId)
-        setStripError(true)
+        setStripError(error)
     }
     void refreshSuggestions(
       { storyId: story.storyId, branchId },
@@ -551,9 +567,20 @@ export default function ReaderComposerRoute() {
       // 'rejected' is the self-block a second ⟳ hits while one runs, and
       // 'aborted' is a cancel or a branch switch — neither is a failure.
       .then((result) => {
-        if (result.outcome === 'failed') fail()
+        if (result.outcome === 'failed')
+          fail(result.error ?? { kind: 'orchestrator', detail: 'run failed without an error' })
       })
-      .catch(fail)
+      .catch((e: unknown) => {
+        // Logged outside the strip guard: a throw that lands after a branch
+        // switch still has to leave a trace, and beginRun's own unwind path
+        // rethrows without logging.
+        logger.error('pipeline.suggestion_refresh_threw', {
+          branchId: startedBranchId,
+          entryId: startedEntryId,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        fail({ kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) })
+      })
   }, [terminalEntry, openForBranch, branchId])
 
   const handleReady = useCallback(async () => {
@@ -782,6 +809,9 @@ export default function ReaderComposerRoute() {
               collapsed={stripCollapsed}
               chips={chips}
               categories={suggestionCategories}
+              errorMessage={stripErrorMessage}
+              errorFix={stripErrorFix}
+              canRefresh={canRefreshSuggestions}
               onTapChip={handleTapChip}
               onRefresh={handleRefreshSuggestions}
               onCancel={handleCancelSuggestions}

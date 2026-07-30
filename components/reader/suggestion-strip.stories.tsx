@@ -75,7 +75,32 @@ export const Loading: Story = { args: { phase: 'loading' } }
 /** Generate pressed from empty-state: busy before any chip exists. */
 export const LoadingEmpty: Story = { args: { phase: 'loading', chips: [] } }
 
-export const Error: Story = { args: { phase: 'error' } }
+/** A failed re-roll keeps the chips it failed to replace — they are still tappable. */
+export const Error: Story = {
+  args: { phase: 'error', errorMessage: 'The model returned no usable suggestions.' },
+}
+
+/** First-ever generate failed: nothing to preserve, so the notice stands alone. */
+export const ErrorEmpty: Story = {
+  args: { phase: 'error', chips: [], errorMessage: "Couldn't generate suggestions." },
+}
+
+/** A deterministic config failure: Retry would never succeed, so the fix replaces it. */
+export const ErrorNeedsProfile: Story = {
+  args: {
+    phase: 'error',
+    errorMessage: 'The suggestion agent has no profile assigned.',
+    errorFix: { label: 'Assign profile', onPress: fn() },
+  },
+}
+
+/** Every category disabled: historical chips still render, but ⟳ would no-op, so it is dead. */
+export const NoEnabledCategories: Story = {
+  args: {
+    canRefresh: false,
+    categories: categories.map((c) => ({ ...c, enabled: false })),
+  },
+}
 
 /** A turn in flight: same spinner, but ⟳ stays (disabled) — there is no strip-owned run to cancel. */
 export const LockedByTurn: Story = { args: { disabled: true } }
@@ -132,6 +157,3 @@ export const CustomHexColor: Story = {
     ],
   },
 }
-
-/** In-flight per-turn generation: chips dim and stop taking taps, collapse stays live. */
-export const DisabledDuringGeneration: Story = { args: { disabled: true } }

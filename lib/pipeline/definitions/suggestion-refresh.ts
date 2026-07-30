@@ -21,6 +21,10 @@ export const SUGGESTION_REFRESH_KIND = 'suggestion-refresh'
 export const SUGGESTION_EMISSION_PHASE = 'suggestion-emission'
 export const SUGGESTION_TRANSLATION_PHASE = 'suggestion-translation'
 
+// Tags the phase-logic failure raised when the call returned but nothing in it
+// resolved, so the strip can say that rather than "generation failed".
+export const SUGGESTIONS_UNUSABLE = 'suggestions-unusable'
+
 // No target entry: the anchor is always the branch's last narrative entry, and
 // the phase resolves it after the run takes the edit gate. Passing it from the
 // reader would capture it a tick earlier, outside the gate, for no gain.
@@ -160,8 +164,22 @@ async function* suggestionEmissionPhase(
       received: result.value.suggestions.length,
       dropped: droppedCount,
     })
-  // Writing an empty list would blank a strip that still holds usable chips.
-  if (items.length === 0) return { status: 'completed' }
+  // Still never writes an empty list — that would blank a strip holding usable
+  // chips. Reported as a failure rather than a quiet `completed` because the
+  // user asked for this run: `completed` left the strip identical to never
+  // having pressed ⟳, so a model that keeps emitting unresolvable refs reads as
+  // a dead button. The strip keeps its chips and surfaces the failure beside
+  // them.
+  if (items.length === 0)
+    return {
+      status: 'failed',
+      error: {
+        kind: 'phase-logic',
+        subsystem: SUGGESTIONS_UNUSABLE,
+        phaseName: SUGGESTION_EMISSION_PHASE,
+        detail: `no chip resolved (received ${result.value.suggestions.length}, dropped ${droppedCount})`,
+      },
+    }
 
   // Defense in depth behind the hard gate: user reversals reject at the action
   // layer for this run's duration, but abort paths and any non-UI writer sit

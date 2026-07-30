@@ -32,6 +32,12 @@ type SuggestionStripProps = {
   chips: readonly SuggestionChip[]
   /** The story's palette, including `enabled: false` entries — disable gates emission, not render. */
   categories: readonly SuggestionCategory[]
+  /** Resolved by the route from the run's `PipelineError`; the strip never classifies a failure. */
+  errorMessage?: string
+  /** Set only for deterministic failures — replaces Retry, which could not succeed. */
+  errorFix?: { label: string; onPress: () => void }
+  /** False when no category is enabled: the phase would no-op, so ⟳ must not offer the run. */
+  canRefresh?: boolean
   /** Receives the chip's prose; the route fills the composer and forces `Free` mode. */
   onTapChip: (text: string) => void
   onRefresh: () => void
@@ -135,6 +141,9 @@ export function SuggestionStrip({
   onRefresh,
   onCancel,
   onToggleCollapsed,
+  errorMessage,
+  errorFix,
+  canRefresh = true,
   disabled = false,
   className,
   contentClassName,
@@ -149,33 +158,64 @@ export function SuggestionStrip({
   )
 
   const busy = phase === 'loading'
+  // A foreign lock (a turn in flight) is treated exactly as our own refresh is:
+  // taps refuse and the overlay spinner shows, because whatever is on screen is
+  // about to be replaced and a static stack reads as interactive-but-broken. It
+  // deliberately does NOT get the "Generating suggestions…" line or the ✕ — the
+  // route cannot know this turn will emit chips at all (zero enabled categories
+  // or capability gating can skip it silently), and the turn's cancel lives on
+  // the composer.
   const locked = busy || disabled
-  // A foreign lock (a turn in flight) gets the same spinner: whatever is on
-  // screen is about to be replaced and nothing here is actionable, so a static
-  // stack reads as interactive-but-broken. It deliberately does NOT get the
-  // "Generating suggestions…" line or the ✕ — the route cannot know this turn
-  // will emit chips at all (zero enabled categories or capability gating can
-  // skip it silently), and the turn's cancel lives on the composer.
-  const inFlight = busy || disabled
+  const refreshBlocked = locked || !canRefresh
   // The body's Generate button IS the refresh affordance; two ⟳ one above the
   // other read as different actions. Collapsing hides it, so the chrome one
   // comes back.
   const emptyStateOwnsRefresh = phase === 'empty-state' && !collapsed
+
+  const chipStack = (
+    <View className={cn('gap-1.5', locked && 'opacity-50')}>
+      {chips.map((chip, index) => (
+        <SuggestionChipRow
+          key={index}
+          chip={chip}
+          category={categoryById.get(chip.categoryId)}
+          tintAlpha={tintAlpha}
+          locked={locked}
+          onTapChip={onTapChip}
+        />
+      ))}
+    </View>
+  )
 
   let body: ReactNode
   if (collapsed) {
     body = null
   } else if (phase === 'error') {
     body = (
-      <View className="flex-row items-center gap-2 rounded-md border border-dashed border-warning px-3 py-2">
-        <Icon as={AlertTriangle} size="sm" className="shrink-0 text-warning" />
-        <Text size="sm" variant="muted" className="min-w-0 flex-1">
-          {t('reader:suggestions.errorBody')}
-        </Text>
-        <Button variant="secondary" size="sm" onPress={onRefresh} disabled={locked}>
-          <Icon as={RefreshCw} size="sm" />
-          <Text>{t('reader:suggestions.retry')}</Text>
-        </Button>
+      <View className="gap-1.5">
+        <View className="flex-row items-center gap-2 rounded-md border border-dashed border-warning px-3 py-2">
+          <Icon as={AlertTriangle} size="sm" className="shrink-0 text-warning" />
+          <Text size="sm" variant="muted" className="min-w-0 flex-1">
+            {errorMessage ?? t('reader:suggestions.errorBody')}
+          </Text>
+          {errorFix ? (
+            // A deterministic failure (no profile assigned, profile or provider
+            // missing) cannot be retried into success, so the only honest
+            // control is the one that goes and fixes it.
+            <Button variant="secondary" size="sm" onPress={errorFix.onPress}>
+              <Text>{errorFix.label}</Text>
+            </Button>
+          ) : (
+            <Button variant="secondary" size="sm" onPress={onRefresh} disabled={refreshBlocked}>
+              <Icon as={RefreshCw} size="sm" />
+              <Text>{t('reader:suggestions.retry')}</Text>
+            </Button>
+          )}
+        </View>
+        {/* A failed re-roll must not destroy what was on screen: these chips
+            predate the failure and stay tappable. Same contract the loading
+            overlay honours. */}
+        {chips.length > 0 ? chipStack : null}
       </View>
     )
   } else if (busy && chips.length === 0) {
@@ -200,7 +240,7 @@ export function SuggestionStrip({
   } else if (phase === 'empty-state') {
     body = (
       <View className="items-center">
-        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={locked}>
+        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={refreshBlocked}>
           <Icon as={RefreshCw} size="sm" />
           <Text>{t('reader:suggestions.generate')}</Text>
         </Button>
@@ -212,19 +252,8 @@ export function SuggestionStrip({
       // a re-roll that lands on nothing usable keeps what was there, so
       // clearing the stack first would flash a loss that may not happen.
       <View>
-        <View className={cn('gap-1.5', locked && 'opacity-50')}>
-          {chips.map((chip, index) => (
-            <SuggestionChipRow
-              key={index}
-              chip={chip}
-              category={categoryById.get(chip.categoryId)}
-              tintAlpha={tintAlpha}
-              locked={locked}
-              onTapChip={onTapChip}
-            />
-          ))}
-        </View>
-        {inFlight ? (
+        {chipStack}
+        {locked ? (
           <View
             style={POINTER_EVENTS_NONE}
             className="absolute inset-0 items-center justify-center"
@@ -266,7 +295,7 @@ export function SuggestionStrip({
                 icon={RefreshCw}
                 label={t('reader:suggestions.refresh')}
                 size="sm"
-                disabled={locked}
+                disabled={refreshBlocked}
                 onPress={onRefresh}
               />
             )}

@@ -21,6 +21,7 @@ import {
   SUGGESTION_REFRESH_KIND,
   SUGGESTION_TRANSLATION_PHASE,
   suggestionRefreshSchema,
+  SUGGESTIONS_UNUSABLE,
   type SuggestionRefreshInput,
 } from './suggestion-refresh'
 import { __resetRegistry, getPipeline } from '../authoring/registry'
@@ -616,7 +617,10 @@ describe('suggestion-refresh emission phase', () => {
     ])
   })
 
-  it('completes without a write when nothing resolved', async () => {
+  // An unresolvable ref is the likeliest model failure (it echoes the category
+  // label instead of the opaque cat1), so it must not read as a completed run —
+  // that left ⟳ pixel-identical to never having been pressed.
+  it('fails without a write when nothing resolved', async () => {
     openStory()
     hydrate()
     wireAppSettings()
@@ -624,7 +628,25 @@ describe('suggestion-refresh emission phase', () => {
 
     const { events, result } = await runEmission()
 
-    expect(result).toEqual({ status: 'completed' })
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'phase-logic', subsystem: SUGGESTIONS_UNUSABLE },
+    })
+    expect(events).toEqual([])
+  })
+
+  it('fails without a write when the model returns an empty array', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([]))
+
+    const { events, result } = await runEmission()
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'phase-logic', subsystem: SUGGESTIONS_UNUSABLE },
+    })
     expect(events).toEqual([])
   })
 
@@ -632,8 +654,9 @@ describe('suggestion-refresh emission phase', () => {
     openStory()
     hydrate()
     wireAppSettings()
-    // no-gate: CTRL-Z / rollback are not blocked by this run, so the row the
-    // write targets can be gone by the time the call returns.
+    // The hard gate rejects a user reversal for this run's duration, but abort
+    // paths and non-UI writers sit outside it, so the row can still be gone by
+    // the time the call returns.
     generateStructuredMock.mockImplementation(async () => {
       entriesStore.hydrate('b1', [])
       return okChips([{ categoryRef: 'cat1', text: 'Orphaned.' }])

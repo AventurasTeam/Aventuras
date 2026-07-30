@@ -176,9 +176,11 @@ describe('refreshSuggestions', () => {
     const gate = new Promise<void>((r) => {
       release = r
     })
+    // A resolvable chip, so the run's terminal outcome is about the self-block
+    // and not about an unusable emission (which now fails the run).
     generateStructuredMock.mockImplementation(async () => {
       await gate
-      return { status: 'ok', value: { suggestions: [] } }
+      return { status: 'ok', value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] } }
     })
 
     const inflight = refreshSuggestions(
