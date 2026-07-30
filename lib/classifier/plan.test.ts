@@ -22,6 +22,9 @@ const window = () =>
 const entityRow = (id: string, status = 'active', name = id) =>
   ({ id, branchId: 'branch_1', kind: 'character', name, description: 'x', status }) as never
 
+const nonCharacterRow = (id: string, kind: string) =>
+  ({ id, branchId: 'branch_1', kind, name: id, description: 'x', status: 'active' }) as never
+
 const base = {
   branchId: 'branch_1',
   window: window(),
@@ -311,5 +314,254 @@ describe('buildClassifierActions', () => {
     expect(kinds.indexOf('createHappening')).toBeLessThan(
       kinds.indexOf('createHappeningInvolvement'),
     )
+  })
+
+  describe('story-time anchoring', () => {
+    type HappeningEntry = { temporal: string | null; occurredAtEntryId: string | null }
+
+    const plan = (happening: Record<string, unknown>) =>
+      buildClassifierActions(
+        {
+          happenings: [{ involvements: [], awareness: [], ...happening }] as never,
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [],
+        },
+        base,
+      )
+
+    it('keeps a free-form temporal when no occurredAtTurn is given', () => {
+      const { planned } = plan({ title: 'A', sourceTurn: 't1', temporal: 'three winters ago' })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: 'three winters ago',
+        occurredAtEntryId: null,
+      })
+    })
+
+    it('resolves occurredAtTurn to an entry ref', () => {
+      const { planned } = plan({ title: 'A', sourceTurn: 't1', occurredAtTurn: 't2' })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: 'e2',
+      })
+    })
+
+    it('lets the entry ref win when both are present, satisfying the table CHECK', () => {
+      const { planned } = plan({
+        title: 'A',
+        sourceTurn: 't1',
+        temporal: 'three winters ago',
+        occurredAtTurn: 't2',
+      })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: null,
+        occurredAtEntryId: 'e2',
+      })
+    })
+
+    it('degrades a bogus occurredAtTurn to temporal instead of the window head', () => {
+      const { planned, unresolvedRefs, fellBackCount } = plan({
+        title: 'A',
+        sourceTurn: 't1',
+        temporal: 'three winters ago',
+        occurredAtTurn: 't99',
+      })
+      expect(payloadOf<{ entry: HappeningEntry }>(planned[0]).entry).toMatchObject({
+        temporal: 'three winters ago',
+        occurredAtEntryId: null,
+      })
+      expect(unresolvedRefs).toEqual(['t99'])
+      // The provenance anchor resolved cleanly: a story-time miss is not a
+      // provenance fallback.
+      expect(fellBackCount).toBe(0)
+    })
+  })
+
+  describe('ref kind expectations', () => {
+    const entities = [...(base.entities as never[]), nonCharacterRow('loc_1', 'location')]
+
+    it('rejects a non-character awareness ref', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [
+            {
+              title: 'A',
+              sourceTurn: 't1',
+              involvements: [],
+              awareness: [{ ref: 'loc_1', source: 's', severity: 0.5 }],
+            },
+          ],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [],
+        },
+        { ...base, entities },
+      )
+      expect(planned.filter((p) => p.action.kind === 'upsertHappeningAwareness')).toHaveLength(0)
+      expect(unresolvedRefs).toEqual(['loc_1'])
+    })
+
+    it('rejects a relationship whose object is not a character', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [{ subject: 'char_a', object: 'loc_1', kind: 'guards', sourceTurn: 't1' }],
+          statusFlips: [],
+          newCharacters: [],
+        },
+        { ...base, entities },
+      )
+      expect(planned).toHaveLength(0)
+      expect(unresolvedRefs).toEqual(['loc_1'])
+    })
+
+    it('accepts a non-character involvement ref, which is polymorphic', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [
+            { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'loc_1' }], awareness: [] },
+          ],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [],
+        },
+        { ...base, entities },
+      )
+      const involvement = planned.find((p) => p.action.kind === 'createHappeningInvolvement')
+      expect(payloadOf<{ entry: { entityId: string } }>(involvement).entry.entityId).toBe('loc_1')
+      expect(unresolvedRefs).toEqual([])
+    })
+  })
+
+  describe('reconcile decisions', () => {
+    it('records a newCharacters handle that has no decision and plans nothing', () => {
+      const { planned, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [{ handle: 'h9', name: 'Eldrin', description: 'x', sourceTurn: 't1' }],
+        },
+        base,
+      )
+      expect(planned).toHaveLength(0)
+      expect(unresolvedRefs).toEqual(['h9'])
+    })
+
+    it('emits nothing for a known decision but still resolves the handle', () => {
+      const decisions = new Map<string, ReconcileDecision>([
+        ['h1', { kind: 'known', entityId: 'char_a', similarity: 0.9 }],
+      ])
+      const { planned, handleMap } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [{ handle: 'h1', name: 'char_a', description: 'x', sourceTurn: 't1' }],
+        },
+        { ...base, decisions },
+      )
+      expect(planned).toHaveLength(0)
+      expect(handleMap.get('h1')).toBe('char_a')
+    })
+  })
+
+  it('skips a self-relationship', () => {
+    const { planned } = buildClassifierActions(
+      {
+        happenings: [],
+        relationships: [{ subject: 'char_a', object: 'char_a', kind: 'rival', sourceTurn: 't1' }],
+        statusFlips: [],
+        newCharacters: [],
+      },
+      base,
+    )
+    expect(planned).toHaveLength(0)
+  })
+
+  describe('status-flip monotonicity', () => {
+    const flip = (ref: string, to: string, entities: never[]) =>
+      buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [{ ref, to, sourceTurn: 't1' }] as never,
+          newCharacters: [],
+        },
+        { ...base, entities },
+      )
+
+    it('promotes a staged entity to active', () => {
+      const { planned } = flip('char_s', 'active', [entityRow('char_s', 'staged')])
+      expect(planned[0].action).toMatchObject({
+        kind: 'updateEntity',
+        payload: { id: 'char_s', patch: { status: 'active' } },
+      })
+    })
+
+    it('skips an active entity flipped to active', () => {
+      const { planned } = flip('char_a', 'active', [entityRow('char_a')])
+      expect(planned).toHaveLength(0)
+    })
+
+    it('never revives a retired entity', () => {
+      const { planned } = flip('char_r', 'active', [entityRow('char_r', 'retired')])
+      expect(planned).toHaveLength(0)
+    })
+
+    it('emits one delta for two identical retire flips', () => {
+      const { planned } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [
+            { ref: 'char_a', to: 'retired', sourceTurn: 't1' },
+            { ref: 'char_a', to: 'retired', sourceTurn: 't2' },
+          ],
+          newCharacters: [],
+        },
+        { ...base, entities: [entityRow('char_a')] },
+      )
+      expect(planned).toHaveLength(1)
+    })
+
+    it('retires an entity promoted earlier in the same reply', () => {
+      const decisions = new Map<string, ReconcileDecision>([
+        ['h1', { kind: 'promote', entityId: 'char_s', similarity: 0.9 }],
+      ])
+      const { planned } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [{ ref: 'char_s', to: 'retired', reason: 'fell', sourceTurn: 't2' }],
+          newCharacters: [{ handle: 'h1', name: 'char_s', description: 'x', sourceTurn: 't1' }],
+        },
+        { ...base, decisions, entities: [entityRow('char_s', 'staged')] },
+      )
+      expect(planned.map((p) => p.action.kind)).toEqual(['updateEntity', 'updateEntity'])
+      expect(planned[1].action).toMatchObject({
+        payload: { id: 'char_s', patch: { status: 'retired', retiredReason: 'fell' } },
+      })
+    })
+
+    it('retires a character created earlier in the same reply', () => {
+      const decisions = new Map<string, ReconcileDecision>([
+        ['h1', { kind: 'create', flagged: false }],
+      ])
+      const { planned } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [{ ref: 'h1', to: 'retired', reason: 'fell', sourceTurn: 't2' }],
+          newCharacters: [{ handle: 'h1', name: 'Eldrin', description: 'x', sourceTurn: 't1' }],
+        },
+        { ...base, decisions },
+      )
+      const createdId = payloadOf<{ entry: { id: string } }>(planned[0]).entry.id
+      expect(planned[1].action).toMatchObject({
+        kind: 'updateEntity',
+        payload: { id: createdId, patch: { status: 'retired' } },
+      })
+    })
   })
 })

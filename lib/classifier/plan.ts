@@ -23,8 +23,9 @@ export type PlanDeps = {
   /** Reconcile decision per newCharacters handle, resolved before planning. */
   decisions: Map<string, ReconcileDecision>
   now: () => number
-  // 'haw' is absent on purpose: upsertHappeningAwareness allocates the awareness
-  // id itself (register-awareness.ts:95), so the planner must not.
+  // 'haw' is absent on purpose: the upsertHappeningAwareness handler in
+  // lib/actions/happenings/register-awareness.ts allocates the awareness id
+  // itself, so the planner must not.
   newId: (kind: 'hap' | 'char' | 'hinv') => string
 }
 
@@ -46,12 +47,23 @@ export function buildClassifierActions(
     return entryId
   }
 
-  const known = new Set(entities.map((e) => e.id))
-  const resolveRef = (ref: string): string | null => {
-    if (handleMap.has(ref)) return handleMap.get(ref)!
-    if (known.has(ref)) return ref
-    unresolvedRefs.push(ref)
-    return null
+  // Mutable, not a frozen snapshot: rows this pass plans are visible to later
+  // facts in the same reply, so the flip guards read post-plan status and a ref
+  // to a just-created character resolves.
+  const index = new Map<string, { kind: Entity['kind']; status: Entity['status'] }>(
+    entities.map((e) => [e.id, { kind: e.kind, status: e.status }]),
+  )
+
+  const resolveRef = (ref: string, expectedKind?: Entity['kind']): string | null => {
+    const id = handleMap.get(ref) ?? (index.has(ref) ? ref : null)
+    // A kind mismatch is unresolvable, not merely wrong: the awareness and
+    // relationship tables are FK-less and their handlers don't re-check kind, so
+    // a location landing in character_id would never be caught downstream.
+    if (id == null || (expectedKind != null && index.get(id)?.kind !== expectedKind)) {
+      unresolvedRefs.push(ref)
+      return null
+    }
+    return id
   }
 
   // New characters first: later refs in the same reply resolve through handleMap,
@@ -65,6 +77,8 @@ export function buildClassifierActions(
     const entryId = anchor(candidate.sourceTurn)
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)
+      const promoted = index.get(decision.entityId)
+      if (promoted != null) index.set(decision.entityId, { ...promoted, status: 'active' })
       planned.push({
         action: {
           kind: 'updateEntity',
@@ -82,6 +96,7 @@ export function buildClassifierActions(
     const id = newId('char')
     const timestamp = now()
     handleMap.set(candidate.handle, id)
+    index.set(id, { kind: 'character', status: 'active' })
     planned.push({
       action: {
         kind: 'createEntity',
@@ -113,10 +128,16 @@ export function buildClassifierActions(
     const parentAnchor = anchor(happening.sourceTurn)
     const happeningId = newId('hap')
     const timestamp = now()
-    const occurredAtEntryId =
-      happening.occurredAtTurn != null
-        ? window.resolveHandle(happening.occurredAtTurn).entryId
-        : null
+    // Deliberately not through anchor(): occurred_at_entry_id is a story-time
+    // claim retrieval and the Plot screen read as fact, not a survival anchor, so
+    // a head-fallback would assert the happening occurred at the newest window
+    // turn. A bogus handle degrades to the temporal string instead.
+    let occurredAtEntryId: string | null = null
+    if (happening.occurredAtTurn != null) {
+      const resolved = window.resolveHandle(happening.occurredAtTurn)
+      if (resolved.fellBack) unresolvedRefs.push(happening.occurredAtTurn)
+      else occurredAtEntryId = resolved.entryId
+    }
     planned.push({
       action: {
         kind: 'createHappening',
@@ -140,6 +161,8 @@ export function buildClassifierActions(
     })
 
     for (const involvement of happening.involvements) {
+      // Unrestricted by kind: happening_involvements is polymorphic — a location,
+      // item or faction is valid subject matter.
       const entityId = resolveRef(involvement.ref)
       if (entityId == null) continue
       planned.push({
@@ -162,7 +185,7 @@ export function buildClassifierActions(
     }
 
     for (const row of happening.awareness) {
-      const characterId = resolveRef(row.ref)
+      const characterId = resolveRef(row.ref, 'character')
       if (characterId == null) continue
       // A character learning of an OLD happening anchors to the turn that
       // narrated the learning, not the happening's.
@@ -188,8 +211,8 @@ export function buildClassifierActions(
   }
 
   for (const relationship of extraction.relationships) {
-    const subjectId = resolveRef(relationship.subject)
-    const objectId = resolveRef(relationship.object)
+    const subjectId = resolveRef(relationship.subject, 'character')
+    const objectId = resolveRef(relationship.object, 'character')
     if (subjectId == null || objectId == null || subjectId === objectId) continue
     planned.push({
       action: {
@@ -206,11 +229,13 @@ export function buildClassifierActions(
   for (const flip of extraction.statusFlips) {
     const id = resolveRef(flip.ref)
     if (id == null) continue
-    const current = entities.find((e) => e.id === id)
+    const current = index.get(id)
+    if (current == null) continue
     // Monotonic staged->active (the other writer may have landed it already) and
     // hard-finality retirement only; retired->active is user-only in v1.
-    if (flip.to === 'active' && current?.status !== 'staged') continue
-    if (flip.to === 'retired' && current?.status !== 'active') continue
+    if (flip.to === 'active' && current.status !== 'staged') continue
+    if (flip.to === 'retired' && current.status !== 'active') continue
+    index.set(id, { kind: current.kind, status: flip.to })
     planned.push({
       action: {
         kind: 'updateEntity',
