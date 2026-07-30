@@ -149,7 +149,12 @@ export default function ReaderComposerRoute() {
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState(false)
-  const terminalEntry = entries.at(-1) ?? null
+  // The last NARRATIVE entry, not the last row: a failed turn appends a system
+  // entry, and every way back out of that failure (Retry, Dismiss, a fresh
+  // Send) runs clearSystemEntry, which deletes the row — so chips anchored
+  // there could never survive it, and the prior reply's chips are exactly what
+  // a retry wants to offer.
+  const terminalEntry = entries.findLast((e) => e.kind !== 'system') ?? null
   const suggestionsEnabled = openForBranch?.settings.suggestionsEnabled ?? false
   const suggestionCategories = openForBranch?.settings.suggestionCategories ?? []
   const chips = terminalEntry?.metadata?.nextTurnSuggestions?.items ?? []

@@ -139,8 +139,10 @@ describe('refreshSuggestions', () => {
 
   it('survives a CTRL-Z round trip on an entry that had no metadata at all', async () => {
     const { db, ctx } = await makeHarness()
-    // The empty-state ⟳ Generate path: a system / legacy terminal entry.
-    const bare = { ...ENTRY, kind: 'system' as const, metadata: null }
+    // The empty-state ⟳ Generate path: a legacy terminal entry written before
+    // the metadata column carried a scene. Not a system entry — those are
+    // refused as targets outright, since clearSystemEntry deletes the row.
+    const bare = { ...ENTRY, metadata: null }
     await db.insert(storyEntries).values(bare)
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings: settings() })
     entriesStore.hydrate('b1', [bare])

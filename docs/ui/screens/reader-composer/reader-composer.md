@@ -583,12 +583,22 @@ Disabling the feature lives in
 [Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories)
 via the `suggestionsEnabled` master toggle, not inline.
 
+**The strip anchors to the last _narrative_ entry**, not the last
+row. A failed turn appends a `system` entry that becomes the tail,
+and every way back out of the failure — Retry, Dismiss, or a fresh
+Send — runs `clearSystemEntry`, which deletes the row. Chips
+anchored to one could therefore never survive the way out, and
+anchoring past it also keeps the prior reply's chips visible
+through the failure, which is exactly when a retry wants them. The
+emission phase re-checks the entry kind rather than trusting the
+caller.
+
 **Empty-state ⟳ Generate.** Terminal entries without
 `nextTurnSuggestions` (opening entries, `user_action` entries
-pre-AI-reply, `system` entries, legacy entries from before this
-feature landed) show a single ⟳ Generate button on the strip body.
-Click fires `suggestion-refresh` to produce chips ex nihilo. Same
-pipeline as the refresh button.
+pre-AI-reply, legacy entries from before this feature landed) show
+a single ⟳ Generate button on the strip body. Click fires
+`suggestion-refresh` to produce chips ex nihilo. Same pipeline as
+the refresh button.
 
 **States:**
 

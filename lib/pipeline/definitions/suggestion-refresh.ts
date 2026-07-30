@@ -91,6 +91,14 @@ async function* suggestionEmissionPhase(
     })
     return { status: 'completed' }
   }
+  // Unconditional, mirroring the system exclusion in buildGenerationContext: a
+  // system entry is a transient failure card that clearSystemEntry deletes on
+  // Retry / Dismiss / next Send, so chips anchored to one are born dead. The
+  // reader anchors past them; this is the backstop for any other caller.
+  if (target.kind === 'system') {
+    ctx.log.warn('classifier.suggestions_refresh_target_transient', { targetEntryId: target.id })
+    return { status: 'completed' }
+  }
   // Chips seed the turn that follows THIS entry, so context past it would
   // describe another. The target is the tail in every path the UI offers, but a
   // redo landing between the click and this read would put entries after it.
@@ -168,7 +176,7 @@ async function* suggestionEmissionPhase(
     return { status: 'completed' }
   }
   // The empty-state ⟳ Generate fires on entries that carry no metadata at all
-  // (system / legacy); the scene floor keeps the column schema-valid.
+  // (legacy rows predating the column); the scene floor keeps it schema-valid.
   const base: EntryMetadata = current.metadata ?? inheritedEntryMetadata(null)
 
   yield {

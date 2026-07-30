@@ -392,6 +392,31 @@ describe('suggestion-refresh emission phase', () => {
     expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
+  it('completes without a call when the target is a system entry', async () => {
+    openStory()
+    // A failed turn's system entry is the branch tail; clearSystemEntry deletes
+    // it on Retry / Dismiss / next Send, so chips anchored there cannot survive.
+    const systemTail = {
+      ...TARGET_ENTRY,
+      id: 'entry-system',
+      position: 2,
+      kind: 'system',
+      metadata: { sceneEntities: [], currentLocationId: null, worldTime: 120 },
+    }
+    hydrate([TARGET_ENTRY, systemTail])
+    wireAppSettings()
+
+    const { events, result } = await runEmission({
+      targetEntryId: 'entry-system',
+      refreshGuidance: '',
+    })
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(events).toEqual([])
+    // Guarded before the call, so a doomed target never spends a token.
+    expect(generateStructuredMock).not.toHaveBeenCalled()
+  })
+
   it('calls the dedicated suggestion agent with the refresh template and story model overrides', async () => {
     openStory({ models: { suggestion: 'story-model' } })
     hydrate()
@@ -506,9 +531,11 @@ describe('suggestion-refresh emission phase', () => {
     })
   })
 
-  it('builds a metadata floor for a target entry that carries none (system / legacy entry)', async () => {
+  it('builds a metadata floor for a legacy target entry that carries none', async () => {
     openStory()
-    hydrate([{ ...TARGET_ENTRY, kind: 'system', metadata: null }])
+    // Legacy, not system: system targets are refused outright above, so the
+    // floor exists for rows written before the metadata column carried a scene.
+    hydrate([{ ...TARGET_ENTRY, metadata: null }])
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
 
