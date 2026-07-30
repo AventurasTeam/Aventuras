@@ -226,6 +226,7 @@ describe('buildClassifierActions', () => {
       },
     })
     expect(handleMap.get('h1')).toBe(payloadOf<{ entry: { id: string } }>(planned[0]).entry.id)
+    expect(planned[0].entryId).toBe('e1')
   })
 
   it('promotes instead of creating when reconcile said promote', () => {
