@@ -235,3 +235,27 @@ describe('appSettingsConfigSchema — new fields (Task 4)', () => {
     expect('updatedAt' in parsed).toBe(false)
   })
 })
+
+describe('classifierWindowMaxEntries', () => {
+  it('defaults to 20 when absent', () => {
+    const parsed = appSettingsConfigSchema.parse({
+      providers: [],
+      profiles: [],
+      assignments: {},
+      defaultProviderId: null,
+    })
+    expect(parsed.classifierWindowMaxEntries).toBe(20)
+  })
+
+  it('rejects a non-positive cap', () => {
+    expect(() =>
+      appSettingsConfigSchema.parse({
+        providers: [],
+        profiles: [],
+        assignments: {},
+        defaultProviderId: null,
+        classifierWindowMaxEntries: 0,
+      }),
+    ).toThrow()
+  })
+})

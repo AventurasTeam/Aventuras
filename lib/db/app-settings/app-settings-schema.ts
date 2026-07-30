@@ -83,6 +83,10 @@ export const appSettingsConfigSchema = z.object({
   defaultProviderId: z.string().nullable(),
   embeddingModelId: z.string().nullable().default(null),
   embeddingProviderId: z.string().nullable().default(null),
+  // App-scope truncation cap (architecture.md -> App-only settings). Caps the
+  // classifier's (processedThrough, head] window; the pass advances the
+  // watermark only to the cut, so a backlog drains over successive passes.
+  classifierWindowMaxEntries: z.number().int().positive().default(20),
   defaultStorySettings: storySettingsPartialSchema.default({}),
   defaultCalendarId: z.string().nullable().default(null),
   defaultSuggestionCategories: defaultSuggestionCategoriesSchema.default({

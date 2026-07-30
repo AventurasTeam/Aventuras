@@ -15,6 +15,7 @@ export const APP_SETTINGS_DEFAULTS = {
   defaultProviderId: null as string | null,
   embeddingModelId: null as string | null,
   embeddingProviderId: null as string | null,
+  classifierWindowMaxEntries: 20,
   defaultStorySettings: { activePackId: BUNDLED_PACK_ID } as Partial<StorySettings>,
   defaultCalendarId: null as string | null,
   defaultSuggestionCategories: { adventure: [], creative: [] } as {
