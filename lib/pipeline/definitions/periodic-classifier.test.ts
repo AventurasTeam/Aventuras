@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
+import { shouldCadenceFire } from '@/lib/classifier'
 import { branches, stories, type ClassifierStatus, type Entity, type StoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { makeLogger } from '@/lib/diagnostics'
@@ -40,6 +41,7 @@ type Harness = {
 async function ctxWith(opts: {
   processedThrough: number | null
   headPosition: number
+  entryKind?: StoryEntry['kind']
   entities?: Entity[]
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
@@ -74,7 +76,7 @@ async function ctxWith(opts: {
     id: `e${i + 1}`,
     branchId: 'b1',
     position: i + 1,
-    kind: 'ai_reply',
+    kind: opts.entryKind ?? 'ai_reply',
     content: `turn ${i + 1}`,
   })) as unknown as StoryEntry[]
 
@@ -148,7 +150,9 @@ async function drain(ctx: PhaseContext) {
 
 describe('periodicClassifierPhase', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    // resetAllMocks, not clearAllMocks: a leaked mockResolvedValue would let a
+    // guard test reach the LLM and still look green.
+    vi.resetAllMocks()
     __resetRegistry()
   })
 
@@ -161,6 +165,20 @@ describe('periodicClassifierPhase', () => {
     expect(generateStructured).not.toHaveBeenCalled()
     // No LLM call means no pass happened: status must be untouched, not "idle again".
     expect(h.status()).toEqual(before)
+  })
+
+  it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entryKind: 'system' })
+    const { events, result } = await drain(h.ctx)
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'completed' })
+    expect(generateStructured).not.toHaveBeenCalled()
+    // Technical rows hold positions the model must never see; leaving the
+    // watermark behind them re-fires the cadence on every run_complete forever.
+    expect(h.status()?.processedThrough).toBe(2)
+    expect(shouldCadenceFire({ status: h.status()!, headPosition: 2, cadence: 1 })).toBe(false)
+    // Nothing ran, so the lifecycle keys must not read as a successful pass.
+    expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null, retryCount: 0 })
   })
 
   it('emits one delta per planned write, each with its own entryId', async () => {
@@ -252,11 +270,13 @@ describe('periodicClassifierPhase', () => {
     })
   })
 
-  it('fails when the open story is another branch, before any LLM call', async () => {
+  it.each([
+    ['branch', { storyId: 's1', branchId: 'other' }],
+    ['story', { storyId: 'other', branchId: 'b1' }],
+  ])('fails when the open %s differs from the run, before any LLM call', async (_which, open) => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
     currentStoryStore.set({
-      storyId: 's1',
-      branchId: 'other',
+      ...open,
       definition: {} as never,
       settings: { models: {} } as never,
     })

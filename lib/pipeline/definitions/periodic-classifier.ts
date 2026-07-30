@@ -102,7 +102,7 @@ export async function* periodicClassifierPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const open = currentStoryStore.getCurrentStory()
-  if (!open || open.branchId !== ctx.branchId)
+  if (!open || open.branchId !== ctx.branchId || open.storyId !== ctx.storyId)
     return {
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'periodic-classifier: no open story for branch' },
@@ -126,7 +126,15 @@ export async function* periodicClassifierPhase(
     processedThrough: status.processedThrough,
     maxEntries: cfg.classifierWindowMaxEntries,
   })
-  if (window.isEmpty) return { status: 'completed' }
+  if (window.isEmpty) {
+    // coversThrough counts the capped candidates BEFORE the system-entry filter,
+    // so a window of nothing but technical rows is empty yet still advanceable.
+    // Leaving the watermark behind them re-fires the cadence forever. Only the
+    // watermark moves: no pass ran, so the lifecycle keys stay as they were.
+    if (window.coversThrough > (status.processedThrough ?? 0))
+      await advanceWatermark(ctx, window.coversThrough)
+    return { status: 'completed' }
+  }
 
   const entities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === ctx.branchId,
