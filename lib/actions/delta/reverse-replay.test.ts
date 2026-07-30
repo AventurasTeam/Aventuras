@@ -5,7 +5,7 @@ import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { applyDeltaAction } from './apply-delta-action'
-import { reverseReplayDeltas } from './reverse-replay'
+import { reverseAndPruneDeltaRows, reverseReplayDeltas } from './reverse-replay'
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -203,5 +203,19 @@ describe('reverseReplayDeltas', () => {
       .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
     // BOTH sub-keys restored to their pre-act_rev state — no clobber
     expect(entry.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
+  })
+})
+
+describe('reverseAndPruneDeltaRows', () => {
+  it('commits extra ops even when there are no delta rows to reverse', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    const count = await reverseAndPruneDeltaRows([], ctx, [
+      { sql: `UPDATE branches SET name = ? WHERE id = ?`, params: ['renamed', 'b1'] },
+    ])
+    expect(count).toBe(0)
+    const [branch] = await db.select().from(branches).where(eq(branches.id, 'b1'))
+    expect(branch.name).toBe('renamed')
   })
 })

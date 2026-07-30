@@ -1,3 +1,4 @@
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { RunState } from '@/lib/stores'
 
 import { getPipeline } from '../authoring/registry'
@@ -15,7 +16,7 @@ export function checkConcurrencyContract(
   currentRuns: ReadonlyMap<string, RunState>,
   reversalInProgress: boolean,
 ): StartDecision {
-  if (kind === 'periodic-classifier' && reversalInProgress) {
+  if (kind === PERIODIC_CLASSIFIER_KIND && reversalInProgress) {
     return { kind: 'blocked', by: 'reversal' }
   }
 

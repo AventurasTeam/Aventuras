@@ -160,7 +160,7 @@ export async function rollbackToEntry(
       .where(win.where)
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const counts = countBuckets(rows)
-    const clampOps = await classifierWatermarkClampOps(branchId, win.earliestRemovedPosition, ctx)
+    const clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
     await reverseAndPruneDeltaRows(rows, ctx, clampOps)
     // A second unrelated action clears the redo stack (data-model.md).
     undoRedoStore.clear()

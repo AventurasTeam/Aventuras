@@ -49,7 +49,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
         .from(deltas)
         .where(win.where)
         .orderBy(desc(deltas.logPosition))) as Delta[]
-      clampOps = await classifierWatermarkClampOps(branchId, win.earliestRemovedPosition, ctx)
+      clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
     } else {
       rows = recent.filter((r) => r.actionId === target.actionId)
     }

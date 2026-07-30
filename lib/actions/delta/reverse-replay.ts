@@ -105,7 +105,7 @@ export async function reverseAndPruneDeltaRows(
   ctx: DbCtx,
   extraOps: readonly SqlOp[] = [],
 ): Promise<number> {
-  if (rows.length === 0) return 0
+  if (rows.length === 0 && extraOps.length === 0) return 0
   const actionId = rows[0]?.actionId ?? 'rollback'
   let patches: PatchEmission[]
   try {
