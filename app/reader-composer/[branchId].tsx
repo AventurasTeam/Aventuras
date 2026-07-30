@@ -800,13 +800,16 @@ export default function ReaderComposerRoute() {
                 ref={composerRef}
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
-                disabled={editBlocked || !hydrationSucceeded}
+                disabled={!hydrationSucceeded}
+                sendBlocked={editBlocked}
                 disabledReason={
                   hydrationFailed
                     ? t('reader:hydrationFailedBody')
                     : !hydrationSucceeded
                       ? t('reader:hydrationLoading')
-                      : undefined
+                      : editBlocked
+                        ? t('reader:actions.blockedWhileGenerating')
+                        : undefined
                 }
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })

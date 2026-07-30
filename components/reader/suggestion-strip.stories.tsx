@@ -69,6 +69,7 @@ type Story = StoryObj<typeof meta>
 
 export const Visible: Story = {}
 
+/** Re-roll over an existing stack: spinner rides on top, outgoing chips stay put. */
 export const Loading: Story = { args: { phase: 'loading' } }
 
 /** Generate pressed from empty-state: busy before any chip exists. */

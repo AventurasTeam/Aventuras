@@ -23,7 +23,16 @@ type ComposerProps = {
   /** Caller ANDs `stories.settings.composerModesEnabled` with `mode !== 'creative'`. */
   modesEnabled: boolean
   isGenerating: boolean
+  /** No story to draft against (unhydrated / failed): the whole composer is inert. */
   disabled?: boolean
+  /**
+   * The reader's edit gate is held. Only Send is refused — the draft and the
+   * mode are local state until send, so nothing the user types races the
+   * pipeline (principles.md → Edit restrictions gates *mutations*, and a draft
+   * is not one).
+   */
+  sendBlocked?: boolean
+  /** Rendered under the composer when `disabled`; the Send hint in either case. */
   disabledReason?: string
   onSend: (rawText: string, mode: ComposerMode) => void
   onCancel: () => void
@@ -66,7 +75,15 @@ function getModeOptions(): SelectOption[] {
 const LINT_DEBOUNCE_MS = 2000
 
 export const Composer = forwardRef(function Composer(
-  { modesEnabled, isGenerating, disabled = false, disabledReason, onSend, onCancel }: ComposerProps,
+  {
+    modesEnabled,
+    isGenerating,
+    disabled = false,
+    sendBlocked = false,
+    disabledReason,
+    onSend,
+    onCancel,
+  }: ComposerProps,
   ref: ForwardedRef<ComposerHandle>,
 ) {
   const [text, setText] = useState('')
@@ -114,7 +131,7 @@ export const Composer = forwardRef(function Composer(
   }, [text])
 
   const canSend = text.trim().length > 0
-  const sendDisabled = disabled || !canSend
+  const sendDisabled = disabled || sendBlocked || !canSend
 
   function handleSubmit() {
     if (!canSend) return
@@ -142,7 +159,7 @@ export const Composer = forwardRef(function Composer(
               onValueChange={(value) => setMode(value as ComposerMode)}
               mode="dropdown"
               size="sm"
-              disabled={disabled || isGenerating}
+              disabled={disabled}
               label={t('reader:composerModeLabel')}
               renderTrigger={({ selected }) => (
                 <View className="flex-row items-baseline gap-1.5">
@@ -179,7 +196,7 @@ export const Composer = forwardRef(function Composer(
             <Button
               variant="primary"
               disabled={sendDisabled}
-              accessibilityHint={disabled ? disabledReason : undefined}
+              accessibilityHint={disabled || sendBlocked ? disabledReason : undefined}
               onPress={handleSubmit}
             >
               <Text>{t('reader:send')}</Text>

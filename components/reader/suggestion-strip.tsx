@@ -5,6 +5,7 @@ import { Platform, Pressable, View } from 'react-native'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
+import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import type { EntryMetadata, SuggestionCategory } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -46,6 +47,11 @@ type SuggestionStripProps = {
 
 // The overline sits on the chip surface, so the tint has to carry further on dark.
 const OVERLINE_TINT_ALPHA: Record<'light' | 'dark', number> = { light: 0.14, dark: 0.26 }
+
+// Style-level, not the deprecated `pointerEvents` prop. The chips underneath
+// already refuse taps via `locked`; the overlay must not become the thing that
+// swallows them once the run settles.
+const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 function tintOf(hex: string, alpha: number): string {
   const body = hex.slice(1)
@@ -128,8 +134,9 @@ export function SuggestionStrip({
 
   const busy = phase === 'loading'
   const locked = busy || disabled
-  // The body's Generate button IS the refresh affordance; two ⟳ side by side read
-  // as different actions. Collapsing hides it, so the chrome one comes back.
+  // The body's Generate button IS the refresh affordance; two ⟳ one above the
+  // other read as different actions. Collapsing hides it, so the chrome one
+  // comes back.
   const emptyStateOwnsRefresh = phase === 'empty-state' && !collapsed
 
   let body: ReactNode
@@ -159,7 +166,8 @@ export function SuggestionStrip({
     )
   } else if (busy && chips.length === 0) {
     body = (
-      <View className="items-center py-2">
+      <View className="flex-row items-center justify-center gap-2 py-3">
+        <Spinner size="sm" colorSlot="--fg-muted" />
         <Text size="sm" variant="muted">
           {t('reader:suggestions.loading')}
         </Text>
@@ -167,17 +175,30 @@ export function SuggestionStrip({
     )
   } else {
     body = (
-      <View className={cn('gap-1.5', locked && 'opacity-50')}>
-        {chips.map((chip, index) => (
-          <SuggestionChipRow
-            key={index}
-            chip={chip}
-            category={categoryById.get(chip.categoryId)}
-            tintAlpha={tintAlpha}
-            locked={locked}
-            onTapChip={onTapChip}
-          />
-        ))}
+      // The spinner rides over the outgoing chips rather than replacing them:
+      // a re-roll that lands on nothing usable keeps what was there, so
+      // clearing the stack first would flash a loss that may not happen.
+      <View>
+        <View className={cn('gap-1.5', locked && 'opacity-50')}>
+          {chips.map((chip, index) => (
+            <SuggestionChipRow
+              key={index}
+              chip={chip}
+              category={categoryById.get(chip.categoryId)}
+              tintAlpha={tintAlpha}
+              locked={locked}
+              onTapChip={onTapChip}
+            />
+          ))}
+        </View>
+        {busy ? (
+          <View
+            style={POINTER_EVENTS_NONE}
+            className="absolute inset-0 items-center justify-center"
+          >
+            <Spinner size="lg" colorSlot="--accent" />
+          </View>
+        ) : null}
       </View>
     )
   }
@@ -189,7 +210,6 @@ export function SuggestionStrip({
       className={cn('border-t border-border bg-bg-sunken px-4 py-2', className)}
     >
       <View className={cn('gap-1.5', contentClassName)}>
-        {body}
         <View className="flex-row items-center justify-end gap-1">
           {busy ? (
             // Swaps in rather than sitting beside ⟳: a live refresh button next
@@ -219,6 +239,7 @@ export function SuggestionStrip({
             onPress={onToggleCollapsed}
           />
         </View>
+        {body}
       </View>
     </View>
   )

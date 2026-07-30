@@ -555,15 +555,19 @@ parked entry tracks the post-v1 design if real signal surfaces.
 prefix/suffix wrapping intent. Suggestion category = narrative-beat
 type. Different axes.
 
-**Chrome row** beneath the chip stack, right-aligned:
+**Chrome row** above the chip stack, right-aligned. It leads rather
+than trails so the controls hold one position: the chip stack's
+height moves with the count and with the `empty-state` / `error`
+bodies, which would otherwise slide ⟳ and ⌄ under the cursor between
+re-rolls.
 
 - **⟳ refresh** — primary action. Fires the `suggestion-refresh`
   pipeline with current composer text as `refreshGuidance` (empty
-  string if composer is empty). Strip enters `loading`; chips dim;
-  taps no-op.
+  string if composer is empty). Strip enters `loading`; chips dim
+  under a centred spinner; taps no-op.
   **Hidden while `empty-state` is expanded** — the body's ⟳ Generate
-  button below is the refresh affordance there, and the two side by
-  side would read as different actions. Reappears once the strip is
+  button below is the refresh affordance there, and two ⟳ one above
+  the other would read as different actions. Reappears once the strip is
   collapsed, since collapsing hides the body button along with the
   rest of the content and the chrome row becomes the only refresh
   affordance left.
@@ -572,7 +576,7 @@ type. Different axes.
   than sitting beside ⟳ because a live refresh button next to a
   cancel would offer a re-roll the pipeline self-blocks anyway, and
   it is not animated: a throbbing control reads as busy rather than
-  pressable, and the dimmed chips already carry the in-flight
+  pressable, and the body's spinner already carries the in-flight
   signal. The chrome ✕ is present even in the `empty-state`-fired
   case, since the strip is in `loading` (not `empty-state`) while
   the run is up, so the slot is never empty during a run.
@@ -606,7 +610,9 @@ the refresh button.
 - `visible` — normal
 - `loading` — a re-roll is in flight (the chrome ⟳ or the
   empty-state ⟳ Generate button fired `suggestion-refresh`). Chips
-  dim; the chrome ⟳ becomes ✕
+  dim under a centred spinner and the chrome ⟳ becomes ✕; the
+  outgoing chips stay put rather than clearing, since a re-roll that
+  returns nothing usable keeps them
 - `error` — generation failed (inline error with Retry)
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
