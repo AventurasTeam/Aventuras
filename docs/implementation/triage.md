@@ -675,3 +675,23 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   whose "a phase reads the domain stores directly" no longer holds (the
   "calls the group's context builder per render" half is unchanged).
   Surfaced by M3.7a post-merge review (2026-07-30).
+- **Config pre-flight cannot see story-level model overrides, so it
+  both passes runs that will fail and blocks runs that would
+  succeed.** `runPreflight` (`lib/pipeline/runtime/preflight.ts:14`)
+  builds its `ResolveModelConfig` from `snapshot.appSettings` only and
+  never passes `storyModels`, even though `orchestrator.ts` puts
+  `storySettings` in the snapshot and every phase passes
+  `open.settings.models`. Since `resolveModel` branches on
+  `config.storyModels?.[target]` for story-override targets
+  (`lib/db/app-settings/agents.ts` → `STORY_AGENT_IDS`), pre-flight
+  always takes the assignments path while the phase takes the override
+  path. Both directions are wrong: a story with `settings.models.X` set
+  and a missing `defaultProviderId` clears pre-flight and fails
+  in-phase, and a story whose override would resolve is rejected by
+  pre-flight when app-level assignments are empty. Affects every
+  story-override target, `narrative` included — it is a framework gap,
+  not a suggestions one, which is why it is here rather than in the
+  slice. Fixing it is a one-line config addition plus a decision about
+  whether pre-flight should resolve per-story at all (it is currently
+  documented as an app-config check). Surfaced by M3.7a review
+  (2026-07-31).

@@ -2107,17 +2107,20 @@ text?" confirm gate. Toast is lighter-weight and uses the existing
 [`patterns/toast.md`](./ui/patterns/toast.md) primitive; dialog is
 more explicit. Surface on user reports.
 
-#### Status pill is single-slot, so a turn started during a refresh strands the refresh
+#### A turn started mid-refresh kills the re-roll with no user feedback
 
 `GenerationStatusPill`'s `GenerationPhase` union
-(`components/compounds/generation-status-pill.tsx`) now includes
+(`components/compounds/generation-status-pill.tsx`) includes
 `refreshing-suggestions` alongside the per-turn phases, but the pill
-only ever shows one `currentPhase`. If a turn starts while a
-`suggestion-refresh` is still in flight, the pill shows
-`generating-narrative`, its cancel targets the turn, and the
-still-running refresh has no cancel affordance until the turn ends —
-the refresh isn't blocked (`per-turn` deliberately doesn't gate on the
-no-gate `suggestion-refresh` kind), it's just invisible to the pill
-while a turn owns the slot. A designed state, not a bug the phase
-addition introduced; recorded so a future multi-slot pill redesign
-has the scenario on record. Surfaced by M3.7a Task 8, 2026-07-25.
+only ever shows one `currentPhase`. `suggestion-refresh` declares
+`yieldsTo: ['per-turn']`, so a starting turn aborts an in-flight
+refresh and awaits its terminal rather than running beside it. The
+reader cannot reach this today — the refresh holds the edit gate
+(`hard-gate`), so Send is disabled while it runs — but any non-UI
+writer, or a future path that starts a turn directly, gets a re-roll
+that vanishes silently: no pill state, no strip error, the chips
+simply never change. Recorded so a multi-slot pill redesign has the
+scenario on record, and so the silent-abort gap is not rediscovered
+as a bug. Surfaced by M3.7a Task 8, 2026-07-25; rewritten 2026-07-31
+when the kind moved from `no-gate` to `hard-gate` and the original
+stranding scenario became unreachable.

@@ -36,7 +36,7 @@ path as well.
 Emissions persist on `story_entries.metadata.nextTurnSuggestions`,
 so chips are reload-, branch-, and rollback-safe through the
 existing metadata delta log. The re-roll path is a dedicated
-2-stage pipeline (`suggestion-refresh`, `no-gate`, self-blocking)
+2-stage pipeline (`suggestion-refresh`, `hard-gate`, self-blocking)
 using the `suggestion` agent slot, with current composer text as
 `refreshGuidance`. Tap fills the composer in `Free` mode; the
 tap-after-typing draft loss is a documented v1 wart.
@@ -53,7 +53,7 @@ tap-after-typing draft loss is a documented v1 wart.
   — `suggestionCategories` / `suggestionCount` /
   `suggestionsEnabled` and copy-at-creation.
 - [`generation-pipeline.md → V1 declarations`](../../../../generation-pipeline.md#v1-declarations)
-  — the `suggestion-refresh` declaration values (no-gate,
+  — the `suggestion-refresh` declaration values (hard-gate,
   `blockedBy: ['per-turn', 'suggestion-refresh']`).
 - [`generation-pipeline.md → Config pre-flight validation`](../../../../generation-pipeline.md#config-pre-flight-validation)
   — resolver-input declaration for the `suggestion` agent.
@@ -217,11 +217,13 @@ seed ship here while the editor moves to
   one enum. Canon's chrome row persists when collapsed, so ⟳ is
   reachable there; a single enum makes collapsed-and-loading
   unrepresentable.
-- `suggestion-refresh` is the **first `no-gate` pipeline kind in the
-  codebase**. That made two specified-but-unreachable framework paths
-  reachable for the first time (the reversal barrier, and a
-  reversal landing mid-run); both are filed in
-  [`triage.md`](../../../triage.md).
+- `suggestion-refresh` shipped `no-gate` and was **moved to
+  `hard-gate` on 2026-07-30**, so a user reversal now rejects at the
+  action layer for the run's duration. Two specified-but-unreachable
+  framework paths (the reversal barrier, and a reversal landing
+  mid-run) briefly looked reachable and are not; they stay filed in
+  [`triage.md`](../../../triage.md) for whoever lands the first live
+  `no-gate` kind.
 - Caller input reaches a pipeline through a new `inputs?: unknown` on
   `PhaseContext` with a per-phase narrowing guard —
   `intermediates` is for state flowing _between_ phases and seeding it
