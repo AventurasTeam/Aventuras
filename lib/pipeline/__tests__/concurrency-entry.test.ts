@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
   definePipeline,
   ensurePerTurnPipelineRegistered,
   ensurePeriodicClassifierPipelineRegistered,
-  PERIODIC_CLASSIFIER_KIND,
   PER_TURN_KIND,
   runPipeline,
   type PhaseContext,

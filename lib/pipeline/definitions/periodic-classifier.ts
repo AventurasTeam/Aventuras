@@ -10,6 +10,7 @@ import {
   nextStatusOnSuccess,
   PERIODIC_CLASSIFIER_KIND,
   reconcileNewCharacter,
+  substituteClassifierIds,
   type EmbedDescriptions,
   type ReconcileDecision,
 } from '@/lib/classifier'
@@ -33,30 +34,18 @@ export { PERIODIC_CLASSIFIER_KIND }
 
 export const PERIODIC_CLASSIFIER_RESOLVES: readonly ResolverInput[] = [{ target: 'classifier' }]
 
+// Reconciliation degrades to create-with-flag rather than failing the pass when
+// boot has not wired a real embedder.
+const NO_EMBEDDER: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
+
 // Injected so tests drive the similarity bands deterministically and so the
 // embedder composition (config + provider resolution) stays in the action layer.
-let embedDescriptions: EmbedDescriptions = async () => ({ vectors: [], dim: 0 })
+let embedDescriptions: EmbedDescriptions = NO_EMBEDDER
 export function configureClassifierEmbedder(fn: EmbedDescriptions): void {
   embedDescriptions = fn
 }
-
-const PLACEHOLDER_FIELDS = ['ref', 'subject', 'object'] as const
-
-// The generic substituteIds walker maps UUID -> placeholder, so the return trip
-// needs its own pass. Unknown strings pass through untouched (a model-invented
-// handle, or a newCharacters temp handle), which is what lets the planner
-// resolve temp handles itself and report the rest as unresolved.
-function substitutePlaceholders<T>(value: T, idMap: IdBiMap): T {
-  if (Array.isArray(value)) return value.map((v) => substitutePlaceholders(v, idMap)) as T
-  if (value === null || typeof value !== 'object') return value
-  return Object.fromEntries(
-    Object.entries(value).map(([key, v]) => {
-      if (typeof v === 'string' && (PLACEHOLDER_FIELDS as readonly string[]).includes(key)) {
-        return [key, idMap.getUuidFor(v) ?? v]
-      }
-      return [key, substitutePlaceholders(v, idMap)]
-    }),
-  ) as T
+export function __resetClassifierEmbedder(): void {
+  embedDescriptions = NO_EMBEDDER
 }
 
 async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
@@ -68,14 +57,10 @@ async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
 }
 
 async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise<void> {
-  // branches is not delta-logged (classifier.md -> Persistence): operational
-  // state outside the reversal log, so a direct row write, not an action.
-  //
-  // Key-scoped json_set, never a whole-blob write: the reversal clamp
-  // (classifierWatermarkClampOps) owns $.processedThrough and can commit between
-  // this run's status read and this write, so serializing a snapshot of the whole
-  // blob here would revert the clamp. Same per-field discipline as
-  // cadence.md -> Concurrency.
+  // branches is not delta-logged (classifier.md -> Persistence), so operational
+  // state is a direct row write rather than an action. Key-scoped json_set,
+  // never a whole blob: the reversal clamp owns $.processedThrough and can
+  // commit between this run's read and this write (cadence.md -> Concurrency).
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
           COALESCE(classifier_status, '{}'),
@@ -129,8 +114,7 @@ export async function* periodicClassifierPhase(
   if (window.isEmpty) {
     // coversThrough counts the capped candidates BEFORE the system-entry filter,
     // so a window of nothing but technical rows is empty yet still advanceable.
-    // Leaving the watermark behind them re-fires the cadence forever. Only the
-    // watermark moves: no pass ran, so the lifecycle keys stay as they were.
+    // Leaving the watermark behind them re-fires the cadence forever.
     if (window.coversThrough > (status.processedThrough ?? 0))
       await advanceWatermark(ctx, window.coversThrough)
     return { status: 'completed' }
@@ -183,7 +167,7 @@ export async function* periodicClassifierPhase(
   // either discarded a not-yet-committed run above, or lets this burst land for
   // the positional sweep to reverse. Never return aborted holding deltas.
   const extraction = result.value
-  const substituted = substitutePlaceholders(extraction, idMap)
+  const substituted = substituteClassifierIds(extraction, idMap)
 
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {

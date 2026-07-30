@@ -14,6 +14,8 @@ import {
 } from '@/lib/stores'
 
 import {
+  __resetClassifierEmbedder,
+  configureClassifierEmbedder,
   ensurePeriodicClassifierPipelineRegistered,
   PERIODIC_CLASSIFIER_KIND,
   PERIODIC_CLASSIFIER_RESOLVES,
@@ -43,6 +45,7 @@ async function ctxWith(opts: {
   headPosition: number
   entryKind?: StoryEntry['kind']
   entities?: Entity[]
+  seedStatus?: Partial<ClassifierStatus>
   onWatermark?: (n: number) => void
 }): Promise<Harness> {
   const { db, sqlite } = await createTestDb()
@@ -69,6 +72,7 @@ async function ctxWith(opts: {
       lastError: null,
       retryCount: 0,
       processedThrough: opts.processedThrough,
+      ...opts.seedStatus,
     }),
   )
 
@@ -154,6 +158,7 @@ describe('periodicClassifierPhase', () => {
     // guard test reach the LLM and still look green.
     vi.resetAllMocks()
     __resetRegistry()
+    __resetClassifierEmbedder()
   })
 
   it('completes without emitting when the window is empty', async () => {
@@ -220,7 +225,36 @@ describe('periodicClassifierPhase', () => {
       order.push('delta')
     }
     expect(order).toEqual(['delta', 'watermark'])
-    expect(h.status()).toMatchObject({ state: 'idle', processedThrough: 2, retryCount: 0 })
+    expect(h.status()).toMatchObject({
+      state: 'idle',
+      processedThrough: 2,
+      retryCount: 0,
+      lastSuccessAt: expect.any(Number),
+    })
+  })
+
+  it('clears the retry state and the stale error when a pass recovers', async () => {
+    const h = await ctxWith({
+      processedThrough: 0,
+      headPosition: 2,
+      seedStatus: { state: 'retrying', retryCount: 2, lastError: 'rate limited' },
+    })
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        happenings: [{ title: 'A', sourceTurn: 't1', involvements: [], awareness: [] }],
+      }),
+    })
+    await drain(h.ctx)
+    // A classifier that recovers but keeps reporting the old failure is what the
+    // status surface would show the user.
+    expect(h.status()).toMatchObject({
+      state: 'idle',
+      retryCount: 0,
+      lastError: null,
+      lastSuccessAt: expect.any(Number),
+      processedThrough: 2,
+    })
   })
 
   it('is abort-free once parsing begins: an abort mid-burst still commits and returns completed', async () => {
@@ -326,6 +360,44 @@ describe('periodicClassifierPhase', () => {
       (involvements[0] as { action: { payload: { entry: { entityId: string } } } }).action.payload
         .entry.entityId,
     ).toBe(CHAR_KAEL)
+  })
+
+  it('reconciles a new character against a staged namesake and promotes instead of creating', async () => {
+    const vector = Float32Array.from([1, 0, 0])
+    const embedder = vi.fn(async () => ({ vectors: [vector, vector], dim: 3 }))
+    configureClassifierEmbedder(embedder)
+    const staged = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'staged',
+      description: 'A courier.',
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [{ handle: 'nc1', name: 'kael', description: 'The courier from the ford.' }],
+        // Refers to the character by its temp handle, which must survive the
+        // return trip untouched for the planner's handleMap to resolve it.
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'nc1' }], awareness: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [staged] })
+    const { events } = await drain(h.ctx)
+
+    expect(embedder).toHaveBeenCalledWith(['The courier from the ford.', 'A courier.'])
+    const actions = events.map((e) => (e as { action: { kind: string; payload: unknown } }).action)
+    // Promote, not create: the namesake exists and the descriptions match.
+    expect(actions.map((a) => a.kind)).toEqual([
+      'updateEntity',
+      'createHappening',
+      'createHappeningInvolvement',
+    ])
+    expect(actions[0].payload).toMatchObject({ id: CHAR_KAEL, patch: { status: 'active' } })
+    expect(actions[2].payload).toMatchObject({ entry: { entityId: CHAR_KAEL } })
   })
 
   it('never reverts a concurrent watermark clamp: status keys are written key-scoped', async () => {

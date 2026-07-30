@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { deltas, pipelineRuns } from '@/lib/db'
 import {
   definePipeline,
   ensurePeriodicClassifierPipelineRegistered,
-  PERIODIC_CLASSIFIER_KIND,
   pipelineEventBus,
   runPipeline,
   type PhaseFn,
