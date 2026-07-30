@@ -117,6 +117,18 @@ harness absorbs:
   `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
   the `dev` suite, and steps 1-3 of [CI](#ci) before the packaged one.
   CI itself is safe, because its job always builds first.
+- **A running `pnpm desktop` breaks the whole suite.** The dev app holds
+  the default remote-debugging port (`127.0.0.1:9222`), and a suite
+  launched alongside it fails **every** spec in `beforeAll` — Electron
+  logs `bind() failed: Address already in use (98)` /
+  `Cannot start http server for devtools`, then `electron.launch` times
+  out after 60s. The list reporter shows every test at `0ms`, which reads
+  like a mass product failure rather than a port collision. State is not
+  the problem (the harness seeds its own `--user-data-dir`, so the dev DB
+  is untouched) — only the port is. Close the desktop app before running
+  the suite, and check `ss -tlnp | grep 9222` if launches time out. Note
+  a crashed or backgrounded run can leave the port held by an orphan;
+  `pgrep -f electron/dist/main.js` finds it.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open

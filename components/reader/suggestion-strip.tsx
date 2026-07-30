@@ -5,7 +5,7 @@ import { Platform, Pressable, View } from 'react-native'
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
-import { Spinner } from '@/components/ui/spinner'
+import { Spinner, SPINNER_PX } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import type { EntryMetadata, SuggestionCategory } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -52,6 +52,22 @@ const OVERLINE_TINT_ALPHA: Record<'light' | 'dark', number> = { light: 0.14, dar
 // already refuse taps via `locked`; the overlay must not become the thing that
 // swallows them once the run settles.
 const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
+
+// One single-line chip row, from the markup in SuggestionChipRow below: 2px
+// borders + 16px (py-2) + a 20px overline (4px py-0.5 over a 16px text-xs
+// line) + 4px (gap-1) + a 20px text-sm line.
+const CHIP_ROW_PX = 62
+const CHIP_GAP_PX = 6 // gap-1.5 on the stack
+
+// 1.5 rows, but never taller than the stack it covers: the overlay is
+// positioned rather than clipped, so at suggestionCount 1 the untrimmed size
+// would spill over the chrome row above and the composer below. Chips that
+// wrap only make the real stack taller than this estimate, so the clamp errs
+// toward the smaller spinner rather than an overflowing one.
+function overlaySpinnerPx(chipCount: number): number {
+  const stack = chipCount * CHIP_ROW_PX + Math.max(0, chipCount - 1) * CHIP_GAP_PX
+  return Math.max(SPINNER_PX.lg, Math.min(Math.round(CHIP_ROW_PX * 1.5), stack - 12))
+}
 
 function tintOf(hex: string, alpha: number): string {
   const body = hex.slice(1)
@@ -196,7 +212,7 @@ export function SuggestionStrip({
             style={POINTER_EVENTS_NONE}
             className="absolute inset-0 items-center justify-center"
           >
-            <Spinner size="lg" colorSlot="--accent" />
+            <Spinner size={overlaySpinnerPx(chips.length)} colorSlot="--accent" />
           </View>
         ) : null}
       </View>
