@@ -47,6 +47,23 @@ export function resolveSuggestionEmission(settings: {
   }
 }
 
+// Chips only ever land on AI-authored entries, so those are the only kinds that
+// can anchor the strip — and both exclusions are load-bearing, not tidiness.
+// Skipping `system` keeps chips off a failure card `clearSystemEntry` deletes
+// on Retry / Dismiss / next Send. Skipping `user_action` is what keeps the
+// strip showing the previous reply's chips for the length of a turn, instead of
+// blanking to the empty-state ⟳ Generate the moment the action commits —
+// offering "generate suggestions" while the generation that produces them is
+// already running (reader-composer.md → the per-turn lock: whatever the strip
+// was showing just locks).
+const ANCHOR_KINDS: ReadonlySet<string> = new Set(['ai_reply', 'opening'])
+
+export function findSuggestionAnchor<T extends { kind: string }>(
+  entries: readonly T[],
+): T | undefined {
+  return entries.findLast((e) => ANCHOR_KINDS.has(e.kind))
+}
+
 // The UI-level half of the strip's mount gate (reader-composer.md → Edge
 // cases → Zero enabled categories). settingsAllowEmission alone would hide
 // the strip whenever categories are all disabled, even on a terminal entry

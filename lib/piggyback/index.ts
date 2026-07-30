@@ -6,6 +6,7 @@ export { buildPiggybackActions } from './apply'
 export { substitutePiggybackIds } from './substitute'
 export {
   buildSuggestionSlots,
+  findSuggestionAnchor,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   shouldShowSuggestionStrip,

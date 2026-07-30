@@ -587,23 +587,33 @@ Disabling the feature lives in
 [Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories)
 via the `suggestionsEnabled` master toggle, not inline.
 
-**The strip anchors to the last _narrative_ entry**, not the last
-row. A failed turn appends a `system` entry that becomes the tail,
-and every way back out of the failure — Retry, Dismiss, or a fresh
-Send — runs `clearSystemEntry`, which deletes the row. Chips
-anchored to one could therefore never survive the way out, and
-anchoring past it also keeps the prior reply's chips visible
-through the failure, which is exactly when a retry wants them. The
-emission phase resolves that anchor itself rather than taking one
-from the caller, so the read and the write both sit inside the gate
-the run holds.
+**The strip anchors to the last _AI-authored_ entry** (`ai_reply` or
+`opening`), not the last row. Both exclusions carry weight:
 
-**Empty-state ⟳ Generate.** Terminal entries without
-`nextTurnSuggestions` (opening entries, `user_action` entries
-pre-AI-reply, legacy entries from before this feature landed) show
-a single ⟳ Generate button on the strip body. Click fires
-`suggestion-refresh` to produce chips ex nihilo. Same pipeline as
-the refresh button.
+- A `user_action` becomes the tail the instant a turn is submitted,
+  so anchoring to it would blank the strip to the empty-state ⟳
+  Generate for the whole turn — offering to generate suggestions
+  while the generation that produces them is already running.
+  Skipping it is what makes the per-turn lock below behave as
+  specified: the previous reply's chips stay on screen, locked.
+- A failed turn appends a `system` entry, and every way back out —
+  Retry, Dismiss, or a fresh Send — runs `clearSystemEntry`, which
+  deletes the row. Chips anchored there could never survive the way
+  out, and anchoring past it keeps the prior reply's chips visible
+  through the failure, which is exactly when a retry wants them.
+
+Only those two kinds ever carry `nextTurnSuggestions`, so the rule
+is "anchor where chips can live." The emission phase resolves the
+anchor itself rather than taking one from the caller, so the read
+and the write both sit inside the gate the run holds, and the strip
+and the pipeline can't disagree about which entry is current.
+
+**Empty-state ⟳ Generate.** An anchor without `nextTurnSuggestions`
+(an opening entry, or a legacy entry from before this feature
+landed) shows a single ⟳ Generate button on the strip body. Click
+fires `suggestion-refresh` to produce chips ex nihilo. Same pipeline
+as the refresh button. A `user_action` tail does **not** reach this
+state — it is not an anchor, so the previous reply's chips hold.
 
 **States:**
 

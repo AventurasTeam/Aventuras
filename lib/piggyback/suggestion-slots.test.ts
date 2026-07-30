@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   buildSuggestionSlots,
+  findSuggestionAnchor,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   shouldShowSuggestionStrip,
@@ -75,6 +76,33 @@ describe('resolveSuggestionEmission', () => {
 
   it('carries the chip count through', () => {
     expect(resolveSuggestionEmission({ ...base, suggestionCount: 5 }).count).toBe(5)
+  })
+})
+
+describe('findSuggestionAnchor', () => {
+  const e = (id: string, kind: string) => ({ id, kind })
+
+  it('takes the last AI-authored entry', () => {
+    expect(
+      findSuggestionAnchor([e('a', 'opening'), e('b', 'user_action'), e('c', 'ai_reply')])?.id,
+    ).toBe('c')
+  })
+
+  it('skips a user_action tail so a turn in flight keeps the last reply’s chips', () => {
+    // Otherwise the strip blanks to the empty-state ⟳ Generate the moment the
+    // action commits, offering to generate while generation is already running.
+    expect(findSuggestionAnchor([e('a', 'ai_reply'), e('b', 'user_action')])?.id).toBe('a')
+  })
+
+  it('skips a system tail, whose row clearSystemEntry deletes', () => {
+    expect(
+      findSuggestionAnchor([e('a', 'ai_reply'), e('b', 'user_action'), e('c', 'system')])?.id,
+    ).toBe('a')
+  })
+
+  it('is undefined when nothing AI-authored exists yet', () => {
+    expect(findSuggestionAnchor([e('a', 'user_action'), e('b', 'system')])).toBeUndefined()
+    expect(findSuggestionAnchor([])).toBeUndefined()
   })
 })
 

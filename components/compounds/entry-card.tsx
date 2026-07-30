@@ -166,12 +166,11 @@ export function EntryCard({
 
   return (
     <View
-      className={cn(
-        'relative w-full rounded-lg border p-4',
-        KIND_BUBBLE[kind],
-        disabled && 'opacity-60',
-        className,
-      )}
+      // No dim while `disabled`: reading is never gated (principles.md → What's
+      // not gated), every control below takes `disabled` on its own, and the
+      // streaming card is rendered without it — so dimming here made the prose
+      // change shade the frame a turn committed and back again when it settled.
+      className={cn('relative w-full rounded-lg border p-4', KIND_BUBBLE[kind], className)}
     >
       <View className={cn('mb-2 flex-row items-center gap-2', showActions && 'pr-28')}>
         {kind === 'user_action' ? (

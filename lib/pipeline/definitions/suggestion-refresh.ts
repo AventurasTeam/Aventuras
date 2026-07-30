@@ -3,7 +3,11 @@ import { z } from 'zod'
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
-import { resolveSuggestionEmission, resolveSuggestionItems } from '@/lib/piggyback'
+import {
+  findSuggestionAnchor,
+  resolveSuggestionEmission,
+  resolveSuggestionItems,
+} from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -87,12 +91,11 @@ async function* suggestionEmissionPhase(
   const entries = [...entriesStore.getEntries().values()]
     .filter((e) => e.branchId === ctx.branchId)
     .sort((a, b) => a.position - b.position)
-  // Skips a system entry rather than guarding against one: clearSystemEntry
-  // deletes that row on Retry / Dismiss / next Send, so chips anchored there
-  // are born dead. A system entry is a tail singleton (writeSystemEntry drops
-  // any existing one, then appends), so nothing narrative follows the anchor
-  // and the whole entry list is already the right prompt window.
-  const target = entries.findLast((e) => e.kind !== 'system')
+  // Same anchor the strip renders from, so the run writes where the reader is
+  // looking. Only AI-authored entries qualify, and everything after the anchor
+  // is a user_action or a system row — neither carries chips, and the builder
+  // drops system rows — so the whole entry list is already the prompt window.
+  const target = findSuggestionAnchor(entries)
   if (!target) {
     ctx.log.warn('classifier.suggestions_refresh_no_anchor', { branchId: ctx.branchId })
     return { status: 'completed' }

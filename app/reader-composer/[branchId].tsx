@@ -50,7 +50,7 @@ import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
-import { shouldShowSuggestionStrip } from '@/lib/piggyback'
+import { findSuggestionAnchor, shouldShowSuggestionStrip } from '@/lib/piggyback'
 import {
   awaitRunTerminal,
   PER_TURN_KIND,
@@ -149,12 +149,7 @@ export default function ReaderComposerRoute() {
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState(false)
-  // The last NARRATIVE entry, not the last row: a failed turn appends a system
-  // entry, and every way back out of that failure (Retry, Dismiss, a fresh
-  // Send) runs clearSystemEntry, which deletes the row — so chips anchored
-  // there could never survive it, and the prior reply's chips are exactly what
-  // a retry wants to offer.
-  const terminalEntry = entries.findLast((e) => e.kind !== 'system') ?? null
+  const terminalEntry = findSuggestionAnchor(entries) ?? null
   const suggestionsEnabled = openForBranch?.settings.suggestionsEnabled ?? false
   const suggestionCategories = openForBranch?.settings.suggestionCategories ?? []
   const chips = terminalEntry?.metadata?.nextTurnSuggestions?.items ?? []

@@ -408,6 +408,22 @@ describe('suggestion-refresh emission phase', () => {
     expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
+  it('anchors past a user_action tail to the last AI-authored entry', async () => {
+    openStory()
+    // Mid-turn: the action has committed, the reply has not. Anchoring here
+    // would blank the strip to ⟳ Generate while generation is already running.
+    hydrate([
+      TARGET_ENTRY,
+      { ...TARGET_ENTRY, id: 'entry-action', position: 2, kind: 'user_action', content: 'I run.' },
+    ])
+    wireAppSettings()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
+
+    const { events } = await runEmission()
+
+    expect(events[0]).toMatchObject({ entryId: 'entry-1' })
+  })
+
   it('anchors past a system tail to the last narrative entry', async () => {
     openStory()
     // A failed turn's system entry is the branch tail; clearSystemEntry deletes
