@@ -243,34 +243,41 @@ export function SuggestionStrip({
       className={cn('border-t border-border bg-bg-sunken px-4 py-2', className)}
     >
       <View className={cn('gap-1.5', contentClassName)}>
-        <View className="flex-row items-center justify-end gap-1">
-          {busy ? (
-            // Swaps in rather than sitting beside ⟳: a live refresh button next
-            // to a cancel offers a re-roll the pipeline would self-block anyway.
-            // Not pulsed — a throbbing control reads as busy, not as pressable,
-            // and the body's dimmed chips already carry the in-flight signal.
+        <View className="flex-row items-center justify-between gap-2">
+          {/* Collapsed, the chrome row is the only thing left — without a label
+              it is two bare icons floating above the composer. */}
+          <Text size="xs" variant="muted" className="font-semibold uppercase tracking-wider">
+            {t('reader:suggestions.title')}
+          </Text>
+          <View className="flex-row items-center gap-1">
+            {busy ? (
+              // Swaps in rather than sitting beside ⟳: a live refresh button next
+              // to a cancel offers a re-roll the pipeline would self-block anyway.
+              // Not pulsed — a throbbing control reads as busy, not as pressable,
+              // and the body's dimmed chips already carry the in-flight signal.
+              <IconAction
+                icon={X}
+                label={t('reader:suggestions.cancel')}
+                size="sm"
+                onPress={onCancel}
+              />
+            ) : emptyStateOwnsRefresh ? null : (
+              <IconAction
+                icon={RefreshCw}
+                label={t('reader:suggestions.refresh')}
+                size="sm"
+                disabled={locked}
+                onPress={onRefresh}
+              />
+            )}
             <IconAction
-              icon={X}
-              label={t('reader:suggestions.cancel')}
+              icon={collapsed ? ChevronUp : ChevronDown}
+              label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}
               size="sm"
-              onPress={onCancel}
+              aria-expanded={!collapsed}
+              onPress={onToggleCollapsed}
             />
-          ) : emptyStateOwnsRefresh ? null : (
-            <IconAction
-              icon={RefreshCw}
-              label={t('reader:suggestions.refresh')}
-              size="sm"
-              disabled={locked}
-              onPress={onRefresh}
-            />
-          )}
-          <IconAction
-            icon={collapsed ? ChevronUp : ChevronDown}
-            label={collapsed ? t('reader:suggestions.expand') : t('reader:suggestions.collapse')}
-            size="sm"
-            aria-expanded={!collapsed}
-            onPress={onToggleCollapsed}
-          />
+          </View>
         </View>
         {body}
       </View>

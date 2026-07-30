@@ -23,6 +23,7 @@
     "free": "no wrapping"
   },
   "suggestions": {
+    "title": "Suggestions",
     "refresh": "Refresh suggestions",
     "cancel": "Cancel suggestion refresh",
     "generate": "Generate suggestions",

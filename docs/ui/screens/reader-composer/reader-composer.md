@@ -555,11 +555,14 @@ parked entry tracks the post-v1 design if real signal surfaces.
 prefix/suffix wrapping intent. Suggestion category = narrative-beat
 type. Different axes.
 
-**Chrome row** above the chip stack, right-aligned. It leads rather
-than trails so the controls hold one position: the chip stack's
-height moves with the count and with the `empty-state` / `error`
-bodies, which would otherwise slide ⟳ and ⌄ under the cursor between
-re-rolls.
+**Chrome row** above the chip stack: a `Suggestions` label on the
+left, controls on the right. It leads rather than trails so the
+controls hold one position — the chip stack's height moves with the
+count and with the `empty-state` / `error` bodies, which would
+otherwise slide ⟳ and ⌄ under the cursor between re-rolls. The label
+earns its place in the collapsed state, where the chrome row is all
+that remains and two bare icons would float unlabelled above the
+composer.
 
 - **⟳ refresh** — primary action. Fires the `suggestion-refresh`
   pipeline with current composer text as `refreshGuidance` (empty
