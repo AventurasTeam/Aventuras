@@ -204,6 +204,66 @@ describe('reverseReplayDeltas', () => {
     // BOTH sub-keys restored to their pre-act_rev state — no clobber
     expect(entry.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
   })
+
+  it('delete without restoreCascade passes undo payload through untouched', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    // Create an entry without any cascade behavior
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createStoryEntry',
+          source: 'ai_classifier',
+          payload: {
+            entry: {
+              id: 'entry_1',
+              branchId: 'b1',
+              position: 1,
+              kind: 'ai_reply',
+              content: 'hi',
+              metadata: { sceneEntities: [], currentLocationId: null, worldTime: 5 },
+              createdAt: 1,
+            },
+          },
+        },
+        actionId: 'act_create',
+        branchId: 'b1',
+        entryId: 'entry_1',
+      },
+      ctx,
+    )
+    // Delete it
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteStoryEntry',
+          source: 'user_edit',
+          payload: { branchId: 'b1', id: 'entry_1' },
+        },
+        actionId: 'act_delete',
+        branchId: 'b1',
+      },
+      ctx,
+    )
+    // Verify it's deleted
+    const deleted = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
+    expect(deleted.length).toBe(0)
+
+    // Reverse the delete
+    await reverseReplayDeltas('act_delete', ctx)
+
+    // Verify it's restored with full undo payload intact
+    const [restored] = await db
+      .select()
+      .from(storyEntries)
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'entry_1')))
+    expect(restored).toBeDefined()
+    expect(restored.metadata).toEqual({ sceneEntities: [], currentLocationId: null, worldTime: 5 })
+  })
 })
 
 describe('reverseAndPruneDeltaRows', () => {

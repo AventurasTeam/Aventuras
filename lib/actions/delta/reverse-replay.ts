@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
-import { deltas, happeningInvolvements, happeningAwareness } from '@/lib/db'
+import { deltas } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload } from './delta-encoding'
@@ -53,13 +53,9 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      const involvements = full.involvements as Record<string, unknown>[] | undefined
-      const awareness = full.awareness as Record<string, unknown>[] | undefined
-
-      // Extract cascaded child rows before re-inserting the parent
-      const rowData = { ...full }
-      delete rowData.involvements
-      delete rowData.awareness
+      const { row: rowData, children } = entry.restoreCascade
+        ? entry.restoreCascade(full)
+        : { row: full, children: [] }
 
       working.set(key, { ...rowData })
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
@@ -69,37 +65,23 @@ async function buildUndoOps(
         patch: { op: 'create', id: delta.targetId, row: rowData },
       })
 
-      // Re-insert cascaded child rows for happenings
-      if (delta.targetTable === 'happenings') {
-        if (involvements && involvements.length > 0) {
-          ops.push(
-            ctx.db
-              .insert(happeningInvolvements)
-              .values(involvements as any)
-              .toSQL(),
-          )
-          for (const inv of involvements) {
-            patches.push({
-              table: 'happening_involvements',
-              branchId: delta.branchId,
-              patch: { op: 'create', id: inv.id as string, row: inv },
-            })
-          }
-        }
-        if (awareness && awareness.length > 0) {
-          ops.push(
-            ctx.db
-              .insert(happeningAwareness)
-              .values(awareness as any)
-              .toSQL(),
-          )
-          for (const aw of awareness) {
-            patches.push({
-              table: 'happening_awareness',
-              branchId: delta.branchId,
-              patch: { op: 'create', id: aw.id as string, row: aw },
-            })
-          }
+      // Re-insert cascaded child rows if the domain declares them
+      for (const { table: childTableName, rows: childRows } of children) {
+        const childEntry = resolveByTable(childTableName)
+        if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
+        const { table: childTable } = childEntry.descriptor
+        ops.push(
+          ctx.db
+            .insert(childTable)
+            .values(childRows as any)
+            .toSQL(),
+        )
+        for (const childRow of childRows) {
+          patches.push({
+            table: childTableName,
+            branchId: delta.branchId,
+            patch: { op: 'create', id: childRow.id as string, row: childRow },
+          })
         }
       }
       continue

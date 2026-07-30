@@ -11,7 +11,7 @@ import {
 import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import { register, type ActionHandler } from '../delta/registry'
+import { register, type ActionHandler, type CascadeRestore } from '../delta/registry'
 import type { DeltaSource } from '../types'
 
 type HappeningUpdatePatch = Partial<{
@@ -195,6 +195,25 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+const restoreCascade: CascadeRestore = (undoPayload) => {
+  const involvements = undoPayload.involvements as Record<string, unknown>[] | undefined
+  const awareness = undoPayload.awareness as Record<string, unknown>[] | undefined
+
+  const row = { ...undoPayload }
+  delete row.involvements
+  delete row.awareness
+
+  const children = []
+  if (involvements && involvements.length > 0) {
+    children.push({ table: 'happening_involvements', rows: involvements })
+  }
+  if (awareness && awareness.length > 0) {
+    children.push({ table: 'happening_awareness', rows: awareness })
+  }
+
+  return { row, children }
+}
+
 export function registerHappenings(): void {
   register({
     table: 'happenings',
@@ -206,5 +225,6 @@ export function registerHappenings(): void {
       deleteHappening: deleteHandler,
     },
     patcher: (branchId, p) => happeningsStore.patch(branchId, p),
+    restoreCascade,
   })
 }
