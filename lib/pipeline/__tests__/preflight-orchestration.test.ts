@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { deltas, pipelineRuns } from '@/lib/db'
 import {
   definePipeline,
+  ensurePeriodicClassifierPipelineRegistered,
+  PERIODIC_CLASSIFIER_KIND,
   pipelineEventBus,
   runPipeline,
   type PhaseFn,
@@ -142,5 +144,22 @@ describe('runPipeline config pre-flight', () => {
     expect(pr.outcome).toBe('failed')
     expect(pr.finishedAt).not.toBeNull()
     expect((await db.select().from(deltas)).length).toBe(0)
+  })
+
+  it('halts a cadence-triggered classifier before phase 0 when the agent is unassigned', async () => {
+    const { db, ctx } = await makeHarness()
+    await hydrateAppSettings(async () => WIRED_CONFIG) // narrative profile only
+
+    ensurePeriodicClassifierPipelineRegistered()
+    const result = expectRan(await runPipeline(PERIODIC_CLASSIFIER_KIND, ctx))
+
+    expect(result).toMatchObject({
+      outcome: 'failed',
+      error: { kind: 'config-resolver', target: 'classifier', phaseName: 'classify' },
+    })
+    // config-resolver is only reachable from pre-flight: the phase itself would
+    // have failed on the unhydrated story stores with an 'orchestrator' error.
+    expect((await db.select().from(deltas)).length).toBe(0)
+    expect(generationStore.getTxState().runs.size).toBe(0)
   })
 })
