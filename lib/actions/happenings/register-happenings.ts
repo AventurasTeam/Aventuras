@@ -151,7 +151,27 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 }
 
 async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: DbCtx) {
-  return [
+  // Query children before deletion so we can track which IDs were deleted
+  const involvements = await ctx.db
+    .select()
+    .from(happeningInvolvements)
+    .where(
+      and(
+        eq(happeningInvolvements.branchId, branchId),
+        eq(happeningInvolvements.happeningId, happeningId),
+      ),
+    )
+  const awareness = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(
+      and(
+        eq(happeningAwareness.branchId, branchId),
+        eq(happeningAwareness.happeningId, happeningId),
+      ),
+    )
+
+  const ops = [
     ctx.db
       .delete(happeningInvolvements)
       .where(
@@ -171,6 +191,13 @@ async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: D
       )
       .toSQL(),
   ]
+  return {
+    ops,
+    children: {
+      happening_involvements: involvements,
+      happening_awareness: awareness,
+    },
+  }
 }
 
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
@@ -195,7 +222,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happeningAwareness)
     .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
 
-  const childDeleteOps = await buildChildDeleteOps(bid, id, ctx)
+  const { ops: childDeleteOps } = await buildChildDeleteOps(bid, id, ctx)
 
   return {
     status: 'ok',

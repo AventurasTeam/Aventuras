@@ -19,8 +19,9 @@ import { registerHappeningAwareness } from './register-awareness'
 import { registerHappenings } from './register-happenings'
 import { registerHappeningInvolvements } from './register-involvements'
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { __resetRegistry } from '../delta/registry'
-import { reverseReplayDeltas } from '../delta/reverse-replay'
+import { reverseReplayDeltas, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 
 async function setup() {
   __resetRegistry()
@@ -405,5 +406,77 @@ describe('happenings CRUD arms', () => {
       decayResistance: 0.5,
       source: 'direct',
     })
+  })
+
+  it('redo of a cascading delete leaves all tables (parent + children) empty in DB and stores', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    const inv: NewHappeningInvolvement = {
+      id: 'inv_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    }
+    const aware: NewHappeningAwareness = {
+      id: 'haw_1',
+      branchId: 'br_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      learnedAtEntryId: null,
+      decayResistance: 0.5,
+      source: 'direct',
+    }
+    await db.insert(happeningInvolvements).values(inv)
+    await db.insert(happeningAwareness).values(aware)
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'periodic_classifier',
+          payload: { branchId: 'br_1', id: 'hap_1' },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    // After delete: all three tables should be empty
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(0)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(0)
+    expect(await rowFor(db, 'hap_1')).toBeUndefined()
+
+    // Undo the delete: capture snapshot first, then prune (remove) the delta
+    const deleteDeltaRows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_d'))
+    const snapshots = await snapshotForRedo(deleteDeltaRows, ctx)
+    await reverseAndPruneDeltaRows(deleteDeltaRows, ctx)
+
+    // After undo: everything should be restored
+    expect(await rowFor(db, 'hap_1')).toBeDefined()
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(1)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(1)
+    expect(happeningsStore.getById('hap_1')).toBeDefined()
+    expect(happeningInvolvementsStore.getById('inv_1')).toBeDefined()
+    expect(happeningAwarenessStore.getById('haw_1')).toBeDefined()
+
+    // Redo the delete: cascade should delete children too, not just parent
+    await applyRedo(snapshots, ctx)
+
+    // After redo: all three tables must be empty (tests the cascadeDeleteOps hook)
+    expect(await rowFor(db, 'hap_1')).toBeUndefined()
+    expect(await countRows('happening_involvements', 'br_1', db)).toBe(0)
+    expect(await countRows('happening_awareness', 'br_1', db)).toBe(0)
+
+    expect(happeningsStore.getById('hap_1')).toBeUndefined()
+    expect(happeningInvolvementsStore.getById('inv_1')).toBeUndefined()
+    expect(happeningAwarenessStore.getById('haw_1')).toBeUndefined()
   })
 })

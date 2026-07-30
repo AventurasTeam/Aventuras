@@ -25,9 +25,17 @@ export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
   cascadeKeys: string[]
 }
 
-// A cascade delete returns the ops needed to delete cascaded children.
+// A cascade delete returns the ops needed to delete cascaded children and the children
+// rows being deleted, so redo can emit store patches to keep stores in sync with the DB.
 // Called during redo to reconstruct the cascade behavior of the forward delete.
-export type CascadeDeleteOps = (branchId: string, targetId: string, ctx: DbCtx) => Promise<SqlOp[]>
+export type CascadeDeleteOps = (
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+) => Promise<{
+  ops: SqlOp[]
+  children: Record<string, Record<string, unknown>[]>
+}>
 
 export type HandlerOutcome =
   | { status: 'rejected'; reason: string; code?: string }
