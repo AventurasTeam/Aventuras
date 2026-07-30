@@ -45,3 +45,19 @@ export async function readClassifierStatus(
     .where(eq(branches.id, branchId))
   return row?.classifierStatus ?? idleStatus()
 }
+
+/**
+ * Boot-time orphan reconciliation: a branch left `state: 'running'` was owned
+ * by a process that no longer exists, so nothing is actually in flight for it.
+ * Key-scoped `$.state` only — `processedThrough` (the watermark never
+ * advanced, which is the coherent matching state) and the retry lifecycle keys
+ * are untouched, and this must never fire for 'retrying' / 'failed-persistent'
+ * (a real error the manual run — not boot — is meant to surface and clear).
+ */
+export async function resetStuckClassifierRunState(ctx: DbCtx): Promise<void> {
+  await ctx.db.run(
+    sql`UPDATE ${branches}
+        SET classifier_status = json_set(classifier_status, '$.state', 'idle')
+        WHERE json_extract(classifier_status, '$.state') = 'running'`,
+  )
+}

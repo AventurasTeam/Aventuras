@@ -1,4 +1,9 @@
-export { embedClassifierDescriptions, headPosition, readClassifierStatus } from './classifier/deps'
+export {
+  embedClassifierDescriptions,
+  headPosition,
+  readClassifierStatus,
+  resetStuckClassifierRunState,
+} from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export { defineAction } from './define-action'
 // The raw engine primitives (startSwap / resumeSwap / cancelSwap / reindexStory /

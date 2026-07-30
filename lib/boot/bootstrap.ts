@@ -7,6 +7,7 @@ import {
   normalizeAppSettingsRow,
   readClassifierStatus,
   registerAllDomains,
+  resetStuckClassifierRunState,
   reverseReplayDeltas,
   runClassifierNow,
   setDrainKickSink,
@@ -118,6 +119,17 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
     if (report.reversed.length > 0) recoveryReportStore.publish(report)
   } catch (err) {
     logger.error('bootstrap.recovery_failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+  // A branch's own orphan: state: 'running' outlived the process that wrote it.
+  // Separate from recoverInFlightRuns (pipeline_runs markers) because
+  // classifier_status is a branches column with no marker row of its own — and
+  // unlike a marker's deltas, there is nothing here to reverse-replay.
+  try {
+    await resetStuckClassifierRunState(ctx)
+  } catch (err) {
+    logger.error('bootstrap.classifier_running_reset_failed', {
       error: err instanceof Error ? err.message : String(err),
     })
   }
