@@ -268,6 +268,54 @@ describe('rollbackToEntry', () => {
     expect(generationStore.getTxState().reversalInProgress).toBe(false)
   })
 
+  it('clamps the classifier watermark to position(B) - 1 in the sweep transaction', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    await db
+      .update(branches)
+      .set({
+        classifierStatus: {
+          state: 'idle',
+          lastSuccessAt: null,
+          lastError: null,
+          retryCount: 0,
+          processedThrough: 4,
+        },
+      })
+      .where(eq(branches.id, 'b1'))
+
+    // t2 is position 3 and is itself the first removed entry.
+    const result = await rollbackToEntry('b1', 't2', ctx)
+    expect(result.status).toBe('ok')
+    const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
+    expect(row.classifierStatus?.processedThrough).toBe(2)
+  })
+
+  it('leaves a watermark already below the clamp untouched', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seedBranchWithTurns(db, ctx)
+    entriesStore.hydrate('b1', [])
+    await db
+      .update(branches)
+      .set({
+        classifierStatus: {
+          state: 'idle',
+          lastSuccessAt: null,
+          lastError: null,
+          retryCount: 0,
+          processedThrough: 1,
+        },
+      })
+      .where(eq(branches.id, 'b1'))
+
+    await rollbackToEntry('b1', 't2', ctx)
+    const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
+    expect(row.classifierStatus?.processedThrough).toBe(1)
+  })
+
   it('clears the redo stack on success (a rollback is a new unrelated action)', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

@@ -71,6 +71,7 @@ export {
   type RollbackCounts,
   type StoryEntryRejection,
 } from './story-entries/operational'
+export { bracketProseReversal, classifierWatermarkClampOps } from './story-entries/prose-reversal'
 export { ENTRIES_WINDOW_SIZE, readRecentEntries } from './story-entries/recent-window'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
 export { redoLastAction, undoLastAction, type UndoResult } from './story-entries/undo'

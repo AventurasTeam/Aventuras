@@ -117,6 +117,30 @@ describe('undoLastAction / redoLastAction', () => {
     expect(entriesStore.getById('e_turn')).toBeUndefined()
   })
 
+  it('clamps the classifier watermark to the undone turn - 1', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    hydrateOpeningAndTurn()
+    await db
+      .update(branches)
+      .set({
+        classifierStatus: {
+          state: 'idle',
+          lastSuccessAt: null,
+          lastError: null,
+          retryCount: 0,
+          processedThrough: 2,
+        },
+      })
+      .where(eq(branches.id, 'b1'))
+
+    // e_turn is position 2 and is the entry the undo removes.
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
+    expect(row.classifierStatus?.processedThrough).toBe(1)
+  })
+
   it('removes a real turn (user_action + ai_reply sharing one actionId) and redo restores both', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
