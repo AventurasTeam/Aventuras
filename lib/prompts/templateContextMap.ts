@@ -75,6 +75,51 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
   ],
+  classifierContext: [
+    {
+      name: 'turns',
+      type: 'WindowTurn[]',
+      category: 'Story',
+      description:
+        'Unclassified prose window, each turn carrying the provenance handle (t1..tN) the model must tag its facts with.',
+      required: true,
+    },
+    {
+      name: 'entities',
+      type: 'Entity[]',
+      category: 'Entities',
+      description: 'Branch entities (id/kind/name/description/status) — the placeholder universe.',
+      required: true,
+    },
+    {
+      name: 'happenings',
+      type: '{ id, title }[]',
+      category: 'Plot',
+      description: 'Existing happenings, so the model can reference rather than duplicate them.',
+      required: false,
+    },
+    {
+      name: 'lore',
+      type: 'Lore[]',
+      category: 'Plot',
+      description: 'Branch lore entries.',
+      required: false,
+    },
+    {
+      name: 'definition',
+      type: 'StoryDefinition',
+      category: 'Story Config',
+      description: 'mode/narration/genre/tone/setting; genre/tone are { label, promptBody }.',
+      required: true,
+    },
+    {
+      name: 'calendarVocabulary',
+      type: 'CalendarVocabulary | null',
+      category: 'Story Config',
+      description: 'Vocabulary descriptor for the active calendar system.',
+      required: false,
+    },
+  ],
   wizard: [
     {
       name: 'definition',
@@ -122,6 +167,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
   [TEMPLATE_IDS.perTurnNarrative]: 'generationContext',
   [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
+  [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',

@@ -7,6 +7,7 @@ export const BUNDLED_PACK_ID = 'pack_bundled_default'
 export const TEMPLATE_IDS = {
   perTurnNarrative: 'tmpl_per_turn_narrative',
   piggybackFallbackClassifier: 'tmpl_piggyback_fallback_classifier',
+  periodicClassifier: 'tmpl_periodic_classifier',
   wizardOpening: 'tmpl_wizard_opening',
   wizardTitleChips: 'tmpl_wizard_title_chips',
   wizardDescription: 'tmpl_wizard_description',

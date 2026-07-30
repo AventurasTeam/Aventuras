@@ -2,6 +2,7 @@ import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack } from '../types'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
+import { PERIODIC_CLASSIFIER } from './periodic-classifier'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
 import { WIZARD_DESCRIPTION, WIZARD_OPENING, WIZARD_TITLE_CHIPS } from './wizard'
@@ -12,6 +13,10 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
       source: PIGGYBACK_FALLBACK_CLASSIFIER,
+    },
+    [TEMPLATE_IDS.periodicClassifier]: {
+      group: 'classifierContext',
+      source: PERIODIC_CLASSIFIER,
     },
     [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', source: WIZARD_OPENING },
     [TEMPLATE_IDS.wizardTitleChips]: { group: 'wizard', source: WIZARD_TITLE_CHIPS },
