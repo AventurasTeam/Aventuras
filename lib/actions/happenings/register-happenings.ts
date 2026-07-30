@@ -11,8 +11,13 @@ import {
 import { happeningsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
-import { register, type ActionHandler, type CascadeRestore } from '../delta/registry'
-import type { DeltaSource } from '../types'
+import {
+  register,
+  type ActionHandler,
+  type CascadeRestore,
+  type CascadeDeleteOps,
+} from '../delta/registry'
+import type { DbCtx, DeltaSource } from '../types'
 
 type HappeningUpdatePatch = Partial<{
   title: string
@@ -145,6 +150,29 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: DbCtx) {
+  return [
+    ctx.db
+      .delete(happeningInvolvements)
+      .where(
+        and(
+          eq(happeningInvolvements.branchId, branchId),
+          eq(happeningInvolvements.happeningId, happeningId),
+        ),
+      )
+      .toSQL(),
+    ctx.db
+      .delete(happeningAwareness)
+      .where(
+        and(
+          eq(happeningAwareness.branchId, branchId),
+          eq(happeningAwareness.happeningId, happeningId),
+        ),
+      )
+      .toSQL(),
+  ]
+}
+
 const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (action.kind !== 'deleteHappening')
     throw new Error(`handler/kind mismatch: expected 'deleteHappening', got '${action.kind}'`)
@@ -167,6 +195,8 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     .from(happeningAwareness)
     .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
 
+  const childDeleteOps = await buildChildDeleteOps(bid, id, ctx)
+
   return {
     status: 'ok',
     targetTable: 'happenings',
@@ -176,16 +206,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     // the only place reverse-replay can rebuild them from.
     undoPayload: { ...current, involvements, awareness },
     ops: [
-      ctx.db
-        .delete(happeningInvolvements)
-        .where(
-          and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.happeningId, id)),
-        )
-        .toSQL(),
-      ctx.db
-        .delete(happeningAwareness)
-        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
-        .toSQL(),
+      ...childDeleteOps,
       ctx.db
         .delete(happenings)
         .where(and(eq(happenings.branchId, bid), eq(happenings.id, id)))
@@ -199,20 +220,22 @@ const restoreCascade: CascadeRestore = (undoPayload) => {
   const involvements = undoPayload.involvements as Record<string, unknown>[] | undefined
   const awareness = undoPayload.awareness as Record<string, unknown>[] | undefined
 
-  const row = { ...undoPayload }
-  delete row.involvements
-  delete row.awareness
-
   const children = []
+  const cascadeKeys = []
+
   if (involvements && involvements.length > 0) {
     children.push({ table: 'happening_involvements', rows: involvements })
+    cascadeKeys.push('involvements')
   }
   if (awareness && awareness.length > 0) {
     children.push({ table: 'happening_awareness', rows: awareness })
+    cascadeKeys.push('awareness')
   }
 
-  return { row, children }
+  return { children, cascadeKeys }
 }
+
+const cascadeDeleteOps: CascadeDeleteOps = buildChildDeleteOps
 
 export function registerHappenings(): void {
   register({
@@ -226,5 +249,6 @@ export function registerHappenings(): void {
     },
     patcher: (branchId, p) => happeningsStore.patch(branchId, p),
     restoreCascade,
+    cascadeDeleteOps,
   })
 }

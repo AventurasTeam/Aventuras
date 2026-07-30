@@ -40,6 +40,10 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
       if (rowBeforeUndo)
         ops.push(ctx.db.insert(entry.descriptor.table).values(rowBeforeUndo).toSQL())
     } else if (delta.op === 'delete') {
+      if (entry.cascadeDeleteOps) {
+        const childOps = await entry.cascadeDeleteOps(delta.branchId, delta.targetId, ctx)
+        ops.push(...childOps)
+      }
       ops.push(ctx.db.delete(entry.descriptor.table).where(where).toSQL())
     } else if (rowBeforeUndo) {
       ops.push(ctx.db.update(entry.descriptor.table).set(rowBeforeUndo).where(where).toSQL())

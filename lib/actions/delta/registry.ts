@@ -16,14 +16,18 @@ export type StorePatch =
 // A domain patcher closes over its working-set store; the store branch-guards.
 export type StorePatcher = (branchId: string, patch: StorePatch) => void
 
-// A cascade restore splits an undo payload into the parent row and child rows
-// for tables that delete their children as a side effect of the parent delete.
+// A cascade restore extracts child rows from an undo payload.
+// The engine removes the declared cascade keys to get the clean parent row.
 export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
-  /** The parent row, with cascade keys removed. */
-  row: Record<string, unknown>
   /** Child rows to re-insert, keyed by their own registered table name. */
   children: { table: string; rows: Record<string, unknown>[] }[]
+  /** Keys in the undo payload that belong to cascaded children; engine strips these. */
+  cascadeKeys: string[]
 }
+
+// A cascade delete returns the ops needed to delete cascaded children.
+// Called during redo to reconstruct the cascade behavior of the forward delete.
+export type CascadeDeleteOps = (branchId: string, targetId: string, ctx: DbCtx) => Promise<SqlOp[]>
 
 export type HandlerOutcome =
   | { status: 'rejected'; reason: string; code?: string }
@@ -60,6 +64,7 @@ export type DomainRegistration = {
   handlers: Record<string, ActionHandler>
   patcher?: StorePatcher
   restoreCascade?: CascadeRestore
+  cascadeDeleteOps?: CascadeDeleteOps
 }
 
 type TableEntry = Omit<DomainRegistration, 'handlers'>

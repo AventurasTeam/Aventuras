@@ -362,10 +362,12 @@ describe('happenings CRUD arms', () => {
     const restoredHap = await rowFor(db, 'hap_1')
     expect(restoredHap).toBeDefined()
     expect(restoredHap?.title).toBe('The duel')
+    expect(happeningsStore.getById('hap_1')?.title).toBe('The duel')
+
     expect(await countRows('happening_involvements', 'br_1', db)).toBe(1)
     expect(await countRows('happening_awareness', 'br_1', db)).toBe(1)
 
-    // Verify the child rows have correct data
+    // Verify the child rows have correct data in DB
     const [restoredInv] = await db
       .select()
       .from(happeningInvolvements)
@@ -382,6 +384,21 @@ describe('happenings CRUD arms', () => {
       .from(happeningAwareness)
       .where(eq(happeningAwareness.id, 'haw_1'))
     expect(restoredAware).toMatchObject({
+      id: 'haw_1',
+      happeningId: 'hap_1',
+      characterId: 'char_1',
+      decayResistance: 0.5,
+      source: 'direct',
+    })
+
+    // Verify the child rows are synced to stores
+    expect(happeningInvolvementsStore.getById('inv_1')).toMatchObject({
+      id: 'inv_1',
+      happeningId: 'hap_1',
+      entityId: 'char_1',
+      role: 'protagonist',
+    })
+    expect(happeningAwarenessStore.getById('haw_1')).toMatchObject({
       id: 'haw_1',
       happeningId: 'hap_1',
       characterId: 'char_1',

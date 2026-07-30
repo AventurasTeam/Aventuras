@@ -53,9 +53,14 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      const { row: rowData, children } = entry.restoreCascade
+      const { children, cascadeKeys } = entry.restoreCascade
         ? entry.restoreCascade(full)
-        : { row: full, children: [] }
+        : { children: [], cascadeKeys: [] }
+
+      const rowData = { ...full }
+      for (const key of cascadeKeys) {
+        delete rowData[key]
+      }
 
       working.set(key, { ...rowData })
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
@@ -70,12 +75,7 @@ async function buildUndoOps(
         const childEntry = resolveByTable(childTableName)
         if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
         const { table: childTable } = childEntry.descriptor
-        ops.push(
-          ctx.db
-            .insert(childTable)
-            .values(childRows as any)
-            .toSQL(),
-        )
+        ops.push(ctx.db.insert(childTable).values(childRows).toSQL())
         for (const childRow of childRows) {
           patches.push({
             table: childTableName,
