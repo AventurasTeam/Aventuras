@@ -111,6 +111,51 @@ describe('reconcileNewCharacter', () => {
     )
     expect(decision).toEqual({ kind: 'known', entityId: 'char_1', similarity: 0.9 })
   })
+
+  it('promotes exactly at TAU_HIGH', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      { entities: [entity()], embedDescriptions: stubEmbedder(TAU_HIGH) },
+    )
+    expect(decision).toEqual({ kind: 'promote', entityId: 'char_1', similarity: TAU_HIGH })
+  })
+
+  it('treats exactly TAU_LOW as ambiguous, not distinct', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      { entities: [entity()], embedDescriptions: stubEmbedder(TAU_LOW) },
+    )
+    expect(decision).toEqual({
+      kind: 'create',
+      flagged: true,
+      similarity: TAU_LOW,
+      flagReason: 'ambiguous',
+    })
+  })
+
+  it('creates flagged as no-signal when the embedder returns the wrong vector count', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [entity()],
+        embedDescriptions: async () => ({ vectors: [new Float32Array([1, 0])], dim: 2 }),
+      },
+    )
+    expect(decision).toEqual({
+      kind: 'create',
+      flagged: true,
+      similarity: null,
+      flagReason: 'no-signal',
+    })
+  })
+
+  it('treats a null namesake description as empty', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      { entities: [entity({ description: null })], embedDescriptions: stubEmbedder(0.9) },
+    )
+    expect(decision).toEqual({ kind: 'promote', entityId: 'char_1', similarity: 0.9 })
+  })
 })
 
 describe('cosine', () => {

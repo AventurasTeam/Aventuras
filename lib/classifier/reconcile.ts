@@ -24,6 +24,7 @@ export type EmbedDescriptions = (
   texts: string[],
 ) => Promise<{ vectors: Float32Array[]; dim: number }>
 
+/** Cosine similarity in [-1, 1], rounded to 6 decimals to absorb Float32Array storage noise. */
 export function cosine(a: Float32Array, b: Float32Array): number {
   const n = Math.min(a.length, b.length)
   let dot = 0
@@ -35,9 +36,6 @@ export function cosine(a: Float32Array, b: Float32Array): number {
     nb += b[i] * b[i]
   }
   if (na === 0 || nb === 0) return 0
-  // Round off float32 storage noise (embeddings are Float32Array; a stored
-  // 0.9 reads back as 0.8999999...) so threshold comparisons and equality
-  // checks see the value the caller actually meant.
   return Math.round((dot / (Math.sqrt(na) * Math.sqrt(nb))) * 1e6) / 1e6
 }
 
@@ -60,16 +58,14 @@ export async function reconcileNewCharacter(
   )
   if (!namesake) return { kind: 'create', flagged: false }
 
-  let similarity: number | null = null
+  let vectors: Float32Array[] | null = null
   try {
-    const { vectors } = await deps.embedDescriptions([
-      candidate.description,
-      namesake.description ?? '',
-    ])
-    if (vectors.length === 2) similarity = cosine(vectors[0], vectors[1])
+    const result = await deps.embedDescriptions([candidate.description, namesake.description ?? ''])
+    vectors = result.vectors
   } catch {
-    similarity = null
+    vectors = null
   }
+  const similarity = vectors && vectors.length === 2 ? cosine(vectors[0], vectors[1]) : null
 
   // No signal: a namesake exists and we cannot tell them apart. Conservative
   // create-with-flag defers to the user rather than silently merging two
