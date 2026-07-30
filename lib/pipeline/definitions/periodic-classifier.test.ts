@@ -205,6 +205,25 @@ describe('periodicClassifierPhase', () => {
     ])
   })
 
+  it('persists state: running before the model call, for the M7.2 status panel', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+    let stateAtCallTime: string | undefined
+    vi.mocked(generateStructured).mockImplementation(async () => {
+      stateAtCallTime = h.status()?.state
+      return { status: 'ok', value: extraction() }
+    })
+    await drain(h.ctx)
+    expect(stateAtCallTime).toBe('running')
+  })
+
+  it('restores the pre-run status on an early abort, so running is never stuck', async () => {
+    const h = await ctxWith({ processedThrough: 0, headPosition: 1 })
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'aborted' })
+    const { result } = await drain(h.ctx)
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
+  })
+
   it('advances processedThrough after the deltas, never before', async () => {
     const order: string[] = []
     const h = await ctxWith({

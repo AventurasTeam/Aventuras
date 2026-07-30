@@ -7,6 +7,7 @@ import {
   classifierExtractionSchema,
   idleStatus,
   nextStatusOnFailure,
+  nextStatusOnStart,
   nextStatusOnSuccess,
   PERIODIC_CLASSIFIER_KIND,
   reconcileNewCharacter,
@@ -136,6 +137,10 @@ export async function* periodicClassifierPhase(
     }),
   )
 
+  // Key-scoped like every other lifecycle write here — gives the M7.2 status
+  // panel its Running state and makes shouldCadenceFire's running guard live.
+  await writeStatus(ctx, nextStatusOnStart(status))
+
   const result = await generateStructured(
     'classifier',
     prompt,
@@ -149,7 +154,12 @@ export async function* periodicClassifierPhase(
     },
     ctx.abortSignal,
   )
-  if (result.status === 'aborted') return { status: 'aborted' }
+  // Restore the pre-run status: an abort burns no retry state, and leaving
+  // 'running' behind would permanently block shouldCadenceFire's guard.
+  if (result.status === 'aborted') {
+    await writeStatus(ctx, status)
+    return { status: 'aborted' }
+  }
   if (result.status !== 'ok') {
     const { status: next } = nextStatusOnFailure(status, {
       error: result.status === 'not-configured' ? result.kind : result.detail,

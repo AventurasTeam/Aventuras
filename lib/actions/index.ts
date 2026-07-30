@@ -1,3 +1,5 @@
+export { embedClassifierDescriptions, headPosition, readClassifierStatus } from './classifier/deps'
+export { runClassifierNow } from './classifier/run-now'
 export { defineAction } from './define-action'
 // The raw engine primitives (startSwap / resumeSwap / cancelSwap / reindexStory /
 // relabelModel) are deliberately absent: each requires the caller to already hold
@@ -14,6 +16,7 @@ export {
   relabelStory,
   RelabelBlockedError,
   RelabelDimMismatchError,
+  resolveDrainConfig,
   resolveStorySwapConfig,
   resumeStorySwap,
   setDrainKickSink,

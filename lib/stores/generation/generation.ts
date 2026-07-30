@@ -110,6 +110,23 @@ export const generationStore = {
   __reset: api.__reset,
 }
 
+// Foreground kinds only: a no-gate background run (periodic classifier) must not
+// light up the streaming placeholder, disable the contextual actions, or put the
+// composer in generating state.
+const FOREGROUND_KINDS = ['per-turn', 'chapter-close', 'translation-retry'] as const
+
+export function isForegroundGenerating(txState: TxState, branchId: string): boolean {
+  return [...txState.runs.values()].some(
+    (r) => r.branchId === branchId && (FOREGROUND_KINDS as readonly string[]).includes(r.kind),
+  )
+}
+
+export function backgroundClassifierRunning(txState: TxState, branchId: string): boolean {
+  return [...txState.runs.values()].some(
+    (r) => r.branchId === branchId && r.kind === 'periodic-classifier',
+  )
+}
+
 // Generic wait on an in-flight run of `kind`, optionally aborting it first.
 // No-op when none is running. 'cancel' fires abort then awaits terminal (the
 // doomed call winds down); 'finish' awaits the natural commit. Lives here, not

@@ -49,12 +49,14 @@ import { PER_TURN_KIND, pipelineEventBus, type PipelineError } from '@/lib/pipel
 import {
   appSettingsStore,
   awaitRunTerminal,
+  backgroundClassifierRunning,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
+  isForegroundGenerating,
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
@@ -103,7 +105,10 @@ export default function ReaderComposerRoute() {
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const isGenerating = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some((r) => r.branchId === branchId),
+    isForegroundGenerating(s.txState, branchId),
+  )
+  const classifierRunning = generationStore.useGeneration((s) =>
+    backgroundClassifierRunning(s.txState, branchId),
   )
 
   const open = currentStoryStore.useCurrentStory((s) => s)
@@ -591,7 +596,9 @@ export default function ReaderComposerRoute() {
       actions={<AppActionsMenu contextual={contextualActions} />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={isGenerating ? 'generating-narrative' : undefined}
+          activePhase={
+            isGenerating ? 'generating-narrative' : classifierRunning ? 'classifying' : undefined
+          }
           error={
             isGenerating
               ? undefined
@@ -601,7 +608,10 @@ export default function ReaderComposerRoute() {
                   ? { code: 'memory-incomplete', pendingRows: staleTotal }
                   : undefined
           }
-          onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+          // Cancelling is a per-turn affordance; a background classifier pass has none.
+          {...(isGenerating
+            ? { onCancel: () => void awaitRunTerminal(PER_TURN_KIND, 'cancel') }
+            : {})}
           onErrorTap={(code) => {
             if (code !== 'classifier-offline' && storyId != null)
               router.push(`/story-settings/${storyId}?tab=memory`)

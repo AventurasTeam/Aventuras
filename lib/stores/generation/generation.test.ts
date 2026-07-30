@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import {
   awaitRunTerminal,
+  backgroundClassifierRunning,
   generationStore,
+  isForegroundGenerating,
   isUserEditBlocked,
   type RunState,
   type TxState,
@@ -58,6 +60,31 @@ describe('generation store', () => {
     expect(runs.has('run_pred')).toBe(false)
     expect(runs.has('run_succ')).toBe(true)
     expect(runs.size).toBe(1)
+  })
+})
+
+describe('isForegroundGenerating', () => {
+  beforeEach(() => generationStore.__reset())
+
+  function runFor(kind: string, branchId = 'branch_1'): RunState {
+    return { ...run(`run_${kind}`, kind), branchId }
+  }
+
+  it('is false for a periodic-classifier run', () => {
+    generationStore.startRun(runFor('periodic-classifier'))
+    const tx = generationStore.getTxState()
+    expect(isForegroundGenerating(tx, 'branch_1')).toBe(false)
+    expect(backgroundClassifierRunning(tx, 'branch_1')).toBe(true)
+  })
+
+  it('is true for a per-turn run on the same branch', () => {
+    generationStore.startRun(runFor('per-turn'))
+    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(true)
+  })
+
+  it('ignores runs on other branches', () => {
+    generationStore.startRun(runFor('per-turn', 'branch_other'))
+    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(false)
   })
 })
 
