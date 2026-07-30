@@ -55,7 +55,7 @@ describe('bundled pack', () => {
 
     expect(instruction(classifier)).toBe(instruction(refresh))
     expect(instruction(refresh)).toContain('exactly 2 distinct entries')
-    expect(instruction(refresh)).toContain('[cat1] Action: act')
+    expect(instruction(refresh)).toContain('id "cat1" = Action — use it for: act')
     // The tagged-block macro is the OTHER contract; it must not leak in here.
     expect(classifier + refresh).not.toContain('<suggestions>')
   })

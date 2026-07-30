@@ -990,8 +990,8 @@ describe('per-turn-piggyback', () => {
 
       const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
       expect(prompt).toContain('exactly 2 distinct entries')
-      expect(prompt).toContain('[cat1] Action: act')
-      expect(prompt).toContain('[cat2] Dialogue: say')
+      expect(prompt).toContain('id "cat1" = Action — use it for: act')
+      expect(prompt).toContain('id "cat2" = Dialogue — use it for: say')
       expect(prompt).toContain('one or two sentences')
       expect(prompt).not.toContain('Hidden')
       expect(prompt).not.toContain('cat3')

@@ -33,7 +33,7 @@ export type SuggestionRefreshInput = { refreshGuidance: string }
 export const suggestionRefreshSchema = z.object({
   suggestions: z.array(
     z.object({
-      categoryRef: z.string().describe('category ref from the prompt list, without brackets'),
+      categoryRef: z.string().describe('opaque category id from the prompt list, e.g. cat1'),
       text: z.string().describe("complete prose for the reader's next turn"),
     }),
   ),

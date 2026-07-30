@@ -77,6 +77,14 @@ export const LoadingEmpty: Story = { args: { phase: 'loading', chips: [] } }
 
 export const Error: Story = { args: { phase: 'error' } }
 
+/** A turn in flight: same spinner, but ⟳ stays (disabled) — there is no strip-owned run to cancel. */
+export const LockedByTurn: Story = { args: { disabled: true } }
+
+/** Locked by a turn with nothing to show: spinner replaces the ⟳ Generate button. */
+export const LockedByTurnEmpty: Story = {
+  args: { disabled: true, phase: 'empty-state', chips: [] },
+}
+
 export const Collapsed: Story = { args: { collapsed: true } }
 
 /** Refresh is reachable from collapsed, so the busy signal has to survive it. */

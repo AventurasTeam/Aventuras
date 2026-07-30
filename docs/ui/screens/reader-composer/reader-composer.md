@@ -639,9 +639,18 @@ on its own — the `disabled` prop is what covers a lock this strip
 did not cause.) The route can't know in advance whether this turn's
 piggyback or classifier-fold emission will actually produce chips —
 zero enabled categories or capability gating can silently skip it —
-so claiming "Generating suggestions…" could lie. Whatever the strip
-was already showing (chips, or the `empty-state` ⟳ Generate button)
-just locks until the turn resolves.
+so claiming "Generating suggestions…" could lie. What the strip was
+already showing stays put and locks until the turn resolves.
+
+It does, however, carry **the same spinner** a re-roll shows: the
+chips on screen are about to be replaced and nothing in the strip is
+actionable, so a static stack reads as interactive-but-broken. The
+spinner is the whole of it — no "Generating suggestions…" line, and
+no ✕, since there is no strip-owned run to cancel and the turn's
+cancel lives on the composer. An anchor carrying no chips shows the
+spinner **instead of** the ⟳ Generate button for the turn's
+duration, rather than offering to generate the very thing the
+running turn produces.
 
 **Orphan categories.** A chip whose stored `categoryId` no longer
 resolves (user deleted the category since emission) renders with

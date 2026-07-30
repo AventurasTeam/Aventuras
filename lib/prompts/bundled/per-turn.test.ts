@@ -206,7 +206,12 @@ describe('bundled per-turn template — suggestionsFire gating', () => {
   it('includes the suggestion-emission macro when suggestionsFire is true', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
     expect(rendered).toContain('<suggestions>')
-    expect(rendered).toContain('[cat1] Action: A decisive move.')
+    // The id is its own labelled field, not bracketed beside the name: a model
+    // that reads "[cat1] Action" as one label emits an unresolvable ref.
+    expect(rendered).toContain('id "cat1" = Action — use it for: A decisive move.')
+    // The skeleton interpolates a real id rather than the word "ref", which a
+    // model would copy verbatim into the attribute.
+    expect(rendered).toContain('<item category="cat1">')
   })
 
   // stripTrailingBlocks (lib/piggyback/parse.ts) cuts prose at the EARLIEST

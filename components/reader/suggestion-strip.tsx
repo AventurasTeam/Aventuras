@@ -150,6 +150,13 @@ export function SuggestionStrip({
 
   const busy = phase === 'loading'
   const locked = busy || disabled
+  // A foreign lock (a turn in flight) gets the same spinner: whatever is on
+  // screen is about to be replaced and nothing here is actionable, so a static
+  // stack reads as interactive-but-broken. It deliberately does NOT get the
+  // "Generating suggestions…" line or the ✕ — the route cannot know this turn
+  // will emit chips at all (zero enabled categories or capability gating can
+  // skip it silently), and the turn's cancel lives on the composer.
+  const inFlight = busy || disabled
   // The body's Generate button IS the refresh affordance; two ⟳ one above the
   // other read as different actions. Collapsing hides it, so the chrome one
   // comes back.
@@ -171,15 +178,6 @@ export function SuggestionStrip({
         </Button>
       </View>
     )
-  } else if (phase === 'empty-state') {
-    body = (
-      <View className="items-center">
-        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={locked}>
-          <Icon as={RefreshCw} size="sm" />
-          <Text>{t('reader:suggestions.generate')}</Text>
-        </Button>
-      </View>
-    )
   } else if (busy && chips.length === 0) {
     body = (
       <View className="flex-row items-center justify-center gap-2 py-3">
@@ -187,6 +185,25 @@ export function SuggestionStrip({
         <Text size="sm" variant="muted">
           {t('reader:suggestions.loading')}
         </Text>
+      </View>
+    )
+  } else if (disabled && chips.length === 0) {
+    // Ahead of the empty-state branch on purpose: a turn in flight would
+    // otherwise leave a dead ⟳ Generate offering to generate the very thing
+    // the running turn produces. The spinner alone waits without claiming
+    // chips are coming.
+    body = (
+      <View className="items-center py-3">
+        <Spinner size="md" colorSlot="--fg-muted" />
+      </View>
+    )
+  } else if (phase === 'empty-state') {
+    body = (
+      <View className="items-center">
+        <Button variant="ghost" size="sm" onPress={onRefresh} disabled={locked}>
+          <Icon as={RefreshCw} size="sm" />
+          <Text>{t('reader:suggestions.generate')}</Text>
+        </Button>
       </View>
     )
   } else {
@@ -207,7 +224,7 @@ export function SuggestionStrip({
             />
           ))}
         </View>
-        {busy ? (
+        {inFlight ? (
           <View
             style={POINTER_EVENTS_NONE}
             className="absolute inset-0 items-center justify-center"

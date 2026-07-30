@@ -465,8 +465,8 @@ describe('suggestion-refresh emission phase', () => {
     const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
     expect(prompt).toContain('A keep on a hill.')
     expect(prompt).toContain('The gate groans open.')
-    expect(prompt).toContain('[cat1] Action')
-    expect(prompt).toContain('[cat2] Dialogue')
+    expect(prompt).toContain('id "cat1" = Action')
+    expect(prompt).toContain('id "cat2" = Dialogue')
     // Structured call: it must ask for the JSON field, never the tagged block
     // the narrative fold's shared macro instructs.
     expect(prompt).toContain('"suggestions" field')
