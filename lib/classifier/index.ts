@@ -7,3 +7,11 @@ export { cosine, reconcileNewCharacter, TAU_HIGH, TAU_LOW } from './reconcile'
 export type { EmbedDescriptions, FlagReason, ReconcileDecision } from './reconcile'
 export { buildClassifierActions } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
+export {
+  BACKOFF_MS,
+  idleStatus,
+  nextStatusOnFailure,
+  nextStatusOnStart,
+  nextStatusOnSuccess,
+  shouldCadenceFire,
+} from './status'
