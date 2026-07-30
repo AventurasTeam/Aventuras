@@ -7,7 +7,10 @@ export { cosine, reconcileNewCharacter, TAU_HIGH, TAU_LOW } from './reconcile'
 export type { EmbedDescriptions, FlagReason, ReconcileDecision } from './reconcile'
 export { buildClassifierActions } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
+export { createClassifierScheduler } from './scheduler'
+export type { ClassifierSchedulerDeps, StartRunOutcome } from './scheduler'
 export {
+  retryDelayForStatus,
   BACKOFF_MS,
   idleStatus,
   nextStatusOnFailure,
