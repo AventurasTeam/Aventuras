@@ -35,10 +35,16 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 {% for entry in recentEntries %}
 {{ entry.content }}
 {% endfor %}
-{%- if suggestionsFire %}
+{%- comment -%}
+No suggestionsFire guard, unlike per-turn and the fallback classifier: those
+emit chips only under a run-level condition (the tagged block firing / no chips
+captured yet), while producing chips is the entire reason this call exists. The
+phase returns before rendering when the palette is empty, so a guard here could
+never be false — and a refresh prompt with the section omitted would be a call
+asking for nothing.
+{%- endcomment %}
 # Next-turn options
 {% include 'macro_suggestion_emission_json' %}
-{%- endif -%}
 {%- if refreshGuidance != blank %}
 
 The reader has already started writing their next turn:
