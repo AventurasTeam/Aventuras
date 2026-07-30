@@ -1,13 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import {
-  awaitRunTerminal,
-  definePipeline,
-  runPipeline,
-  type PhaseContext,
-  type PhaseResult,
-} from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
+import { definePipeline, runPipeline, type PhaseContext, type PhaseResult } from '@/lib/pipeline'
+import { awaitRunTerminal, generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 

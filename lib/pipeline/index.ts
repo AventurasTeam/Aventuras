@@ -9,7 +9,7 @@ export {
   configureDeltaActionPort,
   type DeltaActionPort,
 } from './runtime/action-port'
-export { awaitRunTerminal, runPipeline, type RunCtx } from './runtime/orchestrator'
+export { runPipeline, type RunCtx } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
 export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
 export type {

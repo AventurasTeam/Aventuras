@@ -95,17 +95,6 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
-// Generic wait on an in-flight run of `kind`, optionally aborting it first.
-// No-op when none is running. 'cancel' fires abort then awaits terminal (the
-// doomed call winds down); 'finish' awaits the natural commit. The waiter need
-// not have started the run — it awaits the run's own terminal deferred.
-export function awaitRunTerminal(kind: string, disposition: 'finish' | 'cancel'): Promise<void> {
-  const run = [...generationStore.getTxState().runs.values()].find((r) => r.kind === kind)
-  if (!run) return Promise.resolve()
-  if (disposition === 'cancel') run.abortController.abort()
-  return run.terminal
-}
-
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
     let result: MutationResult

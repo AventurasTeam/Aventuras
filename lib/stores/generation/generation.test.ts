@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { generationStore, isUserEditBlocked, type RunState, type TxState } from './generation'
+import {
+  awaitRunTerminal,
+  generationStore,
+  isUserEditBlocked,
+  type RunState,
+  type TxState,
+} from './generation'
 
 function run(id: string, kind = 'synthetic'): RunState {
   return {
@@ -52,5 +58,49 @@ describe('generation store', () => {
     expect(runs.has('run_pred')).toBe(false)
     expect(runs.has('run_succ')).toBe(true)
     expect(runs.size).toBe(1)
+  })
+})
+
+describe('awaitRunTerminal', () => {
+  function runFor(kind: string) {
+    let resolveTerminal!: () => void
+    const terminal = new Promise<void>((r) => {
+      resolveTerminal = r
+    })
+    return {
+      runId: `run_${kind}`,
+      kind,
+      gateBehavior: 'no-gate' as const,
+      actionId: 'act_1',
+      storyId: 'story_1',
+      branchId: 'branch_1',
+      abortController: new AbortController(),
+      currentPhase: '',
+      intermediates: {},
+      terminal,
+      resolveTerminal,
+    }
+  }
+
+  it('resolves immediately when no run of the kind is in flight', async () => {
+    await expect(awaitRunTerminal('periodic-classifier', 'cancel')).resolves.toBeUndefined()
+  })
+
+  it('aborts then awaits the terminal on cancel', async () => {
+    const run = runFor('periodic-classifier')
+    generationStore.startRun(run)
+    const waited = awaitRunTerminal('periodic-classifier', 'cancel')
+    expect(run.abortController.signal.aborted).toBe(true)
+    run.resolveTerminal()
+    await expect(waited).resolves.toBeUndefined()
+  })
+
+  it('does not abort on finish', async () => {
+    const run = runFor('periodic-classifier')
+    generationStore.startRun(run)
+    const waited = awaitRunTerminal('periodic-classifier', 'finish')
+    expect(run.abortController.signal.aborted).toBe(false)
+    run.resolveTerminal()
+    await waited
   })
 })

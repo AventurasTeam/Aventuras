@@ -109,3 +109,15 @@ export const generationStore = {
   setReversalInProgress: api.setReversalInProgress,
   __reset: api.__reset,
 }
+
+// Generic wait on an in-flight run of `kind`, optionally aborting it first.
+// No-op when none is running. 'cancel' fires abort then awaits terminal (the
+// doomed call winds down); 'finish' awaits the natural commit. Lives here, not
+// in lib/pipeline, so a reversal in lib/actions can await a classifier terminal
+// without importing the orchestrator.
+export function awaitRunTerminal(kind: string, disposition: 'finish' | 'cancel'): Promise<void> {
+  const run = [...getTxState().runs.values()].find((r) => r.kind === kind)
+  if (!run) return Promise.resolve()
+  if (disposition === 'cancel') run.abortController.abort()
+  return run.terminal
+}

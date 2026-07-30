@@ -84,7 +84,7 @@ export type { AppSettingsSnapshot, BootHydrateResult } from './app-settings/app-
 export type { RelationshipView } from './character-relationships/character-relationships'
 export type { OpenStory } from './current-story/current-story'
 export type { WorkingSetStore } from './factory/working-set-store'
-export { isUserEditBlocked } from './generation/generation'
+export { awaitRunTerminal, isUserEditBlocked } from './generation/generation'
 export type { RunState, TxState } from './generation/generation'
 export type { NavigationSnapshot } from './navigation/navigation'
 export type { OpenFailure, OpenFailureKind, StoriesSnapshot } from './stories/stories'
