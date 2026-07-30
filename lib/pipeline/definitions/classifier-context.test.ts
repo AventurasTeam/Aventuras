@@ -5,24 +5,16 @@ import { VARIABLES } from '@/lib/prompts'
 
 import { buildClassifierContext } from './classifier-context'
 
-const definition = {
-  setting: 's',
-  genre: { promptBody: '' },
-  tone: { promptBody: '' },
-} as never
-
 describe('buildClassifierContext', () => {
-  it('emits exactly the variables pinned for the classifierContext group', () => {
+  it('emits exactly the variables pinned for the classifierContext group, nothing more', () => {
     const context = buildClassifierContext({
       window: { turns: [{ handle: 't1', entryId: 'e1', position: 1, content: 'prose' }] } as never,
       entities: [],
       happenings: [],
-      lore: [],
-      definition,
       idMap: new IdBiMap(),
     })
-    const required = VARIABLES.classifierContext.filter((v) => v.required).map((v) => v.name)
-    for (const name of required) expect(context).toHaveProperty(name)
+    const declared = VARIABLES.classifierContext.map((v) => v.name)
+    expect(Object.keys(context).sort()).toEqual(declared.sort())
   })
 
   it('substitutes entity and happening ids to placeholders but leaves prose alone', () => {
@@ -43,8 +35,6 @@ describe('buildClassifierContext', () => {
       happenings: [
         { id: 'hap_22222222-2222-2222-2222-222222222222', title: 'The ford ambush' } as never,
       ],
-      lore: [],
-      definition,
       idMap,
     })
     expect((context.entities as { id: string }[])[0].id).toBe('c1')
@@ -60,8 +50,6 @@ describe('buildClassifierContext', () => {
       } as never,
       entities: [],
       happenings: [],
-      lore: [],
-      definition,
       idMap: new IdBiMap(),
     })
     // A raw entry id in the prompt would be an id the model can neither use nor

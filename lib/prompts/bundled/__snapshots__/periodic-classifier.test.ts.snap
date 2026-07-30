@@ -4,22 +4,15 @@ exports[`periodic classifier template > carries the hard-finality retirement dir
 "You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.
 
 Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
-
 - [c1] Kael (character) — A courier.
 - [c2] Aria (character, staged) — His sister.
 
-
 Known happenings, same ID rule:
-
 - [hp1] The satchel was stolen
 
-
 Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it:
-
 [t1] Kael falls at the ford, lifeless.
-
 [t2] Aria hears of it from Jorin.
-
 
 Rules:
 

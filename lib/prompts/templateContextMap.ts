@@ -98,27 +98,6 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description: 'Existing happenings, so the model can reference rather than duplicate them.',
       required: false,
     },
-    {
-      name: 'lore',
-      type: 'Lore[]',
-      category: 'Plot',
-      description: 'Branch lore entries.',
-      required: false,
-    },
-    {
-      name: 'definition',
-      type: 'StoryDefinition',
-      category: 'Story Config',
-      description: 'mode/narration/genre/tone/setting; genre/tone are { label, promptBody }.',
-      required: true,
-    },
-    {
-      name: 'calendarVocabulary',
-      type: 'CalendarVocabulary | null',
-      category: 'Story Config',
-      description: 'Vocabulary descriptor for the active calendar system.',
-      required: false,
-    },
   ],
   wizard: [
     {

@@ -1,21 +1,29 @@
+// The "LATEST contributing turn" clause in the Provenance rule below is
+// load-bearing, not stylistic: classifierExtractionSchema carries a single
+// sourceTurn per fact, so nothing downstream can enforce cross-turn
+// attribution — this line is the only thing that does. Keep it if editing.
 export const PERIODIC_CLASSIFIER = `You are extracting structured world state from recent story prose. Report only what the prose supports; never invent.
 
 Known entities, referenced only by the ID shown in brackets — write it without the brackets, never invent one:
-{% for e in entities %}
+{%- for e in entities %}
 - [{{ e.id }}] {{ e.name }} ({{ e.kind }}{% if e.status != 'active' %}, {{ e.status }}{% endif %}){% if e.description %} — {{ e.description }}{% endif %}
 {%- endfor %}
-{% if entities.size == 0 %}(none){% endif %}
+{%- unless entities and entities.size > 0 %}
+(none)
+{%- endunless %}
 
 Known happenings, same ID rule:
-{% for h in happenings %}
+{%- for h in happenings %}
 - [{{ h.id }}] {{ h.title }}
 {%- endfor %}
-{% if happenings.size == 0 %}(none){% endif %}
+{%- unless happenings and happenings.size > 0 %}
+(none)
+{%- endunless %}
 
 Turns to classify. Each is labelled with a turn handle in brackets — every fact you emit must carry the handle of the turn whose prose produced it:
-{% for turn in turns %}
+{%- for turn in turns %}
 [{{ turn.handle }}] {{ turn.content }}
-{% endfor %}
+{%- endfor %}
 
 Rules:
 
