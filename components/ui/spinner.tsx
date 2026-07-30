@@ -12,7 +12,14 @@ const SPINNER_PX = {
 type SpinnerSize = keyof typeof SPINNER_PX
 
 type SpinnerProps = {
-  /** `'sm'` / `'md'` / `'lg'` matches Icon's 16/20/24 scale. Numeric override accepted. */
+  /**
+   * `'sm'` / `'md'` / `'lg'` matches Icon's 16/20/24 scale. Numeric override
+   * accepted, on every platform. Reading RN's `ActivityIndicator` source
+   * suggests otherwise — a number leaves the native `size` prop undefined and
+   * only styles the wrapper box — but Android's drawable scales to those
+   * bounds anyway. Measured on device (2026-07-31); don't "fix" it from the
+   * source alone.
+   */
   size?: SpinnerSize | number
   /**
    * Theme slot driving the spinner color (e.g. `'--fg-primary'`,

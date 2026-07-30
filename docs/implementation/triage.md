@@ -675,22 +675,3 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   whose "a phase reads the domain stores directly" no longer holds (the
   "calls the group's context builder per render" half is unchanged).
   Surfaced by M3.7a post-merge review (2026-07-30).
-
-- **`Spinner`'s numeric `size` is a no-op on Android, and every size is
-  likely wrong there.** `components/ui/spinner.tsx` splits web (an SVG it
-  scales itself) from native (`ActivityIndicator`), and the native branch
-  forwards `size={resolved}` straight through. RN's `ActivityIndicator`
-  (`node_modules/react-native/Libraries/Components/ActivityIndicator/ActivityIndicator.js`)
-  only maps `'small'` / `'large'` onto the native `size` prop — for a number
-  it leaves that prop undefined and applies `{width, height}` to the wrapper
-  only, so the Android drawable renders at its own intrinsic size inside a
-  box of the requested one. Since the primitive converts **every** call to a
-  number before reaching that branch (`SPINNER_PX[size]`), no consumer gets
-  the size it asked for on Android: `size="sm"` (16px) most likely overflows
-  its box and `size="lg"` (24px) under-fills it. Unverified on device — it
-  is a code reading, not a measurement, and nothing in the suite covers
-  native rendering. The fix is to pass the `'large'` enum (a 36×36 box, per
-  RN's own `styles.sizeLarge`) and apply `transform: [{ scale: resolved / 36 }]`,
-  which makes the prop's documented "Numeric override accepted" true off web.
-  Touches 11 call sites' appearance, so it wants a device check rather than a
-  drive-by. Surfaced by M3.7a suggestion-strip polish (2026-07-30).
