@@ -8,13 +8,13 @@ export type { EmbedDescriptions, FlagReason, ReconcileDecision } from './reconci
 export { buildClassifierActions } from './plan'
 export type { PlanDeps, PlannedWrite, PlanResult } from './plan'
 export { createClassifierScheduler } from './scheduler'
-export type { ClassifierSchedulerDeps, StartRunOutcome } from './scheduler'
+export type { ClassifierSchedulerDeps, RunNowOutcome, StartRunOutcome } from './scheduler'
 export {
-  retryDelayForStatus,
   BACKOFF_MS,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
+  retryDelayForStatus,
   shouldCadenceFire,
 } from './status'

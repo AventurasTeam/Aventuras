@@ -6,6 +6,7 @@ import {
   nextStatusOnFailure,
   nextStatusOnStart,
   nextStatusOnSuccess,
+  retryDelayForStatus,
   shouldCadenceFire,
 } from './status'
 
@@ -94,6 +95,21 @@ describe('shouldCadenceFire', () => {
 
   it('treats a non-positive cadence as "every turn" rather than dividing by zero', () => {
     expect(shouldCadenceFire({ status: idleStatus(), headPosition: 1, cadence: 0 })).toBe(true)
+  })
+})
+
+describe('retryDelayForStatus', () => {
+  it('returns null for every state other than retrying', () => {
+    for (const state of ['idle', 'running', 'failed-persistent'] as const) {
+      expect(retryDelayForStatus({ ...idleStatus(), state })).toBeNull()
+    }
+  })
+
+  // Unreachable through nextStatusOnFailure (attempt 1 is the first retryCount
+  // it ever produces), but reachable from a hand-edited or migrated row —
+  // pinning this keeps the scheduler from scheduling a bogus BACKOFF_MS[-1] read.
+  it('returns null for retrying with retryCount 0', () => {
+    expect(retryDelayForStatus({ ...idleStatus(), state: 'retrying', retryCount: 0 })).toBeNull()
   })
 })
 
