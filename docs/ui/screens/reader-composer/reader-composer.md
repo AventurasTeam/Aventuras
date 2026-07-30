@@ -626,13 +626,28 @@ state — it is not an anchor, so the previous reply's chips hold.
   dim under a centred spinner and the chrome ⟳ becomes ✕; the
   outgoing chips stay put rather than clearing, since a re-roll that
   returns nothing usable keeps them
-- `error` — generation failed (inline error with Retry)
+- `error` — generation failed. The notice sits **above the chips it
+  failed to replace**, which stay tappable, on the same reasoning
+  that keeps them under the `loading` spinner. A deterministic
+  config failure (no profile assigned, profile or provider missing)
+  shows the route to settings in place of Retry, which could not
+  succeed
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
   (`stories.settings.suggestionsEnabled = false`); panel never
   appears
 - `empty-state` — terminal entry has no `nextTurnSuggestions`;
   single ⟳ Generate affordance rendered where chips would be
+
+**Bounding model output.** Chip prose is untrusted, and the strip
+sits above the composer in a non-scrolling column, so two caps hold
+it: a chip longer than `MAX_SUGGESTION_CHARS` (400) is **dropped**
+during resolution and counted as a drop, and the chip stack scrolls
+once it would exceed 38% of viewport height. Dropped rather than
+truncated because a tap inserts the chip's text into the composer
+verbatim — a clipped chip would hand the writer mangled input. The
+prompt's "one or two sentences" runs 120-200 characters, so a
+compliant model never reaches either cap.
 
 **Not a `loading` state: the per-turn lock.** While a per-turn
 pipeline is in flight, the strip locks chip taps and the refresh

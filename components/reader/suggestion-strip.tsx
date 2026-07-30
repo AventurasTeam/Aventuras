@@ -1,6 +1,6 @@
 import { AlertTriangle, ChevronDown, ChevronUp, RefreshCw, X } from 'lucide-react-native'
-import { useMemo, type ReactNode } from 'react'
-import { Platform, Pressable, View } from 'react-native'
+import { useMemo, useState, type ReactNode } from 'react'
+import { Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -61,18 +61,22 @@ const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 // One single-line chip row, from the markup in SuggestionChipRow below: 2px
 // borders + 16px (py-2) + a 20px overline (4px py-0.5 over a 16px text-xs
-// line) + 4px (gap-1) + a 20px text-sm line.
+// line) + 4px (gap-1) + a 20px text-sm line. An upper bound on the overlay
+// spinner only — never an assumed row height, since a wrapped chip is taller.
 const CHIP_ROW_PX = 62
-const CHIP_GAP_PX = 6 // gap-1.5 on the stack
+
+// Share of the viewport the chip stack may occupy before it scrolls. The strip
+// sits above the composer in a non-scrolling column, so an uncapped stack
+// pushes the input off screen with no way back except the collapse chevron.
+const MAX_STACK_VIEWPORT_FRACTION = 0.38
 
 // 1.5 rows, but never taller than the stack it covers: the overlay is
-// positioned rather than clipped, so at suggestionCount 1 the untrimmed size
-// would spill over the chrome row above and the composer below. Chips that
-// wrap only make the real stack taller than this estimate, so the clamp errs
-// toward the smaller spinner rather than an overflowing one.
-function overlaySpinnerPx(chipCount: number): number {
-  const stack = chipCount * CHIP_ROW_PX + Math.max(0, chipCount - 1) * CHIP_GAP_PX
-  return Math.max(SPINNER_PX.lg, Math.min(Math.round(CHIP_ROW_PX * 1.5), stack - 12))
+// positioned rather than clipped, so over one short chip the untrimmed size
+// would spill onto the chrome row above and the composer below. Driven by the
+// measured stack rather than a per-count estimate — chips wrap, so any
+// computed height would drift from the real one.
+function overlaySpinnerPx(stackPx: number): number {
+  return Math.max(SPINNER_PX.lg, Math.min(Math.round(CHIP_ROW_PX * 1.5), stackPx - 12))
 }
 
 function tintOf(hex: string, alpha: number): string {
@@ -150,6 +154,11 @@ export function SuggestionStrip({
 }: SuggestionStripProps) {
   const { theme } = useTheme()
   const tintAlpha = OVERLINE_TINT_ALPHA[theme.mode]
+  const { height: windowHeight } = useWindowDimensions()
+  const maxStackPx = Math.round(windowHeight * MAX_STACK_VIEWPORT_FRACTION)
+  // Measured, not derived: the overlay spinner has to fit the stack as rendered,
+  // and a wrapped chip makes any arithmetic estimate wrong.
+  const [stackPx, setStackPx] = useState(0)
 
   // Map, not a plain object: a stored categoryId of 'constructor' must miss.
   const categoryById = useMemo(
@@ -173,7 +182,13 @@ export function SuggestionStrip({
   const emptyStateOwnsRefresh = phase === 'empty-state' && !collapsed
 
   const chipStack = (
-    <View className={cn('gap-1.5', locked && 'opacity-50')}>
+    <ScrollView
+      style={{ maxHeight: maxStackPx }}
+      className={cn(locked && 'opacity-50')}
+      contentContainerClassName="gap-1.5"
+      showsVerticalScrollIndicator={false}
+      onLayout={(e) => setStackPx(e.nativeEvent.layout.height)}
+    >
       {chips.map((chip, index) => (
         <SuggestionChipRow
           key={index}
@@ -184,7 +199,7 @@ export function SuggestionStrip({
           onTapChip={onTapChip}
         />
       ))}
-    </View>
+    </ScrollView>
   )
 
   let body: ReactNode
@@ -258,7 +273,7 @@ export function SuggestionStrip({
             style={POINTER_EVENTS_NONE}
             className="absolute inset-0 items-center justify-center"
           >
-            <Spinner size={overlaySpinnerPx(chips.length)} colorSlot="--accent" />
+            <Spinner size={overlaySpinnerPx(stackPx)} colorSlot="--accent" />
           </View>
         ) : null}
       </View>

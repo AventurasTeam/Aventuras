@@ -7,6 +7,7 @@ export { substitutePiggybackIds } from './substitute'
 export {
   buildSuggestionSlots,
   findSuggestionAnchor,
+  MAX_SUGGESTION_CHARS,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   shouldShowSuggestionStrip,

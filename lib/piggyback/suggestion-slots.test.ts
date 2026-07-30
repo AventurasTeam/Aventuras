@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildSuggestionSlots,
   findSuggestionAnchor,
+  MAX_SUGGESTION_CHARS,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   shouldShowSuggestionStrip,
@@ -172,6 +173,31 @@ describe('resolveSuggestionItems', () => {
     )
     expect(items).toEqual([{ categoryId: 'a', text: 'kept' }])
     expect(droppedCount).toBe(1)
+  })
+
+  // A chip's text is inserted into the composer verbatim, and the strip has no
+  // way to shrink runaway prose without mangling it, so an over-long one is
+  // dropped like an unresolvable ref rather than truncated.
+  it('drops an item longer than the character cap, counting it as a drop', () => {
+    const { items, droppedCount } = resolveSuggestionItems(
+      [
+        { categoryRef: 'cat1', text: 'x'.repeat(MAX_SUGGESTION_CHARS + 1) },
+        { categoryRef: 'cat2', text: 'kept' },
+      ],
+      emission(5),
+    )
+    expect(items).toEqual([{ categoryId: 'b', text: 'kept' }])
+    expect(droppedCount).toBe(1)
+  })
+
+  it('keeps an item exactly at the character cap', () => {
+    const text = 'x'.repeat(MAX_SUGGESTION_CHARS)
+    const { items, droppedCount } = resolveSuggestionItems(
+      [{ categoryRef: 'cat1', text }],
+      emission(5),
+    )
+    expect(items).toEqual([{ categoryId: 'a', text }])
+    expect(droppedCount).toBe(0)
   })
 
   it('clamps to emission.count without counting the truncation as a drop', () => {

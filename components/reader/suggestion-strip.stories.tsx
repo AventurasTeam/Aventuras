@@ -141,6 +141,16 @@ export const DisabledCategory: Story = {
   },
 }
 
+/** Long-but-legal chips at a high count: the stack scrolls instead of pushing the composer away. */
+export const OverflowingStack: Story = {
+  args: {
+    chips: Array.from({ length: 6 }, (_, i) => ({
+      categoryId: categories[i % 3]!.id,
+      text: `${'You weigh the options carefully, turning each one over before you commit to anything at all. '.repeat(3)}(${i + 1})`,
+    })),
+  },
+}
+
 /** Custom hex straight from the ColorPicker, plus the 3-digit shorthand it also accepts. */
 export const CustomHexColor: Story = {
   args: {
