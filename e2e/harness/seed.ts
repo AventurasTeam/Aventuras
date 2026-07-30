@@ -103,6 +103,24 @@ export function markSwapPending(dbPath: string, storyId: string, targetModelId: 
   }
 }
 
+// Force the classifier to fire on the next committed turn. Runs before launch.
+export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
+      settings: string
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.classifierCadence = cadence
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Clear taggedBlockReliable on every cached model so piggyback can't ride
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.
