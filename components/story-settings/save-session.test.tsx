@@ -52,6 +52,7 @@ type SectionFixture = {
   dirtyFields: readonly string[]
   getPatch: Mock<() => Partial<StorySettings>>
   reset: Mock<() => void>
+  invalidReason?: string
 }
 
 function makeSection(
@@ -70,6 +71,7 @@ function Section({ fixture }: { fixture: SectionFixture }) {
     dirtyFields: fixture.dirtyFields,
     getPatch: fixture.getPatch,
     reset: fixture.reset,
+    invalidReason: fixture.invalidReason,
   })
   return null
 }
@@ -1045,5 +1047,50 @@ describe('useStorySettingsSection', () => {
 
     expect(renders.count).toBeLessThanOrEqual(3)
     expect(session.api().snapshot.dirtyFields).toHaveLength(2)
+  })
+})
+
+describe('StorySettingsSaveSessionProvider — validity', () => {
+  it('refuses the save while a dirty section is invalid, without calling onCommit', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'invalid', reason: 'dup' })
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(aids.reset).not.toHaveBeenCalled()
+  })
+
+  it('leaves a pending leave open when the save is refused as invalid', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.api().pendingLeave).toBe(true)
+  })
+
+  it('commits normally once the section reports itself valid again', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'], {
+      suggestionsEnabled: true,
+    })
+    const session = mountSession({ children: sectionsOf(aids) })
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
   })
 })

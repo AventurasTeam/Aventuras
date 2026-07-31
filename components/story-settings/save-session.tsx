@@ -40,6 +40,8 @@ type SectionCallbacks = {
 type SaveOutcome =
   | { status: 'noop' }
   | { status: 'busy' }
+  /** A dirty section's draft cannot be written. Nothing was attempted. */
+  | { status: 'invalid'; reason: string }
   | { status: 'committed'; stillDirty: boolean; storeStale: boolean }
   | { status: 'rejected'; error: unknown }
 
@@ -238,6 +240,15 @@ export function StorySettingsSaveSessionProvider({
       return { status: 'noop' }
     }
 
+    // Refused, not failed: nothing was attempted, so a waiting leave stays
+    // queued rather than being settled or dropped — the user still has Discard
+    // and Cancel, and Save re-arms the moment the section reports itself valid.
+    const invalidReason = computeSnapshot(stateRef.current.sections).invalidReason
+    if (invalidReason != null) {
+      logger.warn('action_layer.story_settings_save_blocked', { reason: invalidReason })
+      return { status: 'invalid', reason: invalidReason }
+    }
+
     // What each section's draft looked like when its patch was read, so an
     // edit made while the write was in flight isn't re-derived away after it.
     const committed = new Map<string, unknown>()
@@ -426,6 +437,13 @@ type SectionRegistration = {
    */
   getPatch: () => Partial<StorySettings>
   /**
+   * Non-null while this section is dirty but cannot be written — a
+   * user-facing reason (e.g. "Two categories share a label"). The surface
+   * refuses the save and renders this beside the dirty-field list. Ignored
+   * while the section is clean, since a clean section is never merged.
+   */
+  invalidReason?: string
+  /**
    * Drop this section's local draft so it re-derives from the `settings` the
    * surface passes down. Fires on Discard, and after a save for each section
    * whose draft still matches what that save wrote — a section the user kept
@@ -450,6 +468,7 @@ export function useStorySettingsSection({
   tab,
   dirtyFields,
   getPatch,
+  invalidReason,
   reset,
 }: SectionRegistration): void {
   const registry = useContext(SectionRegistryContext)
@@ -470,8 +489,8 @@ export function useStorySettingsSection({
   fieldsRef.current = dirtyFields
   const dirtyKey = JSON.stringify(dirtyFields)
   useEffect(() => {
-    publish({ id, tab, dirtyFields: fieldsRef.current })
-  }, [publish, id, tab, dirtyKey])
+    publish({ id, tab, dirtyFields: fieldsRef.current, invalidReason })
+  }, [publish, id, tab, dirtyKey, invalidReason])
 
   useEffect(() => () => unpublish(id), [unpublish, id])
 }
