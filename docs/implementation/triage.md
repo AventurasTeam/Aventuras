@@ -695,3 +695,72 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   whether pre-flight should resolve per-story at all (it is currently
   documented as an app-config check). Surfaced by M3.7a review
   (2026-07-31).
+
+- **The phone list state hides a dirty save bar.** `StorySettingsShell`
+  renders the bar inside the detail pane, and `MasterDetailLayout`
+  drops that pane on phone when no tab is selected. No data loss —
+  panels stay mounted, and `←` and window-close both route through
+  the guard — but the unsaved state is invisible. Canon argues
+  against the obvious fix:
+  [`save-sessions.md → Save bar`](../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
+  says the bar "spans the editable pane only — never the rail," and
+  [`story-settings.md → Mobile expression`](../ui/screens/story-settings/story-settings.md#mobile-expression)
+  puts it at "the bottom edge of the detail-route's scroll region."
+  Accepted at M3.7b planning; the call belongs to M4.4, the surface's
+  real owner. Surfaced by M3.7b implementation (2026-07-31).
+
+- **M2.5's composer modes are unreachable on every real story.**
+  `composerModesEnabled` defaults to `false` in
+  `lib/db/stories/story-settings-defaults.ts`, and app-level
+  `defaultStorySettings` carries only `activePackId`, so no story is
+  ever created with it on and no UI can flip it — the same
+  dead-feature shape M3.7b just fixed for `suggestionsEnabled`. Canon
+  puts its toggle and wrap-POV in the same Authoring aids grouping
+  M3.7b's section lives in, so M4.4 completing that grouping is the
+  natural owner. Surfaced by M3.7b implementation (2026-07-31).
+
+- **The Generation tab renders two `role="status"` live regions at
+  once.** `@dnd-kit` mounts its own inside
+  `SuggestionCategoriesEditor`'s web branch, while `SaveBar`
+  (`components/compounds/save-bar.tsx`) uses that role for its
+  unsaved-changes notice — so a screen reader sees two competing
+  status regions, and role-based queries against the save bar are
+  ambiguous. Surfaced by M3.7b implementation (2026-07-31).
+
+- **Background content behind an open `AlertDialog` is not
+  `aria-hidden`.** Contrary to the usual Radix `hideOthers`
+  assumption, an E2E locator scoped only by role matched both the
+  save bar's Discard button and the unsaved-changes dialog's Discard
+  button while the dialog was open — confirmed by an actual run
+  (`e2e/locators/story-settings.ts`). Fixed in the spec by scoping
+  through the dialog, but the root cause (portal nesting?) was never
+  investigated, and any future locator or a11y assumption about
+  background-hiding on this stack is unsafe. Surfaced by M3.7b
+  implementation (2026-07-31).
+
+- **`action_layer.story_settings_save_blocked` logs a localized
+  string.** The event's `reason` payload
+  (`components/story-settings/save-session.tsx`) carries translated
+  UI text, so it can't be aggregated or grepped across locales. The
+  producing section has a stable discriminant
+  (`validateDraft`'s `problem` field,
+  `'empty-label' | 'duplicate-label'`) and discards it at the channel
+  boundary; carrying a code alongside the reason would need the C7
+  contract widened. Surfaced by M3.7b implementation (2026-07-31).
+
+- **`components/compounds/save-bar.tsx` uses the deprecated
+  `pointerEvents="none"` prop form**, which React Native flags as
+  deprecated in favor of `style.pointerEvents` on every render
+  (visible in test output). Pre-existing; not fixed in M3.7b to keep
+  that commit to its scope. Surfaced by M3.7b implementation
+  (2026-07-31).
+
+- **The save bar's invalid-reason notice is not tab-qualified.**
+  `computeSnapshot` (`components/story-settings/save-session-state.ts`)
+  reports the first dirty-and-invalid section in rail order, and the
+  bar lists dirty fields from every tab — so once M4.4 adds more
+  sections, a user on one tab can be shown a blocking reason sourced
+  from another with nothing indicating where to go. Moot at one
+  section; `{ tab, reason }` would be a single optional field on the
+  existing `SaveSessionSnapshot` type. Surfaced by M3.7b
+  implementation (2026-07-31).
