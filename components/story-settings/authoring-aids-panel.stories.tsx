@@ -191,6 +191,12 @@ export const MasterToggleGatesTheSection: Story = {
 
     const bar = await findSaveBar()
     expect(bar.textContent).toContain(COPY.fieldSuggestions)
+
+    // Reset is the only mutation left against a list the user otherwise can't
+    // touch, so it goes with the editor. The hint stays mode-specific.
+    await userEvent.click(screen.getByRole('button', { name: COPY.menu }))
+    expect(await screen.findByRole('button', { name: COPY.reset })).toBeDisabled()
+    expect(screen.queryByText(COPY.resetUnavailable)).not.toBeInTheDocument()
   },
 }
 

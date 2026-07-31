@@ -128,7 +128,7 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
           <PopoverContent className="w-64 p-1">
             <Button
               variant="ghost"
-              disabled={mode == null}
+              disabled={mode == null || !enabled}
               onPress={() => {
                 menuTriggerRef.current?.close()
                 setResetConfirmOpen(true)
