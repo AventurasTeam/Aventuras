@@ -9,7 +9,7 @@ import {
   STORY_SETTINGS_DEFAULTS,
   type StorySettings,
 } from '@/lib/db'
-import { runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import { awaitRunTerminal, runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -187,6 +187,67 @@ describe('refreshSuggestions', () => {
     await refreshSuggestions(ids, input, ctx)
     const [again] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry-1'))
     expect(entryMetadataSchema.safeParse(again?.metadata).success).toBe(true)
+  })
+
+  // Sets up an in-flight run whose provider call is held open, so a test can
+  // act against it before it settles. Returns the run promise plus the release.
+  async function withInflightRefresh(
+    db: Awaited<ReturnType<typeof makeHarness>>['db'],
+    ctx: DbCtx,
+  ) {
+    await seed(db)
+    wireAppSettings()
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    generateStructuredMock.mockImplementation(async () => {
+      await gate
+      return { status: 'ok', value: { suggestions: [{ categoryRef: 'cat1', text: 'Draw.' }] } }
+    })
+    const inflight = refreshSuggestions(
+      { storyId: 's1', branchId: 'b1' },
+      { refreshGuidance: '' },
+      ctx,
+    )
+    await vi.waitFor(() => expect(generateStructuredMock).toHaveBeenCalled())
+    return { inflight, release }
+  }
+
+  // The hard gate's CONSEQUENCE. suggestion-refresh.test.ts asserts
+  // gateBehavior and calls isUserEditBlocked on a synthetic TxState; neither
+  // drives a real reversal, so a regression in undo's own check would leave
+  // both of those green while reopening the race f78941f6 closed.
+  it('rejects a CTRL-Z fired while a re-roll is in flight', async () => {
+    const { db, ctx } = await makeHarness()
+    const { inflight, release } = await withInflightRefresh(db, ctx)
+
+    expect(await undoLastAction('b1', ctx)).toEqual({
+      status: 'rejected',
+      reason: 'generation in flight',
+    })
+
+    release()
+    expect((await inflight).outcome).toBe('completed')
+  })
+
+  // Branch-switch abort: the reader's unmount effect cancels the run. Because
+  // the pipeline is hard-gate, a leaked run would hold undo/redo/Send disabled
+  // on the branch just entered, not merely write to the one just left.
+  it('aborts without writing when the run is cancelled mid-call', async () => {
+    const { db, ctx } = await makeHarness()
+    const { inflight, release } = await withInflightRefresh(db, ctx)
+
+    // abort() fires synchronously; the terminal cannot resolve until the held
+    // call returns, so release after arming the wait rather than before it.
+    const cancelled = awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
+    release()
+    await cancelled
+
+    expect((await inflight).outcome).toBe('aborted')
+    const [row] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry-1'))
+    expect(row?.metadata?.nextTurnSuggestions).toBeUndefined()
+    expect(await db.select().from(deltas)).toEqual([])
   })
 
   it('self-blocks a second re-roll while one is in flight', async () => {

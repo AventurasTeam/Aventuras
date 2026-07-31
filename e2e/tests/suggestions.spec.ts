@@ -37,17 +37,22 @@ async function currentBranchId(page: Page): Promise<string> {
   return rows[0]?.[0] as string
 }
 
-// Reads the branch's terminal (highest-position) entry — the row the strip
-// itself reads from (reader-composer route: terminalEntry = entries.at(-1)).
+// Reads the row the strip anchors to. Mirrors findSuggestionAnchor
+// (lib/piggyback/suggestion-slots.ts): the highest-position AI-authored entry,
+// skipping `user_action` and `system` tails. Highest-position alone would
+// coincide today and diverge the moment a spec asserts after a submit or a
+// failed turn — the two would then read different rows and the mismatch would
+// look like a chip bug.
 // metadata comes back as a raw JSON string: queryApp is a raw SQL bridge, not
 // drizzle's typed select, so the column's `mode: 'json'` transform never runs.
-async function readTerminalEntry(
+async function readAnchorEntry(
   page: Page,
   branchId: string,
 ): Promise<{ id: string; suggestions?: PersistedSuggestions }> {
   const rows = await queryApp(
     page,
-    `SELECT id, metadata FROM story_entries WHERE branch_id = ? ORDER BY position DESC LIMIT 1`,
+    `SELECT id, metadata FROM story_entries WHERE branch_id = ? AND kind IN ('ai_reply', 'opening')
+     ORDER BY position DESC LIMIT 1`,
     [branchId],
   )
   const [id, raw] = rows[0] as [string, string | null]
@@ -117,10 +122,19 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
         timeout: 30_000,
       })
       branchId = await currentBranchId(app.window)
+      // That text matches the STREAMING placeholder, which renders while the
+      // run is still in flight — the ai_reply row lands at the end of the
+      // narrative phase. Without this poll the next step's DB read races the
+      // insert and comes back with the user_action row instead.
+      await expect
+        .poll(async () => (await readAnchorEntry(app.window, branchId)).suggestions?.source, {
+          timeout: 30_000,
+        })
+        .toBe('piggyback')
     })
 
     await test.step('chips persist via the piggyback fold and render without leaking trailing blocks', async () => {
-      const terminal = await readTerminalEntry(app.window, branchId)
+      const terminal = await readAnchorEntry(app.window, branchId)
       entryId = terminal.id
       expect(terminal.suggestions?.source).toBe('piggyback')
       expect(terminal.suggestions?.items).toEqual([
@@ -171,7 +185,7 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
       await expect(reader.suggestionChip(app.window, 'Speak', REFRESH_CHIP_SPEAK)).toBeVisible()
       await expect(reader.suggestionChip(app.window, 'Act', CHIP_ACT_1)).toHaveCount(0)
 
-      const refreshed = await readTerminalEntry(app.window, branchId)
+      const refreshed = await readAnchorEntry(app.window, branchId)
       expect(refreshed.id).toBe(entryId)
       expect(refreshed.suggestions).toEqual({
         items: [
@@ -196,7 +210,7 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
       })
       await expect(reader.suggestionChip(app.window, 'Act', REFRESH_CHIP_ACT)).toHaveCount(0)
 
-      const undone = await readTerminalEntry(app.window, branchId)
+      const undone = await readAnchorEntry(app.window, branchId)
       expect(undone.id).toBe(entryId)
       expect(undone.suggestions).toEqual({
         items: [
@@ -264,7 +278,7 @@ test.describe('next-turn suggestions — classifier fold', () => {
     await expect(reader.suggestionChip(app.window, 'Speak', CLASSIFIER_CHIP_SPEAK)).toBeVisible()
 
     const branchId = await currentBranchId(app.window)
-    const { suggestions } = await readTerminalEntry(app.window, branchId)
+    const { suggestions } = await readAnchorEntry(app.window, branchId)
     expect(suggestions?.source).toBe('classifier')
     expect(suggestions?.items).toEqual([
       { categoryId: 'act', text: CLASSIFIER_CHIP_ACT },
