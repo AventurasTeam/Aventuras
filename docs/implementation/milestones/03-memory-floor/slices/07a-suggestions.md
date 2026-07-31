@@ -226,11 +226,14 @@ seed ship here while the editor moves to
   mid-run) briefly looked reachable and are not; they stay filed in
   [`triage.md`](../../../triage.md) for whoever lands the first live
   `no-gate` kind.
-- Caller input reaches a pipeline through a new `inputs?: unknown` on
-  `PhaseContext` with a per-phase narrowing guard —
-  `intermediates` is for state flowing _between_ phases and seeding it
-  from `RunCtx` would leak a predecessor's inputs into a chained
-  successor.
+- Caller input reaches a pipeline through `inputs` on `RunCtx`, keyed
+  by kind in `PipelineInputMap` so `runPipeline` rejects a missing or
+  misshapen payload at the call site. `PhaseContext.inputs` stays
+  `unknown` with a per-phase narrowing guard: the registry holds every
+  kind's phases under one type, so narrowing there needs a generic
+  `Pipeline`. `intermediates` is for state flowing _between_ phases,
+  and seeding it from `RunCtx` would leak a predecessor's inputs into
+  a chained successor.
 - The refresh's delta stamps `DeltaSource: 'ai_classifier'`. Not
   `user_edit` (a model-authored chip must not claim a human wrote it)
   and not a new member (no consumer needs the distinction; the
