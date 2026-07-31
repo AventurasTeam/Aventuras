@@ -163,6 +163,27 @@ describe('resolveSuggestionItems', () => {
     ])
   })
 
+  it('trims surrounding whitespace from resolved suggestion text', () => {
+    const { items, droppedCount } = resolveSuggestionItems(
+      [{ categoryRef: 'cat1', text: '  Draw the blade. \n' }],
+      emission(5),
+    )
+    expect(items).toEqual([{ categoryId: 'a', text: 'Draw the blade.' }])
+    expect(droppedCount).toBe(0)
+  })
+
+  it('drops whitespace-only suggestion text and counts it as a drop', () => {
+    const { items, droppedCount } = resolveSuggestionItems(
+      [
+        { categoryRef: 'cat1', text: ' \n\t ' },
+        { categoryRef: 'cat2', text: 'kept' },
+      ],
+      emission(5),
+    )
+    expect(items).toEqual([{ categoryId: 'b', text: 'kept' }])
+    expect(droppedCount).toBe(1)
+  })
+
   it('drops an item whose ref does not resolve, keeping the rest', () => {
     const { items, droppedCount } = resolveSuggestionItems(
       [

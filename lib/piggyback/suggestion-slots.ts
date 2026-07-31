@@ -107,8 +107,10 @@ export function resolveSuggestionItems(
 ): { items: SuggestionItem[]; droppedCount: number } {
   const resolved = raw.flatMap((item) => {
     const categoryId = emission.resolveCategoryId(item.categoryRef)
-    if (categoryId === undefined || item.text.length > MAX_SUGGESTION_CHARS) return []
-    return [{ categoryId, text: item.text }]
+    const text = item.text.trim()
+    if (categoryId === undefined || text.length === 0 || text.length > MAX_SUGGESTION_CHARS)
+      return []
+    return [{ categoryId, text }]
   })
   return { items: resolved.slice(0, emission.count), droppedCount: raw.length - resolved.length }
 }

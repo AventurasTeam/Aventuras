@@ -216,6 +216,7 @@ async function* suggestionEmissionPhase(
       },
     },
   }
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
   return { status: 'completed' }
 }
 

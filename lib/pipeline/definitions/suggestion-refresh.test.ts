@@ -711,6 +711,22 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
+  it('returns aborted when cancel lands while the yielded delta is being applied', async () => {
+    openStory()
+    hydrate()
+    wireAppSettings()
+    const controller = new AbortController()
+    generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Too late.' }]))
+    const gen = emissionPhase()(phaseCtx(DEFAULT_INPUT, controller.signal))
+
+    const emitted = await gen.next()
+    expect(emitted.done).toBe(false)
+    expect(emitted.value).toMatchObject({ type: 'delta_emitted' })
+
+    controller.abort()
+    expect(await gen.next()).toEqual({ done: true, value: { status: 'aborted' } })
+  })
+
   it('reports an aborted provider call as aborted, not failed', async () => {
     openStory()
     hydrate()
