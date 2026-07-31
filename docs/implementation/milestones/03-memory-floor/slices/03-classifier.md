@@ -217,10 +217,16 @@ world-state-block edit surface rather than by this pipeline.
   transactionally with it** — a direct non-delta `UPDATE branches` once
   the burst has landed. The orchestrator applies each delta as it is
   yielded, so there is no run-wide transaction to join. Watermark-after
-  is coherent by construction: a crash mid-run leaves the watermark
-  unadvanced, which is exactly the state boot recovery's reverse-replay
-  produces. The reverse order would advance over facts that were then
-  reversed — a silent permanent hole in the graph.
+  is the right order — the reverse would advance over facts that were
+  then reversed, a silent permanent hole in the graph — but it is **not**
+  coherent by construction, as this note originally claimed. The claim
+  assumed boot recovery reverse-replays an interrupted pass; nothing
+  does. Classifier runs leave no `pipeline_runs` marker, and
+  `resetStuckClassifierRunState` only repairs `$.state`, so a crash
+  between two committed deltas leaves those deltas on disk with the
+  watermark unmoved and the next pass re-writes the window's happenings.
+  Tracked in [`followups.md`](../../../../followups.md); closing it needs
+  either a transactional watermark, a run marker, or an idempotency key.
 - **`bracketProseReversal` is the only sanctioned entry to the reversal
   sweep.** It owns both classifier-era obligations (drain the in-flight
   run, hold `reversalInProgress` across the whole wait → sweep window),
@@ -241,6 +247,23 @@ world-state-block edit surface rather than by this pipeline.
   silently reverts the other, which
   [`cadence.md → Concurrency`](../../../../memory/cadence.md#concurrency)
   bans.
+- **`newCharacters` handles live in a reserved namespace (`new:`), and
+  the return trip enforces it structurally.** The placeholder walker runs
+  before the planner, so a handle that collides with a live placeholder
+  (`c1`, `hp1`, …) would have every ref to the new character rewritten
+  into the _existing_ entity's uuid — silent misattribution with no
+  unresolved ref and no warning. The prompt reserves the prefix, but the
+  guard that actually holds is `substituteClassifierIds` refusing to
+  rewrite any ref a declared handle claims, so a non-compliant model
+  cannot reach the failure. Any future ref-bearing field must keep both
+  halves.
+- **A pre-flight failure is recorded by `runClassifierNow`, not by the
+  phase.** An unresolvable `classifier` agent halts the run before phase
+  0, so the phase's own `nextStatusOnFailure` bookkeeping never executes:
+  left alone the status stays `idle`, the backoff never arms,
+  `failed-persistent` is unreachable, and the cadence re-fires the doomed
+  run on every committed turn. Whoever adds a second pre-phase failure
+  mode owns extending that mapping.
 - **Cross-turn attribution is a prompt obligation, not an enforceable
   one.** The extraction schema carries one `sourceTurn` per fact, so the
   planner structurally cannot apply the "latest turn wins" rule; the
@@ -279,14 +302,25 @@ world-state-block edit surface rather than by this pipeline.
   `pipelineEventBus`'s `run_complete` — the drain worker's precedent. Its
   state is keyed **per branch**: global timer state let a tick on one
   branch destroy another branch's pending backoff, i.e. a failed run
-  losing its recovery. `runNow` returns a `'busy'` marker rather than
-  `void`, because it is the only escape from `failed-persistent` and a
-  silent no-op there is unreportable.
+  losing its recovery. `runNow` returns a marker rather than `void`
+  (`'busy'` for an in-flight run, `'stopped'` for a torn-down scheduler),
+  because it is the only escape from `failed-persistent` and a silent
+  no-op there is unreportable.
 - **Prompt-window cap:** new `classifierWindowMaxEntries` app setting
   (default 20), filling the app-scope truncation cap
   `architecture.md` specifies but M1.5 never landed. The pass advances
   the watermark only to the cut, so a long backlog drains over
   successive passes instead of skipping prose permanently.
+- **The window is read from SQLite, never from `entriesStore`.** The
+  store holds only the last `ENTRIES_WINDOW_SIZE` (50) entries, so a
+  store-fed window starts at the reader's oldest loaded row — and since
+  the pass then advances the watermark over the cut, every turn between
+  the watermark and that row is skipped permanently, which is the exact
+  failure the cap above is supposed to prevent. The phase queries
+  `position > processedThrough` with `LIMIT maxEntries + 1`, the `+1`
+  being what still lets `buildClassifierWindow` see the cut and set
+  `truncated`. Unit tests that hydrate the store cannot catch a
+  regression here; `periodic-classifier.spec.ts` covers it end to end.
 - **`τ_high` / `τ_low`:** hardcoded `0.75` / `0.50` in
   `lib/classifier/reconcile.ts`; the tuning surface is parked to M7.5, and
   a config field with no UI is surface without a consumer. `τ_low` is
@@ -326,10 +360,16 @@ world-state-block edit surface rather than by this pipeline.
   `generating-narrative` pill; it now tracks foreground kinds only.
   `GenerationStatusPill.onCancel` became optional rather than wiring a
   per-turn cancel that would no-op during a classifier-only run.
-- **Unhardened by choice:** `cosine` truncates on mismatched vector
-  length, and the per-pass name index is first-match-wins on duplicate
-  namesakes — the latter matches canon's documented v1 polymorphic-naming
-  limitation.
+- **Disambiguation was hardened in review, against both of the shortcuts
+  this note originally recorded as deliberate.** A truncating `cosine`
+  scores a shared prefix of two differently-sized vectors — reachable
+  mid embedder-swap — and hands a fabricated similarity to a
+  create-or-merge decision; a dimension mismatch now degrades to
+  `'no-signal'` instead. First-match-wins on namesakes is worse than the
+  canon limitation it was justified by, because create-with-flag
+  _manufactures_ namesakes: from the second flagged duplicate onward,
+  insertion order decided whether the real match was ever scored. All
+  namesakes are embedded in the same single call and the best is taken.
 - **`unresolvedRefs` mixes entity refs with turn handles and merges
   "unknown" with "wrong kind".** Adequate as a counter; a future
   diagnostics consumer will want the two separated.
