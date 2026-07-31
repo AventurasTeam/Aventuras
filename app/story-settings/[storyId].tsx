@@ -29,7 +29,7 @@ import { StorySettingsStaleStoreError, updateStorySettings } from '@/lib/actions
 import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { PER_TURN_KIND } from '@/lib/pipeline'
+import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { awaitRunTerminal, generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
@@ -114,12 +114,23 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
-  // The branch, not just a boolean: cancelling needs the run's own branch, and
-  // runs only exist for the open story, so a hit here is this story's branch.
-  const generatingBranchId = generationStore.useGeneration(
+  // Split by kind so the pill names what is actually running: a refresh started
+  // in the reader stays cancellable after a jump here.
+  const isGenerating = generationStore.useGeneration((s) =>
+    [...s.txState.runs.values()].some(
+      (r) => r.storyId === storyId && r.kind !== SUGGESTION_REFRESH_KIND,
+    ),
+  )
+  const refreshingSuggestions = generationStore.useGeneration((s) =>
+    [...s.txState.runs.values()].some(
+      (r) => r.storyId === storyId && r.kind === SUGGESTION_REFRESH_KIND,
+    ),
+  )
+  // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
+  // run for this story carries it: runs only exist for the open story/branch.
+  const cancelBranchId = generationStore.useGeneration(
     (s) => [...s.txState.runs.values()].find((r) => r.storyId === storyId)?.branchId ?? null,
   )
-  const isGenerating = generatingBranchId != null
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
@@ -208,10 +219,20 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       actions={<AppActionsMenu />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={isGenerating ? 'generating-narrative' : undefined}
+          activePhase={
+            isGenerating
+              ? 'generating-narrative'
+              : refreshingSuggestions
+                ? 'refreshing-suggestions'
+                : undefined
+          }
           onCancel={() => {
-            if (generatingBranchId != null)
-              void awaitRunTerminal(PER_TURN_KIND, generatingBranchId, 'cancel')
+            if (cancelBranchId == null) return
+            void awaitRunTerminal(
+              isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
+              cancelBranchId,
+              'cancel',
+            )
           }}
           onErrorTap={() => {}}
         />

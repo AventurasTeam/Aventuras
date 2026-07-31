@@ -13,4 +13,7 @@ Extract scene state from this turn:
 
 {% for entry in entries %}
 {{ entry.content }}
-{% endfor %}`
+{% endfor %}
+{% if suggestionsFire -%}
+{% include 'macro_suggestion_emission_json' %}
+{%- endif -%}`

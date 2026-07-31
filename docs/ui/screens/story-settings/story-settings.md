@@ -306,8 +306,11 @@ reuses the same compound):
   insensitive unique within the list. Collision blocks save with
   inline error on the conflicting row.
 - **[`ColorPicker`](../../patterns/color-picker.md)** — curated
-  swatches + `+ custom`. Stores palette slot key (theme-resolved at
-  render).
+  swatches + `+ custom`. Stores either a curated palette slot key or
+  a raw custom hex; both resolve to a color via `resolveAccentColor`
+  (`lib/themes`) — the palette itself is fixed hex, not theme-derived
+  (see
+  [`color.md → Curated accent palette`](../../foundations/color.md#curated-accent-palette)).
 - **Prompt hint** — multi-line textarea. The prose the suggestion
   agent receives for this slot. Empty allowed (falls back to label
   as sole hint, soft warning that emissions may be lower quality).

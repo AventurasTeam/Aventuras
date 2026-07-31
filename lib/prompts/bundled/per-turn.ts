@@ -68,4 +68,13 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 {% include 'macro_output_format_narrative' %}
 {% if piggybackFires -%}
 {% include 'macro_state_emission' %}
+{%- endif -%}
+{%- comment -%}
+Documents the block below: one newline, no blank line, between the state and
+suggestions blocks when both fire.
+{%- endcomment -%}
+{%- if piggybackFires and suggestionsFire %}
+{% endif -%}
+{%- if suggestionsFire -%}
+{% include 'macro_suggestion_emission' %}
 {%- endif %}`

@@ -88,15 +88,26 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
   if (!current)
     return { status: 'rejected', reason: `update target story_entries ${bid}:${id} not found` }
-  const before = (current.metadata ?? {}) as Record<string, unknown>
   return {
     status: 'ok',
     targetTable: 'story_entries',
     targetId: id,
     op: 'update',
     // Column-keyed: reverse-replay iterates undo_payload's top-level keys as
-    // target columns. metadata is the column; the inner object is its partial.
-    undoPayload: { metadata: computeUndoPayload(entryMetadataSchema, before, metadata) },
+    // target columns. metadata is the column; the inner object is its partial —
+    // except when the column was NULL, which a field-wise partial cannot express
+    // (a non-optional key's null sentinel decodes to a null VALUE, leaving an
+    // unparseable blob). A null partial restores the whole column instead.
+    undoPayload: {
+      metadata:
+        current.metadata == null
+          ? null
+          : computeUndoPayload(
+              entryMetadataSchema,
+              current.metadata as Record<string, unknown>,
+              metadata,
+            ),
+    },
     ops: [
       ctx.db
         .update(storyEntries)

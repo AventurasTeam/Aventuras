@@ -1,6 +1,11 @@
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
-import { storySettingsSchema, type StorySettings } from './story-config-schema'
+import { DEFAULT_SUGGESTION_CATEGORIES } from './default-suggestion-categories'
+import {
+  storySettingsSchema,
+  type StorySettings,
+  type SuggestionCategory,
+} from './story-config-schema'
 
 export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   chapterTokenThreshold: 24000,
@@ -16,7 +21,15 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',
-  suggestionsEnabled: false,
+  // The toggle on beside an empty palette is deliberate, and this constant is
+  // the ONLY source of suggestionsEnabled for a new story (app-level
+  // defaultStorySettings carries just activePackId), so it cannot be flipped
+  // off to make the pair coherent — buildStorySettings below supplies the real
+  // per-mode palette instead. Spreading this in a fixture is fine and common,
+  // but settingsAllowEmission reads BOTH halves: a test that means to exercise
+  // emission has to set suggestionCategories, not just the flag, or it silently
+  // asserts against a story that emits nothing.
+  suggestionsEnabled: true,
   suggestionCount: 3,
   suggestionCategories: [],
   translation: {
@@ -37,23 +50,38 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   packVariables: {},
 }
 
-// A story copies the embedder selection at creation and never re-reads the app
-// default, so both halves must be captured here or a provider-backend story
-// resolves to 'no-provider' for the rest of its life.
+// A story copies the embedder selection and the per-mode suggestion palette at
+// creation and never re-reads the app defaults, so every one of them must be
+// captured here or a provider-backend story resolves to 'no-provider' / an
+// empty palette for the rest of its life.
 export function buildStorySettings(
-  appDefault: Partial<StorySettings>,
-  appEmbeddingModelId: string | null,
-  appEmbeddingProviderId: string | null,
+  mode: 'adventure' | 'creative',
+  app: {
+    defaultStorySettings: Partial<StorySettings>
+    embeddingModelId: string | null
+    embeddingProviderId: string | null
+    defaultSuggestionCategories: {
+      adventure: readonly SuggestionCategory[]
+      creative: readonly SuggestionCategory[]
+    }
+  },
+  // Not folded into `app`: the dim is resolved per story from the wizard's
+  // Matryoshka pick, not copied off an app-level column like the two above.
   effectiveDim?: number | null,
 ): StorySettings {
+  const appPalette = app.defaultSuggestionCategories[mode]
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
-    ...appDefault,
-    // Both halves override unconditionally: appDefault is a template for the
-    // other fields, but the embedder selection has its own app-level columns,
-    // and a stale copy in the template must not outrank them.
-    embedding_model_id: appEmbeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
-    embedding_provider_id: appEmbeddingProviderId ?? undefined,
+    ...app.defaultStorySettings,
+    // An empty stored palette means "not configured" — a row written before the
+    // per-mode seed landed, or one whose Zod default filled in empty arrays —
+    // not "the user wants none".
+    suggestionCategories: appPalette.length > 0 ? appPalette : DEFAULT_SUGGESTION_CATEGORIES[mode],
+    // Both halves override unconditionally: defaultStorySettings is a template
+    // for the other fields, but the embedder selection has its own app-level
+    // columns, and a stale copy in the template must not outrank them.
+    embedding_model_id: app.embeddingModelId ?? STORY_SETTINGS_DEFAULTS.embedding_model_id,
+    embedding_provider_id: app.embeddingProviderId ?? undefined,
     // Omit when null so the field stays absent (native dim), not stored as a
     // value the tightened positive-int schema would reject.
     ...(effectiveDim != null ? { effectiveDim } : {}),

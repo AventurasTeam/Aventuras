@@ -3,7 +3,14 @@ import { eq, sql } from 'drizzle-orm'
 import { resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
-import { buildPiggybackActions, parseStateBlock, substitutePiggybackIds } from '@/lib/piggyback'
+import {
+  buildPiggybackActions,
+  parseStateBlock,
+  parseSuggestionsBlock,
+  resolveSuggestionEmission,
+  resolveSuggestionItems,
+  substitutePiggybackIds,
+} from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
@@ -72,15 +79,22 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     narrativeModelCapabilities: narrativeCapabilities,
   })
 
+  // Suggestions ride the same tagged emission as <state>, so they require it to
+  // be firing at all — separate from whether the story wants chips.
+  const suggestionEmission = resolveSuggestionEmission(open.settings)
+  const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
+
   const idMap = new IdBiMap()
   ctx.intermediates.idMap = idMap
   const context = buildGenerationContext({
+    branchId,
     entries,
     entities,
     definition: open.definition,
     settings: open.settings,
     idMap,
     piggybackFires: piggybackShouldFire,
+    suggestionsFire: suggestionsShouldFire,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
@@ -198,6 +212,32 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     succeeded: piggybackShouldFire && piggybackParseSucceeded,
   }
 
+  const parsedSuggestions = suggestionsShouldFire
+    ? parseSuggestionsBlock(content)
+    : { items: [], blockFound: false, failed: false, malformedCount: 0 }
+  const { items: suggestionItems, droppedCount } = resolveSuggestionItems(
+    parsedSuggestions.items,
+    suggestionEmission,
+  )
+  // Keys on items actually resolved, never on blockFound alone — a literal
+  // "<suggestions>" string anywhere in prose would otherwise read as captured.
+  const suggestionsCaptured = !parsedSuggestions.failed && suggestionItems.length > 0
+  // Short counts as a problem, not just empty: one good chip beside two
+  // malformed ones used to leave captured=true and dropped=0, so a model that
+  // reliably under-delivers produced a permanently thin strip and no signal.
+  const suggestionsShort = suggestionItems.length < suggestionEmission.count
+  if (suggestionsShouldFire && (!suggestionsCaptured || droppedCount > 0 || suggestionsShort)) {
+    ctx.log.warn('classifier.suggestions_parse_failed', {
+      blockFound: parsedSuggestions.blockFound,
+      failed: parsedSuggestions.failed,
+      dropped: droppedCount,
+      malformed: parsedSuggestions.malformedCount,
+      resolved: suggestionItems.length,
+      expected: suggestionEmission.count,
+    })
+  }
+  ctx.intermediates.suggestionsCaptured = suggestionsCaptured
+
   const metadata: EntryMetadata = {
     ...(usage
       ? {
@@ -214,6 +254,9 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     ...(piggybackApplied?.metadata ?? inherited),
+    ...(suggestionsCaptured
+      ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
+      : {}),
   }
 
   const [next] = await ctx.db

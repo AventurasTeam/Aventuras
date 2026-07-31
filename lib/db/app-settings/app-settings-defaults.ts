@@ -4,6 +4,7 @@ import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
 import type { Appearance, ModelProfile, ProviderInstance } from './app-settings-schema'
 import { appSettings } from '../schema'
+import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-categories'
 import type { StorySettings, SuggestionCategory } from '../stories/story-config-schema'
 
 export const APP_SETTINGS_SINGLETON_ID = 'singleton'
@@ -18,10 +19,10 @@ export const APP_SETTINGS_DEFAULTS = {
   classifierWindowMaxEntries: 20,
   defaultStorySettings: { activePackId: BUNDLED_PACK_ID } as Partial<StorySettings>,
   defaultCalendarId: null as string | null,
-  defaultSuggestionCategories: { adventure: [], creative: [] } as {
-    adventure: SuggestionCategory[]
-    creative: SuggestionCategory[]
-  },
+  defaultSuggestionCategories: {
+    adventure: [...DEFAULT_SUGGESTION_CATEGORIES.adventure],
+    creative: [...DEFAULT_SUGGESTION_CATEGORIES.creative],
+  } as { adventure: SuggestionCategory[]; creative: SuggestionCategory[] },
   appearance: {
     themeId: 'system',
     readerFontScale: 1,

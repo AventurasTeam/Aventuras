@@ -37,6 +37,7 @@ const APP_DEFAULTS: FinishAppDefaults = {
   defaultStorySettings: {},
   embeddingModelId: LOCAL_MODEL,
   embeddingProviderId: null,
+  defaultSuggestionCategories: { adventure: [], creative: [] },
   providers: [],
   installedLocalIds: [LOCAL_MODEL],
 }
@@ -54,6 +55,7 @@ const MATRYOSHKA_PROVIDER_DEFAULTS: FinishAppDefaults = {
   defaultStorySettings: { embeddingBackend: 'provider' },
   embeddingModelId: PROVIDER_MODEL,
   embeddingProviderId: 'p1',
+  defaultSuggestionCategories: { adventure: [], creative: [] },
   providers: [
     {
       id: 'p1',

@@ -14,6 +14,7 @@ import type {
   PhaseNode,
   PhaseResult,
   PipelineError,
+  PipelineInputMap,
   RejectedStart,
   TxResult,
 } from '../types'
@@ -38,7 +39,20 @@ class ActionRejectedError extends ActionLayerError {
   }
 }
 
-export type RunCtx = { storyId: string | null; branchId: string; actionId?: string } & DbCtx
+export type RunCtx = {
+  storyId: string | null
+  branchId: string
+  actionId?: string
+  // Kind-specific run parameters the starting action hands to the phases
+  // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
+  inputs?: unknown
+} & DbCtx
+
+// RunCtx with `inputs` narrowed to whatever the kind declares in
+// PipelineInputMap, and required when it declares one. A kind absent from the
+// map is unconstrained, so ad-hoc test kinds still type-check.
+export type RunCtxFor<K extends string> = RunCtx &
+  (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
@@ -54,6 +68,7 @@ function newRunState(kind: string, ctx: RunCtx): RunState {
     branchId: ctx.branchId,
     abortController: new AbortController(),
     currentPhase: '',
+    inputs: ctx.inputs,
     intermediates: {},
     terminal,
     resolveTerminal,
@@ -160,6 +175,7 @@ function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
   return {
     actionId: run.actionId,
     abortSignal: run.abortController.signal,
+    inputs: run.inputs,
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
     db: ctx.db,
@@ -238,7 +254,11 @@ async function commitRun(
       { runId: run.runId, kind: run.kind, nextKind },
       { actionId: run.actionId },
     )
-  const successor = nextPipeline ? newRunState(nextPipeline.kind, ctx) : undefined
+  // A chained kind gets its own context, so the predecessor's inputs stop here
+  // (generation-pipeline.md → Run-scoped state); nothing supplies the successor's.
+  const successor = nextPipeline
+    ? newRunState(nextPipeline.kind, { ...ctx, inputs: undefined })
+    : undefined
   generationStore.finishRun(run.runId, successor)
   try {
     await ctx.db
@@ -366,7 +386,10 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   return { kind: 'completed' }
 }
 
-export async function runPipeline(kind: string, ctx: RunCtx): Promise<TxResult | RejectedStart> {
+export async function runPipeline<K extends string>(
+  kind: K,
+  ctx: RunCtxFor<K>,
+): Promise<TxResult | RejectedStart> {
   // Loop so a yield-wait can't act on a stale decision: after aborting + awaiting the
   // yielding runs, re-check; a blocking run may have started during the wait.
   for (;;) {

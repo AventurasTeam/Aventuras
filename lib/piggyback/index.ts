@@ -4,3 +4,15 @@ export * from './parse'
 export { resolvePiggybackWorldTimeDelta } from './world-time'
 export { buildPiggybackActions } from './apply'
 export { substitutePiggybackIds } from './substitute'
+export {
+  buildSuggestionSlots,
+  findSuggestionAnchor,
+  MAX_SUGGESTION_CHARS,
+  resolveSuggestionEmission,
+  resolveSuggestionItems,
+  shouldShowSuggestionStrip,
+  type SuggestionSlot,
+  type SuggestionSlotMap,
+  type SuggestionEmission,
+  type SuggestionItem,
+} from './suggestion-slots'

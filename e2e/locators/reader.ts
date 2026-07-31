@@ -58,6 +58,13 @@ export const reader = {
   hydrationFailed: (page: Page): Locator =>
     page.getByText(t('reader:hydrationFailedTitle'), { exact: false }),
 
+  // Next-turn suggestion strip (components/reader/suggestion-strip.tsx). The
+  // chip's accessible name is the interpolated chipLabel ("Category: text"),
+  // not the chip prose alone, so the locator takes both parts.
+  suggestionChip: (page: Page, category: string, text: string): Locator =>
+    page.getByRole('button', { name: t('reader:suggestions.chipLabel', { category, text }) }),
+  suggestionRefresh: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:suggestions.refresh') }),
   // The generation status pill in its memory-incomplete state (a warning-tone
   // Tag; interactive, so role=button). The accessible name interpolates the
   // pending-row count, so only the lead-in shared by both plural forms is

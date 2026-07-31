@@ -20,11 +20,26 @@ export const ModesHidden: Story = { args: { modesEnabled: false, isGenerating: f
 
 export const Generating: Story = { args: { modesEnabled: true, isGenerating: true } }
 
+/** No story to draft against — the whole composer is inert and says why. */
 export const Disabled: Story = {
   args: {
     modesEnabled: true,
     isGenerating: false,
     disabled: true,
-    disabledReason: 'Generation is in flight. Cancel to edit.',
+    disabledReason: 'Loading this branch…',
+  },
+}
+
+/**
+ * The reader's edit gate is held (a suggestion re-roll, say). Only Send is
+ * refused — the draft and the mode picker stay live, since neither writes
+ * anything until send.
+ */
+export const SendBlocked: Story = {
+  args: {
+    modesEnabled: true,
+    isGenerating: false,
+    sendBlocked: true,
+    disabledReason: 'Unavailable while generating.',
   },
 }

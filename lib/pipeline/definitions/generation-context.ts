@@ -1,11 +1,17 @@
 import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { buildSuggestionSlots } from '@/lib/piggyback'
 
 type BuildArgs = {
-  // Caller-scoped entry window, ascending by position (per-turn: the open
-  // partial chapter; chapter-close: the closing chapter). Recency windowing
-  // is template-side via the `recent` filter, not done here.
+  // Scopes both collections below. Callers already read per-branch, but no
+  // generation context has ever wanted a row from another branch, so the
+  // predicate belongs here rather than at each call site.
+  branchId: string
+  // The branch's loaded entries, ascending by position. Every consumer draws
+  // from that one set and differs only in how much of it it passes, so this is
+  // a truncation seam, not a per-kind query. Recency windowing is template-side
+  // via the `recent` filter, not done here.
   entries: readonly StoryEntry[]
   entities: readonly Entity[]
   definition: StoryDefinition
@@ -17,6 +23,16 @@ type BuildArgs = {
   // every other generationContext consumer, which never emits state-emission
   // instructions in the first place.
   piggybackFires?: boolean
+  // Whether THIS call should emit the <suggestions> fragment — only the
+  // calling fold knows this (suggestionsEnabled + enabled categories + no
+  // suggestions already in hand), so it's caller-supplied like piggybackFires
+  // rather than computed here. Defaults false for every other
+  // generationContext consumer.
+  suggestionsFire?: boolean
+  // Composer text at the moment the reader hit ⟳ on the chip strip
+  // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
+  // phase has it; blank everywhere else.
+  refreshGuidance?: string
 }
 
 // Defense-in-depth: emit '' for whitespace-only definitional prose so a header
@@ -58,11 +74,23 @@ function promptEntity(entity: Entity): Record<string, unknown> {
 // agent's phase calls this and its template picks from the same variable set
 // (pinned in templateContextMap; parity-tested here).
 export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
-  const { entries, entities, definition, settings, idMap, piggybackFires = false } = args
+  const {
+    branchId,
+    entries,
+    entities,
+    definition,
+    settings,
+    idMap,
+    piggybackFires = false,
+    suggestionsFire = false,
+    refreshGuidance = '',
+  } = args
 
-  // System entries are technical-only rows (removed on generate) — templates
-  // must never see them, so exclusion is unconditional defense-in-depth.
-  const narrative = entries.filter((e) => e.kind !== 'system')
+  // Both exclusions are unconditional defense-in-depth: system entries are
+  // technical-only rows (removed on generate) that templates must never see,
+  // and a foreign-branch row would describe a story this prompt isn't telling.
+  const narrative = entries.filter((e) => e.kind !== 'system' && e.branchId === branchId)
+  const branchEntities = entities.filter((e) => e.branchId === branchId)
 
   const normalizedDefinition = {
     ...definition,
@@ -73,9 +101,15 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   const calendar = getCalendar(definition.calendarSystemId)
 
+  // Built unconditionally: the slots are the story's palette, not an
+  // instruction to emit. suggestionsFire answers the separate question of
+  // whether a surface should ASK for chips, and suggestion-refresh leaves it
+  // false — asking is that call's whole premise, not a per-run condition.
+  const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
+
   const context = {
     entries: narrative.map((e) => ({ content: e.content })),
-    entities: entities.map(promptEntity),
+    entities: branchEntities.map(promptEntity),
     // Writers inherit scene membership forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene state.
     sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],
@@ -84,6 +118,13 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     userSettings: { partialChapterBuffer: settings.partialChapterBuffer },
     intermediates: {},
     piggybackFires,
+    // Re-gated on the derived slots, not just the caller's flag: a caller
+    // passing suggestionsFire=true against an all-disabled palette must still
+    // omit the fragment rather than render it with an empty pick list.
+    suggestionsFire: suggestionsFire && suggestionSlots.length > 0,
+    suggestionSlots,
+    suggestionCount: settings.suggestionCount,
+    refreshGuidance: blankIfWhitespace(refreshGuidance),
   }
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes

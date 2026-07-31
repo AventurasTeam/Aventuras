@@ -31,6 +31,7 @@ import {
   translations,
   vaultCalendars,
 } from '../schema'
+import { DEFAULT_SUGGESTION_CATEGORIES } from '../stories/default-suggestion-categories'
 import { storyDefinitionSchema, storySettingsSchema } from '../stories/story-config-schema'
 import type { StoryDefinition, StorySettings } from '../stories/story-config-schema'
 import { entryMetadataSchema } from '../story-entries/entry-metadata'
@@ -151,7 +152,7 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
         id: 'act',
         label: 'Act',
         promptHint: 'Take a physical action',
-        color: '#4f8',
+        color: 'green',
         enabled: true,
         order: 0,
       },
@@ -159,7 +160,7 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
         id: 'speak',
         label: 'Speak',
         promptHint: 'Say something',
-        color: '#48f',
+        color: 'blue',
         enabled: true,
         order: 1,
       },
@@ -1509,8 +1510,9 @@ const appSettingsRow: NewAppSettings = {
       endpoint: 'http://localhost:1234/v1',
       favoriteModelIds: ['seed/narrative'],
       // taggedBlockReliable lets piggyback ride in-band on the narrative call;
-      // the classifier profile below still backs the periodic classifier and
-      // the piggyback fallback so a turn resolves on seeded data.
+      // the classifier profile below still backs the periodic classifier, the
+      // piggyback fallback, and the suggestion-refresh agent so every agent
+      // target resolves on seeded data.
       cachedModels: [{ id: 'seed/narrative', capabilities: { taggedBlockReliable: true } }],
     }),
   ],
@@ -1529,13 +1531,24 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
     }),
   ],
-  assignments: { narrative: 'prof_narrative', classifier: 'prof_classifier' },
+  // 'suggestion' reuses the classifier profile rather than seeding a dedicated
+  // one: resolveModel keys purely on assignments[target] -> profile id (no
+  // kind/target coupling), and no fixture scenario needs a suggestion-specific
+  // model/temperature distinct from the classifier's.
+  assignments: {
+    narrative: 'prof_narrative',
+    classifier: 'prof_classifier',
+    suggestion: 'prof_classifier',
+  },
   defaultProviderId: 'prov_local',
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   embeddingProviderId: 'prov_local',
   defaultStorySettings: { activePackId: BUNDLED_PACK_ID },
   defaultCalendarId: CAL,
-  defaultSuggestionCategories: { adventure: [], creative: [] },
+  defaultSuggestionCategories: {
+    adventure: [...DEFAULT_SUGGESTION_CATEGORIES.adventure],
+    creative: [...DEFAULT_SUGGESTION_CATEGORIES.creative],
+  },
   appearance: appearanceSchema.parse({ themeId: 'system', readerFontScale: 1, density: 'default' }),
   uiLanguage: 'en',
   onboardingCompletedAt: BASE,

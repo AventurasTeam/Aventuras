@@ -6,7 +6,10 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
+import {
+  GenerationStatusPill,
+  type GenerationPhase,
+} from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -15,9 +18,12 @@ import {
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
+import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
+import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
   describeTurnFailure,
   toSystemFailureMeta,
+  useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
 import { ScreenShell } from '@/components/shells/screen-shell'
@@ -33,6 +39,7 @@ import {
   readRecentEntries,
   redoLastAction,
   refreshEmbeddingStatus,
+  refreshSuggestions,
   rollbackToEntry,
   submitTurn,
   undoLastAction,
@@ -43,9 +50,20 @@ import {
 } from '@/lib/actions'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
-import { PER_TURN_KIND, pipelineEventBus, type PipelineError } from '@/lib/pipeline'
+import {
+  buildSuggestionSlots,
+  findSuggestionAnchor,
+  shouldShowSuggestionStrip,
+} from '@/lib/piggyback'
+import {
+  PER_TURN_KIND,
+  pipelineEventBus,
+  SUGGESTION_REFRESH_KIND,
+  type PipelineError,
+} from '@/lib/pipeline'
 import {
   appSettingsStore,
   awaitRunTerminal,
@@ -56,7 +74,7 @@ import {
   entitiesStore,
   entriesStore,
   generationStore,
-  isForegroundGenerating,
+  isBackgroundKind,
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
@@ -104,8 +122,22 @@ export default function ReaderComposerRoute() {
   )
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  // A suggestion refresh is not a turn: counting it here would swap Send for
+  // Cancel and raise the streaming placeholder over a branch that isn't
+  // streaming. Note this is only about the turn-shaped chrome — the refresh
+  // does hold the edit gate, so `editBlocked` above already covers undo/redo.
   const isGenerating = generationStore.useGeneration((s) =>
-    isForegroundGenerating(s.txState, branchId),
+    // Narrative only: a refresh gets its own phase below, and a background kind
+    // (the classifier) must not light the streaming placeholder at all.
+    [...s.txState.runs.values()].some(
+      (r) =>
+        r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND && !isBackgroundKind(r.kind),
+    ),
+  )
+  const refreshingSuggestions = generationStore.useGeneration((s) =>
+    [...s.txState.runs.values()].some(
+      (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
+    ),
   )
   const classifierRunning = generationStore.useGeneration((s) =>
     backgroundClassifierRunning(s.txState, branchId),
@@ -130,6 +162,38 @@ export default function ReaderComposerRoute() {
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
+  const [stripCollapsed, setStripCollapsed] = useState(false)
+  const [stripError, setStripError] = useState<PipelineError | null>(null)
+  const terminalEntry = findSuggestionAnchor(entries) ?? null
+  const suggestionsEnabled = openForBranch?.settings.suggestionsEnabled ?? false
+  const suggestionCategories = openForBranch?.settings.suggestionCategories ?? []
+  const chips = terminalEntry?.metadata?.nextTurnSuggestions?.items ?? []
+  const stripVisible = shouldShowSuggestionStrip({
+    suggestionsEnabled,
+    hasTerminalEntry: terminalEntry != null,
+    hasChips: chips.length > 0,
+    categories: suggestionCategories,
+  })
+  // The strip stays mounted on historical chips after every category is
+  // disabled, but the phase no-ops in that state — so ⟳ must not offer a run
+  // that cannot produce anything.
+  const canRefreshSuggestions = buildSuggestionSlots(suggestionCategories).slots.length > 0
+  // No visible/empty-state arm: that is `chips.length`, which the strip already
+  // has. Deriving it twice is what let the two disagree.
+  const stripPhase: SuggestionStripPhase = refreshingSuggestions
+    ? 'loading'
+    : stripError != null
+      ? 'error'
+      : 'idle'
+  const stripErrorMessage = describeSuggestionFailure(stripError)
+  const stripErrorFix = useConfigFixAction(
+    stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
+  )
+
+  // The failure belongs to the entry it was fired on; a turn, a rollback or a
+  // branch switch replaces the strip's contents, so the error must not ride along.
+  useEffect(() => setStripError(null), [branchId, terminalEntry?.id])
+
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     embeddingStatusStore.staleTotalFor(s, storyId),
   )
@@ -144,6 +208,17 @@ export default function ReaderComposerRoute() {
   // A live loop reports through the Memory panel's own progress row instead.
   const swapPaused =
     storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+
+  // A suggestion refresh occupies the pill exactly like a turn does, and the
+  // pill prioritizes activePhase over error — so the two branches must be
+  // derived from one value, or a refresh would leave the warning tone visible.
+  const activePhase: GenerationPhase | undefined = isGenerating
+    ? 'generating-narrative'
+    : refreshingSuggestions
+      ? 'refreshing-suggestions'
+      : classifierRunning
+        ? 'classifying'
+        : undefined
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -181,6 +256,20 @@ export default function ReaderComposerRoute() {
     setStreaming(null)
     setHasOlder(false)
   }, [branchId])
+
+  // Leaving the branch (switch or unmount) aborts an in-flight refresh: its
+  // target entry is on the branch being left, and letting it settle would hold
+  // the edit gate on the branch just entered
+  // (reader-composer.md → Edge cases → Branch switch with chips in flight).
+  useEffect(
+    () => () => {
+      const running = [...generationStore.getTxState().runs.values()].some(
+        (r) => r.kind === SUGGESTION_REFRESH_KIND && r.branchId === branchId,
+      )
+      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+    },
+    [branchId],
+  )
 
   useEffect(
     () =>
@@ -445,6 +534,65 @@ export default function ReaderComposerRoute() {
     [openRollback],
   )
 
+  // Chips are finished prose, so the draft is replaced outright and the mode
+  // forced to Free — no wrapping (reader-composer.md → Next-turn suggestions).
+  const handleTapChip = useCallback((text: string) => {
+    composerRef.current?.restoreDraft(text, 'free')
+  }, [])
+
+  const handleToggleStripCollapsed = useCallback(() => setStripCollapsed((prev) => !prev), [])
+
+  const handleCancelSuggestions = useCallback(() => {
+    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+  }, [branchId])
+
+  // Read at settle time, not from the closure: a branch-switch abort whose
+  // reverse-replay fails resolves 'failed' well after the switch, and the
+  // error belongs to the strip that fired it. The entry ref alone would cover
+  // it (ids are globally unique, and a switch nulls the tail); the branch ref
+  // stays so the guard is legible without trusting that cross-module invariant.
+  const branchIdRef = useRef(branchId)
+  const terminalEntryIdRef = useRef(terminalEntry?.id)
+  branchIdRef.current = branchId
+  terminalEntryIdRef.current = terminalEntry?.id
+
+  const handleRefreshSuggestions = useCallback(() => {
+    const anchor = terminalEntry
+    const story = openForBranch
+    // The phase resolves its own anchor; this only proves there is one to
+    // resolve, and captures which strip an eventual failure belongs to.
+    if (anchor == null || story == null) return
+    setStripError(null)
+    const startedBranchId = branchId
+    const startedEntryId = anchor.id
+    const fail = (error: PipelineError) => {
+      if (branchIdRef.current === startedBranchId && terminalEntryIdRef.current === startedEntryId)
+        setStripError(error)
+    }
+    void refreshSuggestions(
+      { storyId: story.storyId, branchId },
+      { refreshGuidance: composerRef.current?.getDraft().text ?? '' },
+      ctx,
+    )
+      // 'rejected' is the self-block a second ⟳ hits while one runs, and
+      // 'aborted' is a cancel or a branch switch — neither is a failure.
+      .then((result) => {
+        if (result.outcome === 'failed')
+          fail(result.error ?? { kind: 'orchestrator', detail: 'run failed without an error' })
+      })
+      .catch((e: unknown) => {
+        // Logged outside the strip guard: a throw that lands after a branch
+        // switch still has to leave a trace, and beginRun's own unwind path
+        // rethrows without logging.
+        logger.error('pipeline.suggestion_refresh_threw', {
+          branchId: startedBranchId,
+          entryId: startedEntryId,
+          error: e instanceof Error ? e.message : String(e),
+        })
+        fail({ kind: 'orchestrator', detail: e instanceof Error ? e.message : String(e) })
+      })
+  }, [terminalEntry, openForBranch, branchId])
+
   const handleReady = useCallback(async () => {
     // Boot/reload handshake: emissions before onReady are lost, so bump the
     // nonce to force a fresh full-prop emission, and re-arm the loading veil.
@@ -523,8 +671,12 @@ export default function ReaderComposerRoute() {
     enabled: isFocused,
   })
   const contextualActions: ActionGroup = useMemo(() => {
+    // editBlocked, not isGenerating: undo/redo reject on the gate, which a
+    // suggestion refresh now holds too. Keyed off the turn alone, the item
+    // would stay enabled and its rejection would toast "nothing to undo" over
+    // an intact history.
     const blocked = {
-      disabled: isGenerating,
+      disabled: editBlocked,
       disabledReason: t('reader:actions.blockedWhileGenerating'),
     }
     return {
@@ -555,7 +707,7 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, isGenerating, menuUndo, menuRedo, entries.length, jumpToBottom])
+  }, [hasRedo, editBlocked, menuUndo, menuRedo, entries.length, jumpToBottom])
 
   const streamingPayload = useMemo(
     () =>
@@ -596,11 +748,9 @@ export default function ReaderComposerRoute() {
       actions={<AppActionsMenu contextual={contextualActions} />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={
-            isGenerating ? 'generating-narrative' : classifierRunning ? 'classifying' : undefined
-          }
+          activePhase={activePhase}
           error={
-            isGenerating
+            activePhase != null
               ? undefined
               : swapPaused
                 ? { code: 'swap-paused' }
@@ -608,9 +758,17 @@ export default function ReaderComposerRoute() {
                   ? { code: 'memory-incomplete', pendingRows: staleTotal }
                   : undefined
           }
-          // Cancelling is a per-turn affordance; a background classifier pass has none.
-          {...(isGenerating
-            ? { onCancel: () => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel') }
+          // A background classifier pass has no cancel affordance, so the prop is
+          // absent rather than a no-op handler that would still open the popover.
+          {...(isGenerating || refreshingSuggestions
+            ? {
+                onCancel: () =>
+                  void awaitRunTerminal(
+                    isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
+                    branchId,
+                    'cancel',
+                  ),
+              }
             : {})}
           onErrorTap={(code) => {
             if (code !== 'classifier-offline' && storyId != null)
@@ -663,19 +821,39 @@ export default function ReaderComposerRoute() {
               </View>
             )}
           </View>
+          {stripVisible ? (
+            <SuggestionStrip
+              contentClassName="mx-auto w-full max-w-[860px]"
+              phase={stripPhase}
+              collapsed={stripCollapsed}
+              chips={chips}
+              categories={suggestionCategories}
+              errorMessage={stripErrorMessage}
+              errorFix={stripErrorFix}
+              canRefresh={canRefreshSuggestions}
+              onTapChip={handleTapChip}
+              onRefresh={handleRefreshSuggestions}
+              onCancel={handleCancelSuggestions}
+              onToggleCollapsed={handleToggleStripCollapsed}
+              disabled={editBlocked}
+            />
+          ) : null}
           <View className="border-t border-border px-6 pb-3.5 pt-3">
             <View className="mx-auto w-full max-w-[860px]">
               <Composer
                 ref={composerRef}
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
-                disabled={editBlocked || !hydrationSucceeded}
+                disabled={!hydrationSucceeded}
+                sendBlocked={editBlocked}
                 disabledReason={
                   hydrationFailed
                     ? t('reader:hydrationFailedBody')
                     : !hydrationSucceeded
                       ? t('reader:hydrationLoading')
-                      : undefined
+                      : editBlocked
+                        ? t('reader:actions.blockedWhileGenerating')
+                        : undefined
                 }
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })

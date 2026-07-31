@@ -17,7 +17,7 @@ for the placement rule.
   persisted entry content.** Scheduled for the post-M3 reconciliation
   pass, before M4 opens. Today `EntryCard` detects the block by
   scanning persisted `content` for a literal `<state>` substring
-  (`stripStateBlock`, `lib/piggyback/parse.ts`) and renders the raw
+  (`stripTrailingBlocks`, `lib/piggyback/parse.ts`) and renders the raw
   XML verbatim. Three things follow: the fallback per-turn classifier
   writes metadata and deltas but never touches `content`, so its block
   is structurally invisible; the icon means "the model emitted XML,"
@@ -149,7 +149,7 @@ for the placement rule.
     remnant to inspect. Keep the raw text for that case; `reasoning` is
     the precedent for a large optional string on metadata.
   - **Legacy rows keep their inline block.** Prefer a tolerant reader
-    (retain `stripStateBlock` as a display-time fallback) over a
+    (retain `stripTrailingBlocks` as a display-time fallback) over a
     migration.
 
 - **Happening involvements drift when scene membership is edited after

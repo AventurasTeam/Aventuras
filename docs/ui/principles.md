@@ -317,6 +317,15 @@ when reachable from inside the story.
   itself. Reads of the live store during pipeline writes are
   accepted; the user sees state in motion as the pipeline
   progresses.
+- **Composing the next turn** — the composer's text and its mode
+  picker stay live for the whole gate. Neither writes anything: the
+  draft is component state and the composer mode is a send-time
+  transform, so only **Send** is refused (and regenerate, when it
+  lands). Gating the draft would mean the user cannot think ahead
+  during the one stretch where they have nothing else to do, and it
+  buys no coherence — there is no second writer to race. The
+  `mode switch` in the gated list above is the story's
+  adventure / creative mode, not this picker.
 - **Cancel** — always available, reverts the transaction via
   reverse-replay of the `action_id`'s deltas. Universal escape
   hatch.

@@ -5,7 +5,7 @@
 - **Milestone:** [Milestone 3 — Memory floor](../milestone.md)
 - **Depends on:** none (day-one; the M2.7 per-turn pipeline and
   M2.8 id-substitution are merged prerequisites)
-- **Blocks:** [Slice 3.7](./07-suggestions.md) (both emission folds
+- **Blocks:** [Slice 3.7a](./07a-suggestions.md) (both emission folds
   ride this slice's paths; `<suggestions>` parses through C2)
 
 ## Goal
@@ -107,7 +107,7 @@ is off, a separate per-turn classifier call writes the same subset.
 - Any row creation (entities, lore, happenings) and any
   `description` authorship — [Slice 3.3](./03-classifier.md).
 - `<suggestions>` emission and parse wiring —
-  [Slice 3.7](./07-suggestions.md) (consumes C2).
+  [Slice 3.7a](./07a-suggestions.md) (consumes C2).
 - Retirement (`active → retired`) — classifier-only per canon.
 - The piggybackMode settings UI (Story Settings · Memory · Classifier
   panel) — M7.2; the setting itself is readable since M1.5.

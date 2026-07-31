@@ -8,6 +8,7 @@ export const TEMPLATE_IDS = {
   perTurnNarrative: 'tmpl_per_turn_narrative',
   piggybackFallbackClassifier: 'tmpl_piggyback_fallback_classifier',
   periodicClassifier: 'tmpl_periodic_classifier',
+  suggestionRefresh: 'tmpl_suggestion_refresh',
   wizardOpening: 'tmpl_wizard_opening',
   wizardTitleChips: 'tmpl_wizard_title_chips',
   wizardDescription: 'tmpl_wizard_description',
@@ -16,6 +17,8 @@ export const TEMPLATE_IDS = {
 export const MACRO_IDS = {
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
+  suggestionEmission: 'macro_suggestion_emission',
+  suggestionEmissionJson: 'macro_suggestion_emission_json',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

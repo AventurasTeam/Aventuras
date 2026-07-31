@@ -212,10 +212,23 @@ type ClassifierContext = BaseContext & {
 The orchestrator hands each phase its run's typed context —
 `PerTurnContext`, `ClassifierContext`, etc. — narrowing the generic
 `PhaseContext` base; a phase typed for the wrong kind is a type error.
-(M1 ships the minimal base `{ actionId, abortSignal, intermediates }`;
-the per-kind `inputs` / `story` / `settings` fields land with their
-milestones.) **Chained transactions (per-turn → chapter-close) do not
-inherit intermediates** — each chained pipeline has its own context and
+(M1 ships the minimal base `{ actionId, abortSignal, intermediates }`.)
+
+**What shipped for `inputs` instead of the sketch above.** The base
+`PhaseContext` (`lib/pipeline/types.ts`) carries an untyped
+`inputs?: unknown` rather than a typed field landing per milestone.
+Slice 3.7a is the first milestone to give a phase caller-supplied
+inputs — `suggestion-refresh`'s `refreshGuidance` —
+and the phase narrows `unknown` with its own type guard
+(`readRefreshInput` in
+`lib/pipeline/definitions/suggestion-refresh.ts`) rather than reading
+a typed `PerTurnContext`/`ClassifierContext`-shaped field; neither of
+those types exists in the codebase yet. Adequate for one consumer; a
+second pipeline kind needing caller inputs is the trigger to revisit
+a generic seam.
+
+**Chained transactions (per-turn → chapter-close) do not inherit
+intermediates** — each chained pipeline has its own context and
 writes a fresh set.
 
 A given piece of phase output may be both an intermediate AND
@@ -528,13 +541,17 @@ What gets validated is **selective per pipeline kind** — the
 pre-flight walks only the resolver inputs of phases this pipeline
 actually fires. The per-turn pipeline validates retrieval +
 narrative + classifier (if a separate classifier call is in the
-phase list, e.g. piggyback mode is off) + suggestions (if
-`stories.settings.suggestionsEnabled`); the chapter-close pipeline
-validates the chapter-close agent's resolved config; the periodic
-classifier validates classifier's config at its scheduled fire
-time. The memory probe is not a pipeline — it captures as a
-side-effect of the per-turn pipeline's retrieval phase, covered by
-that pipeline's pre-flight.
+phase list, e.g. piggyback mode is off). Suggestion emission is not
+a separate resolver target here — on both folds it rides whichever
+of those two calls fires, so it adds nothing to the per-turn
+pre-flight; the dedicated `suggestion` agent belongs to the
+`suggestion-refresh` pipeline kind and is pre-flighted independently
+when that pipeline runs. The chapter-close pipeline validates the
+chapter-close agent's resolved config; the periodic classifier
+validates classifier's config at its scheduled fire time. The memory
+probe is not a pipeline — it captures as a side-effect of the
+per-turn pipeline's retrieval phase, covered by that pipeline's
+pre-flight.
 
 **On failure**, the run halts before phase 0 fires — no LLM call
 goes out, no tokens spent, no deltas written. The orchestrator
@@ -1389,10 +1406,22 @@ const chapterClosePipeline: Pipeline = {
 
 const suggestionRefreshPipeline: Pipeline = {
   kind: 'suggestion-refresh',
-  gateBehavior: 'no-gate', // composer stays usable; only the chip strip shows local loading
-  concurrencyPolicy: { blockedBy: ['per-turn', 'suggestion-refresh'] },
-  // per-turn and self-block are framework backstops; the UI also gates
-  // the re-roll affordance during a turn or while one is already loading
+  gateBehavior: 'hard-gate', // chips are delta-logged state built from a context snapshot
+  concurrencyPolicy: {
+    blockedBy: ['per-turn', 'suggestion-refresh'],
+    yieldsTo: ['per-turn'],
+  },
+  // The gate is what keeps a reversal from racing the write: undo, redo,
+  // edit and rollback all reject on `isUserEditBlocked` for the run's
+  // duration. The post-call re-read of the target can only prove the row
+  // survived — not that an undone edit or a redo appending past it left
+  // the context the chips describe intact. Escapable rather than blocking:
+  // the strip swaps its ⟳ for a ✕ for exactly as long as the gate is held.
+  // per-turn and self-block are framework backstops; the UI also gates the
+  // re-roll affordance during a turn or while one is already loading.
+  // yieldsTo is a backstop too, now that the gate disables Send and the
+  // failure card's Retry — per-turn's own blockedBy still lacks this kind,
+  // so a non-UI caller could otherwise start a turn mid-refresh.
 }
 
 const periodicClassifierPipeline: Pipeline = {
@@ -1433,6 +1462,10 @@ const translationRetryPipeline: Pipeline = {
 | translation-retry     | chapter-close (chained) | chained start originates from per-turn commit; per-turn can't run during retry, so chain can't fire                                                                                                                                                              |
 | translation-retry     | periodic-classifier     | classifier's blockedBy lacks translation-retry → starts; both run (classifier doesn't write translation rows)                                                                                                                                                    |
 | translation-retry     | translation-retry       | blockedBy includes self → blocked                                                                                                                                                                                                                                |
+| per-turn              | suggestion-refresh      | refresh's blockedBy includes per-turn → blocked (the strip also locks its ⟳ for the turn's duration)                                                                                                                                                             |
+| suggestion-refresh    | suggestion-refresh      | blockedBy includes self → blocked; the strip's ⟳ is swapped for ✕ while loading, so a second re-roll isn't offered                                                                                                                                               |
+| suggestion-refresh    | per-turn                | refresh's hard-gate disables Send and the failure card's Retry, so the UI cannot get here; a non-UI caller hits yieldsTo → refresh aborts, turn starts                                                                                                           |
+| suggestion-refresh    | chapter-close (chained) | chained start bypasses concurrencyPolicy → starts; the chain originates from a per-turn commit, which the gate already prevented starting                                                                                                                        |
 
 `blockedBy` prevents NEW starts; it does NOT kill running pipelines.
 The architectural premise (`memory/cadence.md → Concurrency`) is that

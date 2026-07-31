@@ -57,6 +57,27 @@ vi.mock('./engine', async (importOriginal) => {
 
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
 
+// These tests only ever vary the embedder trio, so the mode and the suggestion
+// palette buildStorySettings also seeds are pinned to their app defaults here
+// rather than restated at ~24 call sites.
+function storySettings(
+  defaultStorySettings: Partial<StorySettings>,
+  embeddingModelId: string | null,
+  embeddingProviderId: string | null,
+  effectiveDim?: number | null,
+): StorySettings {
+  return buildStorySettings(
+    'adventure',
+    {
+      defaultStorySettings,
+      embeddingModelId,
+      embeddingProviderId,
+      defaultSuggestionCategories: APP_SETTINGS_DEFAULTS.defaultSuggestionCategories,
+    },
+    effectiveDim,
+  )
+}
+
 describe('runExclusive single-flight lock', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -145,7 +166,7 @@ describe('stale cancel-flag isolation across operations', () => {
 
   async function seedStory(): Promise<DbCtx> {
     const { db, sqlite, runInTransaction } = await createTestDb()
-    const settings = buildStorySettings({}, MINILM, null)
+    const settings = storySettings({}, MINILM, null)
     sqlite
       .prepare(
         'INSERT INTO stories (id, title, settings, created_at, updated_at) VALUES (?,?,?,?,?)',
@@ -236,7 +257,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
   })
 
   it('resolves a provider target for a local-backend story', async () => {
-    await seedStores(buildStorySettings({ embeddingBackend: 'local' }, MINILM, null), [
+    await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null), [
       cachedProvider('prov1', [{ id: TARGET_MODEL }]),
     ])
 
@@ -255,10 +276,9 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
   })
 
   it('resolves a local target for a provider-backed story', async () => {
-    await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
-      [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])],
-    )
+    await seedStores(storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'), [
+      cachedProvider('prov1', [{ id: PROVIDER_MODEL }]),
+    ])
 
     const resolution = resolveStorySwapConfig('s1', { modelId: MINILM, backend: 'local' })
 
@@ -272,7 +292,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
 
   it('reads capabilities from the target provider, not the story provider', async () => {
     await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 256),
+      storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 256),
       [
         cachedProvider('prov1', [
           { id: PROVIDER_MODEL, capabilities: { matryoshkaSupported: false } },
@@ -299,7 +319,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
 
   it('keeps the story locked effectiveDim rather than re-picking it', async () => {
     await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 512),
+      storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 512),
       [cachedProvider('prov1', [{ id: TARGET_MODEL }])],
     )
 
@@ -317,7 +337,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
 
   it('threads the probed provider native dimension into the resolved target config', async () => {
     await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 2048),
+      storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1', 2048),
       [
         cachedProvider('prov1', [
           {
@@ -344,7 +364,7 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
   })
 
   it('reports no-model for a story that is not in the store', async () => {
-    await seedStores(buildStorySettings({ embeddingBackend: 'local' }, MINILM, null))
+    await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
     expect(resolveStorySwapConfig('missing', { modelId: MINILM, backend: 'local' })).toEqual({
       ok: false,
@@ -364,7 +384,7 @@ describe('relabelStory', () => {
     // Branch-less on purpose: relabelModel's vec identity rewrite is pinned by the
     // engine tests, so this isolates the settings write the app layer owns.
     const { ctx, sqlite } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      storySettings({ embeddingBackend: 'local' }, MINILM, null),
     )
 
     await relabelStory(
@@ -382,7 +402,7 @@ describe('relabelStory', () => {
 
   it('clears the provider id when relabelling onto a local target', async () => {
     const { ctx, sqlite } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
+      storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
     )
 
     await relabelStory('s1', { modelId: MINILM, backend: 'local' }, ctx)
@@ -394,7 +414,7 @@ describe('relabelStory', () => {
 
   it('relabels onto a model the catalog has never heard of', async () => {
     const { ctx, sqlite } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      storySettings({ embeddingBackend: 'local' }, MINILM, null),
     )
 
     // A renamed local copy resolves no catalog entry. Relabel is the one path that
@@ -407,7 +427,7 @@ describe('relabelStory', () => {
 
   it('refuses while a swap marker is set', async () => {
     const { ctx } = await seedStores({
-      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
       embedding_swap_target: TARGET_MODEL,
     })
 
@@ -431,9 +451,7 @@ describe('store refresh on every engine exit', () => {
   })
 
   it('publishes a marker committed by a swap that then failed', async () => {
-    const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
-    )
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
     vi.mocked(startSwap).mockImplementation(async () => {
       // The engine commits the marker in its own transaction before phase 1, so
@@ -464,17 +482,13 @@ describe('cancelStorySwap outcome', () => {
   })
 
   it('reports nothing-pending when no swap is in flight and no marker is set', async () => {
-    const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
-    )
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
     await expect(cancelStorySwap('s1', ctx)).resolves.toBe('nothing-pending')
   })
 
   it('reports already-completed when the run finished past its last cancel poll', async () => {
-    const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
-    )
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
     vi.mocked(startSwap).mockResolvedValue('completed')
 
     // Cancel races a run that completes: awaiting it returns, but nothing was
@@ -487,9 +501,7 @@ describe('cancelStorySwap outcome', () => {
   })
 
   it('falls through to a direct unwind when the run rejected before its poll', async () => {
-    const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
-    )
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
     vi.mocked(startSwap).mockImplementation(async () => {
       // The engine commits the marker before phase 1, so a throw here leaves it.
       await ctx.runInTransaction([
@@ -529,7 +541,7 @@ describe('resolveDrainConfig swap guards', () => {
   })
 
   it('refuses to drain while an embedder op holds the story lock', async () => {
-    const settings = buildStorySettings({ embeddingBackend: 'local' }, MINILM, null)
+    const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
     await seedStores(settings)
     currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
     expect(resolveDrainConfig('s1').ok).toBe(true)
@@ -552,7 +564,7 @@ describe('resolveDrainConfig swap guards', () => {
 
   it('still refuses for a crash-recovered marker with no run in flight', async () => {
     const settings = {
-      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
       embedding_swap_target: MINILM,
     }
     await seedStores(settings)
@@ -583,7 +595,7 @@ describe('crash recovery resolves its target from the marker', () => {
   it('resumes a cross-backend swap against the marker backend, not the story backend', async () => {
     const { ctx } = await seedStores(
       {
-        ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+        ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
         embedding_swap_target: TARGET_MODEL,
         embedding_swap_backend: 'provider',
         embedding_swap_provider_id: 'prov1',
@@ -609,7 +621,7 @@ describe('crash recovery resolves its target from the marker', () => {
 
   it('threads persisted swap dimensions into resume parameters', async () => {
     const { ctx } = await seedStores({
-      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
       embedding_swap_target: MINILM,
       embedding_swap_source_dim: 384,
       embedding_swap_target_dim: 768,
@@ -623,7 +635,7 @@ describe('crash recovery resolves its target from the marker', () => {
 
   it('treats an absent swap backend as the story own backend', async () => {
     const { ctx } = await seedStores({
-      ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+      ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
       embedding_swap_target: MINILM,
     })
     const { seen } = captureResume()
@@ -636,9 +648,7 @@ describe('crash recovery resolves its target from the marker', () => {
   })
 
   it('refuses to resume a story with no marker', async () => {
-    const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
-    )
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
     await expect(resumeStorySwap('s1', ctx)).rejects.toBeInstanceOf(SwapNotInProgressError)
     expect(resumeSwap).not.toHaveBeenCalled()
@@ -647,7 +657,7 @@ describe('crash recovery resolves its target from the marker', () => {
   it('cancels a crash-recovered swap from the marker with no loop running', async () => {
     const { ctx } = await seedStores(
       {
-        ...buildStorySettings({ embeddingBackend: 'local' }, MINILM, null),
+        ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
         embedding_swap_target: TARGET_MODEL,
         embedding_swap_backend: 'provider',
         embedding_swap_provider_id: 'prov1',
@@ -677,7 +687,7 @@ describe('crash recovery resolves its target from the marker', () => {
 
   it('re-indexes on the story own backend, not a bare model id', async () => {
     const { ctx } = await seedStores(
-      buildStorySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
+      storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'),
       [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])],
     )
     let params: SwapParams | undefined

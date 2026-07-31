@@ -4,7 +4,14 @@ import { generateStructured, resolveModel, resolveModelCapabilities } from '@/li
 import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
 import type { IdBiMap } from '@/lib/ids'
-import { buildPiggybackActions, substitutePiggybackIds, VISUAL_CHANGE_TYPES } from '@/lib/piggyback'
+import {
+  buildPiggybackActions,
+  resolveSuggestionEmission,
+  resolveSuggestionItems,
+  substitutePiggybackIds,
+  suggestionRefSchema,
+  VISUAL_CHANGE_TYPES,
+} from '@/lib/piggyback'
 import type {
   PhaseContext,
   PhaseEmittedEvent,
@@ -74,32 +81,39 @@ export const fallbackClassifierSchema = z.object({
   summary: z.string().optional(),
 })
 
+// Structured output validates the whole object in one shot, so without
+// .catch([]) a malformed suggestions array would fail the entire classifier
+// parse and take the (unrelated) scene-state fields down with it. The element
+// is shared with suggestion-refresh; only this array policy is local.
+const suggestionFieldSchema = z.array(suggestionRefSchema).catch([])
+
+export const fallbackClassifierWithSuggestionsSchema = fallbackClassifierSchema.extend({
+  suggestions: suggestionFieldSchema,
+})
+
+function hasSuggestions(
+  value:
+    | z.infer<typeof fallbackClassifierSchema>
+    | z.infer<typeof fallbackClassifierWithSuggestionsSchema>,
+): value is z.infer<typeof fallbackClassifierWithSuggestionsSchema> {
+  return 'suggestions' in value
+}
+
 // architecture.md → Classifier contract — metadata fields: reject a negative
 // worldTimeDelta, re-roll the classification once, then let
 // resolvePiggybackWorldTimeDelta clamp-and-warn if it's still negative. A
 // re-roll here means redoing the whole structured call (this is an isolated
 // classifier call, unlike the narrative path where the delta rides the same
 // call as the prose and can't be re-rolled alone).
-async function generateClassifierState(
+async function generateClassifierState<T extends { worldTimeDelta: number }>(
   prompt: string,
+  schema: z.ZodType<T>,
   config: ResolveModelConfig,
   abortSignal: AbortSignal,
-): Promise<GenerateStructuredResult<z.infer<typeof fallbackClassifierSchema>>> {
-  const first = await generateStructured(
-    'classifier',
-    prompt,
-    fallbackClassifierSchema,
-    config,
-    abortSignal,
-  )
+): Promise<GenerateStructuredResult<T>> {
+  const first = await generateStructured('classifier', prompt, schema, config, abortSignal)
   if (first.status !== 'ok' || first.value.worldTimeDelta >= 0) return first
-  const reroll = await generateStructured(
-    'classifier',
-    prompt,
-    fallbackClassifierSchema,
-    config,
-    abortSignal,
-  )
+  const reroll = await generateStructured('classifier', prompt, schema, config, abortSignal)
   return reroll.status === 'ok' ? reroll : first
 }
 
@@ -127,6 +141,13 @@ export async function* piggybackFallbackClassifierPhase(
     (e) => e.branchId === ctx.branchId,
   )
 
+  const suggestionEmission = resolveSuggestionEmission(open.settings)
+  // Only ask when chips aren't already in hand: a <state>-failed /
+  // <suggestions>-ok turn fires this phase for state alone, and re-rolling
+  // would overwrite good chips with a second opinion.
+  const suggestionsAlreadyCaptured = ctx.intermediates.suggestionsCaptured === true
+  const askForSuggestions = suggestionEmission.settingsAllowEmission && !suggestionsAlreadyCaptured
+
   // Same context builder + template pattern as the narrative phase
   // (lib/pipeline/definitions/per-turn.ts) — the classifier is a
   // story-related prompt like any other, not a special case. Reuses the
@@ -134,6 +155,7 @@ export async function* piggybackFallbackClassifierPhase(
   // consistent across the turn instead of being renumbered from scratch.
   const idMap = ctx.intermediates.idMap as IdBiMap
   const context = buildGenerationContext({
+    branchId: ctx.branchId,
     // The user's action can itself carry state changes ("I put the sword
     // away"), not just the AI's reply — both entries go to the classifier.
     entries: previousEntry ? [previousEntry, tail] : [tail],
@@ -141,21 +163,31 @@ export async function* piggybackFallbackClassifierPhase(
     definition: open.definition,
     settings: open.settings,
     idMap,
+    suggestionsFire: askForSuggestions,
   })
   const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
 
   const appSettings = appSettingsStore.getAppSettings()
-  const result = await generateClassifierState(
-    prompt,
-    {
-      providers: appSettings.providers,
-      profiles: appSettings.profiles,
-      assignments: appSettings.assignments,
-      defaultProviderId: appSettings.defaultProviderId,
-      storyModels: open.settings.models,
-    },
-    ctx.abortSignal,
-  )
+  const classifierConfig: ResolveModelConfig = {
+    providers: appSettings.providers,
+    profiles: appSettings.profiles,
+    assignments: appSettings.assignments,
+    defaultProviderId: appSettings.defaultProviderId,
+    storyModels: open.settings.models,
+  }
+  const result = askForSuggestions
+    ? await generateClassifierState(
+        prompt,
+        fallbackClassifierWithSuggestionsSchema,
+        classifierConfig,
+        ctx.abortSignal,
+      )
+    : await generateClassifierState(
+        prompt,
+        fallbackClassifierSchema,
+        classifierConfig,
+        ctx.abortSignal,
+      )
   if (result.status !== 'ok') {
     ctx.log.warn('classifier.piggyback_fallback_failed', {
       status: result.status,
@@ -185,6 +217,34 @@ export async function* piggybackFallbackClassifierPhase(
     source: 'per_turn_classifier',
   })
 
+  const rawSuggestions =
+    askForSuggestions && hasSuggestions(result.value) ? result.value.suggestions : []
+  const { items: suggestionItems, droppedCount } = resolveSuggestionItems(
+    rawSuggestions,
+    suggestionEmission,
+  )
+  // A malformed suggestions array is already indistinguishable from a
+  // genuinely-empty one by the time we get here — .catch([]) collapses both
+  // to [] at parse time, and unlike the narrative fold there's no sibling
+  // blockFound/failed signal on this isolated structured call to tell them
+  // apart. Warn on either zero-captured or any drop so a model that
+  // consistently emits malformed chips doesn't fail silently forever
+  // (callWithRetry's parse-retry never sees this: .catch() means the parse
+  // itself never fails).
+  if (
+    askForSuggestions &&
+    (suggestionItems.length === 0 ||
+      droppedCount > 0 ||
+      suggestionItems.length < suggestionEmission.count)
+  ) {
+    ctx.log.warn('classifier.suggestions_parse_failed', {
+      received: rawSuggestions.length,
+      dropped: droppedCount,
+      resolved: suggestionItems.length,
+      expected: suggestionEmission.count,
+    })
+  }
+
   yield {
     type: 'delta_emitted',
     action: {
@@ -193,7 +253,13 @@ export async function* piggybackFallbackClassifierPhase(
       payload: {
         branchId: ctx.branchId,
         id: tail.id,
-        metadata: { ...tail.metadata, ...scenePatch },
+        metadata: {
+          ...tail.metadata,
+          ...scenePatch,
+          ...(suggestionItems.length > 0
+            ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }
+            : {}),
+        },
       },
     },
   }

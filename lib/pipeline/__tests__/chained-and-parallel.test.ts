@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
 import { deltas, pipelineRuns, storyEntries } from '@/lib/db'
-import { definePipeline, pipelineEventBus, runPipeline, type PhaseResult } from '@/lib/pipeline'
+import {
+  definePipeline,
+  pipelineEventBus,
+  runPipeline,
+  type PhaseContext,
+  type PhaseResult,
+} from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
@@ -77,6 +83,28 @@ describe('chained transition', () => {
     expect(rows.every((r) => r.outcome === 'completed' && r.finishedAt !== null)).toBe(true)
 
     expect(generationStore.getTxState().runs.size).toBe(0) // successor executed and cleared
+  })
+
+  it('hands the origin run its inputs and the chained successor none', async () => {
+    const { ctx } = await makeHarness()
+    const seen: unknown[] = []
+    async function* record({ inputs }: PhaseContext): AsyncGenerator<never, PhaseResult> {
+      seen.push(inputs)
+      return { status: 'completed' }
+    }
+    definePipeline({ kind: 'succ', phases: [{ name: 'p', run: record }], ...base })
+    definePipeline({
+      kind: 'pred',
+      phases: [{ name: 'p', run: record }],
+      chainsTo: () => 'succ',
+      ...base,
+    })
+
+    await runPipeline('pred', { ...ctx, inputs: { note: 'origin-only' } })
+
+    // A chained kind has its own context; inheriting the predecessor's inputs
+    // would feed it parameters shaped for a different pipeline.
+    expect(seen).toEqual([{ note: 'origin-only' }, undefined])
   })
 
   it('keeps a hard-gate run present across the transition (no edit window)', async () => {

@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router'
 
+import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { PipelineError } from '@/lib/pipeline'
@@ -43,26 +44,31 @@ export function toSystemFailureMeta(
   }
 }
 
+// Shared by the system-entry bubble and the suggestion strip: a config-resolver
+// failure is deterministic, so both surfaces route to settings instead of
+// offering a retry that cannot succeed. Widened past ResolveFailureKind because
+// the bubble's caller reads a persisted `z.string()`; an unrecognised value
+// lands on the generic "Fix default" rather than dropping the affordance.
+export function useConfigFixAction(
+  failure: ResolveFailureKind | (string & {}) | undefined,
+): SystemEntryFixAction {
+  const router = useRouter()
+  if (failure === undefined) return undefined
+  const labelKey =
+    failure === 'no-profile-assigned'
+      ? 'reader:systemEntry.assignProfile'
+      : failure === 'profile-missing'
+        ? 'reader:systemEntry.fixProfile'
+        : 'reader:systemEntry.fixDefault'
+  return { label: t(labelKey), onPress: () => router.push('/settings?tab=providers') }
+}
+
 export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
 ): { onRetry: () => void; fixAction: SystemEntryFixAction } {
-  const router = useRouter()
-
-  function navigateToProviderSettings() {
-    router.push('/settings?tab=providers')
-  }
-
-  let fixAction: SystemEntryFixAction
-  if (failure?.kind === 'config-resolver') {
-    const labelKey =
-      failure.failure === 'no-profile-assigned'
-        ? 'reader:systemEntry.assignProfile'
-        : failure.failure === 'profile-missing'
-          ? 'reader:systemEntry.fixProfile'
-          : 'reader:systemEntry.fixDefault'
-    fixAction = { label: t(labelKey), onPress: navigateToProviderSettings }
-  }
-
+  const fixAction = useConfigFixAction(
+    failure?.kind === 'config-resolver' ? failure.failure : undefined,
+  )
   return { onRetry, fixAction }
 }

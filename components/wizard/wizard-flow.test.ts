@@ -43,6 +43,7 @@ const APP_DEFAULTS = {
   defaultStorySettings: {},
   embeddingModelId: LOCAL_MODEL,
   embeddingProviderId: null,
+  defaultSuggestionCategories: { adventure: [], creative: [] },
   providers: [],
   installedLocalIds: [LOCAL_MODEL],
 }

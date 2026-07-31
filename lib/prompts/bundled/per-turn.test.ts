@@ -191,3 +191,65 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     expect(rendered).toContain('<state>')
   })
 })
+
+describe('bundled per-turn template — suggestionsFire gating', () => {
+  const suggestionContext = {
+    ...m2Context,
+    suggestionsFire: true,
+    suggestionCount: 2,
+    suggestionSlots: [
+      { ref: 'cat1', label: 'Action', promptHint: 'A decisive move.' },
+      { ref: 'cat2', label: 'Dialogue', promptHint: 'A line of speech.' },
+    ],
+  }
+
+  it('includes the suggestion-emission macro when suggestionsFire is true', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(rendered).toContain('<suggestions>')
+    // The id is its own labelled field, not bracketed beside the name: a model
+    // that reads "[cat1] Action" as one label emits an unresolvable ref.
+    expect(rendered).toContain('id "cat1" = Action — use it for: A decisive move.')
+    // The skeleton interpolates a real id rather than the word "ref", which a
+    // model would copy verbatim into the attribute.
+    expect(rendered).toContain('<item category="cat1">')
+  })
+
+  // stripTrailingBlocks (lib/piggyback/parse.ts) cuts prose at the EARLIEST
+  // trailing-tag occurrence anywhere in the raw output — a fragment that
+  // doesn't forbid mid-prose emission risks the model burying <suggestions>
+  // inside the narrative and silently truncating everything after it.
+  it('forbids mid-prose emission regardless of whether the state block is present', () => {
+    const withState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(withState).toContain('never inside the prose itself')
+
+    const withoutState = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      piggybackFires: false,
+    })
+    expect(withoutState).toContain('never inside the prose itself')
+  })
+
+  it('omits the suggestion-emission macro when suggestionsFire is false', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      suggestionsFire: false,
+    })
+    expect(rendered).not.toContain('<suggestions>')
+  })
+
+  it('joins the state block and the suggestions block with a single newline, no blank line, when both fire', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, suggestionContext)
+    expect(rendered).toContain('off-scene).\nAppend exactly one <suggestions> block')
+  })
+
+  it('places the suggestions block directly after the narrative instruction when piggybackFires is false', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...suggestionContext,
+      piggybackFires: false,
+    })
+    expect(rendered).not.toContain('<state>')
+    expect(rendered).toContain(
+      'Do not break character or address the reader.\nAppend exactly one <suggestions> block',
+    )
+  })
+})

@@ -16,7 +16,7 @@ const definition = {
   worldTimeOrigin: { year: 0 },
 }
 
-const settings = { partialChapterBuffer: 3 } as never
+const settings = { partialChapterBuffer: 3, suggestionCategories: [] } as never
 
 function entry(id: string, position: number, content: string, kind = 'ai_reply') {
   return {
@@ -41,6 +41,7 @@ describe('buildGenerationContext', () => {
       entry('e5', 5, 'five'),
     ] as never[]
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries,
       entities: [],
       definition,
@@ -54,6 +55,7 @@ describe('buildGenerationContext', () => {
 
   it('exposes partialChapterBuffer through userSettings for template-side windowing', () => {
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [],
       definition,
@@ -65,6 +67,7 @@ describe('buildGenerationContext', () => {
 
   it('emits every variable the generationContext registry pins', () => {
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [],
       definition,
@@ -78,6 +81,7 @@ describe('buildGenerationContext', () => {
 
   it('normalizes whitespace-only definitional fields to empty string', () => {
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [],
       definition,
@@ -101,6 +105,7 @@ describe('buildGenerationContext', () => {
       },
     ] as never[]
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities,
       definition,
@@ -115,6 +120,7 @@ describe('buildGenerationContext', () => {
   // would silently enrol every future column and make it undroppable.
   it('projects entities to PROMPT_ENTITY_FIELDS, dropping the rest of the row', () => {
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [
         {
@@ -163,6 +169,7 @@ describe('buildGenerationContext', () => {
       },
     ] as never[]
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries,
       entities,
       definition,
@@ -178,6 +185,7 @@ describe('buildGenerationContext', () => {
 
   it('yields empty sceneEntities when no entry carries scene metadata', () => {
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries: [entry('e1', 1, 'one')] as never[],
       entities: [],
       definition,
@@ -196,6 +204,7 @@ describe('buildGenerationContext', () => {
       entry('e5', 5, 'The gate creaks open.'),
     ] as never[]
     const ctx = buildGenerationContext({
+      branchId: 'b1',
       entries,
       entities: [],
       definition,
@@ -212,8 +221,178 @@ describe('buildGenerationContext', () => {
     expect(prompt).not.toContain('second-line')
   })
 
+  it('drops entries and entities belonging to another branch', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [entry('e1', 1, 'ours'), { ...entry('e2', 2, 'theirs'), branchId: 'b2' }] as never[],
+      entities: [
+        { id: 'char_00000000-0000-4000-8000-00000000000a', name: 'Ours', branchId: 'b1' },
+        { id: 'char_00000000-0000-4000-8000-00000000000b', name: 'Theirs', branchId: 'b2' },
+      ] as never[],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect((ctx.entries as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
+    expect((ctx.entities as { name: string }[]).map((e) => e.name)).toEqual(['Ours'])
+  })
+
+  it('always carries suggestionSlots; suggestionsFire gates only the instruction', () => {
+    const paletteSettings = {
+      partialChapterBuffer: 3,
+      suggestionCategories: [
+        {
+          id: 'cat_a',
+          label: 'Action',
+          promptHint: 'Do something.',
+          color: 'red',
+          enabled: true,
+          order: 0,
+        },
+      ],
+    } as never
+    const base = { branchId: 'b1', entries: [], entities: [], definition, idMap: new IdBiMap() }
+
+    // The slots are the story's palette, not an instruction to emit — a caller
+    // that renders a template reading them (suggestion-refresh) must not have
+    // to claim it is "firing" to receive its own subject matter.
+    const quiet = buildGenerationContext({ ...base, settings: paletteSettings })
+    expect(quiet.suggestionSlots).toEqual([
+      { ref: 'cat1', label: 'Action', promptHint: 'Do something.' },
+    ])
+    expect(quiet.suggestionsFire).toBe(false)
+
+    const firing = buildGenerationContext({
+      ...base,
+      settings: paletteSettings,
+      suggestionsFire: true,
+    })
+    expect(firing.suggestionsFire).toBe(true)
+  })
+
+  it('re-gates suggestionsFire to false when the palette has nothing enabled', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings: { partialChapterBuffer: 3, suggestionCategories: [] } as never,
+      idMap: new IdBiMap(),
+      suggestionsFire: true,
+    })
+    expect(ctx.suggestionsFire).toBe(false)
+  })
+
+  it('emits placeholder-ref slots for the enabled categories, in order, when suggestionsFire is true', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings: {
+        partialChapterBuffer: 3,
+        suggestionCategories: [
+          {
+            id: 'cat_a',
+            label: 'Action',
+            promptHint: 'Do something.',
+            color: 'red',
+            enabled: true,
+            order: 0,
+          },
+          {
+            id: 'cat_b',
+            label: 'Dialogue',
+            promptHint: 'Say something.',
+            color: 'blue',
+            enabled: false,
+            order: 1,
+          },
+        ],
+      } as never,
+      idMap: new IdBiMap(),
+      suggestionsFire: true,
+    })
+    expect(ctx.suggestionSlots).toEqual([
+      { ref: 'cat1', label: 'Action', promptHint: 'Do something.' },
+    ])
+  })
+
+  it('forces suggestionsFire back to false when the caller says true but every category is disabled', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings: {
+        partialChapterBuffer: 3,
+        suggestionCategories: [
+          {
+            id: 'cat_a',
+            label: 'Action',
+            promptHint: 'Do something.',
+            color: 'red',
+            enabled: false,
+            order: 0,
+          },
+        ],
+      } as never,
+      idMap: new IdBiMap(),
+      suggestionsFire: true,
+    })
+    expect(ctx.suggestionsFire).toBe(false)
+    expect(ctx.suggestionSlots).toEqual([])
+  })
+
+  it('passes suggestionCount through from settings regardless of whether suggestions fire', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings: { partialChapterBuffer: 3, suggestionCount: 5, suggestionCategories: [] } as never,
+      idMap: new IdBiMap(),
+    })
+    expect(ctx.suggestionCount).toBe(5)
+  })
+
+  it('defaults refreshGuidance to empty and normalizes a whitespace-only steer', () => {
+    const empty = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    expect(empty.refreshGuidance).toBe('')
+
+    const blank = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+      refreshGuidance: '   ',
+    })
+    expect(blank.refreshGuidance).toBe('')
+
+    const steered = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+      refreshGuidance: 'I sneak around the back',
+    })
+    expect(steered.refreshGuidance).toBe('I sneak around the back')
+  })
+
   it('resolves calendarVocabulary for known calendar id and null for unknown', () => {
     const knownCtx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [],
       definition: { ...definition, calendarSystemId: 'earth-gregorian' },
@@ -224,6 +403,7 @@ describe('buildGenerationContext', () => {
     expect((knownCtx.calendarVocabulary as { baseUnitName: string }).baseUnitName).toBe('second')
 
     const unknownCtx = buildGenerationContext({
+      branchId: 'b1',
       entries: [],
       entities: [],
       definition: { ...definition, calendarSystemId: 'nonexistent-calendar' },

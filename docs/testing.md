@@ -80,14 +80,20 @@ settled and load-bearing:
 
 ### Launch modes
 
-| Mode      | Renderer source                            | Electron main | Used for                           |
-| --------- | ------------------------------------------ | ------------- | ---------------------------------- |
-| **Local** | static `dist/` export, served on localhost | unpackaged    | Authoring tests; fast              |
-| **CI**    | `electron-builder --linux --dir` bundle    | packaged      | The suite of record; real `app://` |
+Named for the Playwright projects that select them — `dev` is what
+`pnpm test:e2e` runs, `packaged` what `pnpm test:e2e:packaged` runs.
 
-Neither mode runs a Metro dev server, and **neither hot-reloads**: local
-mode serves a prebuilt `dist/` through `serveDist()`, so a renderer
-change is invisible to it until `pnpm build:web` runs again.
+| Mode         | Renderer source                            | Electron main | Used for                           |
+| ------------ | ------------------------------------------ | ------------- | ---------------------------------- |
+| **dev**      | static `dist/` export, served on localhost | unpackaged    | Authoring tests; fast              |
+| **packaged** | `electron-builder --linux --dir` bundle    | packaged      | The suite of record; real `app://` |
+
+Neither mode runs a Metro dev server, and **neither hot-reloads**: both
+load the same pre-built `dist/` produced by `pnpm build:web`
+(`expo export --platform web`), `dev` through `serveDist()` and
+`packaged` through the `app://bundle` protocol. A renderer change is
+invisible to either until `pnpm build:web` runs again — see the first
+gotcha below, which this trap has already sprung once for real.
 
 The packaged build is the target of record because it is the only
 mode that exercises `app://bundle` protocol handling, asar packing,
@@ -109,18 +115,32 @@ harness absorbs:
   matches copy or a testID you just changed: assert against the artifact
   (`grep` the new string in `dist/`) before debugging the code. Run
   `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
-  the local suite, and steps 1-3 of [CI](#ci) before the packaged one.
+  the `dev` suite, and steps 1-3 of [CI](#ci) before the packaged one.
   CI itself is safe, because its job always builds first.
+- **A running `pnpm desktop` breaks the whole suite.** The dev app holds
+  the default remote-debugging port (`127.0.0.1:9222`), and a suite
+  launched alongside it fails **every** spec in `beforeAll` — Electron
+  logs `bind() failed: Address already in use (98)` /
+  `Cannot start http server for devtools`, then `electron.launch` times
+  out after 60s. The list reporter shows every test at `0ms`, which reads
+  like a mass product failure rather than a port collision. State is not
+  the problem (the harness seeds its own `--user-data-dir`, so the dev DB
+  is untouched) — only the port is. Close the desktop app before running
+  the suite, and check `ss -tlnp | grep 9222` if launches time out. Note
+  a crashed or backgrounded run can leave the port held by an orphan;
+  `pgrep -f electron/dist/main.js` finds it.
 - **`firstWindow()` is unreliable in unpackaged/dev mode.** Dev-mode
   `electron/main.ts` opens a detached DevTools window that races the
   app window. Select the app window by URL prefix, not by first-open
   order. (Packaged mode has no DevTools window, so `firstWindow()` is
   safe there — but the harness selects by URL uniformly.)
-- **`__DEV__` differs by mode.** It is `true` in unpackaged/local mode
-  and `false` in the packaged bundle. Tests must never depend on it —
-  in particular the `stub` provider (`lib/ai/providers.ts`) throws
-  when `__DEV__` is false, so it is unavailable to E2E. Use the mock
-  LLM server instead (below).
+- **`__DEV__` is `false` in both modes**, despite one of them being
+  named `dev`. `build:web` runs `expo export` with no `--dev` flag, so
+  the bundle prelude both modes load hardcodes `__DEV__=false`; the
+  unpackaged Electron main is what "dev" names, not the renderer. In
+  particular the `stub` provider (`lib/ai/providers.ts`) throws when
+  `__DEV__` is false, so it is unavailable to E2E in either mode. Use
+  the mock LLM server instead (below).
 
 ### Virtual display
 
@@ -274,8 +294,8 @@ starts the mock, then `setProviderEndpoint` repoints that provider's
 endpoint at the mock's URL before launch (the port is dynamic, so the
 override happens at seed time, not in the dataset). This exercises the
 real transport (`lib/ai/transport`) rather than bypassing it, and works
-identically in local and packaged modes — unlike the `stub` provider,
-which is `__DEV__`-gated and absent from the packaged build. It sends
+identically in `dev` and `packaged` modes — unlike the `stub` provider,
+which is `__DEV__`-gated and so throws in both. It sends
 CORS headers (and answers the preflight) because the renderer's fetch
 is cross-origin.
 

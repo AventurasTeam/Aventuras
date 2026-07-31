@@ -50,12 +50,16 @@ test.describe('turn fanning out to the fallback classifier', () => {
 
     // One endpoint, two shapes: a streaming narrative and a structured call the
     // mock matched to the classifier by its injected schema block. The
-    // classifier fires after the narrative, so poll for it.
+    // classifier fires after the narrative, so poll for it. The seeded story
+    // has suggestions enabled, so the actual reply shape is the
+    // suggestions-carrying variant (per-turn-classifier-suggestions) — this
+    // spec is about the fan-out, not the reply shape, so it accepts either.
     expect(mock.requests.some((r) => r.streamed)).toBe(true)
     await expect
-      .poll(() => mock.requests.some((r) => !r.streamed && r.agent === 'per-turn-classifier'), {
-        timeout: 15_000,
-      })
+      .poll(
+        () => mock.requests.some((r) => !r.streamed && r.agent?.startsWith('per-turn-classifier')),
+        { timeout: 15_000 },
+      )
       .toBe(true)
 
     // The AI reply still commits despite the extra classifier round-trip.

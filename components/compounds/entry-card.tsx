@@ -26,7 +26,7 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
-import { stripStateBlock } from '@/lib/piggyback'
+import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -158,7 +158,7 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
 
-  const { prose, stateRaw } = useMemo(() => stripStateBlock(content), [content])
+  const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
   const hasState = stateRaw != null && stateRaw.length > 0
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
@@ -166,12 +166,11 @@ export function EntryCard({
 
   return (
     <View
-      className={cn(
-        'relative w-full rounded-lg border p-4',
-        KIND_BUBBLE[kind],
-        disabled && 'opacity-60',
-        className,
-      )}
+      // No dim while `disabled`: reading is never gated (principles.md → What's
+      // not gated), every control below takes `disabled` on its own, and the
+      // streaming card renders without it — so a dim here would shade the prose
+      // as a turn commits and unshade it as the run settles.
+      className={cn('relative w-full rounded-lg border p-4', KIND_BUBBLE[kind], className)}
     >
       <View className={cn('mb-2 flex-row items-center gap-2', showActions && 'pr-28')}>
         {kind === 'user_action' ? (

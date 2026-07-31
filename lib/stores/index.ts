@@ -87,6 +87,7 @@ export type { WorkingSetStore } from './factory/working-set-store'
 export {
   awaitRunTerminal,
   backgroundClassifierRunning,
+  isBackgroundKind,
   isForegroundGenerating,
   isUserEditBlocked,
 } from './generation/generation'

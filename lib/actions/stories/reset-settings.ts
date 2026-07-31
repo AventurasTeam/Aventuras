@@ -9,16 +9,17 @@ export async function resetStorySettings(
   nowMs: number = Date.now(),
 ): Promise<void> {
   const [story] = await ctx.db
-    .select({ id: stories.id })
+    .select({ id: stories.id, definition: stories.definition })
     .from(stories)
     .where(eq(stories.id, storyId))
   if (!story) throw new Error('Story not found')
 
   const appSettings = appSettingsStore.getAppSettings()
   const settings = buildStorySettings(
-    appSettings.defaultStorySettings,
-    appSettings.embeddingModelId,
-    appSettings.embeddingProviderId,
+    // definition is nullable at the column level; creative is the wizard's
+    // starting mode, used if a row somehow has none.
+    story.definition?.mode ?? 'creative',
+    appSettings,
   )
 
   await ctx.runInTransaction([

@@ -30,4 +30,41 @@ describe('bundled pack', () => {
     expect(out).toContain('cast id: c1')
     expect(out).toMatchSnapshot()
   })
+
+  // Both structured surfaces include macro_suggestion_emission_json; editing the
+  // chip contract inline in one template instead of the macro diverges them here.
+  it('renders one identical JSON chip instruction on both structured surfaces', () => {
+    const context = {
+      definition: { mode: 'adventure', genre: { promptBody: '' }, tone: { promptBody: '' } },
+      entities: [],
+      entries: [{ content: 'The gate groaned open.' }],
+      suggestionsFire: true,
+      suggestionSlots: [{ ref: 'cat1', label: 'Action', promptHint: 'act' }],
+      suggestionCount: 2,
+    }
+    const instruction = (prompt: string) => {
+      const start = prompt.indexOf('Populate the "suggestions" field')
+      const end = prompt.indexOf('one or two sentences.')
+      expect(start).toBeGreaterThan(-1)
+      expect(end).toBeGreaterThan(start)
+      return prompt.slice(start, end)
+    }
+
+    const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+    // suggestionsFire: false is what the refresh phase actually produces — it
+    // never sets the flag, so buildGenerationContext defaults it. Rendering
+    // this half with `true` would let a suggestionsFire guard be added to the
+    // refresh template and still pass, while shipping a prompt with no chip
+    // section at all.
+    const refresh = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      ...context,
+      suggestionsFire: false,
+    })
+
+    expect(instruction(classifier)).toBe(instruction(refresh))
+    expect(instruction(refresh)).toContain('exactly 2 distinct entries')
+    expect(instruction(refresh)).toContain('id "cat1" = Action — use it for: act')
+    // The tagged-block macro is the OTHER contract; it must not leak in here.
+    expect(classifier + refresh).not.toContain('<suggestions>')
+  })
 })

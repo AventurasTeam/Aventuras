@@ -12,6 +12,8 @@ export type RunState = {
   branchId: string
   abortController: AbortController
   currentPhase: string
+  // Caller-supplied run parameters (RunCtx.inputs), read-only for phases.
+  inputs?: unknown
   intermediates: Record<string, unknown>
   lastResult?: { status: 'completed' | 'aborted' | 'failed' }
   // Resolves when the run reaches commit or abort. Lets a context that did not
@@ -115,6 +117,12 @@ export const generationStore = {
 // Denylist, not an allowlist: an unlisted kind reads as foreground, so a pipeline
 // added later shows the pill instead of running invisibly.
 const BACKGROUND_KINDS: readonly string[] = [PERIODIC_CLASSIFIER_KIND]
+
+/** Exported so a caller narrowing further (the pill splits foreground by phase)
+ * composes with the denylist instead of re-hardcoding it. */
+export function isBackgroundKind(kind: string): boolean {
+  return BACKGROUND_KINDS.includes(kind)
+}
 
 export function isForegroundGenerating(txState: TxState, branchId: string): boolean {
   return [...txState.runs.values()].some(

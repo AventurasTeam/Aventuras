@@ -5,6 +5,8 @@ import { MACRO_IDS } from '../ids'
 import type { Pack } from '../types'
 import { PER_TURN_NARRATIVE } from './per-turn'
 import { STATE_EMISSION } from './state-emission'
+import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
+import { SUGGESTION_REFRESH } from './suggestion-refresh'
 
 const sceneEntity = {
   id: 'char_1',
@@ -46,6 +48,13 @@ function render(source: string): string {
     macros: {
       [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
       [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
+      // suggestion-refresh includes this unconditionally (its whole purpose is
+      // emitting chips), so an absent stub fails the lookup rather than
+      // rendering the scene block this suite is actually checking.
+      [MACRO_IDS.suggestionEmissionJson]: {
+        group: 'staticContent',
+        source: SUGGESTION_EMISSION_JSON,
+      },
     },
   }
   return createEngine(pack).renderFileSync('t', context) as string
@@ -60,6 +69,11 @@ describe('structural-floor invariant — active + in-scene always inject', () =>
   it('bundled per-turn template injects a disabled-but-active-in-scene entity', () => {
     expect(injectsSceneEntity(PER_TURN_NARRATIVE)).toBe(true)
     expect(render(PER_TURN_NARRATIVE)).toContain('A wary scout.')
+  })
+
+  it('bundled suggestion-refresh template injects a disabled-but-active-in-scene entity', () => {
+    expect(injectsSceneEntity(SUGGESTION_REFRESH)).toBe(true)
+    expect(render(SUGGESTION_REFRESH)).toContain('A wary scout.')
   })
 
   it('permanent negative fixture: an injectionMode-respecting variant DROPS it', () => {
