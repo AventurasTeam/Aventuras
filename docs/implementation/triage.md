@@ -384,6 +384,138 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   i18n pass is a one-line locator change. Fix is to move the strings into
   the `reader` / `common` namespaces and swap the locators to `t()`.
   Surfaced by the coverage-expansion pass (2026-07-24).
+- **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
+  `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
+  `{{ entry.content }}` (inside the `recentEntries` loop) renders the
+  persisted `story_entries.content` column verbatim; nothing strips a
+  trailing `<state>` or `<suggestions>` block before it's re-injected —
+  those blocks are stripped only for display, by `stripTrailingBlocks`
+  in `entry-card.tsx`, which never touches what's stored. So every
+  prior AI turn's trailing block(s) re-enter the next prompt as if they
+  were narrative prose. Pre-existing for `<state>`; this slice's
+  `<suggestions>` block is a second instance of the same leak.
+  Stripping in the `recent` filter that windows entries into
+  `recentEntries` would fix it but changes what already-merged piggyback
+  behavior sends the model, so it needs an owner and a token-cost
+  measurement before anyone touches it. Surfaced by M3.7a Task 1
+  (2026-07-25).
+- **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
+  builds, so a story-level model override can't satisfy pre-flight even
+  though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
+  constructs its `config: ResolveModelConfig` from only `providers`,
+  `profiles`, `assignments`, and `defaultProviderId` off
+  `snapshot.appSettings` — never `snapshot.storySettings?.models` —
+  even though `resolveModel` (`lib/ai/resolve-model.ts`) checks
+  `config.storyModels?.[target]` for story-override targets, and every
+  runtime call site (`per-turn.ts`, `per-turn-piggyback.ts`,
+  `suggestion-refresh.ts`) already passes `storyModels: open.settings.models`
+  correctly. A story that overrides `narrative` or `classifier` (or,
+  once wired, `suggestion`) at the story level therefore resolves fine
+  when the call actually fires, but pre-flight — which runs first and
+  gates the whole run — halts on config that works. Affects
+  `narrative` / `classifier` today; inert until a UI writes story-level
+  model overrides. One-line fix: add
+  `storyModels: snapshot.storySettings?.models` to the config passed
+  into `resolveModel`. Surfaced by M3.7a Task 7 (2026-07-25).
+- **`Compounds/EntryCard → StreamingReasoning` reportedly renders empty
+  in the Storybook dev server while passing under
+  `vitest --project storybook` (20/20).** The vitest harness is not
+  blind to render throws — verified with a deliberately-throwing story,
+  which it does fail. A browser probe against `pnpm storybook` reported
+  `#storybook-root` empty with a `ReanimatedError` about a missing
+  dependency array, the same shape as an unguarded `useAnimatedStyle`
+  with no deps array — the pattern the reader's `SuggestionStrip`
+  splits web/native specifically to avoid. Real desktop is unaffected
+  (Metro applies the worklet plugin there), and both the dev-server and
+  vitest-storybook paths load the same `.storybook` config directory,
+  so it isn't an obvious config split. Mechanism unresolved; worth ten
+  minutes with `pnpm storybook` open. Surfaced by M3.7a Task 9
+  (2026-07-26).
+- **A typed `PipelineInputMap` via declaration merging is the shape to
+  reach for once a second pipeline needs caller inputs.**
+  `suggestion-refresh` is the first pipeline kind to give a phase
+  a caller-supplied parameter (`refreshGuidance`), and
+  it rides the base `PhaseContext.inputs?: unknown`
+  (`lib/pipeline/types.ts`) narrowed by its own type guard
+  (`readRefreshInput` in `lib/pipeline/definitions/suggestion-refresh.ts`)
+  rather than a typed per-kind context. That's the right amount of
+  machinery for one consumer. `lib/actions/action-map.ts`'s
+  `PipelineActionMap` already establishes the declaration-merging idiom
+  this repo uses for the analogous per-domain-additive problem; a
+  `PipelineInputMap` keyed by pipeline kind is the natural generic seam
+  once a second pipeline kind needs its own caller inputs. Not needed
+  yet — recorded so the next consumer doesn't have to rediscover the
+  idiom. Surfaced by M3.7a Task 7 (2026-07-25).
+- **`lib/actions/entities/register.ts` carries the same null-flattening
+  shape that produced this slice's undo defect, but lands on the safe
+  side of it.** Task 7 fixed a real bug in
+  `lib/actions/story-entries/register.ts`: a field-wise undo partial
+  can't express "this column was NULL," so reversing onto a NULL
+  `metadata` produced an unparseable blob. `entities/register.ts` has
+  the analogous shape for entity `state`, but its flattened default is
+  a schema-valid empty object rather than an invalid one, so undo there
+  restores an empty-but-parseable `state` rather than breaking the next
+  read — and a NULL `state` row is only reachable via legacy import or
+  a manual DB edit, not any path this slice touches. Deliberately left
+  alone; recorded so the asymmetry with `story_entries.metadata` is a
+  known, chosen difference rather than an oversight the next reader
+  "fixes" into inconsistency. Surfaced by M3.7a Task 7 (2026-07-25).
+- **The reversal barrier (`awaitRunTerminal(kind, 'cancel')`) is
+  specified in `generation-pipeline.md` but never invoked by any
+  reversal path, and `applyDeltaAction` never consults
+  `reversalInProgress`.** Both exist in
+  `lib/pipeline/runtime/orchestrator.ts` /
+  `lib/stores/generation/generation.ts` and predate this slice, and
+  nothing reaches them today. `suggestion-refresh` briefly looked like
+  the first consumer — it shipped `no-gate`, which would have made it
+  the first run able to be mid-flight while a user reversal (CTRL-Z /
+  rollback) fired against the same entry — but it was moved to
+  `hard-gate` on 2026-07-30, so reversals now reject at the action
+  layer for its duration. That leaves no live `no-gate` kind: the
+  declared `periodic-classifier` has no pipeline file yet. Whoever
+  lands the first real one inherits this, and should note that
+  re-reading the target after the call (as this phase does) is not
+  equivalent — it proves the row survived, not that the context the
+  call was built from did. Surfaced by M3.7a Task 7 (2026-07-25),
+  re-scoped when the gate flipped (2026-07-30).
+- **`abortRun` reverse-replays every delta under a run's `actionId`,
+  which would reverse a `suggestion-refresh` run's already-committed
+  stage-1 emission.**
+  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)'s
+  "Re-roll cancel during translation stage" edge case states that on a
+  translation-stage cancel "the stage-1 emission has already
+  committed" — but `abortRun` (`lib/pipeline/runtime/orchestrator.ts`)
+  doesn't distinguish committed-and-chained-forward deltas from
+  in-flight ones; it reverses everything tagged with the run's
+  `actionId`. Unobservable today because `suggestionTranslationPhase`
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) is a synchronous
+  no-op — there's no window between stage 1 committing and stage 2
+  finishing for a cancel to land in. Becomes real once the M8.1
+  translation call replaces that no-op. Surfaced by M3.7a Task 7
+  (2026-07-25).
+- **Two of the three suggestion-emission paths share a log event name with
+  different payload shapes.** `classifier.suggestions_parse_failed` is
+  emitted by the narrative fold (`lib/pipeline/definitions/per-turn.ts:225`)
+  with `blockFound`, `failed`, and `dropped` fields, and by the classifier
+  fold (`lib/pipeline/definitions/per-turn-piggyback.ts:239`) with `received`
+  and `dropped` fields — two structurally different shapes under one event
+  name — while the refresh path
+  (`lib/pipeline/definitions/suggestion-refresh.ts:153`) uses a distinct
+  `classifier.suggestions_refresh_unusable`. Filtering diagnostics by event
+  name can't separate the two folds sharing one. Either all three emission
+  paths should share a name or none should; two-of-three is the
+  inconsistency. Surfaced by the M3.7a whole-slice review (2026-07-26).
+- **The next-turn-suggestions feature is invisible to every story created
+  before this slice.** `suggestionsEnabled` (`stories.settings`) is a
+  non-optional persisted boolean, so pre-slice stories carry whatever
+  `false` they were written with, and 3.7a ships no toggle to flip it — the
+  Story Settings editor lands in 3.7b. Today the only route to `true` on an
+  existing story is `resetStorySettings` ("Reset settings to defaults"),
+  which discards every other story setting to get there. This is a correct
+  consequence of the copy-at-creation rule
+  (`story-settings-defaults.ts → buildStorySettings`) rather than a defect,
+  but it means existing users see nothing new until 3.7b ships, and nothing
+  records that today. Surfaced by the M3.7a whole-slice review (2026-07-26).
 
 - **"Upgrade to current default" story-open prompt deferred from 3.1b.**
   Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
@@ -511,3 +643,55 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   row load, or narrow canon to say revalidation happens only where a caller
   already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
   the cancel half resolved in M3.1b review (2026-07-28).
+
+- **`buildGenerationContext` should own the store reads, not receive a
+  finished dataset.** The planned shape is a unified **data source**: call
+  sites hand the builder identity and it reads `entriesStore` /
+  `entitiesStore` itself, with templates doing the shaping in Liquid per
+  [`architecture.md → Formatting lives in Liquid`](../architecture.md#formatting-lives-in-liquid-not-in-the-context-builder).
+  Today all three phases (`per-turn.ts`, `per-turn-piggyback.ts`,
+  `suggestion-refresh.ts`) duplicate the same branch-filter-and-sort and
+  hand in pre-shaped arrays, and the builder flattens entries to
+  `{ content }` — which contradicts that canon in the one place it matters
+  most, since a template can reach neither `entry.position` nor
+  `entry.metadata`. Four things the implementer must handle, none obvious
+  from the call sites: (a) `sceneEntities` is derived from `.at(-1)` of the
+  array the caller passed, so template-side truncation silently makes it
+  describe the branch tail instead of the consumer's own — it has to become
+  template-derived in the same change or the refresh renders the wrong scene
+  block; (b) `entry` is absent from `SUBSTITUTABLE_PREFIXES`
+  (`lib/ids/prefixes.ts`), so raw entries expose real UUIDs where a pack
+  author can print them, against
+  [`data-model.md → ID shape`](../data-model.md#id-shape--kind-prefixed-uuids-throughout)
+  — nothing prints one today, but a pack author could; (c) no consumer
+  needs a new filter: per-turn already truncates via `recent`, the
+  classifier fold's tail pair is exactly `recent: 2`, and
+  `suggestion-refresh` stopped truncating at all once its anchor became
+  the branch tail by construction (2026-07-30);
+  (d) `generation-context.test.ts` has 17 call sites passing fixtures
+  directly, and the builder is currently pure, so store-reading means
+  hydrating stores in each — the bulk of the mechanical cost. Also needs a
+  clause edit to [`architecture.md → The single-context principle`](../architecture.md#the-single-context-principle),
+  whose "a phase reads the domain stores directly" no longer holds (the
+  "calls the group's context builder per render" half is unchanged).
+  Surfaced by M3.7a post-merge review (2026-07-30).
+- **Config pre-flight cannot see story-level model overrides, so it
+  both passes runs that will fail and blocks runs that would
+  succeed.** `runPreflight` (`lib/pipeline/runtime/preflight.ts:14`)
+  builds its `ResolveModelConfig` from `snapshot.appSettings` only and
+  never passes `storyModels`, even though `orchestrator.ts` puts
+  `storySettings` in the snapshot and every phase passes
+  `open.settings.models`. Since `resolveModel` branches on
+  `config.storyModels?.[target]` for story-override targets
+  (`lib/db/app-settings/agents.ts` → `STORY_AGENT_IDS`), pre-flight
+  always takes the assignments path while the phase takes the override
+  path. Both directions are wrong: a story with `settings.models.X` set
+  and a missing `defaultProviderId` clears pre-flight and fails
+  in-phase, and a story whose override would resolve is rejected by
+  pre-flight when app-level assignments are empty. Affects every
+  story-override target, `narrative` included — it is a framework gap,
+  not a suggestions one, which is why it is here rather than in the
+  slice. Fixing it is a one-line config addition plus a decision about
+  whether pre-flight should resolve per-story at all (it is currently
+  documented as an app-config check). Surfaced by M3.7a review
+  (2026-07-31).

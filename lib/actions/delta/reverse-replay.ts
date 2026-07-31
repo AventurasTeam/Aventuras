@@ -76,13 +76,17 @@ async function buildUndoOps(
     const restored: Record<string, unknown> = {}
     for (const [col, partial] of Object.entries(payload)) {
       const schema = entry.columnSchemas[col]
-      const value = schema
-        ? applyUndoPayload(
-            schema,
-            (row[col] as Record<string, unknown>) ?? {},
-            partial as Record<string, unknown>,
-          )
-        : partial // scalar column: whole-value restore
+      // A null partial on a schema-backed column means the column itself was
+      // null pre-change — no field-wise overlay can express that. Falls through
+      // to the same whole-value restore a scalar column takes.
+      const value =
+        schema && partial !== null
+          ? applyUndoPayload(
+              schema,
+              (row[col] as Record<string, unknown>) ?? {},
+              partial as Record<string, unknown>,
+            )
+          : partial
       restored[col] = value
       row[col] = value // thread into the working copy for later-in-DESC undos
     }

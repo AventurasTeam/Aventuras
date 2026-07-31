@@ -1,7 +1,19 @@
 export { toPipelineError } from './call-error'
 export { definePhase, definePipeline } from './authoring/define'
 export { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './definitions/per-turn'
-export { fallbackClassifierSchema } from './definitions/per-turn-piggyback'
+export {
+  fallbackClassifierSchema,
+  fallbackClassifierWithSuggestionsSchema,
+} from './definitions/per-turn-piggyback'
+export {
+  ensureSuggestionRefreshPipelineRegistered,
+  SUGGESTION_EMISSION_PHASE,
+  SUGGESTION_REFRESH_KIND,
+  SUGGESTION_TRANSLATION_PHASE,
+  suggestionRefreshSchema,
+  SUGGESTIONS_UNUSABLE,
+  type SuggestionRefreshInput,
+} from './definitions/suggestion-refresh'
 export { __resetRegistry, getPipeline, registerPipeline } from './authoring/registry'
 export { __resetBus, pipelineEventBus } from './runtime/event-bus'
 export {
@@ -9,7 +21,7 @@ export {
   configureDeltaActionPort,
   type DeltaActionPort,
 } from './runtime/action-port'
-export { awaitRunTerminal, runPipeline, type RunCtx } from './runtime/orchestrator'
+export { awaitRunTerminal, runPipeline, type RunCtx, type RunCtxFor } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
 export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
 export type {

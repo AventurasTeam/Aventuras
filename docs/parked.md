@@ -2106,3 +2106,21 @@ tap-with-non-empty-composer, OR an AlertDialog "Replace your typed
 text?" confirm gate. Toast is lighter-weight and uses the existing
 [`patterns/toast.md`](./ui/patterns/toast.md) primitive; dialog is
 more explicit. Surface on user reports.
+
+#### A turn started mid-refresh kills the re-roll with no user feedback
+
+`GenerationStatusPill`'s `GenerationPhase` union
+(`components/compounds/generation-status-pill.tsx`) includes
+`refreshing-suggestions` alongside the per-turn phases, but the pill
+only ever shows one `currentPhase`. `suggestion-refresh` declares
+`yieldsTo: ['per-turn']`, so a starting turn aborts an in-flight
+refresh and awaits its terminal rather than running beside it. The
+reader cannot reach this today — the refresh holds the edit gate
+(`hard-gate`), so Send is disabled while it runs — but any non-UI
+writer, or a future path that starts a turn directly, gets a re-roll
+that vanishes silently: no pill state, no strip error, the chips
+simply never change. Recorded so a multi-slot pill redesign has the
+scenario on record, and so the silent-abort gap is not rediscovered
+as a bug. Surfaced by M3.7a Task 8, 2026-07-25; rewritten 2026-07-31
+when the kind moved from `no-gate` to `hard-gate` and the original
+stranding scenario became unreachable.

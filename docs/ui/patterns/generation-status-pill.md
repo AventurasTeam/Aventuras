@@ -46,6 +46,7 @@ type GenerationPhase =
   | 'generating-narrative'
   | 'classifying'
   | 'closing-chapter'
+  | 'refreshing-suggestions'
   | 'translating-display'
   | 'retrying-translations'
 
@@ -130,6 +131,7 @@ Tap opens a `Popover` anchored to the tag. Body is a single button:
 - `Cancel generation` — for `reasoning` / `generating-narrative` /
   `classifying`.
 - `Cancel chapter close` — for `closing-chapter`.
+- `Cancel suggestion refresh` — for `refreshing-suggestions`.
 
 Clicking the button fires `onCancel()` and closes the popover.
 Esc / outside-tap closes the popover without firing `onCancel`.

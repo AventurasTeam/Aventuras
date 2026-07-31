@@ -73,6 +73,16 @@ export const ActiveClosingChapter: Story = {
   ),
 }
 
+export const ActiveRefreshingSuggestions: Story = {
+  render: () => (
+    <GenerationStatusPill
+      activePhase="refreshing-suggestions"
+      onCancel={onCancel}
+      onErrorTap={onErrorTap}
+    />
+  ),
+}
+
 export const ErrorEmbedder: Story = {
   render: () => {
     const tap = fn()

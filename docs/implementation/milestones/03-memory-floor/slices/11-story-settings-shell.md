@@ -7,7 +7,7 @@
   the M2 in-story routing are merged prerequisites)
 - **Blocks:** the settings-section portions of
   [Slice 3.1b](./01b-embedder-lifecycle.md) (embedding-status
-  panel) and [Slice 3.7](./07-suggestions.md) (Authoring aids
+  panel) and [Slice 3.7b](./07b-suggestion-settings.md) (Authoring aids
   section) — partial gates; both slices' core work is independent
   of this shell.
 
@@ -113,7 +113,7 @@ Resolved developer decisions and deviations worth carrying forward.
 Cross-cutting findings this slice surfaced went to
 [triage](../../../triage.md) instead, and the ones that go live with
 the first real section consumer went to
-[Slice 3.7's Open questions](./07-suggestions.md#open-questions).
+[Slice 3.7b's Open questions](./07b-suggestion-settings.md#open-questions).
 
 - **The C7 seam is a route tab map plus a save-session context, not
   a component registry.** The contract cites the M1.5 delta-registry
@@ -154,7 +154,7 @@ the first real section consumer went to
   a bare `router.push`, so the navigate-away guard — which wraps only
   the surface's own back path — does not intercept it. A general
   router-event interceptor was out of scope; it waits on
-  [Slice 3.7](./07-suggestions.md#open-questions), the first slice
+  [Slice 3.7b](./07b-suggestion-settings.md#open-questions), the first slice
   that can make the session dirty.
 - **Window-close intent is wired.** `useUnsavedChangesGuard` raises
   the surface's own dialog for an Electron window-close (held in the

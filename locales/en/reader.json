@@ -22,6 +22,26 @@
     "think": "internal monologue",
     "free": "no wrapping"
   },
+  "suggestions": {
+    "title": "Suggestions",
+    "refresh": "Refresh suggestions",
+    "cancel": "Cancel suggestion refresh",
+    "generate": "Generate suggestions",
+    "collapse": "Collapse suggestions",
+    "expand": "Expand suggestions",
+    "orphanCategory": "(removed)",
+    "errorBody": "Couldn't generate suggestions.",
+    "retry": "Retry",
+    "loading": "Generating suggestions…",
+    "chipLabel": "{{category}}: {{text}}",
+    "failure": {
+      "llmCall": "The suggestion model call failed.",
+      "unusable": "The model returned no usable suggestions.",
+      "noProfileAssigned": "The suggestion agent has no profile assigned.",
+      "profileMissing": "The suggestion agent's assigned profile is missing.",
+      "providerMissing": "The suggestion model's provider is missing."
+    }
+  },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "spellcheckSuggestion": "→ {{text}}",

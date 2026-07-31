@@ -234,8 +234,13 @@ export default function WizardRoute() {
     setIsFinishing(true)
     setEmbedFailure(null)
     suppressAutosave()
-    const { defaultStorySettings, embeddingModelId, embeddingProviderId, providers } =
-      appSettingsStore.getAppSettings()
+    const {
+      defaultStorySettings,
+      embeddingModelId,
+      embeddingProviderId,
+      defaultSuggestionCategories,
+      providers,
+    } = appSettingsStore.getAppSettings()
     runAction(
       // A listing failure rejects rather than reporting "nothing installed":
       // runAction's toast is honest, whereas an empty list would block Finish
@@ -251,6 +256,7 @@ export default function WizardRoute() {
               defaultStorySettings,
               embeddingModelId,
               embeddingProviderId,
+              defaultSuggestionCategories,
               providers,
               installedLocalIds,
             },

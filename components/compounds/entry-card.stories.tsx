@@ -135,6 +135,12 @@ export const EditMode: StoryT = {
   },
 }
 
+/**
+ * The gate is held: the row's controls refuse, the prose does not change
+ * shade. Reading is never gated (principles.md → What's not gated), and the
+ * streaming card renders without `disabled` — a dim here would make the text
+ * shift the frame a turn commits and shift back when it settles.
+ */
 export const Disabled: StoryT = {
   ...wrap,
   args: {

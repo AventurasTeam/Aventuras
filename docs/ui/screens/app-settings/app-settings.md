@@ -659,8 +659,8 @@ user-edited entries for that mode.
 
 Edits here change defaults for **new stories only** — the
 copy-at-creation rule means existing stories own their snapshot and
-don't reflect changes here. Stories edit their own palette in Story
-Settings → Composer → Suggestion categories.
+don't reflect changes here. Stories edit their own palette in
+[Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories).
 
 ## APP · Appearance
 

@@ -8,7 +8,12 @@ import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 
-type GenerationPhase = 'reasoning' | 'generating-narrative' | 'classifying' | 'closing-chapter'
+type GenerationPhase =
+  | 'reasoning'
+  | 'generating-narrative'
+  | 'classifying'
+  | 'closing-chapter'
+  | 'refreshing-suggestions'
 
 // `memory-incomplete` names the observable state, not a cause: the pill fires
 // off a non-zero stale-row count, which an available embedder can produce too
@@ -40,6 +45,8 @@ function phaseCopy(phase: GenerationPhase): string {
       return t('chrome.generationStatusPill.phase.classifying')
     case 'closing-chapter':
       return t('chrome.generationStatusPill.phase.closingChapter')
+    case 'refreshing-suggestions':
+      return t('chrome.generationStatusPill.phase.refreshingSuggestions')
   }
 }
 
@@ -56,10 +63,19 @@ function errorCopy(error: ErrorState): string {
   }
 }
 
+// Exhaustive switch rather than a default-carrying ternary: a new phase must
+// fail the build here instead of silently inheriting "Cancel generation".
 function cancelCopy(phase: GenerationPhase): string {
-  return phase === 'closing-chapter'
-    ? t('chrome.generationStatusPill.cancelChapterClose')
-    : t('chrome.generationStatusPill.cancelGeneration')
+  switch (phase) {
+    case 'reasoning':
+    case 'generating-narrative':
+    case 'classifying':
+      return t('chrome.generationStatusPill.cancelGeneration')
+    case 'closing-chapter':
+      return t('chrome.generationStatusPill.cancelChapterClose')
+    case 'refreshing-suggestions':
+      return t('chrome.generationStatusPill.cancelSuggestionRefresh')
+  }
 }
 
 export function GenerationStatusPill({

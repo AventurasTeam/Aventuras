@@ -6,6 +6,7 @@ import {
   type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
+  type SuggestionCategory,
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -33,6 +34,10 @@ export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
   embeddingModelId: string | null
   embeddingProviderId: string | null
+  defaultSuggestionCategories: {
+    adventure: readonly SuggestionCategory[]
+    creative: readonly SuggestionCategory[]
+  }
   providers: readonly ProviderInstance[]
   installedLocalIds: readonly string[]
 }
@@ -107,12 +112,7 @@ export async function finishWizard(
     worldTimeOrigin: s.definition.worldTimeOrigin,
   }
 
-  const settings = buildStorySettings(
-    appDefaults.defaultStorySettings,
-    appDefaults.embeddingModelId,
-    appDefaults.embeddingProviderId,
-    effectiveDim,
-  )
+  const settings = buildStorySettings(definition.mode, appDefaults, effectiveDim)
 
   // The lead is the only entity the M2 commit materializes, so it's the only id
   // opening refs can legitimately point at: keep the lead in sceneEntities, drop

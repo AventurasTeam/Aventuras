@@ -914,6 +914,7 @@
     <!-- Next-turn suggestions — shown after a completed AI reply; emitted by piggyback, classifier fold, or refresh re-roll per data-model.md; collapses when not needed; falls back to empty-state Generate when terminal entry carries no nextTurnSuggestions. -->
     <div class="suggestions" id="suggestions-panel">
       <div class="suggestions-inner">
+        <!-- Chrome row ABOVE the chip stack, right-aligned (reader-composer.md → Next-turn suggestions): the stack's height moves with the chip count and with the empty-state / error bodies, so trailing controls would slide under the cursor between re-rolls. Persists when collapsed since the CSS only hides .suggestions-list below. -->
         <div class="suggestions-header">
           <span class="suggestions-title">
             <span class="collapse-icon" id="suggestions-collapse" title="Collapse">&#9662;</span>
@@ -924,7 +925,7 @@
           </div>
         </div>
         <div class="suggestions-list" id="suggestions-list">
-          <!-- Each chip renders with its category's stored color (palette slot, theme-resolved). The category palette is user-customizable per story via Story Settings → Composer → Suggestion categories; the sets shown here are the bundled mode defaults (Adventure: Action/Dialogue/Examine/Move; Creative: Action/Dialogue/Revelation/Twist) seeded at story creation. The number of chips per turn = stories.settings.suggestionCount (default 3, range 1-6). -->
+          <!-- Each chip renders with its category's stored color (curated palette slot or custom hex, resolved via lib/themes' resolveAccentColor). The category palette is user-customizable per story via Story Settings → Suggestion categories (Generation tab → Authoring aids); the sets shown here are the bundled mode defaults (Adventure: Action/Dialogue/Examine/Move; Creative: Action/Dialogue/Revelation/Twist) seeded at story creation. The number of chips per turn = stories.settings.suggestionCount (default 3, range 1-6). -->
         </div>
         <div class="suggestions-empty" style="display:none; padding: 8px 10px; text-align: center;">
           <span style="cursor: pointer; color: var(--ink-muted); font-size: 12px;">&#8634; Generate suggestions</span>

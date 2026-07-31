@@ -493,15 +493,19 @@ the categories editor lives in
 this section covers the reader surface end-to-end.
 
 **Categories are user-customizable per story.** The palette is
-authored in Story Settings → Composer → Suggestion categories;
+authored in
+[Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories);
 defaults seeded at story creation from
 `app_settings.default_suggestion_categories[mode]`. Adventure ships
 Action / Dialogue / Examine / Move; Creative ships Action / Dialogue
 / Revelation / Twist. Users can add, edit, reorder, recolor, or
-disable categories. Custom categories carry their own
+disable categories. Every category carries its own
 [`ColorPicker`](../../patterns/color-picker.md) selection (curated
-palette + custom hex); the chip's color is theme-resolved at render
-from the stored palette slot.
+palette + custom hex); a chip's color resolves through
+`resolveAccentColor` (`lib/themes`), which accepts either a curated
+palette slot key or a raw custom hex — the palette itself is fixed
+hex per mode, not theme-derived (see
+[`color.md → Curated accent palette`](../../foundations/color.md#curated-accent-palette)).
 
 **Chip count is decoupled from category count.**
 `stories.settings.suggestionCount` (default 3, range 1-6) drives
@@ -520,8 +524,11 @@ existing metadata delta-log:
   block in the narrative model's trailing emission, parsed
   independently of `<state>`.
 - **Classifier fold** (`piggybackMode='off'`) — the per-turn
-  classifier pass emits both `<state>` and `<suggestions>` in one
-  call.
+  classifier pass is a structured-output call; chips arrive as a
+  `suggestions` field on the classifier's Zod schema (`.catch([])`-
+  wrapped so a malformed array can't take the scene-state fields down
+  with it), not a `<suggestions>` text block. Still one call — a
+  different wire shape from the narrative fold's tagged block.
 - **Refresh re-roll** — user-triggered `suggestion-refresh` pipeline
   using the dedicated `models.suggestion` agent (single-shot
   emission + conditional translation; see
@@ -548,39 +555,120 @@ parked entry tracks the post-v1 design if real signal surfaces.
 prefix/suffix wrapping intent. Suggestion category = narrative-beat
 type. Different axes.
 
-**Chrome row** beneath the chip stack, right-aligned:
+**Chrome row** above the chip stack: a `Suggestions` label on the
+left, controls on the right. It leads rather than trails so the
+controls hold one position — the chip stack's height moves with the
+count and with the `empty-state` / `error` bodies, which would
+otherwise slide ⟳ and ⌄ under the cursor between re-rolls. The label
+earns its place in the collapsed state, where the chrome row is all
+that remains and two bare icons would float unlabelled above the
+composer.
 
 - **⟳ refresh** — primary action. Fires the `suggestion-refresh`
   pipeline with current composer text as `refreshGuidance` (empty
-  string if composer is empty). Strip enters `loading`; refresh icon
-  pulses; chips dim; taps no-op. Second click while loading is a
-  no-op (concurrency policy self-blocks; see
-  [`generation-pipeline.md`](../../../generation-pipeline.md)).
+  string if composer is empty). Strip enters `loading`; chips dim
+  under a centred spinner; taps no-op.
+  **Hidden while `empty-state` is expanded** — the body's ⟳ Generate
+  button below is the refresh affordance there, and two ⟳ one above
+  the other would read as different actions. Reappears once the strip is
+  collapsed, since collapsing hides the body button along with the
+  rest of the content and the chrome row becomes the only refresh
+  affordance left.
+- **✕ cancel** — **replaces** ⟳ in the same slot for as long as the
+  strip is `loading`, and aborts the in-flight run. It swaps rather
+  than sitting beside ⟳ because a live refresh button next to a
+  cancel would offer a re-roll the pipeline self-blocks anyway, and
+  it is not animated: a throbbing control reads as busy rather than
+  pressable, and the body's spinner already carries the in-flight
+  signal. The chrome ✕ is present even in the `empty-state`-fired
+  case, since the strip is in `loading` (not `empty-state`) while
+  the run is up, so the slot is never empty during a run.
 - **⌄ collapse** — existing affordance; flips between `visible` and
   `collapsed`. Chrome row persists when collapsed.
 
-Disabling the feature lives in Story Settings → Composer →
-Suggestions via the `suggestionsEnabled` master toggle, not inline.
+Disabling the feature lives in
+[Story Settings → Suggestion categories](../story-settings/story-settings.md#suggestion-categories)
+via the `suggestionsEnabled` master toggle, not inline.
 
-**Empty-state ⟳ Generate.** Terminal entries without
-`nextTurnSuggestions` (opening entries, `user_action` entries
-pre-AI-reply, `system` entries, legacy entries from before this
-feature landed) show a single ⟳ Generate button on the strip body.
-Click fires `suggestion-refresh` to produce chips ex nihilo. Same
-pipeline as the refresh button.
+**The strip anchors to the last _AI-authored_ entry** (`ai_reply` or
+`opening`), not the last row. Both exclusions carry weight:
+
+- A `user_action` becomes the tail the instant a turn is submitted,
+  so anchoring to it would blank the strip to the empty-state ⟳
+  Generate for the whole turn — offering to generate suggestions
+  while the generation that produces them is already running.
+  Skipping it is what makes the per-turn lock below behave as
+  specified: the previous reply's chips stay on screen, locked.
+- A failed turn appends a `system` entry, and every way back out —
+  Retry, Dismiss, or a fresh Send — runs `clearSystemEntry`, which
+  deletes the row. Chips anchored there could never survive the way
+  out, and anchoring past it keeps the prior reply's chips visible
+  through the failure, which is exactly when a retry wants them.
+
+Only those two kinds ever carry `nextTurnSuggestions`, so the rule
+is "anchor where chips can live." The emission phase resolves the
+anchor itself rather than taking one from the caller, so the read
+and the write both sit inside the gate the run holds, and the strip
+and the pipeline can't disagree about which entry is current.
+
+**Empty-state ⟳ Generate.** An anchor without `nextTurnSuggestions`
+(an opening entry, or a legacy entry from before this feature
+landed) shows a single ⟳ Generate button on the strip body. Click
+fires `suggestion-refresh` to produce chips ex nihilo. Same pipeline
+as the refresh button. A `user_action` tail does **not** reach this
+state — it is not an anchor, so the previous reply's chips hold.
 
 **States:**
 
 - `visible` — normal
-- `loading` — suggestion emission in flight (chip-strip emission OR
-  re-roll). Chips dim; refresh icon pulses
-- `error` — generation failed (inline error with Retry)
+- `loading` — a re-roll is in flight (the chrome ⟳ or the
+  empty-state ⟳ Generate button fired `suggestion-refresh`). Chips
+  dim under a centred spinner and the chrome ⟳ becomes ✕; the
+  outgoing chips stay put rather than clearing, since a re-roll that
+  returns nothing usable keeps them
+- `error` — generation failed. The notice sits **above the chips it
+  failed to replace**, which stay tappable, on the same reasoning
+  that keeps them under the `loading` spinner. A deterministic
+  config failure (no profile assigned, profile or provider missing)
+  shows the route to settings in place of Retry, which could not
+  succeed
 - `collapsed` — user hid the list via chevron; chrome remains
 - `hidden` — user disabled suggestions in Story Settings
   (`stories.settings.suggestionsEnabled = false`); panel never
   appears
 - `empty-state` — terminal entry has no `nextTurnSuggestions`;
   single ⟳ Generate affordance rendered where chips would be
+
+**Bounding model output.** Chip prose is untrusted, and the strip
+sits above the composer in a non-scrolling column, so two caps hold
+it: a chip longer than `MAX_SUGGESTION_CHARS` (400) is **dropped**
+during resolution and counted as a drop, and the chip stack scrolls
+once it would exceed 38% of viewport height. Dropped rather than
+truncated because a tap inserts the chip's text into the composer
+verbatim — a clipped chip would hand the writer mangled input. The
+prompt's "one or two sentences" runs 120-200 characters, so a
+compliant model never reaches either cap.
+
+**Not a `loading` state: the per-turn lock.** While a per-turn
+pipeline is in flight, the strip locks chip taps and the refresh
+affordance through a separate `disabled` prop rather than switching
+to `loading`. (A re-roll holds the same gate, but drives `loading`
+on its own — the `disabled` prop is what covers a lock this strip
+did not cause.) The route can't know in advance whether this turn's
+piggyback or classifier-fold emission will actually produce chips —
+zero enabled categories or capability gating can silently skip it —
+so claiming "Generating suggestions…" could lie. What the strip was
+already showing stays put and locks until the turn resolves.
+
+It does, however, carry **the same spinner** a re-roll shows: the
+chips on screen are about to be replaced and nothing in the strip is
+actionable, so a static stack reads as interactive-but-broken. The
+spinner is the whole of it — no "Generating suggestions…" line, and
+no ✕, since there is no strip-owned run to cancel and the turn's
+cancel lives on the composer. An anchor carrying no chips shows the
+spinner **instead of** the ⟳ Generate button for the turn's
+duration, rather than offering to generate the very thing the
+running turn produces.
 
 **Orphan categories.** A chip whose stored `categoryId` no longer
 resolves (user deleted the category since emission) renders with
@@ -604,6 +692,19 @@ not a deletion.
   before a branch switch fires (existing reader transaction
   behavior). A `suggestion-refresh` in flight aborts on branch
   switch — non-transactional, cancellable.
+- **A reversal fired while a re-roll is in flight.** The refresh
+  holds the reader's edit gate (`hard-gate`), so undo, redo, entry
+  edit and rollback all reject for its duration, and Send and the
+  failure card's Retry are disabled. Chips are generated from a
+  context snapshot and persisted as a delta, so a reversal landing
+  mid-call would leave them describing a state that no longer holds
+  — and re-reading the target after the call can only prove the row
+  survived, not that the surrounding context did. A redo is the
+  sharpest case: it appends past the target, so the chips land on a
+  non-tail entry, stay invisible, and reappear on a later rollback.
+  The gate is escapable rather than blocking — the chrome ⟳ is a ✕
+  for exactly as long as the gate is held, so the way out is one
+  click at the place the re-roll was fired.
 - **Rollback semantics.** `story_entries.metadata.nextTurnSuggestions`
   rolls back via the existing metadata delta-log. After rollback,
   the new terminal entry's chips become the active strip. The

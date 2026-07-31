@@ -31,7 +31,8 @@
         "reasoning": "reasoning…",
         "generatingNarrative": "generating narrative…",
         "classifying": "classifying…",
-        "closingChapter": "closing chapter…"
+        "closingChapter": "closing chapter…",
+        "refreshingSuggestions": "refreshing suggestions…"
       },
       "error": {
         "memoryIncomplete_one": "Memory incomplete — {{count}} row pending",
@@ -40,7 +41,8 @@
         "swapPaused": "Embedder switch paused — waiting on you"
       },
       "cancelGeneration": "Cancel generation",
-      "cancelChapterClose": "Cancel chapter close"
+      "cancelChapterClose": "Cancel chapter close",
+      "cancelSuggestionRefresh": "Cancel suggestion refresh"
     }
   },
   "modelPicker": {
