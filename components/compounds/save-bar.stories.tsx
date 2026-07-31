@@ -221,3 +221,13 @@ export const PluralizationManyFields: Story = {
     expect(screen.getByText(/2 unsaved changes\b/)).toBeInTheDocument()
   },
 }
+
+export const InvalidDraft: Story = {
+  args: {
+    dirtyFields: ['suggestion categories'],
+    notice: 'Two categories share a label',
+    saveDisabled: true,
+    onSave: fn(),
+    onDiscard: fn(),
+  },
+}

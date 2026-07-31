@@ -35,6 +35,12 @@ type SaveBarProps = {
    */
   saving?: boolean
   /**
+   * A section's draft cannot be written. Disables Save and the keyboard
+   * shortcut; Discard stays live so the session is never a dead end. Pair with
+   * `notice` to say why.
+   */
+  saveDisabled?: boolean
+  /**
    * The host screen's focus state. A pushed-under expo-router screen stays
    * mounted, so leaving this unset lets its Cmd-S fire from behind whatever
    * screen is on top. Defaults to `true` for hosts that never push.
@@ -50,6 +56,7 @@ export function SaveBar({
   onSave,
   onDiscard,
   saving = false,
+  saveDisabled = false,
   enabled = true,
   className,
 }: SaveBarProps) {
@@ -61,8 +68,8 @@ export function SaveBar({
     [],
   )
   const handleSaveShortcut = useCallback(() => {
-    if (!saving) onSave()
-  }, [onSave, saving])
+    if (!saving && !saveDisabled) onSave()
+  }, [onSave, saving, saveDisabled])
   useGlobalHotkey(matchesSaveShortcut, handleSaveShortcut, {
     capture: true,
     stopPropagation: true,
@@ -121,7 +128,7 @@ export function SaveBar({
         <Button variant="secondary" size="sm" onPress={onDiscard} disabled={saving}>
           <Text>{t('saveBar.discard')}</Text>
         </Button>
-        <Button variant="primary" size="sm" onPress={onSave} disabled={saving}>
+        <Button variant="primary" size="sm" onPress={onSave} disabled={saving || saveDisabled}>
           <Text>
             {t('saveBar.save')}
             {shortcutHint != null ? ` ${shortcutHint}` : ''}

@@ -14,6 +14,8 @@ import { t } from '@/lib/i18n'
 type UnsavedChangesDialogProps = {
   open: boolean
   saving?: boolean
+  /** Mirrors the save bar: an invalid section leaves Discard and Cancel as the only exits. */
+  saveDisabled?: boolean
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
@@ -22,6 +24,7 @@ type UnsavedChangesDialogProps = {
 export function UnsavedChangesDialog({
   open,
   saving = false,
+  saveDisabled = false,
   onSave,
   onDiscard,
   onCancel,
@@ -52,7 +55,7 @@ export function UnsavedChangesDialog({
           <Button variant="secondary" onPress={onDiscard} disabled={saving}>
             <Text>{t('storySettings:save.unsavedDiscard')}</Text>
           </Button>
-          <Button variant="primary" onPress={onSave} disabled={saving}>
+          <Button variant="primary" onPress={onSave} disabled={saving || saveDisabled}>
             <Text>{t('storySettings:save.unsavedSave')}</Text>
           </Button>
         </AlertDialogFooter>
