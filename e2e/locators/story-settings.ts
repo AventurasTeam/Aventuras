@@ -55,4 +55,48 @@ export const storySettings = {
 
   resumeLater: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:swap.resumeLater') }),
+
+  generationTab: (page: Page): Locator =>
+    page.getByRole('tab', { name: t('storySettings:tabs.generation') }),
+
+  authoringAidsPanel: (page: Page): Locator => page.getByTestId('authoring-aids-panel'),
+
+  suggestionsToggle: (page: Page): Locator =>
+    page.getByRole('switch', { name: t('storySettings:generation.suggestions') }),
+
+  // Tier 3: the label inputs repeat per row and share one placeholder as their
+  // only accessible name, so a role query would match every row at once.
+  categoryLabel: (page: Page, categoryId: string): Locator =>
+    page.getByTestId(`suggestion-category-label-${categoryId}`),
+
+  countIncrement: (page: Page): Locator =>
+    page.getByRole('button', { name: t('storySettings:generation.countIncrement') }),
+
+  // The save button's accessible name carries a platform shortcut hint
+  // (`Save Ctrl+S`), so it anchors rather than matching exactly.
+  save: (page: Page): Locator =>
+    page.getByRole('button', { name: new RegExp(`^${t('saveBar.save')}`) }),
+
+  discard: (page: Page): Locator => page.getByRole('button', { name: t('saveBar.discard') }),
+
+  // ScreenShell's chrome back arrow, an IconAction whose accessible name is t('chrome.back').
+  back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
+
+  // getByText alone is ambiguous here: the dialog body's copy also contains
+  // the substring "unsaved changes" (getByText is a case-insensitive
+  // substring match), so it resolves both the title and the description.
+  // Anchoring on the alertdialog role stays unambiguous even with the
+  // panel's other two AlertDialogs (delete/reset confirm) in the tree.
+  unsavedDialog: (page: Page): Locator =>
+    page.getByRole('alertdialog').filter({ hasText: t('storySettings:save.unsavedTitle') }),
+
+  // Scoped inside the dialog, not a bare role+name query: the save bar behind
+  // it stays in the accessibility tree while the dialog is open (confirmed by
+  // an actual run — Radix's background-hiding doesn't reach this DOM shape),
+  // so an unscoped query resolves both this button and the save bar's own
+  // "Discard".
+  unsavedDiscard: (page: Page): Locator =>
+    storySettings
+      .unsavedDialog(page)
+      .getByRole('button', { name: t('storySettings:save.unsavedDiscard') }),
 }
