@@ -1051,7 +1051,7 @@ describe('useStorySettingsSection', () => {
 })
 
 describe('StorySettingsSaveSessionProvider — validity', () => {
-  it('refuses the save while a dirty section is invalid, without calling onCommit', async () => {
+  it('refuses the save while a dirty section is invalid, attempting nothing', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
     const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
     const session = mountSession({ children: sectionsOf(invalid) })
@@ -1063,7 +1063,12 @@ describe('StorySettingsSaveSessionProvider — validity', () => {
 
     expect(outcome).toEqual({ status: 'invalid', reason: 'dup' })
     expect(session.onCommit).not.toHaveBeenCalled()
+    expect(aids.getPatch).not.toHaveBeenCalled()
     expect(aids.reset).not.toHaveBeenCalled()
+    // Nothing entered the commit branch: a stray `committing: true` on this
+    // path has no `finally` to clear it and would brick every button behind
+    // `saving` — Save, Discard, and the leave dialog — for the rest of the session.
+    expect(session.api().saving).toBe(false)
   })
 
   it('leaves a pending leave open when the save is refused as invalid', async () => {
@@ -1081,11 +1086,24 @@ describe('StorySettingsSaveSessionProvider — validity', () => {
     expect(session.api().pendingLeave).toBe(true)
   })
 
-  it('commits normally once the section reports itself valid again', async () => {
+  it('re-arms once the section reports itself valid again, without changing dirtyFields', async () => {
     const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'], {
       suggestionsEnabled: true,
     })
-    const session = mountSession({ children: sectionsOf(aids) })
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+
+    expect(session.api().snapshot.invalidReason).toBe('dup')
+
+    // Same dirtyFields throughout — fixing the collision doesn't change the
+    // label, so only invalidReason moves. The publish effect must key on it
+    // directly: dirtyKey alone would never re-fire this republish.
+    const revalidated: SectionFixture = { ...aids, invalidReason: undefined }
+    act(() => {
+      session.rerenderWith(sectionsOf(revalidated))
+    })
+
+    expect(session.api().snapshot.invalidReason).toBeUndefined()
 
     await act(async () => {
       await session.api().save()

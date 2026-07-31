@@ -9,8 +9,9 @@ export type SectionDirtyState = {
 }
 
 /**
- * The surface's dirty fields in rail order. One field, so "clean" and "which
- * fields" can never disagree — read `dirtyFields.length` for both.
+ * The surface's dirty fields in rail order, plus the reason a save would be
+ * refused. Clean is `dirtyFields.length === 0` — the one field, so "clean"
+ * and "which fields" can never disagree.
  */
 export type SaveSessionSnapshot = {
   readonly dirtyFields: readonly string[]

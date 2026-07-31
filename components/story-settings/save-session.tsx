@@ -438,9 +438,9 @@ type SectionRegistration = {
   getPatch: () => Partial<StorySettings>
   /**
    * Non-null while this section is dirty but cannot be written — a
-   * user-facing reason (e.g. "Two categories share a label"). The surface
-   * refuses the save and renders this beside the dirty-field list. Ignored
-   * while the section is clean, since a clean section is never merged.
+   * user-facing reason (e.g. "Two categories share a label"). The provider
+   * refuses the save; the surface renders this beside the dirty-field list.
+   * Ignored while the section is clean, since a clean section is never merged.
    */
   invalidReason?: string
   /**
@@ -489,6 +489,11 @@ export function useStorySettingsSection({
   fieldsRef.current = dirtyFields
   const dirtyKey = JSON.stringify(dirtyFields)
   useEffect(() => {
+    // Empty string still satisfies `!= null`: read as invalid it blocks a save
+    // with a blank reason, read as valid it silently doesn't block at all.
+    if (DEV_CHECKS && invalidReason === '') {
+      throw new Error(`Story Settings section "${id}" published an empty invalidReason.`)
+    }
     publish({ id, tab, dirtyFields: fieldsRef.current, invalidReason })
   }, [publish, id, tab, dirtyKey, invalidReason])
 
