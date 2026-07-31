@@ -76,8 +76,9 @@ export const EscapeCancels: Story = {
 
 /**
  * Invalid draft state — Save is disabled, but Discard and Cancel remain live
- * as escape hatches. The reason is displayed under the body copy. Design
- * invariant: an invalid session must never become a trap.
+ * as escape hatches. The reason is displayed under the body copy and is
+ * semantically included in the dialog's accessible description (aria-describedby).
+ * Design invariant: an invalid session must never become a trap.
  */
 export const InvalidDraft: Story = {
   args: {
@@ -95,7 +96,15 @@ export const InvalidDraft: Story = {
     expect(save).toBeDisabled()
     expect(discard).not.toBeDisabled()
     expect(cancel).not.toBeDisabled()
-    expect(screen.getByText('Two suggestion categories share a label')).toBeInTheDocument()
+    const reasonText = screen.getByText('Two suggestion categories share a label')
+    expect(reasonText).toBeInTheDocument()
+    // Verify reason is inside the dialog's aria-describedby target, not orphaned
+    const alertDialog = screen.getByRole('alertdialog')
+    const describedById = alertDialog.getAttribute('aria-describedby')
+    expect(describedById).toBeTruthy()
+    const describedByElement = document.getElementById(describedById!)
+    expect(describedByElement).toBeTruthy()
+    expect(describedByElement).toContainElement(reasonText)
     await userEvent.click(discard)
     await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
     expect(args.onSave).not.toHaveBeenCalled()

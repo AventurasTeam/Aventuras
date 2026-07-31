@@ -44,12 +44,15 @@ export function UnsavedChangesDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('storySettings:save.unsavedTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('storySettings:save.unsavedBody')}</AlertDialogDescription>
-          {reason != null ? (
-            <Text size="sm" variant="muted">
-              {reason}
-            </Text>
-          ) : null}
+          <AlertDialogDescription>
+            {t('storySettings:save.unsavedBody')}
+            {reason != null ? (
+              <Text size="sm" variant="muted">
+                {'\n\n'}
+                {reason}
+              </Text>
+            ) : null}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>

@@ -233,9 +233,11 @@ export const InvalidDraft: Story = {
 }
 
 /**
- * Invalid draft state — Save is disabled, Discard remains live. Design
- * invariant: an invalid session must never become a trap. Ctrl-S / Cmd-S
- * is also suppressed (stays claimed by the component, not reaching browser).
+ * Invalid draft state — Save is disabled, Discard remains live. Ctrl-S / Cmd-S
+ * does not call onSave and, critically, is claimed by the component
+ * (event.defaultPrevented = true) rather than falling through to the browser's
+ * save-page dialog. Gates the handler body, not the registration — a
+ * registration-level gate would let the browser claim Ctrl-S instead.
  */
 export const InvalidDraftDisablesSaveOnly: Story = {
   args: {
@@ -250,9 +252,20 @@ export const InvalidDraftDisablesSaveOnly: Story = {
     const discard = await screen.findByRole('button', { name: 'Discard' })
     expect(save).toBeDisabled()
     expect(discard).not.toBeDisabled()
-    // Keyboard shortcut is suppressed
+    // Keyboard shortcut is suppressed and claimed by the component
     await userEvent.keyboard('{Meta>}s{/Meta}')
     expect(args.onSave).not.toHaveBeenCalled()
+    // The gate must live in the handler body, not the registration: an
+    // unregistered listener lets Ctrl-S reach the browser's save-page dialog.
+    const event = new KeyboardEvent('keydown', {
+      key: 's',
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    document.body.dispatchEvent(event)
+    expect(args.onSave).not.toHaveBeenCalled()
+    expect(event.defaultPrevented).toBe(true)
     // Discard still works
     await userEvent.click(discard)
     await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
