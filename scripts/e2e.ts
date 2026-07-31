@@ -25,15 +25,40 @@ const XVFB_SERVER_ARGS = '-screen 0 1920x1080x24'
 // Inputs are per-output: the Expo bundle is built from the app sources, the
 // Electron main from `electron/` alone, so a lib/ edit must not be read as
 // staleness in electron/dist.
+// Root config and the lockfile count as inputs too: a babel/metro/tailwind edit
+// or a dependency bump changes the bundle without touching a single source file,
+// and that is exactly the kind of staleness a source-only check would mask.
+const ROOT_BUILD_INPUTS = [
+  'package.json',
+  'pnpm-lock.yaml',
+  'app.json',
+  'babel.config.js',
+  'metro.config.js',
+  'postcss.config.js',
+  'tailwind.config.js',
+  'tsconfig.json',
+  'global.css',
+  'patches',
+]
+
 const BUILD_OUTPUTS = [
   {
     out: join(REPO_ROOT, 'dist'),
-    inputs: ['app', 'components', 'hooks', 'lib', 'constants', 'types', 'assets'],
+    inputs: [
+      'app',
+      'components',
+      'hooks',
+      'lib',
+      'constants',
+      'types',
+      'assets',
+      ...ROOT_BUILD_INPUTS,
+    ],
     rebuild: 'pnpm build:web',
   },
   {
     out: join(REPO_ROOT, 'electron', 'dist'),
-    inputs: ['electron'],
+    inputs: ['electron', 'package.json', 'pnpm-lock.yaml'],
     rebuild: 'pnpm electron:compile',
   },
 ]

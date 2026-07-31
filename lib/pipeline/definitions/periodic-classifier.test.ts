@@ -397,6 +397,38 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0 })
   })
 
+  // The timeout timer stayed armed after an outer abort, so a cancel landing near
+  // the boundary could still see it fire and be recorded as a provider timeout —
+  // burning a retry on what the user deliberately cancelled.
+  it('does not reclassify a late-cancel as a timeout once the outer signal aborts', async () => {
+    vi.useFakeTimers()
+    try {
+      const controller = new AbortController()
+      vi.mocked(generateStructured).mockImplementation(
+        (...args: unknown[]) =>
+          new Promise((resolve) => {
+            const signal = args[4] as AbortSignal
+            const settle = () => setTimeout(() => resolve({ status: 'aborted' } as never), 5_000)
+            if (signal.aborted) settle()
+            else signal.addEventListener('abort', settle)
+          }) as never,
+      )
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      const pass = drain({ ...h.ctx, abortSignal: controller.signal })
+
+      // Cancel just short of the cap, then run well past it while the call winds down.
+      await vi.advanceTimersByTimeAsync(299_000)
+      controller.abort()
+      await vi.advanceTimersByTimeAsync(60_000)
+      const { result } = await pass
+
+      expect(result).toEqual({ status: 'aborted' })
+      expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0 })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('fails without advancing the watermark on a provider failure', async () => {
     const watermarks: number[] = []
     vi.mocked(generateStructured).mockResolvedValue({ status: 'failed', detail: 'rate limited' })

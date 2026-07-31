@@ -85,8 +85,14 @@ function boundedSignal(outer: AbortSignal | undefined, ms: number) {
     expired = true
     controller.abort()
   }, ms)
-  const relay = () => controller.abort()
-  if (outer?.aborted) controller.abort()
+  // Clears the timer, not just relays: left armed it can still fire while the
+  // aborted call winds down, and `expired` is what tells a cancel from a
+  // timeout — a late fire would burn a retry on a clean cancellation.
+  const relay = () => {
+    clearTimeout(timer)
+    controller.abort()
+  }
+  if (outer?.aborted) relay()
   else outer?.addEventListener('abort', relay)
   return {
     signal: controller.signal,

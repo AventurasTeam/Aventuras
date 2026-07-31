@@ -30,7 +30,13 @@ import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { awaitRunTerminal, generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
+import {
+  awaitRunTerminal,
+  generationStore,
+  isBackgroundKind,
+  rehydrateStories,
+  storiesStore,
+} from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -115,10 +121,13 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
   // Split by kind so the pill names what is actually running: a refresh started
-  // in the reader stays cancellable after a jump here.
+  // in the reader stays cancellable after a jump here. Background kinds are out
+  // of both arms — a classifier pass would otherwise read as narrative and hand
+  // the cancel a PER_TURN_KIND that matches no run.
   const isGenerating = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
-      (r) => r.storyId === storyId && r.kind !== SUGGESTION_REFRESH_KIND,
+      (r) =>
+        r.storyId === storyId && r.kind !== SUGGESTION_REFRESH_KIND && !isBackgroundKind(r.kind),
     ),
   )
   const refreshingSuggestions = generationStore.useGeneration((s) =>
@@ -127,9 +136,12 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
     ),
   )
   // awaitRunTerminal is branch-scoped, and this screen has no branch param. Any
-  // run for this story carries it: runs only exist for the open story/branch.
+  // cancellable run for this story carries it: runs only exist for the open
+  // story/branch.
   const cancelBranchId = generationStore.useGeneration(
-    (s) => [...s.txState.runs.values()].find((r) => r.storyId === storyId)?.branchId ?? null,
+    (s) =>
+      [...s.txState.runs.values()].find((r) => r.storyId === storyId && !isBackgroundKind(r.kind))
+        ?.branchId ?? null,
   )
 
   const isDirty = session.snapshot.dirtyFields.length > 0

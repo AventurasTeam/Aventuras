@@ -22,6 +22,11 @@ test.describe('periodic classifier — real provider smoke', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   const logs: { kind: string; text: string }[] = []
+  // Captured where it is written, not re-read later: the pass can complete before
+  // the test reads it back, and a post-hoc baseline would already hold the
+  // advanced value — then the poll waits out its timeout for a second advance
+  // that no further turn triggers.
+  let parkedWatermark = 0
 
   test.beforeAll(async () => {
     test.setTimeout(300_000)
@@ -89,6 +94,7 @@ test.describe('periodic classifier — real provider smoke', () => {
            WHERE id = 'br_hero_main'`,
         )
         .run(m)
+      parkedWatermark = m
     } finally {
       head.close()
     }
@@ -186,14 +192,7 @@ test.describe('periodic classifier — real provider smoke', () => {
     )
     expect(landed).toBeGreaterThanOrEqual(1)
 
-    // Cadence 2 over three turns: the watermark must move past where it was parked.
-    const startWatermark = (
-      await queryApp(
-        app.window,
-        `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
-        [branchId],
-      )
-    )[0][0] as number
+    // Cadence 2: the watermark must move past where beforeAll parked it.
     await expect
       .poll(
         async () =>
@@ -206,7 +205,7 @@ test.describe('periodic classifier — real provider smoke', () => {
           )[0][0] as number,
         { timeout: 300_000, intervals: [3000] },
       )
-      .toBeGreaterThan(startWatermark)
+      .toBeGreaterThan(parkedWatermark)
 
     const report = async (label: string, sql: string, params: unknown[] = []) => {
       const rows = await queryApp(app.window, sql, params)
