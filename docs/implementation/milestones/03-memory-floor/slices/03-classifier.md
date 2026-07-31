@@ -389,10 +389,28 @@ world-state-block edit surface rather than by this pipeline.
 
 ### Outstanding
 
-The slice's **manual smoke is not yet run**: real provider,
-`classifierCadence` 2, three turns, confirming graph population and that
-the pill shows `classifying` only when no narrative turn is in flight.
-It needs a real API key and a human at the UI. Watch emission compliance
-while doing it — `classifier.window_head_fallback` warnings dominating
-the log is the signal for the M7.5 tuning pass; the fallback is safe by
-design, so do not add a re-roll.
+The manual smoke is **done**, automated as
+`e2e/tests/classifier-real-provider.smoke.spec.ts` (opt-in: it skips unless
+`SMOKE_LLM_URL` / `SMOKE_LLM_MODEL` are set). Run against a local koboldcpp
+serving a 4B-class Q4 model, it confirms the chain end to end — cadence tick →
+pass → anchored deltas → graph rows → watermark — with every
+`periodic_classifier` delta carrying an `entry_id`.
+
+What it also showed, and what the M7.5 tuning pass should start from:
+
+- **Extraction quality swings hard on a small model.** Two runs over the same
+  window produced nine happenings and one. Titles and descriptions were sound
+  both times and `occurredAtTurn` resolved to real entries, so provenance held.
+- **`unresolvedRefs` dominates, not `window_head_fallback`.** 7 and 19
+  unresolved refs against a single head fallback: the model invents its own
+  handles rather than reusing the `[c1]` placeholders it was given. Involvements
+  and awareness are what get dropped, so the graph gains happenings but few
+  edges. The reserved `new:` namespace does not help here — these are refs to
+  entities that already exist. That is a prompt/model-compliance problem and the
+  first thing worth measuring.
+- **Polymorphic involvement works:** the one edge that did resolve bound a
+  happening to the `faction` "The City Watch", not a character.
+- **The embedding contract is observable only before the drain.** The pass
+  writes `embedding_stale = 1` and the drain clears it moments later, so a
+  post-hoc assertion on that column races; the mock-LLM spec covers the
+  write-path half instead.
