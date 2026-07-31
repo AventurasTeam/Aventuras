@@ -14,6 +14,5 @@ export {
   type SuggestionSlot,
   type SuggestionSlotMap,
   type SuggestionEmission,
-  type SuggestionRef,
   type SuggestionItem,
 } from './suggestion-slots'

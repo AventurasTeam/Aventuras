@@ -21,10 +21,14 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',
-  // Paired with an empty palette, this combination alone allows zero enabled
-  // categories with the toggle on — buildStorySettings below always overrides
-  // suggestionCategories with a real per-mode seed before a story persists
-  // these; don't spread this constant directly as a valid settings shape.
+  // The toggle on beside an empty palette is deliberate, and this constant is
+  // the ONLY source of suggestionsEnabled for a new story (app-level
+  // defaultStorySettings carries just activePackId), so it cannot be flipped
+  // off to make the pair coherent — buildStorySettings below supplies the real
+  // per-mode palette instead. Spreading this in a fixture is fine and common,
+  // but settingsAllowEmission reads BOTH halves: a test that means to exercise
+  // emission has to set suggestionCategories, not just the flag, or it silently
+  // asserts against a story that emits nothing.
   suggestionsEnabled: true,
   suggestionCount: 3,
   suggestionCategories: [],

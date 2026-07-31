@@ -1,3 +1,5 @@
+import { z } from 'zod'
+
 // Mirrors CharacterState['visual']'s keys (lib/db/entities/entity-state-schema.ts →
 // visualSchema) — the only categories a full-replace visual change can target.
 export const VISUAL_CHANGE_TYPES = [
@@ -39,10 +41,21 @@ export type ParseStateBlockResult = {
 
 // `categoryRef` is the prompt-side placeholder (cat1, cat2…), not a category
 // id — the emission map resolves it (lib/piggyback/suggestion-slots.ts).
-export type ParsedSuggestion = { categoryRef: string; text: string }
+//
+// The single declaration of the chip shape a model returns, shared by the
+// tagged parser and both structured surfaces. The .describe() strings are part
+// of the prompt contract that ships to the model, so a second copy would let
+// the two structured surfaces silently start asking for different things.
+// Consumers differ only in array policy (.catch([]) or not), never in element.
+export const suggestionRefSchema = z.object({
+  categoryRef: z.string().describe('opaque category id from the prompt list, e.g. cat1'),
+  text: z.string().describe("complete prose for the reader's next turn"),
+})
+
+export type SuggestionRef = z.infer<typeof suggestionRefSchema>
 
 export type ParseSuggestionsBlockResult = {
-  items: ParsedSuggestion[]
+  items: SuggestionRef[]
   blockFound: boolean
   failed: boolean
   /**

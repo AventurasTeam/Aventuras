@@ -1,5 +1,7 @@
 import type { SuggestionCategory } from '@/lib/db'
 
+import type { SuggestionRef } from './types'
+
 export type SuggestionSlot = { ref: string; label: string; promptHint: string }
 
 export type SuggestionSlotMap = {
@@ -82,7 +84,6 @@ export function shouldShowSuggestionStrip(params: {
   return params.hasChips || buildSuggestionSlots(params.categories).slots.length > 0
 }
 
-export type SuggestionRef = { categoryRef: string; text: string }
 export type SuggestionItem = { categoryId: string; text: string }
 
 // Generous by design: the prompt asks for one or two sentences, which runs

@@ -9,6 +9,7 @@ import {
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
+  suggestionRefSchema,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
 import type {
@@ -82,15 +83,9 @@ export const fallbackClassifierSchema = z.object({
 
 // Structured output validates the whole object in one shot, so without
 // .catch([]) a malformed suggestions array would fail the entire classifier
-// parse and take the (unrelated) scene-state fields down with it.
-const suggestionFieldSchema = z
-  .array(
-    z.object({
-      categoryRef: z.string().describe('opaque category id from the prompt list, e.g. cat1'),
-      text: z.string().describe("complete prose for the reader's next turn"),
-    }),
-  )
-  .catch([])
+// parse and take the (unrelated) scene-state fields down with it. The element
+// is shared with suggestion-refresh; only this array policy is local.
+const suggestionFieldSchema = z.array(suggestionRefSchema).catch([])
 
 export const fallbackClassifierWithSuggestionsSchema = fallbackClassifierSchema.extend({
   suggestions: suggestionFieldSchema,

@@ -7,6 +7,7 @@ import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
   resolveSuggestionItems,
+  suggestionRefSchema,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
@@ -35,12 +36,7 @@ export type SuggestionRefreshInput = { refreshGuidance: string }
 // array must fail the parse — that buys callWithRetry's re-ask and, failing
 // that, the strip's error state, instead of a silent no-chip "success".
 export const suggestionRefreshSchema = z.object({
-  suggestions: z.array(
-    z.object({
-      categoryRef: z.string().describe('opaque category id from the prompt list, e.g. cat1'),
-      text: z.string().describe("complete prose for the reader's next turn"),
-    }),
-  ),
+  suggestions: z.array(suggestionRefSchema),
 })
 
 function readRefreshInput(inputs: unknown): SuggestionRefreshInput | null {

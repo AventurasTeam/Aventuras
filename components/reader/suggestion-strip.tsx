@@ -9,7 +9,7 @@ import { Spinner, SPINNER_PX } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
 import type { EntryMetadata, SuggestionCategory } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { resolveAccentColor, useTheme } from '@/lib/themes'
+import { resolveAccentColor, useTheme, type AccentHex } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 /** Derived from the persisted metadata so the strip can't drift from the schema. */
@@ -79,7 +79,7 @@ function overlaySpinnerPx(stackPx: number): number {
   return Math.max(SPINNER_PX.lg, Math.min(Math.round(CHIP_ROW_PX * 1.5), stackPx - 12))
 }
 
-function tintOf(hex: string, alpha: number): string {
+function tintOf(hex: AccentHex, alpha: number): string {
   const body = hex.slice(1)
   const full = body.length === 3 ? body.replace(/./g, (c) => c + c) : body
   const n = Number.parseInt(full, 16)

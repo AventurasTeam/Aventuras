@@ -10,7 +10,7 @@ import {
 import { VISUAL_CHANGE_TYPES } from './types'
 import type {
   ItemTransfer,
-  ParsedSuggestion,
+  SuggestionRef,
   ParseFieldFailure,
   ParsedStateBlock,
   ParsedTransfers,
@@ -201,7 +201,7 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
   if (segment === undefined)
     return { items: [], blockFound: false, failed: false, malformedCount: 0 }
 
-  const items: ParsedSuggestion[] = []
+  const items: SuggestionRef[] = []
   const re = new RegExp(
     `<${SUGGESTION_ITEM_TAG}\\s+([^>]*)>([\\s\\S]*?)</${SUGGESTION_ITEM_TAG}>`,
     'g',

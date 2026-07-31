@@ -4,6 +4,7 @@ export {
   NEUTRAL_ACCENT,
   resolveAccentColor,
   slotForHex,
+  type AccentHex,
   type CuratedAccentSlot,
 } from './core/accent-palette'
 export { contrastRatio } from './core/contrast'
