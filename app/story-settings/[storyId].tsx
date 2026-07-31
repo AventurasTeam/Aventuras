@@ -4,9 +4,9 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
-import { SaveBar } from '@/components/compounds/save-bar'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
+import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
 import {
@@ -14,12 +14,15 @@ import {
   useStorySettingsSaveSession,
 } from '@/components/story-settings/save-session'
 import {
+  StorySettingsLeaveDialog,
+  StorySettingsSaveBar,
+} from '@/components/story-settings/save-session-chrome'
+import {
   isStorySettingsTabId,
   STORY_SETTINGS_TAB_GROUPS,
   STORY_SETTINGS_TAB_IDS,
   type StorySettingsTabId,
 } from '@/components/story-settings/tabs'
-import { UnsavedChangesDialog } from '@/components/story-settings/unsaved-changes-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
@@ -114,6 +117,9 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
+  const definition = storiesStore.useStories(
+    (s) => s.rows.find((r) => r.id === storyId)?.definition ?? null,
+  )
   // Split by kind so the pill names what is actually running: a refresh started
   // in the reader stays cancellable after a jump here.
   const isGenerating = generationStore.useGeneration((s) =>
@@ -162,7 +168,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
             ? { status: 'missing' }
             : settings == null
               ? { status: 'uninitialized' }
-              : { status: 'ready', settings }
+              : { status: 'ready', settings, definition }
 
   // Consumer slices switch on `id` here and render their section for the
   // `ready` branch, deriving its draft from `data.settings`.
@@ -187,6 +193,8 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
           />
         )
       case 'ready':
+        if (id === 'generation')
+          return <AuthoringAidsPanel settings={data.settings} definition={data.definition} />
         if (id === 'memory' && storyId != null)
           return <MemoryPanel storyId={storyId} settings={data.settings} />
         return (
@@ -211,7 +219,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       chapterProgress={0}
       hideSelfReferentialIcon
       onBack={handleBack}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu beforeNavigate={session.requestLeave} />}
       statusSlot={
         <GenerationStatusPill
           activePhase={
@@ -234,32 +242,9 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         onSelectTab={setSelectedTab}
         panelData={panelData}
         renderPanel={renderPanel}
-        saveBar={
-          isDirty ? (
-            <SaveBar
-              dirtyFields={session.snapshot.dirtyFields}
-              dirtyCount={session.snapshot.dirtyFields.length}
-              saving={session.saving}
-              enabled={isFocused}
-              onSave={() => void session.save()}
-              onDiscard={session.discard}
-            />
-          ) : null
-        }
+        saveBar={<StorySettingsSaveBar enabled={isFocused} />}
       />
-      {/* No focus gate: `pendingLeave` is only set by this screen's own back
-          arrow or the window-close guard, and a pushed-under screen's back
-          arrow can't fire — so a pending leave while unfocused means the user
-          is closing the window, which is exactly when the dialog must show.
-          Gating it there held the close open with nothing on screen to answer
-          it, leaving the window unclosable. */}
-      <UnsavedChangesDialog
-        open={session.pendingLeave}
-        saving={session.saving}
-        onSave={() => session.resolveLeave('save')}
-        onDiscard={() => session.resolveLeave('discard')}
-        onCancel={() => session.resolveLeave('cancel')}
-      />
+      <StorySettingsLeaveDialog />
     </ScreenShell>
   )
 }

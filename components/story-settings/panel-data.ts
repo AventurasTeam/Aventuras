@@ -1,4 +1,4 @@
-import type { StorySettings } from '@/lib/db'
+import type { StoryDefinition, StorySettings } from '@/lib/db'
 
 /**
  * What a tab panel is given to render. `stories.settings` is nullable and the
@@ -12,4 +12,9 @@ export type StorySettingsPanelData =
   | { status: 'unavailable' }
   | { status: 'missing' }
   | { status: 'uninitialized' }
-  | { status: 'ready'; settings: StorySettings }
+  /**
+   * `definition` is a separate nullable column, not part of `settings`: the
+   * wizard inserts a draft row before either exists, so a story with settings
+   * and no definition is a real persisted state.
+   */
+  | { status: 'ready'; settings: StorySettings; definition: StoryDefinition | null }
