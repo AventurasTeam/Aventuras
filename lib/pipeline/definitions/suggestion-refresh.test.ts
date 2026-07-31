@@ -505,7 +505,7 @@ describe('suggestion-refresh emission phase', () => {
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
 
-    const { events } = await runEmission({ targetEntryId: 'entry-1', refreshGuidance: '   ' })
+    const { events } = await runEmission({ refreshGuidance: '   ' })
 
     const prompt = generateStructuredMock.mock.calls[0]?.[1] as string
     expect(prompt).not.toContain('already started writing')

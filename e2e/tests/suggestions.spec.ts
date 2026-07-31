@@ -165,9 +165,7 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
 
       await reader.suggestionChip(app.window, 'Act', CHIP_ACT_1).click()
       await expect(reader.composer(app.window)).toHaveValue(CHIP_ACT_1)
-      await expect(reader.modeTrigger(app.window)).toHaveText(
-        new RegExp(t('reader:composerMode.free')),
-      )
+      await expect(reader.modeTrigger(app.window)).toContainText(t('reader:composerMode.free'))
     })
 
     await test.step('refresh re-rolls through the dedicated pipeline, passing the composer text as refreshGuidance', async () => {
