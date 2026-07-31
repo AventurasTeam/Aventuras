@@ -336,6 +336,19 @@ world-state-block edit surface rather than by this pipeline.
 
 ### Deviations from the brief
 
+- **The pass bounds its own model call (5 min), separately from
+  `profile.timeout`.** The retry policy in scope here can only act on a call
+  that _returns_; a provider that accepts the request and never answers is not
+  a failure, so the backoff never armed. That case is uniquely unrecoverable
+  for this pipeline: `state: 'running'` is persisted, and both
+  `shouldCadenceFire` and `runNow`'s in-flight guard read it, so the pass stayed
+  dead until the next boot with the pill showing `classifying` throughout — and
+  unlike every foreground kind, the user has no cancel affordance to break it.
+  The expiry is routed to `nextStatusOnFailure`, not the abort arm, so it burns
+  a retry rather than silently rescheduling the same dead provider. A profile
+  timeout shorter than the cap still wins (the SDK aborts first); a longer one
+  is deliberately capped.
+
 - **The cascade's "merge" arm is not built.** No merge action exists in
   the delta registry and this planner only ever creates happenings;
   happening consolidation and dedup are chapter-close lore-mgmt (M5.2).

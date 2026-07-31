@@ -66,6 +66,39 @@ async function readWindowEntries(
     .limit(maxEntries + 1)) as StoryEntry[]
 }
 
+// The classifier is the one agent a user cannot cancel — the pill has no
+// affordance for a background pass — and it persists `state: 'running'`, which
+// gates both its own cadence and `runNow`. A provider that accepts the request
+// and never answers therefore wedges it until the next boot. This bounds the
+// whole structured call (retries included) so the expiry becomes an ordinary
+// failure the existing backoff can act on. A profile `timeout` shorter than
+// this still wins — the SDK aborts first; a longer one is deliberately capped.
+const CALL_TIMEOUT_MS = 300_000
+
+// AbortSignal.timeout / .any are statics Hermes has historically lacked, so
+// this composes the same behavior from AbortController + setTimeout, matching
+// lib/embedder/download/model-card.ts.
+function boundedSignal(outer: AbortSignal | undefined, ms: number) {
+  const controller = new AbortController()
+  let expired = false
+  const timer = setTimeout(() => {
+    expired = true
+    controller.abort()
+  }, ms)
+  const relay = () => controller.abort()
+  if (outer?.aborted) controller.abort()
+  else outer?.addEventListener('abort', relay)
+  return {
+    signal: controller.signal,
+    /** Stays readable after dispose: the flag is captured, not derived. */
+    expired: () => expired,
+    dispose: () => {
+      clearTimeout(timer)
+      outer?.removeEventListener('abort', relay)
+    },
+  }
+}
+
 async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
   const [row] = await ctx.db
     .select({ classifierStatus: branches.classifierStatus })
@@ -149,34 +182,51 @@ export async function* periodicClassifierPhase(
   // Makes shouldCadenceFire's running guard live for the duration of the call.
   await writeStatus(ctx, nextStatusOnStart(status))
 
-  const result = await generateStructured(
-    'classifier',
-    prompt,
-    classifierExtractionSchema,
-    {
-      providers: cfg.providers,
-      profiles: cfg.profiles,
-      assignments: cfg.assignments,
-      defaultProviderId: cfg.defaultProviderId,
-      storyModels: open.settings.models,
-    },
-    ctx.abortSignal,
-  )
+  const bounded = boundedSignal(ctx.abortSignal, CALL_TIMEOUT_MS)
+  let result
+  try {
+    result = await generateStructured(
+      'classifier',
+      prompt,
+      classifierExtractionSchema,
+      {
+        providers: cfg.providers,
+        profiles: cfg.profiles,
+        assignments: cfg.assignments,
+        defaultProviderId: cfg.defaultProviderId,
+        storyModels: open.settings.models,
+      },
+      bounded.signal,
+    )
+  } finally {
+    bounded.dispose()
+  }
   // Restore the pre-run status: an abort burns no retry state, and leaving
   // 'running' behind would permanently block shouldCadenceFire's guard.
-  if (result.status === 'aborted') {
+  if (result.status === 'aborted' && !bounded.expired()) {
     await writeStatus(ctx, status)
     return { status: 'aborted' }
   }
   if (result.status !== 'ok') {
-    const { status: next } = nextStatusOnFailure(status, {
-      error: result.status === 'not-configured' ? result.kind : result.detail,
-      at: Date.now(),
-    })
+    // A expiry aborts the same way a cancel does, but it is a provider fault:
+    // routing it through the abort arm would burn no retry and leave the pass
+    // to rediscover the same dead provider on the next tick, forever.
+    const detail =
+      result.status === 'aborted'
+        ? `timeout after ${CALL_TIMEOUT_MS}ms`
+        : result.status === 'not-configured'
+          ? result.kind
+          : result.detail
+    const timedOut = result.status === 'aborted'
+    const { status: next } = nextStatusOnFailure(status, { error: detail, at: Date.now() })
     await writeStatus(ctx, next)
     return {
       status: 'failed',
-      error: { kind: 'provider', reason: 'unknown', detail: `classifier: ${result.status}` },
+      error: {
+        kind: 'provider',
+        reason: timedOut ? 'timeout' : 'unknown',
+        detail: `classifier: ${timedOut ? 'timeout' : result.status}`,
+      },
     }
   }
 

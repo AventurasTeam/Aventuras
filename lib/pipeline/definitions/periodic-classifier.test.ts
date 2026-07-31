@@ -348,6 +348,55 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0, processedThrough: 0 })
   })
 
+  // A provider that accepts the request and never answers used to leave
+  // 'running' persisted forever: the cadence guard and runNow's in-flight guard
+  // both read it, so the pass was dead until the next boot. The expiry must land
+  // as a failure, not an abort, or the backoff never arms and every later tick
+  // rediscovers the same dead provider.
+  it('treats a call that outlives the timeout as a retryable failure', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.mocked(generateStructured).mockImplementation(
+        (...args: unknown[]) =>
+          new Promise((resolve) => {
+            const signal = args[4] as AbortSignal
+            if (signal.aborted) resolve({ status: 'aborted' } as never)
+            signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+          }) as never,
+      )
+      const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+      const pass = drain(h.ctx)
+      await vi.advanceTimersByTimeAsync(300_000)
+      const { events, result } = await pass
+
+      expect(events).toEqual([])
+      expect(result).toMatchObject({ status: 'failed', error: { reason: 'timeout' } })
+      expect(h.status()).toMatchObject({ state: 'retrying', retryCount: 1, processedThrough: 0 })
+      expect(h.status()?.lastError).toMatch(/timeout/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('still treats a real cancel as an abort, burning no retry state', async () => {
+    const controller = new AbortController()
+    vi.mocked(generateStructured).mockImplementation(
+      (...args: unknown[]) =>
+        new Promise((resolve) => {
+          const signal = args[4] as AbortSignal
+          if (signal.aborted) resolve({ status: 'aborted' } as never)
+          signal.addEventListener('abort', () => resolve({ status: 'aborted' } as never))
+        }) as never,
+    )
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
+    const pass = drain({ ...h.ctx, abortSignal: controller.signal })
+    controller.abort()
+    const { result } = await pass
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(h.status()).toMatchObject({ state: 'idle', retryCount: 0 })
+  })
+
   it('fails without advancing the watermark on a provider failure', async () => {
     const watermarks: number[] = []
     vi.mocked(generateStructured).mockResolvedValue({ status: 'failed', detail: 'rate limited' })
