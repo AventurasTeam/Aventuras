@@ -51,7 +51,7 @@ function createProviderFromProfile(options: {
   manualBody?: string
   serviceId?: string
 }) {
-  const { profile, presetId, debugId, structuredOutputs, manualBody } = options
+  const { profile, presetId, debugId, structuredOutputs, manualBody, serviceId } = options
   const fetch = createTimeoutFetch(
     settings.apiSettings.llmTimeoutMs,
     serviceId ?? presetId,
