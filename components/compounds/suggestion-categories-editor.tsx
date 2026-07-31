@@ -47,6 +47,7 @@ import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useDensity } from '@/lib/density'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type SuggestionCategory = {
@@ -77,10 +78,14 @@ type SuggestionCategoriesEditorProps = {
   disabled?: boolean
   /** Generator for new-row ids — host injects so prod can use cuid / nanoid. */
   generateId?: () => string
+  /**
+   * When set, the row's delete control calls this instead of removing the row.
+   * The host owns the confirmation and applies the removal through `onChange`.
+   */
+  onRequestDelete?: (id: string) => void
   className?: string
 }
 
-const DEFAULT_FALLBACK_LABEL = 'Default'
 const PROMPT_HINT_MIN_HEIGHT = 80
 const EXPAND_DURATION_MS = 200
 // Cover the lib's post-gesture withSpring settle (~300ms) so the dropped row stays on top.
@@ -165,20 +170,22 @@ const RowContent = memo(function RowContent({
   stacked,
 }: RowContentProps) {
   const labelError = emptyLabel
-    ? 'Label is required'
+    ? t('suggestionCategories.labelRequired')
     : duplicateLabel
-      ? 'Label must be unique'
+      ? t('suggestionCategories.labelDuplicate')
       : null
-  const deleteLabel = `Delete category${total === 1 ? ' (last one)' : ''}`
+  const deleteLabel =
+    total === 1 ? t('suggestionCategories.deleteLast') : t('suggestionCategories.delete')
   const labelField = (
     <View className="min-w-0 flex-1 flex-col gap-1">
       <Input
         value={category.label}
         onChangeText={(v) => onLabelChange(category.id, v)}
-        placeholder="Category label"
+        placeholder={t('suggestionCategories.labelPlaceholder')}
         editable={!disabled}
         aria-invalid={labelError != null}
         autoCorrect={false}
+        testID={`suggestion-category-label-${category.id}`}
       />
       {labelError ? (
         <Text size="xs" className="text-danger">
@@ -191,7 +198,7 @@ const RowContent = memo(function RowContent({
     <View className={stacked ? 'flex-col gap-1' : 'min-h-control-md justify-center'}>
       {stacked ? (
         <Text size="xs" variant="muted">
-          Color
+          {t('suggestionCategories.color')}
         </Text>
       ) : null}
       <ColorPicker
@@ -209,7 +216,7 @@ const RowContent = memo(function RowContent({
     <Textarea
       value={category.promptHint}
       onChangeText={(v) => onPromptHintChange(category.id, v)}
-      placeholder="Prompt hint (optional — label is used as the sole hint when blank)"
+      placeholder={t('suggestionCategories.promptHintPlaceholder')}
       editable={!disabled}
       style={textareaMinHeightStyle}
       rows={3}
@@ -223,7 +230,9 @@ const RowContent = memo(function RowContent({
           checked={category.enabled}
           onCheckedChange={() => onToggleEnabled(category.id)}
           disabled={disabled}
-          aria-label={category.enabled ? 'Disable category' : 'Enable category'}
+          aria-label={t(
+            category.enabled ? 'suggestionCategories.disable' : 'suggestionCategories.enable',
+          )}
         />
       </View>
       <View className={cn('flex-1 flex-col', stacked ? 'gap-3' : 'gap-2')}>
@@ -251,6 +260,7 @@ const RowContent = memo(function RowContent({
           variant="destructive"
           onPress={() => onDelete(category.id)}
           disabled={disabled}
+          testID={`suggestion-category-delete-${category.id}`}
         />
       </View>
     </View>
@@ -289,7 +299,7 @@ function SortableWebRow({
   const dragHandle = (
     <button
       type="button"
-      aria-label="Drag to reorder"
+      aria-label={t('suggestionCategories.dragReorder')}
       {...listeners}
       {...attributes}
       disabled={disabled}
@@ -329,7 +339,7 @@ function PhoneRowSummary({
   fallbackColor: ColorValue
 }) {
   const dotColor = category.color ?? fallbackColor
-  const labelDisplay = category.label.trim() || 'Unnamed category'
+  const labelDisplay = category.label.trim() || t('suggestionCategories.unnamed')
   const hasError = duplicateLabel || emptyLabel
   return (
     <View className="flex-1 flex-row items-center gap-2">
@@ -351,7 +361,7 @@ function PhoneRowSummary({
       </Text>
       {!category.enabled ? (
         <Text size="xs" variant="muted">
-          off
+          {t('suggestionCategories.off')}
         </Text>
       ) : null}
     </View>
@@ -394,7 +404,7 @@ function PhoneRowShell({
         {dragHandle}
         <Pressable
           accessibilityRole="button"
-          aria-label={expanded ? 'Collapse category' : 'Expand category'}
+          aria-label={t(expanded ? 'suggestionCategories.collapse' : 'suggestionCategories.expand')}
           aria-expanded={expanded}
           onPress={onToggleExpanded}
           disabled={disabled}
@@ -436,9 +446,10 @@ function SuggestionCategoriesEditor({
   onChange,
   swatches,
   fallbackColor,
-  fallbackColorLabel = DEFAULT_FALLBACK_LABEL,
+  fallbackColorLabel = t('suggestionCategories.fallbackColor'),
   disabled,
   generateId = defaultIdGen,
+  onRequestDelete,
   className,
 }: SuggestionCategoriesEditorProps) {
   // Split on platform, not tier: WebList uses dnd-kit + DOM elements that crash on native,
@@ -449,8 +460,8 @@ function SuggestionCategoriesEditor({
 
   // Ref so handlers stay stable across keystrokes — otherwise they re-create on every
   // categories change and defeat memo(RowContent)/memo(SortablePhoneRow).
-  const stateRef = useRef({ categories, onChange, generateId })
-  stateRef.current = { categories, onChange, generateId }
+  const stateRef = useRef({ categories, onChange, generateId, onRequestDelete })
+  stateRef.current = { categories, onChange, generateId, onRequestDelete }
 
   const handlers = useMemo<RowHandlers>(
     () => ({
@@ -472,6 +483,10 @@ function SuggestionCategoriesEditor({
       },
       onDelete: (id) => {
         const s = stateRef.current
+        if (s.onRequestDelete) {
+          s.onRequestDelete(id)
+          return
+        }
         s.onChange(s.categories.filter((c) => c.id !== id))
       },
     }),
@@ -505,8 +520,13 @@ function SuggestionCategoriesEditor({
   )
 
   const addButton = (
-    <Button variant="ghost" onPress={handleAdd} disabled={disabled} aria-label="Add category">
-      <Text>+ Add category</Text>
+    <Button
+      variant="ghost"
+      onPress={handleAdd}
+      disabled={disabled}
+      aria-label={t('suggestionCategories.addAria')}
+    >
+      <Text>{t('suggestionCategories.add')}</Text>
     </Button>
   )
 
@@ -889,9 +909,11 @@ const SortablePhoneRow = memo(function SortablePhoneRow({
                 <View
                   accessibilityRole="button"
                   accessibilityState={{ disabled: !!disabled }}
-                  aria-label={
-                    disabled ? 'Drag handle (disabled)' : 'Long-press to drag and reorder'
-                  }
+                  aria-label={t(
+                    disabled
+                      ? 'suggestionCategories.dragHandleDisabled'
+                      : 'suggestionCategories.dragHandle',
+                  )}
                 >
                   <Icon as={GripVertical} size="md" className="text-fg-muted" />
                 </View>

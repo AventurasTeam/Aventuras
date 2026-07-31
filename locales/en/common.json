@@ -87,5 +87,26 @@
     "delete": "Delete",
     "draft": "Draft",
     "archived": "Archived"
+  },
+  "suggestionCategories": {
+    "add": "+ Add category",
+    "addAria": "Add category",
+    "labelPlaceholder": "Category label",
+    "labelRequired": "Label is required",
+    "labelDuplicate": "Label must be unique",
+    "color": "Color",
+    "fallbackColor": "Default",
+    "promptHintPlaceholder": "Prompt hint (optional — label is used as the sole hint when blank)",
+    "delete": "Delete category",
+    "deleteLast": "Delete category (last one)",
+    "enable": "Enable category",
+    "disable": "Disable category",
+    "expand": "Expand category",
+    "collapse": "Collapse category",
+    "dragReorder": "Drag to reorder",
+    "dragHandle": "Long-press to drag and reorder",
+    "dragHandleDisabled": "Drag handle (disabled)",
+    "unnamed": "Unnamed category",
+    "off": "off"
   }
 }

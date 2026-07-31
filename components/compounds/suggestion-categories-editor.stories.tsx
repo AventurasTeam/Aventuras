@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { SuggestionCategoriesEditor, type SuggestionCategory } from './suggestion-categories-editor'
 import type { ColorValue } from '../ui/color-picker'
@@ -52,9 +53,10 @@ const SEED: SuggestionCategory[] = [
 type DemoProps = {
   initial?: SuggestionCategory[]
   disabled?: boolean
+  onRequestDelete?: (id: string) => void
 }
 
-function Demo({ initial = SEED, disabled }: DemoProps) {
+function Demo({ initial = SEED, disabled, onRequestDelete }: DemoProps) {
   const [categories, setCategories] = useState<SuggestionCategory[]>(initial)
   return (
     <View className="w-full flex-col gap-3" style={{ minHeight: 480 }}>
@@ -64,6 +66,7 @@ function Demo({ initial = SEED, disabled }: DemoProps) {
         swatches={SWATCHES}
         fallbackColor={FALLBACK}
         disabled={disabled}
+        onRequestDelete={onRequestDelete}
       />
     </View>
   )
@@ -85,6 +88,8 @@ const meta: Meta<typeof SuggestionCategoriesEditor> = {
 
 export default meta
 type Story = StoryObj<typeof SuggestionCategoriesEditor>
+
+let requestDeleteSpy: ReturnType<typeof fn>
 
 export const Default: Story = { render: () => <Demo /> }
 
@@ -133,4 +138,38 @@ export const ManyCategories: Story = {
       }))}
     />
   ),
+}
+
+// onRequestDelete routes the delete press to the host instead of removing the
+// row — the host owns the confirmation dialog. The row must survive the click;
+// a story that only checks the spy fired would still pass if the compound
+// removed the row itself.
+export const HostOwnedDeleteKeepsRow: Story = {
+  render: () => {
+    const spy = fn()
+    requestDeleteSpy = spy
+    return <Demo onRequestDelete={spy} />
+  },
+  play: async () => {
+    const target = SEED[0]!
+    const deleteButton = screen.getByTestId(`suggestion-category-delete-${target.id}`)
+    await userEvent.click(deleteButton)
+    await waitFor(() => expect(requestDeleteSpy).toHaveBeenCalledWith(target.id))
+    expect(screen.getByTestId(`suggestion-category-label-${target.id}`)).toBeInTheDocument()
+  },
+}
+
+// Without onRequestDelete, delete falls back to removing the row through onChange.
+export const DeleteWithoutHostRemovesRow: Story = {
+  render: () => <Demo />,
+  play: async () => {
+    const target = SEED[0]!
+    const deleteButton = screen.getByTestId(`suggestion-category-delete-${target.id}`)
+    await userEvent.click(deleteButton)
+    await waitFor(() =>
+      expect(
+        screen.queryByTestId(`suggestion-category-label-${target.id}`),
+      ).not.toBeInTheDocument(),
+    )
+  },
 }
