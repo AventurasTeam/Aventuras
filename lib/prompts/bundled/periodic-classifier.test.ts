@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { NEW_HANDLE_PREFIX } from '@/lib/classifier'
+
 import { renderTemplate, TEMPLATE_IDS } from '..'
 
 const context = {
@@ -42,6 +44,15 @@ describe('periodic classifier template', () => {
   it('instructs one-perspective-only relationship emission', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
     expect(rendered).toMatch(/do not infer the inverse/i)
+  })
+
+  // The reserved namespace is what keeps a newCharacters handle out of the
+  // placeholder space; substituteClassifierIds defends the case anyway, but an
+  // unprefixed instruction invites the collision on every reply.
+  it('reserves the new: namespace for newCharacters handles', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.periodicClassifier, context)
+    expect(rendered).toContain(NEW_HANDLE_PREFIX)
+    expect(rendered).toMatch(/MUST start with/i)
   })
 
   it('exposes the placeholder universe including happenings', () => {

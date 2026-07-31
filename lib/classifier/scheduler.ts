@@ -2,20 +2,18 @@ import type { ClassifierStatus } from '@/lib/db'
 
 import { retryDelayForStatus, shouldCadenceFire } from './status'
 
-// Deliberately not imported from the pipeline: pipeline definitions import
-// the classifier module, so the reverse import would form a cycle. This
-// shape mirrors StartRunResult/RunOutcome on purpose — keep it in sync by
-// hand rather than "deduplicating" it into one.
+// Mirrors the pipeline's StartRunResult by hand: importing it would cycle, since
+// pipeline definitions import this module.
 export type StartRunOutcome =
   | { outcome: 'completed' | 'aborted' | 'failed' }
   | { outcome: 'rejected'; blockedBy: string }
 
-/** Declined without starting because a run for that branch is already in flight. */
-export type RunNowOutcome = StartRunOutcome | { outcome: 'busy' }
+/** Declined without starting: a run for that branch is in flight, or the scheduler is stopped. */
+export type RunNowOutcome = StartRunOutcome | { outcome: 'busy' | 'stopped' }
 
 export type ClassifierSchedulerDeps = {
   cadenceFor: (branchId: string) => number
-  headPositionFor: (branchId: string) => Promise<number>
+  unprocessedTurnsFor: (branchId: string, processedThrough: number | null) => Promise<number>
   statusFor: (branchId: string) => Promise<ClassifierStatus>
   startRun: (branchId: string) => Promise<StartRunOutcome>
   setTimer: (fn: () => void, ms: number) => unknown
@@ -57,6 +55,9 @@ export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
       // than queueing, so a chapter-close never accumulates a retry backlog.
       // An aborted run was deliberately cancelled, so it takes the same
       // no-retry path as completed — retrying would fight the canceller.
+      // A 'rejected' retry (the branch was closed since the timer armed) drops the
+      // timer too; the persisted 'retrying' state re-fires it on the next cadence
+      // tick, so re-arming here would only spin against a branch nobody reopened.
       if (result.outcome !== 'failed') return result
       // The phase already persisted the failure through nextStatusOnFailure, so
       // re-read rather than re-deriving: retryDelayForStatus owns the mapping
@@ -74,15 +75,15 @@ export function createClassifierScheduler(deps: ClassifierSchedulerDeps) {
     /** Cadence tick: a turn landed, so the unprocessed count changed. */
     noteTurnCommitted: async (branchId: string): Promise<void> => {
       if (stopped || stateFor(branchId).inFlight) return
-      const [status, headPosition] = await Promise.all([
-        deps.statusFor(branchId),
-        deps.headPositionFor(branchId),
-      ])
-      if (!shouldCadenceFire({ status, headPosition, cadence: deps.cadenceFor(branchId) })) return
+      const status = await deps.statusFor(branchId)
+      const unprocessedTurns = await deps.unprocessedTurnsFor(branchId, status.processedThrough)
+      if (!shouldCadenceFire({ status, unprocessedTurns, cadence: deps.cadenceFor(branchId) }))
+        return
       await start(branchId)
     },
     /** `[Run classifier now]` — bypasses the count and the suspension. */
     runNow: async (branchId: string): Promise<RunNowOutcome> => {
+      if (stopped) return { outcome: 'stopped' }
       if (stateFor(branchId).inFlight) return { outcome: 'busy' }
       clearPending(branchId)
       const result = await start(branchId)

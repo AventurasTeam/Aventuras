@@ -408,6 +408,42 @@ describe('happenings CRUD arms', () => {
     })
   })
 
+  // A childless happening still carries `involvements: []` / `awareness: []` in
+  // its undo payload. Declaring the cascade keys only for non-empty arrays leaves
+  // them on the parent row, and the restored store row grows two phantom fields
+  // (the SQL insert survives only because drizzle drops non-column keys).
+  it('restores a childless happening without leaking the cascade keys onto the row', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'deleteHappening',
+          source: 'periodic_classifier',
+          payload: { branchId: 'br_1', id: 'hap_1' },
+        },
+        actionId: 'act_d',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    await reverseReplayDeltas('act_d', ctx)
+
+    expect(await rowFor(db, 'hap_1')).toBeDefined()
+    const restored = happeningsStore.getById('hap_1')
+    expect(restored).toBeDefined()
+    expect(restored).not.toHaveProperty('involvements')
+    expect(restored).not.toHaveProperty('awareness')
+  })
+
   it('redo of a cascading delete leaves all tables (parent + children) empty in DB and stores', async () => {
     const { db, ctx } = await setup()
     await applyDeltaAction(

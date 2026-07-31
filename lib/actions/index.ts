@@ -1,8 +1,9 @@
 export {
   embedClassifierDescriptions,
-  headPosition,
   readClassifierStatus,
+  recordClassifierPreflightFailure,
   resetStuckClassifierRunState,
+  unprocessedTurnCount,
 } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
 export { defineAction } from './define-action'

@@ -70,8 +70,10 @@ async function buildUndoOps(
         patch: { op: 'create', id: delta.targetId, row: rowData },
       })
 
-      // Re-insert cascaded child rows if the domain declares them
       for (const { table: childTableName, rows: childRows } of children) {
+        // drizzle's values() throws on an empty array, so an empty child set must
+        // never reach it — a domain declaring one is saying "nothing to restore".
+        if (childRows.length === 0) continue
         const childEntry = resolveByTable(childTableName)
         if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
         const { table: childTable } = childEntry.descriptor

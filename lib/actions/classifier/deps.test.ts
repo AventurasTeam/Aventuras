@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, stories, type ClassifierStatus } from '@/lib/db'
+import { branches, stories, storyEntries, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { resetStuckClassifierRunState } from './deps'
+import { resetStuckClassifierRunState, unprocessedTurnCount } from './deps'
 
 async function seed(
   db: Awaited<ReturnType<typeof createTestDb>>['db'],
@@ -100,5 +100,31 @@ describe('resetStuckClassifierRunState', () => {
     await resetStuckClassifierRunState({ db, runInTransaction })
 
     expect(await readStatus(db, 'b-idle')).toEqual(idle)
+  })
+})
+
+describe('unprocessedTurnCount', () => {
+  // Differencing MAX(position) against the watermark instead would count the
+  // technical rows the window filters out, firing the cadence early.
+  it('counts classifiable turns past the watermark, ignoring system rows', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    const kinds = ['ai_reply', 'system', 'user_input', 'system', 'ai_reply'] as const
+    for (const [i, kind] of kinds.entries())
+      await db.insert(storyEntries).values({
+        id: `e${i + 1}`,
+        branchId: 'b1',
+        position: i + 1,
+        kind,
+        content: 'x',
+        chapterId: null,
+        metadata: {},
+        createdAt: 1,
+      } as never)
+
+    expect(await unprocessedTurnCount('b1', null, { db, runInTransaction })).toBe(3)
+    expect(await unprocessedTurnCount('b1', 2, { db, runInTransaction })).toBe(2)
+    expect(await unprocessedTurnCount('b1', 5, { db, runInTransaction })).toBe(0)
   })
 })

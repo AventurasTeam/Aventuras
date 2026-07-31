@@ -97,6 +97,31 @@ describe('substituteClassifierIds', () => {
     expect(out).toEqual({ ref: 'nc1', subject: 'c9' })
   })
 
+  // Without the reserved set, a model that names a new character 'c1' has every
+  // ref to it rewritten into the existing entity c1 — the fact lands on the wrong
+  // character with no unresolved ref and no warning anywhere.
+  it('never rewrites a ref that a newCharacters handle claims, even on a placeholder collision', () => {
+    const idMap = new IdBiMap()
+    const collide = idMap.allocate(CHAR_A)
+    const out = substituteClassifierIds(
+      { newCharacters: [{ handle: collide }], relationships: [{ subject: collide, object: 'c9' }] },
+      idMap,
+      new Set([collide]),
+    )
+    expect(out).toEqual({
+      newCharacters: [{ handle: collide }],
+      relationships: [{ subject: collide, object: 'c9' }],
+    })
+  })
+
+  it('still substitutes placeholders no handle claims', () => {
+    const idMap = new IdBiMap()
+    const a = idMap.allocate(CHAR_A)
+    const b = idMap.allocate(CHAR_B)
+    const out = substituteClassifierIds({ subject: a, object: b }, idMap, new Set([b]))
+    expect(out).toEqual({ subject: CHAR_A, object: b })
+  })
+
   it('passes non-object values and nulls through', () => {
     const idMap = new IdBiMap()
     expect(substituteClassifierIds({ ref: null, n: 3, ok: true }, idMap)).toEqual({

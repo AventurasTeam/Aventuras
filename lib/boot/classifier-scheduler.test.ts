@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   embedClassifierDescriptions,
-  headPosition,
+  unprocessedTurnCount,
   readClassifierStatus,
   runClassifierNow,
 } from '@/lib/actions'
@@ -68,7 +68,7 @@ describe('wireClassifierScheduler', () => {
       definition: DEFINITION,
       settings: SETTINGS,
     })
-    vi.mocked(headPosition).mockResolvedValue(5)
+    vi.mocked(unprocessedTurnCount).mockResolvedValue(5)
     vi.mocked(readClassifierStatus).mockResolvedValue(idleStatus())
     vi.mocked(runClassifierNow).mockResolvedValue({
       outcome: 'completed',

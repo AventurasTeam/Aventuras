@@ -73,28 +73,28 @@ describe('nextStatusOnFailure', () => {
 
 describe('shouldCadenceFire', () => {
   it('fires when the unprocessed count reaches the cadence', () => {
-    expect(shouldCadenceFire({ status: idleStatus(), headPosition: 8, cadence: 8 })).toBe(true)
-    expect(shouldCadenceFire({ status: idleStatus(), headPosition: 7, cadence: 8 })).toBe(false)
+    expect(shouldCadenceFire({ status: idleStatus(), unprocessedTurns: 8, cadence: 8 })).toBe(true)
+    expect(shouldCadenceFire({ status: idleStatus(), unprocessedTurns: 7, cadence: 8 })).toBe(false)
   })
 
-  it('counts from the watermark, not from zero', () => {
+  it('takes the unprocessed count from the caller, watermark already applied', () => {
     const status = { ...idleStatus(), processedThrough: 10 }
-    expect(shouldCadenceFire({ status, headPosition: 17, cadence: 8 })).toBe(false)
-    expect(shouldCadenceFire({ status, headPosition: 18, cadence: 8 })).toBe(true)
+    expect(shouldCadenceFire({ status, unprocessedTurns: 7, cadence: 8 })).toBe(false)
+    expect(shouldCadenceFire({ status, unprocessedTurns: 8, cadence: 8 })).toBe(true)
   })
 
   it('suspends in failed-persistent', () => {
     const status = { ...idleStatus(), state: 'failed-persistent' as const }
-    expect(shouldCadenceFire({ status, headPosition: 99, cadence: 1 })).toBe(false)
+    expect(shouldCadenceFire({ status, unprocessedTurns: 99, cadence: 1 })).toBe(false)
   })
 
   it('does not fire while a run is already recorded as running', () => {
     const status = { ...idleStatus(), state: 'running' as const }
-    expect(shouldCadenceFire({ status, headPosition: 99, cadence: 1 })).toBe(false)
+    expect(shouldCadenceFire({ status, unprocessedTurns: 99, cadence: 1 })).toBe(false)
   })
 
   it('treats a non-positive cadence as "every turn" rather than dividing by zero', () => {
-    expect(shouldCadenceFire({ status: idleStatus(), headPosition: 1, cadence: 0 })).toBe(true)
+    expect(shouldCadenceFire({ status: idleStatus(), unprocessedTurns: 1, cadence: 0 })).toBe(true)
   })
 })
 

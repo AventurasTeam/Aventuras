@@ -464,6 +464,36 @@ describe('buildClassifierActions', () => {
       expect(planned).toHaveLength(0)
       expect(handleMap.get('h1')).toBe('char_a')
     })
+
+    // Rebinding the handle would retarget every ref emitted before the duplicate,
+    // including ones the model wrote for the first character.
+    it('keeps the first binding when a handle is reused, and reports the collision', () => {
+      const decisions = new Map<string, ReconcileDecision>([
+        ['h1', { kind: 'create', flagged: false }],
+      ])
+      const { planned, handleMap, unresolvedRefs } = buildClassifierActions(
+        {
+          happenings: [],
+          relationships: [],
+          statusFlips: [],
+          newCharacters: [
+            { handle: 'h1', name: 'First', description: 'x', sourceTurn: 't1' },
+            { handle: 'h1', name: 'Second', description: 'y', sourceTurn: 't1' },
+          ],
+        },
+        { ...base, decisions },
+      )
+      const creates = planned.filter((p) => p.action.kind === 'createEntity')
+      expect(creates).toHaveLength(1)
+      expect(
+        (creates[0].action as { payload: { entry: { name: string; id: string } } }).payload.entry
+          .name,
+      ).toBe('First')
+      expect(handleMap.get('h1')).toBe(
+        (creates[0].action as { payload: { entry: { id: string } } }).payload.entry.id,
+      )
+      expect(unresolvedRefs).toEqual(['h1'])
+    })
   })
 
   it('skips a self-relationship', () => {

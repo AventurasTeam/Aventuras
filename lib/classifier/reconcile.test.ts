@@ -156,6 +156,68 @@ describe('reconcileNewCharacter', () => {
     )
     expect(decision).toEqual({ kind: 'promote', entityId: 'char_1', similarity: 0.9 })
   })
+
+  // Create-with-flag deliberately leaves two rows sharing a name, so from the
+  // next pass on "the namesake" is ambiguous. Scoring only the first would let
+  // insertion order decide whether a real match is found at all.
+  it('scores every namesake and settles on the best match, not the first', async () => {
+    const embed = vi.fn(async (texts: string[]) => ({
+      vectors: [
+        new Float32Array([1, 0]),
+        new Float32Array([0, 1]), // decoy, similarity 0
+        new Float32Array([1, 0]), // true match
+      ].slice(0, texts.length),
+      dim: 2,
+    }))
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [
+          entity({ id: 'char_decoy', description: 'A blacksmith.' }),
+          entity({ id: 'char_real', description: 'A tavern keeper with ink-stained hands.' }),
+        ],
+        embedDescriptions: embed,
+      },
+    )
+    expect(decision).toMatchObject({ kind: 'promote', entityId: 'char_real' })
+    // One call carrying the candidate plus both namesakes.
+    expect(embed.mock.calls[0][0]).toHaveLength(3)
+  })
+
+  // Mid embedder-swap the two sides can come back on different models. Comparing
+  // the shared prefix would fabricate a similarity and drive a create-or-merge.
+  it('degrades to no-signal when the vectors disagree on dimension', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [entity()],
+        embedDescriptions: vi.fn(async () => ({
+          vectors: [new Float32Array([1, 0, 0]), new Float32Array([1, 0])],
+          dim: 3,
+        })),
+      },
+    )
+    expect(decision).toEqual({
+      kind: 'create',
+      flagged: true,
+      similarity: null,
+      flagReason: 'no-signal',
+    })
+  })
+
+  it('degrades to no-signal on a short vector set', async () => {
+    const decision = await reconcileNewCharacter(
+      { name: 'Eldrin', description: 'The tavern keeper.' },
+      {
+        entities: [entity({ id: 'char_a' }), entity({ id: 'char_b' })],
+        embedDescriptions: vi.fn(async () => ({
+          vectors: [new Float32Array([1, 0]), new Float32Array([1, 0])],
+          dim: 2,
+        })),
+      },
+    )
+    expect(decision).toMatchObject({ flagReason: 'no-signal' })
+  })
 })
 
 describe('cosine', () => {

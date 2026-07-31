@@ -151,7 +151,6 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
 }
 
 async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: DbCtx) {
-  // Query children before deletion so we can track which IDs were deleted
   const involvements = await ctx.db
     .select()
     .from(happeningInvolvements)
@@ -213,16 +212,7 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   if (!current)
     return { status: 'rejected', reason: `delete target happening ${bid}:${id} not found` }
 
-  const involvements = await ctx.db
-    .select()
-    .from(happeningInvolvements)
-    .where(and(eq(happeningInvolvements.branchId, bid), eq(happeningInvolvements.happeningId, id)))
-  const awareness = await ctx.db
-    .select()
-    .from(happeningAwareness)
-    .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.happeningId, id)))
-
-  const { ops: childDeleteOps } = await buildChildDeleteOps(bid, id, ctx)
+  const { ops: childDeleteOps, children } = await buildChildDeleteOps(bid, id, ctx)
 
   return {
     status: 'ok',
@@ -231,7 +221,11 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
     op: 'delete',
     // The link rows have no delta of their own here, so the parent's payload is
     // the only place reverse-replay can rebuild them from.
-    undoPayload: { ...current, involvements, awareness },
+    undoPayload: {
+      ...current,
+      involvements: children.happening_involvements,
+      awareness: children.happening_awareness,
+    },
     ops: [
       ...childDeleteOps,
       ctx.db
@@ -247,19 +241,16 @@ const restoreCascade: CascadeRestore = (undoPayload) => {
   const involvements = undoPayload.involvements as Record<string, unknown>[] | undefined
   const awareness = undoPayload.awareness as Record<string, unknown>[] | undefined
 
-  const children = []
-  const cascadeKeys = []
-
-  if (involvements && involvements.length > 0) {
-    children.push({ table: 'happening_involvements', rows: involvements })
-    cascadeKeys.push('involvements')
+  // Both halves declared unconditionally — the engine skips the empty ones. An
+  // empty array is still a key the parent row must not carry into the re-insert
+  // or the store patch, so the cascade shape must not depend on the row counts.
+  return {
+    children: [
+      { table: 'happening_involvements', rows: involvements ?? [] },
+      { table: 'happening_awareness', rows: awareness ?? [] },
+    ],
+    cascadeKeys: ['involvements', 'awareness'],
   }
-  if (awareness && awareness.length > 0) {
-    children.push({ table: 'happening_awareness', rows: awareness })
-    cascadeKeys.push('awareness')
-  }
-
-  return { children, cascadeKeys }
 }
 
 const cascadeDeleteOps: CascadeDeleteOps = buildChildDeleteOps

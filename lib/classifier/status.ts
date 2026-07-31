@@ -1,6 +1,7 @@
 import type { ClassifierStatus } from '@/lib/db'
 
-// classifier.md -> Auto-retry policy. Three attempts, then failed-persistent.
+// classifier.md -> Auto-retry policy. One attempt plus three backed-off retries,
+// then failed-persistent.
 export const BACKOFF_MS = [30_000, 120_000, 300_000] as const
 
 export function idleStatus(): ClassifierStatus {
@@ -34,8 +35,7 @@ export function nextStatusOnSuccess(
 /**
  * The wait before the next attempt, or null when the backoff is exhausted.
  * `retryCount` counts failures so far, so attempt N waits `BACKOFF_MS[N - 1]`.
- * Sole owner of that mapping: the scheduler re-derives the delay from persisted
- * status, and an independent second indexing is how the two drift by one.
+ * Sole owner of that mapping — the scheduler re-derives the delay from here.
  */
 export function retryDelayForStatus(status: ClassifierStatus): number | null {
   if (status.state !== 'retrying') return null
@@ -58,17 +58,16 @@ export function nextStatusOnFailure(
 }
 
 /**
- * Entry-counted cadence (canon ships no token trigger in v1). Suspended in
+ * Turn-counted cadence (canon ships no token trigger in v1). Suspended in
  * failed-persistent so a broken provider is not spammed on every tick — the
  * manual run is the only way out.
  */
 export function shouldCadenceFire(args: {
   status: ClassifierStatus
-  headPosition: number
+  unprocessedTurns: number
   cadence: number
 }): boolean {
-  const { status, headPosition, cadence } = args
+  const { status, unprocessedTurns, cadence } = args
   if (status.state === 'failed-persistent' || status.state === 'running') return false
-  const unprocessed = headPosition - (status.processedThrough ?? 0)
-  return unprocessed >= Math.max(1, cadence)
+  return unprocessedTurns >= Math.max(1, cadence)
 }

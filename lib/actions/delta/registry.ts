@@ -16,8 +16,8 @@ export type StorePatch =
 // A domain patcher closes over its working-set store; the store branch-guards.
 export type StorePatcher = (branchId: string, patch: StorePatch) => void
 
-// A cascade restore extracts child rows from an undo payload.
-// The engine removes the declared cascade keys to get the clean parent row.
+// Extracts cascaded child rows from a delete delta's undo payload; the engine
+// strips the declared keys to recover the clean parent row.
 export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
   /** Child rows to re-insert, keyed by their own registered table name. */
   children: { table: string; rows: Record<string, unknown>[] }[]
@@ -25,9 +25,8 @@ export type CascadeRestore = (undoPayload: Record<string, unknown>) => {
   cascadeKeys: string[]
 }
 
-// A cascade delete returns the ops needed to delete cascaded children and the children
-// rows being deleted, so redo can emit store patches to keep stores in sync with the DB.
-// Called during redo to reconstruct the cascade behavior of the forward delete.
+// Replays the forward delete's cascade. Returns the child rows alongside the ops
+// so the caller can emit matching store patches.
 export type CascadeDeleteOps = (
   branchId: string,
   targetId: string,

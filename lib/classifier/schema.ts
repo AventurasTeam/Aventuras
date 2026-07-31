@@ -1,10 +1,7 @@
 import { z } from 'zod'
 
-// No .transform() anywhere in this schema: it is a wire contract, and
-// z.toJSONSchema — which generateStructured calls to build the model's schema —
-// throws "Transforms cannot be represented in JSON Schema" (verified). An
-// out-of-range severity is a prompt-compliance slip, not a reason to fail a
-// whole pass, so the clamp into [0, 1] lives at the consumer, in plan.ts.
+// No .transform() anywhere: z.toJSONSchema (used by generateStructured) throws
+// on transforms, so the severity clamp into [0, 1] lives in plan.ts.
 const severity = z.number().default(0)
 
 const awareness = z.object({

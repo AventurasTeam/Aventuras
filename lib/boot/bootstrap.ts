@@ -3,7 +3,6 @@ import {
   applyDeltaAction,
   buildDrainController,
   embedClassifierDescriptions,
-  headPosition,
   normalizeAppSettingsRow,
   readClassifierStatus,
   registerAllDomains,
@@ -11,9 +10,10 @@ import {
   reverseReplayDeltas,
   runClassifierNow,
   setDrainKickSink,
+  unprocessedTurnCount,
 } from '@/lib/actions'
 import { createClassifierScheduler } from '@/lib/classifier'
-import type { DbCtx } from '@/lib/db'
+import { STORY_SETTINGS_DEFAULTS, type DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
 import {
   configureClassifierEmbedder,
@@ -84,8 +84,11 @@ export function wireClassifierScheduler(ctx: DbCtx): void {
   teardownClassifierScheduler?.()
   configureClassifierEmbedder(embedClassifierDescriptions)
   const scheduler = createClassifierScheduler({
-    cadenceFor: () => currentStoryStore.getCurrentStory()?.settings.classifierCadence ?? 8,
-    headPositionFor: (branchId) => headPosition(branchId, ctx),
+    cadenceFor: () =>
+      currentStoryStore.getCurrentStory()?.settings.classifierCadence ??
+      STORY_SETTINGS_DEFAULTS.classifierCadence,
+    unprocessedTurnsFor: (branchId, processedThrough) =>
+      unprocessedTurnCount(branchId, processedThrough, ctx),
     statusFor: (branchId) => readClassifierStatus(branchId, ctx),
     startRun: (branchId) => runClassifierNow(branchId, ctx),
     setTimer: (fn, ms) => setTimeout(fn, ms),

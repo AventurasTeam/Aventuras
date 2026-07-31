@@ -5,13 +5,8 @@ import type { Entity } from '@/lib/db'
 export const TAU_HIGH = 0.75
 export const TAU_LOW = 0.5
 
-/**
- * Why a create was flagged. Canon's three bands collapse to two outcomes —
- * both the low and the ambiguous band create-with-flag — so the band survives
- * here rather than in the control flow: it is what the M4 collision-review
- * surface needs to explain the flag, and it is what makes TAU_LOW load-bearing
- * instead of decorative.
- */
+/** Why a create was flagged. Both the low and the ambiguous band create-with-flag,
+ * so the band is carried explicitly for the collision-review surface. */
 export type FlagReason = 'distinct' | 'ambiguous' | 'no-signal'
 
 export type ReconcileDecision =
@@ -42,46 +37,67 @@ export function cosine(a: Float32Array, b: Float32Array): number {
 const normalizeName = (name: string) => name.trim().toLowerCase()
 
 /**
- * Layer B reconciliation (edge-cases.md -> Layer B). Name index first, then a
- * transient similarity check between the extracted description and the
- * namesake's own description — both embedded in ONE call and compared in
- * memory, so the decision never depends on whether the namesake's vec0 row has
- * been drained yet.
+ * Layer B reconciliation (edge-cases.md -> Layer B). Every namesake is embedded
+ * alongside the candidate in ONE call and compared in memory, so the decision
+ * never depends on whether their vec0 rows have been drained yet.
+ *
+ * All namesakes, not just the first: create-with-flag deliberately produces
+ * same-name rows, so a branch that has already flagged one would otherwise keep
+ * scoring new candidates against whichever row happens to sort first.
  */
 export async function reconcileNewCharacter(
   candidate: { name: string; description: string },
   deps: { entities: readonly Entity[]; embedDescriptions: EmbedDescriptions },
 ): Promise<ReconcileDecision> {
   const target = normalizeName(candidate.name)
-  const namesake = deps.entities.find(
+  const namesakes = deps.entities.filter(
     (e) => e.kind === 'character' && normalizeName(e.name) === target,
   )
-  if (!namesake) return { kind: 'create', flagged: false }
+  if (namesakes.length === 0) return { kind: 'create', flagged: false }
 
   let vectors: Float32Array[] | null = null
   try {
-    const result = await deps.embedDescriptions([candidate.description, namesake.description ?? ''])
+    const result = await deps.embedDescriptions([
+      candidate.description,
+      ...namesakes.map((n) => n.description ?? ''),
+    ])
     vectors = result.vectors
   } catch {
     vectors = null
   }
-  const similarity = vectors && vectors.length === 2 ? cosine(vectors[0], vectors[1]) : null
 
-  // No signal: a namesake exists and we cannot tell them apart. Conservative
-  // create-with-flag defers to the user rather than silently merging two
-  // characters or silently promoting the wrong one.
-  if (similarity == null)
+  // A short reply or a dim mismatch mid embedder-swap would otherwise be scored
+  // on whatever prefix the two vectors happen to share — a fabricated similarity
+  // driving a create-or-merge decision.
+  const dim = vectors?.[0]?.length ?? 0
+  const usable =
+    vectors != null &&
+    vectors.length === namesakes.length + 1 &&
+    dim > 0 &&
+    vectors.every((v) => v.length === dim)
+
+  let best: { entity: Entity; similarity: number } | null = null
+  if (usable && vectors != null) {
+    for (const [i, namesake] of namesakes.entries()) {
+      const similarity = cosine(vectors[0], vectors[i + 1])
+      if (best == null || similarity > best.similarity) best = { entity: namesake, similarity }
+    }
+  }
+
+  // A namesake exists but is indistinguishable: defer to the user rather than
+  // silently merge or promote the wrong character.
+  if (best == null)
     return { kind: 'create', flagged: true, similarity: null, flagReason: 'no-signal' }
 
-  if (similarity >= TAU_HIGH) {
-    return namesake.status === 'staged'
-      ? { kind: 'promote', entityId: namesake.id, similarity }
-      : { kind: 'known', entityId: namesake.id, similarity }
+  if (best.similarity >= TAU_HIGH) {
+    return best.entity.status === 'staged'
+      ? { kind: 'promote', entityId: best.entity.id, similarity: best.similarity }
+      : { kind: 'known', entityId: best.entity.id, similarity: best.similarity }
   }
   return {
     kind: 'create',
     flagged: true,
-    similarity,
-    flagReason: similarity < TAU_LOW ? 'distinct' : 'ambiguous',
+    similarity: best.similarity,
+    flagReason: best.similarity < TAU_LOW ? 'distinct' : 'ambiguous',
   }
 }

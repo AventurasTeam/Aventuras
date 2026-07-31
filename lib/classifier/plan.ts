@@ -74,6 +74,12 @@ export function buildClassifierActions(
       unresolvedRefs.push(candidate.handle)
       continue
     }
+    // A handle reused for a second character would silently rebind every earlier
+    // ref to the later row. Keep the first binding and report the collision.
+    if (handleMap.has(candidate.handle)) {
+      unresolvedRefs.push(candidate.handle)
+      continue
+    }
     const entryId = anchor(candidate.sourceTurn)
     if (decision.kind === 'promote') {
       handleMap.set(candidate.handle, decision.entityId)

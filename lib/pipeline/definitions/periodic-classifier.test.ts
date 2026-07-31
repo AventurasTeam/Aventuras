@@ -2,7 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { generateStructured } from '@/lib/ai'
 import { shouldCadenceFire } from '@/lib/classifier'
-import { branches, stories, type ClassifierStatus, type Entity, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  stories,
+  storyEntries,
+  type ClassifierStatus,
+  type Entity,
+  type StoryEntry,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { makeLogger } from '@/lib/diagnostics'
 import {
@@ -83,6 +90,15 @@ async function ctxWith(opts: {
     kind: opts.entryKind ?? 'ai_reply',
     content: `turn ${i + 1}`,
   })) as unknown as StoryEntry[]
+  // The phase reads its window from SQLite, so the rows must exist there. The
+  // store hydrate below only stands in for what the reader UI happens to hold.
+  for (const e of entries)
+    await db.insert(storyEntries).values({
+      ...e,
+      chapterId: null,
+      metadata: {},
+      createdAt: 1,
+    } as never)
 
   resetAllStores()
   currentStoryStore.set({
@@ -172,6 +188,35 @@ describe('periodicClassifierPhase', () => {
     expect(h.status()).toEqual(before)
   })
 
+  // Guards the seam a store-fed window cannot see: entriesStore holds only the
+  // last ENTRIES_WINDOW_SIZE entries, so reading the window from it would start
+  // the pass at the reader's oldest loaded row and then advance the watermark
+  // past everything below it — prose silently never classified.
+  it('starts the window at the watermark even when the reader store is paged past it', async () => {
+    const h = await ctxWith({ processedThrough: 10, headPosition: 200 })
+    // Stand in for a reader scrolled to the tail: only the last 50 rows loaded.
+    entriesStore.hydrate(
+      'b1',
+      Array.from({ length: 50 }, (_, i) => ({
+        id: `e${151 + i}`,
+        branchId: 'b1',
+        position: 151 + i,
+        kind: 'ai_reply',
+        content: `turn ${151 + i}`,
+      })) as unknown as StoryEntry[],
+    )
+    vi.mocked(generateStructured).mockResolvedValue({ status: 'ok', value: extraction() } as never)
+
+    const { result } = await drain(h.ctx)
+
+    expect(result).toEqual({ status: 'completed' })
+    const prompt = vi.mocked(generateStructured).mock.calls[0][1] as string
+    expect(prompt).toContain('turn 11')
+    expect(prompt).not.toContain('turn 151')
+    // maxEntries defaults to 20, so one pass claims 11..30 and the backlog drains.
+    expect(h.status()?.processedThrough).toBe(30)
+  })
+
   it('advances past a window of only system entries, so the cadence cannot live-lock', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2, entryKind: 'system' })
     const { events, result } = await drain(h.ctx)
@@ -181,7 +226,7 @@ describe('periodicClassifierPhase', () => {
     // Technical rows hold positions the model must never see; leaving the
     // watermark behind them re-fires the cadence on every run_complete forever.
     expect(h.status()?.processedThrough).toBe(2)
-    expect(shouldCadenceFire({ status: h.status()!, headPosition: 2, cadence: 1 })).toBe(false)
+    expect(shouldCadenceFire({ status: h.status()!, unprocessedTurns: 0, cadence: 1 })).toBe(false)
     // Nothing ran, so the lifecycle keys must not read as a successful pass.
     expect(h.status()).toMatchObject({ state: 'idle', lastSuccessAt: null, retryCount: 0 })
   })
@@ -338,9 +383,11 @@ describe('periodicClassifierPhase', () => {
     expect(generateStructured).not.toHaveBeenCalled()
   })
 
-  it('fails when the entries store holds another branch', async () => {
+  // The window comes from SQLite, so a reader paged onto another branch is no
+  // longer able to starve the pass — only a closed story stops it.
+  it('fails when no story is open for the branch', async () => {
     const h = await ctxWith({ processedThrough: 0, headPosition: 2 })
-    entriesStore.hydrate('other', [])
+    currentStoryStore.clear()
     const { result } = await drain(h.ctx)
     expect(result).toMatchObject({ status: 'failed', error: { kind: 'orchestrator' } })
     expect(generateStructured).not.toHaveBeenCalled()
@@ -379,6 +426,44 @@ describe('periodicClassifierPhase', () => {
       (involvements[0] as { action: { payload: { entry: { entityId: string } } } }).action.payload
         .entry.entityId,
     ).toBe(CHAR_KAEL)
+  })
+
+  // The prompt reserves NEW_HANDLE_PREFIX for newCharacters handles, but a
+  // non-compliant model can still pick 'c1'. The reserved set is what keeps that
+  // from redirecting every ref onto the existing entity the placeholder names.
+  it('binds refs to the new character when its handle collides with a live placeholder', async () => {
+    const kael = {
+      id: CHAR_KAEL,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Kael',
+      status: 'active',
+      description: 'A courier.',
+    } as unknown as Entity
+    vi.mocked(generateStructured).mockResolvedValue({
+      status: 'ok',
+      value: extraction({
+        newCharacters: [
+          { handle: 'c1', name: 'Jorin', description: 'A ferryman.', sourceTurn: 't1' },
+        ],
+        happenings: [
+          { title: 'A', sourceTurn: 't1', involvements: [{ ref: 'c1' }], awareness: [] },
+        ],
+      }),
+    })
+    const h = await ctxWith({ processedThrough: 0, headPosition: 2, entities: [kael] })
+    const { events } = await drain(h.ctx)
+
+    const created = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createEntity',
+    ) as { action: { payload: { entry: { id: string; name: string } } } }
+    expect(created.action.payload.entry.name).toBe('Jorin')
+
+    const involvement = events.find(
+      (e) => (e as { action: { kind: string } }).action.kind === 'createHappeningInvolvement',
+    ) as { action: { payload: { entry: { entityId: string } } } }
+    expect(involvement.action.payload.entry.entityId).toBe(created.action.payload.entry.id)
+    expect(involvement.action.payload.entry.entityId).not.toBe(CHAR_KAEL)
   })
 
   it('reconciles a new character against a staged namesake and promotes instead of creating', async () => {

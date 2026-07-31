@@ -66,7 +66,6 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
       const entry = resolveByTable(delta.targetTable)
       if (delta.op === 'delete') {
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
-        // Emit delete patches for cascaded child rows
         const children = cascadeInfo.get(delta.targetId)
         if (children) {
           for (const [childTableName, childRows] of Object.entries(children)) {

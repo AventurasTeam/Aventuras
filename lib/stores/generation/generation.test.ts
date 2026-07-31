@@ -86,6 +86,13 @@ describe('isForegroundGenerating', () => {
     generationStore.startRun(runFor('per-turn', 'branch_other'))
     expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(false)
   })
+
+  // Denylist, not allowlist: a kind added later must default to foreground, so a
+  // new pipeline shows the pill rather than running invisibly.
+  it('treats an unknown kind as foreground', () => {
+    generationStore.startRun(runFor('some-future-pipeline'))
+    expect(isForegroundGenerating(generationStore.getTxState(), 'branch_1')).toBe(true)
+  })
 })
 
 describe('awaitRunTerminal', () => {

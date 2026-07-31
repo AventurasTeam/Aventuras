@@ -7,8 +7,10 @@ import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import {
   createSeededUserDataDir,
   removeUserDataDir,
+  seedClassifierBacklog,
   setClassifierCadence,
   setProviderEndpoint,
+  unassignClassifierAgent,
 } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
@@ -141,23 +143,15 @@ test.describe('periodic classifier — graph population', () => {
   })
 })
 
-// Regression coverage for a defect this slice actually shipped: through Tasks
-// 7-12, configureClassifierEmbedder (lib/pipeline/definitions/periodic-classifier.ts)
-// had no caller, so disambiguation always ran with an embedder returning empty
-// vectors — every namesake collision degraded to create-flagged 'no-signal'.
-// Unit tests stayed green throughout: reconcileNewCharacter is unit-tested with
-// an *injected* embedder, and the boot wiring is unit-tested only for
-// subscription/teardown. Each half passes while the composition is broken —
-// "nobody calls the setter" is invisible to unit tests by construction. The
-// happy-path spec above can't catch it either: its reply names a character no
-// entity shares, so the name index short-circuits before the embedder is ever
-// called. This test needs a REAL name collision resolved by a REAL embedding
-// (docs/testing.md -> Embedder in E2E), so only E2E can reach it.
+// Covers the configureClassifierEmbedder wiring, which unit tests cannot reach:
+// reconcileNewCharacter is tested with an injected embedder and the boot wiring
+// only for subscription/teardown, so an unwired setter passes both halves. Needs
+// a real name collision resolved by a real embedding (docs/testing.md -> Embedder
+// in E2E).
 //
-// The fixture's staged "The Ashen Sage" (char, br_hero_main) is the collision
-// target. The paraphrase below was checked against the real MiniLM model:
-// cosine similarity ~0.87 against the seeded description, comfortably above
-// TAU_HIGH (0.75).
+// Collision target: the fixture's staged "The Ashen Sage" (br_hero_main). The
+// paraphrase below scores ~0.87 against the seeded description on the real MiniLM
+// model, above TAU_HIGH (0.75).
 test.describe('periodic classifier — disambiguation seam', () => {
   let app: LaunchedApp
   let mock: MockLlm
@@ -235,12 +229,138 @@ test.describe('periodic classifier — disambiguation seam', () => {
       `SELECT status, name_collision_flag FROM entities WHERE branch_id = ? AND name = 'The Ashen Sage'`,
       [branchId],
     )
-    // A collision resolved with real signal promotes the existing staged row —
-    // no second row, no flag. An unwired embedder (no-signal) instead creates a
-    // second 'The Ashen Sage' row with name_collision_flag = 1, which is the
-    // regression this test exists to catch — don't "simplify" this into the
-    // happy-path test above, its reply never triggers the name-index branch.
+    // Real signal promotes the staged row; a no-signal decision would instead
+    // leave a second 'The Ashen Sage' with name_collision_flag = 1.
     expect(sageRows).toHaveLength(1)
     expect(sageRows[0][1]).toBe(0)
+  })
+})
+
+// entriesStore holds only the last ENTRIES_WINDOW_SIZE entries, so a pass fed
+// from it would start at the reader's oldest loaded row and then advance the
+// watermark past everything below — prose silently never classified. Only a real
+// launch hydrates that store for real, so only E2E proves the phase reads SQLite.
+test.describe('periodic classifier — backlog deeper than the reader window', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    mock = await startMockLlm()
+    mock.setNarrative('E2E-BACKLOG the road goes on.')
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    setClassifierCadence(seeded.dbPath, 'story_hero', 1)
+    // 80 filler turns past a watermark of 1: the tail 50 the reader loads cannot
+    // reach position 2, so a store-fed window would skip it.
+    seedClassifierBacklog(seeded.dbPath, 'br_hero_main', 80, 1)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('classifies from the watermark, not from the oldest entry the reader holds', async () => {
+    await home.openStory(app.window, 'The Veilstone Courier').click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    await reader.composer(app.window).fill('E2E-BACKLOG I keep riding.')
+    await reader.send(app.window).click()
+    await expect(app.window.getByText('E2E-BACKLOG the road', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    await expect
+      .poll(() => mock.requests.some((r) => r.agent === 'periodic-classifier'), { timeout: 20_000 })
+      .toBe(true)
+
+    const pass = mock.requests.find((r) => r.agent === 'periodic-classifier')!
+    const prompt = JSON.stringify(pass.body)
+    // Position 2 is fixture prose, far below both the fillers and the reader's
+    // loaded tail — reachable only by a window read from SQLite.
+    expect(prompt).toContain('I follow the figure into the alley')
+    expect(prompt).not.toContain('FILLER-')
+
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+    const watermark = await queryApp(
+      app.window,
+      `SELECT json_extract(classifier_status, '$.processedThrough') FROM branches WHERE id = ?`,
+      [branchId],
+    )
+    // classifierWindowMaxEntries defaults to 20, so one pass claims 2..21.
+    expect(watermark[0][0]).toBe(21)
+  })
+})
+
+// A pre-flight halt never reaches the phase, so nothing records the failure: the
+// status would stay idle, the backoff would never arm, and the cadence would
+// re-fire the doomed run on every committed turn.
+test.describe('periodic classifier — unassigned agent', () => {
+  let app: LaunchedApp
+  let mock: MockLlm
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    mock = await startMockLlm()
+    mock.setNarrative('E2E-NOAGENT the lantern gutters.')
+    setProviderEndpoint(seeded.dbPath, mock.url)
+    setClassifierCadence(seeded.dbPath, 'story_hero', 1)
+    unassignClassifierAgent(seeded.dbPath)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    await mock?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  test('records the pre-flight failure into the retry lifecycle instead of staying idle', async () => {
+    await home.openStory(app.window, 'The Veilstone Courier').click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+    await reader.composer(app.window).fill('E2E-NOAGENT I light the lantern.')
+    await reader.send(app.window).click()
+    await expect(app.window.getByText('E2E-NOAGENT the lantern', { exact: false })).toBeVisible({
+      timeout: 30_000,
+    })
+
+    const branchId = (
+      await queryApp(app.window, `SELECT current_branch_id FROM stories WHERE id = 'story_hero'`)
+    )[0][0] as string
+
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryApp(
+              app.window,
+              `SELECT json_extract(classifier_status, '$.state') FROM branches WHERE id = ?`,
+              [branchId],
+            )
+          )[0][0],
+        { timeout: 20_000 },
+      )
+      .toBe('retrying')
+
+    const status = await queryApp(
+      app.window,
+      `SELECT json_extract(classifier_status, '$.retryCount'),
+              json_extract(classifier_status, '$.lastError'),
+              json_extract(classifier_status, '$.processedThrough')
+       FROM branches WHERE id = ?`,
+      [branchId],
+    )
+    expect(status[0][0]).toBe(1)
+    expect(status[0][1]).not.toBeNull()
+    // A run that never reached the phase must not claim any prose.
+    expect(status[0][2] ?? 0).toBe(0)
+    expect(mock.requests.some((r) => r.agent === 'periodic-classifier')).toBe(false)
   })
 })

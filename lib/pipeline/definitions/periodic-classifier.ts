@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm'
+import { and, asc, eq, gt, sql } from 'drizzle-orm'
 
 import { generateStructured } from '@/lib/ai'
 import {
@@ -15,16 +15,10 @@ import {
   type EmbedDescriptions,
   type ReconcileDecision,
 } from '@/lib/classifier'
-import { branches, type ClassifierStatus } from '@/lib/db'
+import { branches, storyEntries, type ClassifierStatus, type StoryEntry } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import {
-  appSettingsStore,
-  currentStoryStore,
-  entitiesStore,
-  entriesStore,
-  happeningsStore,
-} from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, entitiesStore, happeningsStore } from '@/lib/stores'
 
 import { buildClassifierContext } from './classifier-context'
 import { definePipeline } from '../authoring/define'
@@ -49,6 +43,28 @@ export function __resetClassifierEmbedder(): void {
   embedDescriptions = NO_EMBEDDER
 }
 
+// Straight from SQLite, never from entriesStore: that store holds only the last
+// ENTRIES_WINDOW_SIZE entries, so a backlog older than the reader's window would
+// be skipped outright and the watermark would advance past prose nobody classified.
+// `maxEntries + 1` so buildClassifierWindow can still see the cut and set `truncated`.
+async function readWindowEntries(
+  ctx: PhaseContext,
+  processedThrough: number | null,
+  maxEntries: number,
+): Promise<StoryEntry[]> {
+  return (await ctx.db
+    .select()
+    .from(storyEntries)
+    .where(
+      and(
+        eq(storyEntries.branchId, ctx.branchId),
+        gt(storyEntries.position, processedThrough ?? 0),
+      ),
+    )
+    .orderBy(asc(storyEntries.position))
+    .limit(maxEntries + 1)) as StoryEntry[]
+}
+
 async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
   const [row] = await ctx.db
     .select({ classifierStatus: branches.classifierStatus })
@@ -58,10 +74,9 @@ async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
 }
 
 async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise<void> {
-  // branches is not delta-logged (classifier.md -> Persistence), so operational
-  // state is a direct row write rather than an action. Key-scoped json_set,
-  // never a whole blob: the reversal clamp owns $.processedThrough and can
-  // commit between this run's read and this write (cadence.md -> Concurrency).
+  // branches is not delta-logged (classifier.md -> Persistence), so this is a
+  // direct row write. Key-scoped json_set because the reversal clamp owns
+  // $.processedThrough and can commit between this run's read and this write.
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
           COALESCE(classifier_status, '{}'),
@@ -73,8 +88,8 @@ async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise
   )
 }
 
-// Advancing the watermark is its own key-scoped write, for the same reason in
-// reverse: it must not carry this run's snapshot of the lifecycle keys.
+// Its own key-scoped write, for the mirror reason: it must not carry this run's
+// snapshot of the lifecycle keys.
 async function advanceWatermark(ctx: PhaseContext, coversThrough: number): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
@@ -93,20 +108,13 @@ export async function* periodicClassifierPhase(
       status: 'failed',
       error: { kind: 'orchestrator', detail: 'periodic-classifier: no open story for branch' },
     }
-  if (entriesStore.getLoadedBranch() !== ctx.branchId)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'orchestrator',
-        detail: 'periodic-classifier: entries store loaded for another branch',
-      },
-    }
-
   const cfg = appSettingsStore.getAppSettings()
   const status = await readStatus(ctx)
-  const entries = [...entriesStore.getEntries().values()]
-    .filter((e) => e.branchId === ctx.branchId)
-    .sort((a, b) => a.position - b.position)
+  const entries = await readWindowEntries(
+    ctx,
+    status.processedThrough,
+    cfg.classifierWindowMaxEntries,
+  )
   const window = buildClassifierWindow({
     entries,
     processedThrough: status.processedThrough,
@@ -137,8 +145,7 @@ export async function* periodicClassifierPhase(
     }),
   )
 
-  // Key-scoped like every other lifecycle write here — gives the M7.2 status
-  // panel its Running state and makes shouldCadenceFire's running guard live.
+  // Makes shouldCadenceFire's running guard live for the duration of the call.
   await writeStatus(ctx, nextStatusOnStart(status))
 
   const result = await generateStructured(
@@ -172,12 +179,15 @@ export async function* periodicClassifierPhase(
     }
   }
 
-  // --- abort-free critical section starts here -------------------------------
-  // From this point the burst ignores signal.aborted: a reversal's 'cancel'
-  // either discarded a not-yet-committed run above, or lets this burst land for
-  // the positional sweep to reverse. Never return aborted holding deltas.
+  // Abort-free from here: a reversal's 'cancel' either discarded the run above,
+  // or lets this burst land for the positional sweep to reverse. Never return
+  // aborted while holding deltas.
   const extraction = result.value
-  const substituted = substituteClassifierIds(extraction, idMap)
+  const substituted = substituteClassifierIds(
+    extraction,
+    idMap,
+    new Set(extraction.newCharacters.map((c) => c.handle)),
+  )
 
   const decisions = new Map<string, ReconcileDecision>()
   for (const candidate of substituted.newCharacters) {
@@ -205,6 +215,8 @@ export async function* periodicClassifierPhase(
   }
 
   const next = nextStatusOnSuccess(status, { coversThrough: window.coversThrough, at: Date.now() })
+  // writeStatus persists the lifecycle keys only; next.processedThrough is not
+  // one of them — the watermark lands below, key-scoped and MAX-guarded in SQL.
   await writeStatus(ctx, next)
   await advanceWatermark(ctx, window.coversThrough)
   return { status: 'completed' }
