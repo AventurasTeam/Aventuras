@@ -47,7 +47,8 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
   {
     // Same logical agent, second reply shape: the classifier's schema grows a
     // `suggestions` field whenever the run asks for chips (suggestionsEnabled
-    // + no chips already in hand), which changes the injected TS block enough
+    // AND at least one enabled category, and no chips already in hand), which
+    // changes the injected TS block enough
     // that it no longer matches the entry above (see per-turn-piggyback.ts).
     // Distinct name so setStructured can target this shape without also
     // overriding the base-schema entry's reply.
@@ -59,14 +60,16 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
   },
   {
     // The ⟳ refresh pipeline's own agent target ('suggestion'), a distinct
-    // schema from both classifier shapes above — no suggestions.catch([]) here
-    // (suggestion-refresh.ts), so an unmatched request would 404 into `{}` and
-    // fail every refresh test as a provider error instead of exercising it.
+    // schema from both classifier shapes above. Its own entry because an
+    // unmatched structured request answers 200 with `{}` (not a 404 — that is
+    // only for a wrong URL or method), and `{}` fails this schema, which has no
+    // suggestions.catch([]) to absorb it (suggestion-refresh.ts).
     name: 'suggestion-refresh',
     block: schemaToTypeScriptBlock(z.toJSONSchema(suggestionRefreshSchema) as JsonSchema),
-    // No-op: zero chips is schema-valid and parses cleanly, same convention as
-    // the classifier entries above.
-    example: { suggestions: [] },
+    // One resolvable chip, NOT zero: a refresh that resolves nothing is now a
+    // run failure, so an empty default would fail any spec that reaches ⟳
+    // without calling setStructured. cat1 is the first enabled category.
+    example: { suggestions: [{ categoryRef: 'cat1', text: 'You press on.' }] },
   },
 ]
 

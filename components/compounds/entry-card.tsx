@@ -168,8 +168,8 @@ export function EntryCard({
     <View
       // No dim while `disabled`: reading is never gated (principles.md → What's
       // not gated), every control below takes `disabled` on its own, and the
-      // streaming card is rendered without it — so dimming here made the prose
-      // change shade the frame a turn committed and back again when it settled.
+      // streaming card renders without it — so a dim here would shade the prose
+      // as a turn commits and unshade it as the run settles.
       className={cn('relative w-full rounded-lg border p-4', KIND_BUBBLE[kind], className)}
     >
       <View className={cn('mb-2 flex-row items-center gap-2', showActions && 'pr-28')}>

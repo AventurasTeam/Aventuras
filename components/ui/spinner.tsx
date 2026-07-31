@@ -13,12 +13,10 @@ type SpinnerSize = keyof typeof SPINNER_PX
 
 type SpinnerProps = {
   /**
-   * `'sm'` / `'md'` / `'lg'` matches Icon's 16/20/24 scale. Numeric override
-   * accepted, on every platform. Reading RN's `ActivityIndicator` source
-   * suggests otherwise — a number leaves the native `size` prop undefined and
-   * only styles the wrapper box — but Android's drawable scales to those
-   * bounds anyway. Measured on device (2026-07-31); don't "fix" it from the
-   * source alone.
+   * `'sm'` / `'md'` / `'lg'` matches Icon's 16/20/24 scale. A numeric override
+   * works on every platform, including Android, despite what
+   * `ActivityIndicator`'s source implies — its drawable scales to the styled
+   * bounds. Measured on device 2026-07-31; don't "fix" it from the source.
    */
   size?: SpinnerSize | number
   /**

@@ -51,7 +51,15 @@ describe('bundled pack', () => {
     }
 
     const classifier = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
-    const refresh = renderTemplate(TEMPLATE_IDS.suggestionRefresh, context)
+    // suggestionsFire: false is what the refresh phase actually produces — it
+    // never sets the flag, so buildGenerationContext defaults it. Rendering
+    // this half with `true` would let a suggestionsFire guard be added to the
+    // refresh template and still pass, while shipping a prompt with no chip
+    // section at all.
+    const refresh = renderTemplate(TEMPLATE_IDS.suggestionRefresh, {
+      ...context,
+      suggestionsFire: false,
+    })
 
     expect(instruction(classifier)).toBe(instruction(refresh))
     expect(instruction(refresh)).toContain('exactly 2 distinct entries')

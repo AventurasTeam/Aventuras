@@ -75,9 +75,9 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   const calendar = getCalendar(definition.calendarSystemId)
 
   // Built unconditionally: the slots are the story's palette, not an
-  // instruction to emit. Withholding them behind suggestionsFire forced the
-  // suggestion-refresh phase to set a flag whose only other meaning — "ask the
-  // model for chips" — is that call's entire premise.
+  // instruction to emit. suggestionsFire answers the separate question of
+  // whether a surface should ASK for chips, and suggestion-refresh leaves it
+  // false — asking is that call's whole premise, not a per-run condition.
   const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
 
   const context = {

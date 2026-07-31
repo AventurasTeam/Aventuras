@@ -38,10 +38,12 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 {%- comment -%}
 No suggestionsFire guard, unlike per-turn and the fallback classifier: those
 emit chips only under a run-level condition (the tagged block firing / no chips
-captured yet), while producing chips is the entire reason this call exists. The
-phase returns before rendering when the palette is empty, so a guard here could
-never be false — and a refresh prompt with the section omitted would be a call
-asking for nothing.
+captured yet), while producing chips is the entire reason this call exists. Do
+not add one for template-family symmetry: this phase deliberately does not set
+suggestionsFire (the slots are the story's palette, not an instruction to
+emit), so a guard here would always be FALSE and would silently omit the one
+section this call exists to send. The palette-empty case never reaches here —
+the phase returns first.
 {%- endcomment %}
 # Next-turn options
 {% include 'macro_suggestion_emission_json' %}

@@ -250,7 +250,7 @@ export function ensureSuggestionRefreshPipelineRegistered(): void {
       ],
       affordance: 'pill-only',
       // Chips are delta-logged, undoable state generated from a context
-      // snapshot, and the post-call existence re-read below can only prove the
+      // snapshot, and the post-call existence re-read can only prove the
       // target survived — not that an undone edit, an undone entity write, or a
       // redo appending past it left that context intact. The strip's ✕ is what
       // keeps the gate from being a trap.
