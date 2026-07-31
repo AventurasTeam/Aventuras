@@ -19,7 +19,8 @@ import { settings } from '$lib/stores/settings.svelte'
 import { createModelFromProfile, PROVIDERS } from '../providers'
 import { buildProviderOptions } from '../generate'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import type { GenerationPreset, APIProfile, ProviderType } from '$lib/types'
+import type { GenerationPreset, APIProfile, ProviderType, SdkEffort } from '$lib/types'
+import { ToSdkEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
@@ -33,7 +34,7 @@ export interface ResolvedAgentConfig {
   providerType: ProviderType
   model: LanguageModelV3
   providerOptions: ProviderOptions | undefined
-  reasoning: string
+  reasoning: SdkEffort
 }
 
 /**
@@ -75,7 +76,7 @@ function resolveAgentConfig(
       break
   }
 
-  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
+  const reasoning = ToSdkEffort(preset.reasoningEffort)
 
   const baseModel = createModelFromProfile({
     profile,

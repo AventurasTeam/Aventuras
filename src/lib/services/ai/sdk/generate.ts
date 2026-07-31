@@ -9,7 +9,8 @@ import { createLogger } from '$lib/log'
 import { debug } from '$lib/stores/debug.svelte'
 
 import { settings } from '$lib/stores/settings.svelte'
-import type { APIProfile, GenerationPreset, ProviderType } from '$lib/types'
+import { ToSdkEffort } from '$lib/types'
+import type { APIProfile, GenerationPreset, ProviderType, SdkEffort } from '$lib/types'
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic'
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
@@ -181,7 +182,7 @@ interface ResolvedConfig {
   providerType: ProviderType
   model: LanguageModelV3
   providerOptions: ProviderOptions | undefined
-  reasoning: string
+  reasoning: SdkEffort
   supportsStructuredOutput: boolean
   useThinkTag: boolean
 }
@@ -193,7 +194,7 @@ interface NarrativeConfig {
   temperature: number
   maxTokens: number
   providerOptions: ProviderOptions | undefined
-  reasoning: string
+  reasoning: SdkEffort
   useThinkTag: boolean
 }
 
@@ -234,7 +235,7 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     serviceId,
   })
 
-  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
+  const reasoning = ToSdkEffort(preset.reasoningEffort)
   const useThinkTag =
     profile.providerType === 'openai-compatible' ||
     getReasoningExtraction(profile.providerType) === 'think-tag'
@@ -272,7 +273,8 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     manualBody: settings.apiSettings.manualBody ?? '',
   })
 
-  const reasoningEffort = settings.apiSettings.reasoningEffort ?? 'off'
+  const reasoningEffort = ToSdkEffort(settings.apiSettings.reasoningEffort)
+
   const narrativePreset: GenerationPreset = {
     id: '_narrative',
     name: 'Narrative',

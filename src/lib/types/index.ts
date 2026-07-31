@@ -722,6 +722,10 @@ export interface APISettings {
 }
 
 export type ReasoningEffort = 'off' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+export type SdkEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
+
+export const ToSdkEffort = (reasoningEffort: ReasoningEffort): SdkEffort =>
+  reasoningEffort === 'off' ? 'none' : reasoningEffort === 'max' ? 'xhigh' : reasoningEffort
 
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport
