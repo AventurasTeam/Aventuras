@@ -110,6 +110,23 @@ reinforces the signal — useful on long-form surfaces where the
 save bar is far from the user's gaze. See
 [`toast.md`](./toast.md) for the primitive contract.
 
+### Invalid draft
+
+A section can report that its draft cannot be written — Story
+Settings' suggestion-categories editor does this for a label
+collision (see
+[`story-settings.md → Suggestion categories`](../screens/story-settings/story-settings.md#suggestion-categories)).
+When it does, the surface refuses the save: **Save and the
+`Cmd/Ctrl-S` shortcut both disable**, and the reason renders in the
+same `⚠` slot the informational notes above use — a second kind of
+content for the one slot, not a second state.
+
+**Discard and Cancel always stay live.** An invalid draft must never
+trap the user — they can always throw the session away or leave it
+alone. The [navigate-away guard](#navigate-away-guard--global-intercept)
+follows the same rule: its Save button disables and carries the same
+reason, so Discard and Cancel remain the two exits.
+
 ---
 
 ## Navigate-away guard — global intercept
