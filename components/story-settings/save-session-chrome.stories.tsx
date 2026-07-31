@@ -28,7 +28,8 @@ function FixtureSection() {
     tab: 'generation',
     dirtyFields: state.dirtyFields,
     invalidReason: state.invalidReason,
-    getPatch: (): Partial<StorySettings> => ({ suggestionCount: 5 }),
+    getPatch: (): Partial<StorySettings> =>
+      state.invalidReason != null ? { suggestionCategories: [] } : { suggestionCount: 5 },
     reset: () => setState({ dirtyFields: [] }),
   })
   return (
@@ -54,8 +55,8 @@ function FixtureSection() {
 }
 
 /**
- * Stands in for the route's back arrow / window-close guard — neither exists
- * yet (Task 9 wires the route), so this is what drives `requestLeave` here.
+ * Stands in for the surface's back arrow / window-close guard, which drive
+ * `requestLeave` from outside this component in production.
  */
 function RequestLeaveButton({ onProceed }: { onProceed: () => void }) {
   const session = useStorySettingsSaveSession()
@@ -69,15 +70,16 @@ function RequestLeaveButton({ onProceed }: { onProceed: () => void }) {
 type HarnessProps = {
   onCommit: (patch: Partial<StorySettings>) => Promise<unknown>
   onProceed: () => void
+  enabled?: boolean
 }
 
-function Harness({ onCommit, onProceed }: HarnessProps) {
+function Harness({ onCommit, onProceed, enabled = true }: HarnessProps) {
   return (
     <View className="rounded-md border border-border bg-bg-base" style={{ width: 720 }}>
       <StorySettingsSaveSessionProvider onCommit={onCommit}>
         <FixtureSection />
         <RequestLeaveButton onProceed={onProceed} />
-        <StorySettingsSaveBar enabled />
+        <StorySettingsSaveBar enabled={enabled} />
         <StorySettingsLeaveDialog />
       </StorySettingsSaveSessionProvider>
     </View>
@@ -128,6 +130,33 @@ export const ValidCommitsThroughSaveBar: Story = {
     const save = await screen.findByRole('button', { name: /^Save/ })
     await userEvent.click(save)
     await waitFor(() => expect(args.onCommit).toHaveBeenCalledWith({ suggestionCount: 5 }))
+  },
+}
+
+export const SaveBarDiscardThrowsAwayTheDraft: Story = {
+  args: { onCommit: fn(), onProceed: fn() },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
+    const discard = await screen.findByRole('button', { name: 'Discard' })
+
+    await userEvent.click(discard)
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument(),
+    )
+    expect(args.onCommit).not.toHaveBeenCalled()
+  },
+}
+
+export const DisabledSuppressesTheSaveShortcut: Story = {
+  args: { onCommit: fn(), onProceed: fn(), enabled: false },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
+    await screen.findByRole('button', { name: 'Discard' })
+
+    await userEvent.keyboard('{Meta>}s{/Meta}')
+
+    expect(args.onCommit).not.toHaveBeenCalled()
   },
 }
 

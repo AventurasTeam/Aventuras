@@ -3,11 +3,7 @@ import { SaveBar } from '@/components/compounds/save-bar'
 import { useStorySettingsSaveSession } from './save-session'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 
-/**
- * The surface's save bar, mounted only while the session is dirty. Split out of
- * the route so the dirty-gate and the invalid-gate are reachable from a test —
- * with no registered section neither could ever execute.
- */
+/** The surface's save bar, mounted only while the session is dirty. */
 export function StorySettingsSaveBar({ enabled }: { enabled: boolean }) {
   const session = useStorySettingsSaveSession()
   const { dirtyFields, invalidReason } = session.snapshot
