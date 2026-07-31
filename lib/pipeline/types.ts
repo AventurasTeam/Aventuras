@@ -47,13 +47,24 @@ export type PipelineEvent =
   | { type: 'phase_complete'; runId: string; name: string; result: PhaseResult }
   | PhaseEmittedEvent
 
+// Caller-supplied run parameters, keyed by kind. Only kinds that REQUIRE inputs
+// appear here; any other kind (including the ad-hoc ones test harnesses
+// register) keeps `inputs?: unknown`. Declared at the framework level rather
+// than in each definition so `runPipeline` can correlate its two arguments —
+// the call site is the one place an external module can get this wrong, and it
+// used to fail at runtime as a 'phase-logic' error instead.
+export type PipelineInputMap = {
+  'suggestion-refresh': { refreshGuidance: string }
+}
+
 export type PhaseContext = {
   actionId: string
   abortSignal: AbortSignal
   intermediates: Record<string, unknown>
   // The run's caller-supplied parameters, distinct from `intermediates`
-  // (phase-to-phase scratch) per generation-pipeline.md → Run-scoped state. Kind-
-  // specific and unknown here until per-kind contexts land; the phase narrows it.
+  // (phase-to-phase scratch) per generation-pipeline.md → Run-scoped state. Still
+  // `unknown` on the phase side: the registry stores every kind's phases under one
+  // type, so narrowing here needs a generic Pipeline. The phase re-validates.
   inputs?: unknown
   // Run-bound logger so a phase's logs are turn-attributed without a global.
   log: Logger

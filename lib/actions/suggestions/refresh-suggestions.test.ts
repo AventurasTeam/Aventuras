@@ -9,11 +9,13 @@ import {
   STORY_SETTINGS_DEFAULTS,
   type StorySettings,
 } from '@/lib/db'
+import { runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
 import { undoLastAction } from '../story-entries/undo'
+import type { DbCtx } from '../types'
 
 const { generateStructuredMock } = vi.hoisted(() => ({ generateStructuredMock: vi.fn() }))
 
@@ -100,6 +102,25 @@ beforeEach(() => {
 afterEach(() => resetSingletons())
 
 describe('refreshSuggestions', () => {
+  // Compile-time only — the body never runs. Locks runPipeline's correlated
+  // signature: omitting `inputs` for suggestion-refresh, or misspelling the
+  // field, used to type-check and fail at runtime as a 'phase-logic' error.
+  // Deleting the generic makes `tsc --noEmit` fail on the unused directives.
+  it('rejects a malformed run context at the call site', () => {
+    const neverCalled = (ctx: DbCtx) => {
+      // @ts-expect-error `inputs` is required for this kind
+      void runPipeline(SUGGESTION_REFRESH_KIND, { storyId: 's1', branchId: 'b1', ...ctx })
+      void runPipeline(SUGGESTION_REFRESH_KIND, {
+        storyId: 's1',
+        branchId: 'b1',
+        ...ctx,
+        // @ts-expect-error the field is `refreshGuidance`
+        inputs: { guidance: 'typo' },
+      })
+    }
+    expect(typeof neverCalled).toBe('function')
+  })
+
   it('persists re-rolled chips on the target entry and delta-logs the write', async () => {
     const { db, ctx } = await makeHarness()
     await seed(db)

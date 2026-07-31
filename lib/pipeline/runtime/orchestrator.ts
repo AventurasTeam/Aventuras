@@ -14,6 +14,7 @@ import type {
   PhaseNode,
   PhaseResult,
   PipelineError,
+  PipelineInputMap,
   RejectedStart,
   TxResult,
 } from '../types'
@@ -46,6 +47,12 @@ export type RunCtx = {
   // (generation-pipeline.md → Run-scoped state: inputs, not intermediates).
   inputs?: unknown
 } & DbCtx
+
+// RunCtx with `inputs` narrowed to whatever the kind declares in
+// PipelineInputMap, and required when it declares one. A kind absent from the
+// map is unconstrained, so ad-hoc test kinds still type-check.
+export type RunCtxFor<K extends string> = RunCtx &
+  (K extends keyof PipelineInputMap ? { inputs: PipelineInputMap[K] } : { inputs?: unknown })
 
 function newRunState(kind: string, ctx: RunCtx): RunState {
   let resolveTerminal!: () => void
@@ -374,7 +381,10 @@ async function runPhases(run: RunState, ctx: RunCtx): Promise<PhaseOutcome> {
   return { kind: 'completed' }
 }
 
-export async function runPipeline(kind: string, ctx: RunCtx): Promise<TxResult | RejectedStart> {
+export async function runPipeline<K extends string>(
+  kind: K,
+  ctx: RunCtxFor<K>,
+): Promise<TxResult | RejectedStart> {
   // Loop so a yield-wait can't act on a stale decision: after aborting + awaiting the
   // yielding runs, re-check; a blocking run may have started during the wait.
   for (;;) {

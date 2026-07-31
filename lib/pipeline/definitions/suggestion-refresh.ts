@@ -16,7 +16,7 @@ import { buildGenerationContext } from './generation-context'
 import { PER_TURN_KIND } from './per-turn'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
+import type { PhaseContext, PhaseEmittedEvent, PhaseResult, PipelineInputMap } from '../types'
 
 export const SUGGESTION_REFRESH_KIND = 'suggestion-refresh'
 export const SUGGESTION_EMISSION_PHASE = 'suggestion-emission'
@@ -29,7 +29,9 @@ export const SUGGESTIONS_UNUSABLE = 'suggestions-unusable'
 // No target entry: the anchor is always the branch's last narrative entry, and
 // the phase resolves it after the run takes the edit gate. Passing it from the
 // reader would capture it a tick earlier, outside the gate, for no gain.
-export type SuggestionRefreshInput = { refreshGuidance: string }
+// Sourced from PipelineInputMap so runPipeline's call-site check and this
+// phase's runtime guard cannot describe different shapes.
+export type SuggestionRefreshInput = PipelineInputMap['suggestion-refresh']
 
 // No .catch([]) on the array (unlike the classifier fold, where it shields the
 // sibling scene-state fields): chips are this call's only output, so a malformed

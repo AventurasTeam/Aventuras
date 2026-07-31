@@ -2,7 +2,7 @@ import {
   ensureSuggestionRefreshPipelineRegistered,
   runPipeline,
   SUGGESTION_REFRESH_KIND,
-  type RunCtx,
+  type RunCtxFor,
   type SuggestionRefreshInput,
 } from '@/lib/pipeline'
 
@@ -19,7 +19,7 @@ export async function refreshSuggestions(
   ensureSuggestionRefreshPipelineRegistered()
 
   // No shared actionId with anything: the re-roll is its own CTRL-Z unit.
-  const runCtx: RunCtx = {
+  const runCtx: RunCtxFor<typeof SUGGESTION_REFRESH_KIND> = {
     storyId: ids.storyId,
     branchId: ids.branchId,
     db: ctx.db,
