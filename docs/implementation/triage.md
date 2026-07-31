@@ -511,3 +511,23 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   row load, or narrow canon to say revalidation happens only where a caller
   already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
   the cancel half resolved in M3.1b review (2026-07-28).
+
+- **The classifier's tuning signal is `unresolvedRefs`, not
+  `window_head_fallback`.**
+  [Slice 3.3](./milestones/03-memory-floor/slices/03-classifier.md) called
+  head-fallback warnings dominating the log the trigger for the M7.5 prompt
+  tuning pass. The first real-provider run says otherwise: against a local
+  4B-class Q4 model the pass logged 7 and 19 `classifier.unresolved_refs`
+  against a single `classifier.window_head_fallback`. The model invents its
+  own handles rather than reusing the `[c1]` placeholders the prompt hands
+  it, so the refs it emits point at nothing. These are refs to entities that
+  already exist, so the reserved `new:` namespace does not cover them.
+  Consequence: the graph gains happenings with sound titles, descriptions
+  and resolved `occurredAtTurn` anchors, but almost no edges — involvements
+  and awareness are what get dropped. **Caveat: two runs, one model.** Enough
+  to redirect what M7.5 measures, not to set a threshold — and small-model
+  placeholder compliance may not generalise to the frontier models the
+  tuning pass will target. Route into the M7.5 slice's Open questions once
+  that milestone is authored; it has no owner today. Surfaced by the Slice
+  3.3 real-provider smoke (2026-07-31), reproducible via
+  `e2e/tests/classifier-real-provider.smoke.spec.ts`.

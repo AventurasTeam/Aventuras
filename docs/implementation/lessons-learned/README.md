@@ -120,6 +120,10 @@ slice plans when relevant.
   — the published xxh32 vectors all hash below `0x80000000`, so a
   signed-int32 leak survived a green suite; assert format
   invariants over a sweep, not just point values.
+- [Staleness flags are cleared by the drain](./staleness-flags-are-cleared-by-the-drain.md)
+  — `embedding_stale` is a handoff signal, not a durable property, so a
+  post-hoc E2E assertion on it tests drain scheduling; assert the initial
+  write or the settled end state, never the handoff.
 - [A literal NUL in a plan file silently rewrites the code it specifies](./plan-file-nul-corruption.md)
   — `file .impl-plans/*.md` should never say `data`; reading tools disagree
   about a raw NUL and each renders a different separator.
