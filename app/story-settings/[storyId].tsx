@@ -114,9 +114,12 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
-  const isGenerating = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some((r) => r.storyId === storyId),
+  // The branch, not just a boolean: cancelling needs the run's own branch, and
+  // runs only exist for the open story, so a hit here is this story's branch.
+  const generatingBranchId = generationStore.useGeneration(
+    (s) => [...s.txState.runs.values()].find((r) => r.storyId === storyId)?.branchId ?? null,
   )
+  const isGenerating = generatingBranchId != null
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
@@ -206,7 +209,10 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       statusSlot={
         <GenerationStatusPill
           activePhase={isGenerating ? 'generating-narrative' : undefined}
-          onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+          onCancel={() => {
+            if (generatingBranchId != null)
+              void awaitRunTerminal(PER_TURN_KIND, generatingBranchId, 'cancel')
+          }}
           onErrorTap={() => {}}
         />
       }

@@ -5,6 +5,7 @@ import {
   buildClassifierActions,
   buildClassifierWindow,
   classifierExtractionSchema,
+  IDLE_STATUS_JSON,
   idleStatus,
   nextStatusOnFailure,
   nextStatusOnStart,
@@ -79,7 +80,7 @@ async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise
   // $.processedThrough and can commit between this run's read and this write.
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, '{}'),
+          COALESCE(classifier_status, ${IDLE_STATUS_JSON}),
           '$.state', ${status.state},
           '$.lastSuccessAt', ${status.lastSuccessAt},
           '$.lastError', ${status.lastError},
@@ -93,7 +94,7 @@ async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise
 async function advanceWatermark(ctx: PhaseContext, coversThrough: number): Promise<void> {
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, '{}'), '$.processedThrough',
+          COALESCE(classifier_status, ${IDLE_STATUS_JSON}), '$.processedThrough',
           MAX(COALESCE(json_extract(classifier_status, '$.processedThrough'), 0), ${coversThrough})
         ) WHERE ${branches.id} = ${ctx.branchId}`,
   )

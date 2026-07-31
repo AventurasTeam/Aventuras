@@ -610,7 +610,7 @@ export default function ReaderComposerRoute() {
           }
           // Cancelling is a per-turn affordance; a background classifier pass has none.
           {...(isGenerating
-            ? { onCancel: () => void awaitRunTerminal(PER_TURN_KIND, 'cancel') }
+            ? { onCancel: () => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel') }
             : {})}
           onErrorTap={(code) => {
             if (code !== 'classifier-offline' && storyId != null)
@@ -681,7 +681,7 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel')}
               />
             </View>
           </View>

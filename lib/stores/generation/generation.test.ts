@@ -96,18 +96,18 @@ describe('isForegroundGenerating', () => {
 })
 
 describe('awaitRunTerminal', () => {
-  function runFor(kind: string) {
+  function runFor(kind: string, branchId = 'branch_1') {
     let resolveTerminal!: () => void
     const terminal = new Promise<void>((r) => {
       resolveTerminal = r
     })
     return {
-      runId: `run_${kind}`,
+      runId: `run_${kind}_${branchId}`,
       kind,
       gateBehavior: 'no-gate' as const,
       actionId: 'act_1',
       storyId: 'story_1',
-      branchId: 'branch_1',
+      branchId,
       abortController: new AbortController(),
       currentPhase: '',
       intermediates: {},
@@ -117,22 +117,47 @@ describe('awaitRunTerminal', () => {
   }
 
   it('resolves immediately when no run of the kind is in flight', async () => {
-    await expect(awaitRunTerminal('periodic-classifier', 'cancel')).resolves.toBeUndefined()
+    await expect(
+      awaitRunTerminal('periodic-classifier', 'branch_1', 'cancel'),
+    ).resolves.toBeUndefined()
   })
 
   it('aborts then awaits the terminal on cancel', async () => {
     const run = runFor('periodic-classifier')
     generationStore.startRun(run)
-    const waited = awaitRunTerminal('periodic-classifier', 'cancel')
+    const waited = awaitRunTerminal('periodic-classifier', 'branch_1', 'cancel')
     expect(run.abortController.signal.aborted).toBe(true)
     run.resolveTerminal()
+    await expect(waited).resolves.toBeUndefined()
+  })
+
+  // Kind-only matching let a reversal on one branch abort the other branch's run
+  // and then sweep while it was still writing.
+  it('ignores a run of the same kind on another branch', async () => {
+    const other = runFor('periodic-classifier', 'branch_other')
+    generationStore.startRun(other)
+    await expect(
+      awaitRunTerminal('periodic-classifier', 'branch_1', 'cancel'),
+    ).resolves.toBeUndefined()
+    expect(other.abortController.signal.aborted).toBe(false)
+  })
+
+  it('cancels only the run on the requested branch', async () => {
+    const mine = runFor('periodic-classifier', 'branch_1')
+    const other = runFor('periodic-classifier', 'branch_other')
+    generationStore.startRun(mine)
+    generationStore.startRun(other)
+    const waited = awaitRunTerminal('periodic-classifier', 'branch_1', 'cancel')
+    expect(mine.abortController.signal.aborted).toBe(true)
+    expect(other.abortController.signal.aborted).toBe(false)
+    mine.resolveTerminal()
     await expect(waited).resolves.toBeUndefined()
   })
 
   it('does not abort on finish', async () => {
     const run = runFor('periodic-classifier')
     generationStore.startRun(run)
-    const waited = awaitRunTerminal('periodic-classifier', 'finish')
+    const waited = awaitRunTerminal('periodic-classifier', 'branch_1', 'finish')
     expect(run.abortController.signal.aborted).toBe(false)
     run.resolveTerminal()
     await waited

@@ -128,11 +128,23 @@ export function backgroundClassifierRunning(txState: TxState, branchId: string):
   )
 }
 
-// Generic wait on an in-flight run of `kind`; no-op when none is running.
-// 'cancel' aborts then awaits terminal, 'finish' awaits the natural commit.
-// Lives here so lib/actions can await a terminal without importing the orchestrator.
-export function awaitRunTerminal(kind: string, disposition: 'finish' | 'cancel'): Promise<void> {
-  const run = [...getTxState().runs.values()].find((r) => r.kind === kind)
+// Generic wait on an in-flight run of `kind` on `branchId`; no-op when none is
+// running. 'cancel' aborts then awaits terminal, 'finish' awaits the natural
+// commit. Lives here so lib/actions can await a terminal without importing the
+// orchestrator.
+//
+// branchId is required, not optional: matching on kind alone would let a
+// reversal on one branch abort another branch's run and then sweep while that
+// run is still writing. Only one story is open at a time today, but the
+// classifier scheduler already keys its state per branch, so the two must agree.
+export function awaitRunTerminal(
+  kind: string,
+  branchId: string,
+  disposition: 'finish' | 'cancel',
+): Promise<void> {
+  const run = [...getTxState().runs.values()].find(
+    (r) => r.kind === kind && r.branchId === branchId,
+  )
   if (!run) return Promise.resolve()
   if (disposition === 'cancel') run.abortController.abort()
   return run.terminal

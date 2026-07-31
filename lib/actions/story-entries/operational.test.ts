@@ -311,7 +311,10 @@ describe('rollbackToEntry', () => {
       })
       .where(eq(branches.id, 'b1'))
 
-    await rollbackToEntry('b1', 't2', ctx)
+    // Asserted first: a rejected rollback runs no clamp, so the watermark would
+    // read 1 for the wrong reason and the test would prove nothing.
+    const result = await rollbackToEntry('b1', 't2', ctx)
+    expect(result.status).toBe('ok')
     const [row] = await db.select().from(branches).where(eq(branches.id, 'b1'))
     expect(row.classifierStatus?.processedThrough).toBe(1)
   })

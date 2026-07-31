@@ -14,7 +14,7 @@ describe('bracketProseReversal', () => {
 
   it('sets reversalInProgress across the body and clears it after', async () => {
     const seen: boolean[] = []
-    await bracketProseReversal(async () => {
+    await bracketProseReversal('branch_1', async () => {
       seen.push(generationStore.getTxState().reversalInProgress)
     })
     expect(seen).toEqual([true])
@@ -23,7 +23,7 @@ describe('bracketProseReversal', () => {
 
   it('clears reversalInProgress even when the body throws', async () => {
     await expect(
-      bracketProseReversal(async () => {
+      bracketProseReversal('branch_1', async () => {
         throw new Error('sweep failed')
       }),
     ).rejects.toThrow('sweep failed')
@@ -51,7 +51,7 @@ describe('bracketProseReversal', () => {
       terminal,
       resolveTerminal,
     })
-    const done = bracketProseReversal(async () => {
+    const done = bracketProseReversal('branch_1', async () => {
       order.push('swept')
     })
     expect(order).toEqual(['aborted'])
@@ -62,8 +62,8 @@ describe('bracketProseReversal', () => {
 
   it('rejects a nested bracket rather than silently dropping the barrier', async () => {
     await expect(
-      bracketProseReversal(async () => {
-        await bracketProseReversal(async () => {})
+      bracketProseReversal('branch_1', async () => {
+        await bracketProseReversal('branch_1', async () => {})
       }),
     ).rejects.toThrow('not re-entrant')
     expect(generationStore.getTxState().reversalInProgress).toBe(false)

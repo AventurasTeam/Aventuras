@@ -150,6 +150,11 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+// Reads the children, then deletes them in a later transaction. Safe only while
+// the classifier is the sole writer of these tables and only ever attaches rows
+// to happenings it creates in the same plan — nothing can add a child to an
+// existing happening mid-delete. A user-facing "add involvement" affordance
+// breaks that premise and needs this read and delete in one critical section.
 async function buildChildDeleteOps(branchId: string, happeningId: string, ctx: DbCtx) {
   const involvements = await ctx.db
     .select()

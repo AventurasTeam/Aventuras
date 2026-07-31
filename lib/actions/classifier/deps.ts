@@ -1,6 +1,6 @@
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
-import { idleStatus, nextStatusOnFailure } from '@/lib/classifier'
+import { IDLE_STATUS_JSON, idleStatus, nextStatusOnFailure } from '@/lib/classifier'
 import { branches, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
 import { embedTexts, type EmbedderConfig } from '@/lib/embedder'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
@@ -76,7 +76,7 @@ export async function recordClassifierPreflightFailure(
   const { status } = nextStatusOnFailure(current, { error: detail, at: Date.now() })
   await ctx.db.run(
     sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, '{}'),
+          COALESCE(classifier_status, ${IDLE_STATUS_JSON}),
           '$.state', ${status.state},
           '$.lastError', ${status.lastError},
           '$.retryCount', ${status.retryCount}

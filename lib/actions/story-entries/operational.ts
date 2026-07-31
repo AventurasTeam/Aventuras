@@ -151,7 +151,7 @@ export async function rollbackToEntry(
       code: STORY_ENTRY_REJECTION.inFlight,
     }
 
-  return bracketProseReversal(async () => {
+  return bracketProseReversal(branchId, async () => {
     const win = await resolveRollbackWindow(branchId, targetId, ctx)
     if ('status' in win) return win
     const rows = (await ctx.db

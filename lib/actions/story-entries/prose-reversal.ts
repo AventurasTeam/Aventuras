@@ -10,12 +10,15 @@ import { awaitRunTerminal, generationStore } from '@/lib/stores'
  * Not re-entrant: `reversalInProgress` is a plain boolean, so a nested bracket's
  * `finally` would drop the barrier while the outer sweep still runs.
  */
-export async function bracketProseReversal<T>(body: () => Promise<T>): Promise<T> {
+export async function bracketProseReversal<T>(
+  branchId: string,
+  body: () => Promise<T>,
+): Promise<T> {
   if (generationStore.getTxState().reversalInProgress)
     throw new Error('bracketProseReversal is not re-entrant')
   generationStore.setReversalInProgress(true)
   try {
-    await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, 'cancel')
+    await awaitRunTerminal(PERIODIC_CLASSIFIER_KIND, branchId, 'cancel')
     return await body()
   } finally {
     generationStore.setReversalInProgress(false)

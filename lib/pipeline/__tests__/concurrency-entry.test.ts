@@ -83,7 +83,7 @@ describe('runPipeline concurrency entry + coordination', () => {
     })
 
     const inflight = runPipeline('bg', ctx)
-    await awaitRunTerminal('bg', 'cancel')
+    await awaitRunTerminal('bg', 'b1', 'cancel')
     expect(expectRan(await inflight).outcome).toBe('aborted')
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
@@ -107,7 +107,7 @@ describe('runPipeline concurrency entry + coordination', () => {
 
     const inflight = runPipeline('bg', ctx)
     let resolved = false
-    const waiter = awaitRunTerminal('bg', 'finish').then(() => {
+    const waiter = awaitRunTerminal('bg', 'b1', 'finish').then(() => {
       resolved = true
     })
     await Promise.resolve()
@@ -119,7 +119,7 @@ describe('runPipeline concurrency entry + coordination', () => {
   })
 
   it('awaitRunTerminal no-ops when no run of the kind is in flight', async () => {
-    await expect(awaitRunTerminal('absent', 'cancel')).resolves.toBeUndefined()
+    await expect(awaitRunTerminal('absent', 'b1', 'cancel')).resolves.toBeUndefined()
   })
 
   it('start-after-yields aborts the yielding run before starting the incoming one', async () => {

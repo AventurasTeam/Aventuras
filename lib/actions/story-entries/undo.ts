@@ -33,7 +33,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  return bracketProseReversal(async () => {
+  return bracketProseReversal(branchId, async () => {
     const recent = await recentDeltaRows(branchId, ctx)
     const target = selectUndoTarget(recent)
     if (!target) return { status: 'rejected', reason: 'nothing to undo' }

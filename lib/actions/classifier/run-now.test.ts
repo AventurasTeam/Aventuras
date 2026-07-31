@@ -140,10 +140,15 @@ describe('runClassifierNow', () => {
     const row = sqlite
       .prepare('SELECT classifier_status AS s FROM branches WHERE id = ?')
       .get('b1') as { s: string | null }
-    expect(JSON.parse(row.s!)).toMatchObject({
+    // Total, not just the three keys this writer owns: the column is typed
+    // ClassifierStatus, and a json_set onto a bare '{}' would persist an object
+    // missing lastSuccessAt/processedThrough for every consumer that reads it back.
+    expect(JSON.parse(row.s!)).toEqual({
       state: 'retrying',
       retryCount: 1,
       lastError: 'classifier: unassigned',
+      lastSuccessAt: null,
+      processedThrough: null,
     })
   })
 

@@ -14,6 +14,15 @@ export function idleStatus(): ClassifierStatus {
   }
 }
 
+/**
+ * Seed document for the key-scoped `json_set` writers. They patch individual
+ * keys, so a `COALESCE(classifier_status, '{}')` on a never-written branch
+ * persists an object missing whichever keys that writer does not own — the
+ * column then type-lies about ClassifierStatus. Seeding a complete idle status
+ * keeps every write total without making any writer touch a key it doesn't own.
+ */
+export const IDLE_STATUS_JSON = JSON.stringify(idleStatus())
+
 export function nextStatusOnStart(status: ClassifierStatus): ClassifierStatus {
   return { ...status, state: 'running' }
 }
