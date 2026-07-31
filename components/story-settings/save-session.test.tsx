@@ -1019,6 +1019,15 @@ describe('useStorySettingsSection', () => {
     )
   })
 
+  it('throws when a section publishes an empty invalidReason', () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: '' }
+
+    expect(() => mountSession({ children: sectionsOf(invalid) })).toThrow(
+      /published an empty invalidReason/,
+    )
+  })
+
   it('settles instead of looping when a section republishes a fresh array', async () => {
     const renders = { count: 0 }
     const ChurningSection = churningSection(renders)
