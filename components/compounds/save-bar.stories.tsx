@@ -231,3 +231,30 @@ export const InvalidDraft: Story = {
     onDiscard: fn(),
   },
 }
+
+/**
+ * Invalid draft state — Save is disabled, Discard remains live. Design
+ * invariant: an invalid session must never become a trap. Ctrl-S / Cmd-S
+ * is also suppressed (stays claimed by the component, not reaching browser).
+ */
+export const InvalidDraftDisablesSaveOnly: Story = {
+  args: {
+    dirtyFields: ['suggestion categories'],
+    notice: 'Two categories share a label',
+    saveDisabled: true,
+    onSave: fn(),
+    onDiscard: fn(),
+  },
+  play: async ({ args }) => {
+    const save = await screen.findByRole('button', { name: /Save/ })
+    const discard = await screen.findByRole('button', { name: 'Discard' })
+    expect(save).toBeDisabled()
+    expect(discard).not.toBeDisabled()
+    // Keyboard shortcut is suppressed
+    await userEvent.keyboard('{Meta>}s{/Meta}')
+    expect(args.onSave).not.toHaveBeenCalled()
+    // Discard still works
+    await userEvent.click(discard)
+    await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
+  },
+}

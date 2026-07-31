@@ -37,7 +37,8 @@ type SaveBarProps = {
   /**
    * A section's draft cannot be written. Disables Save and the keyboard
    * shortcut; Discard stays live so the session is never a dead end. Pair with
-   * `notice` to say why.
+   * `notice` to say why. Gates the handler body, not hotkey registration, so
+   * Ctrl-S stays claimed instead of reaching the browser's own save dialog.
    */
   saveDisabled?: boolean
   /**

@@ -73,3 +73,55 @@ export const EscapeCancels: Story = {
     await waitFor(() => expect(args.onCancel).toHaveBeenCalled())
   },
 }
+
+/**
+ * Invalid draft state — Save is disabled, but Discard and Cancel remain live
+ * as escape hatches. The reason is displayed under the body copy. Design
+ * invariant: an invalid session must never become a trap.
+ */
+export const InvalidDraft: Story = {
+  args: {
+    open: true,
+    saveDisabled: true,
+    reason: 'Two suggestion categories share a label',
+    onSave: fn(),
+    onDiscard: fn(),
+    onCancel: fn(),
+  },
+  play: async ({ args }) => {
+    const save = await screen.findByRole('button', { name: 'Save' })
+    const discard = await screen.findByRole('button', { name: 'Discard' })
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
+    expect(save).toBeDisabled()
+    expect(discard).not.toBeDisabled()
+    expect(cancel).not.toBeDisabled()
+    expect(screen.getByText('Two suggestion categories share a label')).toBeInTheDocument()
+    await userEvent.click(discard)
+    await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
+    expect(args.onSave).not.toHaveBeenCalled()
+    expect(args.onCancel).not.toHaveBeenCalled()
+  },
+}
+
+/**
+ * Invalid draft state with Cancel — verify Cancel still fires even when
+ * Save is unavailable.
+ */
+export const InvalidDraftCancel: Story = {
+  args: {
+    open: true,
+    saveDisabled: true,
+    reason: 'Two suggestion categories share a label',
+    onSave: fn(),
+    onDiscard: fn(),
+    onCancel: fn(),
+  },
+  play: async ({ args }) => {
+    const cancel = await screen.findByRole('button', { name: 'Cancel' })
+    expect(cancel).not.toBeDisabled()
+    await userEvent.click(cancel)
+    await waitFor(() => expect(args.onCancel).toHaveBeenCalled())
+    expect(args.onSave).not.toHaveBeenCalled()
+    expect(args.onDiscard).not.toHaveBeenCalled()
+  },
+}
