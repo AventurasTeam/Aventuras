@@ -33,6 +33,8 @@ export function Stepper({
   testID,
   className,
 }: StepperProps) {
+  // The disabled gate only blocks presses once `value` is in range — a `value` that
+  // arrives already outside `[min, max]` still needs the step clamped back in.
   const clamp = (next: number) => Math.min(max, Math.max(min, next))
   return (
     <View testID={testID} className={cn('flex-row items-center gap-2', className)}>

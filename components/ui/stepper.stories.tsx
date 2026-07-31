@@ -166,16 +166,30 @@ export const DisabledBlocksBothControls: Story = {
   },
 }
 
-// `value`/`max` are typed as `number`, not `integer` — the JSDoc on
-// `onChange` promises it never fires outside `[min, max]` for any of them.
-// With integer-aligned bounds a unit step can never overshoot (the disabled
-// check already blocks the press once `value >= max`), so this off-grid gap
-// is what actually exercises the clamp rather than the disabled guard.
-export const IncrementNeverOvershootsMax: Story = {
-  render: () => <Demo initial={9.5} min={0} max={10} />,
+// A stored value can arrive already outside `[min, max]` — a range narrowed
+// after the value was saved, or a config imported from elsewhere. The
+// disabled gate only compares against the bound facing the pressed control
+// (decrement checks `min`, increment checks `max`), so a value past the far
+// bound still leaves that control enabled, and clamp is what pulls it back
+// in on the first press rather than letting it drift by ±1 indefinitely.
+export const ClampsWhenStartingAboveMax: Story = {
+  render: () => <Demo initial={9} min={1} max={6} />,
   play: async ({ canvas }) => {
+    expect(canvas.getByText('9')).toBeInTheDocument()
+    const decrement = canvas.getByRole('button', { name: DECREMENT_LABEL })
+    await userEvent.click(decrement)
+    await waitFor(() => expect(canvas.getByText('6')).toBeInTheDocument())
+    expect(canvas.queryByText('8')).not.toBeInTheDocument()
+  },
+}
+
+export const ClampsWhenStartingBelowMin: Story = {
+  render: () => <Demo initial={-2} min={1} max={6} />,
+  play: async ({ canvas }) => {
+    expect(canvas.getByText('-2')).toBeInTheDocument()
     const increment = canvas.getByRole('button', { name: INCREMENT_LABEL })
     await userEvent.click(increment)
-    await waitFor(() => expect(canvas.getByText('10')).toBeInTheDocument())
+    await waitFor(() => expect(canvas.getByText('1')).toBeInTheDocument())
+    expect(canvas.queryByText('-1')).not.toBeInTheDocument()
   },
 }
