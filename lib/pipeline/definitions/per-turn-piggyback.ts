@@ -236,10 +236,17 @@ export async function* piggybackFallbackClassifierPhase(
   // consistently emits malformed chips doesn't fail silently forever
   // (callWithRetry's parse-retry never sees this: .catch() means the parse
   // itself never fails).
-  if (askForSuggestions && (suggestionItems.length === 0 || droppedCount > 0)) {
+  if (
+    askForSuggestions &&
+    (suggestionItems.length === 0 ||
+      droppedCount > 0 ||
+      suggestionItems.length < suggestionEmission.count)
+  ) {
     ctx.log.warn('classifier.suggestions_parse_failed', {
       received: rawSuggestions.length,
       dropped: droppedCount,
+      resolved: suggestionItems.length,
+      expected: suggestionEmission.count,
     })
   }
 

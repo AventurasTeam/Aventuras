@@ -195,6 +195,42 @@ describe('parseSuggestionsBlock', () => {
     const result = parseSuggestionsBlock('<suggestions><item category="cat1">kept</item>')
     expect(result.items).toEqual([{ categoryRef: 'cat1', text: 'kept' }])
   })
+
+  // Items the parser skips never reach `items`, so resolveSuggestionItems'
+  // droppedCount cannot count them. Without malformedCount, one good chip
+  // beside two bad ones is indistinguishable from a model that emitted one.
+  it('counts a skipped item as malformed', () => {
+    const result = parseSuggestionsBlock(
+      '<suggestions><item>no category</item><item category="cat1">kept</item></suggestions>',
+    )
+    expect(result.items).toHaveLength(1)
+    expect(result.malformedCount).toBe(1)
+  })
+
+  it('counts an empty-text item as malformed', () => {
+    const result = parseSuggestionsBlock(
+      '<suggestions><item category="cat1">   </item><item category="cat2">kept</item></suggestions>',
+    )
+    expect(result.items).toEqual([{ categoryRef: 'cat2', text: 'kept' }])
+    expect(result.malformedCount).toBe(1)
+  })
+
+  // A final item cut off mid-stream never matches the paired regex, so it is
+  // counted off the opening tag rather than in the match loop.
+  it('counts an item truncated mid-stream as malformed', () => {
+    const result = parseSuggestionsBlock(
+      '<suggestions><item category="cat1">kept</item><item category="cat2">cut off',
+    )
+    expect(result.items).toEqual([{ categoryRef: 'cat1', text: 'kept' }])
+    expect(result.malformedCount).toBe(1)
+  })
+
+  it('reports no malformed items when every item parses', () => {
+    const result = parseSuggestionsBlock(
+      '<suggestions><item category="cat1">one</item><item category="cat2">two</item></suggestions>',
+    )
+    expect(result.malformedCount).toBe(0)
+  })
 })
 
 describe('parse independence — the four outcome combinations', () => {
@@ -301,6 +337,32 @@ describe('unterminated blocks do not bleed into their sibling', () => {
     const raw =
       'p\n<state><scene_entities>c1, c2\n<suggestions><item category="cat1">go</item></suggestions>'
     expect(parseStateBlock(raw).block.sceneEntities).toEqual(['c1', 'c2'])
+  })
+
+  // The mirror image. Every case above runs state-then-suggestions, so a guard
+  // that bounded only <state> would pass them all while an unterminated
+  // <suggestions> swallowed the <state> after it — which assertNotTruncated
+  // then reads as a failed block, dropping chips that parsed cleanly.
+  // Composed so the bleed is actually observable. <state>'s transfers reuse the
+  // <item> tag name, and a bled transfer yields no chip (it has no `category`),
+  // so `items` looks identical whether or not the boundary held — only the
+  // malformed counter, which counts opening tags, can tell them apart.
+  const unterminatedSuggestions =
+    'Prose.\n<suggestions><item category="cat1">go north</item>\n' +
+    '<state><transfers><item id="i1" slot="inventory" to="c2" /></transfers>' +
+    '<summary>x</summary></state>'
+
+  it("keeps <state>'s transfer items out of the suggestions segment", () => {
+    const result = parseSuggestionsBlock(unterminatedSuggestions)
+    expect(result.failed).toBe(false)
+    expect(result.items).toEqual([{ categoryRef: 'cat1', text: 'go north' }])
+    expect(result.malformedCount).toBe(0)
+  })
+
+  it('still parses the state block that follows an unterminated suggestions block', () => {
+    const state = parseStateBlock(unterminatedSuggestions)
+    expect(state.block.summary).toBe('x')
+    expect(state.block.transfers?.items).toEqual([{ id: 'i1', slot: 'inventory', to: 'c2' }])
   })
 })
 

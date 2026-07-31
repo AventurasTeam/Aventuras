@@ -198,7 +198,8 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
 // neither block's failure can reach the other (C2).
 export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult {
   const segment = extractSegment(raw, SUGGESTIONS_ROOT_TAG, SUGGESTIONS_ROOT_TAG)
-  if (segment === undefined) return { items: [], blockFound: false, failed: false }
+  if (segment === undefined)
+    return { items: [], blockFound: false, failed: false, malformedCount: 0 }
 
   const items: ParsedSuggestion[] = []
   const re = new RegExp(
@@ -215,12 +216,24 @@ export function parseSuggestionsBlock(raw: string): ParseSuggestionsBlockResult 
     items.push({ categoryRef: attrs.category, text: trimmed })
   }
 
+  // Counted off opening tags rather than by incrementing in the loop above: an
+  // item truncated mid-stream, or one with no attributes at all, never matches
+  // the paired regex, so the loop never sees it to count. `[\s>]` after the tag
+  // name catches both `<item ...>` and a bare `<item>` without matching a
+  // longer tag that merely starts with the same letters.
+  const opened = segment.match(new RegExp(`<${SUGGESTION_ITEM_TAG}[\\s>]`, 'g'))?.length ?? 0
+
   try {
     assertNotTruncated(segment, items.length, SUGGESTIONS_ROOT_TAG)
   } catch {
-    return { items: [], blockFound: true, failed: true }
+    return { items: [], blockFound: true, failed: true, malformedCount: opened }
   }
-  return { items, blockFound: true, failed: false }
+  return {
+    items,
+    blockFound: true,
+    failed: false,
+    malformedCount: Math.max(0, opened - items.length),
+  }
 }
 
 // Separates narrative prose from every trailing block the model appended.

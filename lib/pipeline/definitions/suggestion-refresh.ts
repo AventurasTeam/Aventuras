@@ -159,10 +159,12 @@ async function* suggestionEmissionPhase(
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const { items, droppedCount } = resolveSuggestionItems(result.value.suggestions, emission)
-  if (items.length === 0 || droppedCount > 0)
+  if (items.length === 0 || droppedCount > 0 || items.length < emission.count)
     ctx.log.warn('classifier.suggestions_refresh_unusable', {
       received: result.value.suggestions.length,
       dropped: droppedCount,
+      resolved: items.length,
+      expected: emission.count,
     })
   // Still never writes an empty list — that would blank a strip holding usable
   // chips. Reported as a failure rather than a quiet `completed` because the

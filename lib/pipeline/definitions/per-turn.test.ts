@@ -873,6 +873,63 @@ describe('narrative fold — suggestions', () => {
     )
   })
 
+  // The silent case before malformedCount existed: the bad item never reaches
+  // `items`, so droppedCount is 0, and one good chip makes captured true — the
+  // old gate gave a half-filled strip and no signal at all.
+  it('warns when the model under-delivers because an item was malformed', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn')
+    await runNarrativeWith({
+      log: logger,
+      narrative:
+        'p\n<state><summary>s</summary></state>\n' +
+        '<suggestions><item>no category</item>' +
+        '<item category="cat1">kept</item></suggestions>',
+    })
+    expect(warnSpy).toHaveBeenCalledWith(
+      'classifier.suggestions_parse_failed',
+      expect.objectContaining({ dropped: 0, malformed: 1, resolved: 1, expected: 2 }),
+    )
+  })
+
+  // The producer half of the handoff the classifier fold reads to decide
+  // askForSuggestions. Consumer tests inject this value as a fixture, so
+  // without these the write could be deleted outright and the suite stay green
+  // — and a <state>-failed turn would re-roll and clobber landed chips.
+  describe('publishes suggestionsCaptured for the classifier fold', () => {
+    it('is true when chips resolved', async () => {
+      const { intermediates } = await runNarrativeWith({
+        narrative:
+          'p\n<state><summary>s</summary></state>\n' +
+          '<suggestions><item category="cat1">kept</item></suggestions>',
+      })
+      expect(intermediates.suggestionsCaptured).toBe(true)
+    })
+
+    it('is false when the block failed to parse', async () => {
+      const { intermediates } = await runNarrativeWith({
+        narrative: 'p\n<state><summary>s</summary></state>\n<suggestions>garbage</suggestions>',
+      })
+      expect(intermediates.suggestionsCaptured).toBe(false)
+    })
+
+    it('is false when every ref dropped', async () => {
+      const { intermediates } = await runNarrativeWith({
+        narrative:
+          'p\n<state><summary>s</summary></state>\n' +
+          '<suggestions><item category="cat9">orphan</item></suggestions>',
+      })
+      expect(intermediates.suggestionsCaptured).toBe(false)
+    })
+
+    it('is false when suggestions are disabled', async () => {
+      const { intermediates } = await runNarrativeWith({
+        settings: { suggestionsEnabled: false },
+        narrative: 'p\n<state><summary>s</summary></state>',
+      })
+      expect(intermediates.suggestionsCaptured).toBe(false)
+    })
+  })
+
   it('clamps persisted chips to suggestionCount when the model over-emits', async () => {
     const { metadata } = await runNarrativeWith({
       // Base fixture settings set suggestionCount: 2; three valid items come back.

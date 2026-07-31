@@ -214,7 +214,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
 
   const parsedSuggestions = suggestionsShouldFire
     ? parseSuggestionsBlock(content)
-    : { items: [], blockFound: false, failed: false }
+    : { items: [], blockFound: false, failed: false, malformedCount: 0 }
   const { items: suggestionItems, droppedCount } = resolveSuggestionItems(
     parsedSuggestions.items,
     suggestionEmission,
@@ -222,11 +222,18 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // Keys on items actually resolved, never on blockFound alone — a literal
   // "<suggestions>" string anywhere in prose would otherwise read as captured.
   const suggestionsCaptured = !parsedSuggestions.failed && suggestionItems.length > 0
-  if (suggestionsShouldFire && (!suggestionsCaptured || droppedCount > 0)) {
+  // Short counts as a problem, not just empty: one good chip beside two
+  // malformed ones used to leave captured=true and dropped=0, so a model that
+  // reliably under-delivers produced a permanently thin strip and no signal.
+  const suggestionsShort = suggestionItems.length < suggestionEmission.count
+  if (suggestionsShouldFire && (!suggestionsCaptured || droppedCount > 0 || suggestionsShort)) {
     ctx.log.warn('classifier.suggestions_parse_failed', {
       blockFound: parsedSuggestions.blockFound,
       failed: parsedSuggestions.failed,
       dropped: droppedCount,
+      malformed: parsedSuggestions.malformedCount,
+      resolved: suggestionItems.length,
+      expected: suggestionEmission.count,
     })
   }
   ctx.intermediates.suggestionsCaptured = suggestionsCaptured

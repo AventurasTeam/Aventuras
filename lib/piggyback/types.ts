@@ -45,4 +45,11 @@ export type ParseSuggestionsBlockResult = {
   items: ParsedSuggestion[]
   blockFound: boolean
   failed: boolean
+  /**
+   * `<item>` tags the block opened but the parser could not turn into an entry:
+   * no `category`, empty text, or never closed. They never reach `items`, so
+   * `resolveSuggestionItems`' droppedCount cannot see them — without this a
+   * partially malformed block is indistinguishable from a short one.
+   */
+  malformedCount: number
 }
