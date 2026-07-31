@@ -764,3 +764,31 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   section; `{ tab, reason }` would be a single optional field on the
   existing `SaveSessionSnapshot` type. Surfaced by M3.7b
   implementation (2026-07-31).
+
+- **The two suggestion-emission macros diverge on the worked
+  example, so the first category is privileged on one emission path
+  only.** `lib/prompts/bundled/suggestion-emission.ts` (tagged block,
+  narrative fold) renders a skeleton via
+  `{% assign exampleSlot = suggestionSlots | first %}`, making the
+  lowest-`order` enabled category a one-shot exemplar;
+  `lib/prompts/bundled/suggestion-emission-json.ts` (per-turn
+  fallback classifier and suggestion-refresh) has no example at all,
+  because the schema carries the shape. Consequence: which category
+  the model favors depends on which path fired, and on the narrative
+  path the exemplar works against the diversity nudge sitting
+  immediately above it. The JSON macro's own header comment states
+  the split exists so the framing rules, ref convention, diversity
+  nudge and length cap cannot drift between the two — this is a
+  drift in exactly that class, living in the skeleton rather than
+  the shared prose, which is why the split did not catch it. Two
+  open questions: whether slot 1 should be exemplar at all (an
+  alternative is naming no ref in the skeleton, at the cost the file
+  comment warns about — a literal placeholder is something a model
+  copies), and whether the JSON path wants a matching example for
+  parity. Effect size is unmeasured here; the claim that an exemplar
+  anchors harder than list position is general, not observed in this
+  app. Related: nothing caps the category list — both macros loop
+  the full enabled palette, so `order` has no truncation effect and
+  this exemplar is the only place list position does real work.
+  Surfaced while reviewing the reorder affordance's justification
+  after M3.7b (2026-08-01).
