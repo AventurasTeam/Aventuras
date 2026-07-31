@@ -17,6 +17,39 @@ describe('buildClassifierContext', () => {
     expect(Object.keys(context).sort()).toEqual(declared.sort())
   })
 
+  // Packs are user-authored, so whatever reaches the context is template surface
+  // whether the bundled template renders it or not. Passing the drizzle row whole
+  // would silently enrol every future column and make it undroppable.
+  it('projects entities to the documented fields, dropping the rest of the row', () => {
+    const context = buildClassifierContext({
+      window: { turns: [] } as never,
+      entities: [
+        {
+          id: 'char_11111111-1111-1111-1111-111111111111',
+          branchId: 'b1',
+          kind: 'character',
+          name: 'Kael',
+          description: 'A courier.',
+          status: 'active',
+          retiredReason: null,
+          injectionMode: 'auto',
+          nameCollisionFlag: 0,
+          state: { traits: ['wry'] },
+          tags: ['secret'],
+          embeddingStale: 1,
+          createdAt: 1,
+          updatedAt: 2,
+        } as never,
+      ],
+      happenings: [],
+      idMap: new IdBiMap(),
+    })
+    const [entity] = context.entities as Record<string, unknown>[]
+    expect(Object.keys(entity).sort()).toEqual(
+      ['description', 'id', 'kind', 'name', 'status'].sort(),
+    )
+  })
+
   it('substitutes entity and happening ids to placeholders but leaves prose alone', () => {
     const idMap = new IdBiMap()
     const context = buildClassifierContext({

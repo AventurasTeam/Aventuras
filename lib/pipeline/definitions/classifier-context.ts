@@ -16,7 +16,16 @@ export function buildClassifierContext(args: {
     // entryId/position stay out: the model addresses turns by handle only, and
     // entry_* is not substitutable, so leaking it would put a raw id in the prompt.
     turns: window.turns.map((t) => ({ handle: t.handle, content: t.content })),
-    entities,
+    // Projected to the fields templateContextMap documents, like happenings
+    // below. Narrower than generationContext's on purpose: the classifier reads
+    // prose and has no use for injectionMode, which is a retrieval-time knob.
+    entities: entities.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      name: e.name,
+      description: e.description,
+      status: e.status,
+    })),
     happenings: happenings.map((h) => ({ id: h.id, title: h.title })),
   }
   return substituteIds(context, idMap) as Record<string, unknown>

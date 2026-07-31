@@ -27,6 +27,33 @@ function blankIfWhitespace(value: string): string {
   return value.trim() === '' ? '' : value
 }
 
+/**
+ * The exact fields templateContextMap documents for `generationContext.entities`.
+ * Projected rather than passed whole: packs are user-authored, so an un-projected
+ * drizzle row silently makes every future column (`state`, `tags`,
+ * `embeddingStale`, timestamps) part of the template surface — reachable by a
+ * custom template and impossible to drop later without breaking it.
+ */
+export const PROMPT_ENTITY_FIELDS = [
+  'id',
+  'kind',
+  'name',
+  'description',
+  'status',
+  'injectionMode',
+] as const
+
+function promptEntity(entity: Entity): Record<string, unknown> {
+  return {
+    id: entity.id,
+    kind: entity.kind,
+    name: entity.name,
+    description: entity.description,
+    status: entity.status,
+    injectionMode: entity.injectionMode,
+  }
+}
+
 // The one context builder for the `generationContext` group: every story
 // agent's phase calls this and its template picks from the same variable set
 // (pinned in templateContextMap; parity-tested here).
@@ -48,7 +75,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   const context = {
     entries: narrative.map((e) => ({ content: e.content })),
-    entities,
+    entities: entities.map(promptEntity),
     // Writers inherit scene membership forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene state.
     sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],
