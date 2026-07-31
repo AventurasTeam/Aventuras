@@ -33,6 +33,7 @@ export interface ResolvedAgentConfig {
   providerType: ProviderType
   model: LanguageModelV3
   providerOptions: ProviderOptions | undefined
+  reasoning: string
 }
 
 /**
@@ -48,7 +49,7 @@ function resolveAgentConfig(
   serviceId: string,
   debugId?: string,
 ): ResolvedAgentConfig {
-  const preset = settings.getPresetConfig(presetId)
+  const preset = settings.getPresetConfig(presetId, serviceId)
   const profileId = preset.profileId ?? settings.apiSettings.mainNarrativeProfileId
   const profile = settings.getProfile(profileId)
 
@@ -74,6 +75,8 @@ function resolveAgentConfig(
       break
   }
 
+  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
+
   const baseModel = createModelFromProfile({
     profile,
     modelId: preset.model,
@@ -87,7 +90,7 @@ function resolveAgentConfig(
   const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })
   const providerOptions = buildProviderOptions(preset, profile.providerType)
 
-  return { preset, profile, providerType: profile.providerType, model, providerOptions }
+  return { preset, profile, providerType: profile.providerType, model, providerOptions, reasoning }
 }
 
 /**
@@ -138,7 +141,10 @@ export function createAgentFromPreset<TTools extends ToolSet>(
   serviceId: string,
 ): AgentWithSignal<TTools> {
   const { presetId, instructions, tools, stopWhen, signal } = options
-  const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
+  const { preset, providerType, model, providerOptions, reasoning } = resolveAgentConfig(
+    presetId,
+    serviceId,
+  )
 
   log('createAgentFromPreset', {
     presetId,
@@ -154,6 +160,7 @@ export function createAgentFromPreset<TTools extends ToolSet>(
     stopWhen,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
   })
 
@@ -200,7 +207,10 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
   serviceId: string,
 ): AssistantWithSignal<TTools> {
   const { presetId, instructions, tools, stopWhen, signal, prepareStep } = options
-  const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
+  const { preset, providerType, model, providerOptions, reasoning } = resolveAgentConfig(
+    presetId,
+    serviceId,
+  )
 
   log('createStreamingAgenticAssistant', {
     presetId,
@@ -217,6 +227,7 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     prepareStep,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
   })
 

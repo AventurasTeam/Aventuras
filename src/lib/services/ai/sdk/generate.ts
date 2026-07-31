@@ -9,7 +9,8 @@ import { createLogger } from '$lib/log'
 import { debug } from '$lib/stores/debug.svelte'
 
 import { settings } from '$lib/stores/settings.svelte'
-import type { APIProfile, GenerationPreset, ProviderType, TextModel } from '$lib/types'
+import type { APIProfile, GenerationPreset, ProviderType } from '$lib/types'
+import type { AnthropicProviderOptions } from '@ai-sdk/anthropic'
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
@@ -92,23 +93,33 @@ export function buildProviderOptions(
   const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
 
   if (!settings.advancedRequestSettings.manualMode) {
-    options = { reasoning } satisfies ProviderOptions
     switch (providerType) {
       case 'openai':
         if (reasoning !== 'none') {
           options = {
-            ...options,
             reasoningSummary: 'auto',
           } satisfies OpenAIResponsesProviderOptions
         }
         break
+      case 'anthropic':
+        // all 4.6+ models support adaptive thinking
+        // everything older than 4.5 has been deprecated and removed from most providers
+        if (reasoning !== 'none' && !preset.model.includes('-4-5')) {
+          options = {
+            thinking: {
+              type: 'adaptive',
+              display: 'summarized',
+            },
+            effort: reasoning,
+          } satisfies AnthropicProviderOptions
+        }
+        break
       case 'xai':
-        options = { ...options, parallel_function_calling: true } satisfies XaiProviderOptions
+        options = { parallel_function_calling: true } satisfies XaiProviderOptions
         break
       case 'google': {
         // Reinject safety settings here for complete model-request coverage
         options = {
-          ...options,
           safetySettings: GOOGLE_SAFETY_SETTINGS,
         } satisfies GoogleGenerativeAIProviderOptions
         if (reasoning !== 'none') {
@@ -129,13 +140,13 @@ export function buildProviderOptions(
         } satisfies PollinationsLanguageModelSettings
         break
       case 'groq':
-        options = { ...options, parallelToolCalls: true } satisfies GroqProviderOptions
+        options = { parallelToolCalls: true } satisfies GroqProviderOptions
         break
       case 'zhipu':
         if (reasoning !== 'none') {
           options = {
-            ...options,
-            thinking: { type: 'enabled', clearThinking: true, doSample: true },
+            thinking: { type: 'enabled' },
+            reasoning_effort: reasoning,
           }
         } else {
           options = {
@@ -145,7 +156,6 @@ export function buildProviderOptions(
         break
       case 'mistral':
         options = {
-          ...options,
           safePrompt: false,
           parallelToolCalls: true,
         } satisfies MistralLanguageModelOptions
@@ -171,6 +181,7 @@ interface ResolvedConfig {
   providerType: ProviderType
   model: LanguageModelV3
   providerOptions: ProviderOptions | undefined
+  reasoning: string
   supportsStructuredOutput: boolean
   useThinkTag: boolean
 }
@@ -182,6 +193,7 @@ interface NarrativeConfig {
   temperature: number
   maxTokens: number
   providerOptions: ProviderOptions | undefined
+  reasoning: string
   useThinkTag: boolean
 }
 
@@ -222,6 +234,7 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     serviceId,
   })
 
+  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
   const useThinkTag =
     profile.providerType === 'openai-compatible' ||
     getReasoningExtraction(profile.providerType) === 'think-tag'
@@ -234,6 +247,7 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     providerType: profile.providerType,
     model,
     providerOptions,
+    reasoning,
     supportsStructuredOutput: structuredOutputs,
     useThinkTag,
   }
@@ -282,6 +296,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     temperature: settings.apiSettings.temperature,
     maxTokens: settings.apiSettings.maxTokens,
     providerOptions: buildProviderOptions(narrativePreset, profile.providerType),
+    reasoning: reasoningEffort === 'off' ? 'none' : reasoningEffort,
     useThinkTag,
   }
 }
@@ -363,8 +378,15 @@ export async function generateStructured<T extends z.ZodType>(
 ): Promise<z.infer<T>> {
   const { presetId, schema, system, prompt, signal } = options
   const config = resolveConfig(presetId, serviceId)
-  const { preset, providerType, model, providerOptions, supportsStructuredOutput, useThinkTag } =
-    config
+  const {
+    preset,
+    providerType,
+    model,
+    providerOptions,
+    reasoning,
+    supportsStructuredOutput,
+    useThinkTag,
+  } = config
 
   log('generateStructured', {
     presetId,
@@ -388,6 +410,7 @@ export async function generateStructured<T extends z.ZodType>(
     output: Output.object({ schema }),
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
     abortSignal: signal,
   })
@@ -400,7 +423,7 @@ export async function generatePlainText(
   serviceId: string,
 ): Promise<string> {
   const { presetId, system, prompt, signal } = options
-  const { preset, providerType, model, providerOptions, useThinkTag } = resolveConfig(
+  const { preset, providerType, model, providerOptions, reasoning, useThinkTag } = resolveConfig(
     presetId,
     serviceId,
   )
@@ -416,6 +439,7 @@ export async function generatePlainText(
     prompt,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
     abortSignal: signal,
   })
@@ -426,7 +450,7 @@ export async function generatePlainText(
 export function streamPlainText(options: BaseGenerateOptions, serviceId: string) {
   const debugId = crypto.randomUUID()
   const { presetId, system, prompt, signal } = options
-  const { preset, providerType, model, providerOptions, useThinkTag } = resolveConfig(
+  const { preset, providerType, model, providerOptions, reasoning, useThinkTag } = resolveConfig(
     presetId,
     serviceId,
     debugId,
@@ -444,6 +468,7 @@ export function streamPlainText(options: BaseGenerateOptions, serviceId: string)
     prompt,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
@@ -469,8 +494,15 @@ export function streamStructured<T extends z.ZodType>(
   const { presetId, schema, system, prompt, signal } = options
   const debugId = crypto.randomUUID()
   const config = resolveConfig(presetId, serviceId, debugId)
-  const { preset, providerType, model, providerOptions, supportsStructuredOutput, useThinkTag } =
-    config
+  const {
+    preset,
+    providerType,
+    model,
+    providerOptions,
+    reasoning,
+    supportsStructuredOutput,
+    useThinkTag,
+  } = config
 
   log('streamStructured', { presetId, model: preset.model, providerType, supportsStructuredOutput })
   const startTime = Date.now()
@@ -490,6 +522,7 @@ export function streamStructured<T extends z.ZodType>(
     output: Output.object({ schema }),
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
@@ -521,7 +554,7 @@ interface NarrativeGenerateOptions {
 export function streamNarrative(options: NarrativeGenerateOptions) {
   const { system, prompt, signal } = options
   const debugId = crypto.randomUUID()
-  const { providerType, model, temperature, maxTokens, providerOptions, useThinkTag } =
+  const { providerType, model, temperature, maxTokens, providerOptions, reasoning, useThinkTag } =
     resolveNarrativeConfig(debugId)
 
   log('streamNarrative', { model: settings.apiSettings.defaultModel, providerType })
@@ -536,6 +569,7 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
     prompt,
     temperature: !settings.advancedRequestSettings.manualMode ? temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? maxTokens : undefined,
+    reasoning,
     providerOptions,
     abortSignal: signal,
     onFinish: (result) => {
@@ -556,7 +590,8 @@ export function streamNarrative(options: NarrativeGenerateOptions) {
 
 export async function generateNarrative(options: NarrativeGenerateOptions): Promise<string> {
   const { system, prompt, signal } = options
-  const { providerType, model, temperature, maxTokens, providerOptions } = resolveNarrativeConfig()
+  const { providerType, model, temperature, maxTokens, providerOptions, reasoning } =
+    resolveNarrativeConfig()
 
   log('generateNarrative', { model: settings.apiSettings.defaultModel, providerType })
 
@@ -569,6 +604,7 @@ export async function generateNarrative(options: NarrativeGenerateOptions): Prom
     prompt,
     temperature,
     maxOutputTokens: maxTokens,
+    reasoning,
     providerOptions,
     abortSignal: signal,
   })
