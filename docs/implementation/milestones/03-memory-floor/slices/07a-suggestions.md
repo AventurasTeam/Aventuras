@@ -89,9 +89,11 @@ tap-after-typing draft loss is a documented v1 wart.
 - **Chip strip:** panel between entries and composer on terminal
   AI entries; chip anatomy (overline, prose body, accent strip
   resolved from the curated palette); a `phase`
-  (`visible / loading / error / empty-state`) with `collapsed`
-  orthogonal to it, and `hidden` owned by the route not the
-  compound; chrome row (⟳ refresh with composer text as guidance,
+  (`idle / loading / error`) with `collapsed` orthogonal to it,
+  `hidden` owned by the route not the compound, and canon's
+  `visible` vs `empty-state` derived from `chips.length` rather
+  than carried — a second copy of that fact could disagree with the
+  chips themselves; chrome row (⟳ refresh with composer text as guidance,
   ⌄ collapse); tap → composer fill + `Free` mode; orphan-category
   `(removed)` fallback; disabled-category render rules;
   accessibility (chip = button with category label, `aria-busy`

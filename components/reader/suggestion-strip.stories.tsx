@@ -53,7 +53,7 @@ const meta = {
   parameters: { layout: 'padded' },
   tags: ['autodocs'],
   args: {
-    phase: 'visible',
+    phase: 'idle',
     collapsed: false,
     chips,
     categories,
@@ -105,9 +105,9 @@ export const NoEnabledCategories: Story = {
 /** A turn in flight: same spinner, but ⟳ stays (disabled) — there is no strip-owned run to cancel. */
 export const LockedByTurn: Story = { args: { disabled: true } }
 
-/** Locked by a turn with nothing to show: spinner replaces the ⟳ Generate button. */
+/** Locked by a turn with nothing to show: spinner replaces ⟳ Generate, so the chrome ⟳ returns (disabled). */
 export const LockedByTurnEmpty: Story = {
-  args: { disabled: true, phase: 'empty-state', chips: [] },
+  args: { disabled: true, chips: [] },
 }
 
 export const Collapsed: Story = { args: { collapsed: true } }
@@ -116,11 +116,11 @@ export const Collapsed: Story = { args: { collapsed: true } }
 export const CollapsedLoading: Story = { args: { collapsed: true, phase: 'loading' } }
 
 /** Body owns the only ⟳ here — the chrome one would duplicate it. */
-export const EmptyState: Story = { args: { phase: 'empty-state', chips: [] } }
+export const EmptyState: Story = { args: { chips: [] } }
 
 /** Collapsed hides the body's Generate, so the chrome ⟳ comes back. */
 export const EmptyStateCollapsed: Story = {
-  args: { phase: 'empty-state', collapsed: true, chips: [] },
+  args: { collapsed: true, chips: [] },
 }
 
 /** Deleted category: label falls back to `(removed)`, color to neutral, tap still fires. */

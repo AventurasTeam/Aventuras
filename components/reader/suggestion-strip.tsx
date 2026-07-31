@@ -16,13 +16,16 @@ import { cn } from '@/lib/utils'
 type SuggestionChip = NonNullable<EntryMetadata['nextTurnSuggestions']>['items'][number]
 
 /**
- * Two of canon's six states are absent by design: `hidden`
- * (`settings.suggestionsEnabled = false`) means the strip never mounts, which the
- * route owns by not rendering it, and `collapsed` is an orthogonal prop because
- * the chrome row survives collapse — so a refresh fired while collapsed has to
- * stay representable.
+ * Canon's six states, minus three that are not this prop's business. `hidden`
+ * (`settings.suggestionsEnabled = false`) means the strip never mounts, which
+ * the route owns by not rendering it. `collapsed` is an orthogonal prop because
+ * the chrome row survives collapse — so a refresh fired while collapsed stays
+ * representable. And `visible` vs `empty-state` is not a phase at all: it is
+ * `chips.length`, which this component already receives, so carrying it here
+ * too would make `visible`-with-no-chips and `empty-state`-with-chips
+ * representable, and both render wrong.
  */
-type SuggestionStripPhase = 'visible' | 'loading' | 'error' | 'empty-state'
+type SuggestionStripPhase = 'idle' | 'loading' | 'error'
 
 type SuggestionStripProps = {
   phase: SuggestionStripPhase
@@ -176,10 +179,12 @@ export function SuggestionStrip({
   // the composer.
   const locked = busy || disabled
   const refreshBlocked = locked || !canRefresh
-  // The body's Generate button IS the refresh affordance; two ⟳ one above the
-  // other read as different actions. Collapsing hides it, so the chrome one
-  // comes back.
-  const emptyStateOwnsRefresh = phase === 'empty-state' && !collapsed
+  // Exactly the condition under which the body below renders ⟳ Generate. That
+  // button IS the refresh affordance, and two ⟳ one above the other read as
+  // different actions — but every other chipless case (collapsed, busy,
+  // turn-locked) shows no Generate, so the chrome one has to come back or the
+  // strip has no ⟳ anywhere.
+  const bodyOwnsRefresh = !collapsed && phase === 'idle' && !disabled && chips.length === 0
 
   const chipStack = (
     <ScrollView
@@ -252,7 +257,9 @@ export function SuggestionStrip({
         <Spinner size="md" colorSlot="--fg-muted" />
       </View>
     )
-  } else if (phase === 'empty-state') {
+  } else if (chips.length === 0) {
+    // Canon's empty-state. Derived from the chips rather than announced by the
+    // route: the two cannot disagree if only one of them exists.
     body = (
       <View className="items-center">
         <Button variant="ghost" size="sm" onPress={onRefresh} disabled={refreshBlocked}>
@@ -305,7 +312,7 @@ export function SuggestionStrip({
                 size="sm"
                 onPress={onCancel}
               />
-            ) : emptyStateOwnsRefresh ? null : (
+            ) : bodyOwnsRefresh ? null : (
               <IconAction
                 icon={RefreshCw}
                 label={t('reader:suggestions.refresh')}

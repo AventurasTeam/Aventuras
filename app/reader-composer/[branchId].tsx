@@ -170,13 +170,13 @@ export default function ReaderComposerRoute() {
   // disabled, but the phase no-ops in that state — so ⟳ must not offer a run
   // that cannot produce anything.
   const canRefreshSuggestions = buildSuggestionSlots(suggestionCategories).slots.length > 0
+  // No visible/empty-state arm: that is `chips.length`, which the strip already
+  // has. Deriving it twice is what let the two disagree.
   const stripPhase: SuggestionStripPhase = refreshingSuggestions
     ? 'loading'
     : stripError != null
       ? 'error'
-      : chips.length > 0
-        ? 'visible'
-        : 'empty-state'
+      : 'idle'
   const stripErrorMessage = describeSuggestionFailure(stripError)
   const stripErrorFix = useConfigFixAction(
     stripError?.kind === 'config-resolver' ? stripError.failure : undefined,
