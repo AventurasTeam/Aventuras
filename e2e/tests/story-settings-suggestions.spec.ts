@@ -4,7 +4,7 @@ import type { StorySettings, SuggestionCategory } from '@/lib/db'
 
 import { queryApp } from '../harness/db'
 import { launchApp, type LaunchedApp } from '../harness/launch'
-import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
+import { createSeededUserDataDir, enableDiagnostics, removeUserDataDir } from '../harness/seed'
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 import { storySettings } from '../locators/story-settings'
@@ -95,8 +95,9 @@ test.describe('story settings — authoring aids save round-trip', () => {
       suggestionCount: afterFirstSave.suggestionCount,
     }).toEqual({ suggestionsEnabled: false, suggestionCount: seededCount + 1 })
 
-    // Switch away and back: the label input must show what's on disk, not a
-    // draft that happened to still be sitting in memory.
+    // Panels are hidden, not unmounted, so this is not a remount check — it pins
+    // that the post-save `reset()` closed over the post-save `settings`. A stale
+    // closure would revert the draft here and bring the save bar back.
     await storySettings.memoryTab(app.window).click()
     await storySettings.generationTab(app.window).click()
     await expect(storySettings.categoryLabel(app.window, firstCategory.id)).toHaveValue(
@@ -169,5 +170,66 @@ test.describe('story settings — dirty navigate-away guard', () => {
     // Discard also settles the queued leave intent — the same click that threw
     // the draft away carries the navigation through.
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 10_000 })
+  })
+})
+
+// Its own launch, not a third case in the guard block above: the Diagnostics
+// entry needs a seed the other tests don't take, and a case that starts from the
+// previous test's terminal screen can't be run on its own to debug it.
+test.describe('story settings — dirty Actions-menu guard', () => {
+  let app: LaunchedApp
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    enableDiagnostics(seeded.dbPath)
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+  })
+
+  test.afterAll(async () => {
+    await app?.close()
+    removeUserDataDir(userDataDir)
+  })
+
+  // The Actions menu's route jump is the intercept category save-sessions.md
+  // requires and the only one the back arrow can't stand in for: it leaves the
+  // surface through the router directly, so dropping the wiring would push
+  // Diagnostics over the top of an unsaved draft with no prompt at all.
+  test('an Actions-menu route jump is intercepted while dirty, and Cancel keeps the user on the surface', async () => {
+    await home.openStory(app.window, HERO_TITLE).click()
+    await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
+
+    await storySettings.openFromReader(app.window).click()
+    await storySettings.generationTab(app.window).click()
+    await expect(storySettings.authoringAidsPanel(app.window)).toBeVisible()
+
+    const seeded = await readStorySettings(app)
+    const original = firstByOrder(seeded.suggestionCategories)
+
+    await storySettings.categoryLabel(app.window, original.id).fill('E2E Menu Edit')
+    await expect(storySettings.save(app.window)).toBeVisible()
+
+    await storySettings.actionsTrigger(app.window).click()
+    await storySettings.diagnosticsHubRow(app.window).click()
+    await expect(storySettings.unsavedDialog(app.window)).toBeVisible()
+
+    await storySettings.unsavedCancel(app.window).click()
+
+    // Cancel drops the intent rather than settling it: the draft is still here
+    // and the route never moved, so the panel — not Diagnostics — is on screen.
+    await expect(storySettings.authoringAidsPanel(app.window)).toBeVisible()
+    await expect(storySettings.categoryLabel(app.window, original.id)).toHaveValue('E2E Menu Edit')
+
+    const afterCancel = await readStorySettings(app)
+    expect(afterCancel.suggestionCategories.find((c) => c.id === original.id)?.label).toBe(
+      original.label,
+    )
+
+    // Discard before teardown, or `app.close()` hangs: Cancel deliberately keeps
+    // the session dirty, and the window-close guard then holds the close open on
+    // a dialog with no test left to answer it.
+    await storySettings.discard(app.window).click()
+    await expect(storySettings.save(app.window)).toBeHidden()
   })
 })

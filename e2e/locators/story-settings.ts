@@ -82,6 +82,17 @@ export const storySettings = {
   // ScreenShell's chrome back arrow, an IconAction whose accessible name is t('chrome.back').
   back: (page: Page): Locator => page.getByRole('button', { name: t('chrome.back') }),
 
+  // The chrome Actions menu. Its trigger's accessible name carries the "(Ctrl+K)"
+  // shortcut hint on web, so it anchors on the base label rather than matching
+  // exactly (same shape as the reader's).
+  actionsTrigger: (page: Page): Locator =>
+    page.getByRole('button', { name: new RegExp(t('chrome.actions')) }),
+
+  // The menu's only route jump, and the one this surface routes through its
+  // save-session guard. Gated on the diagnostics flag — seed it on first.
+  diagnosticsHubRow: (page: Page): Locator =>
+    page.getByText(t('settings:diagnosticsHub.actionLabel'), { exact: true }),
+
   // getByText alone is ambiguous here: the dialog body's copy also contains
   // the substring "unsaved changes" (getByText is a case-insensitive
   // substring match), so it resolves both the title and the description.
@@ -99,4 +110,9 @@ export const storySettings = {
     storySettings
       .unsavedDialog(page)
       .getByRole('button', { name: t('storySettings:save.unsavedDiscard') }),
+
+  // The dialog's AlertDialogCancel uses the shared `common:cancel`, not a
+  // storySettings-namespaced key.
+  unsavedCancel: (page: Page): Locator =>
+    storySettings.unsavedDialog(page).getByRole('button', { name: t('cancel') }),
 }
