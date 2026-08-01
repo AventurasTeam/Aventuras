@@ -75,7 +75,11 @@ function syncBridge(native: CloseBridge): void {
 export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveRequest): void {
   const navigation = useNavigation()
   const requestLeaveRef = useRef(requestLeave)
-  requestLeaveRef.current = requestLeave
+  // Post-commit, not in render: React can discard a render pass, and both
+  // readers below only fire on a later user gesture.
+  useEffect(() => {
+    requestLeaveRef.current = requestLeave
+  })
 
   usePreventRemove(dirty, ({ data }) => {
     requestLeaveRef.current(() => navigation.dispatch(data.action))
