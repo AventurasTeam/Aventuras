@@ -1,0 +1,78 @@
+import type { QueryAll } from './types'
+
+export type EntityRef = { id: string; status: string }
+
+export type NameKeywordIndex = {
+  /** lowercased entity name -> the rows carrying it */
+  entityNames: ReadonlyMap<string, readonly EntityRef[]>
+  /** lowercased lore keyword -> the lore rows carrying it */
+  loreKeywords: ReadonlyMap<string, readonly string[]>
+}
+
+export async function buildNameKeywordIndex(
+  queryAll: QueryAll,
+  branchId: string,
+): Promise<NameKeywordIndex> {
+  const entityNames = new Map<string, EntityRef[]>()
+  const loreKeywords = new Map<string, string[]>()
+
+  const entityRows = await queryAll('SELECT id, name, status FROM entities WHERE branch_id = ?', [
+    branchId,
+  ])
+  for (const row of entityRows) {
+    const [id, name, status] = row as [string, string, string]
+    const term = name.trim().toLowerCase()
+    if (term === '') continue
+    const bucket = entityNames.get(term)
+    if (bucket) bucket.push({ id, status })
+    else entityNames.set(term, [{ id, status }])
+  }
+
+  const loreRows = await queryAll('SELECT id, keywords FROM lore WHERE branch_id = ?', [branchId])
+  for (const row of loreRows) {
+    const [id, raw] = row as [string, string | null]
+    let keywords: unknown
+    try {
+      // Hand-edited or pre-schema rows must not fail the whole retrieval pass.
+      keywords = raw == null ? [] : JSON.parse(raw)
+    } catch {
+      continue
+    }
+    if (!Array.isArray(keywords)) continue
+    for (const kw of keywords) {
+      if (typeof kw !== 'string') continue
+      const term = kw.trim().toLowerCase()
+      if (term === '') continue
+      const bucket = loreKeywords.get(term)
+      if (bucket) bucket.push(id)
+      else loreKeywords.set(term, [id])
+    }
+  }
+
+  return { entityNames, loreKeywords }
+}
+
+// Terms come from user-authored names/keywords, which may contain regex metacharacters.
+function escape(term: string): string {
+  return term.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)
+}
+
+// Plain \b is ASCII-only and misses accented/Cyrillic names entirely (e.g.
+// "Zoë" never matches). \p{L}/\p{N} lookarounds cover any script with
+// letter/number boundaries; scripts without word delimiters (CJK) are a
+// separate segmentation problem this doesn't attempt to solve.
+function boundaryPattern(term: string): RegExp {
+  return new RegExp(String.raw`(?<![\p{L}\p{N}_])${escape(term)}(?![\p{L}\p{N}_])`, 'u')
+}
+
+export function matchTerms(text: string, terms: Iterable<string>): string[] {
+  const haystack = text.toLowerCase()
+  const hits: string[] = []
+  for (const term of terms) {
+    if (!haystack.includes(term)) continue
+    // Boundary-anchored: a substring hit (e.g. "Mira" inside "miracle") would
+    // wrongly fire Layer-A suppression / kw_boost on ordinary prose.
+    if (boundaryPattern(term).test(haystack)) hits.push(term)
+  }
+  return hits
+}
