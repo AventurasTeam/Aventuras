@@ -38,7 +38,8 @@ Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
 Chip, ColorPicker, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
 Input, JSONBlock, MultiSelect, Popover, SearchableOverlayList, Select, Sheet,
 Skeleton, Spinner, Stepper, Switch, SwitchVisual, Tabs, Tag, Textarea, Text,
-Toast. Plus the `NativeOnlyAnimatedView` utility wrapper.
+Toast. Plus the `NativeOnlyAnimatedView` and `DisabledReasonTooltip` utility
+wrappers.
 
 ### Primitives — needs revision
 

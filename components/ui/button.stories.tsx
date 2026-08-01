@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, userEvent, waitFor } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -81,6 +83,45 @@ export const States: Story = {
       </Button>
     </View>
   ),
+}
+
+const BLOCKED_REASON = 'Generation in progress'
+
+function BlockToggleDemo() {
+  const [blocked, setBlocked] = useState(false)
+  return (
+    <View className="flex-col gap-3">
+      <Button variant="secondary" onPress={() => setBlocked((prev) => !prev)}>
+        <Text>Toggle</Text>
+      </Button>
+      <Button disabled={blocked} disabledReason={blocked ? BLOCKED_REASON : undefined}>
+        <Text>Target</Text>
+      </Button>
+    </View>
+  )
+}
+
+export const DisabledReasonSurvivesTheFlip: Story = {
+  render: () => <BlockToggleDemo />,
+  play: async ({ canvas }) => {
+    const target = canvas.getByRole('button', { name: 'Target' })
+    expect(target.parentElement?.getAttribute('title')).toBeNull()
+
+    await userEvent.click(canvas.getByRole('button', { name: 'Toggle' }))
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Target' })).toBeDisabled())
+
+    // Same DOM node across the flip: a wrapper gated on the disabled state
+    // changes the root element type, and React remounts the control.
+    expect(canvas.getByRole('button', { name: 'Target' })).toBe(target)
+    expect(target.parentElement?.getAttribute('title')).toBe(BLOCKED_REASON)
+
+    // RN-Web drops a raw `title` on Pressable, so the tooltip can only sit on
+    // an ancestor. Assert the browser's own hit test still reaches it — the
+    // disabled control itself is `pointer-events: none`.
+    const rect = target.getBoundingClientRect()
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    expect(hit?.closest('[title]')?.getAttribute('title')).toBe(BLOCKED_REASON)
+  },
 }
 
 export const Shapes: Story = {
