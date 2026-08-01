@@ -58,6 +58,8 @@ type MemoryPanelProps = {
   settings: StorySettings
   /** Injectable seam for stories/tests — defaults to lib/embedder's listInstalledLocal. */
   listInstalled?: () => Promise<InstalledModelInfo[]>
+  disabled?: boolean
+  disabledReason?: string
 }
 
 /**
@@ -66,7 +68,13 @@ type MemoryPanelProps = {
  * not the save bar — this panel intentionally doesn't join
  * `useStorySettingsSection`.
  */
-export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelProps) {
+export function MemoryPanel({
+  storyId,
+  settings,
+  listInstalled,
+  disabled = false,
+  disabledReason,
+}: MemoryPanelProps) {
   const staleTotal = embeddingStatusStore.useEmbeddingStatus((s) =>
     embeddingStatusStore.staleTotalFor(s, storyId),
   )
@@ -162,6 +170,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
   const handleTargetSelected = useCallback(
     (target: EmbeddingTarget) => {
+      if (disabled) return
       void ensureTargetDimension(target).catch((error: unknown) => {
         logger.warn('embedder.swap_target_dim_probe_failed', {
           storyId,
@@ -170,18 +179,20 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         })
       })
     },
-    [storyId, ensureTargetDimension],
+    [storyId, ensureTargetDimension, disabled],
   )
 
   const openReindexConfirm = useCallback(() => {
+    if (disabled) return
     setReindexRowCount(null)
     setReindexConfirmOpen(true)
     // Fetched on open rather than on mount: the panel renders on every Memory
     // tab visit, and the count only matters once the user reaches for the button.
     void countStoryEmbeddableRows(storyId, ctx).then(setReindexRowCount)
-  }, [storyId])
+  }, [storyId, disabled])
 
   const handleReindexNow = useCallback(async () => {
+    if (disabled) return
     setReindexConfirmOpen(false)
     try {
       await ensureTargetDimension(storyTarget)
@@ -191,7 +202,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
     } finally {
       void refreshEmbeddingStatus(storyId)
     }
-  }, [storyId, storyTarget, reportEngineFailure, ensureTargetDimension])
+  }, [storyId, storyTarget, reportEngineFailure, ensureTargetDimension, disabled])
 
   const handleCancelProgress = useCallback(() => {
     embedderSwapStore.requestCancel(storyId)
@@ -199,6 +210,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
   const handleReindexTarget = useCallback(
     async (target: EmbeddingTarget) => {
+      if (disabled) return
       embedderSwapStore.closeDialog()
       try {
         await ensureTargetDimension(target)
@@ -209,7 +221,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure, ensureTargetDimension],
+    [storyId, reportEngineFailure, ensureTargetDimension, disabled],
   )
 
   const handleKeep = useCallback(() => {
@@ -220,6 +232,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
   const handleRelabel = useCallback(
     async (target: EmbeddingTarget) => {
+      if (disabled) return
       embedderSwapStore.closeDialog()
       try {
         await ensureTargetDimension(target)
@@ -234,7 +247,7 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         void refreshEmbeddingStatus(storyId)
       }
     },
-    [storyId, reportEngineFailure, ensureTargetDimension],
+    [storyId, reportEngineFailure, ensureTargetDimension, disabled],
   )
 
   const handleDismissDialog = useCallback(() => {
@@ -258,8 +271,11 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
 
       <View className="gap-1">
         <Button
-          disabled={settings.embedding_swap_target != null || progress != null}
-          onPress={() => openEmbedderSwapDialog(storyId)}
+          disabled={disabled || settings.embedding_swap_target != null || progress != null}
+          disabledReason={disabled ? disabledReason : undefined}
+          onPress={() => {
+            if (!disabled) openEmbedderSwapDialog(storyId)
+          }}
         >
           <Text>{t('storySettings:memory.switchEmbedder')}</Text>
         </Button>
@@ -273,7 +289,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
       <Button
         testID="reindex-now"
         variant="secondary"
-        disabled={settings.embedding_swap_target != null || progress != null}
+        disabled={disabled || settings.embedding_swap_target != null || progress != null}
+        disabledReason={disabled ? disabledReason : undefined}
         onPress={openReindexConfirm}
       >
         <Text>{t('storySettings:memory.reindexNow')}</Text>
@@ -284,6 +301,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         onOpenChange={setReindexConfirmOpen}
         rowCount={reindexRowCount}
         modelLabel={settings.embedding_model_id}
+        disabled={disabled}
+        disabledReason={disabledReason}
         onConfirm={() => void handleReindexNow()}
       />
 
@@ -311,6 +330,8 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
         onKeep={handleKeep}
         onRelabel={(target) => void handleRelabel(target)}
         onDismiss={handleDismissDialog}
+        disabled={disabled}
+        disabledReason={disabledReason}
       />
 
       {resumeOpen ? (
@@ -325,7 +346,13 @@ export function MemoryPanel({ storyId, settings, listInstalled }: MemoryPanelPro
             })}
           </Text>
           <View className="flex-row gap-2">
-            <Button testID="memory-swap-pending-resume" variant="primary" onPress={handleResume}>
+            <Button
+              testID="memory-swap-pending-resume"
+              variant="primary"
+              disabled={disabled}
+              disabledReason={disabledReason}
+              onPress={handleResume}
+            >
               <Text>{t('storySettings:swap.resume')}</Text>
             </Button>
             <Button

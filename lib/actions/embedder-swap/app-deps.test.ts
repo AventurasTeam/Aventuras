@@ -15,9 +15,11 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import {
   currentStoryStore,
   embedderSwapStore,
+  generationStore,
   rehydrateAppSettings,
   rehydrateStories,
   storiesStore,
+  type RunState,
 } from '@/lib/stores'
 
 import {
@@ -56,6 +58,22 @@ vi.mock('./engine', async (importOriginal) => {
 })
 
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
+
+function startHardGate(): void {
+  generationStore.startRun({
+    runId: 'run-hard-gate',
+    kind: 'per-turn',
+    gateBehavior: 'hard-gate',
+    actionId: 'action-hard-gate',
+    storyId: 's1',
+    branchId: 'b1',
+    abortController: new AbortController(),
+    currentPhase: 'narrative',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  } satisfies RunState)
+}
 
 // These tests only ever vary the embedder trio, so the mode and the suggestion
 // palette buildStorySettings also seeds are pinned to their app defaults here
@@ -239,6 +257,39 @@ async function seedStores(
   await rehydrateStories(db)
   return { ctx: { db, runInTransaction }, sqlite }
 }
+
+describe('user-origin hard gate', () => {
+  afterEach(() => {
+    generationStore.__reset()
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    embedderSwapStore.__reset()
+    vi.clearAllMocks()
+    vi.restoreAllMocks()
+  })
+
+  it.each([
+    ['start', (ctx: DbCtx) => startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)],
+    ['resume', (ctx: DbCtx) => resumeStorySwap('s1', ctx)],
+    ['re-index', (ctx: DbCtx) => reindexStoryNow('s1', ctx)],
+    ['relabel', (ctx: DbCtx) => relabelStory('s1', { modelId: MINILM, backend: 'local' }, ctx)],
+  ])('rejects %s before reading or writing story state', async (_label, invoke) => {
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
+    const select = vi.spyOn(ctx.db, 'select')
+    vi.clearAllMocks()
+    startHardGate()
+
+    await expect(invoke(ctx)).resolves.toEqual({
+      status: 'rejected',
+      reason: 'generation in flight',
+    })
+
+    expect(select).not.toHaveBeenCalled()
+    expect(startSwap).not.toHaveBeenCalled()
+    expect(resumeSwap).not.toHaveBeenCalled()
+    expect(reindexStory).not.toHaveBeenCalled()
+  })
+})
 
 function settingsOf(
   sqlite: Awaited<ReturnType<typeof createTestDb>>['sqlite'],

@@ -4,9 +4,13 @@ import { useCallback, useEffect, useState, type ReactElement } from 'react'
 
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
-import { SaveBar } from '@/components/compounds/save-bar'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
+import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
+import {
+  selectStorySettingsGenerationRunKind,
+  storySettingsGenerationPhase,
+} from '@/components/story-settings/generation-run'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
 import {
@@ -14,12 +18,15 @@ import {
   useStorySettingsSaveSession,
 } from '@/components/story-settings/save-session'
 import {
+  StorySettingsLeaveDialog,
+  StorySettingsSaveBar,
+} from '@/components/story-settings/save-session-chrome'
+import {
   isStorySettingsTabId,
   STORY_SETTINGS_TAB_GROUPS,
   STORY_SETTINGS_TAB_IDS,
   type StorySettingsTabId,
 } from '@/components/story-settings/tabs'
-import { UnsavedChangesDialog } from '@/components/story-settings/unsaved-changes-dialog'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
@@ -29,8 +36,8 @@ import { StorySettingsStaleStoreError, updateStorySettings } from '@/lib/actions
 import { db, runInTransaction, type StorySettings } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
-import { awaitRunTerminal, PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import { generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
+import { awaitRunTerminal } from '@/lib/pipeline'
+import { generationStore, isUserEditBlocked, rehydrateStories, storiesStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
@@ -47,9 +54,11 @@ export default function StorySettingsRoute() {
   // All three are in the provider's `save` dep chain; inline arrows would give
   // every consumer a new context identity on each render.
   const onCommit = useCallback(
-    (patch: Partial<StorySettings>) => {
+    async (patch: Partial<StorySettings>) => {
       if (storyId == null) return Promise.reject(new Error('Story not found'))
-      return updateStorySettings(storyId, patch, ctx)
+      const result = await updateStorySettings(storyId, patch, ctx)
+      if (result.status === 'rejected') throw new Error(result.reason)
+      return result.settings
     },
     [storyId],
   )
@@ -114,25 +123,25 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const settings = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.settings ?? null,
   )
-  // Split by kind so the pill names what is actually running: a refresh started
-  // in the reader stays cancellable after a jump here.
-  const isGenerating = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some(
-      (r) => r.storyId === storyId && r.kind !== SUGGESTION_REFRESH_KIND,
-    ),
+  const definition = storiesStore.useStories(
+    (s) => s.rows.find((r) => r.id === storyId)?.definition ?? null,
   )
-  const refreshingSuggestions = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some(
-      (r) => r.storyId === storyId && r.kind === SUGGESTION_REFRESH_KIND,
-    ),
+  const activeRunKind = generationStore.useGeneration((s) =>
+    selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
+  const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  const disabledReason = editBlocked
+    ? t(
+        activeRunKind === 'chapter-close'
+          ? 'generationGate.chapterClose'
+          : 'generationGate.inFlight',
+      )
+    : undefined
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
 
-  const leaveSurface = useCallback(() => {
-    session.requestLeave(() => router.back())
-  }, [session, router])
+  const leaveSurface = useCallback(() => router.back(), [router])
 
   // Phone is list-first, so a tab open there collapses back to the list
   // (within-session, unguarded); every other back exits through the dirty guard.
@@ -162,7 +171,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
             ? { status: 'missing' }
             : settings == null
               ? { status: 'uninitialized' }
-              : { status: 'ready', settings }
+              : { status: 'ready', settings, definition }
 
   // Consumer slices switch on `id` here and render their section for the
   // `ready` branch, deriving its draft from `data.settings`.
@@ -187,8 +196,24 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
           />
         )
       case 'ready':
+        if (id === 'generation')
+          return (
+            <AuthoringAidsPanel
+              settings={data.settings}
+              definition={data.definition}
+              disabled={editBlocked}
+              disabledReason={disabledReason}
+            />
+          )
         if (id === 'memory' && storyId != null)
-          return <MemoryPanel storyId={storyId} settings={data.settings} />
+          return (
+            <MemoryPanel
+              storyId={storyId}
+              settings={data.settings}
+              disabled={editBlocked}
+              disabledReason={disabledReason}
+            />
+          )
         return (
           <EmptyState
             title={t('storySettings:landsLater')}
@@ -211,19 +236,15 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       chapterProgress={0}
       hideSelfReferentialIcon
       onBack={handleBack}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu beforeNavigate={session.requestLeave} />}
       statusSlot={
         <GenerationStatusPill
           activePhase={
-            isGenerating
-              ? 'generating-narrative'
-              : refreshingSuggestions
-                ? 'refreshing-suggestions'
-                : undefined
+            activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
           }
-          onCancel={() =>
-            void awaitRunTerminal(isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND, 'cancel')
-          }
+          onCancel={() => {
+            if (activeRunKind != null) void awaitRunTerminal(activeRunKind, 'cancel')
+          }}
           onErrorTap={() => {}}
         />
       }
@@ -235,31 +256,14 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
         panelData={panelData}
         renderPanel={renderPanel}
         saveBar={
-          isDirty ? (
-            <SaveBar
-              dirtyFields={session.snapshot.dirtyFields}
-              dirtyCount={session.snapshot.dirtyFields.length}
-              saving={session.saving}
-              enabled={isFocused}
-              onSave={() => void session.save()}
-              onDiscard={session.discard}
-            />
-          ) : null
+          <StorySettingsSaveBar
+            enabled={isFocused}
+            blocked={editBlocked}
+            disabledReason={disabledReason}
+          />
         }
       />
-      {/* No focus gate: `pendingLeave` is only set by this screen's own back
-          arrow or the window-close guard, and a pushed-under screen's back
-          arrow can't fire — so a pending leave while unfocused means the user
-          is closing the window, which is exactly when the dialog must show.
-          Gating it there held the close open with nothing on screen to answer
-          it, leaving the window unclosable. */}
-      <UnsavedChangesDialog
-        open={session.pendingLeave}
-        saving={session.saving}
-        onSave={() => session.resolveLeave('save')}
-        onDiscard={() => session.resolveLeave('discard')}
-        onCancel={() => session.resolveLeave('cancel')}
-      />
+      <StorySettingsLeaveDialog blocked={editBlocked} disabledReason={disabledReason} />
     </ScreenShell>
   )
 }

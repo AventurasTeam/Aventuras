@@ -695,3 +695,116 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   whether pre-flight should resolve per-story at all (it is currently
   documented as an app-config check). Surfaced by M3.7a review
   (2026-07-31).
+
+- **The phone list state hides a dirty save bar.** `StorySettingsShell`
+  renders the bar inside the detail pane, and `MasterDetailLayout`
+  drops that pane on phone when no tab is selected. No data loss —
+  panels stay mounted, and `←` and window-close both route through
+  the guard — but the unsaved state is invisible. Canon argues
+  against the obvious fix:
+  [`save-sessions.md → Save bar`](../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
+  says the bar "spans the editable pane only — never the rail," and
+  [`story-settings.md → Mobile expression`](../ui/screens/story-settings/story-settings.md#mobile-expression)
+  puts it at "the bottom edge of the detail-route's scroll region."
+  Accepted at M3.7b planning; the call belongs to M4.4, the surface's
+  real owner. Surfaced by M3.7b implementation (2026-07-31).
+
+- **M2.5's composer modes are unreachable on every real story.**
+  `composerModesEnabled` defaults to `false` in
+  `lib/db/stories/story-settings-defaults.ts`, and app-level
+  `defaultStorySettings` carries only `activePackId`, so no story is
+  ever created with it on and no UI can flip it — the same
+  dead-feature shape M3.7b just fixed for `suggestionsEnabled`. Canon
+  puts its toggle and wrap-POV in the same Authoring aids grouping
+  M3.7b's section lives in, so M4.4 completing that grouping is the
+  natural owner. Surfaced by M3.7b implementation (2026-07-31).
+
+- **The Generation tab renders two `role="status"` live regions at
+  once.** `@dnd-kit` mounts its own inside
+  `SuggestionCategoriesEditor`'s web branch, while `SaveBar`
+  (`components/compounds/save-bar.tsx`) uses that role for its
+  unsaved-changes notice — so a screen reader sees two competing
+  status regions, and role-based queries against the save bar are
+  ambiguous. Surfaced by M3.7b implementation (2026-07-31).
+
+- **Background content behind an open `AlertDialog` is not
+  `aria-hidden`.** Contrary to the usual Radix `hideOthers`
+  assumption, an E2E locator scoped only by role matched both the
+  save bar's Discard button and the unsaved-changes dialog's Discard
+  button while the dialog was open — confirmed by an actual run
+  (`e2e/locators/story-settings.ts`). Fixed in the spec by scoping
+  through the dialog, but the root cause (portal nesting?) was never
+  investigated, and any future locator or a11y assumption about
+  background-hiding on this stack is unsafe. Surfaced by M3.7b
+  implementation (2026-07-31).
+
+- **`action_layer.story_settings_save_blocked` logs a localized
+  string.** The event's `reason` payload
+  (`components/story-settings/save-session.tsx`) carries translated
+  UI text, so it can't be aggregated or grepped across locales. The
+  producing section has a stable discriminant
+  (`validateDraft`'s `problem` field,
+  `'empty-label' | 'duplicate-label'`) and discards it at the channel
+  boundary; carrying a code alongside the reason would need the C7
+  contract widened. Surfaced by M3.7b implementation (2026-07-31).
+
+- **`components/compounds/save-bar.tsx` uses the deprecated
+  `pointerEvents="none"` prop form**, which React Native flags as
+  deprecated in favor of `style.pointerEvents` on every render
+  (visible in test output). Pre-existing; not fixed in M3.7b to keep
+  that commit to its scope. Surfaced by M3.7b implementation
+  (2026-07-31).
+
+- **The save bar's invalid-reason notice is not tab-qualified.**
+  `computeSnapshot` (`components/story-settings/save-session-state.ts`)
+  reports the first dirty-and-invalid section in rail order, and the
+  bar lists dirty fields from every tab — so once M4.4 adds more
+  sections, a user on one tab can be shown a blocking reason sourced
+  from another with nothing indicating where to go. Moot at one
+  section; `{ tab, reason }` would be a single optional field on the
+  existing `SaveSessionSnapshot` type. Surfaced by M3.7b
+  implementation (2026-07-31).
+
+- **The two suggestion-emission macros diverge on the worked
+  example, so the first category is privileged on one emission path
+  only.** `lib/prompts/bundled/suggestion-emission.ts` (tagged block,
+  narrative fold) renders a skeleton via
+  `{% assign exampleSlot = suggestionSlots | first %}`, making the
+  lowest-`order` enabled category a one-shot exemplar;
+  `lib/prompts/bundled/suggestion-emission-json.ts` (per-turn
+  fallback classifier and suggestion-refresh) has no example at all,
+  because the schema carries the shape. Consequence: which category
+  the model favors depends on which path fired, and on the narrative
+  path the exemplar works against the diversity nudge sitting
+  immediately above it. The JSON macro's own header comment states
+  the split exists so the framing rules, ref convention, diversity
+  nudge and length cap cannot drift between the two — this is a
+  drift in exactly that class, living in the skeleton rather than
+  the shared prose, which is why the split did not catch it. Two
+  open questions: whether slot 1 should be exemplar at all (an
+  alternative is naming no ref in the skeleton, at the cost the file
+  comment warns about — a literal placeholder is something a model
+  copies), and whether the JSON path wants a matching example for
+  parity. Effect size is unmeasured here; the claim that an exemplar
+  anchors harder than list position is general, not observed in this
+  app. Related: nothing caps the category list — both macros loop
+  the full enabled palette, so `order` has no truncation effect and
+  this exemplar is the only place list position does real work.
+  Surfaced while reviewing the reorder affordance's justification
+  after M3.7b (2026-08-01).
+- **`disabledReason` never reaches the accessibility tree on web.**
+  `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
+  `ColorPicker` all pass the reason to `accessibilityHint`, which RN
+  Web drops outright — probed in Chromium, a disabled `Button` carries
+  no `title`, `aria-describedby` or `aria-label` of its own. The web
+  tooltip works (the `DisabledReasonTooltip` ancestor is reachable by
+  hit-test from every point on the control, verified), but an ancestor
+  `title` is not a dependable accessible-description source, so screen
+  reader users get "dimmed and unavailable" with no reason. Button's
+  own prop doc claims both channels; on web only the tooltip half is
+  true. RN Web does forward `aria-describedby` (verified), so the fix
+  is a visually-hidden reason node plus `useId` in the shared wrapper —
+  modest, but it needs a hidden-text primitive the repo lacks and it
+  changes a shared UI contract, so it wants a design pass rather than a
+  drive-by. Cross-cutting: every `disabledReason` consumer, present and
+  future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).

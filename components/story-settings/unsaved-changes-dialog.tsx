@@ -14,6 +14,11 @@ import { t } from '@/lib/i18n'
 type UnsavedChangesDialogProps = {
   open: boolean
   saving?: boolean
+  /** Mirrors the save bar: an invalid section leaves Discard and Cancel as the only exits. */
+  saveDisabled?: boolean
+  saveDisabledReason?: string
+  /** Why Save is unavailable. Rendered under the body when a section reports an invalid draft. */
+  reason?: string
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
@@ -22,6 +27,9 @@ type UnsavedChangesDialogProps = {
 export function UnsavedChangesDialog({
   open,
   saving = false,
+  saveDisabled = false,
+  saveDisabledReason,
+  reason,
   onSave,
   onDiscard,
   onCancel,
@@ -38,7 +46,15 @@ export function UnsavedChangesDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t('storySettings:save.unsavedTitle')}</AlertDialogTitle>
-          <AlertDialogDescription>{t('storySettings:save.unsavedBody')}</AlertDialogDescription>
+          <AlertDialogDescription>
+            {t('storySettings:save.unsavedBody')}
+            {reason != null ? (
+              <Text size="sm" variant="muted">
+                {'\n\n'}
+                {reason}
+              </Text>
+            ) : null}
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
@@ -52,7 +68,12 @@ export function UnsavedChangesDialog({
           <Button variant="secondary" onPress={onDiscard} disabled={saving}>
             <Text>{t('storySettings:save.unsavedDiscard')}</Text>
           </Button>
-          <Button variant="primary" onPress={onSave} disabled={saving}>
+          <Button
+            variant="primary"
+            onPress={onSave}
+            disabled={saving || saveDisabled}
+            disabledReason={saveDisabled ? saveDisabledReason : undefined}
+          >
             <Text>{t('storySettings:save.unsavedSave')}</Text>
           </Button>
         </AlertDialogFooter>

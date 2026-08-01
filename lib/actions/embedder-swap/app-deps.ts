@@ -86,6 +86,16 @@ export class RelabelBlockedError extends Error {
   }
 }
 
+export type StoryEmbedderActionRejection = {
+  status: 'rejected'
+  reason: 'generation in flight'
+}
+
+const GENERATION_IN_FLIGHT_REJECTION: StoryEmbedderActionRejection = {
+  status: 'rejected',
+  reason: 'generation in flight',
+}
+
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
@@ -362,14 +372,16 @@ export function startStorySwap(
   storyId: string,
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
-): Promise<'completed' | 'cancelled'> {
+): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
+  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, startSwap, () => target)
 }
 
 export function resumeStorySwap(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
-): Promise<'completed' | 'cancelled'> {
+): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
+  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, resumeSwap, (settings) => {
     if (settings.embedding_swap_target == null) throw new SwapNotInProgressError(storyId)
     return markerTarget(settings)
@@ -379,7 +391,8 @@ export function resumeStorySwap(
 export function reindexStoryNow(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
-): Promise<'completed' | 'cancelled'> {
+): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
+  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, reindexStory, (settings) => ({
     modelId: settings.embedding_model_id,
     backend: settings.embeddingBackend,
@@ -461,7 +474,8 @@ export async function relabelStory(
   storyId: string,
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
-): Promise<void> {
+): Promise<void | StoryEmbedderActionRejection> {
+  if (generationStore.isUserEditBlocked()) return GENERATION_IN_FLIGHT_REJECTION
   await runExclusive(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
     // Relabel's pre-delete is destructive toward target-model rows; a swap in

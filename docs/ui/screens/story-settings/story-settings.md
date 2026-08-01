@@ -316,7 +316,12 @@ reuses the same compound):
   as sole hint, soft warning that emissions may be lower quality).
 - **Delete** — confirmation-gated. Orphan chips (entries that
   already emitted with the deleted `categoryId`) render with
-  `(removed)` label per the reader-composer surface.
+  `(removed)` label per the reader-composer surface. Refused on the
+  last remaining row: a story palette must keep at least one
+  category, since an empty one leaves the agent no slots to fill and
+  every turn's emission then fails to parse. The floor is the host's,
+  not the compound's — App Settings → Story Defaults allows an empty
+  palette, which reads as "not configured".
 
 **Mobile expression.** Row collapses into a vertical stack inside
 an [`Accordion`](../../patterns/accordion.md) item; the
@@ -331,7 +336,16 @@ hint, `enabled: true`, `order: items.length`.
 section's overflow. Confirmation-gated; overwrites the current list
 with a fresh copy of
 `app_settings.default_suggestion_categories[story.mode]`. Discards
-user edits.
+user edits. Three gates apply:
+
+- Unavailable while the `suggestionsEnabled` master toggle is off,
+  matching the dimmed editor below it.
+- An empty app-level palette falls back to the built-in
+  `DEFAULT_SUGGESTION_CATEGORIES[mode]` — the same resolution
+  `buildStorySettings` uses at creation, where empty reads as "not
+  configured" rather than "the user wants none".
+- Unavailable with an inline explanation when `stories.definition`
+  is null, since the action keys off `definition.mode`.
 
 **Save semantics.** Lives inside the existing
 [`save-sessions`](../../patterns/save-sessions.md) pattern of the

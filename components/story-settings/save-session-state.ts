@@ -4,14 +4,21 @@ export type SectionDirtyState = {
   id: string
   tab: StorySettingsTabId
   dirtyFields: readonly string[]
+  /** Non-null when the section is dirty but its draft cannot be written. */
+  invalidReason?: string
 }
 
 /**
- * The surface's dirty fields in rail order. One field, so "clean" and "which
- * fields" can never disagree — read `dirtyFields.length` for both.
+ * The surface's dirty fields in rail order, plus the reason a save would be
+ * refused. Clean is `dirtyFields.length === 0` — the one field, so "clean"
+ * and "which fields" can never disagree.
  */
 export type SaveSessionSnapshot = {
   readonly dirtyFields: readonly string[]
+  /** First dirty-and-invalid section's reason, in rail order. */
+  readonly invalidReason?: string
+  /** Which section `invalidReason` came from. Logged instead of the translated copy. */
+  readonly invalidSectionId?: string
 }
 
 const CLEAN_SNAPSHOT: SaveSessionSnapshot = { dirtyFields: [] }
@@ -25,14 +32,19 @@ function sameFields(a: readonly string[], b: readonly string[]): boolean {
 // fields in the same sequence the tabs present them. Sections sharing a tab tie
 // on order and fall back to id, so the sequence stays stable across mounts.
 export function computeSnapshot(sections: readonly SectionDirtyState[]): SaveSessionSnapshot {
-  const dirtyFields = [...sections]
-    .sort(
-      (a, b) =>
-        storySettingsTabOrder(a.tab) - storySettingsTabOrder(b.tab) || a.id.localeCompare(b.id),
-    )
-    .flatMap((section) => section.dirtyFields)
+  const ordered = [...sections].sort(
+    (a, b) =>
+      storySettingsTabOrder(a.tab) - storySettingsTabOrder(b.tab) || a.id.localeCompare(b.id),
+  )
+  const dirtyFields = ordered.flatMap((section) => section.dirtyFields)
   if (dirtyFields.length === 0) return CLEAN_SNAPSHOT
-  return { dirtyFields }
+  // Gated on the section being dirty: the save skips clean sections entirely,
+  // so an invalid draft the user never touched must not refuse the write.
+  const invalid = ordered.find(
+    (section) => section.dirtyFields.length > 0 && section.invalidReason != null,
+  )
+  if (invalid?.invalidReason == null) return { dirtyFields }
+  return { dirtyFields, invalidReason: invalid.invalidReason, invalidSectionId: invalid.id }
 }
 
 // Returns the SAME array reference when nothing changed, so the provider's
@@ -44,7 +56,11 @@ export function upsertSection(
   const index = sections.findIndex((s) => s.id === next.id)
   if (index === -1) return [...sections, next]
   const current = sections[index]
-  if (current.tab === next.tab && sameFields(current.dirtyFields, next.dirtyFields)) {
+  if (
+    current.tab === next.tab &&
+    current.invalidReason === next.invalidReason &&
+    sameFields(current.dirtyFields, next.dirtyFields)
+  ) {
     return sections
   }
   const copy = [...sections]

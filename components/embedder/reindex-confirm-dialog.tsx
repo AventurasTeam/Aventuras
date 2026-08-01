@@ -1,6 +1,5 @@
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -19,6 +18,8 @@ type ReindexConfirmDialogProps = {
   rowCount: number | null
   modelLabel: string
   onConfirm: () => void
+  disabled?: boolean
+  disabledReason?: string
 }
 
 export function ReindexConfirmDialog({
@@ -27,6 +28,8 @@ export function ReindexConfirmDialog({
   rowCount,
   modelLabel,
   onConfirm,
+  disabled = false,
+  disabledReason,
 }: ReindexConfirmDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
@@ -46,11 +49,14 @@ export function ReindexConfirmDialog({
               <Text>{t('cancel')}</Text>
             </Button>
           </AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <Button testID="reindex-confirm-start" onPress={onConfirm}>
-              <Text>{t('storySettings:reindexConfirm.confirm')}</Text>
-            </Button>
-          </AlertDialogAction>
+          <Button
+            testID="reindex-confirm-start"
+            disabled={disabled}
+            disabledReason={disabledReason}
+            onPress={onConfirm}
+          >
+            <Text>{t('storySettings:reindexConfirm.confirm')}</Text>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

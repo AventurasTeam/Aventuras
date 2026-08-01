@@ -7,7 +7,7 @@ import {
   type DbCtx,
   type StorySettings,
 } from '@/lib/db'
-import { currentStoryStore, rehydrateStories, storiesStore } from '@/lib/stores'
+import { currentStoryStore, generationStore, rehydrateStories, storiesStore } from '@/lib/stores'
 
 /**
  * The write landed but the store could not be re-read, so every rendered copy
@@ -20,6 +20,10 @@ export class StorySettingsStaleStoreError extends Error {
     this.name = 'StorySettingsStaleStoreError'
   }
 }
+
+export type UpdateStorySettingsResult =
+  | { status: 'ok'; settings: StorySettings }
+  | { status: 'rejected'; reason: 'generation in flight' }
 
 // `stories` is absent from deltas.target_table, so a settings save is a direct
 // write: no delta row, no CTRL-Z reversal.
@@ -36,7 +40,10 @@ export async function updateStorySettings(
   patch: Partial<StorySettings>,
   ctx: DbCtx,
   nowMs: number = Date.now(),
-): Promise<StorySettings> {
+): Promise<UpdateStorySettingsResult> {
+  if (generationStore.isUserEditBlocked()) {
+    return { status: 'rejected', reason: 'generation in flight' }
+  }
   // Explicit `undefined` typechecks without exactOptionalPropertyTypes, and
   // spreading it in would trip zod's defaults instead of leaving the key alone.
   const changed = Object.fromEntries(
@@ -84,5 +91,5 @@ export async function updateStorySettings(
   if (!(await rehydrateStories(ctx.db))) throw new StorySettingsStaleStoreError()
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId === storyId) currentStoryStore.set({ ...open, settings })
-  return settings
+  return { status: 'ok', settings }
 }

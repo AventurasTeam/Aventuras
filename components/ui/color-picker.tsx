@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import LibColorPicker, { HueSlider, Panel1 } from 'reanimated-color-picker'
 
 import { Button } from '@/components/ui/button'
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { useDensity, type DensityValue } from '@/lib/density'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type ColorValue = string
@@ -26,11 +28,13 @@ type ColorPickerProps = {
   allowCustom?: boolean
   customWarning?: (hex: ColorValue) => ReactNode | null
   disabled?: boolean
+  disabledReason?: string
   className?: string
   testID?: string
 }
 
 const HEX_PATTERN = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i
+const DEFAULT_CUSTOM_HEX = '#3b82f6'
 
 function normalizeHex(input: string): string | null {
   const trimmed = input.trim()
@@ -149,9 +153,29 @@ type CustomEditorProps = {
   initial: ColorValue
   customWarning?: (hex: ColorValue) => ReactNode | null
   renderActions: (hex: ColorValue, valid: boolean) => ReactNode
+  disabled: boolean
+  disabledReason?: string
+  copy: CustomColorCopy
 }
 
-function CustomEditor({ initial, customWarning, renderActions }: CustomEditorProps) {
+type CustomColorCopy = {
+  title: string
+  hexLabel: string
+  invalidHex: string
+  pickLabel: string
+  valueLabel: (hex: ColorValue) => string
+  cancel: string
+  apply: string
+}
+
+function CustomEditor({
+  initial,
+  customWarning,
+  renderActions,
+  disabled,
+  disabledReason,
+  copy,
+}: CustomEditorProps) {
   const [localHex, setLocalHex] = useState<ColorValue>(initial.toLowerCase())
   const [hexInput, setHexInput] = useState<string>(initial.toLowerCase())
 
@@ -168,18 +192,25 @@ function CustomEditor({ initial, customWarning, renderActions }: CustomEditorPro
 
   return (
     <View className="flex-col gap-3">
-      <Heading level={4}>Custom color</Heading>
-      <LibColorPicker
-        value={localHex}
-        onChangeJS={({ hex }) => {
-          setLocalHex(hex.toLowerCase())
-          setHexInput(hex.toLowerCase())
-        }}
-        style={STATIC_STYLES.pickerWrapper}
+      <Heading level={4}>{copy.title}</Heading>
+      {/* The editor is portaled out of ColorPicker's wrapper, so it never
+          inherits the outer disabled dimming — it has to carry its own. */}
+      <View
+        style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
+        className={cn(disabled && 'opacity-50')}
       >
-        <Panel1 style={STATIC_STYLES.panel} />
-        <HueSlider style={STATIC_STYLES.hueSlider} thumbShape="circle" />
-      </LibColorPicker>
+        <LibColorPicker
+          value={localHex}
+          onChangeJS={({ hex }) => {
+            setLocalHex(hex.toLowerCase())
+            setHexInput(hex.toLowerCase())
+          }}
+          style={STATIC_STYLES.pickerWrapper}
+        >
+          <Panel1 style={STATIC_STYLES.panel} />
+          <HueSlider style={STATIC_STYLES.hueSlider} thumbShape="circle" />
+        </LibColorPicker>
+      </View>
       <View className="flex-row items-center gap-2">
         <View
           aria-hidden
@@ -189,17 +220,19 @@ function CustomEditor({ initial, customWarning, renderActions }: CustomEditorPro
         <Input
           value={hexInput}
           onChangeText={setHexInput}
-          placeholder="#3b82f6"
+          placeholder={DEFAULT_CUSTOM_HEX}
           autoCapitalize="none"
           autoCorrect={false}
           aria-invalid={!inputValid}
-          aria-label="Hex color"
+          aria-label={copy.hexLabel}
+          editable={!disabled}
+          accessibilityHint={disabled ? disabledReason : undefined}
           className="flex-1"
         />
       </View>
       {!inputValid ? (
         <Text size="xs" className="text-danger">
-          Enter a hex color, e.g. #3b82f6
+          {copy.invalidHex}
         </Text>
       ) : null}
       {warning != null ? <View>{warning}</View> : null}
@@ -214,10 +247,38 @@ type CustomChipProps = {
   onOpenChange: (open: boolean) => void
   customWarning?: (hex: ColorValue) => ReactNode | null
   onCommit: (hex: ColorValue) => void
+  copy: CustomColorCopy
   disabled?: boolean
+  disabledReason?: string
 }
 
-const DEFAULT_CUSTOM_HEX = '#3b82f6'
+function CustomPopoverApplyAction({
+  disabled,
+  disabledReason,
+  valid,
+  onPress,
+  copy,
+}: {
+  disabled: boolean
+  disabledReason?: string
+  valid: boolean
+  onPress: () => void
+  copy: string
+}) {
+  return (
+    <DisabledReasonTooltip reason={disabled ? disabledReason : undefined}>
+      <PopoverPrimitive.Close asChild>
+        <Button
+          disabled={disabled || !valid}
+          accessibilityHint={disabled ? disabledReason : undefined}
+          onPress={onPress}
+        >
+          <Text>{copy}</Text>
+        </Button>
+      </PopoverPrimitive.Close>
+    </DisabledReasonTooltip>
+  )
+}
 
 function CustomChip({
   customHex,
@@ -225,11 +286,13 @@ function CustomChip({
   onOpenChange,
   customWarning,
   onCommit,
+  copy,
   disabled,
+  disabledReason,
 }: CustomChipProps) {
   const tier = useTier()
   const filled = customHex != null
-  const ariaLabel = filled ? `Custom color ${customHex}` : 'Pick custom color'
+  const ariaLabel = filled ? copy.valueLabel(customHex) : copy.pickLabel
   const initial = customHex ?? DEFAULT_CUSTOM_HEX
 
   const trigger = (
@@ -240,6 +303,7 @@ function CustomChip({
       ariaLabel={ariaLabel}
       onPress={() => onOpenChange(true)}
       disabled={disabled}
+      accessibilityHint={disabled ? disabledReason : undefined}
     />
   )
 
@@ -247,24 +311,28 @@ function CustomChip({
     return (
       <>
         {trigger}
-        <Sheet open={open} onOpenChange={onOpenChange} ariaLabel="Custom color">
+        <Sheet open={open} onOpenChange={onOpenChange} ariaLabel={copy.title}>
           <SheetContent anchor="bottom" size="auto">
             <CustomEditor
               initial={initial}
               customWarning={customWarning}
+              disabled={disabled === true}
+              disabledReason={disabledReason}
+              copy={copy}
               renderActions={(hex, valid) => (
                 <View className="flex-row justify-end gap-2">
                   <Button variant="ghost" onPress={() => onOpenChange(false)}>
-                    <Text>Cancel</Text>
+                    <Text>{copy.cancel}</Text>
                   </Button>
                   <Button
-                    disabled={!valid}
+                    disabled={disabled || !valid}
+                    disabledReason={disabled ? disabledReason : undefined}
                     onPress={() => {
                       onOpenChange(false)
                       onCommit(hex)
                     }}
                   >
-                    <Text>Apply</Text>
+                    <Text>{copy.apply}</Text>
                   </Button>
                 </View>
               )}
@@ -276,24 +344,29 @@ function CustomChip({
   }
 
   return (
-    <Popover ariaLabel="Custom color">
+    <Popover ariaLabel={copy.title}>
       <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent className="w-72">
         <CustomEditor
           initial={initial}
           customWarning={customWarning}
+          disabled={disabled === true}
+          disabledReason={disabledReason}
+          copy={copy}
           renderActions={(hex, valid) => (
             <View className="flex-row justify-end gap-2">
               <PopoverPrimitive.Close asChild>
                 <Button variant="ghost">
-                  <Text>Cancel</Text>
+                  <Text>{copy.cancel}</Text>
                 </Button>
               </PopoverPrimitive.Close>
-              <PopoverPrimitive.Close asChild>
-                <Button disabled={!valid} onPress={() => onCommit(hex)}>
-                  <Text>Apply</Text>
-                </Button>
-              </PopoverPrimitive.Close>
+              <CustomPopoverApplyAction
+                disabled={disabled === true}
+                disabledReason={disabledReason}
+                valid={valid}
+                onPress={() => onCommit(hex)}
+                copy={copy.apply}
+              />
             </View>
           )}
         />
@@ -311,10 +384,20 @@ function ColorPicker({
   allowCustom = false,
   customWarning,
   disabled,
+  disabledReason,
   className,
   testID,
 }: ColorPickerProps) {
   const [customOpen, setCustomOpen] = useState(false)
+  const customCopy: CustomColorCopy = {
+    title: t('colorPicker.customColor'),
+    hexLabel: t('colorPicker.hexColor'),
+    invalidHex: t('colorPicker.invalidHex', { example: DEFAULT_CUSTOM_HEX }),
+    pickLabel: t('colorPicker.pickCustomColor'),
+    valueLabel: (hex) => t('colorPicker.customColorValue', { hex }),
+    cancel: t('cancel'),
+    apply: t('colorPicker.apply'),
+  }
 
   const valueIsCurated = useMemo(
     () => value != null && swatches.some((s) => eqColor(s, value)),
@@ -335,6 +418,7 @@ function ColorPicker({
         ariaLabel={fallbackLabel}
         onPress={() => onChange(null)}
         disabled={disabled}
+        accessibilityHint={disabled ? disabledReason : undefined}
       />
       {swatches.map((swatch) => (
         <SwatchButton
@@ -345,6 +429,7 @@ function ColorPicker({
           ariaLabel={swatch}
           onPress={() => onChange(swatch)}
           disabled={disabled}
+          accessibilityHint={disabled ? disabledReason : undefined}
         />
       ))}
       {allowCustom ? (
@@ -354,7 +439,9 @@ function ColorPicker({
           onOpenChange={setCustomOpen}
           customWarning={customWarning}
           onCommit={(hex) => onChange(hex)}
+          copy={customCopy}
           disabled={disabled}
+          disabledReason={disabledReason}
         />
       ) : null}
     </View>

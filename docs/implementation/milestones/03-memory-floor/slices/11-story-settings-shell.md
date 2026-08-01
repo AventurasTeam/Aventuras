@@ -111,9 +111,9 @@ surface. M4.4 extends this shell rather than replacing it.
 
 Resolved developer decisions and deviations worth carrying forward.
 Cross-cutting findings this slice surfaced went to
-[triage](../../../triage.md) instead, and the ones that go live with
-the first real section consumer went to
-[Slice 3.7b's Open questions](./07b-suggestion-settings.md#open-questions).
+[triage](../../../triage.md) instead, and the ones that only went
+live with the first real section consumer were resolved there — see
+[Slice 3.7b's Implementation notes](./07b-suggestion-settings.md#implementation-notes).
 
 - **The C7 seam is a route tab map plus a save-session context, not
   a component registry.** The contract cites the M1.5 delta-registry
@@ -150,15 +150,21 @@ the first real section consumer went to
   kept editing keeps its newer draft, stays dirty, and holds a
   pending leave open — the save bar reappearing right after `Saved.`
   is the correct reading of "that edit is not on disk yet".
-- **Accepted scope gap.** `AppActionsMenu`'s Diagnostics-Hub jump is
-  a bare `router.push`, so the navigate-away guard — which wraps only
-  the surface's own back path — does not intercept it. A general
-  router-event interceptor was out of scope; it waits on
-  [Slice 3.7b](./07b-suggestion-settings.md#open-questions), the first slice
-  that can make the session dirty.
+- **Scope gap closed by 3.7b.** `AppActionsMenu`'s Diagnostics-Hub
+  jump was a bare `router.push` at this slice's ship, so the
+  navigate-away guard — which wraps only the surface's own back path
+  — did not intercept it.
+  [Slice 3.7b](./07b-suggestion-settings.md#implementation-notes)
+  closed it: `AppActionsMenu` gained an optional `beforeNavigate`
+  prop that the Story Settings route wires to `session.requestLeave`.
 - **Window-close intent is wired.** `useUnsavedChangesGuard` raises
   the surface's own dialog for an Electron window-close (held in the
   main process until the user answers) and the browser's native
   prompt for a web reload or tab close. Electron's own reload path
   still bypasses it — queued in
   [triage](../../../triage.md#inbox).
+- **The section contract gained `invalidReason?: string` in 3.7b.**
+  The provider aggregates it across every dirty section; `save()`
+  returns `{ status: 'invalid' }` without attempting a write when one
+  is present, and a queued leave intent stays queued rather than
+  being settled or dropped.

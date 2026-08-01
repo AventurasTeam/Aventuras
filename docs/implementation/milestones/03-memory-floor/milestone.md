@@ -301,14 +301,21 @@ consumer slice renders its section in the tab's branch, the same way
 M3.1a extended the App Settings route — and the shell's
 **save session**, which a section joins at runtime by calling
 `useStorySettingsSection` from inside its own body, reporting
-`{ dirtyFields, getPatch, reset }` into the surface's single save
-bar.
-Consumers: 3.1b registers the Memory tab's embedding-status panel;
-3.7b registers the Generation tab's Authoring aids section
-(categories editor, master toggle, count stepper). Story Settings
-saves write `stories.settings` directly — `stories` is absent from
-`deltas.target_table`, so a settings save carries no delta and is
-not CTRL-Z reversible. Names fixed in 3.11's first commit.
+`{ dirtyFields, invalidReason, getPatch, reset }` into the surface's
+single save bar. `invalidReason` is non-null while a section is
+dirty but cannot be written; the surface refuses the save and
+renders the reason beside the dirty-field list. Added by 3.7b, whose
+label-collision rule
+[`story-settings.md → Suggestion categories`](../../../ui/screens/story-settings/story-settings.md#suggestion-categories)
+specifies as blocking.
+Consumers: 3.7b registers the Generation tab's Authoring aids section
+(categories editor, master toggle, count stepper) — the contract's
+only consumer; 3.1b's embedding-status panel commits straight
+through the embedder engine and does not join the save session.
+Story Settings saves write `stories.settings` directly — `stories`
+is absent from `deltas.target_table`, so a settings save carries no
+delta and is not CTRL-Z reversible. Names fixed in 3.11's first
+commit.
 
 ### C8 — Swap-dialog open action
 
