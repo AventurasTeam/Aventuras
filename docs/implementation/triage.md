@@ -946,3 +946,28 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `mmr_dedupe` and eager-tokenization items above) or drop λ from the
   simulatable list. M3.4 is not at fault — it emits exactly the fields
   C4 pins. Surfaced by M3.4 Task 6 review (2026-08-01).
+- **Q3's dialogue signal mis-pairs across unbalanced quotes.**
+  `lib/retrieval/prose-extract.ts` finds quoted spans over the whole
+  narrative entry (needed, because a quote legitimately opens in one
+  sentence and closes in a later one) and awards
+  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)'s
+  Medium "dialogue" weight to any sentence overlapping a span. On
+  well-formed prose this is correct. On an **unclosed** opener it
+  mis-pairs: that opener binds to the _opening_ quote of the next
+  speech, so the pure narration between them collects a spurious +2,
+  and every subsequent quote in the entry is off by one. Measured:
+  `'"Run, she said. He left the room. "Wait." Done here.'` yields one
+  span covering the first two sentences, flagging `He left the room.`
+  as dialogue. Two things bound the damage — a lone stray `"` with no
+  later quote produces **no** span at all (it does not swallow the rest
+  of the entry), and the multi-paragraph dialogue convention (each
+  paragraph opening a quote, only the last closing it) happens to flag
+  correctly. LLM narrative does emit unbalanced quotes, so this is
+  reachable. A stateful open-quote tracker was considered and rejected
+  during M3.4 as needing its own pairing and nesting logic per quote
+  style; any regex pairing degrades on unbalanced input, and the
+  shipped version is strictly better than the per-sentence one it
+  replaced, which lost the signal entirely whenever a quote spanned a
+  sentence break. Worth revisiting only if probe captures show the
+  dialogue weight firing on obvious narration. Surfaced by M3.4 Task 8
+  review (2026-08-02).
