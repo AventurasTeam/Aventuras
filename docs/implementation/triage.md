@@ -792,3 +792,19 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   this exemplar is the only place list position does real work.
   Surfaced while reviewing the reorder affordance's justification
   after M3.7b (2026-08-01).
+- **`disabledReason` never reaches the accessibility tree on web.**
+  `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
+  `ColorPicker` all pass the reason to `accessibilityHint`, which RN
+  Web drops outright — probed in Chromium, a disabled `Button` carries
+  no `title`, `aria-describedby` or `aria-label` of its own. The web
+  tooltip works (the `DisabledReasonTooltip` ancestor is reachable by
+  hit-test from every point on the control, verified), but an ancestor
+  `title` is not a dependable accessible-description source, so screen
+  reader users get "dimmed and unavailable" with no reason. Button's
+  own prop doc claims both channels; on web only the tooltip half is
+  true. RN Web does forward `aria-describedby` (verified), so the fix
+  is a visually-hidden reason node plus `useId` in the shared wrapper —
+  modest, but it needs a hidden-text primitive the repo lacks and it
+  changes a shared UI contract, so it wants a design pass rather than a
+  drive-by. Cross-cutting: every `disabledReason` consumer, present and
+  future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
