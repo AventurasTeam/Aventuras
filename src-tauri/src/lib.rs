@@ -252,8 +252,8 @@ pub fn run() {
         .setup(|app| {
             let db_path = app
                 .path()
-                .app_data_dir()
-                .expect("failed to get app data dir")
+                .app_config_dir()
+                .expect("failed to get app config dir")
                 .join("aventura.db");
 
             if db_path.try_exists().expect("failed to check db path") {
