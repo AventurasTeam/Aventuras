@@ -15,10 +15,11 @@ export function distanceToCosine(distance: number): number {
   return Math.min(1, Math.max(-1, 1 - (distance * distance) / 2))
 }
 
-// Copy first: a Float32Array view throws unless byteOffset is 4-aligned, and a
-// driver is free to hand back a blob that views into a pooled buffer.
+// Not blob.slice(): Buffer#slice returns a VIEW, and a driver is free to hand
+// back a pooled Buffer whose byteOffset isn't 4-aligned — which a Float32Array
+// view rejects outright. The Uint8Array constructor always allocates.
 export function unpackFloat32(blob: Uint8Array): Float32Array {
-  const copy = blob.slice()
+  const copy = new Uint8Array(blob)
   return new Float32Array(copy.buffer, copy.byteOffset, copy.byteLength / 4)
 }
 

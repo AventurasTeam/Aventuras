@@ -39,6 +39,20 @@ describe('unpackFloat32', () => {
     const v = unit(1, 2, 3)
     expect(Array.from(unpackFloat32(packFloat32(v)))).toEqual(Array.from(v))
   })
+
+  // Buffer#slice returns a VIEW, not a copy, so a driver handing back a pooled
+  // Buffer at an odd offset survives into the Float32Array construction and
+  // throws RangeError unless the copy is unconditional.
+  it('decodes a misaligned Buffer view rather than throwing', () => {
+    const values = [0.5, -0.25, 0.75]
+    const backing = new ArrayBuffer(16)
+    const view = new DataView(backing)
+    values.forEach((v, i) => view.setFloat32(3 + i * 4, v, true))
+
+    const misaligned = Buffer.from(backing, 3, 12)
+    expect(misaligned.byteOffset % 4).not.toBe(0)
+    expect(Array.from(unpackFloat32(misaligned))).toEqual(values)
+  })
 })
 
 describe('knnQuery', () => {
