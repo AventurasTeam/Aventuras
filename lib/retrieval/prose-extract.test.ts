@@ -134,6 +134,14 @@ describe('extractProse', () => {
     expect(withDialogue.scores[0]).toBeGreaterThan(withoutDialogue.scores[0])
   })
 
+  it('sums the signal weights when several fire on one sentence', () => {
+    const out = extractProse('Kara Vex drew the blade. The awning had not been lowered.', index, 2)
+    // Entity 3 + action verb 2 + brevity 1; the second sentence fires brevity
+    // alone. Only the ordering of these weights is canon, so this pins the
+    // current tuning rather than a spec'd value.
+    expect(out.scores).toEqual([6, 1])
+  })
+
   it('weighs a short sentence over a long one when no other signal fires', () => {
     const short = extractProse('The room was quiet and still.', index, 1)
     const long = extractProse(

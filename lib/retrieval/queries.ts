@@ -11,7 +11,7 @@ export type QueryStackInput = {
   eraName: string | null
   /** One-sentence enrichment off the piggyback trailing block; null when absent. */
   piggybackSummary: string | null
-  /** The last narrative entry's prose; '' on a cold start. */
+  /** The last narrative entry's prose — the opening entry on turn 1; '' only when the branch has no narrative entry. */
   lastNarrativeContent: string
   index: NameKeywordIndex
 }
@@ -35,17 +35,18 @@ export type QueryStack = {
 const trimmed = (s: string | null): string => s?.trim() ?? ''
 const nonEmpty = (s: string): boolean => s !== ''
 
-function structuralDigest(i: QueryStackInput): string {
-  const scene = [...i.sceneEntityNames, i.currentLocationName].map(trimmed).filter(nonEmpty)
-  const threads = i.activeThreadTitles.map(trimmed).filter(nonEmpty)
-  const era = trimmed(i.eraName)
-  const summary = trimmed(i.piggybackSummary)
+function structuralDigest(input: QueryStackInput): string {
+  const scene = [...input.sceneEntityNames, input.currentLocationName].map(trimmed).filter(nonEmpty)
+  const threads = input.activeThreadTitles.map(trimmed).filter(nonEmpty)
+  const era = trimmed(input.eraName)
+  const summary = trimmed(input.piggybackSummary)
+  // Canon renders the first three lines unconditionally (retrieval.md → Q2);
+  // omitting empty ones is a deliberate deviation, filed in
+  // docs/implementation/triage.md.
   return [
     ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
     ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),
     ...(nonEmpty(era) ? [`Era: ${era}.`] : []),
-    // Optional by design: retrieval must not degrade on a turn whose piggyback
-    // trailing block failed to parse (retrieval.md → Q2).
     ...(nonEmpty(summary) ? [summary] : []),
   ].join('\n')
 }
@@ -64,7 +65,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
   // An empty query is marked absent rather than embedded: the ranker
   // re-normalizes the blend weights over the present queries, so carrying one
   // would instead spend a weighted similarity term on noise.
-  const presence: QueryPresence = [q1.text !== '', q2.text !== '', q3.text !== '']
+  const presence: QueryPresence = [nonEmpty(q1.text), nonEmpty(q2.text), nonEmpty(q3.text)]
 
   const embedTexts = [q1, q2, q3].filter((_, i) => presence[i]).map((q) => q.text)
 

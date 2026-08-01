@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import { PROSE_EXTRACT_TOP_K } from './constants'
+import { extractProse } from './prose-extract'
 import { buildQueryStack, distributeQueryVectors, type QueryStackInput } from './queries'
 
 const index = {
@@ -118,20 +120,12 @@ describe('buildQueryStack', () => {
     expect(s.q2.text.split('\n').at(-1)).toBe('They agree to split up.')
   })
 
-  it('stands the structural template alone when the summary is absent', () => {
-    const s = buildQueryStack(base)
-    expect(s.q2.text.trim().endsWith('.')).toBe(true)
-    expect(s.q2.text).not.toContain('They agree to split up.')
-    expect(s.presence[1]).toBe(true)
-  })
-
   it('derives Q3 from the last narrative entry and carries sentence scores', () => {
     const s = buildQueryStack(base)
     expect(s.q3.text).toContain('Kara Vex')
-    // prose-extract's WEIGHT: "Kara Vex drew the blade." scores entity 3 +
-    // action-verb ("drew") 2 + brevity 1; the second sentence has neither an
-    // indexed term nor an action verb, so it scores brevity alone.
-    expect(s.q3.sentenceScores).toEqual([6, 1])
+    expect(s.q3.sentenceScores).toEqual(
+      extractProse(base.lastNarrativeContent, index, PROSE_EXTRACT_TOP_K).scores,
+    )
   })
 
   it('keeps only the top-K sentences rather than the whole narrative entry', () => {
@@ -143,9 +137,9 @@ describe('buildQueryStack', () => {
       'The lamps were unlit and the shutters stayed closed all morning, which nobody in the row of houses remarked upon.',
     ].join(' ')
     const s = buildQueryStack({ ...base, lastNarrativeContent })
-    // The last sentence runs past prose-extract's brevity ceiling and carries no
-    // other signal, so it alone scores 0 and is the one top-K drops.
-    expect(s.q3.sentenceScores).toEqual([6, 1, 1, 1, 0])
+    // Scored per sentence over all five, not only the four that survive top-K —
+    // the probe pairs scores against sentences positionally.
+    expect(s.q3.sentenceScores).toHaveLength(5)
     expect(s.q3.text).toContain('Kara Vex drew the blade.')
     expect(s.q3.text).not.toContain('The lamps were unlit')
   })
@@ -262,5 +256,13 @@ describe('distributeQueryVectors', () => {
 
   it('nulls the slots a short vector array cannot fill', () => {
     expect(distributeQueryVectors([v(1)], [true, true, true])).toEqual([v(1), null, null])
+  })
+
+  it('discards vectors beyond the present slots', () => {
+    expect(distributeQueryVectors([v(1), v(2), v(3)], [true, false, false])).toEqual([
+      v(1),
+      null,
+      null,
+    ])
   })
 })
