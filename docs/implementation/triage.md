@@ -808,3 +808,28 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+- **`retrieval.md`'s MMR cost model understates measured cost by ~2.5x,
+  and its complexity claim doesn't match the shipped algorithm.**
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  budgets "<5ms per type" for MMR after the top-200 pre-filter, and
+  [`Diversity — MMR`](../memory/retrieval.md#diversity--mmr) calls it
+  "sub-millisecond" for pools in the hundreds. Measured on the M3.4
+  implementation (Node 24 / V8, desktop, `Candidate`-shaped payloads,
+  N=200): **6.55 ms at dim 384 and 12.32 ms at dim 768**. dim 768 is a
+  shipped config — `onnx-community/embeddinggemma-300m-ONNX` in
+  `catalog-data.json` — so five types cost ~61 ms of the doc's ~100 ms
+  total per-turn target before anything else runs. Restructuring is
+  **not** the lever: a `Uint8Array` bitmap variant measured only 10-18%
+  faster, and the irreducible cosine floor alone is 4.34 ms at N=200.
+  Separately the doc states MMR is `O(N × K)`, but C4's per-candidate
+  trace requires a rank for every candidate that entered MMR
+  (`CandidateTrace.mmrRank` is documented as null only for pre-filtered
+  rows), which forces the full `O(N²)` greedy ranking — roughly 5x the
+  work the cost model assumes. The implementation is correct; the
+  budget line was written against a different algorithm. Wants either a
+  corrected budget or an explicit decision that the trace contract is
+  worth the cost. **Open sub-question, unmeasured:** `retrieval.md`'s
+  PoC puts a 384-dim dot at ~24-30 µs on Hermes; if that holds, 19,900
+  dots is ~500 ms per type on mobile, which would dominate the turn.
+  Nobody has run MMR on-device. Surfaced by M3.4 Task 5 review
+  (2026-08-01).
