@@ -983,8 +983,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   and the ranker re-normalizes the blend across the remaining queries.
   The driver was measurable: under the literal template, a story with no
   cast, no location, no threads and no era renders Q2 as punctuation
-  only, and because Q3 is also absent on a cold start that vector took
-  half of every candidate's blended similarity. The plan had already
+  only, and that vector still took a full `w_digest` share — 35% of
+  every candidate's blended similarity — because nothing marks it
+  absent. (Q3 is present even on turn 1:
+  [`retrieval.md → Cold start`](../memory/retrieval.md#cold-start)
+  sources it from the opening entry, which the wizard always commits.)
+  The plan had already
   made the era line conditional, so the module was internally
   inconsistent either way. Code and canon now disagree and the project
   rule is that the doc wins — either amend the Q2 section to describe
