@@ -7,7 +7,10 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { StorySettingsShell } from '@/components/shells/story-settings-shell'
 import { AuthoringAidsPanel } from '@/components/story-settings/authoring-aids-panel'
-import { selectStorySettingsGenerationRun } from '@/components/story-settings/generation-run'
+import {
+  selectStorySettingsGenerationRunKind,
+  storySettingsGenerationPhase,
+} from '@/components/story-settings/generation-run'
 import { MemoryPanel } from '@/components/story-settings/memory-panel'
 import { type StorySettingsPanelData } from '@/components/story-settings/panel-data'
 import {
@@ -123,13 +126,13 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
   const definition = storiesStore.useStories(
     (s) => s.rows.find((r) => r.id === storyId)?.definition ?? null,
   )
-  const activeRun = generationStore.useGeneration((s) =>
-    selectStorySettingsGenerationRun(s.txState, storyId),
+  const activeRunKind = generationStore.useGeneration((s) =>
+    selectStorySettingsGenerationRunKind(s.txState, storyId),
   )
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
   const disabledReason = editBlocked
     ? t(
-        activeRun?.kind === 'chapter-close'
+        activeRunKind === 'chapter-close'
           ? 'generationGate.chapterClose'
           : 'generationGate.inFlight',
       )
@@ -236,9 +239,11 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       actions={<AppActionsMenu beforeNavigate={session.requestLeave} />}
       statusSlot={
         <GenerationStatusPill
-          activePhase={activeRun?.phase}
+          activePhase={
+            activeRunKind != null ? storySettingsGenerationPhase(activeRunKind) : undefined
+          }
           onCancel={() => {
-            if (activeRun != null) void awaitRunTerminal(activeRun.kind, 'cancel')
+            if (activeRunKind != null) void awaitRunTerminal(activeRunKind, 'cancel')
           }}
           onErrorTap={() => {}}
         />
