@@ -66,9 +66,12 @@ function score(
 
   // No awareness row backs these, so pin and decay are inapplicable; 0/1 is the
   // captured shape (probe.md → Common-knowledge happenings).
-  const pinSignal = common ? 0 : c.pinSignal
+  const pinSignal = common ? 0 : Math.min(1, Math.max(0, c.pinSignal))
+  // The probe's per-row pin_signal override (probe.md → Simulatable parameters)
+  // reaches this unvalidated, and out-of-range flips the exponent's sign.
+  const chaptersOld = Math.max(0, c.chaptersOld)
   const recencyFactor =
-    common || lambda <= 0 ? 1 : Math.exp(-lambda * c.chaptersOld * (1 - pinSignal))
+    common || lambda <= 0 ? 1 : Math.exp(-lambda * chaptersOld * (1 - pinSignal))
 
   let finalScore = simBlend * recencyFactor + kwBoostValue
 

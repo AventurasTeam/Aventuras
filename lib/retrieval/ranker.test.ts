@@ -97,6 +97,36 @@ describe('rankPerType — scoring', () => {
     expect(hit.traces[0].finalScore - miss.traces[0].finalScore).toBeCloseTo(0.1, 6)
   })
 
+  it('adds the keyword boost after decay, not before', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: 10, keywordHits: ['x'] })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(r.traces[0].finalScore).toBeCloseTo(0.6 * Math.exp(-0.7) + 0.1, 6)
+  })
+
+  it('clamps an out-of-range pin signal and age instead of inverting decay', () => {
+    const overPinned = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: 40, pinSignal: 2 })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(overPinned.traces[0].pinSignal).toBe(1)
+    expect(overPinned.traces[0].recencyFactor).toBe(1)
+    expect(overPinned.traces[0].finalScore).toBeCloseTo(0.6, 6)
+
+    const negativeAge = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: -20 })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(negativeAge.traces[0].recencyFactor).toBe(1)
+  })
+
   it('revives a deeply decayed row whose sim clears tau_revive', () => {
     // chaptersOld 60 at lambda 0.07 crushes recency to ~0.015; the bypass
     // floors the score at sim - tau_revive = 0.95 - 0.85 = 0.10.
@@ -184,6 +214,27 @@ describe('rankPerType — MMR and budget fill', () => {
     const r = rankPerType(pool, 'happenings', 35, base) // seats one 30-token row
     expect(r.selected.map((c) => c.id)).toEqual(['a'])
     expect(r.traces.find((t) => t.id === 'b')?.dropReason).toBe('over_budget')
+  })
+
+  it('stamps the MMR position on every ranked trace', () => {
+    const pool = [
+      candidate({ id: 'first', sims: [0.9, 0.9, 0.9], vector: v(1, 0, 0) }),
+      candidate({ id: 'dupe', sims: [0.88, 0.88, 0.88], vector: v(1, 0, 0) }),
+      candidate({ id: 'other', sims: [0.7, 0.7, 0.7], vector: v(0, 1, 0) }),
+    ]
+    const r = rankPerType(pool, 'happenings', 60, base)
+    const rank = (id: string) => r.traces.find((t) => t.id === id)?.mmrRank
+    expect([rank('first'), rank('other'), rank('dupe')]).toEqual([0, 1, 2])
+  })
+
+  it('funnel counts the seated rows and the MMR input size', () => {
+    const pool = [
+      candidate({ id: 'a', sims: [0.9, 0.9, 0.9] }),
+      candidate({ id: 'b', sims: [0.8, 0.8, 0.8], vector: v(0, 1, 0) }),
+    ]
+    const r = rankPerType(pool, 'happenings', 35, base)
+    expect(r.funnel.selectedCount).toBe(1)
+    expect(r.funnel.mmrSize).toBe(2)
   })
 
   it('pre-filters to the top N and traces the excess with a null mmrRank', () => {
@@ -315,11 +366,12 @@ describe('rankAll', () => {
 
 // The whole transitive surface the simulator loads, not just the entry file —
 // a DB import one hop down pulls the same graph in.
-const PURE_FILES = ['ranker.ts', 'mmr.ts', 'vector.ts', 'constants.ts']
+const PURE_FILES = ['ranker.ts', 'mmr.ts', 'vector.ts', 'constants.ts', 'types.ts']
 
 describe('C4 — ranker purity', () => {
   it.each(PURE_FILES)('%s imports nothing from lib/stores or lib/db', (file) => {
-    const src = readFileSync(`lib/retrieval/${file}`, 'utf8')
+    // `import type` is erased at build; only value imports pull the graph in.
+    const src = readFileSync(`lib/retrieval/${file}`, 'utf8').replace(/^import type .*$/gm, '')
     // Path prefix, not exact specifier — a deep import like
     // '@/lib/db/runtime/exec' pulls in the same graph.
     expect(src).not.toMatch(/@\/lib\/(db|stores)/)
