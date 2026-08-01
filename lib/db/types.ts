@@ -27,6 +27,9 @@ import type {
 
 export type SqlOp = { sql: string; params: unknown[] }
 
+/** Same shape as `SqlOp`, on the read side: a SELECT plus its bound params. */
+export type RowQuery = { sql: string; params: unknown[] }
+
 export type DbCtx = {
   db: BaseSQLiteDatabase<'async' | 'sync', unknown, typeof dbSchema>
   runInTransaction: (ops: SqlOp[]) => Promise<void>

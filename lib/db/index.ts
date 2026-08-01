@@ -173,15 +173,9 @@ export type {
 } from './types'
 export { runInTransaction } from './runtime/transaction'
 export { execRaw, listTableNames, queryRows } from './runtime/exec'
-export type { DbCtx, SqlOp } from './types'
+export type { DbCtx, RowQuery, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
-export type {
-  EmbeddedFieldRow,
-  RowQuery,
-  StaleTargetRow,
-  VecTargetKind,
-  VecWrite,
-} from './embeddings'
+export type { EmbeddedFieldRow, StaleTargetRow, VecTargetKind, VecWrite } from './embeddings'
 export {
   VEC_FAMILIES,
   branchRowsQuery,

@@ -1,3 +1,4 @@
+import type { RowQuery } from '../types'
 import { SOURCE_TABLES } from './stale'
 import type { EmbeddedFieldRow } from './stale'
 import type { VecTargetKind } from './vec-tables'
@@ -11,8 +12,6 @@ const KIND_FIELDS: Record<VecTargetKind, [string, string]> = {
   thread: ['title', 'description'],
   chapter: ['summary', 'theme'],
 }
-
-export type RowQuery = { sql: string; params: unknown[] }
 
 // Module-private: a WHERE-less full scan is only a building block for the two
 // filtered queries below; callers should never run it unfiltered against a DB.
