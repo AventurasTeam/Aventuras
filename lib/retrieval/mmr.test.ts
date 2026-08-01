@@ -31,6 +31,7 @@ describe('mmrRank', () => {
       0.75,
     )
     expect(out.map((c) => c.id)).toEqual(['first', 'other', 'dupe'])
+    expect(out[2].mmrScore).toBeCloseTo(0.35, 6) // 0.75*0.8 − 0.25*1.0 (max sim vs S, not vs last pick)
   })
 
   it('returns every candidate exactly once', () => {
@@ -52,5 +53,21 @@ describe('mmrRank', () => {
 
   it('is empty for an empty pool', () => {
     expect(mmrRank([], 0.75)).toEqual([])
+  })
+
+  it('records a negative mmr score rather than flooring it at 0', () => {
+    const out = mmrRank([{ id: 'neg', score: -0.5, vector: v(1, 0) }], 0.75)
+    expect(out[0].mmrScore).toBeCloseTo(-0.375, 6) // 0.75*-0.5 - 0.25*0
+  })
+
+  it('tie-breaks by array position when raw scores are equal', () => {
+    const out = mmrRank(
+      [
+        { id: 'a', score: 0.5, vector: v(1, 0) },
+        { id: 'b', score: 0.5, vector: v(0, 1) },
+      ],
+      0.75,
+    )
+    expect(out[0].id).toBe('a')
   })
 })

@@ -21,6 +21,9 @@ describe('cosine', () => {
   it('clamps to [-1, 1] against float drift on near-parallel vectors', () => {
     const v = unit(0.6, 0.8)
     expect(cosine(v, v)).toBeLessThanOrEqual(1)
+
+    const w = Float32Array.from(v, (x) => -x)
+    expect(cosine(v, w)).toBeGreaterThanOrEqual(-1)
   })
 
   it('throws on dimension mismatch instead of silently comparing a prefix', () => {
