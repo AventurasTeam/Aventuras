@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { RANKER_DEFAULTS } from './constants'
+import { KNN_K, PROSE_EXTRACT_TOP_K, RANKER_DEFAULTS } from './constants'
 
 describe('RANKER_DEFAULTS', () => {
   it('matches canon retrieval.md → Per-type decay rates', () => {
@@ -26,5 +26,22 @@ describe('RANKER_DEFAULTS', () => {
     expect(RANKER_DEFAULTS.minScoreThreshold).toBe(0.15)
     expect(RANKER_DEFAULTS.chapterBoost).toBe(1.3)
     expect(RANKER_DEFAULTS.preFilterTopN).toBe(200)
+  })
+})
+
+describe('PROSE_EXTRACT_TOP_K', () => {
+  it('sits inside canon retrieval.md → Q3 heuristic prose extract, K=3-5', () => {
+    expect(PROSE_EXTRACT_TOP_K).toBe(4)
+    expect(PROSE_EXTRACT_TOP_K).toBeGreaterThanOrEqual(3)
+    expect(PROSE_EXTRACT_TOP_K).toBeLessThanOrEqual(5)
+  })
+})
+
+describe('KNN_K', () => {
+  it('fetches to the pre-filter bound, canon retrieval.md → pre-filter to top-200', () => {
+    expect(KNN_K).toBe(200)
+    // Fetching shallower than the pre-filter bound starves it: rows the
+    // pre-filter would have ranked never reach it, and nothing reports the gap.
+    expect(KNN_K).toBeGreaterThanOrEqual(RANKER_DEFAULTS.preFilterTopN)
   })
 })

@@ -32,18 +32,21 @@ export type QueryStack = {
   embedTexts: string[]
 }
 
-const nonEmpty = (s: string | null): s is string => Boolean(s)
+const trimmed = (s: string | null): string => s?.trim() ?? ''
+const nonEmpty = (s: string): boolean => s !== ''
 
 function structuralDigest(i: QueryStackInput): string {
-  const scene = [...i.sceneEntityNames, i.currentLocationName].filter(nonEmpty)
-  const threads = i.activeThreadTitles.filter(nonEmpty)
+  const scene = [...i.sceneEntityNames, i.currentLocationName].map(trimmed).filter(nonEmpty)
+  const threads = i.activeThreadTitles.map(trimmed).filter(nonEmpty)
+  const era = trimmed(i.eraName)
+  const summary = trimmed(i.piggybackSummary)
   return [
     ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
     ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),
-    ...(i.eraName ? [`Era: ${i.eraName}.`] : []),
+    ...(nonEmpty(era) ? [`Era: ${era}.`] : []),
     // Optional by design: retrieval must not degrade on a turn whose piggyback
     // trailing block failed to parse (retrieval.md → Q2).
-    ...(i.piggybackSummary ? [i.piggybackSummary] : []),
+    ...(nonEmpty(summary) ? [summary] : []),
   ].join('\n')
 }
 

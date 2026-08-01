@@ -64,12 +64,31 @@ describe('buildQueryStack', () => {
   it('skips blank entity names and thread titles rather than rendering bare commas', () => {
     const s = buildQueryStack({
       ...base,
-      sceneEntityNames: ['Kara Vex', '', 'Mira'],
-      activeThreadTitles: ['', 'Find the courier'],
+      sceneEntityNames: ['Kara Vex', '', '   ', 'Mira'],
+      activeThreadTitles: ['', '  ', 'Find the courier'],
     })
     expect(s.q2.text).toBe(
       'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
     )
+  })
+
+  it('renders every structural field trimmed', () => {
+    const s = buildQueryStack({
+      ...base,
+      sceneEntityNames: ['  Kara Vex  ', '\tMira'],
+      currentLocationName: ' The Hollow\n',
+      activeThreadTitles: ['  Find the courier '],
+      eraName: '  Third Age  ',
+      piggybackSummary: '  They agree to split up.  ',
+    })
+    expect(s.q2.text).toBe(
+      'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.\nThey agree to split up.',
+    )
+  })
+
+  it('drops a whitespace-only location from the scene line', () => {
+    const s = buildQueryStack({ ...base, currentLocationName: '   ' })
+    expect(s.q2.text.split('\n')[0]).toBe('Kara Vex, Mira.')
   })
 
   it('drops the threads line entirely when no thread is active', () => {
@@ -82,14 +101,16 @@ describe('buildQueryStack', () => {
     expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
   })
 
-  it('treats a blank era the same as a missing one', () => {
-    const s = buildQueryStack({ ...base, eraName: '' })
-    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
+  it('treats a blank or whitespace-only era the same as a missing one', () => {
+    const expected = 'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.'
+    expect(buildQueryStack({ ...base, eraName: '' }).q2.text).toBe(expected)
+    expect(buildQueryStack({ ...base, eraName: '   ' }).q2.text).toBe(expected)
   })
 
-  it('treats a blank piggyback summary the same as a missing one', () => {
-    const s = buildQueryStack({ ...base, piggybackSummary: '' })
-    expect(s.q2.text).toBe(buildQueryStack({ ...base, piggybackSummary: null }).q2.text)
+  it('treats a blank or whitespace-only piggyback summary the same as a missing one', () => {
+    const expected = buildQueryStack({ ...base, piggybackSummary: null }).q2.text
+    expect(buildQueryStack({ ...base, piggybackSummary: '' }).q2.text).toBe(expected)
+    expect(buildQueryStack({ ...base, piggybackSummary: '  ' }).q2.text).toBe(expected)
   })
 
   it('appends the piggyback summary to Q2 when the trailing block parsed', () => {
@@ -151,6 +172,19 @@ describe('buildQueryStack', () => {
     expect(s.q2.text).toBe('')
     expect(s.presence).toEqual([true, false, true])
     expect(s.embedTexts).toEqual([s.q1.text, s.q3.text])
+  })
+
+  it('marks Q2 absent when every structural field is whitespace only', () => {
+    const s = buildQueryStack({
+      ...base,
+      sceneEntityNames: ['   '],
+      currentLocationName: '  ',
+      activeThreadTitles: ['\t'],
+      eraName: '   ',
+      piggybackSummary: '  ',
+    })
+    expect(s.q2.text).toBe('')
+    expect(s.presence[1]).toBe(false)
   })
 
   it('keeps a partially populated Q2 present without an empty threads line', () => {
