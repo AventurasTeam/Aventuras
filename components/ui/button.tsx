@@ -78,6 +78,8 @@ type ButtonProps = Omit<PressableProps, 'children'> &
     loading?: boolean
     children?: ReactNode
     className?: string
+    /** Explains a disabled action through accessibility hint and a web tooltip. */
+    disabledReason?: string
   }
 
 export function Button({
@@ -86,16 +88,18 @@ export function Button({
   size,
   loading,
   disabled,
+  disabledReason,
   children,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading
   const spinnerSlot = SPINNER_SLOT_BY_VARIANT[(variant ?? 'primary') as ButtonVariant]
-  return (
+  const button = (
     <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+        accessibilityHint={isDisabled ? disabledReason : undefined}
         disabled={isDisabled ?? undefined}
         className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
         {...props}
@@ -105,6 +109,14 @@ export function Button({
       </Pressable>
     </TextClassContext.Provider>
   )
+  if (isDisabled && disabledReason && Platform.OS === 'web') {
+    return (
+      <div title={disabledReason} className="contents">
+        {button}
+      </div>
+    )
+  }
+  return button
 }
 
 export { buttonTextVariants, buttonVariants }

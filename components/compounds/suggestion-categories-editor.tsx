@@ -19,7 +19,9 @@ import { ImpactFeedbackStyle, impactAsync } from 'expo-haptics'
 import { ChevronDown, GripVertical, Trash2 } from 'lucide-react-native'
 import {
   memo,
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -83,6 +85,8 @@ type SuggestionCategoriesEditorProps = {
   fallbackColorLabel?: string
   /** When true, dim the entire editor (master suggestionsEnabled toggle off). */
   disabled?: boolean
+  /** Explains the host-level disabled state on web and assistive technology. */
+  disabledReason?: string
   /** Generator for new-row ids — host injects so prod can use cuid / nanoid. */
   generateId?: () => string
   /**
@@ -136,6 +140,8 @@ type RowHandlers = {
   onDelete: (id: string) => void
 }
 
+const DisabledReasonContext = createContext<string | undefined>(undefined)
+
 type RowContentProps = RowState &
   RowHandlers & {
     swatches: ColorValue[]
@@ -168,6 +174,7 @@ const RowContent = memo(function RowContent({
   dragHandle,
   stacked,
 }: RowContentProps) {
+  const disabledReason = useContext(DisabledReasonContext)
   const labelError = emptyLabel
     ? t('suggestionCategories.labelRequired')
     : duplicateLabel
@@ -211,6 +218,7 @@ const RowContent = memo(function RowContent({
         fallbackLabel={fallbackColorLabel}
         allowCustom
         disabled={disabled}
+        disabledReason={disabled ? disabledReason : undefined}
       />
     </View>
   )
@@ -450,6 +458,7 @@ function SuggestionCategoriesEditor({
   fallbackColor,
   fallbackColorLabel = t('suggestionCategories.fallbackColor'),
   disabled,
+  disabledReason,
   generateId = defaultIdGen,
   onRequestDelete,
   minRows = 0,
@@ -528,40 +537,57 @@ function SuggestionCategoriesEditor({
       variant="ghost"
       onPress={handleAdd}
       disabled={disabled}
+      disabledReason={disabledReason}
       aria-label={t('suggestionCategories.addAria')}
     >
       <Text>{t('suggestionCategories.add')}</Text>
     </Button>
   )
 
-  return (
-    <View className={cn('flex-col gap-2', className)} style={disabled ? DIMMED_STYLE : undefined}>
-      {isNative ? (
-        <PhoneList
-          rowStates={rowStates}
-          handlers={handlers}
-          swatches={swatches}
-          fallbackColor={fallbackColor}
-          fallbackColorLabel={fallbackColorLabel}
-          disabled={disabled}
-          onReorder={onChange}
-          categories={categories}
-        />
-      ) : (
-        <WebList
-          rowStates={rowStates}
-          handlers={handlers}
-          swatches={swatches}
-          fallbackColor={fallbackColor}
-          fallbackColorLabel={fallbackColorLabel}
-          disabled={disabled}
-          onReorder={onChange}
-          categories={categories}
-        />
-      )}
-      {addButton}
-    </View>
+  const editor = (
+    <DisabledReasonContext.Provider value={disabled ? disabledReason : undefined}>
+      <View
+        className={cn('flex-col gap-2', className)}
+        style={disabled ? DIMMED_STYLE : undefined}
+        accessibilityHint={disabled ? disabledReason : undefined}
+      >
+        {isNative ? (
+          <PhoneList
+            rowStates={rowStates}
+            handlers={handlers}
+            swatches={swatches}
+            fallbackColor={fallbackColor}
+            fallbackColorLabel={fallbackColorLabel}
+            disabled={disabled}
+            onReorder={onChange}
+            categories={categories}
+          />
+        ) : (
+          <WebList
+            rowStates={rowStates}
+            handlers={handlers}
+            swatches={swatches}
+            fallbackColor={fallbackColor}
+            fallbackColorLabel={fallbackColorLabel}
+            disabled={disabled}
+            onReorder={onChange}
+            categories={categories}
+          />
+        )}
+        {addButton}
+      </View>
+    </DisabledReasonContext.Provider>
   )
+  // Keep the wrapper mounted across enabled/disabled transitions: swapping the
+  // root element would remount the editor and close an already-open color portal.
+  if (Platform.OS === 'web') {
+    return (
+      <div title={disabled ? disabledReason : undefined} className="contents">
+        {editor}
+      </div>
+    )
+  }
+  return editor
 }
 
 type WebListProps = {
