@@ -197,19 +197,6 @@ function sanitizeInlineStyle(css: string): string {
 }
 
 /**
- * Extract raw content from a scoped Visual Prose wrapper.
-
- * Useful for editing - returns the inner HTML without the wrapper.
- */
-export function extractVisualProseContent(html: string): string {
-  const match = html.match(/<div class="vp-[a-f0-9]+ visual-prose-entry">([\s\S]*)<\/div>$/)
-  if (match) {
-    return match[1]
-  }
-  return html
-}
-
-/**
  * Sanitize HTML specifically for TTS consumption.
  * - Always strips <style> tag and its content
  * - Optionally strips all tag content

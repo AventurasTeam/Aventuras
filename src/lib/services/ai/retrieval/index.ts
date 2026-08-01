@@ -11,7 +11,6 @@
 export {
   EntryRetrievalService,
   getEntryRetrievalConfigFromSettings,
-  getRelevantEntries,
   SimpleActivationTracker,
   STICKINESS_BY_TYPE,
   DEFAULT_ENTRY_RETRIEVAL_CONFIG,
@@ -19,25 +18,22 @@ export {
   type ActivationTracker,
   type RetrievedEntry,
   type EntryRetrievalConfig,
-  type LiveWorldState,
 } from './EntryRetrievalService'
 
 // Agentic Retrieval
 export {
   AgenticRetrievalService,
-  getDefaultAgenticRetrievalSettings,
-  type AgenticRetrievalContext,
-  type AgenticRetrievalResult,
-  type AgenticRetrievalSettings,
+  type RetrievalContext as AgenticRetrievalContext,
+  type RetrievalResult as AgenticRetrievalResult,
 } from './AgenticRetrievalService'
 
 // Timeline Fill
+// `TimelineFillSettings` and its defaults live in ai/index.ts, which is what the settings
+// store reads. A second copy here declared `mode: 'static'` while the real default had
+// moved to 'agentic', so the two disagreed about the app's behaviour and neither call
+// site would have told you which one was live -- nothing imported this one at all.
 export {
   TimelineFillService,
-  getDefaultTimelineFillSettings,
   type TimelineFillResult,
-  type TimelineFillSettings,
-  type ResolvedTimelineQuery,
   type TimelineQueryResult,
-  type TimelineChapterInfo,
 } from './TimelineFillService'

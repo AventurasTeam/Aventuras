@@ -2,9 +2,6 @@
  * Scenario Service
  *
  * Provides AI-powered scenario generation for the story wizard.
- *
- * STATUS: STUBBED - Awaiting SDK migration
- * All generation methods throw errors. Non-LLM utility methods preserved.
  */
 
 import { settings } from '$lib/stores/settings.svelte'

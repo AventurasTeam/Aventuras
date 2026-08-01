@@ -22,6 +22,7 @@
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
   import { parseMarkdown } from '$lib/utils/markdown'
+  import { findPrecedingUserAction } from '$lib/utils/storyEntries'
   import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
   import {
     processStoryContent,
@@ -129,6 +130,28 @@
       !ui.lastGenerationError,
   )
 
+  // Fallback regenerate: no matching retry backup exists, so there is no pre-generation
+  // snapshot to restore. Common rather than exceptional -- retry backups live in memory
+  // and do not survive an app restart or a story switch.
+  //
+  // Requires being the last entry outright, not just the last narration: with a trailing
+  // user_action the replacement would be appended below it while answering the prompt
+  // above it. `undoNarrationForRegenerate` enforces the same rule and throws, but the
+  // button should not offer what will be refused.
+  //
+  // findPrecedingUserAction is an O(n) scan of the whole story and this component is
+  // mounted once per entry, so it must stay behind the cheap guards -- evaluating it
+  // eagerly would make every mutation of story.entries an O(n^2) sweep across the list.
+  const isLastEntry = $derived(story.entries[story.entries.length - 1]?.id === entry.id)
+  const canSimpleRegenerate = $derived(
+    isLatestNarration &&
+      isLastEntry &&
+      !canRetry &&
+      !ui.isGenerating &&
+      !ui.lastGenerationError &&
+      !!findPrecedingUserAction(story.entries, entry.id),
+  )
+
   /**
    * Dismiss/delete this error entry from the story.
    */
@@ -163,20 +186,7 @@
 
     // For legacy/untracked errors, find the previous user action and set up retry
     console.log('[StoryEntry] Legacy error, finding previous user action')
-    const entryIndex = story.entries.findIndex((e) => e.id === entry.id)
-    if (entryIndex <= 0) {
-      console.log('[StoryEntry] Entry not found or is first entry')
-      return
-    }
-
-    // Find the most recent user action before this error
-    let userActionEntry = null
-    for (let i = entryIndex - 1; i >= 0; i--) {
-      if (story.entries[i].type === 'user_action') {
-        userActionEntry = story.entries[i]
-        break
-      }
-    }
+    const userActionEntry = findPrecedingUserAction(story.entries, entry.id)
 
     if (!userActionEntry) {
       console.log('[StoryEntry] No user action found before error')
@@ -1225,6 +1235,16 @@
             variant="text"
             size="icon"
             onclick={() => ui.triggerRetryLastMessage()}
+            class="h-7 w-7 text-amber-500 hover:text-amber-600"
+            title="Generate a different response"
+          >
+            <RotateCcw class="h-4 w-4" />
+          </Button>
+        {:else if canSimpleRegenerate}
+          <Button
+            variant="text"
+            size="icon"
+            onclick={() => ui.triggerRegenerateNarration(entry.id)}
             class="h-7 w-7 text-amber-500 hover:text-amber-600"
             title="Generate a different response"
           >

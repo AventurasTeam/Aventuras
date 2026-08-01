@@ -5,6 +5,47 @@
  * Similar to the st-image-auto-generation SillyTavern plugin approach.
  */
 
+/**
+ * One `<pic ... />` or `<pic ...></pic>` tag, attributes captured.
+ *
+ * `[^>]*?` was used here for years and gets the attribute section wrong twice over:
+ *
+ * - A prompt containing `>` ("a sign reading 10 > 9") ends the match early, so *no* rule
+ *   fires. The consequence is not a missing image but the literal `<pic ...>` string
+ *   surviving into rendered narration, with `hasPicTags` and `stripPicTags` both agreeing
+ *   there is nothing there to strip.
+ * - It cannot tell a quote that closes an attribute from one inside its value.
+ *
+ * Matching quoted runs explicitly fixes both: `"[^"]*"` and `'[^']*'` consume a whole
+ * value including any `>` in it, and anything outside a quoted run still may not contain
+ * `>`, so a genuinely unterminated tag does not swallow the rest of the narration.
+ */
+const PIC_TAG = String.raw`<pic\s+((?:"[^"]*"|'[^']*'|[^>"'])*?)(?:\/>|>\s*<\/pic>)`
+
+/**
+ * A fresh regex for the pic-tag pattern.
+ *
+ * A function, not a shared constant: with the `g` flag a shared instance carries
+ * `lastIndex` between callers, and this pattern is used by six of them across two modules.
+ * Exported so `ImageEmbeddingService` -- which does the actual placeholder swap during
+ * rendering -- cannot drift from the parser. It had its own copy of the old pattern, so a
+ * tag the parser accepted could still be left un-swapped in the rendered narration.
+ */
+export const picTagRegex = (flags = 'gi') => new RegExp(PIC_TAG, flags)
+
+/**
+ * Read one attribute's value, tolerating the other quote character inside it.
+ *
+ * `["']([^"']+)["']` could not: `prompt="a knight's blade"` captured `a knight`, which then
+ * fell under the ten-character floor, so the tag was dropped and the image never generated
+ * -- silently, mid-narration, for any prompt containing an apostrophe.
+ */
+function readAttribute(attributes: string, name: string): string | null {
+  const match = attributes.match(new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i'))
+  if (!match) return null
+  return match[2] ?? match[3] ?? null
+}
+
 export interface ParsedPicTag {
   /** Full original tag text */
   originalTag: string
@@ -28,10 +69,9 @@ export interface ParsedPicTag {
 export function extractPicTags(content: string): ParsedPicTag[] {
   const tags: ParsedPicTag[] = []
 
-  // Match <pic ... /> or <pic ...></pic>
-  // Handles multiline prompts and various attribute orders
-  // Captures: full match, attributes section
-  const regex = /<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi
+  // Match <pic ... /> or <pic ...></pic>. Handles multiline prompts, various attribute
+  // orders, and quotes or angle brackets inside a value -- see PIC_TAG.
+  const regex = picTagRegex()
 
   let match
   while ((match = regex.exec(content)) !== null) {
@@ -39,17 +79,13 @@ export function extractPicTags(content: string): ParsedPicTag[] {
     const attributes = match[1]
 
     // Extract prompt attribute (required)
-    const promptMatch = attributes.match(/prompt=["']([^"']+)["']/i)
-    const prompt = promptMatch ? promptMatch[1] : ''
+    const prompt = readAttribute(attributes, 'prompt') ?? ''
 
     // Extract characters attribute (optional)
-    const charsMatch = attributes.match(/characters=["']([^"']*)["']/i)
-    const characters = charsMatch
-      ? charsMatch[1]
-          .split(',')
-          .map((c) => c.trim())
-          .filter((c) => c)
-      : []
+    const characters = (readAttribute(attributes, 'characters') ?? '')
+      .split(',')
+      .map((c) => c.trim())
+      .filter((c) => c)
 
     // Only include tags with valid prompts
     if (prompt && prompt.length >= 10) {
@@ -80,11 +116,20 @@ export function hasIncompletePicTag(content: string): { incomplete: boolean; saf
     return { incomplete: false, safeEnd: content.length }
   }
 
-  // Check if there's a closing after the last open
-  const afterOpen = content.slice(lastPicOpen)
-  const hasClose = afterOpen.includes('/>') || afterOpen.includes('</pic>')
+  // Whether the last opener has actually closed, decided by the same pattern every other
+  // rule uses rather than by looking for the closing characters anywhere after it.
+  //
+  // The old test was `afterOpen.includes('/>') || afterOpen.includes('</pic>')`, which
+  // cannot tell a terminator from the same characters inside an attribute value. A prompt
+  // still mid-stream at `<pic prompt="the sign read 10 /> 9` was declared complete, the
+  // renderer ran on it, and half a tag reached the page. The same held for a bare `>`.
+  //
+  // `lastIndexOf` guarantees there is no further opener, so a match can only start at 0:
+  // anything else means the text after this opener merely resembles a tag.
+  const rest = content.slice(lastPicOpen)
+  const match = picTagRegex('i').exec(rest)
 
-  if (hasClose) {
+  if (match && match.index === 0) {
     return { incomplete: false, safeEnd: content.length }
   }
 
@@ -178,10 +223,9 @@ export function renderSinglePicTag(
   imageMap: Map<string, ImageReplacementInfo>,
   regeneratingIds?: Set<string>,
 ): string {
-  const attrMatch = match.match(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/i)
+  const attrMatch = match.match(picTagRegex('i'))
   const attrs = attrMatch ? attrMatch[1] : ''
-  const promptMatch = attrs.match(/prompt=["']([^"']+)["']/i)
-  const prompt = promptMatch ? promptMatch[1] : ''
+  const prompt = readAttribute(attrs, 'prompt') ?? ''
   const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
 
   const imageInfo = imageMap.get(match)
@@ -229,9 +273,8 @@ export function renderSinglePicTag(
  * @returns Content with placeholders instead of <pic> tags
  */
 export function replacePicTagsWithPlaceholders(content: string): string {
-  return content.replace(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi, (match, attrs) => {
-    const promptMatch = attrs.match(/prompt=["']([^"']+)["']/i)
-    const prompt = promptMatch ? promptMatch[1] : 'Image'
+  return content.replace(picTagRegex(), (_match, attrs: string) => {
+    const prompt = readAttribute(attrs, 'prompt') || 'Image'
     const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
     // No imageId during streaming — use empty string
     return buildPlaceholder(
@@ -254,45 +297,13 @@ export interface ImageReplacementInfo {
 }
 
 /**
- * Replace <pic> tags with actual images or status placeholders.
- * Uses a map keyed by original tag text to match images to their tags.
- *
- * @param content - The content with <pic> tags
- * @param imageMap - Map of original tag text to image info
- * @param regeneratingIds - Optional set of image IDs currently being regenerated
- * @returns Content with images or placeholders instead of <pic> tags
- */
-export function replacePicTagsWithImages(
-  content: string,
-  imageMap: Map<string, ImageReplacementInfo>,
-  regeneratingIds?: Set<string>,
-): string {
-  return content.replace(/<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi, (match) => {
-    return renderSinglePicTag(match, imageMap, regeneratingIds)
-  })
-}
-
-/**
- * Count the number of <pic> tags in content.
- * Useful for quick checks without full parsing.
- *
- * @param content - The content to check
- * @returns Number of <pic> tags found
- */
-export function countPicTags(content: string): number {
-  const regex = /<pic\s+[^>]*?(?:\/>|>\s*<\/pic>)/gi
-  const matches = content.match(regex)
-  return matches ? matches.length : 0
-}
-
-/**
  * Check if content contains any <pic> tags.
  *
  * @param content - The content to check
  * @returns True if at least one <pic> tag is found
  */
 export function hasPicTags(content: string): boolean {
-  return /<pic\s+[^>]*?(?:\/>|>\s*<\/pic>)/i.test(content)
+  return picTagRegex('i').test(content)
 }
 
 /**
@@ -303,5 +314,5 @@ export function hasPicTags(content: string): boolean {
  * @returns Content without <pic> tags
  */
 export function stripPicTags(content: string): string {
-  return content.replace(/<pic\s+[^>]*?(?:\/>|>\s*<\/pic>)/gi, '')
+  return content.replace(picTagRegex(), '')
 }

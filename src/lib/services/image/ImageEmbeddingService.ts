@@ -15,7 +15,11 @@
 import type { EmbeddedImage } from '$lib/types'
 import { parseMarkdown } from '$lib/utils/markdown'
 import { sanitizeVisualProse } from '$lib/utils/htmlSanitize'
-import { renderSinglePicTag, type ImageReplacementInfo } from '$lib/utils/inlineImageParser'
+import {
+  picTagRegex,
+  renderSinglePicTag,
+  type ImageReplacementInfo,
+} from '$lib/utils/inlineImageParser'
 import { createFuzzyTextRegex } from '$lib/utils/text'
 
 interface ImageMarker {
@@ -84,9 +88,6 @@ function buildInlineImageMap(images: EmbeddedImage[]): Map<string, ImageReplacem
   return imageMap
 }
 
-// Regex for matching <pic> tags (same as used everywhere else)
-const PIC_TAG_REGEX = /<pic\s+([^>]*?)(?:\/>|>\s*<\/pic>)/gi
-
 /**
  * Unified rendering pipeline that handles both agentic and inline images.
  *
@@ -114,7 +115,7 @@ function processUnified(
 
   if (hasPicTags) {
     let picIndex = 0
-    text = text.replace(PIC_TAG_REGEX, (match) => {
+    text = text.replace(picTagRegex(), (match) => {
       const placeholder = `PICPH${picIndex++}PICPH`
       const html = renderSinglePicTag(match, imageMap, regeneratingIds)
       placeholderMap.set(placeholder, html)
@@ -175,7 +176,7 @@ export function getPlacedImageIds(content: string, images: EmbeddedImage[]): Set
   // Inline images: placed via <pic> tag match
   const imageMap = buildInlineImageMap(images)
   if (imageMap.size > 0) {
-    const matches = content.matchAll(new RegExp(PIC_TAG_REGEX.source, 'gi'))
+    const matches = content.matchAll(picTagRegex())
     for (const match of matches) {
       const imageInfo = imageMap.get(match[0])
       if (imageInfo) {

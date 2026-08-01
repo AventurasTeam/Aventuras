@@ -342,10 +342,6 @@ export function emitNarrativeResponse(messageId: string, content: string): void 
   eventBus.emit<NarrativeResponseEvent>({ type: 'NarrativeResponse', messageId, content })
 }
 
-export function emitClassificationComplete(messageId: string, result: any): void {
-  eventBus.emit<ClassificationCompleteEvent>({ type: 'ClassificationComplete', messageId, result })
-}
-
 export function emitStateUpdated(changes: StateUpdatedEvent['changes']): void {
   eventBus.emit<StateUpdatedEvent>({ type: 'StateUpdated', changes })
 }

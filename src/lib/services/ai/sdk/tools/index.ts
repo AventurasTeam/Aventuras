@@ -22,6 +22,13 @@ export { createCharacterTools, type CharacterToolContext, type CharacterTools } 
 export { createScenarioTools, type ScenarioToolContext, type ScenarioTools } from './scenario'
 export { createVaultLinkingTools, type VaultLinkingContext, type VaultLinkingTools } from './vault'
 export { createFandomTools, type FandomToolContext, type FandomTools } from './fandom'
-export { createRetrievalTools, type RetrievalToolContext, type RetrievalTools } from './retrieval'
+export {
+  createRetrievalTools,
+  canGrepChapters,
+  hasLiveWorldState,
+  type RetrievalToolContext,
+  type RetrievalTools,
+  type AgenticWorldState,
+} from './retrieval'
 export { createViewerTools, type ViewerToolContext, type ViewerTools } from './viewer'
 export { createImageTools, type ImageToolContext, type ImageTools } from './image'

@@ -134,7 +134,7 @@ export interface StoryEntry {
   createdAt: number
   metadata: EntryMetadata | null
   branchId: string | null // Branch this entry belongs to (null = main branch for legacy)
-  reasoning?: string // In-memory only reasoning (chain of thought)
+  reasoning?: string // Chain of thought, persisted (see migration 019_entry_reasoning)
   // Translation fields
   translatedContent?: string | null // Translated text for display
   translationLanguage?: string | null // Language code of translation
@@ -632,19 +632,6 @@ export interface LoreManagementResult {
   sessionId: string
 }
 
-// ===== Agentic Session Tracking =====
-
-export interface AgenticSession {
-  id: string
-  type: 'lore-management' | 'agentic-retrieval' | 'timeline-fill'
-  storyId: string
-  status: 'running' | 'completed' | 'failed' | 'cancelled'
-  startedAt: number
-  completedAt: number | null
-  messageCount: number
-  // Session is stored separately, not persisted to DB
-}
-
 // UI State types
 export type ActivePanel =
   | 'story'
@@ -656,13 +643,6 @@ export type ActivePanel =
   | 'vault'
   | 'gallery'
 export type SidebarTab = 'characters' | 'locations' | 'inventory' | 'quests' | 'time' | 'branches'
-
-export interface UIState {
-  activePanel: ActivePanel
-  sidebarTab: SidebarTab
-  sidebarOpen: boolean
-  settingsModalOpen: boolean
-}
 
 // Provider types matching Vercel AI SDK providers
 export type ProviderType =
@@ -815,51 +795,6 @@ export interface EmbeddedImage {
  * (RustWebViewClient.shouldInterceptRequest). Keep these paths metadata-only.
  */
 export type EmbeddedImageMeta = Omit<EmbeddedImage, 'imageData'>
-
-// ===== Inline Image Generation System =====
-
-/**
- * Parsed <pic> tag from narrative content.
- * Used for inline image generation mode where AI embeds image tags directly in narrative.
- */
-export interface InlineImageTag {
-  /** Full original tag text (e.g., '<pic prompt="..." characters="..."></pic>') */
-  originalTag: string
-  /** Start position in content */
-  startIndex: number
-  /** End position in content */
-  endIndex: number
-  /** Image generation prompt */
-  prompt: string
-  /** Character names for portrait reference */
-  characters: string[]
-  /** Generated image ID (assigned during processing) */
-  imageId?: string
-  /** Processing status */
-  status: 'pending' | 'generating' | 'complete' | 'failed'
-}
-
-export type ImageSize = '512x512' | '1024x1024' | '1536x1536' | '2048x2048'
-
-export interface ImageGenerationSettings {
-  enabled: boolean // Toggle for image generation (default: false)
-  profileId: string | null // API profile to use for image generation
-  model: string // Image model (default: 'z-image-turbo')
-  styleId: string // Selected image style template
-  portraitStyleId?: string // Character portrait style template
-  size: ImageSize // Regular image size
-  referenceSize?: ImageSize // Reference image size
-  portraitSize?: ImageSize // Portrait image size
-  maxImagesPerMessage: number // Max images to generate per narrative (default: 2)
-
-  // Prompt analysis model settings (for identifying imageable scenes)
-  promptProfileId: string | null // API profile for prompt analysis
-  promptModel: string
-  promptTemperature: number
-  promptMaxTokens: number
-  reasoningEffort: ReasoningEffort
-  manualBody: string
-}
 
 export interface GenerationPreset {
   id: string

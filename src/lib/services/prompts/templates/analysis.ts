@@ -127,11 +127,39 @@ Determine how much narrative time elapsed during this passage. Consider what act
 3. Use the exact names from the text, don't invent or embellish
 4. ALWAYS check if active story beats should be marked completed or failed
 5. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur`,
+  // Ordered by how often each block changes, not by how the task reads.
+  //
+  // With prefix KV caching, everything up to the first token that differs from the previous
+  // request is reused. The entity lists are the bulk of this prompt -- 16k of 40k characters
+  // on a mature story -- and they change only when the classifier itself adds something. The
+  // chat history, the action and the narration change every single turn. With those in
+  // front, two consecutive classifications shared 201 characters and the whole prompt was
+  // reprocessed twice.
+  //
+  // The gain is real but not guaranteed: this is the one prompt whose stable half *this
+  // service* is what changes, so a turn that introduces a character invalidates the rest of
+  // its own list next time. Most turns introduce nothing.
+  //
+  // The passage to classify stays last, immediately before the task. That is the strongest
+  // position for it and it is also the most volatile thing here, so the two goals agree.
   userContent: `Analyze this narrative passage and extract world state changes.
 
-## Context
+## Setting
 {{ genre }}
 Mode: {{ mode }}
+
+## Already Known Entities (check before adding duplicates)
+Characters: {{ existingCharacters }}
+Locations: {{ existingLocations }}
+Items: {{ existingItems }}
+
+## Active Story Beats (update these when resolved!)
+{{ existingBeats }}
+
+{% if customVariableInstructions != blank %}
+{{ customVariableInstructions }}
+{% endif %}
+## Context
 Already tracking: {{ entityCounts }}
 {{ currentTimeInfo }}
 {{ chatHistoryBlock }}
@@ -142,18 +170,6 @@ Already tracking: {{ entityCounts }}
 """
 {{ narrativeResponse }}
 """
-
-## Already Known Entities (check before adding duplicates)
-Characters: {{ existingCharacters }}
-Locations: {{ existingLocations }}
-Items: {{ existingItems }}
-
-## Active Story Beats (update these when resolved!)
-{{ existingBeats }}
-
-{% if customVariableInstructions != '' %}
-{{ customVariableInstructions }}
-{% endif %}
 
 ## Your Task
 1. Check if any EXISTING entities need updates (status change, new info learned, etc.)
@@ -242,14 +258,23 @@ Consider:
 - Story threads that connect to this moment
 
 Only include entries that have a clear connection to the current scene or user's intended action. Do not include entries just because they exist in the world.`,
-  userContent: `# Current Scene
+  // Candidates first, scene and input last. With prefix KV caching everything up to the
+  // first token that differs from the previous request is reused, and the scene changes
+  // every single turn: with it in front, two consecutive calls shared 18 characters and the
+  // whole prompt was reprocessed. The candidate list is the part that mostly repeats.
+  //
+  // It is a weaker win than the same fix on the retrieval agent, because the list is
+  // numbered and one entry leaving the pool renumbers everything after it. It costs
+  // nothing to take, though, and the question stays where a question belongs -- at the end,
+  // after what it is about.
+  userContent: `# Available Entries
+{{ entrySummaries }}
+
+# Current Scene
 {{ recentContent }}
 
 # User's Input
 "{{ userInput }}"
-
-# Available Entries
-{{ entrySummaries }}
 
 Which entries (by number) are relevant to the current scene and user input?`,
 }

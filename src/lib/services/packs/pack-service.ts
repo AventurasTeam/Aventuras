@@ -1,7 +1,22 @@
 import { database } from '$lib/services/database'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
 import { hashContent } from './hash'
-import type { PresetPack, FullPack } from './types'
+import type { PresetPack, FullPack, PackTemplate } from './types'
+
+/**
+ * Has this template been left exactly as the app last wrote it?
+ *
+ * `baselineHash` moves only on a write from the code baseline, so content that still hashes
+ * to it has never been through the template editor. Anything else is the user's work.
+ *
+ * The startup refresh needs this because it cannot otherwise tell "the app ships a newer
+ * default" from "the user changed this": both show up as a stored hash that differs from the
+ * current baseline. It used to compare against the stored content's own hash, so it read
+ * every edit as a stale default and reverted it -- on every single app start.
+ */
+export function isUntouched(template: Pick<PackTemplate, 'contentHash' | 'baselineHash'>): boolean {
+  return template.contentHash === template.baselineHash
+}
 
 /**
  * Pack Service
@@ -51,12 +66,17 @@ class PackService {
     for (const template of PROMPT_TEMPLATES) {
       // Seed system prompt content
       if (!existingIds.has(template.id)) {
-        await database.setPackTemplateContent('default-pack', template.id, template.content)
+        await database.setPackTemplateContent('default-pack', template.id, template.content, true)
       }
       // Seed user content (if template has it)
       const userContentId = `${template.id}-user`
       if (template.userContent && !existingIds.has(userContentId)) {
-        await database.setPackTemplateContent('default-pack', userContentId, template.userContent)
+        await database.setPackTemplateContent(
+          'default-pack',
+          userContentId,
+          template.userContent,
+          true,
+        )
       }
     }
 
@@ -68,7 +88,54 @@ class PackService {
     // custom packs (which are never auto-updated).
     await this.refreshDefaultPackTemplates(existingByTemplateId)
 
+    await this.backfillMissingTemplates()
+
     this.initialized = true
+  }
+
+  /**
+   * Add templates that exist in the code baseline but not yet in a pack.
+   *
+   * Custom packs are seeded once from PROMPT_TEMPLATES at creation and are deliberately
+   * never auto-updated, so a template *added* by a later app version is simply absent
+   * from them. Backfilling gives the user something they can actually open and edit in
+   * the template editor, which a runtime fallback alone would not.
+   *
+   * This is the persistence half; `ContextBuilder.resolveTemplate` is the safety half and
+   * neither replaces the other. The fallback there still matters for packs this never
+   * reaches -- one imported from a file after startup, or a row that fails to write --
+   * where a missing id would otherwise render an empty prompt and the service would
+   * silently issue a contentless request.
+   *
+   * Only ever inserts, so a user's edits to templates they already have are untouched.
+   */
+  private async backfillMissingTemplates(): Promise<void> {
+    const packs = await database.getAllPacks()
+
+    for (const pack of packs) {
+      const existing = await database.getPackTemplates(pack.id)
+      const existingIds = new Set(existing.map((t) => t.templateId))
+
+      // id -> content for everything missing, built before touching the database so the
+      // common case (nothing missing) does no writes and logs nothing.
+      const missing = new Map<string, string>()
+      for (const template of PROMPT_TEMPLATES) {
+        if (!existingIds.has(template.id)) missing.set(template.id, template.content)
+        const userId = `${template.id}-user`
+        if (template.userContent && !existingIds.has(userId)) {
+          missing.set(userId, template.userContent)
+        }
+      }
+      if (missing.size === 0) continue
+
+      for (const [templateId, content] of missing) {
+        await database.setPackTemplateContent(pack.id, templateId, content, true)
+      }
+      console.log('[PackService] Backfilled missing templates', {
+        pack: pack.id,
+        added: [...missing.keys()],
+      })
+    }
   }
 
   /**
@@ -116,9 +183,14 @@ class PackService {
 
     // Seed templates from code baseline (not from the database default-pack, which may be modified)
     for (const template of PROMPT_TEMPLATES) {
-      await database.setPackTemplateContent(packId, template.id, template.content)
+      await database.setPackTemplateContent(packId, template.id, template.content, true)
       if (template.userContent) {
-        await database.setPackTemplateContent(packId, `${template.id}-user`, template.userContent)
+        await database.setPackTemplateContent(
+          packId,
+          `${template.id}-user`,
+          template.userContent,
+          true,
+        )
       }
     }
 
@@ -197,7 +269,7 @@ class PackService {
     const defaultContent = this.getDefaultContent(templateId)
     if (defaultContent === null) return false
 
-    await database.setPackTemplateContent(packId, templateId, defaultContent)
+    await database.setPackTemplateContent(packId, templateId, defaultContent, true)
     return true
   }
 
@@ -209,15 +281,15 @@ class PackService {
    * should use custom packs (which are never auto-updated).
    */
   private async refreshDefaultPackTemplates(
-    existingByTemplateId: Map<string, { templateId: string; contentHash: string }>,
+    existingByTemplateId: Map<string, PackTemplate>,
   ): Promise<void> {
     for (const template of PROMPT_TEMPLATES) {
       // Check system prompt content
       const existing = existingByTemplateId.get(template.id)
-      if (existing) {
+      if (existing && isUntouched(existing)) {
         const newHash = await hashContent(template.content)
         if (existing.contentHash !== newHash) {
-          await database.setPackTemplateContent('default-pack', template.id, template.content)
+          await database.setPackTemplateContent('default-pack', template.id, template.content, true)
         }
       }
 
@@ -225,13 +297,14 @@ class PackService {
       if (template.userContent) {
         const userContentId = `${template.id}-user`
         const existingUser = existingByTemplateId.get(userContentId)
-        if (existingUser) {
+        if (existingUser && isUntouched(existingUser)) {
           const newUserHash = await hashContent(template.userContent)
           if (existingUser.contentHash !== newUserHash) {
             await database.setPackTemplateContent(
               'default-pack',
               userContentId,
               template.userContent,
+              true,
             )
           }
         }

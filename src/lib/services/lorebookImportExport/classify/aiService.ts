@@ -1,4 +1,4 @@
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 /**
  * LorebookClassifierService
  *
@@ -15,7 +15,7 @@ import type { ImportedEntry } from '../types'
 const log = createLogger('LorebookClassifierService')
 
 export class LorebookClassifierService extends BaseAIService {
-  constructor(serviceId: string = 'lorebookClassifier') {
+  constructor(serviceId: ServiceId = 'lorebookClassifier') {
     super(serviceId)
   }
 

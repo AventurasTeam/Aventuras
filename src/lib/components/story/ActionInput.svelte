@@ -7,8 +7,7 @@
   import { aiService } from '$lib/services/ai'
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
-  import { type ImageGenerationContext } from '$lib/services/ai'
-  import { hasRequiredCredentials, getProviderDisplayName } from '$lib/services/ai/image'
+  import { chapterReadBudget } from '$lib/services/ai/core/defaults'
   import { TranslationService } from '$lib/services/ai/utils/TranslationService'
   import {
     Send,
@@ -20,12 +19,9 @@
     X,
     PenLine,
     Square,
-    ImageIcon,
-    Loader2,
   } from 'lucide-svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
-  import { Button } from '$lib/components/ui/button'
   import {
     emitUserInput,
     emitNarrativeResponse,
@@ -37,6 +33,8 @@
   } from '$lib/services/events'
   import { isTouchDevice } from '$lib/utils/swipe'
   import { isAndroid } from '$lib/utils/platform'
+  import { findPrecedingUserAction } from '$lib/utils/storyEntries'
+  import { errMessage } from '$lib/utils/error'
   import {
     GenerationPipeline,
     retryService,
@@ -97,21 +95,10 @@
   let stopRequested = false
   let activeAbortController: AbortController | null = null
   let textareaRef: HTMLTextAreaElement | null = $state(null)
-  let lastImageGenContext = $state<ImageGenerationContext | null>(null)
-  let isManualImageGenRunning = $state(false)
 
   // ============================================================================
   // Derived State
   // ============================================================================
-
-  const canShowManualImageGen = $derived(
-    story.currentStory?.settings?.imageGenerationMode === 'none' && !!lastImageGenContext,
-  )
-
-  const manualImageGenDisabled = $derived.by(() => {
-    if (ui.isGenerating || isManualImageGenRunning) return true
-    return !hasRequiredCredentials()
-  })
 
   const isCreativeMode = $derived(story.storyMode === 'creative-writing')
 
@@ -198,12 +185,6 @@
   // ============================================================================
 
   $effect(() => {
-    const storyId = story.currentStory?.id ?? null
-    if (!storyId || (lastImageGenContext && lastImageGenContext.storyId !== storyId))
-      lastImageGenContext = null
-  })
-
-  $effect(() => {
     ui.setRetryCallback(handleRetry)
     return () => ui.setRetryCallback(null)
   })
@@ -211,6 +192,11 @@
   $effect(() => {
     ui.setRetryLastMessageCallback(handleRetryLastMessage)
     return () => ui.setRetryLastMessageCallback(null)
+  })
+
+  $effect(() => {
+    ui.setRegenerateNarrationCallback(handleRegenerateNarration)
+    return () => ui.setRegenerateNarrationCallback(null)
   })
 
   $effect(() => {
@@ -236,29 +222,41 @@
 
   function buildPipelineDependencies(): PipelineDependencies {
     return {
-      shouldUseAgenticRetrieval: (chaptersLength: number) =>
-        aiService.shouldUseAgenticRetrieval(
-          { length: chaptersLength } as any,
-          settings.systemServicesSettings.timelineFill,
+      shouldUseAgenticRetrieval: () =>
+        aiService.shouldUseAgenticRetrieval(settings.systemServicesSettings.timelineFill),
+      runAgenticRetrieval: (options) =>
+        aiService.runAgenticRetrieval({
+          ...options,
+          getChapterEntries: story.getChapterEntries.bind(story),
+          getUnchapterizedEntries: story.getUnchapterizedEntries.bind(story),
+        }),
+      // The chapter-read budget is derived from this story's own chapterization threshold, so
+      // it is bound here with the rest of the store rather than read from settings: a chapter
+      // is about `tokenThreshold` tokens by construction. See `chapterReadBudget`.
+      runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
+        aiService.runTimelineFill(
+          visibleEntries,
+          chapters,
+          story.getChapterEntries.bind(story),
+          alreadyInContext,
+          chapterReadBudget(story.memoryConfig?.tokenThreshold),
         ),
-      runAgenticRetrieval: aiService.runAgenticRetrieval.bind(aiService),
-      formatAgenticRetrievalForPrompt: aiService.formatAgenticRetrievalForPrompt.bind(aiService),
-      runTimelineFill: (visibleEntries, chapters) =>
-        aiService.runTimelineFill(visibleEntries, chapters, story.getChapterEntries.bind(story)),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
           chapterNumber,
           question,
           chapters,
           story.getChapterEntries.bind(story),
+          chapterReadBudget(story.memoryConfig?.tokenThreshold),
         ),
-      answerChapterRangeQuestion: (startChapter, endChapter, question, chapters) =>
-        aiService.answerChapterRangeQuestion(
-          startChapter,
-          endChapter,
-          question,
-          chapters,
-          story.getChapterEntries.bind(story),
+      buildWorldStateContext: (worldState, userInput, recentEntries, signal, activationTracker) =>
+        aiService.buildWorldStateContext(
+          worldState,
+          userInput,
+          recentEntries,
+          undefined,
+          signal,
+          activationTracker,
         ),
       getRelevantLorebookEntries: aiService.getRelevantLorebookEntries.bind(aiService),
       streamNarrative: aiService.streamNarrative.bind(aiService),
@@ -318,6 +316,7 @@
         tense: story.tense,
         enabled: settings.systemServicesSettings.styleReviewer.enabled,
         triggerInterval: settings.systemServicesSettings.styleReviewer.triggerInterval,
+        recentEntriesCount: settings.systemServicesSettings.styleReviewer.recentEntriesCount,
         currentCounter: ui.messagesSinceLastStyleReview,
         shouldIncrement: countStyleReview,
         source: styleReviewSource,
@@ -514,11 +513,16 @@
         rawInput: userActionContent,
         actionType,
         wasRawActionChoice: false,
-        timelineFillEnabled: settings.systemServicesSettings.timelineFill?.enabled ?? true,
+        memoryRetrievalEnabled: settings.systemServicesSettings.timelineFill?.enabled ?? true,
         storyMode: currentStoryRef.mode ?? 'adventure',
         pov: story.pov,
         tense: story.tense,
-        styleReview: ui.lastStyleReview,
+        // Gated on the setting, not just on the scheduler: `lastStyleReview` is persisted
+        // and restored on load, so a review produced before the feature was switched off
+        // would otherwise keep reaching the narrator prompt forever.
+        styleReview: settings.systemServicesSettings.styleReviewer.enabled
+          ? ui.lastStyleReview
+          : null,
         activationTracker,
         translationSettings: settings.translationSettings,
         imageSettings: {
@@ -640,31 +644,6 @@
           })
           await story.applyClassificationResult(event.result, narrationEntry.id)
           await story.updateEntryTimeEnd(narrationEntry.id)
-
-          if (currentStoryRef.settings?.imageGenerationMode !== 'none') {
-            const presentCharacters = story.characters.filter(
-              (c) =>
-                event.result.scene.presentCharacterNames.includes(c.name) ||
-                c.relationship === 'self',
-            )
-            const imageGenChatHistory = story.visibleEntries
-              .filter((e) => e.type === 'user_action' || e.type === 'narration')
-              .map((e) => `${e.type === 'user_action' ? 'USER' : 'ASSISTANT'}:\n${e.content}`)
-              .join('\n\n')
-
-            lastImageGenContext = {
-              storyId: currentStoryRef.id,
-              entryId: narrationEntry.id,
-              narrativeResponse: fullResponse,
-              userAction: userActionContent,
-              presentCharacters,
-              currentLocation:
-                event.result.scene.currentLocationName ?? worldState.currentLocation?.name,
-              chatHistory: imageGenChatHistory,
-              lorebookContext: undefined,
-              referenceMode: currentStoryRef.settings?.referenceMode ?? false,
-            }
-          }
 
           const translationSettings = settings.translationSettings
           if (TranslationService.shouldTranslateWorldState(translationSettings)) {
@@ -935,26 +914,6 @@
     document.querySelector('textarea')?.focus()
   }
 
-  async function handleManualImageGeneration() {
-    if (!lastImageGenContext || manualImageGenDisabled) return
-    const storySettings = story.currentStory?.settings
-    if (!storySettings || storySettings.imageGenerationMode === 'none') return
-    isManualImageGenRunning = true
-    try {
-      await aiService.generateImagesForNarrative({
-        ...lastImageGenContext,
-        imageGenerationMode: story.currentStory?.settings?.imageGenerationMode,
-        allCharacters: story.characters,
-        imageSettings: settings.systemServicesSettings.imageGeneration,
-        getImageProfile: (id) => settings.getImageProfile(id),
-      })
-    } catch (error) {
-      log('Manual image generation failed (non-fatal)', error)
-    } finally {
-      isManualImageGenRunning = false
-    }
-  }
-
   async function handleSubmit() {
     if (!inputValue.trim() || ui.isGenerating || !story.currentStory) return
 
@@ -1085,6 +1044,49 @@
     ui.clearGenerationError()
   }
 
+  /**
+   * Regenerate a narration that has no matching retry backup. That is not the rare case
+   * the name suggests: `ui.retryBackup` lives in an in-memory SvelteMap, so it is gone
+   * after any app restart or story switch, and this is then the only regenerate available
+   * for the last narration.
+   *
+   * Unlike `handleRetryLastMessage`, there is no pre-generation snapshot to restore from,
+   * so the world state has to be unwound from what the entry itself recorded --
+   * `undoNarrationForRegenerate`. Skipping that step let the discarded narration's
+   * classification stay applied while the replacement's was added on top: story time
+   * advanced twice for one user action, and entities it invented outlived it.
+   */
+  async function handleRegenerateNarration(entryId: string) {
+    if (ui.isGenerating) return
+
+    const userActionEntry = findPrecedingUserAction(story.entries, entryId)
+    if (!userActionEntry) return
+
+    let undo: { entitiesUndone: boolean; timeUndone: boolean }
+    try {
+      undo = await story.undoNarrationForRegenerate(entryId)
+    } catch (error) {
+      ui.showToast(errMessage(error), 'error')
+      return
+    }
+
+    // Entity changes are only reversible when stateTracking recorded a delta for the
+    // entry. Say so rather than leaving the user to notice a stray character later.
+    if (!undo.entitiesUndone) {
+      ui.showToast(
+        'Regenerating: story time was restored, but characters, locations or items the ' +
+          'previous response added could not be undone. Enable State Tracking in ' +
+          'Experimental Features to make these reversible.',
+        'warning',
+      )
+    }
+
+    await generateResponse(userActionEntry.id, userActionEntry.content, {
+      countStyleReview: false,
+      styleReviewSource: 'regenerate',
+    })
+  }
+
   async function handleRetryLastMessage() {
     const backup = ui.retryBackup
     console.log('[handleRetryLastMessage] called', {
@@ -1099,11 +1101,18 @@
 
     const storyId = story.currentStory.id
 
+    // Captured before the clear below, which is what makes the reuse at the bottom of this
+    // function possible at all: `ui.lastRetrievalResult` is read there, and nothing between
+    // here and there ever writes it back (retryService is handed setLastLorebookRetrieval,
+    // not setLastRetrievalResult). Reading the store at the call site returned the null set
+    // on the next line, so every retry silently re-ran retrieval from scratch -- an entire
+    // agentic loop, now that agentic is the default mode.
+    const cachedRetrieval = ui.lastRetrievalResult
+
     ui.clearGenerationError()
     ui.clearSuggestions(storyId)
     ui.clearActionChoices(storyId)
     ui.setLastRetrievalResult(null)
-    lastImageGenContext = null
 
     const result = await retryService.handleRetryLastMessage(
       backup,
@@ -1123,9 +1132,6 @@
         clearGenerationError: () => ui.clearGenerationError(),
         clearSuggestions: () => ui.clearSuggestions(storyId),
         clearActionChoices: () => ui.clearActionChoices(storyId),
-        clearImageContext: () => {
-          lastImageGenContext = null
-        },
       },
     )
 
@@ -1152,7 +1158,7 @@
       await generateResponse(userActionEntry.id, promptContent, {
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
-        cachedRetrievalResult: ui.lastRetrievalResult,
+        cachedRetrievalResult: cachedRetrieval,
       })
     } finally {
       ui.setRetryingLastMessage(false)
@@ -1340,26 +1346,6 @@
               : `Send (${sendKeyHint})`}><Send class="h-6 w-6" /></button
           >{/if}
       </div>
-    </div>
-  {/if}
-
-  {#if canShowManualImageGen}
-    <div class="flex justify-end">
-      <Button
-        variant="secondary"
-        size="sm"
-        onclick={handleManualImageGeneration}
-        disabled={manualImageGenDisabled}
-        title={manualImageGenDisabled && !hasRequiredCredentials()
-          ? `Add a ${getProviderDisplayName()} API key in Settings to generate images`
-          : 'Generate images for the last narration'}
-        class="gap-1.5 text-xs"
-      >
-        {#if isManualImageGenRunning}<Loader2 class="h-4 w-4 animate-spin" />{:else}<ImageIcon
-            class="h-4 w-4"
-          />{/if}
-        {isManualImageGenRunning ? 'Generating...' : 'Generate Images'}
-      </Button>
     </div>
   {/if}
 </div>

@@ -22,6 +22,13 @@ import { createMappers } from './idMaps'
 export interface ImportStructureOptions {
   /** Sync keeps the original title; a user-facing import marks the copy. */
   skipImportedSuffix?: boolean
+  /**
+   * Fired the moment the story row exists, before the rest of the structure is written. Lets a
+   * caller start treating the import as rollback-eligible without waiting for this whole
+   * function to resolve — a failure anywhere below (e.g. a bad chapter row) must still trigger a
+   * cleanup of everything inserted so far, not just of failures after this function returns.
+   */
+  onStoryCreated?: () => void
 }
 
 /**
@@ -34,7 +41,7 @@ export async function importStructure(
 ): Promise<void> {
   const { newStoryId, oldToNewId, branchIdMap, checkpointIdMap } = maps
   const { mapBranchId, mapEntryId, mapOverridesId, remapEntityId } = createMappers(maps)
-  const { skipImportedSuffix = false } = options
+  const { skipImportedSuffix = false, onStoryCreated } = options
 
   const importedStory: Omit<Story, 'createdAt' | 'updatedAt'> = {
     id: newStoryId,
@@ -53,6 +60,7 @@ export async function importStructure(
   }
 
   await database.createStory(importedStory)
+  onStoryCreated?.()
 
   // Branches: parents must exist before children, so insert topologically rather than in
   // array order. Checkpoint links are recorded now and applied once checkpoints exist.

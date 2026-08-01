@@ -135,10 +135,3 @@ export const QUICK_START_SEEDS: QuickStartSeed[] = [
     },
   },
 ]
-
-/**
- * Get a quick start seed by ID
- */
-export function getQuickStartSeed(id: string): QuickStartSeed | undefined {
-  return QUICK_START_SEEDS.find((seed) => seed.id === id)
-}

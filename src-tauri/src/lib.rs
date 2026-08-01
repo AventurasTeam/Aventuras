@@ -230,6 +230,12 @@ pub fn run() {
             sql: include_str!("../migrations/035_entry_versions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 36,
+            description: "pack_template_baseline",
+            sql: include_str!("../migrations/036_pack_template_baseline.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]

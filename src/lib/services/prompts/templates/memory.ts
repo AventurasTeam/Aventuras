@@ -188,39 +188,74 @@ const agenticRetrievalPromptTemplate: PromptTemplate = {
   description: 'Agentic context retrieval for gathering past story context',
   content: `You are a context retrieval agent for an interactive story. Your job is to gather relevant past context that will help the narrator respond to the current situation.
 
-Guidelines:
-1. Start by reviewing the chapter list to understand the story structure
-2. Query specific chapters by asking targeted questions - do NOT ask for "full content" or "everything that happened"
+{% if grepEnabled %}Your two ways of looking into the past cost very different amounts:
+- **grep_chapters is free.** It searches the verbatim story text and costs no LLM call. It also tells you how many times a phrase occurs in each chapter, and stamps every excerpt with the in-story time of the entry it came from.
+- **query_chapter is expensive.** Every call reads a whole chapter with a second model.
+
+So work grep-first:
+1. Start from the chapter list below - it is complete, with every chapter's full summary. There is no tool to list chapters; that list is all of them.
+2. Reach for grep_chapters by default. Search a name, an object, a place.
+   - **It matches literal text, not keywords.** "first time rune" finds nothing unless those three words appear in that exact order, one after another. Searching two ideas at once always fails. Search the single most distinctive *word* first, then narrow using a phrase you have actually seen in the results.
+   - It answers "where is this mentioned", "did this ever happen", "what were the exact words" outright — often you need nothing else.
+   - Its per-chapter counts tell you *which* chapter is worth a deeper look, so you never pay query_chapter to find out where something is.
+   - If a search is noisy, narrow it: a longer phrase, wholeWord for short names, or specific chapterNumbers. When there are more hits than fit, you get a spread across the matching chapters rather than the first few - the per-chapter counts stay complete either way, so narrow with chapterNumbers to see more of one stretch.
+   - **A second grep restricted to one chapter is the step before query_chapter, not an afterthought.** When the counts point at a chapter, re-run the same search with chapterNumbers set to it: the whole quote budget then goes to that one chapter, and it costs nothing. Reach for query_chapter only if reading those passages still leaves the question open.
+   - A grep that finds nothing is a real answer: it means the phrase does not appear in the story text.
+   - The RECENT SCENE below may be trimmed to its most recent part. Whatever was trimmed off is searchable as chapter -1; what you can already read there is not, so grep never returns text you already have.
+3. Use query_chapter only when the text needs to be interpreted or synthesized rather than located — "how did this relationship change", "what was the emotional outcome" — and by then you should already know which chapter to ask. Ask targeted questions, never for "full content" or "everything that happened"{% else %}query_chapter is your only way into the past, and it is expensive: every call reads a whole chapter with a second model. Spend it deliberately.
+
+1. Start from the chapter list below - it is complete, with every chapter's full summary. There is no tool to list chapters; that list is all of them.
+2. Use those summaries to decide which chapter can answer your question, before spending a query on it. Often the list alone is enough and no query is needed.
+3. Then call query_chapter with a targeted question, never for "full content" or "everything that happened"{% endif %}
    - Good: "What did the protagonist learn about the artifact?"
    - Good: "How did the confrontation with the villain end?"
    - Bad: "Give me the full content of this chapter"
-3. Focus on gathering context about:
+   - Chapter summaries are not repeated in tool results. The chapter list below is the one place they live; read them there.
+4. Focus on gathering context about:
    - Characters mentioned or involved
    - Locations being revisited
    - Plot threads being referenced
    - Items or information from the past
    - Relationship history
-4. Be selective - only gather truly relevant information
-5. Search and select lorebook entries that are relevant to the current context
-6. When you have enough context, call finish_retrieval with:
-   - synthesis: Why you selected these entries
-   - chapterSummary: A summary of key facts learned from chapter queries (character states, past events, relationships, plot points) that the narrator needs to know
+5. Be selective - only gather truly relevant information
+6. You can read lorebook entries with search_entries and get_entry to understand names and terms you come across. You do NOT choose which entries reach the narrator - that is handled separately, and the entries listed below are reference material for your own reasoning.{% if worldStateEnabled %} inspect_world_state does the same for live-tracked entities: characters, locations, inventory and active plot threads as they stand right now.{% endif %}
+7. When you have enough context, call finish_retrieval with:
+   - synthesis: What you looked for and what you found
+   - chapterSummary: A summary of key facts learned from your searches and chapter queries (character states, past events, relationships, plot points) that the narrator needs to know
 
-The chapterSummary is crucial - it's how information from past chapters reaches the narrator. Include specific details, not just "I learned about X."`,
-  userContent: `# Current Situation
+Both synthesis and chapterSummary are shown to the narrator, so do not repeat yourself between them: synthesis is one or two sentences on what you went looking for, chapterSummary is the material itself. Put the facts in chapterSummary, with specific details rather than "I learned about X." A finish_retrieval with nothing in either field means the whole retrieval was for nothing.`,
+  // Stable material first, volatile material last, and the order matters for a reason that
+  // is not stylistic: with prefix KV caching, everything up to the first token that differs
+  // from the previous request is reused, and everything after it is reprocessed.
+  //
+  // The chapter list is ~93% of this prompt and changes only when a chapter is written. The
+  // user input, the story time and the recent scene change every single turn. With the
+  // volatile part first, those few hundred tokens broke the prefix and the whole chapter
+  // list was reprocessed on every turn -- measured at 12,363 tokens of prompt processing per
+  // turn on llama-server. Behind the stable block, it is reused instead.
+  //
+  // It costs nothing in quality: the end of the prompt is the strongest position for the
+  // instruction anyway, and that is where the situation now sits.
+  userContent: `# Available Chapters: {{ chaptersCount }}
+{{ chapterList }}
+
+# Lorebook Entries for reference: {{ entriesCount }}
+{{ entryList }}
+
+# Current Situation
 
 USER INPUT:
 "{{ userInput }}"
-
+{% if currentStoryTime != blank %}
+CURRENT STORY TIME: {{ currentStoryTime }}
+This is "now". Excerpt timestamps use the same numbering, so judge how long ago something happened by comparing against it.
+{% endif %}
 RECENT SCENE:
 {{ recentContext }}
-
-# Available Chapters: {{ chaptersCount }}
-{{ chapterList }}
-
-# Lorebook Entries: {{ entriesCount }}
-{{ entryList }}
-
+{% if alreadyInContext != blank %}
+# Already In The Narrator's Prompt
+{{ alreadyInContext }}
+{% endif %}
 Please gather relevant context from past chapters that will help respond to this situation. Focus on information that is actually needed - often, no retrieval is necessary for simple actions.`,
 }
 

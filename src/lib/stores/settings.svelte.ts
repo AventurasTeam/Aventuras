@@ -17,6 +17,13 @@ import type {
 import { database } from '$lib/services/database'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
+import {
+  AGENTIC_RETRIEVAL_DEFAULTS,
+  ENTRY_RETRIEVAL_DEFAULTS,
+  MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
+  WORLD_STATE_INJECTION_DEFAULTS,
+} from '$lib/services/ai/core/defaults'
+import { migrateEntryRetrieval, migrateWorldStateInjection } from './settingsMigrations'
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
@@ -36,7 +43,6 @@ export type ProviderPreset = 'openrouter' | 'nanogpt' | 'openai-compatible'
 
 // Default profile IDs for each provider
 export const DEFAULT_OPENROUTER_PROFILE_ID = 'default-openrouter-profile'
-export const DEFAULT_NANOGPT_PROFILE_ID = 'default-nanogpt-profile'
 
 function dedupeModelIds(models: string[]): string[] {
   return Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)))
@@ -345,6 +351,7 @@ export interface StyleReviewerSettings {
   temperature: number
   maxTokens: number
   triggerInterval: number
+  recentEntriesCount: number
   reasoningEffort: ReasoningEffort
   manualBody: string
 }
@@ -364,7 +371,8 @@ export function getDefaultStyleReviewerSettingsForProvider(
     model: preset.model,
     temperature: 0.3,
     maxTokens: 8192,
-    triggerInterval: 5,
+    triggerInterval: 6,
+    recentEntriesCount: 32,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
   }
@@ -433,13 +441,18 @@ export function getDefaultInteractiveVaultSettingsForProvider(
 export interface AgenticRetrievalSettings {
   presetId?: string
   profileId: string | null // API profile to use (null = use default profile)
-  enabled: boolean
   model: string
   temperature: number
   maxIterations: number
-  agenticThreshold: number // Use agentic if chapters > N
   reasoningEffort: ReasoningEffort
   manualBody: string
+  /**
+   * Give the retrieval agent the no-LLM grep_chapters tool, so it searches the story text
+   * instead of paying a second model to read whole chapters.
+   */
+  grepEnabled: boolean
+  /** Excerpts a single grep_chapters call may quote. Width is fixed; see the tool. */
+  grepExcerptsPerSearch: number
 }
 
 export function getDefaultAgenticRetrievalSettings(): AgenticRetrievalSettings {
@@ -453,13 +466,15 @@ export function getDefaultAgenticRetrievalSettingsForProvider(
   return {
     presetId: 'agentic',
     profileId: null, // Use default profile
-    enabled: false,
     model: preset.model,
     temperature: 0.3,
-    maxIterations: 30,
-    agenticThreshold: 30,
+    maxIterations: AGENTIC_RETRIEVAL_DEFAULTS.maxIterations,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
+    // On by default: measured against the same two turns, grep cut the retrieval agent's
+    // prompt cost by 31% and produced the more specific answer of the two.
+    grepEnabled: true,
+    grepExcerptsPerSearch: AGENTIC_RETRIEVAL_DEFAULTS.grepExcerptsPerSearch,
   }
 }
 
@@ -475,7 +490,7 @@ export function getDefaultTimelineFillSettingsForProvider(
     presetId: 'memory',
     profileId: null, // Use default profile
     enabled: true,
-    mode: 'static',
+    mode: 'agentic',
     model: preset.model,
     temperature: 0.3,
     maxQueries: 5,
@@ -518,9 +533,14 @@ export interface EntryRetrievalSettings {
   profileId: string | null // API profile to use (null = use default profile)
   model: string
   temperature: number
-  maxTier3Entries: number // 0 = unlimited
+  /** Cap on Tier 2 (keyword matched) */
+  maxTier2Entries: number
+  /** Cap on Tier 3 (LLM selected) */
+  maxTier3Entries: number
   maxWordsPerEntry: number // 0 = unlimited
   enableLLMSelection: boolean
+  /** Recent story entries scanned for Tier 2 name/keyword matching and included in the Tier 3 prompt */
+  recentEntriesCount: number
   reasoningEffort: ReasoningEffort
   manualBody: string
 }
@@ -538,11 +558,46 @@ export function getDefaultEntryRetrievalSettingsForProvider(
     profileId: null, // Use default profile
     model: preset.model,
     temperature: 0.2,
-    maxTier3Entries: 0,
+    maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
+    maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
     maxWordsPerEntry: 0,
     enableLLMSelection: true,
+    recentEntriesCount: 5,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
+  }
+}
+
+// World State Injection settings (Tier 3 LLM selection for live-tracked
+// characters/locations/items/story beats -- distinct from Entry Retrieval, which
+// selects Lorebook `Entry[]` records; see WorldStateInjector.ts for the full
+// distinction). Model/temperature/profile are NOT stored here -- they come from
+// the 'worldStateInjection' Agent Profile assignment, same as every other AI task.
+export interface WorldStateInjectionSettings {
+  /** Number of not-yet-selected live entities that triggers Tier 3 LLM selection */
+  llmThreshold: number
+  /**
+   * Cap on Tier 2 (name matched).
+   *
+   * Tier 1 -- the state-based entries and the sticky carry-over -- is deliberately NOT
+   * capped: it is the baseline the narrator needs regardless of how much of it there is.
+   */
+  maxTier2Entries: number
+  /** Cap on Tier 3, in the branch where the LLM had to choose */
+  maxTier3Entries: number
+  /** Enable LLM selection (Tier 3) for large entity counts */
+  enableLLMSelection: boolean
+  /** Recent story entries scanned for Tier 2 name matching and included in the Tier 3 prompt */
+  recentEntriesCount: number
+}
+
+export function getDefaultWorldStateInjectionSettings(): WorldStateInjectionSettings {
+  return {
+    llmThreshold: WORLD_STATE_INJECTION_DEFAULTS.llmThreshold,
+    maxTier2Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
+    maxTier3Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
+    enableLLMSelection: true,
+    recentEntriesCount: 5,
   }
 }
 
@@ -716,10 +771,6 @@ export interface LoreManagementSpecificSettings {}
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface InteractiveVaultSpecificSettings {}
 
-export interface AgenticRetrievalSpecificSettings {
-  maxIterations: number
-}
-
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface TimelineFillSpecificSettings {}
 
@@ -730,8 +781,6 @@ export interface ChapterQuerySpecificSettings {}
 export interface ContextWindowSettings {
   /** Number of recent entries for main narrative context */
   recentEntriesForNarrative: number
-  /** Number of recent entries for tiered context building */
-  recentEntriesForTiered: number
   /** Number of recent entries for classification/retrieval operations */
   recentEntriesForRetrieval: number
   /** Number of recent entries for action choices context */
@@ -740,35 +789,12 @@ export interface ContextWindowSettings {
   userActionsForStyle: number
   /** Number of recent entries for lore management context */
   recentEntriesForLoreManagement: number
-  /** Number of recent entries for name matching in tiered context */
-  recentEntriesForNameMatching: number
 }
 
 // Lorebook injection limits
 export interface LorebookLimitsSettings {
-  /** Max lorebook entries for action choices */
-  maxForActionChoices: number
   /** Max lorebook entries for suggestions */
   maxForSuggestions: number
-  /** Max lorebook entries for agentic preview */
-  maxForAgenticPreview: number
-  /** Threshold for switching to LLM-based selection */
-  llmThreshold: number
-  /** Max entries per tier in context building */
-  maxEntriesPerTier: number
-}
-
-export interface EntryRetrievalSpecificSettings {
-  enableLLMSelection: boolean
-  activationTimeout: number
-  stickyTimeout: number
-  stickinessDecay: number
-  tier1DistanceThreshold: number
-  tier2DistanceThreshold: number
-  tier2Boost: number
-  tier3Boost: number
-  entryContextWindow: number
-  recencyWeight: number
 }
 
 export interface ImageGenerationSpecificSettings {
@@ -793,10 +819,8 @@ export interface ServiceSpecificSettings {
   styleReviewer: StyleReviewerSpecificSettings
   loreManagement: LoreManagementSpecificSettings
   interactiveVault: InteractiveVaultSpecificSettings
-  agenticRetrieval: AgenticRetrievalSpecificSettings
   timelineFill: TimelineFillSpecificSettings
   chapterQuery: ChapterQuerySpecificSettings
-  entryRetrieval: EntryRetrievalSpecificSettings
   imageGeneration: ImageGenerationSpecificSettings
   tts: TTSSpecificSettings
   characterCardImport: CharacterCardImportSpecificSettings
@@ -826,10 +850,8 @@ export function getDefaultServiceSpecificSettings(): ServiceSpecificSettings {
     styleReviewer: getDefaultStyleReviewerSpecificSettings(),
     loreManagement: getDefaultLoreManagementSpecificSettings(),
     interactiveVault: getDefaultInteractiveVaultSpecificSettings(),
-    agenticRetrieval: getDefaultAgenticRetrievalSpecificSettings(),
     timelineFill: getDefaultTimelineFillSpecificSettings(),
     chapterQuery: getDefaultChapterQuerySpecificSettings(),
-    entryRetrieval: getDefaultEntryRetrievalSpecificSettings(),
     imageGeneration: getDefaultImageGenerationSpecificSettings(),
     tts: getDefaultTTSSpecificSettings(),
     characterCardImport: getDefaultCharacterCardImportSpecificSettings(),
@@ -871,33 +893,12 @@ export function getDefaultInteractiveVaultSpecificSettings(): InteractiveVaultSp
   return {}
 }
 
-export function getDefaultAgenticRetrievalSpecificSettings(): AgenticRetrievalSpecificSettings {
-  return {
-    maxIterations: 10,
-  }
-}
-
 export function getDefaultTimelineFillSpecificSettings(): TimelineFillSpecificSettings {
   return {}
 }
 
 export function getDefaultChapterQuerySpecificSettings(): ChapterQuerySpecificSettings {
   return {}
-}
-
-export function getDefaultEntryRetrievalSpecificSettings(): EntryRetrievalSpecificSettings {
-  return {
-    enableLLMSelection: true,
-    activationTimeout: 2000,
-    stickyTimeout: 10000,
-    stickinessDecay: 0.9,
-    tier1DistanceThreshold: 0.5,
-    tier2DistanceThreshold: 0.7,
-    tier2Boost: 0.5,
-    tier3Boost: 0.3,
-    entryContextWindow: 1000,
-    recencyWeight: 0.3,
-  }
 }
 
 export function getDefaultImageGenerationSpecificSettings(): ImageGenerationSpecificSettings {
@@ -922,22 +923,16 @@ export function getDefaultCharacterCardImportSpecificSettings(): CharacterCardIm
 export function getDefaultContextWindowSettings(): ContextWindowSettings {
   return {
     recentEntriesForNarrative: 20,
-    recentEntriesForTiered: 10,
     recentEntriesForRetrieval: 5,
     recentEntriesForChoices: 5,
     userActionsForStyle: 6,
     recentEntriesForLoreManagement: 10,
-    recentEntriesForNameMatching: 3,
   }
 }
 
 export function getDefaultLorebookLimitsSettings(): LorebookLimitsSettings {
   return {
-    maxForActionChoices: 12,
-    maxForSuggestions: 15,
-    maxForAgenticPreview: 20,
-    llmThreshold: 30,
-    maxEntriesPerTier: 20,
+    maxForSuggestions: MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   }
 }
 
@@ -954,6 +949,7 @@ export interface SystemServicesSettings {
   timelineFill: TimelineFillSettings
   chapterQuery: ChapterQuerySettings
   entryRetrieval: EntryRetrievalSettings
+  worldStateInjection: WorldStateInjectionSettings
   imageGeneration: ImageGenerationServiceSettings
   tts: TTSServiceSettings
   characterCardImport: CharacterCardImportSettings
@@ -973,6 +969,7 @@ export function getDefaultSystemServicesSettings(): SystemServicesSettings {
     timelineFill: getDefaultTimelineFillSettings(),
     chapterQuery: getDefaultChapterQuerySettings(),
     entryRetrieval: getDefaultEntryRetrievalSettings(),
+    worldStateInjection: getDefaultWorldStateInjectionSettings(),
     imageGeneration: getDefaultImageGenerationSettings(),
     tts: getDefaultTTSSettings(),
     characterCardImport: getDefaultCharacterCardImportSettings(),
@@ -995,6 +992,9 @@ export function getDefaultSystemServicesSettingsForProvider(
     timelineFill: getDefaultTimelineFillSettingsForProvider(provider),
     chapterQuery: getDefaultChapterQuerySettingsForProvider(provider),
     entryRetrieval: getDefaultEntryRetrievalSettingsForProvider(provider),
+    // No per-provider variant: unlike entryRetrieval, this has no model/temperature
+    // fields of its own (see WorldStateInjectionSettings doc comment).
+    worldStateInjection: getDefaultWorldStateInjectionSettings(),
     imageGeneration: getDefaultImageGenerationSettingsForProvider(provider),
     tts: getDefaultTTSSettingsForProvider(provider),
     characterCardImport: getDefaultCharacterCardImportSettingsForProvider(provider),
@@ -1134,10 +1134,18 @@ export function getDefaultUISettings(): UISettings {
   }
 }
 
-export const DEFAULT_SERVICE_PRESET_ASSIGNMENTS: Record<string, string> = {
+/**
+ * Single source of truth for every AI service identity in the app.
+ * `ServiceId` is derived from this object's keys, so `BaseAIService` and every
+ * factory method that assigns a serviceId are checked against it at compile time --
+ * a typo'd or orphaned serviceId (like the entryRetrieval/EntryInjector collision
+ * this replaced) now fails `npm run check` instead of requiring a manual grep audit.
+ */
+export const DEFAULT_SERVICE_PRESET_ASSIGNMENTS = {
   classifier: 'classification',
   lorebookClassifier: 'classification',
   entryRetrieval: 'classification',
+  worldStateInjection: 'classification',
   characterCardImport: 'classification',
   memory: 'memory',
   chapterQuery: 'memory',
@@ -1164,7 +1172,10 @@ export const DEFAULT_SERVICE_PRESET_ASSIGNMENTS: Record<string, string> = {
   'translation:suggestions': 'translation',
   'translation:actionChoices': 'translation',
   'translation:wizard': 'translation',
-}
+} satisfies Record<string, string>
+
+/** Every valid AI service identity, derived from DEFAULT_SERVICE_PRESET_ASSIGNMENTS's keys. */
+export type ServiceId = keyof typeof DEFAULT_SERVICE_PRESET_ASSIGNMENTS
 
 // Settings Store using Svelte 5 runes
 class SettingsStore {
@@ -1398,7 +1409,16 @@ class SettingsStore {
       // Load provider preset (which provider's defaults to use)
       const providerPreset = await database.getSetting('provider_preset')
       if (providerPreset) {
-        this.providerPreset = providerPreset as ProviderType
+        if (providerPreset in PROVIDERS) {
+          this.providerPreset = providerPreset as ProviderType
+        } else {
+          // Legacy/unrecognized value (e.g. the old 'custom' preset, replaced by
+          // 'openai-compatible' when the provider list was expanded to named providers).
+          // Leaving providerPreset pointing at a key that isn't in PROVIDERS crashes every
+          // reset-to-default flow deep inside PROVIDERS[provider].services.
+          this.providerPreset = 'openai-compatible'
+          await database.setSetting('provider_preset', 'openai-compatible')
+        }
       }
 
       // Load first-run status
@@ -1564,6 +1584,13 @@ class SettingsStore {
         try {
           const loaded = JSON.parse(assignmentsJson)
           this.servicePresetAssignments = { ...this.servicePresetAssignments, ...loaded }
+          // worldStateInjection used to silently piggyback on entryRetrieval's profile
+          // assignment. If the user has never seen worldStateInjection as its own task
+          // (missing from their saved assignments) but did customize entryRetrieval's
+          // profile, inherit that assignment instead of falling back to the map default.
+          if (!('worldStateInjection' in loaded) && loaded.entryRetrieval) {
+            this.servicePresetAssignments.worldStateInjection = loaded.entryRetrieval
+          }
         } catch {
           // Keep defaults
         }
@@ -1585,16 +1612,8 @@ class SettingsStore {
             styleReviewer: getDefaultStyleReviewerSpecificSettings(),
             loreManagement: getDefaultLoreManagementSpecificSettings(),
             interactiveVault: getDefaultInteractiveVaultSpecificSettings(),
-            agenticRetrieval: {
-              ...getDefaultAgenticRetrievalSpecificSettings(),
-              ...loaded.agenticRetrieval,
-            },
             timelineFill: getDefaultTimelineFillSpecificSettings(),
             chapterQuery: getDefaultChapterQuerySpecificSettings(),
-            entryRetrieval: {
-              ...getDefaultEntryRetrievalSpecificSettings(),
-              ...loaded.entryRetrieval,
-            },
             imageGeneration: {
               ...getDefaultImageGenerationSpecificSettings(),
               ...loaded.imageGeneration,
@@ -1642,7 +1661,14 @@ class SettingsStore {
             agenticRetrieval: { ...defaults.agenticRetrieval, ...loaded.agenticRetrieval },
             timelineFill: { ...defaults.timelineFill, ...loaded.timelineFill },
             chapterQuery: { ...defaults.chapterQuery, ...loaded.chapterQuery },
-            entryRetrieval: { ...defaults.entryRetrieval, ...loaded.entryRetrieval },
+            entryRetrieval: migrateEntryRetrieval({
+              ...defaults.entryRetrieval,
+              ...loaded.entryRetrieval,
+            }),
+            worldStateInjection: migrateWorldStateInjection(loaded.worldStateInjection, {
+              ...defaults.worldStateInjection,
+              ...loaded.worldStateInjection,
+            }),
             imageGeneration: { ...defaults.imageGeneration, ...loaded.imageGeneration },
             tts: { ...defaults.tts, ...loaded.tts },
             characterCardImport: { ...defaults.characterCardImport, ...loaded.characterCardImport },
@@ -2253,7 +2279,6 @@ class SettingsStore {
       this.systemServicesSettings.entryRetrieval.profileId = DEFAULT_OPENROUTER_PROFILE_ID
       needsSave = true
     }
-
     if (needsSave) {
       await this.saveSystemServicesSettings()
       console.log('[Settings] Migrated null/undefined profileIds to default OpenRouter profile')
@@ -2800,6 +2825,11 @@ class SettingsStore {
     await this.saveSystemServicesSettings()
   }
 
+  async resetWorldStateInjectionSettings() {
+    this.systemServicesSettings.worldStateInjection = getDefaultWorldStateInjectionSettings()
+    await this.saveSystemServicesSettings()
+  }
+
   async resetImageGenerationSettings() {
     this.systemServicesSettings.imageGeneration = getDefaultImageGenerationSettingsForProvider(
       this.providerPreset,
@@ -2830,11 +2860,6 @@ class SettingsStore {
 
   async resetLorebookLimitsSettings() {
     this.serviceSpecificSettings.lorebookLimits = getDefaultLorebookLimitsSettings()
-    await this.saveServiceSpecificSettings()
-  }
-
-  async resetAgenticRetrievalSpecificSettings() {
-    this.serviceSpecificSettings.agenticRetrieval = getDefaultAgenticRetrievalSpecificSettings()
     await this.saveServiceSpecificSettings()
   }
 
@@ -3132,7 +3157,7 @@ class SettingsStore {
    * @param serviceId - The service identifier (e.g., 'classifier', 'wizard:settingExpansion')
    * @returns The preset ID assigned to this service
    */
-  getServicePresetId(serviceId: string): string {
+  getServicePresetId(serviceId: ServiceId): string {
     return this.servicePresetAssignments[serviceId]
   }
 
@@ -3141,7 +3166,7 @@ class SettingsStore {
    * @param serviceId - The service identifier (e.g., 'classifier', 'wizard:settingExpansion')
    * @param presetId - The preset ID to assign (e.g., 'classification', 'memory', 'wizard')
    */
-  async setServicePresetId(serviceId: string, presetId: string) {
+  async setServicePresetId(serviceId: ServiceId, presetId: string) {
     this.servicePresetAssignments[serviceId] = presetId
     await database.setSetting(
       'service_preset_assignments',

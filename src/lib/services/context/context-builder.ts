@@ -10,6 +10,7 @@
  */
 
 import { database } from '$lib/services/database'
+import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
@@ -111,17 +112,8 @@ export class ContextBuilder {
   async render(templateId: string): Promise<RenderResult> {
     log('render', { templateId, packId: this.packId })
 
-    const systemTemplate = await database.getPackTemplate(this.packId, templateId)
-    if (!systemTemplate) {
-      log('WARNING: system template not found', { templateId, packId: this.packId })
-    }
-    const userTemplate = await database.getPackTemplate(this.packId, `${templateId}-user`)
-    if (!userTemplate) {
-      log('WARNING: user template not found', {
-        templateId: `${templateId}-user`,
-        packId: this.packId,
-      })
-    }
+    const systemTemplate = await this.resolveTemplate(templateId)
+    const userTemplate = await this.resolveTemplate(`${templateId}-user`)
 
     const systemResult = systemTemplate?.content
       ? templateEngine.render(systemTemplate.content, this.context)
@@ -140,6 +132,44 @@ export class ContextBuilder {
       system: systemResult ?? systemTemplate?.content ?? '',
       user: userResult ?? userTemplate?.content ?? '',
     }
+  }
+
+  /**
+   * Look up one template id, falling back to the default pack and then to the code
+   * baseline.
+   *
+   * A pack only holds the templates it was seeded with, so a template introduced by a
+   * later app version can be missing from a pack that predates it -- packs imported
+   * from a file never pass through PackService's backfill at all. Without a fallback
+   * that renders as an empty prompt and the caller silently issues a contentless
+   * request, which is far worse than using a slightly less customized template.
+   */
+  private async resolveTemplate(templateId: string): Promise<{ content: string } | null> {
+    const own = await database.getPackTemplate(this.packId, templateId)
+    if (own) return own
+
+    if (this.packId !== 'default-pack') {
+      const fallback = await database.getPackTemplate('default-pack', templateId)
+      if (fallback) {
+        log('template missing from pack, falling back to default pack', {
+          templateId,
+          packId: this.packId,
+        })
+        return fallback
+      }
+    }
+
+    // Last resort: the compiled-in baseline. `-user` ids map to a template's userContent.
+    const baseId = templateId.endsWith('-user') ? templateId.slice(0, -'-user'.length) : templateId
+    const baseline = PROMPT_TEMPLATES.find((t) => t.id === baseId)
+    const content = templateId.endsWith('-user') ? baseline?.userContent : baseline?.content
+    if (content) {
+      log('template missing from every pack, falling back to code baseline', { templateId })
+      return { content }
+    }
+
+    log('WARNING: template not found anywhere', { templateId, packId: this.packId })
+    return null
   }
 
   /**

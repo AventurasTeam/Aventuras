@@ -1,6 +1,6 @@
 import { emitBackgroundImageAnalysisFailed } from '$lib/services/events'
 import { ContextBuilder } from '$lib/services/context'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import type { StoryEntry } from '$lib/types'
 import { createLogger } from '$lib/log'
 import { backgroundImageAnalysisResultSchema, type BackgroundImageAnalysisResult } from '../sdk'
@@ -13,7 +13,7 @@ export class BackgroundImageService extends BaseAIService {
   private imageSettings: typeof settings.systemServicesSettings.imageGeneration
 
   constructor(
-    serviceId: string,
+    serviceId: ServiceId,
     imageSettings: typeof settings.systemServicesSettings.imageGeneration,
   ) {
     super(serviceId)

@@ -5,6 +5,7 @@
  */
 
 import type { Chapter, StoryEntry, SummaryDetail } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import {
@@ -19,6 +20,7 @@ import {
 } from '../sdk/schemas/memory'
 import { AI_CONFIG } from '../core/config'
 import { createLogger } from '$lib/log'
+import { entryTimeTag, formatTimeSpan } from '$lib/utils/storyTime'
 
 const log = createLogger('Memory')
 
@@ -55,7 +57,7 @@ export interface RetrievalContext {
 }
 
 export class MemoryService extends BaseAIService {
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 
@@ -237,17 +239,28 @@ export class MemoryService extends BaseAIService {
     }
 
     let block = '\n\n[RETRIEVED MEMORY]\n'
-    block += 'The following is relevant context from earlier in the story:\n'
+    block += 'The following is relevant context from earlier in the story, oldest first:\n'
 
-    for (const chapter of relevantChapters) {
-      block += `\n--- Chapter ${chapter.number} ---\n`
+    // Oldest first: this block is read as a sequence, and `chapters` is not guaranteed
+    // sorted (a new chapter is appended without re-sorting).
+    for (const chapter of [...relevantChapters].sort((a, b) => a.number - b.number)) {
+      const span = formatTimeSpan(chapter.startTime, chapter.endTime)
+      block += `\n--- Chapter ${chapter.number}${span ? ` (${span})` : ''} ---\n`
 
       // Use full entries if callback provided, otherwise use summary
       if (getChapterEntries) {
         const entries = getChapterEntries(chapter)
         if (entries.length > 0) {
+          // Time tag only when it changes -- repeating it per line says nothing.
+          let previousTag: string | null = null
           block += entries
-            .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
+            .map((e) => {
+              const role = e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'
+              const tag = entryTimeTag(e, chapter)
+              const prefix = tag === previousTag ? '' : `${tag} `
+              previousTag = tag
+              return `${prefix}[${role}]: ${e.content}`
+            })
             .join('\n\n')
         } else {
           block += chapter.summary

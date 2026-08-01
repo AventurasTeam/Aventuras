@@ -37,8 +37,3 @@ export interface SyncConnectionData {
  * Current mode of the sync modal
  */
 export type SyncMode = 'select' | 'generate' | 'scan' | 'connected' | 'syncing'
-
-/**
- * Action to perform when syncing
- */
-export type SyncAction = 'push' | 'pull'

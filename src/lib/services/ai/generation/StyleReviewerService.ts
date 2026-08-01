@@ -6,6 +6,7 @@
  */
 
 import type { StoryEntry, StoryMode, POV, Tense } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
@@ -29,7 +30,7 @@ export interface StyleReviewResult {
  * Service that analyzes text for style issues.
  */
 export class StyleReviewerService extends BaseAIService {
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 
@@ -65,17 +66,21 @@ export class StyleReviewerService extends BaseAIService {
    * @param mode - Story mode for prompt context
    * @param pov - Point of view for prompt context
    * @param tense - Tense for prompt context
+   * @param recentEntriesCount - Max number of most recent narration entries to analyze
    */
   async analyzeStyle(
     entries: StoryEntry[],
     mode: StoryMode = 'adventure',
     pov: POV = 'second',
     tense: Tense = 'present',
+    recentEntriesCount = 32,
   ): Promise<StyleReviewResult> {
     log('analyzeStyle', { entriesCount: entries.length })
 
-    // Filter to narration entries only
-    const narrationEntries = entries.filter((e) => e.type === 'narration')
+    // Filter to narration entries only, keeping only the most recent window
+    const narrationEntries = entries
+      .filter((e) => e.type === 'narration')
+      .slice(-recentEntriesCount)
     if (narrationEntries.length === 0) {
       return {
         phrases: [],

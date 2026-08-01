@@ -53,6 +53,12 @@ export interface GenerationContext {
 
 // Output from retrieval phase
 export interface RetrievalResult {
+  /**
+   * The live-WorldState block from WorldStateInjector, kept separate from the memory blocks
+   * rather than pre-joined: the retrieval agent needs to be told what world state the
+   * narrator will already have, and that is only expressible while the two are distinct.
+   */
+  worldStateBlock: string | null
   chapterContext: string | null
   lorebookContext: string | null
   lorebookRetrievalResult: EntryRetrievalResult | null
