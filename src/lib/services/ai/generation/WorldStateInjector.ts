@@ -673,30 +673,40 @@ export class WorldStateInjector extends BaseAIService {
     let out = ''
 
     const traits = char.metadata?.traits
-    if (Array.isArray(traits) && traits.length > 0) {
-      out += ` [${traits.join(', ')}]`
-    }
-
     const vd = char.metadata?.visualDescriptors
-    if (!vd) return out
 
-    // Handle both old array format and new object format
-    if (Array.isArray(vd)) {
-      if (vd.length > 0) out += ` {Appearance: ${vd.join(', ')}}`
-      return out
+    const details: string[] = []
+
+    let appearanceStr = ''
+    if (vd) {
+      if (Array.isArray(vd) && vd.length > 0) {
+        appearanceStr = vd.join(', ')
+      } else if (typeof vd === 'object') {
+        const parts = [
+          vd.face,
+          vd.hair,
+          vd.eyes,
+          vd.build,
+          vd.clothing,
+          vd.accessories,
+          vd.distinguishing,
+        ].filter(Boolean)
+        if (parts.length > 0) {
+          appearanceStr = parts.join(', ')
+        }
+      }
     }
 
-    if (typeof vd === 'object') {
-      const parts = [
-        vd.face,
-        vd.hair,
-        vd.eyes,
-        vd.build,
-        vd.clothing,
-        vd.accessories,
-        vd.distinguishing,
-      ].filter(Boolean)
-      if (parts.length > 0) out += ` {Appearance: ${parts.join(', ')}}`
+    if (appearanceStr) {
+      details.push(`Appearance: ${appearanceStr}`)
+    }
+
+    if (Array.isArray(traits) && traits.length > 0) {
+      details.push(`Traits: ${traits.join(', ')}`)
+    }
+
+    if (details.length > 0) {
+      out += ` — ${details.join(' | ')}`
     }
 
     return out

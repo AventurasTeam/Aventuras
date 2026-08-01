@@ -304,7 +304,7 @@ describe('WorldStateInjector', () => {
 
     it('carries traits and appearance, which image generation depends on', async () => {
       const result = await injector.buildContext(withPlayer, '', [])
-      expect(result.contextBlock).toContain('[stubborn]')
+      expect(result.contextBlock).toContain('stubborn')
     })
 
     it('cannot be re-selected into Tier 2 or Tier 3', async () => {

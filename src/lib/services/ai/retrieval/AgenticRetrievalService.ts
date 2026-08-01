@@ -466,10 +466,10 @@ export class AgenticRetrievalService extends BaseAIService {
 
     const contextParts: string[] = []
     if (reasoning) {
-      contextParts.push(`[Retrieved Context - ${reasoning}]`)
+      contextParts.push(`[RELEVANT STORY DATA]\n${reasoning}`)
     }
     if (chapterContext) {
-      contextParts.push(`## Past Story Context\n${chapterContext}`)
+      contextParts.push(`## Relevant Story Data\n${chapterContext}`)
     }
     return { context: contextParts.join('\n\n') }
   }

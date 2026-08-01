@@ -5,16 +5,16 @@ import { joinPromptBlocks } from './promptBlocks'
 const WORLD_STATE = '\n\n[ACTIVE THREADS]\n• Ren’s Liberation: she is now his devoted pet.'
 const LOREBOOK = '\n\n[LOREBOOK CONTEXT]\n(CANONICAL - ...)'
 const AGENTIC =
-  '[Retrieved Context - I searched for all mentions of runes]\n\n## Past Story Context'
+  '[RELEVANT STORY DATA]\nI searched for all mentions of runes\n\n## Relevant Story Data'
 
 describe('joinPromptBlocks', () => {
   it('inserts the blank line a block does not bring itself', () => {
     // The measured bug: in agentic mode the narrator read
-    // "...devoted pet.[Retrieved Context - ..." with no break at all.
+    // "...devoted pet.[RELEVANT STORY DATA..." with no break at all.
     const joined = joinPromptBlocks(WORLD_STATE, AGENTIC)
 
-    expect(joined).toContain('devoted pet.\n\n[Retrieved Context')
-    expect(joined).not.toContain('pet.[Retrieved')
+    expect(joined).toContain('devoted pet.\n\n[RELEVANT STORY DATA]')
+    expect(joined).not.toContain('pet.[RELEVANT')
   })
 
   it('leaves an already-correct boundary byte-identical', () => {
@@ -72,8 +72,8 @@ describe('joinPromptBlocks', () => {
   it('is associative over the pairs it is given, for the real three-block case', () => {
     const all = joinPromptBlocks(WORLD_STATE, AGENTIC, LOREBOOK)
 
-    expect(all).toContain('devoted pet.\n\n[Retrieved Context')
-    expect(all).toContain('Past Story Context\n\n[LOREBOOK CONTEXT]')
+    expect(all).toContain('devoted pet.\n\n[RELEVANT STORY DATA]')
+    expect(all).toContain('Relevant Story Data\n\n[LOREBOOK CONTEXT]')
     expect(all).not.toContain('\n\n\n')
   })
 })

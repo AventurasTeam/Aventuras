@@ -238,7 +238,7 @@ export class MemoryService extends BaseAIService {
       return ''
     }
 
-    let block = '\n\n[RETRIEVED MEMORY]\n'
+    let block = '\n\n[RELEVANT STORY DATA]\n'
     block += 'The following is relevant context from earlier in the story, oldest first:\n'
 
     // Oldest first: this block is read as a sequence, and `chapters` is not guaranteed

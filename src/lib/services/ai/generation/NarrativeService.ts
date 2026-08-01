@@ -165,7 +165,8 @@ export function buildChapterSummariesBlock(
   for (const chapter of chapters) {
     block += `### Chapter ${chapter.number}`
     if (chapter.title) {
-      block += `: ${chapter.title}`
+      const cleanTitle = chapter.title.replace(/^Chapter\s+\d+:\s*/i, '')
+      block += `: ${cleanTitle}`
     }
     block += '\n'
 
@@ -206,7 +207,7 @@ export function buildChapterSummariesBlock(
   }
 
   if (timelineFillResult && timelineFillResult.responses.length > 0) {
-    block += '## Retrieved Context\n'
+    block += '## Relevant Story Data\n'
     block +=
       'The following information was retrieved from past chapters and is relevant to the current scene:\n\n'
 
