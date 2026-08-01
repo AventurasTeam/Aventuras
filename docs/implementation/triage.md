@@ -833,3 +833,59 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   dots is ~500 ms per type on mobile, which would dominate the turn.
   Nobody has run MMR on-device. Surfaced by M3.4 Task 5 review
   (2026-08-01).
+- **`mmr_dedupe` is a `DropReason` with no producer.**
+  [`retrieval.md → Diversity — MMR`](../memory/retrieval.md#diversity--mmr)
+  describes MMR as a pure **reordering** — "iteratively pick the
+  candidate with highest `mmr_score`, add to `S`, recompute, pick
+  next" — and the budget-fill pseudocode then iterates all of
+  `mmr_ranked`. Nothing drops a row at the MMR stage: a diversity
+  loser is demoted and subsequently dies at `below_threshold` or
+  `over_budget`. So the enum value declared in `lib/retrieval/types.ts`,
+  mirrored in `lib/db/world-json-types.ts`, and specified in
+  [`probe.md → What gets captured`](../memory/probe.md#what-gets-captured--light-mode-default)
+  is unreachable, and `PoolFunnel.mmrSize` is always identical to
+  `preFilteredSize`. M3.4's ranker is correct as written; the question
+  is what M3.5's probe UI should do with a drop-reason filter or legend
+  entry that never appears. Either delete the value from all three
+  places, or mark it explicitly reserved. Needs deciding before 3.5
+  builds the capture reader. Surfaced by M3.4 Task 6 review
+  (2026-08-01).
+- **Lore `priority` is inert in the shipped ranker, and a user-facing
+  control promises otherwise.** Two canon statements conflict.
+  [`retrieval.md → Per-type decay rates`](../memory/retrieval.md#per-type-decay-rates)
+  says lore "ranks purely on `sim_blend × (priority/100) + kw_boost`",
+  and [`world.md → Lore detail`](../ui/screens/world/world.md) exposes a
+  0-100 `priority` input whose tooltip repeats that formula. But the
+  authoritative [Pseudocode](../memory/retrieval.md#pseudocode) puts
+  `pin_signal` **only** inside the recency exponent, and λ_lore is 0 —
+  so the exponent is 1 regardless and `priority` cannot move a lore
+  row's score at all. Verified empirically against the M3.4
+  implementation: `pinSignal: 1` and `pinSignal: 0` produce identical
+  `finalScore` for lore. Note the alternative formula is also wrong as
+  literally written — multiplying by `priority/100` would zero every
+  lore row at the default `priority = 0`. This also makes probe.md's
+  simulatable "`pin_signal` overrides" a dead control for lore. M3.4
+  followed the pseudocode (the designated authority) and is not at
+  fault; canon needs a design decision on what `priority` should
+  actually do. Blocks nothing in M3.4; blocks the World panel's lore
+  editor meaning what it says. Surfaced by M3.4 Task 6 review
+  (2026-08-01).
+- **Token estimation costs ~180x its budgeted line, for the same
+  reason MMR does.** [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  budgets "Token estimation — <1ms total". Measured with the production
+  `countTokens` (js-tiktoken `cl100k_base`) on ~69-token rows:
+  **60.5 µs/row, ~181 ms for 3000 rows**. C4's per-candidate trace
+  makes `CandidateTrace.tokensEstimated` non-nullable, so every pool
+  row must be tokenized, not just the ones budget-fill reaches — the
+  same trace-contract-vs-cost-model tension already recorded for MMR
+  above. One concrete mitigation exists with **zero contract loss**:
+  `preFilterTopN` is absent from
+  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters),
+  so a pre-filtered row can never be seated by the simulator at any
+  threshold or budget — meaning the pre-filtered excess need not be
+  tokenized at all. Capping eager tokenization at the kept ≤200/type
+  would cut the worst case from ~3000 rows to ~1000 (~181 ms → ~60 ms).
+  It requires making `tokensEstimated` nullable for pre-filtered rows,
+  which is a C4 trace-shape change and therefore wants the same
+  decision pass as the `mmr_dedupe` item. Surfaced by M3.4 Task 6
+  review (2026-08-01).
