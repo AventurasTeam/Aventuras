@@ -911,12 +911,22 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   Proximate cause is a units mismatch: `min_score_threshold` is
   described at [`retrieval.md → Budget-fill termination`](../memory/retrieval.md#budget-fill-termination)
   as a "cosine baseline", but it is compared against a value already
-  scaled by `λ_div` — so the effective raw-score floor is `0.15 / 0.75
-= 0.2`, while `τ_revive = 0.85` caps bypass output at 0.15. Three
-  knobs could resolve it — lower `τ_revive` (≤ 0.80 makes it reachable
-  at these other defaults), lower `min_score_threshold`, or threshold
-  against the raw score rather than the MMR score — and choosing among
-  them is a canon decision. M3.4's ranker follows the Pseudocode
-  exactly and is not at fault. Same shape as the inert lore `priority`
-  entry above: a documented feature neutralized by the default
-  parameter set. Surfaced by M3.4 Task 6 (2026-08-01).
+  scaled by `λ_div` — so the effective raw-score floor for a first pick
+  is `0.15 / 0.75 = 0.2`, while `τ_revive = 0.85` caps bypass output at
+  0.15. Three knobs could resolve it — lower `τ_revive` (measured
+  boundary is `< 0.80`, not `≤`: at exactly 0.80 the comparison value
+  is `0.14999999999999997`, still under the floor in IEEE754), lower
+  `min_score_threshold`, or threshold against the raw score rather than
+  the MMR score — and choosing among them is a canon decision. M3.4's
+  ranker follows the Pseudocode exactly and is not at fault. Same shape
+  as the inert lore `priority` entry above: a documented feature
+  neutralized by the default parameter set.
+  **The mismatch is broader than the bypass.** 0.2 is only the
+  _first-pick_ floor, where `S` is empty and the diversity penalty is
+  zero. The real floor rises with that penalty: a candidate whose
+  `maxSim` to an already-selected row is 0.5 must reach a raw score of
+  `(0.15 + 0.25 × 0.5) / 0.75 ≈ 0.367` — roughly 2.4x the documented
+  0.15 — to survive. Every pick after the first, in every type, is
+  therefore held to a stricter floor than canon states; the bypass is
+  simply the case where it is provably fatal. Surfaced by M3.4 Task 6
+  (2026-08-01).
