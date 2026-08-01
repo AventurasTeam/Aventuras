@@ -10,9 +10,8 @@ export type MmrRanked = MmrInput & { mmrScore: number }
  *
  * S starts empty and max(...) is 0 there, so the first pick is pure score.
  * Incremental maxSim per candidate rather than rescanning S each round —
- * retrieval.md's PoC found the naive full-rescan MMR at ~280 ms regardless
- * of pool size, dropping to ~15-18 ms once rescanning was replaced with this
- * incremental approach.
+ * retrieval.md's PoC measured the naive full-rescan shape at ~280 ms
+ * regardless of pool size.
  */
 export function mmrRank(candidates: readonly MmrInput[], lambdaDiv: number): MmrRanked[] {
   const remaining = [...candidates]
