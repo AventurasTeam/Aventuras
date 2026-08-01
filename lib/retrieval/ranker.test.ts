@@ -118,6 +118,15 @@ describe('rankPerType — scoring', () => {
     expect(overPinned.traces[0].recencyFactor).toBe(1)
     expect(overPinned.traces[0].finalScore).toBeCloseTo(0.6, 6)
 
+    const underPinned = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: 40, pinSignal: -1 })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(underPinned.traces[0].pinSignal).toBe(0)
+    expect(underPinned.traces[0].recencyFactor).toBeCloseTo(Math.exp(-2.8), 6)
+
     const negativeAge = rankPerType(
       [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: -20 })],
       'happenings',

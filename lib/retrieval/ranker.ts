@@ -67,8 +67,8 @@ function score(
   // No awareness row backs these, so pin and decay are inapplicable; 0/1 is the
   // captured shape (probe.md → Common-knowledge happenings).
   const pinSignal = common ? 0 : Math.min(1, Math.max(0, c.pinSignal))
-  // The probe's per-row pin_signal override (probe.md → Simulatable parameters)
-  // reaches this unvalidated, and out-of-range flips the exponent's sign.
+  // Out of range either input flips the exponent's sign, turning decay into
+  // growth; pin_signal arrives unvalidated from the probe's per-row override.
   const chaptersOld = Math.max(0, c.chaptersOld)
   const recencyFactor =
     common || lambda <= 0 ? 1 : Math.exp(-lambda * chaptersOld * (1 - pinSignal))
