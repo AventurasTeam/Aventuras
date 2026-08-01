@@ -51,9 +51,45 @@ describe('buildQueryStack', () => {
     expect(s.q2.text.split('\n')[0]).toBe('Kara Vex, Mira.')
   })
 
+  it('opens the scene line with the location when there are no entities', () => {
+    const s = buildQueryStack({ ...base, sceneEntityNames: [] })
+    expect(s.q2.text.split('\n')[0]).toBe('The Hollow.')
+  })
+
+  it('drops the scene line entirely when there are neither entities nor a location', () => {
+    const s = buildQueryStack({ ...base, sceneEntityNames: [], currentLocationName: null })
+    expect(s.q2.text).toBe('Active threads: Find the courier.\nEra: Third Age.')
+  })
+
+  it('skips blank entity names and thread titles rather than rendering bare commas', () => {
+    const s = buildQueryStack({
+      ...base,
+      sceneEntityNames: ['Kara Vex', '', 'Mira'],
+      activeThreadTitles: ['', 'Find the courier'],
+    })
+    expect(s.q2.text).toBe(
+      'Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.\nEra: Third Age.',
+    )
+  })
+
+  it('drops the threads line entirely when no thread is active', () => {
+    const s = buildQueryStack({ ...base, activeThreadTitles: [] })
+    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nEra: Third Age.')
+  })
+
   it('drops the era line entirely when there is no era', () => {
     const s = buildQueryStack({ ...base, eraName: null })
     expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
+  })
+
+  it('treats a blank era the same as a missing one', () => {
+    const s = buildQueryStack({ ...base, eraName: '' })
+    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.\nActive threads: Find the courier.')
+  })
+
+  it('treats a blank piggyback summary the same as a missing one', () => {
+    const s = buildQueryStack({ ...base, piggybackSummary: '' })
+    expect(s.q2.text).toBe(buildQueryStack({ ...base, piggybackSummary: null }).q2.text)
   })
 
   it('appends the piggyback summary to Q2 when the trailing block parsed', () => {
@@ -71,7 +107,10 @@ describe('buildQueryStack', () => {
   it('derives Q3 from the last narrative entry and carries sentence scores', () => {
     const s = buildQueryStack(base)
     expect(s.q3.text).toContain('Kara Vex')
-    expect(s.q3.sentenceScores).toHaveLength(2)
+    // prose-extract's WEIGHT: "Kara Vex drew the blade." scores entity 3 +
+    // action-verb ("drew") 2 + brevity 1; the second sentence has neither an
+    // indexed term nor an action verb, so it scores brevity alone.
+    expect(s.q3.sentenceScores).toEqual([6, 1])
   })
 
   it('keeps only the top-K sentences rather than the whole narrative entry', () => {
@@ -83,7 +122,9 @@ describe('buildQueryStack', () => {
       'The lamps were unlit and the shutters stayed closed all morning, which nobody in the row of houses remarked upon.',
     ].join(' ')
     const s = buildQueryStack({ ...base, lastNarrativeContent })
-    expect(s.q3.sentenceScores).toHaveLength(5)
+    // The last sentence runs past prose-extract's brevity ceiling and carries no
+    // other signal, so it alone scores 0 and is the one top-K drops.
+    expect(s.q3.sentenceScores).toEqual([6, 1, 1, 1, 0])
     expect(s.q3.text).toContain('Kara Vex drew the blade.')
     expect(s.q3.text).not.toContain('The lamps were unlit')
   })
@@ -99,7 +140,7 @@ describe('buildQueryStack', () => {
     expect(s.presence).toEqual([false, true, true])
   })
 
-  it('always keeps Q2 present — the structural fields are computed, never missing', () => {
+  it('marks Q2 absent when every structural field is empty', () => {
     const s = buildQueryStack({
       ...base,
       sceneEntityNames: [],
@@ -107,7 +148,34 @@ describe('buildQueryStack', () => {
       activeThreadTitles: [],
       eraName: null,
     })
+    expect(s.q2.text).toBe('')
+    expect(s.presence).toEqual([true, false, true])
+    expect(s.embedTexts).toEqual([s.q1.text, s.q3.text])
+  })
+
+  it('keeps a partially populated Q2 present without an empty threads line', () => {
+    const s = buildQueryStack({
+      ...base,
+      activeThreadTitles: [],
+      eraName: null,
+      piggybackSummary: null,
+    })
+    expect(s.q2.text).toBe('Kara Vex, Mira, The Hollow.')
     expect(s.presence[1]).toBe(true)
+  })
+
+  it('drops every query when the turn carries no signal at all', () => {
+    const s = buildQueryStack({
+      ...base,
+      userAction: '',
+      sceneEntityNames: [],
+      currentLocationName: null,
+      activeThreadTitles: [],
+      eraName: null,
+      lastNarrativeContent: '',
+    })
+    expect(s.presence).toEqual([false, false, false])
+    expect(s.embedTexts).toEqual([])
   })
 
   it('labels each query with its probe-capture source', () => {

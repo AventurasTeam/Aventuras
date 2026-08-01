@@ -32,10 +32,14 @@ export type QueryStack = {
   embedTexts: string[]
 }
 
+const nonEmpty = (s: string | null): s is string => Boolean(s)
+
 function structuralDigest(i: QueryStackInput): string {
+  const scene = [...i.sceneEntityNames, i.currentLocationName].filter(nonEmpty)
+  const threads = i.activeThreadTitles.filter(nonEmpty)
   return [
-    `${i.sceneEntityNames.join(', ')}${i.currentLocationName ? `, ${i.currentLocationName}` : ''}.`,
-    `Active threads: ${i.activeThreadTitles.join(', ')}.`,
+    ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
+    ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),
     ...(i.eraName ? [`Era: ${i.eraName}.`] : []),
     // Optional by design: retrieval must not degrade on a turn whose piggyback
     // trailing block failed to parse (retrieval.md → Q2).
@@ -54,10 +58,10 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
     sentenceScores: extract.scores,
   }
 
-  // Q2 has no absence case — the template renders whatever the fields hold. Q1
-  // (blank action) and Q3 (cold start) do, and the ranker re-normalizes the
-  // blend weights over the present queries rather than scoring a gap as zero.
-  const presence: QueryPresence = [q1.text !== '', true, q3.text !== '']
+  // An empty query is marked absent rather than embedded: the ranker
+  // re-normalizes the blend weights over the present queries, so carrying one
+  // would instead spend a weighted similarity term on noise.
+  const presence: QueryPresence = [q1.text !== '', q2.text !== '', q3.text !== '']
 
   const embedTexts = [q1, q2, q3].filter((_, i) => presence[i]).map((q) => q.text)
 
