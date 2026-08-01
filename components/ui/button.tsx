@@ -2,6 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import type { ReactNode } from 'react'
 import { Platform, Pressable, type PressableProps } from 'react-native'
 
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { TextClassContext } from '@/components/ui/text'
 import type { ThemeColorSlots } from '@/lib/themes'
@@ -94,29 +95,23 @@ export function Button({
 }: ButtonProps) {
   const isDisabled = disabled || loading
   const spinnerSlot = SPINNER_SLOT_BY_VARIANT[(variant ?? 'primary') as ButtonVariant]
-  const button = (
-    <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
-        accessibilityHint={isDisabled ? disabledReason : undefined}
-        disabled={isDisabled ?? undefined}
-        className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
-        {...props}
-      >
-        {loading ? <Spinner size="sm" colorSlot={spinnerSlot} /> : null}
-        {children}
-      </Pressable>
-    </TextClassContext.Provider>
+  return (
+    <DisabledReasonTooltip reason={isDisabled ? disabledReason : undefined}>
+      <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+          accessibilityHint={isDisabled ? disabledReason : undefined}
+          disabled={isDisabled ?? undefined}
+          className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
+          {...props}
+        >
+          {loading ? <Spinner size="sm" colorSlot={spinnerSlot} /> : null}
+          {children}
+        </Pressable>
+      </TextClassContext.Provider>
+    </DisabledReasonTooltip>
   )
-  if (isDisabled && disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={disabledReason} className="contents">
-        {button}
-      </div>
-    )
-  }
-  return button
 }
 
 export { buttonTextVariants, buttonVariants }

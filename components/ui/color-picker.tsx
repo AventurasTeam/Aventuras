@@ -1,10 +1,11 @@
 import * as PopoverPrimitive from '@rn-primitives/popover'
 import { Check } from 'lucide-react-native'
 import { useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react'
-import { Platform, Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
+import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import LibColorPicker, { HueSlider, Panel1 } from 'reanimated-color-picker'
 
 import { Button } from '@/components/ui/button'
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
@@ -192,7 +193,12 @@ function CustomEditor({
   return (
     <View className="flex-col gap-3">
       <Heading level={4}>{copy.title}</Heading>
-      <View style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}>
+      {/* The editor is portaled out of ColorPicker's wrapper, so it never
+          inherits the outer disabled dimming — it has to carry its own. */}
+      <View
+        style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
+        className={cn(disabled && 'opacity-50')}
+      >
         <LibColorPicker
           value={localHex}
           onChangeJS={({ hex }) => {
@@ -259,22 +265,18 @@ function CustomPopoverApplyAction({
   onPress: () => void
   copy: string
 }) {
-  const action = (
-    <PopoverPrimitive.Close asChild>
-      <Button
-        disabled={disabled || !valid}
-        accessibilityHint={disabled ? disabledReason : undefined}
-        onPress={onPress}
-      >
-        <Text>{copy}</Text>
-      </Button>
-    </PopoverPrimitive.Close>
-  )
-  if (Platform.OS !== 'web') return action
   return (
-    <div title={disabled ? disabledReason : undefined} className="contents">
-      {action}
-    </div>
+    <DisabledReasonTooltip reason={disabled ? disabledReason : undefined}>
+      <PopoverPrimitive.Close asChild>
+        <Button
+          disabled={disabled || !valid}
+          accessibilityHint={disabled ? disabledReason : undefined}
+          onPress={onPress}
+        >
+          <Text>{copy}</Text>
+        </Button>
+      </PopoverPrimitive.Close>
+    </DisabledReasonTooltip>
   )
 }
 

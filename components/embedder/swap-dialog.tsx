@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -182,62 +183,56 @@ function CandidateRow({
   disabledReason,
 }: CandidateRowProps) {
   const disabled = blocked || candidate.isCurrent
-  const row = (
-    <Pressable
-      testID={`swap-candidate-${embeddingTargetKey(candidate.target)}`}
-      role="radio"
-      accessibilityRole="radio"
-      aria-checked={selected}
-      accessibilityState={{ selected, disabled }}
-      accessibilityHint={blocked ? disabledReason : undefined}
-      disabled={disabled}
-      onPress={disabled ? undefined : onPress}
-      className={cn(
-        'flex-row items-center gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
-        selected ? 'border-accent' : 'border-border',
-        !disabled && 'active:bg-tint-press',
-        Platform.select({
-          web: cn(
-            !disabled && !selected && 'hover:bg-tint-hover',
-            'outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus-ring',
-          ),
-        }),
-        disabled && 'opacity-50',
-      )}
-    >
-      <View
+  return (
+    <DisabledReasonTooltip reason={blocked ? disabledReason : undefined}>
+      <Pressable
+        testID={`swap-candidate-${embeddingTargetKey(candidate.target)}`}
+        role="radio"
+        accessibilityRole="radio"
+        aria-checked={selected}
+        accessibilityState={{ selected, disabled }}
+        accessibilityHint={blocked ? disabledReason : undefined}
+        disabled={disabled}
+        onPress={disabled ? undefined : onPress}
         className={cn(
-          'size-4 items-center justify-center rounded-full border-2',
-          selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
+          'flex-row items-center gap-3 rounded-md border bg-bg-base px-row-x-md py-row-y-md',
+          selected ? 'border-accent' : 'border-border',
+          !disabled && 'active:bg-tint-press',
+          Platform.select({
+            web: cn(
+              !disabled && !selected && 'hover:bg-tint-hover',
+              'outline-none transition-colors focus-visible:ring-2 focus-visible:ring-focus-ring',
+            ),
+          }),
+          disabled && 'opacity-50',
         )}
       >
-        {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
-      </View>
-      <View className="flex-1 gap-0.5">
-        <Text size="sm" className="font-medium">
-          {candidate.label}
-        </Text>
-        {/* Load-bearing, not decoration: two rows can share a model id, and this
-            is the only thing distinguishing which embedder they mean. */}
-        <Text size="xs" variant="muted">
-          {candidate.sourceLabel}
-        </Text>
-      </View>
-      {candidate.isCurrent ? (
-        <Text size="xs" variant="muted">
-          {t('storySettings:swap.current')}
-        </Text>
-      ) : null}
-    </Pressable>
+        <View
+          className={cn(
+            'size-4 items-center justify-center rounded-full border-2',
+            selected ? 'border-accent bg-accent' : 'border-border-strong bg-bg-base',
+          )}
+        >
+          {selected ? <View className="size-1.5 rounded-full bg-accent-fg" /> : null}
+        </View>
+        <View className="flex-1 gap-0.5">
+          <Text size="sm" className="font-medium">
+            {candidate.label}
+          </Text>
+          {/* Load-bearing, not decoration: two rows can share a model id, and this
+              is the only thing distinguishing which embedder they mean. */}
+          <Text size="xs" variant="muted">
+            {candidate.sourceLabel}
+          </Text>
+        </View>
+        {candidate.isCurrent ? (
+          <Text size="xs" variant="muted">
+            {t('storySettings:swap.current')}
+          </Text>
+        ) : null}
+      </Pressable>
+    </DisabledReasonTooltip>
   )
-  if (blocked && disabledReason && Platform.OS === 'web') {
-    return (
-      <div title={disabledReason} className="contents">
-        {row}
-      </div>
-    )
-  }
-  return row
 }
 
 type OptionsPaneProps = {
