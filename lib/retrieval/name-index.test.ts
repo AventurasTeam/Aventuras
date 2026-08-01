@@ -2,8 +2,16 @@ import { describe, expect, it } from 'vitest'
 
 import { buildNameKeywordIndex, matchTerms } from './name-index'
 
-const queryAll = (rows: Record<string, unknown[][]>) => async (sql: string) =>
-  sql.includes('FROM entities') ? rows.entities : rows.lore
+type Call = { sql: string; params: unknown[] }
+
+const queryAll = (rows: Record<string, unknown[][]>) => {
+  const calls: Call[] = []
+  const fn = async (sql: string, params: unknown[]) => {
+    calls.push({ sql, params })
+    return sql.includes('FROM entities') ? rows.entities : rows.lore
+  }
+  return Object.assign(fn, { calls })
+}
 
 const fixture = queryAll({
   entities: [
@@ -68,6 +76,16 @@ describe('buildNameKeywordIndex', () => {
     const idx = await buildNameKeywordIndex(notAnArray, 'br_1')
     expect(idx.loreKeywords.size).toBe(0)
   })
+
+  it('scopes both the entity and lore queries to the given branch', async () => {
+    const tracked = queryAll({ entities: [], lore: [] })
+    await buildNameKeywordIndex(tracked, 'br_42')
+    expect(tracked.calls).toHaveLength(2)
+    for (const call of tracked.calls) {
+      expect(call.sql).toMatch(/branch_id\s*=\s*\?/)
+      expect(call.params).toEqual(['br_42'])
+    }
+  })
 })
 
 describe('matchTerms', () => {
@@ -89,5 +107,6 @@ describe('matchTerms', () => {
 
   it('matches accented and non-Latin names, unlike plain ASCII \\b', () => {
     expect(matchTerms('Zoë walked into the room.', new Set(['zoë']))).toEqual(['zoë'])
+    expect(matchTerms('Зоя вошла в комнату.', new Set(['зоя']))).toEqual(['зоя'])
   })
 })
