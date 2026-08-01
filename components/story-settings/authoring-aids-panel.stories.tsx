@@ -80,7 +80,8 @@ const COPY = {
   decrement: t('storySettings:generation.countDecrement'),
   menu: t('storySettings:generation.menu'),
   reset: t('storySettings:generation.reset'),
-  resetUnavailable: t('storySettings:generation.resetUnavailable'),
+  resetUnavailable: t('storySettings:generation.resetUnavailable.missing'),
+  resetUnrecognized: t('storySettings:generation.resetUnavailable.unrecognized'),
   cancel: t('cancel'),
   discard: t('saveBar.discard'),
   addCategory: t('suggestionCategories.addAria'),
@@ -175,6 +176,27 @@ export const NoModeRecorded: Story = {
     // disabled attribute IS the pin — there is no press left to intercept.
     expect(await screen.findByRole('button', { name: COPY.reset })).toBeDisabled()
     expect(screen.getByText(COPY.resetUnavailable)).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  },
+}
+
+// `definition` is a $type cast over stored JSON, so a mode off the enum is a
+// reachable runtime value that TypeScript reports as impossible. Reset must
+// disable on it — enabled, its palette lookup returns undefined and the confirm
+// handler throws where no boundary catches it.
+export const UnrecognizedMode: Story = {
+  args: {
+    settings: settings(),
+    definition: { ...DEFINITION, mode: 'sandbox' as StoryDefinition['mode'] },
+    onCommit: fn(),
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: COPY.menu }))
+
+    expect(await screen.findByRole('button', { name: COPY.reset })).toBeDisabled()
+    expect(screen.getByText(COPY.resetUnrecognized)).toBeInTheDocument()
+    // The null-definition copy would misreport this as "no mode recorded yet".
+    expect(screen.queryByText(COPY.resetUnavailable)).not.toBeInTheDocument()
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   },
 }

@@ -7,12 +7,14 @@ import { cn } from '@/lib/utils'
 
 type StepperProps = {
   value: number
-  /** Inclusive. Decrement is disabled at this value. */
+  /** Inclusive. Decrement is disabled at or below this value. */
   min: number
-  /** Inclusive. Increment is disabled at this value. */
+  /** Inclusive. Increment is disabled at or above this value. */
   max: number
-  /** Never fires with a value outside `[min, max]`. */
+  /** Never fires outside `[min, max]`, given a finite `value` and `min <= max`. */
   onChange: (next: number) => void
+  /** Translated accessible name for the value. Pair with the visible field label. */
+  label: string
   /** Translated accessible name for the decrement control. */
   decrementLabel: string
   /** Translated accessible name for the increment control. */
@@ -27,17 +29,27 @@ export function Stepper({
   min,
   max,
   onChange,
+  label,
   decrementLabel,
   incrementLabel,
   disabled,
   testID,
   className,
 }: StepperProps) {
-  // The disabled gate only blocks presses once `value` is in range — a `value` that
-  // arrives already outside `[min, max]` still needs the step clamped back in.
+  // Each gate blocks only the step that moves further out, so a `value` arriving
+  // outside `[min, max]` can still step to another out-of-range one.
   const clamp = (next: number) => Math.min(max, Math.max(min, next))
   return (
-    <View testID={testID} className={cn('flex-row items-center gap-2', className)}>
+    <View
+      testID={testID}
+      accessibilityRole="spinbutton"
+      aria-label={label}
+      aria-valuenow={value}
+      aria-valuemin={min}
+      aria-valuemax={max}
+      accessibilityState={{ disabled: disabled === true }}
+      className={cn('flex-row items-center gap-2', className)}
+    >
       <IconAction
         icon={Minus}
         label={decrementLabel}

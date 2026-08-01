@@ -37,8 +37,8 @@ Generic, single-purpose, reusable. Live in `components/ui/`.
 Accordion, AlertDialog, Autocomplete, Avatar, Button, Checkbox,
 Chip, ColorPicker, Dialog, EmptyState, Heading, Icon, IconAction, InlineEditableName,
 Input, JSONBlock, MultiSelect, Popover, SearchableOverlayList, Select, Sheet,
-Skeleton, Spinner, Switch, SwitchVisual, Tabs, Tag, Textarea, Text, Toast. Plus
-the `NativeOnlyAnimatedView` utility wrapper.
+Skeleton, Spinner, Stepper, Switch, SwitchVisual, Tabs, Tag, Textarea, Text,
+Toast. Plus the `NativeOnlyAnimatedView` utility wrapper.
 
 ### Primitives — needs revision
 

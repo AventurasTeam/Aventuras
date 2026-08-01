@@ -72,7 +72,10 @@
     "categories": "Categories",
     "menu": "Authoring aids actions",
     "reset": "Reset to mode defaults",
-    "resetUnavailable": "This story has no mode recorded yet.",
+    "resetUnavailable": {
+      "missing": "This story has no mode recorded yet.",
+      "unrecognized": "This story's mode isn't one this version recognises."
+    },
     "resetTitle": "Reset categories to mode defaults?",
     "resetBody": "Replaces the list with a fresh copy of the defaults for this story's mode. Your edits to these categories are discarded.",
     "resetConfirm": "Reset",
@@ -80,6 +83,7 @@
     "deleteBody": "Chips already suggested under this category keep rendering, labelled (removed).",
     "deleteConfirm": "Delete",
     "invalid": {
+      "empty-list": "At least one category is required",
       "empty-label": "A category has no label",
       "duplicate-label": "Two categories share a label"
     },

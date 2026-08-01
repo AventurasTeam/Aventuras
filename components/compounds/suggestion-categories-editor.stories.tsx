@@ -54,9 +54,10 @@ type DemoProps = {
   initial?: SuggestionCategory[]
   disabled?: boolean
   onRequestDelete?: (id: string) => void
+  minRows?: number
 }
 
-function Demo({ initial = SEED, disabled, onRequestDelete }: DemoProps) {
+function Demo({ initial = SEED, disabled, onRequestDelete, minRows }: DemoProps) {
   const [categories, setCategories] = useState<SuggestionCategory[]>(initial)
   return (
     <View className="w-full flex-col gap-3" style={{ minHeight: 480 }}>
@@ -67,6 +68,7 @@ function Demo({ initial = SEED, disabled, onRequestDelete }: DemoProps) {
         fallbackColor={FALLBACK}
         disabled={disabled}
         onRequestDelete={onRequestDelete}
+        minRows={minRows}
       />
     </View>
   )
@@ -89,8 +91,6 @@ const meta: Meta<typeof SuggestionCategoriesEditor> = {
 export default meta
 type Story = StoryObj<typeof SuggestionCategoriesEditor>
 
-let requestDeleteSpy: ReturnType<typeof fn>
-
 export const Default: Story = { render: () => <Demo /> }
 
 // Validation surfaces: duplicate label (Dialogue x2 + case variant), empty
@@ -112,6 +112,51 @@ export const ValidationErrors: Story = {
 
 export const SingleCategory: Story = {
   render: () => <Demo initial={[SEED[0]!]} />,
+}
+
+// The floor is the host's rule, so with the default `minRows` the last row is
+// still deletable — App Settings treats an empty palette as "not configured".
+export const LastRowDeletableByDefault: Story = {
+  args: { onRequestDelete: fn() },
+  render: (args) => <Demo initial={[SEED[0]!]} onRequestDelete={args.onRequestDelete} />,
+  play: async ({ args }) => {
+    const target = SEED[0]!
+    await userEvent.click(screen.getByTestId(`suggestion-category-delete-${target.id}`))
+    await waitFor(() => expect(args.onRequestDelete).toHaveBeenCalledWith(target.id))
+  },
+}
+
+// Story Settings passes minRows={1}: an empty palette stops emission entirely,
+// so the delete is refused at the floor rather than saved and repaired later.
+export const MinRowsBlocksLastDelete: Story = {
+  args: { onRequestDelete: fn() },
+  render: (args) => (
+    <Demo initial={[SEED[0]!]} minRows={1} onRequestDelete={args.onRequestDelete} />
+  ),
+  // Asserts the control is genuinely unclickable, not that its handler no-ops:
+  // a gate that only dropped the press would still pass a spy-never-fired check
+  // while leaving the button reachable by keyboard.
+  play: async () => {
+    const target = SEED[0]!
+    const deleteButton = screen.getByTestId(`suggestion-category-delete-${target.id}`)
+    expect(deleteButton).toBeDisabled()
+    expect(deleteButton).toHaveStyle({ pointerEvents: 'none' })
+    expect(screen.getByTestId(`suggestion-category-label-${target.id}`)).toBeInTheDocument()
+  },
+}
+
+// The floor gates only the last row — deleting down *to* it must still work, or
+// a palette could never be trimmed.
+export const MinRowsAllowsDeleteAboveFloor: Story = {
+  args: { onRequestDelete: fn() },
+  render: (args) => (
+    <Demo initial={SEED.slice(0, 2)} minRows={1} onRequestDelete={args.onRequestDelete} />
+  ),
+  play: async ({ args }) => {
+    const target = SEED[1]!
+    await userEvent.click(screen.getByTestId(`suggestion-category-delete-${target.id}`))
+    await waitFor(() => expect(args.onRequestDelete).toHaveBeenCalledWith(target.id))
+  },
 }
 
 export const Empty: Story = {
@@ -145,16 +190,13 @@ export const ManyCategories: Story = {
 // a story that only checks the spy fired would still pass if the compound
 // removed the row itself.
 export const HostOwnedDeleteKeepsRow: Story = {
-  render: () => {
-    const spy = fn()
-    requestDeleteSpy = spy
-    return <Demo onRequestDelete={spy} />
-  },
-  play: async () => {
+  args: { onRequestDelete: fn() },
+  render: (args) => <Demo onRequestDelete={args.onRequestDelete} />,
+  play: async ({ args }) => {
     const target = SEED[0]!
     const deleteButton = screen.getByTestId(`suggestion-category-delete-${target.id}`)
     await userEvent.click(deleteButton)
-    await waitFor(() => expect(requestDeleteSpy).toHaveBeenCalledWith(target.id))
+    await waitFor(() => expect(args.onRequestDelete).toHaveBeenCalledWith(target.id))
     expect(screen.getByTestId(`suggestion-category-label-${target.id}`)).toBeInTheDocument()
   },
 }

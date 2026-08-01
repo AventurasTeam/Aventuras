@@ -75,6 +75,15 @@ describe('toStored', () => {
     const out = toStored([{ id: 'a', label: 'A', color: null, promptHint: '', enabled: true }])
     expect(out[0]?.color).toBe('')
   })
+
+  // Uniqueness is judged on the trimmed label, so persisting the untrimmed one
+  // would store a value validation already ruled out.
+  it('persists the trimmed label validation judged', () => {
+    const out = toStored([
+      { id: 'a', label: '  Combat  ', color: null, promptHint: '', enabled: true },
+    ])
+    expect(out[0]?.label).toBe('Combat')
+  })
 })
 
 describe('round-trip', () => {
@@ -85,6 +94,25 @@ describe('round-trip', () => {
       stored({ id: 'c', label: 'Bare', color: '', order: 2 }),
     ]
     expect(toStored(toDraft(input))).toEqual(input)
+  })
+
+  // The panel compares its draft against `toStored(toDraft(stored))` rather than
+  // the raw row precisely because these do NOT round-trip. Pinned so the reason
+  // that comparison is written the way it is stays visible.
+  it.each([
+    ['an untrimmed label', [stored({ label: '  Action  ' })]],
+    [
+      'a non-contiguous order',
+      [stored({ id: 'a', order: 0 }), stored({ id: 'b', label: 'B', order: 5 })],
+    ],
+    ['an unresolvable colour', [stored({ color: 'chartreuse' })]],
+  ])('normalizes %s rather than preserving it', (_name, input) => {
+    expect(sameStoredCategories(toStored(toDraft(input)), input)).toBe(false)
+  })
+
+  it('is stable once normalized, so a normalized row never reads as dirty', () => {
+    const once = toStored(toDraft([stored({ label: '  Action  ', color: 'chartreuse' })]))
+    expect(sameStoredCategories(toStored(toDraft(once)), once)).toBe(true)
   })
 })
 
@@ -101,8 +129,10 @@ describe('validateDraft', () => {
     expect(validateDraft([row('a', 'Action'), row('b', 'Dialogue')])).toEqual({ ok: true })
   })
 
-  it('accepts an empty list', () => {
-    expect(validateDraft([])).toEqual({ ok: true })
+  // An empty palette leaves the agent no slots to fill, so it invents its own and
+  // parsing fails every turn. The delete gate keeps this unreachable from the UI.
+  it('rejects an empty list', () => {
+    expect(validateDraft([])).toEqual({ ok: false, problem: 'empty-list' })
   })
 
   it('rejects an empty label', () => {

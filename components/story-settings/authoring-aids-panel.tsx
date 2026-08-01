@@ -1,5 +1,5 @@
 import { MoreVertical } from 'lucide-react-native'
-import { useRef, useState, type ComponentRef } from 'react'
+import { useEffect, useRef, useState, type ComponentRef } from 'react'
 import { View } from 'react-native'
 
 import { SuggestionCategoriesEditor } from '@/components/compounds/suggestion-categories-editor'
@@ -17,7 +17,15 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Stepper } from '@/components/ui/stepper'
 import { Text } from '@/components/ui/text'
-import { DEFAULT_SUGGESTION_CATEGORIES, type StoryDefinition, type StorySettings } from '@/lib/db'
+import {
+  DEFAULT_SUGGESTION_CATEGORIES,
+  isStoryMode,
+  SUGGESTION_COUNT_MAX,
+  SUGGESTION_COUNT_MIN,
+  type StoryDefinition,
+  type StorySettings,
+} from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
 import { NEUTRAL_ACCENT } from '@/lib/themes'
@@ -31,8 +39,8 @@ import {
   validateDraft,
 } from './suggestion-categories-draft'
 
-const SUGGESTION_COUNT_MIN = 1
-const SUGGESTION_COUNT_MAX = 6
+/** Story palettes must keep one category; an empty one stops emission entirely. */
+const MIN_CATEGORIES = 1
 
 type AuthoringAidsPanelProps = {
   settings: StorySettings
@@ -52,8 +60,12 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
 
   const appPalettes = appSettingsStore.useAppSettings((s) => s.defaultSuggestionCategories)
 
-  const storedDraft = toStored(draft)
-  const categoriesDirty = !sameStoredCategories(storedDraft, settings.suggestionCategories)
+  // Against the normalized baseline, not the raw row: `toDraft` sorts by `order`
+  // and `toStored` trims labels, so a row predating either normalization would
+  // read as an edit the user never made — and Discard, which re-derives the same
+  // draft, could not clear it. Normalizing lands on the next real save instead.
+  const baseline = toStored(toDraft(settings.suggestionCategories))
+  const categoriesDirty = !sameStoredCategories(toStored(draft), baseline)
 
   const dirtyFields: string[] = []
   if (enabled !== settings.suggestionsEnabled) {
@@ -93,7 +105,19 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
     },
   })
 
-  const mode = definition?.mode ?? null
+  // Checked, not just typed: `definition` reaches the store as a `$type` cast
+  // over stored JSON, so an off-enum mode would index the palettes to undefined
+  // and throw on `.length` inside the confirm handler — where no error boundary
+  // catches it and the user just sees the dialog close with nothing changed.
+  const rawMode = definition?.mode
+  const mode = isStoryMode(rawMode) ? rawMode : null
+  const modeProblem = definition == null ? 'missing' : mode == null ? 'unrecognized' : null
+
+  useEffect(() => {
+    if (modeProblem !== 'unrecognized') return
+    logger.error('action_layer.unrecognized_story_mode', { mode: String(rawMode) })
+  }, [modeProblem, rawMode])
+
   const confirmReset = () => {
     setResetConfirmOpen(false)
     if (mode == null) return
@@ -136,9 +160,9 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
             >
               <Text>{t('storySettings:generation.reset')}</Text>
             </Button>
-            {mode == null ? (
+            {modeProblem != null ? (
               <Text size="xs" variant="muted" className="px-row-x-md pb-2">
-                {t('storySettings:generation.resetUnavailable')}
+                {t(`storySettings:generation.resetUnavailable.${modeProblem}`)}
               </Text>
             ) : null}
           </PopoverContent>
@@ -160,6 +184,7 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
           min={SUGGESTION_COUNT_MIN}
           max={SUGGESTION_COUNT_MAX}
           onChange={setCount}
+          label={t('storySettings:generation.suggestionCount')}
           decrementLabel={t('storySettings:generation.countDecrement')}
           incrementLabel={t('storySettings:generation.countIncrement')}
           disabled={!enabled}
@@ -174,6 +199,7 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
           categories={draft}
           onChange={setDraft}
           onRequestDelete={setPendingDeleteId}
+          minRows={MIN_CATEGORIES}
           swatches={SUGGESTION_SWATCHES}
           fallbackColor={NEUTRAL_ACCENT}
           disabled={!enabled}

@@ -46,14 +46,19 @@ export type {
 } from './world-json-types'
 export type {
   StoryDefinition,
+  StoryMode,
   StorySettings,
   SuggestionCategory,
   TierTuple,
 } from './stories/story-config-schema'
 export {
+  isStoryMode,
+  STORY_MODES,
   storyDefinitionSchema,
   storySettingsPartialSchema,
   storySettingsSchema,
+  SUGGESTION_COUNT_MAX,
+  SUGGESTION_COUNT_MIN,
   suggestionCategorySchema,
 } from './stories/story-config-schema'
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'

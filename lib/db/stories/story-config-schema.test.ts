@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  isStoryMode,
+  STORY_MODES,
   storyDefinitionSchema,
   storySettingsPartialSchema,
   storySettingsSchema,
@@ -217,5 +219,35 @@ describe('storySettingsPartialSchema', () => {
 
   it('accepts a fully-populated settings object', () => {
     expect(storySettingsPartialSchema.safeParse(VALID_SETTINGS).success).toBe(true)
+  })
+})
+
+describe('isStoryMode', () => {
+  // Lead supplied because adventure mode refines on it; the point here is the
+  // enum, not that cross-field rule.
+  it('accepts every mode the schema enum accepts', () => {
+    for (const mode of STORY_MODES) {
+      expect(isStoryMode(mode)).toBe(true)
+      expect(
+        storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode, leadEntityId: 'ent-lead' })
+          .success,
+      ).toBe(true)
+    }
+  })
+
+  // The panel indexes palettes by this, so anything the predicate lets through
+  // that the schema would reject is a lookup returning undefined.
+  it.each([['sandbox'], ['Adventure'], [''], ['constructor']])(
+    'rejects %j, which the schema also rejects',
+    (value) => {
+      expect(isStoryMode(value)).toBe(false)
+      expect(storyDefinitionSchema.safeParse({ ...BASE_DEFINITION, mode: value }).success).toBe(
+        false,
+      )
+    },
+  )
+
+  it('rejects non-strings without throwing', () => {
+    for (const value of [null, undefined, 0, {}, []]) expect(isStoryMode(value)).toBe(false)
   })
 })

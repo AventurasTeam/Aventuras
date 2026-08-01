@@ -38,6 +38,10 @@ import Animated, {
 import { useSortableList, useSortable as useSortableNative } from 'react-native-reanimated-dnd'
 import { runOnUISync } from 'react-native-worklets'
 
+import {
+  categoryLabelKey,
+  findDuplicateLabelIds,
+} from '@/components/compounds/suggestion-category-labels'
 import { Button } from '@/components/ui/button'
 import { ColorPicker, type ColorValue } from '@/components/ui/color-picker'
 import { Icon } from '@/components/ui/icon'
@@ -61,6 +65,9 @@ type SuggestionCategory = {
   promptHint: string
   /** When false, entry stays defined but doesn't emit. */
   enabled: boolean
+  // Structurally, a stored row is this shape plus `order`, so without a negative
+  // field it assigns here and the host's adapter can be skipped silently.
+  order?: never
 }
 
 type SuggestionCategoriesEditorProps = {
@@ -83,6 +90,12 @@ type SuggestionCategoriesEditorProps = {
    * The host owns the confirmation and applies the removal through `onChange`.
    */
   onRequestDelete?: (id: string) => void
+  /**
+   * Row count below which delete is refused. The floor is the host's rule, not
+   * the editor's — an empty story palette stops emission, while an empty
+   * app-level one reads as "not configured" and is a legitimate state.
+   */
+  minRows?: number
   className?: string
 }
 
@@ -98,22 +111,6 @@ const COLLAPSED_ROW_HEIGHT_BY_DENSITY = {
   comfortable: 59,
 } as const
 
-function findDuplicateLabelIds(categories: SuggestionCategory[]): ReadonlySet<string> {
-  const seen = new Map<string, string[]>()
-  for (const c of categories) {
-    const key = c.label.trim().toLowerCase()
-    if (key.length === 0) continue
-    const ids = seen.get(key) ?? []
-    ids.push(c.id)
-    seen.set(key, ids)
-  }
-  const dups = new Set<string>()
-  for (const ids of seen.values()) {
-    if (ids.length > 1) for (const id of ids) dups.add(id)
-  }
-  return dups
-}
-
 function defaultIdGen(): string {
   return `cat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -128,6 +125,7 @@ type RowState = {
   emptyLabel: boolean
   index: number
   total: number
+  deleteBlocked: boolean
 }
 
 type RowHandlers = {
@@ -156,6 +154,7 @@ const RowContent = memo(function RowContent({
   duplicateLabel,
   emptyLabel,
   total,
+  deleteBlocked,
   onLabelChange,
   onPromptHintChange,
   onColorChange,
@@ -174,8 +173,11 @@ const RowContent = memo(function RowContent({
     : duplicateLabel
       ? t('suggestionCategories.labelDuplicate')
       : null
-  const deleteLabel =
-    total === 1 ? t('suggestionCategories.deleteLast') : t('suggestionCategories.delete')
+  const deleteLabel = deleteBlocked
+    ? t('suggestionCategories.deleteBlocked')
+    : total === 1
+      ? t('suggestionCategories.deleteLast')
+      : t('suggestionCategories.delete')
   const labelField = (
     <View className="min-w-0 flex-1 flex-col gap-1">
       <Input
@@ -259,7 +261,7 @@ const RowContent = memo(function RowContent({
           size="sm"
           variant="destructive"
           onPress={() => onDelete(category.id)}
-          disabled={disabled}
+          disabled={disabled || deleteBlocked}
           testID={`suggestion-category-delete-${category.id}`}
         />
       </View>
@@ -450,6 +452,7 @@ function SuggestionCategoriesEditor({
   disabled,
   generateId = defaultIdGen,
   onRequestDelete,
+  minRows = 0,
   className,
 }: SuggestionCategoriesEditorProps) {
   // Split on platform, not tier: WebList uses dnd-kit + DOM elements that crash on native,
@@ -512,11 +515,12 @@ function SuggestionCategoriesEditor({
       categories.map((category, index) => ({
         category,
         duplicateLabel: duplicateIds.has(category.id),
-        emptyLabel: category.label.trim().length === 0,
+        emptyLabel: categoryLabelKey(category.label).length === 0,
         index,
         total: categories.length,
+        deleteBlocked: categories.length <= minRows,
       })),
-    [categories, duplicateIds],
+    [categories, duplicateIds, minRows],
   )
 
   const addButton = (

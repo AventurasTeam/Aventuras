@@ -4,6 +4,7 @@ import { expect, fireEvent, fn, userEvent, waitFor } from 'storybook/test'
 
 import { Stepper } from './stepper'
 
+const VALUE_LABEL = 'Suggestions per turn'
 const DECREMENT_LABEL = 'Decrease suggestion count'
 const INCREMENT_LABEL = 'Increase suggestion count'
 
@@ -31,6 +32,7 @@ export const Default: Story = {
     min: 1,
     max: 6,
     onChange: noop,
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -42,6 +44,7 @@ export const AtMin: Story = {
     min: 1,
     max: 6,
     onChange: noop,
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -53,6 +56,7 @@ export const AtMax: Story = {
     min: 1,
     max: 6,
     onChange: noop,
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -65,6 +69,7 @@ export const Disabled: Story = {
     max: 6,
     disabled: true,
     onChange: noop,
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -84,6 +89,7 @@ function Demo({ initial, min, max }: DemoProps) {
       min={min}
       max={max}
       onChange={setValue}
+      label={VALUE_LABEL}
       decrementLabel={DECREMENT_LABEL}
       incrementLabel={INCREMENT_LABEL}
     />
@@ -117,6 +123,7 @@ export const AtMinBlocksDecrement: Story = {
     min: 1,
     max: 6,
     onChange: fn(),
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -134,6 +141,7 @@ export const AtMaxBlocksIncrement: Story = {
     min: 1,
     max: 6,
     onChange: fn(),
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },
@@ -152,6 +160,7 @@ export const DisabledBlocksBothControls: Story = {
     max: 6,
     disabled: true,
     onChange: fn(),
+    label: VALUE_LABEL,
     decrementLabel: DECREMENT_LABEL,
     incrementLabel: INCREMENT_LABEL,
   },

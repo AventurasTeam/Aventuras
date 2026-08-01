@@ -99,6 +99,7 @@
     "promptHintPlaceholder": "Prompt hint (optional — label is used as the sole hint when blank)",
     "delete": "Delete category",
     "deleteLast": "Delete category (last one)",
+    "deleteBlocked": "Delete category (at least one is required)",
     "enable": "Enable category",
     "disable": "Disable category",
     "expand": "Expand category",
