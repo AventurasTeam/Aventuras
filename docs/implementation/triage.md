@@ -715,3 +715,45 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   that milestone is authored; it has no owner today. Surfaced by the Slice
   3.3 real-provider smoke (2026-07-31), reproducible via
   `e2e/tests/classifier-real-provider.smoke.spec.ts`.
+
+- **`lib/actions/` has drifted from a transactional write layer into
+  the app's general command surface, and wants an extraction pass.**
+  The layer's own bar
+  ([`code-conventions.md → Action layer`](../code-conventions.md#action-layer))
+  is writes that persist to SQLite or cross stores; three groups of
+  residents don't meet it. **(a) Pipeline triggers.**
+  `suggestions/refresh-suggestions.ts` and `classifier/run-now.ts`
+  write nothing — both are an `ensureRegistered` call plus
+  `runPipeline` — and they live here because `@/lib/actions` is what UI
+  and boot are permitted to import. That fusion is what forces the
+  module cycle the repo already works around: `turns/submit-turn.ts`
+  imports `@/lib/pipeline`, so `lib/pipeline` cannot import
+  `@/lib/actions` back and instead deep-imports `@/lib/actions/types`
+  under a dedicated `boundaries/dependencies` exception in
+  `eslint.config.js`, with the rationale comments in
+  `lib/pipeline/runtime/action-port.ts` and `lib/boot/bootstrap.ts`.
+  Extracting the triggers is what would let that exception go.
+  **(b) `classifier/deps.ts`.** Three of its five exports aren't
+  writes: `embedClassifierDescriptions` never touches the DB (it reads
+  two stores and calls `embedTexts`, and sits here only because
+  `resolveDrainConfig` lives in `../embedder-swap`), and
+  `unprocessedTurnCount` / `readClassifierStatus` are reads. The two
+  genuine writes bypass `defineAction`, issuing `ctx.db.run(sql...)`
+  directly. **(c) `embedder-swap/`.** Roughly 1,100 lines of resumable
+  state machine — single-flight locks, injected sinks, cancellation,
+  seven exported error classes — whose `index.ts` already documents
+  that the raw engine primitives must stay unreachable because each
+  assumes the caller holds the per-story lock. A folder curating an
+  unsafe inner API behind a barrel is a lib module wearing an
+  action-layer folder name; only its transactional entry points belong.
+  What stays and shouldn't be churned: the `register.ts` (delta-logged,
+  handler returns ops for the engine to commit) versus `operational.ts`
+  (non-delta write, own transaction, own store patch) split is the
+  layer's real organizing rule, and reads deliberately colocated with
+  their writes to pin a shared invariant (`story-entries/recent-window.ts`
+  and `ENTRIES_WINDOW_SIZE`) are correct where they are. Triage needs a
+  destination decision before any move: a dedicated command seam for the
+  triggers versus pushing them back to their callers, and whether
+  `embedder-swap` becomes its own `lib/` module — the latter risks a new
+  cycle with `lib/embedder`, which is the thing to check first. No M3
+  slice owns this. Surfaced by a 2026-08-01 read of the folder.
