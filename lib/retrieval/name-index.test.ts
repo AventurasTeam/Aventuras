@@ -25,6 +25,28 @@ describe('buildNameKeywordIndex', () => {
     expect(idx.loreKeywords.has('the aetherium')).toBe(true)
   })
 
+  it('trims surrounding whitespace before storing a term', async () => {
+    const padded = queryAll({
+      entities: [['  Kara Vex  ']],
+      lore: [[JSON.stringify(['  veilstone  '])]],
+    })
+    const idx = await buildNameKeywordIndex(padded, 'br_1')
+    expect(idx.entityNames.has('kara vex')).toBe(true)
+    expect(idx.entityNames.has('  kara vex  ')).toBe(false)
+    expect(idx.loreKeywords.has('veilstone')).toBe(true)
+    expect(idx.loreKeywords.has('  veilstone  ')).toBe(false)
+  })
+
+  it('excludes whitespace-only entity names and lore keywords from the index', async () => {
+    const whitespaceOnly = queryAll({
+      entities: [['   ']],
+      lore: [[JSON.stringify(['   '])]],
+    })
+    const idx = await buildNameKeywordIndex(whitespaceOnly, 'br_1')
+    expect(idx.entityNames.size).toBe(0)
+    expect(idx.loreKeywords.size).toBe(0)
+  })
+
   it('normalizes differently-encoded names and keywords to the same term', async () => {
     const nfc = 'caf\u00e9' // U+00E9, precomposed
     const nfd = 'cafe\u0301' // 'e' + U+0301 combining acute
@@ -92,6 +114,19 @@ describe('matchTerms', () => {
 
   it('never matches on an empty term', () => {
     expect(matchTerms('A miracle, she said.', new Set(['']))).toEqual([])
+  })
+
+  it('rejects a term glued onto a preceding letter, not just a following one', () => {
+    expect(matchTerms('Xmira walked by.', new Set(['mira']))).toEqual([])
+  })
+
+  it('escapes regex metacharacters in terms so they match literally', () => {
+    // Unescaped, '*hollow*' is an invalid quantifier and throws mid-turn;
+    // unescaped, '(the elder)' silently becomes a capture group and never matches.
+    expect(matchTerms('The *Hollow* trembled.', new Set(['*hollow*']))).toEqual(['*hollow*'])
+    expect(matchTerms('Vex (the Elder) spoke.', new Set(['vex (the elder)']))).toEqual([
+      'vex (the elder)',
+    ])
   })
 
   it('accepts a one-shot iterator, matching the shape every call site passes', () => {
