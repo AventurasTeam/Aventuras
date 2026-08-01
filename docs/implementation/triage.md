@@ -930,3 +930,19 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   therefore held to a stricter floor than canon states; the bypass is
   simply the case where it is provably fatal. Surfaced by M3.4 Task 6
   (2026-08-01).
+- **`chapters_old` has no home in the capture, but the simulator is
+  specified to recompute from it.**
+  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
+  says the simulator recomputes `recency_factor` from stored
+  `chapters_old` when a user re-tunes per-type `λ`. But neither
+  `CandidateTrace` (`lib/retrieval/types.ts`) nor `CaptureCandidate`
+  (`lib/db/world-json-types.ts`) carries a `chapters_old` field, and
+  [`probe.md → What gets captured`](../memory/probe.md#what-gets-captured--light-mode-default)
+  doesn't list one — it captures the _derived_ `recency_factor` only.
+  From `recency_factor` alone the simulator cannot invert to a new λ
+  without also knowing the age and the pin, so a λ slider is not
+  actually simulatable as specified. Either add `chapters_old` to the
+  capture shape (a C4 trace-contract change, same decision pass as the
+  `mmr_dedupe` and eager-tokenization items above) or drop λ from the
+  simulatable list. M3.4 is not at fault — it emits exactly the fields
+  C4 pins. Surfaced by M3.4 Task 6 review (2026-08-01).
