@@ -375,7 +375,15 @@ describe('rankAll', () => {
 
 // The whole transitive surface the simulator loads, not just the entry file —
 // a DB import one hop down pulls the same graph in.
-const PURE_FILES = ['ranker.ts', 'mmr.ts', 'vector.ts', 'constants.ts', 'types.ts']
+const PURE_FILES = [
+  'ranker.ts',
+  'mmr.ts',
+  'vector.ts',
+  'constants.ts',
+  'types.ts',
+  'queries.ts',
+  'prose-extract.ts',
+]
 
 describe('C4 — ranker purity', () => {
   it.each(PURE_FILES)('%s imports nothing from lib/stores or lib/db', (file) => {
