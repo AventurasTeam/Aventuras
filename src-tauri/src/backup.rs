@@ -18,12 +18,12 @@ use tauri::{AppHandle, Manager};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-/// Path to the live application database (app_data_dir/aventura.db).
+/// Path to the live application database (app_config_dir/aventura.db).
 fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(app
         .path()
-        .app_data_dir()
-        .map_err(|e| format!("failed to resolve app data dir: {e}"))?
+        .app_config_dir()
+        .map_err(|e| format!("failed to resolve app config dir: {e}"))?
         .join("aventura.db"))
 }
 
