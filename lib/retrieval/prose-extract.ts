@@ -25,8 +25,9 @@ const ACTION_VERBS = new Set([
 const BREVITY_MAX_CHARS = 90
 // Below this, a "sentence" is more likely an abbreviation fragment left over
 // from over-splitting (Mr., Capt., Prof. top out at 5 chars) than a genuine
-// short clause (the shortest subject+verb sentences run 8+, e.g. "He died.").
-const BREVITY_MIN_CHARS = 8
+// short clause; 6 is the first length none of those abbreviations reach,
+// while still admitting ordinary short subject+verb sentences ("I ran.").
+const BREVITY_MIN_CHARS = 6
 
 // A bare straight quote/apostrophe (as in "didn't") is not a quoted span;
 // require an actual open+close pair so contractions don't score as dialogue.

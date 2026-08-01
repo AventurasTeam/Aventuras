@@ -194,4 +194,20 @@ describe('extractProse', () => {
     const isolated = extractProse('Nothing else happened at all today somehow.', index, 1)
     expect(mixed.scores[1]).toBe(isolated.scores[0])
   })
+
+  it('does not award the brevity bonus one char below the floor', () => {
+    expect(extractProse('I am.', index, 1).scores[0]).toBe(0)
+  })
+
+  it('awards the brevity bonus at the floor itself', () => {
+    expect(extractProse('It is.', index, 1).scores[0]).toBe(1)
+  })
+
+  it('does not resolve a repeated sentence to an earlier quoted occurrence', () => {
+    const out = extractProse('"Run." He left now. Run. Done here now.', index, 4)
+    expect(out.sentences).toEqual(['"Run." He left now.', 'Run.', 'Done here now.'])
+    // The second "Run." is plain narration; a cursor that didn't advance past
+    // the first, quoted "Run." would wrongly resolve it back to that span.
+    expect(out.scores[1]).toBe(extractProse('Run.', index, 1).scores[0])
+  })
 })
