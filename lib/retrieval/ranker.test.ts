@@ -247,6 +247,38 @@ describe('rankAll', () => {
     expect(t('inside')!.finalScore).toBeCloseTo(t('outside')!.finalScore * 1.3, 6)
   })
 
+  it('boosts the revived score, not the decayed one, when both fire on a row', () => {
+    const pools = emptyPools()
+    pools.chapters = [
+      candidate({
+        id: 'ch1',
+        kind: 'chapter',
+        sims: [0.9, 0.9, 0.9],
+        renderedText: 'x'.repeat(20),
+      }),
+    ]
+    pools.happenings = [
+      candidate({
+        id: 'callback',
+        sims: [0.95, 0.95, 0.95],
+        chaptersOld: 60,
+        occurredAtEntryId: 'e1',
+      }),
+    ]
+    const r = rankAll({
+      ...base,
+      pools,
+      budgets: { entities: 0, lore: 0, happenings: 1000, threads: 0, chapters: 1000 },
+      chapterRanges: new Map([['ch1', new Set(['e1'])]]),
+    })
+    const t = r.happenings.traces[0]
+    expect(t.bypassTriggered).toBe(true)
+    expect(t.chapterBoostApplied).toBe(true)
+    // (0.95 - 0.85) * 1.3. Boosting before the bypass floors instead gives ~0.10,
+    // since 0.0142 * 1.3 loses to the floor.
+    expect(t.finalScore).toBeCloseTo(0.13, 6)
+  })
+
   it('does not boost when the matching chapter lost its own budget race', () => {
     const pools = emptyPools()
     pools.chapters = [
@@ -288,8 +320,9 @@ const PURE_FILES = ['ranker.ts', 'mmr.ts', 'vector.ts', 'constants.ts']
 describe('C4 — ranker purity', () => {
   it.each(PURE_FILES)('%s imports nothing from lib/stores or lib/db', (file) => {
     const src = readFileSync(`lib/retrieval/${file}`, 'utf8')
-    expect(src).not.toMatch(/from '@\/lib\/stores'/)
-    expect(src).not.toMatch(/from '@\/lib\/db'/)
+    // Path prefix, not exact specifier — a deep import like
+    // '@/lib/db/runtime/exec' pulls in the same graph.
+    expect(src).not.toMatch(/@\/lib\/(db|stores)/)
     expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)
   })
 })
