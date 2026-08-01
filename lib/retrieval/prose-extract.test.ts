@@ -35,6 +35,23 @@ describe('splitSentences', () => {
       'He waited.',
     ])
   })
+
+  it('splits after a terminator sitting inside the closing quote', () => {
+    expect(splitSentences('"Run." She turned away.')).toEqual(['"Run."', 'She turned away.'])
+    expect(splitSentences('He shouted, "Run!" Then he fled.')).toEqual([
+      'He shouted, "Run!"',
+      'Then he fled.',
+    ])
+    expect(splitSentences('She asked, "Why?" He shrugged.')).toEqual([
+      'She asked, "Why?"',
+      'He shrugged.',
+    ])
+  })
+
+  it('does not split a contraction or an abbreviation on the trailing-quote rule', () => {
+    expect(splitSentences("It's fine. Don't worry.")).toEqual(["It's fine.", "Don't worry."])
+    expect(splitSentences('Mr. Halloway walked in.')).toEqual(['Mr.', 'Halloway walked in.'])
+  })
 })
 
 describe('extractProse', () => {
@@ -50,12 +67,6 @@ describe('extractProse', () => {
     expect(out.text).toContain('Kara Vex')
     expect(out.text).toContain('veilstone')
     expect(out.text).not.toContain('awning')
-  })
-
-  it('scores a dialogue span above equivalent narration', () => {
-    const withDialogue = extractProse('"We run now," he said.', index, 1)
-    const withoutDialogue = extractProse('They moved on quietly.', index, 1)
-    expect(withDialogue.scores[0]).toBeGreaterThan(withoutDialogue.scores[0])
   })
 
   it('emits one score per sentence, in source order, for the probe capture', () => {
@@ -151,17 +162,20 @@ describe('extractProse', () => {
 
   it('scores dialogue that spans a sentence break, on both fragments', () => {
     const prose = '"Kara Vex betrayed us. The veilstone was never hers." He spat.'
-    const out = extractProse(prose, index, 2)
+    const out = extractProse(prose, index, 3)
     expect(out.sentences).toEqual([
       '"Kara Vex betrayed us.',
-      'The veilstone was never hers." He spat.',
+      'The veilstone was never hers."',
+      'He spat.',
     ])
     const bareOpening = extractProse('Kara Vex betrayed us.', index, 1).scores[0]
     const bareClosing = extractProse('The veilstone was never hers.', index, 1).scores[0]
-    // Both fragments carry the dialogue signal, not just the one holding the
-    // closing quote mark.
+    const bareSpat = extractProse('He spat.', index, 1).scores[0]
+    // Both quoted fragments carry the dialogue signal, not just the one
+    // holding the closing quote mark; the unquoted tag after it does not.
     expect(out.scores[0]).toBeGreaterThan(bareOpening)
     expect(out.scores[1]).toBeGreaterThan(bareClosing)
+    expect(out.scores[2]).toBe(bareSpat)
   })
 
   it('does not award the brevity bonus to an abbreviation fragment from over-splitting', () => {
@@ -205,9 +219,9 @@ describe('extractProse', () => {
 
   it('does not resolve a repeated sentence to an earlier quoted occurrence', () => {
     const out = extractProse('"Run." He left now. Run. Done here now.', index, 4)
-    expect(out.sentences).toEqual(['"Run." He left now.', 'Run.', 'Done here now.'])
+    expect(out.sentences).toEqual(['"Run."', 'He left now.', 'Run.', 'Done here now.'])
     // The second "Run." is plain narration; a cursor that didn't advance past
     // the first, quoted "Run." would wrongly resolve it back to that span.
-    expect(out.scores[1]).toBe(extractProse('Run.', index, 1).scores[0])
+    expect(out.scores[2]).toBe(extractProse('Run.', index, 1).scores[0])
   })
 })

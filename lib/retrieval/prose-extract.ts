@@ -31,13 +31,19 @@ const BREVITY_MIN_CHARS = 6
 
 // A bare straight quote/apostrophe (as in "didn't") is not a quoted span;
 // require an actual open+close pair so contractions don't score as dialogue.
+// It's also not a fourth pairable alternative: two unrelated contractions
+// ("didn't … can't") would falsely pair as a single span.
 const DIALOGUE_SPAN = /"[^"]*"|“[^”]*”|‘[^’]*’/gu
 
 export function splitSentences(prose: string): string[] {
   // Includes the Unicode ellipsis character alongside "...": without it, "…"
   // doesn't end a sentence and the next clause silently merges into this one.
+  // The optional closing quote after the terminator covers dialogue without
+  // a speech tag ("Run." She left.); it also detaches a trailing tag from its
+  // quote ("Why?" she asked. -> two sentences), accepted since each half
+  // scores on its own.
   return prose
-    .split(/(?<=[.!?…])\s+/u)
+    .split(/(?<=[.!?…]["”’']?)\s+/u)
     .map((s) => s.trim())
     .filter((s) => s !== '')
 }
@@ -54,7 +60,9 @@ function dialogueSpans(prose: string): Span[] {
 
 // Sentences are re-derived strings, not slices, so their position in `prose`
 // has to be recovered to test against dialogue spans found over the whole
-// text — a quoted span can open in one sentence and close in the next.
+// text — a quoted span can open in one sentence and close in the next. The
+// -1 fallback below is defensive, not reachable: splitSentences only trims
+// at split points, so each sentence stays a verbatim substring of `prose`.
 function sentenceSpans(prose: string, sentences: string[]): Span[] {
   const spans: Span[] = []
   let cursor = 0
@@ -94,6 +102,7 @@ function scoreSentence(sentence: string, index: NameKeywordIndex, hasDialogue: b
   return score
 }
 
+/** @param topK Clamped to ≥ 1 — Q3 must always yield a query vector, even when a caller passes 0. */
 export function extractProse(prose: string, index: NameKeywordIndex, topK: number): ProseExtract {
   const sentences = splitSentences(prose)
   if (sentences.length === 0) return { sentences, text: '', scores: [] }
