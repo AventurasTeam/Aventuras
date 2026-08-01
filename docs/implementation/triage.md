@@ -971,3 +971,65 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   sentence break. Worth revisiting only if probe captures show the
   dialogue weight firing on obvious narration. Surfaced by M3.4 Task 8
   review (2026-08-02).
+- **Canon's Q2 template renders four lines unconditionally; the shipped
+  digest omits the empty ones.**
+  [`retrieval.md → Q2`](../memory/retrieval.md#q2-structural-digest)
+  specifies the structural digest as a fixed four-line template. M3.4
+  Task 9 makes every line conditional: the scene line is dropped when it
+  would carry neither entities nor a location, the threads line when
+  there are no threads, and the era and summary lines when those are
+  absent. `presence[1]` is derived from the rendered result rather than
+  hardcoded true, so a digest carrying no content reports itself absent
+  and the ranker re-normalizes the blend across the remaining queries.
+  The driver was measurable: under the literal template, a story with no
+  cast, no location, no threads and no era renders Q2 as punctuation
+  only, and because Q3 is also absent on a cold start that vector took
+  half of every candidate's blended similarity. The plan had already
+  made the era line conditional, so the module was internally
+  inconsistent either way. Code and canon now disagree and the project
+  rule is that the doc wins — either amend the Q2 section to describe
+  the conditional template or revert the module. Recommended: amend the
+  doc, since the literal template embeds noise. Surfaced by M3.4 Task 9
+  (2026-08-02).
+- **Canon promises a wizard-derived structural digest that the wizard
+  does not produce.**
+  [`retrieval.md → Cold start`](../memory/retrieval.md#cold-start)
+  specifies turn 1's Q2 as a wizard-derived structural digest, and
+  [`retrieval.md → Q2`](../memory/retrieval.md#q2-structural-digest)
+  calls the four structural fields deterministic, free and always
+  available. Three of the four have no shipped producer.
+  `components/wizard/finish.ts` hardcodes `currentLocationId: null`, and
+  the only writer that sets it is the piggyback block
+  (`lib/piggyback/apply.ts`), which runs after narrative while retrieval
+  runs before — so turn 1 can never carry a location. Threads have
+  exactly one insert site (`lib/actions/threads/register.ts`), reachable
+  only through a `createThread` delta that nothing outside tests
+  dispatches. The default and only shipped calendar sets `eras: null`
+  (`lib/calendar/builtins/earth-gregorian.ts`). Scene entities are empty
+  whenever the wizard produces no lead, which `needsLead`
+  (`components/wizard/step-frame-logic.ts`) reports for the shipped
+  default mode and narration — a case
+  [`wizard.md`](../ui/screens/wizard/wizard.md) calls out explicitly.
+  Retrieval is not broken, since Task 9 marks an empty Q2 absent and the
+  blend re-normalizes, but canon's cold-start guarantee is aspirational
+  and Q2 contributes nothing on turn 1 of a default-wizard story. The
+  dev seed does create threads, which is why this stays invisible in
+  development. Decide whether the wizard should collect an era and
+  opening threads, or whether canon should drop the cold-start Q2
+  guarantee. Surfaced by M3.4 Task 9 (2026-08-02).
+- **The C4 purity guard's transitive claim has an identifier-heuristic
+  hole.** `PURE_FILES` in `lib/retrieval/ranker.test.ts` is documented
+  as covering the whole transitive surface the simulator loads, not just
+  the entry file. M3.4 Task 9 added `queries.ts`, which value-imports
+  `extractProse`, which in turn value-imports `matchTerms` from
+  `name-index.ts` — so `name-index.ts` is now inside the guarded closure
+  but absent from the list, and it cannot be added: the guard's second
+  assertion rejects any file whose source matches `queryAll`, and
+  `buildNameKeywordIndex` takes an injected parameter of that exact
+  name. No live violation exists, because injecting the query function
+  is what keeps the module pure — the heuristic penalizes the very
+  pattern that satisfies C4. A future `@/lib/db` value-import added to
+  `name-index.ts` would go undetected by a guard that claims to cover
+  it. Fix by scoping the second assertion to import statements rather
+  than scanning bare identifiers, or by exempting injected parameter
+  names. Surfaced by M3.4 Task 9 review (2026-08-02).
