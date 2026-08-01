@@ -1,8 +1,8 @@
 import { Tiktoken } from 'js-tiktoken/lite'
 import cl100kBase from 'js-tiktoken/ranks/cl100k_base'
 
-// Lazily constructed: the rank table is ~1.5 MB of JSON and nothing outside a
-// turn or the progress strip needs it, so app start never pays for it.
+// The BPE map build is ~135ms and two 100k-entry Maps; the 1.1 MB rank table
+// itself is a static import (countTokens must stay sync for the pure ranker).
 let encoder: Tiktoken | null = null
 
 function getEncoder(): Tiktoken {
@@ -12,7 +12,10 @@ function getEncoder(): Tiktoken {
 
 export function countTokens(text: string): number {
   if (text === '') return 0
-  return getEncoder().encode(text).length
+  // Empty allow/disallow lists: tiktoken special-token literals (e.g.
+  // "<|endoftext|>") can appear in ordinary user/LLM prose here, and the
+  // default "disallowedSpecial: all" throws instead of counting them.
+  return getEncoder().encode(text, [], []).length
 }
 
 // Content is part of the key, not just the id: a reader edit rewrites an
@@ -30,4 +33,10 @@ export function countEntryTokens(entryId: string, content: string): number {
 
 export function __resetTokenCache(): void {
   entryTokens.clear()
+}
+
+// Test seam — exposes the entry-token cache size so a test can prove a hit
+// reuses the memo rather than recompute.
+export function __tokenCacheSize(): number {
+  return entryTokens.size
 }
