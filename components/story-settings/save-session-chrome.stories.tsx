@@ -6,6 +6,7 @@ import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import type { StorySettings } from '@/lib/db'
+import { t } from '@/lib/i18n'
 
 import {
   StorySettingsSaveSessionProvider,
@@ -71,16 +72,18 @@ type HarnessProps = {
   onCommit: (patch: Partial<StorySettings>) => Promise<unknown>
   onProceed: () => void
   enabled?: boolean
+  blocked?: boolean
 }
 
-function Harness({ onCommit, onProceed, enabled = true }: HarnessProps) {
+function Harness({ onCommit, onProceed, enabled = true, blocked = false }: HarnessProps) {
+  const disabledReason = blocked ? t('generationGate.inFlight') : undefined
   return (
     <View className="rounded-md border border-border bg-bg-base" style={{ width: 720 }}>
       <StorySettingsSaveSessionProvider onCommit={onCommit}>
         <FixtureSection />
         <RequestLeaveButton onProceed={onProceed} />
-        <StorySettingsSaveBar enabled={enabled} />
-        <StorySettingsLeaveDialog />
+        <StorySettingsSaveBar enabled={enabled} blocked={blocked} disabledReason={disabledReason} />
+        <StorySettingsLeaveDialog blocked={blocked} disabledReason={disabledReason} />
       </StorySettingsSaveSessionProvider>
     </View>
   )
@@ -157,6 +160,22 @@ export const DisabledSuppressesTheSaveShortcut: Story = {
     await userEvent.keyboard('{Meta>}s{/Meta}')
 
     expect(args.onCommit).not.toHaveBeenCalled()
+  },
+}
+
+export const HardGateDisablesEverySavePath: Story = {
+  args: { onCommit: fn(), onProceed: fn(), blocked: true },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
+    expect(await screen.findByRole('button', { name: /^Save/ })).toBeDisabled()
+
+    await userEvent.keyboard('{Meta>}s{/Meta}')
+    expect(args.onCommit).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Request leave' }))
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Discard' })).not.toBeDisabled()
   },
 }
 

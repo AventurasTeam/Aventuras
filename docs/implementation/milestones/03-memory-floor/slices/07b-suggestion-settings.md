@@ -171,6 +171,16 @@ None. Resolved at planning; see Implementation notes.
 - _`invalidReason` is gated on the categories being dirty_, so a
   collision already sitting in stored data can't refuse an unrelated
   toggle flip.
+- _Dirty-route protection lives at navigator removal._ Story Settings
+  uses React Navigation's removal guard and replays the exact blocked
+  action through the save session; route-local back handlers alone do
+  not see iOS edge swipes or reset/pop actions.
+- _Generation gating follows `gateBehavior`, not a run-kind list._ The
+  surface disables draft, Save, and direct Memory mutations while the
+  canonical hard gate is active, and the action layer rejects those
+  writes before reading or writing story state. Custom-picker copy is
+  resolved above its portal and passed down, since native portal
+  content cannot rely on inherited localization context.
 
 **Deviations worth carrying forward.**
 

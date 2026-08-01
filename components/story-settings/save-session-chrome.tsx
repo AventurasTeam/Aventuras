@@ -4,7 +4,15 @@ import { useStorySettingsSaveSession } from './save-session'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
 
 /** The surface's save bar, mounted only while the session is dirty. */
-export function StorySettingsSaveBar({ enabled }: { enabled: boolean }) {
+export function StorySettingsSaveBar({
+  enabled,
+  blocked = false,
+  disabledReason,
+}: {
+  enabled: boolean
+  blocked?: boolean
+  disabledReason?: string
+}) {
   const session = useStorySettingsSaveSession()
   const { dirtyFields, invalidReason } = session.snapshot
   if (dirtyFields.length === 0) return null
@@ -13,9 +21,10 @@ export function StorySettingsSaveBar({ enabled }: { enabled: boolean }) {
       dirtyFields={dirtyFields}
       dirtyCount={dirtyFields.length}
       saving={session.saving}
-      enabled={enabled}
-      notice={invalidReason}
-      saveDisabled={invalidReason != null}
+      enabled={enabled && !blocked}
+      notice={invalidReason ?? (blocked ? disabledReason : undefined)}
+      saveDisabled={blocked || invalidReason != null}
+      saveDisabledReason={blocked ? disabledReason : invalidReason}
       onSave={() => void session.save()}
       onDiscard={session.discard}
     />
@@ -28,15 +37,22 @@ export function StorySettingsSaveBar({ enabled }: { enabled: boolean }) {
  * window — exactly when the dialog must show. Gating it there holds the close
  * open with nothing on screen to answer it, leaving the window unclosable.
  */
-export function StorySettingsLeaveDialog() {
+export function StorySettingsLeaveDialog({
+  blocked = false,
+  disabledReason,
+}: {
+  blocked?: boolean
+  disabledReason?: string
+}) {
   const session = useStorySettingsSaveSession()
   const { invalidReason } = session.snapshot
   return (
     <UnsavedChangesDialog
       open={session.pendingLeave}
       saving={session.saving}
-      saveDisabled={invalidReason != null}
-      reason={invalidReason}
+      saveDisabled={blocked || invalidReason != null}
+      saveDisabledReason={blocked ? disabledReason : invalidReason}
+      reason={invalidReason ?? (blocked ? disabledReason : undefined)}
       onSave={() => session.resolveLeave('save')}
       onDiscard={() => session.resolveLeave('discard')}
       onCancel={() => session.resolveLeave('cancel')}

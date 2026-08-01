@@ -46,9 +46,16 @@ type AuthoringAidsPanelProps = {
   settings: StorySettings
   /** `stories.definition` is a separate nullable column; null disables Reset. */
   definition: StoryDefinition | null
+  disabled?: boolean
+  disabledReason?: string
 }
 
-export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelProps) {
+export function AuthoringAidsPanel({
+  settings,
+  definition,
+  disabled = false,
+  disabledReason,
+}: AuthoringAidsPanelProps) {
   const [draft, setDraft] = useState(() => toDraft(settings.suggestionCategories))
   const [enabled, setEnabled] = useState(settings.suggestionsEnabled)
   const [count, setCount] = useState(settings.suggestionCount)
@@ -119,6 +126,7 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
   }, [modeProblem, rawMode])
 
   const confirmReset = () => {
+    if (disabled) return
     setResetConfirmOpen(false)
     if (mode == null) return
     // Same resolution buildStorySettings uses at creation: an empty app-level
@@ -128,6 +136,7 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
   }
 
   const confirmDelete = () => {
+    if (disabled) return
     const id = pendingDeleteId
     setPendingDeleteId(null)
     if (id == null) return
@@ -146,14 +155,17 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
               icon={MoreVertical}
               label={t('storySettings:generation.menu')}
               size="sm"
-              disabled={dialogOpen}
+              disabled={disabled || dialogOpen}
+              disabledReason={disabled ? disabledReason : undefined}
             />
           </PopoverTrigger>
           <PopoverContent className="w-64 p-1">
             <Button
               variant="ghost"
-              disabled={mode == null || !enabled}
+              disabled={disabled || mode == null || !enabled}
+              disabledReason={disabled ? disabledReason : undefined}
               onPress={() => {
+                if (disabled) return
                 menuTriggerRef.current?.close()
                 setResetConfirmOpen(true)
               }}
@@ -174,6 +186,8 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
         hint={t('storySettings:generation.suggestionsHint')}
         checked={enabled}
         onCheckedChange={setEnabled}
+        disabled={disabled}
+        disabledReason={disabledReason}
       />
 
       <View className="flex-row items-center justify-between gap-3">
@@ -187,7 +201,8 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
           label={t('storySettings:generation.suggestionCount')}
           decrementLabel={t('storySettings:generation.countDecrement')}
           incrementLabel={t('storySettings:generation.countIncrement')}
-          disabled={!enabled}
+          disabled={disabled || !enabled}
+          disabledReason={disabled ? disabledReason : undefined}
         />
       </View>
 
@@ -202,7 +217,8 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
           minRows={MIN_CATEGORIES}
           swatches={SUGGESTION_SWATCHES}
           fallbackColor={NEUTRAL_ACCENT}
-          disabled={!enabled}
+          disabled={disabled || !enabled}
+          disabledReason={disabled ? disabledReason : undefined}
         />
       </View>
 
@@ -223,7 +239,13 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
             <Button variant="secondary" onPress={() => setPendingDeleteId(null)}>
               <Text>{t('cancel')}</Text>
             </Button>
-            <Button testID="confirm-delete-category" variant="destructive" onPress={confirmDelete}>
+            <Button
+              testID="confirm-delete-category"
+              variant="destructive"
+              disabled={disabled}
+              disabledReason={disabledReason}
+              onPress={confirmDelete}
+            >
               <Text>{t('storySettings:generation.deleteConfirm')}</Text>
             </Button>
           </AlertDialogFooter>
@@ -242,7 +264,13 @@ export function AuthoringAidsPanel({ settings, definition }: AuthoringAidsPanelP
             <Button variant="secondary" onPress={() => setResetConfirmOpen(false)}>
               <Text>{t('cancel')}</Text>
             </Button>
-            <Button testID="confirm-reset-categories" variant="primary" onPress={confirmReset}>
+            <Button
+              testID="confirm-reset-categories"
+              variant="primary"
+              disabled={disabled}
+              disabledReason={disabledReason}
+              onPress={confirmReset}
+            >
               <Text>{t('storySettings:generation.resetConfirm')}</Text>
             </Button>
           </AlertDialogFooter>

@@ -16,6 +16,7 @@ type UnsavedChangesDialogProps = {
   saving?: boolean
   /** Mirrors the save bar: an invalid section leaves Discard and Cancel as the only exits. */
   saveDisabled?: boolean
+  saveDisabledReason?: string
   /** Why Save is unavailable. Rendered under the body when a section reports an invalid draft. */
   reason?: string
   onSave: () => void
@@ -27,6 +28,7 @@ export function UnsavedChangesDialog({
   open,
   saving = false,
   saveDisabled = false,
+  saveDisabledReason,
   reason,
   onSave,
   onDiscard,
@@ -66,7 +68,12 @@ export function UnsavedChangesDialog({
           <Button variant="secondary" onPress={onDiscard} disabled={saving}>
             <Text>{t('storySettings:save.unsavedDiscard')}</Text>
           </Button>
-          <Button variant="primary" onPress={onSave} disabled={saving || saveDisabled}>
+          <Button
+            variant="primary"
+            onPress={onSave}
+            disabled={saving || saveDisabled}
+            disabledReason={saveDisabled ? saveDisabledReason : undefined}
+          >
             <Text>{t('storySettings:save.unsavedSave')}</Text>
           </Button>
         </AlertDialogFooter>

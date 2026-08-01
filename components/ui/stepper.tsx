@@ -20,6 +20,7 @@ type StepperProps = {
   /** Translated accessible name for the increment control. */
   incrementLabel: string
   disabled?: boolean
+  disabledReason?: string
   testID?: string
   className?: string
 }
@@ -33,6 +34,7 @@ export function Stepper({
   decrementLabel,
   incrementLabel,
   disabled,
+  disabledReason,
   testID,
   className,
 }: StepperProps) {
@@ -55,6 +57,7 @@ export function Stepper({
         label={decrementLabel}
         size="sm"
         disabled={disabled || value <= min}
+        disabledReason={disabled ? disabledReason : undefined}
         onPress={() => onChange(clamp(value - 1))}
       />
       <Text className="min-w-6 text-center">{String(value)}</Text>
@@ -63,6 +66,7 @@ export function Stepper({
         label={incrementLabel}
         size="sm"
         disabled={disabled || value >= max}
+        disabledReason={disabled ? disabledReason : undefined}
         onPress={() => onChange(clamp(value + 1))}
       />
     </View>

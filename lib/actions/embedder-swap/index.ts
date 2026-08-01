@@ -29,5 +29,6 @@ export {
   startStorySwap,
   SwapBusyError,
   SwapConfigError,
+  type StoryEmbedderActionRejection,
   type SwapCancelOutcome,
 } from './app-deps'

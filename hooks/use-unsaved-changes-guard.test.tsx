@@ -1,8 +1,25 @@
 // @vitest-environment jsdom
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { useUnsavedChangesGuard } from './use-unsaved-changes-guard'
+
+const navigation = vi.hoisted(() => ({
+  callback: null as null | ((event: { data: { action: unknown } }) => void),
+  dispatch: vi.fn(),
+  preventRemove: false,
+}))
+
+vi.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ dispatch: navigation.dispatch }),
+  usePreventRemove: (
+    preventRemove: boolean,
+    callback: (event: { data: { action: unknown } }) => void,
+  ) => {
+    navigation.preventRemove = preventRemove
+    navigation.callback = callback
+  },
+}))
 
 type Listener = () => void
 
@@ -37,10 +54,34 @@ function Guard({ dirty, requestLeave }: { dirty: boolean; requestLeave: (p: () =
 afterEach(() => {
   cleanup()
   delete window.native
+  navigation.callback = null
+  navigation.preventRemove = false
+  vi.clearAllMocks()
   vi.restoreAllMocks()
 })
 
 describe('useUnsavedChangesGuard', () => {
+  it('routes navigator removal through requestLeave and replays the captured action', () => {
+    const requestLeave = vi.fn<(proceed: () => void) => void>()
+    render(<Guard dirty requestLeave={requestLeave} />)
+
+    expect(navigation.preventRemove).toBe(true)
+    const action = { type: 'GO_BACK', source: 'story-settings-route' }
+    act(() => navigation.callback?.({ data: { action } }))
+
+    expect(requestLeave).toHaveBeenCalledTimes(1)
+    expect(navigation.dispatch).not.toHaveBeenCalled()
+
+    act(() => requestLeave.mock.calls[0]![0]())
+    expect(navigation.dispatch).toHaveBeenCalledWith(action)
+  })
+
+  it('does not prevent navigator removal while the surface is clean', () => {
+    render(<Guard dirty={false} requestLeave={vi.fn()} />)
+
+    expect(navigation.preventRemove).toBe(false)
+  })
+
   it('arms the window guard only while a surface is dirty', () => {
     const bridge = stubBridge()
     const view = render(<Guard dirty={false} requestLeave={vi.fn()} />)

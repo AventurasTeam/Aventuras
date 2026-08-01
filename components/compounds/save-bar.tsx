@@ -41,6 +41,8 @@ type SaveBarProps = {
    * Ctrl-S stays claimed instead of reaching the browser's own save dialog.
    */
   saveDisabled?: boolean
+  /** Explains a disabled Save action through accessibility hint and web tooltip. */
+  saveDisabledReason?: string
   /**
    * The host screen's focus state. A pushed-under expo-router screen stays
    * mounted, so leaving this unset lets its Cmd-S fire from behind whatever
@@ -58,6 +60,7 @@ export function SaveBar({
   onDiscard,
   saving = false,
   saveDisabled = false,
+  saveDisabledReason,
   enabled = true,
   className,
 }: SaveBarProps) {
@@ -129,7 +132,13 @@ export function SaveBar({
         <Button variant="secondary" size="sm" onPress={onDiscard} disabled={saving}>
           <Text>{t('saveBar.discard')}</Text>
         </Button>
-        <Button variant="primary" size="sm" onPress={onSave} disabled={saving || saveDisabled}>
+        <Button
+          variant="primary"
+          size="sm"
+          onPress={onSave}
+          disabled={saving || saveDisabled}
+          disabledReason={saveDisabled ? saveDisabledReason : undefined}
+        >
           <Text>
             {t('saveBar.save')}
             {shortcutHint != null ? ` ${shortcutHint}` : ''}

@@ -37,6 +37,8 @@ type SwapDialogProps = {
   onKeep: () => void
   onRelabel: (target: EmbeddingTarget) => void
   onDismiss: () => void
+  disabled?: boolean
+  disabledReason?: string
 }
 
 type Stage = 'pick' | 'options'
@@ -49,6 +51,8 @@ export function SwapDialog({
   onKeep,
   onRelabel,
   onDismiss,
+  disabled = false,
+  disabledReason,
 }: SwapDialogProps) {
   const [stage, setStage] = useState<Stage>('pick')
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -84,6 +88,8 @@ export function SwapDialog({
             onKeep={onKeep}
             onRelabel={() => onRelabel(selected.target)}
             onDismiss={onDismiss}
+            disabled={disabled}
+            disabledReason={disabledReason}
           />
         ) : (
           <PickPane
@@ -92,6 +98,8 @@ export function SwapDialog({
             onSelect={selectTarget}
             onNext={() => setStage('options')}
             onDismiss={onDismiss}
+            disabled={disabled}
+            disabledReason={disabledReason}
           />
         )}
       </AlertDialogContent>
@@ -105,9 +113,19 @@ type PickPaneProps = {
   onSelect: (key: string) => void
   onNext: () => void
   onDismiss: () => void
+  disabled: boolean
+  disabledReason?: string
 }
 
-function PickPane({ candidates, selectedKey, onSelect, onNext, onDismiss }: PickPaneProps) {
+function PickPane({
+  candidates,
+  selectedKey,
+  onSelect,
+  onNext,
+  onDismiss,
+  disabled,
+  disabledReason,
+}: PickPaneProps) {
   return (
     <>
       <AlertDialogHeader>
@@ -124,6 +142,8 @@ function PickPane({ candidates, selectedKey, onSelect, onNext, onDismiss }: Pick
               candidate={candidate}
               selected={key === selectedKey}
               onPress={() => onSelect(key)}
+              blocked={disabled}
+              disabledReason={disabledReason}
             />
           )
         })}
@@ -133,7 +153,12 @@ function PickPane({ candidates, selectedKey, onSelect, onNext, onDismiss }: Pick
         <Button variant="secondary" onPress={onDismiss}>
           <Text>{t('storySettings:swap.cancel')}</Text>
         </Button>
-        <Button variant="primary" onPress={onNext} disabled={selectedKey == null}>
+        <Button
+          variant="primary"
+          onPress={onNext}
+          disabled={disabled || selectedKey == null}
+          disabledReason={disabled ? disabledReason : undefined}
+        >
           <Text>{t('storySettings:swap.next')}</Text>
         </Button>
       </AlertDialogFooter>
@@ -145,17 +170,26 @@ type CandidateRowProps = {
   candidate: SwapCandidate
   selected: boolean
   onPress: () => void
+  blocked: boolean
+  disabledReason?: string
 }
 
-function CandidateRow({ candidate, selected, onPress }: CandidateRowProps) {
-  const disabled = candidate.isCurrent
-  return (
+function CandidateRow({
+  candidate,
+  selected,
+  onPress,
+  blocked,
+  disabledReason,
+}: CandidateRowProps) {
+  const disabled = blocked || candidate.isCurrent
+  const row = (
     <Pressable
       testID={`swap-candidate-${embeddingTargetKey(candidate.target)}`}
       role="radio"
       accessibilityRole="radio"
       aria-checked={selected}
       accessibilityState={{ selected, disabled }}
+      accessibilityHint={blocked ? disabledReason : undefined}
       disabled={disabled}
       onPress={disabled ? undefined : onPress}
       className={cn(
@@ -196,6 +230,14 @@ function CandidateRow({ candidate, selected, onPress }: CandidateRowProps) {
       ) : null}
     </Pressable>
   )
+  if (blocked && disabledReason && Platform.OS === 'web') {
+    return (
+      <div title={disabledReason} className="contents">
+        {row}
+      </div>
+    )
+  }
+  return row
 }
 
 type OptionsPaneProps = {
@@ -205,6 +247,8 @@ type OptionsPaneProps = {
   onKeep: () => void
   onRelabel: () => void
   onDismiss: () => void
+  disabled: boolean
+  disabledReason?: string
 }
 
 function OptionsPane({
@@ -214,6 +258,8 @@ function OptionsPane({
   onKeep,
   onRelabel,
   onDismiss,
+  disabled,
+  disabledReason,
 }: OptionsPaneProps) {
   return (
     <>
@@ -226,7 +272,14 @@ function OptionsPane({
 
       <View className="gap-3">
         <View className="gap-1">
-          <Button testID="swap-reindex" variant="primary" className="w-full" onPress={onReindex}>
+          <Button
+            testID="swap-reindex"
+            variant="primary"
+            className="w-full"
+            disabled={disabled}
+            disabledReason={disabledReason}
+            onPress={onReindex}
+          >
             <Text>{t('storySettings:swap.reindex')}</Text>
           </Button>
           <Text size="xs" variant="muted" className="px-1">
@@ -244,7 +297,14 @@ function OptionsPane({
         </View>
 
         <View className="gap-1">
-          <Button testID="swap-relabel" variant="secondary" className="w-full" onPress={onRelabel}>
+          <Button
+            testID="swap-relabel"
+            variant="secondary"
+            className="w-full"
+            disabled={disabled}
+            disabledReason={disabledReason}
+            onPress={onRelabel}
+          >
             <Text>{t('storySettings:swap.relabel')}</Text>
           </Button>
           <Text size="xs" variant="muted" className="px-1">

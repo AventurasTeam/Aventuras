@@ -9,7 +9,7 @@ import {
   type SuggestionCategory,
 } from '@/lib/db'
 import { t } from '@/lib/i18n'
-import { appSettingsStore } from '@/lib/stores'
+import { appSettingsStore, generationStore, isUserEditBlocked } from '@/lib/stores'
 
 import { AuthoringAidsPanel } from './authoring-aids-panel'
 import { StorySettingsSaveSessionProvider } from './save-session'
@@ -64,11 +64,18 @@ type HarnessProps = {
 }
 
 function Harness({ settings: storySettings, definition, onCommit }: HarnessProps) {
+  const blocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
+  const disabledReason = blocked ? t('generationGate.inFlight') : undefined
   return (
     <View className="gap-4 rounded-md bg-bg-base p-4" style={{ width: 720 }}>
       <StorySettingsSaveSessionProvider onCommit={onCommit}>
-        <AuthoringAidsPanel settings={storySettings} definition={definition} />
-        <StorySettingsSaveBar enabled />
+        <AuthoringAidsPanel
+          settings={storySettings}
+          definition={definition}
+          disabled={blocked}
+          disabledReason={disabledReason}
+        />
+        <StorySettingsSaveBar enabled blocked={blocked} disabledReason={disabledReason} />
       </StorySettingsSaveSessionProvider>
     </View>
   )
@@ -90,6 +97,9 @@ const COPY = {
   fieldSuggestions: t('storySettings:generation.field.suggestions'),
   fieldCount: t('storySettings:generation.field.suggestionCount'),
   fieldCategories: t('storySettings:generation.field.suggestionCategories'),
+  pickCustomColor: t('colorPicker.pickCustomColor'),
+  hexColor: t('colorPicker.hexColor'),
+  applyColor: t('colorPicker.apply'),
 }
 
 /**
@@ -120,6 +130,7 @@ const meta: Meta<typeof Harness> = {
   // prior story's edits to that module-global never leak forward.
   beforeEach: () => {
     appSettingsStore.__reset()
+    generationStore.__reset()
   },
 }
 
@@ -219,6 +230,55 @@ export const MasterToggleGatesTheSection: Story = {
     await userEvent.click(screen.getByRole('button', { name: COPY.menu }))
     expect(await screen.findByRole('button', { name: COPY.reset })).toBeDisabled()
     expect(screen.queryByText(COPY.resetUnavailable)).not.toBeInTheDocument()
+  },
+}
+
+export const HardGateDisablesDirtyAuthoringSession: Story = {
+  args: { settings: settings(), definition: DEFINITION, onCommit: fn() },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: COPY.increment }))
+    await findSaveBar()
+    await userEvent.click(screen.getAllByRole('button', { name: COPY.pickCustomColor })[0]!)
+    await screen.findByLabelText(COPY.hexColor)
+
+    generationStore.startRun({
+      runId: 'run-hard-gate',
+      kind: 'per-turn',
+      gateBehavior: 'hard-gate',
+      actionId: 'action-hard-gate',
+      storyId: 'story-1',
+      branchId: 'branch-1',
+      abortController: new AbortController(),
+      currentPhase: 'narrative',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: COPY.suggestions })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    const stepperButtons = within(screen.getByTestId('suggestion-count')).getAllByRole('button')
+    expect(stepperButtons).toHaveLength(2)
+    expect(stepperButtons[0]).toBeDisabled()
+    expect(stepperButtons[1]).toBeDisabled()
+    expect(screen.getByRole('button', { name: COPY.addCategory })).toBeDisabled()
+    expect(
+      screen.getAllByRole('button', { name: t('generationGate.inFlight') }).length,
+    ).toBeGreaterThanOrEqual(3)
+    expect(screen.getByTestId('suggestion-category-label-cat-combat')).toHaveAttribute('readonly')
+    expect(screen.getByLabelText(COPY.hexColor)).toHaveAttribute('readonly')
+    expect(screen.getByRole('button', { name: COPY.applyColor })).toBeDisabled()
+
+    const save = screen.getByRole('button', { name: /^Save/ })
+    expect(save).toBeDisabled()
+    expect(screen.getByRole('button', { name: COPY.discard })).not.toBeDisabled()
+
+    await userEvent.keyboard('{Meta>}s{/Meta}')
+    expect(args.onCommit).not.toHaveBeenCalled()
   },
 }
 

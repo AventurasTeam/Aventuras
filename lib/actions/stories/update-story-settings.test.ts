@@ -3,7 +3,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { branches, buildStorySettings, stories, storyDefinitionSchema } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { currentStoryStore, resetAllStores, storiesStore } from '@/lib/stores'
+import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import {
+  currentStoryStore,
+  generationStore,
+  resetAllStores,
+  storiesStore,
+  type RunState,
+} from '@/lib/stores'
 
 import { StorySettingsStaleStoreError, updateStorySettings } from './update-story-settings'
 
@@ -56,7 +63,57 @@ async function seed() {
   return { db, sqlite, runInTransaction, settings }
 }
 
+function startRun(kind: string, gateBehavior: RunState['gateBehavior']): void {
+  generationStore.startRun({
+    runId: `run-${kind}`,
+    kind,
+    gateBehavior,
+    actionId: `action-${kind}`,
+    storyId: 'story_1',
+    branchId: 'branch_1',
+    abortController: new AbortController(),
+    currentPhase: 'running',
+    intermediates: {},
+    terminal: Promise.resolve(),
+    resolveTerminal: () => {},
+  })
+}
+
 describe('updateStorySettings', () => {
+  it.each([PER_TURN_KIND, 'chapter-close', SUGGESTION_REFRESH_KIND])(
+    'rejects settings writes while %s owns the hard gate',
+    async (kind) => {
+      const { db, runInTransaction } = await seed()
+      startRun(kind, 'hard-gate')
+
+      const result = await updateStorySettings(
+        'story_1',
+        { suggestionCount: 2 },
+        { db, runInTransaction },
+        99,
+      )
+
+      expect(result).toEqual({ status: 'rejected', reason: 'generation in flight' })
+      const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+      expect(row.settings?.suggestionCount).toBe(6)
+      expect(row.updatedAt).toBe(1)
+    },
+  )
+
+  it('allows settings writes while only a no-gate run is active', async () => {
+    const { db, runInTransaction } = await seed()
+    startRun('periodic-classifier', 'no-gate')
+
+    const result = await updateStorySettings(
+      'story_1',
+      { suggestionCount: 2 },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(result).toMatchObject({ status: 'ok', settings: { suggestionCount: 2 } })
+  })
+
   it('merges the patch without clobbering sibling fields', async () => {
     const { db, runInTransaction, settings } = await seed()
 
@@ -67,9 +124,11 @@ describe('updateStorySettings', () => {
       99,
     )
 
-    expect(next.suggestionCount).toBe(5)
-    expect(next.classifierCadence).toBe(2)
-    expect(next.embedding_model_id).toBe(settings.embedding_model_id)
+    expect(next).toMatchObject({ status: 'ok' })
+    if (next.status !== 'ok') throw new Error('expected the settings write to succeed')
+    expect(next.settings.suggestionCount).toBe(5)
+    expect(next.settings.classifierCadence).toBe(2)
+    expect(next.settings.embedding_model_id).toBe(settings.embedding_model_id)
 
     const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
     expect(row.settings?.suggestionCount).toBe(5)
@@ -92,7 +151,9 @@ describe('updateStorySettings', () => {
       99,
     )
 
-    expect(next.models).toEqual({ narrative: 'model-c' })
+    expect(next).toMatchObject({ status: 'ok' })
+    if (next.status !== 'ok') throw new Error('expected the settings write to succeed')
+    expect(next.settings.models).toEqual({ narrative: 'model-c' })
   })
 
   it('refreshes currentStoryStore when the updated story is open', async () => {
@@ -142,8 +203,10 @@ describe('updateStorySettings', () => {
       99,
     )
 
-    expect(next.suggestionCount).toBe(6)
-    expect(next.piggybackMode).toBe('on')
+    expect(next).toMatchObject({ status: 'ok' })
+    if (next.status !== 'ok') throw new Error('expected the settings write to succeed')
+    expect(next.settings.suggestionCount).toBe(6)
+    expect(next.settings.piggybackMode).toBe('on')
 
     const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
     expect(row.settings?.suggestionCount).toBe(6)

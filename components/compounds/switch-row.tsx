@@ -21,6 +21,7 @@ type SwitchRowProps = {
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   disabled?: boolean
+  disabledReason?: string
   className?: string
 }
 
@@ -31,15 +32,17 @@ export function SwitchRow({
   checked,
   onCheckedChange,
   disabled,
+  disabledReason,
   className,
 }: SwitchRowProps) {
   const hasLeading = leading != null
-  return (
+  const row = (
     <Pressable
       role="switch"
       aria-checked={checked}
       aria-label={label}
       accessibilityState={{ checked, disabled: !!disabled }}
+      accessibilityHint={disabled ? disabledReason : undefined}
       disabled={disabled}
       onPress={() => onCheckedChange(!checked)}
       className={cn(
@@ -64,6 +67,14 @@ export function SwitchRow({
       <SwitchVisual checked={checked} disabled={disabled} className={hasLeading ? 'mt-0.5' : ''} />
     </Pressable>
   )
+  if (disabled && disabledReason && Platform.OS === 'web') {
+    return (
+      <div title={disabledReason} className="contents">
+        {row}
+      </div>
+    )
+  }
+  return row
 }
 
 export type { SwitchRowProps }
