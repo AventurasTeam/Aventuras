@@ -17,7 +17,10 @@ export const STORY_SETTINGS_DEFAULTS: StorySettings = {
   piggybackMode: 'off',
   embeddingBackend: 'local',
   embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
-  retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
+  // Token budgets, not row counts (data-model.md → stories.settings). An
+  // entity block's macro overhead alone is ~30 tokens, so a count-shaped value
+  // here seats nothing.
+  retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
   probe_mode_active: false,
   composerModesEnabled: false,
   composerWrapPov: 'third',
