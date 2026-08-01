@@ -1,78 +1,51 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { buildNameKeywordIndex, matchTerms } from './name-index'
 
-type Call = { sql: string; params: unknown[] }
-
-const queryAll = (rows: Record<string, unknown[][]>) => {
-  const calls: Call[] = []
-  const fn = async (sql: string, params: unknown[]) => {
-    calls.push({ sql, params })
-    return sql.includes('FROM entities') ? rows.entities : rows.lore
-  }
-  return Object.assign(fn, { calls })
-}
+const queryAll = (rows: Record<string, unknown[][]>) =>
+  vi.fn(async (sql: string, _params: unknown[]) =>
+    sql.includes('FROM entities') ? rows.entities : rows.lore,
+  )
 
 const fixture = queryAll({
-  entities: [
-    ['char_a', 'Kara Vex', 'active'],
-    ['char_b', 'Mira', 'staged'],
-    ['loc_a', 'The Hollow', 'active'],
-  ],
-  lore: [
-    ['lore_a', JSON.stringify(['veilstone', 'amulet'])],
-    ['lore_b', JSON.stringify(['the Aetherium'])],
-  ],
+  entities: [['Kara Vex'], ['Mira'], ['The Hollow']],
+  lore: [[JSON.stringify(['veilstone', 'amulet'])], [JSON.stringify(['the Aetherium'])]],
 })
 
 describe('buildNameKeywordIndex', () => {
-  it('lowercases entity names and keeps the id and status', async () => {
+  it('lowercases entity names', async () => {
     const idx = await buildNameKeywordIndex(fixture, 'br_1')
-    expect(idx.entityNames.get('kara vex')).toEqual([{ id: 'char_a', status: 'active' }])
-    expect(idx.entityNames.get('mira')).toEqual([{ id: 'char_b', status: 'staged' }])
+    expect(idx.entityNames.has('kara vex')).toBe(true)
+    expect(idx.entityNames.has('mira')).toBe(true)
   })
 
-  it('groups same-named entities under one term', async () => {
-    const dupes = queryAll({
-      entities: [
-        ['char_a', 'Mira', 'active'],
-        ['char_b', 'Mira', 'staged'],
-      ],
-      lore: [],
-    })
-    const idx = await buildNameKeywordIndex(dupes, 'br_1')
-    expect(idx.entityNames.get('mira')).toHaveLength(2)
-  })
-
-  it('lowercases lore keywords and maps them to their row', async () => {
+  it('lowercases lore keywords', async () => {
     const idx = await buildNameKeywordIndex(fixture, 'br_1')
-    expect(idx.loreKeywords.get('veilstone')).toEqual(['lore_a'])
-    expect(idx.loreKeywords.get('the aetherium')).toEqual(['lore_b'])
+    expect(idx.loreKeywords.has('veilstone')).toBe(true)
+    expect(idx.loreKeywords.has('the aetherium')).toBe(true)
   })
 
-  it('groups a shared keyword under every lore row that carries it', async () => {
-    const shared = queryAll({
-      entities: [],
-      lore: [
-        ['lore_a', JSON.stringify(['veilstone'])],
-        ['lore_b', JSON.stringify(['veilstone'])],
-      ],
+  it('normalizes differently-encoded names and keywords to the same term', async () => {
+    const nfc = 'caf\u00e9' // U+00E9, precomposed
+    const nfd = 'cafe\u0301' // 'e' + U+0301 combining acute
+    expect(nfc).not.toBe(nfd) // sanity: distinct code unit sequences for the same rendered text
+    const mixed = queryAll({
+      entities: [[nfc], [nfd]],
+      lore: [[JSON.stringify([nfc])], [JSON.stringify([nfd])]],
     })
-    const idx = await buildNameKeywordIndex(shared, 'br_1')
-    expect(idx.loreKeywords.get('veilstone')).toEqual(['lore_a', 'lore_b'])
+    const idx = await buildNameKeywordIndex(mixed, 'br_1')
+    expect(idx.entityNames.size).toBe(1)
+    expect(idx.loreKeywords.size).toBe(1)
   })
 
   it('tolerates a malformed keywords blob rather than failing the turn', async () => {
-    const bad = queryAll({ entities: [], lore: [['lore_x', 'not json']] })
+    const bad = queryAll({ entities: [], lore: [['not json']] })
     const idx = await buildNameKeywordIndex(bad, 'br_1')
     expect(idx.loreKeywords.size).toBe(0)
   })
 
   it('tolerates well-formed JSON that is not an array', async () => {
-    const notAnArray = queryAll({
-      entities: [],
-      lore: [['lore_x', JSON.stringify({ veilstone: true })]],
-    })
+    const notAnArray = queryAll({ entities: [], lore: [[JSON.stringify({ veilstone: true })]] })
     const idx = await buildNameKeywordIndex(notAnArray, 'br_1')
     expect(idx.loreKeywords.size).toBe(0)
   })
@@ -80,10 +53,10 @@ describe('buildNameKeywordIndex', () => {
   it('scopes both the entity and lore queries to the given branch', async () => {
     const tracked = queryAll({ entities: [], lore: [] })
     await buildNameKeywordIndex(tracked, 'br_42')
-    expect(tracked.calls).toHaveLength(2)
-    for (const call of tracked.calls) {
-      expect(call.sql).toMatch(/branch_id\s*=\s*\?/)
-      expect(call.params).toEqual(['br_42'])
+    expect(tracked.mock.calls).toHaveLength(2)
+    for (const [sql, params] of tracked.mock.calls) {
+      expect(sql).toMatch(/branch_id\s*=\s*\?/)
+      expect(params).toEqual(['br_42'])
     }
   })
 })
@@ -108,5 +81,24 @@ describe('matchTerms', () => {
   it('matches accented and non-Latin names, unlike plain ASCII \\b', () => {
     expect(matchTerms('Zoë walked into the room.', new Set(['zoë']))).toEqual(['zoë'])
     expect(matchTerms('Зоя вошла в комнату.', new Set(['зоя']))).toEqual(['зоя'])
+  })
+
+  it('matches when prose uses a different Unicode normalization form than the stored term', () => {
+    const nfc = 'caf\u00e9' // how buildNameKeywordIndex stores it
+    const nfd = 'cafe\u0301' // how an LLM might render the same word
+    expect(nfc).not.toBe(nfd) // sanity: distinct code unit sequences
+    expect(matchTerms(`the ${nfd} closed early`, new Set([nfc]))).toEqual([nfc])
+  })
+
+  it('never matches on an empty term', () => {
+    expect(matchTerms('A miracle, she said.', new Set(['']))).toEqual([])
+  })
+
+  it('accepts a one-shot iterator, matching the shape every call site passes', () => {
+    expect(matchTerms('Kara Vex met Mira near the veilstone.', terms.values())).toEqual([
+      'kara vex',
+      'mira',
+      'veilstone',
+    ])
   })
 })

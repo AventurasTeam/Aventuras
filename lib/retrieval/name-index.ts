@@ -1,39 +1,33 @@
 import type { QueryAll } from './types'
 
-export type EntityRef = { id: string; status: string }
-
 export type NameKeywordIndex = {
-  /** lowercased entity name -> the rows carrying it */
-  entityNames: ReadonlyMap<string, readonly EntityRef[]>
-  /** lowercased lore keyword -> the lore rows carrying it */
-  loreKeywords: ReadonlyMap<string, readonly string[]>
+  /** lowercased, NFC-normalized entity names present in the branch */
+  entityNames: ReadonlySet<string>
+  /** lowercased, NFC-normalized lore keywords present in the branch */
+  loreKeywords: ReadonlySet<string>
 }
 
 export async function buildNameKeywordIndex(
   queryAll: QueryAll,
   branchId: string,
 ): Promise<NameKeywordIndex> {
-  const entityNames = new Map<string, EntityRef[]>()
-  const loreKeywords = new Map<string, string[]>()
+  const entityNames = new Set<string>()
+  const loreKeywords = new Set<string>()
 
-  const entityRows = await queryAll('SELECT id, name, status FROM entities WHERE branch_id = ?', [
-    branchId,
-  ])
+  const entityRows = await queryAll('SELECT name FROM entities WHERE branch_id = ?', [branchId])
   for (const row of entityRows) {
-    const [id, name, status] = row as [string, string, string]
-    const term = name.trim().toLowerCase()
+    const [name] = row as [string]
+    const term = name.trim().toLowerCase().normalize('NFC')
     if (term === '') continue
-    const bucket = entityNames.get(term)
-    if (bucket) bucket.push({ id, status })
-    else entityNames.set(term, [{ id, status }])
+    entityNames.add(term)
   }
 
-  const loreRows = await queryAll('SELECT id, keywords FROM lore WHERE branch_id = ?', [branchId])
+  const loreRows = await queryAll('SELECT keywords FROM lore WHERE branch_id = ?', [branchId])
   for (const row of loreRows) {
-    const [id, raw] = row as [string, string | null]
+    const [raw] = row as [string | null]
     let keywords: unknown
     try {
-      // Hand-edited or pre-schema rows must not fail the whole retrieval pass.
+      // Hand-edited rows must not fail the whole retrieval pass.
       keywords = raw == null ? [] : JSON.parse(raw)
     } catch {
       continue
@@ -41,11 +35,9 @@ export async function buildNameKeywordIndex(
     if (!Array.isArray(keywords)) continue
     for (const kw of keywords) {
       if (typeof kw !== 'string') continue
-      const term = kw.trim().toLowerCase()
+      const term = kw.trim().toLowerCase().normalize('NFC')
       if (term === '') continue
-      const bucket = loreKeywords.get(term)
-      if (bucket) bucket.push(id)
-      else loreKeywords.set(term, [id])
+      loreKeywords.add(term)
     }
   }
 
@@ -66,9 +58,12 @@ function boundaryPattern(term: string): RegExp {
 }
 
 export function matchTerms(text: string, terms: Iterable<string>): string[] {
-  const haystack = text.toLowerCase()
+  // Terms are stored NFC-normalized; prose (LLM-authored) isn't guaranteed to
+  // be, so the same rendered name can otherwise miss on codepoint mismatch.
+  const haystack = text.toLowerCase().normalize('NFC')
   const hits: string[] = []
   for (const term of terms) {
+    if (term === '') continue
     if (!haystack.includes(term)) continue
     // Boundary-anchored: a substring hit (e.g. "Mira" inside "miracle") would
     // wrongly fire Layer-A suppression / kw_boost on ordinary prose.
