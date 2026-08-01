@@ -137,4 +137,61 @@ describe('extractProse', () => {
     const out = extractProse('Filler here. Kara Vex drew the blade.', index, 0)
     expect(out.text).toContain('Kara Vex')
   })
+
+  it('exposes the sentences scores was computed over, for pairing by the probe', () => {
+    const out = extractProse('Kara Vex drew the blade. Nothing happened at all.', index, 1)
+    expect(out.sentences).toEqual(['Kara Vex drew the blade.', 'Nothing happened at all.'])
+  })
+
+  it('does not treat a diacritic name as a false verb match', () => {
+    const withDiacritic = extractProse('Ranéth stood in the hall.', index, 1)
+    const asciiControl = extractProse('Xanadu stood in the hall.', index, 1)
+    expect(withDiacritic.scores[0]).toBe(asciiControl.scores[0])
+  })
+
+  it('scores dialogue that spans a sentence break, on both fragments', () => {
+    const prose = '"Kara Vex betrayed us. The veilstone was never hers." He spat.'
+    const out = extractProse(prose, index, 2)
+    expect(out.sentences).toEqual([
+      '"Kara Vex betrayed us.',
+      'The veilstone was never hers." He spat.',
+    ])
+    const bareOpening = extractProse('Kara Vex betrayed us.', index, 1).scores[0]
+    const bareClosing = extractProse('The veilstone was never hers.', index, 1).scores[0]
+    // Both fragments carry the dialogue signal, not just the one holding the
+    // closing quote mark.
+    expect(out.scores[0]).toBeGreaterThan(bareOpening)
+    expect(out.scores[1]).toBeGreaterThan(bareClosing)
+  })
+
+  it('does not award the brevity bonus to an abbreviation fragment from over-splitting', () => {
+    const out = extractProse(
+      [
+        'The council chamber had grown unbearably long and utterly forgettable this evening somehow.',
+        'Nothing of any real consequence occurred within its walls at any point whatsoever tonight.',
+        'Mr. Halloway offered nothing further worth remarking upon at all in the official record.',
+      ].join(' '),
+      index,
+      2,
+    )
+    expect(out.text).not.toContain('Mr.')
+  })
+
+  it('does not let a decomposed diacritic mark break a verb-list prefix into a false hit', () => {
+    // "ñ" written as base "n" + a standalone combining tilde (U+0303), rather
+    // than the precomposed codepoint — without \p{M} this splits into "ran" + "oth".
+    const withCombiningMark = extractProse('Ra' + 'n' + '̃' + 'oth stood in the hall.', index, 1)
+    const asciiControl = extractProse('Xanoth stood in the hall.', index, 1)
+    expect(withCombiningMark.scores[0]).toBe(asciiControl.scores[0])
+  })
+
+  it('does not award the dialogue bonus to a sentence that merely shares prose with a quote', () => {
+    const mixed = extractProse(
+      '"Hello," she said. Nothing else happened at all today somehow.',
+      index,
+      2,
+    )
+    const isolated = extractProse('Nothing else happened at all today somehow.', index, 1)
+    expect(mixed.scores[1]).toBe(isolated.scores[0])
+  })
 })
