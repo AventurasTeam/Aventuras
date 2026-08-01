@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { countTokens, countEntryTokens, __resetTokenCache, __tokenCacheSize } from './tokens'
+import {
+  countTokens,
+  countEntryTokens,
+  __resetTokenCache,
+  __tokenCacheSize,
+  __tokenComputeCount,
+} from './tokens'
 
 describe('countTokens', () => {
   it('returns 0 for empty text', () => {
@@ -39,6 +45,7 @@ describe('countEntryTokens', () => {
     const second = countEntryTokens('entry_1', 'the gate groaned open')
     expect(second).toBe(first)
     expect(__tokenCacheSize()).toBe(1)
+    expect(__tokenComputeCount()).toBe(1)
   })
 
   it('recounts when an entry id is reused with different content', () => {

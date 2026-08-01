@@ -22,21 +22,31 @@ export function countTokens(text: string): number {
 // entry's body under its existing id, and an id-only cache would serve the
 // pre-edit count for the rest of the session.
 const entryTokens = new Map<string, { content: string; tokens: number }>()
+let entryTokensComputeCount = 0
 
 export function countEntryTokens(entryId: string, content: string): number {
   const hit = entryTokens.get(entryId)
   if (hit !== undefined && hit.content === content) return hit.tokens
   const tokens = countTokens(content)
+  entryTokensComputeCount += 1
   entryTokens.set(entryId, { content, tokens })
   return tokens
 }
 
 export function __resetTokenCache(): void {
   entryTokens.clear()
+  entryTokensComputeCount = 0
 }
 
 // Test seam — exposes the entry-token cache size so a test can prove a hit
 // reuses the memo rather than recompute.
 export function __tokenCacheSize(): number {
   return entryTokens.size
+}
+
+// Test seam — counts countTokens() calls made on behalf of countEntryTokens
+// (cache misses) so a test can prove a hit skips recomputation, not just that
+// the map stays the same size.
+export function __tokenComputeCount(): number {
+  return entryTokensComputeCount
 }
