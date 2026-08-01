@@ -23,10 +23,10 @@ export function StorySettingsSaveBar({ enabled }: { enabled: boolean }) {
 }
 
 /**
- * No focus gate: `pendingLeave` is only set by the surface's own back arrow or
- * the window-close guard, and a pushed-under screen's back arrow can't fire —
- * so a pending leave while unfocused means the user is closing the window,
- * which is exactly when the dialog must show.
+ * No focus gate: every `requestLeave` caller can only fire while the surface is
+ * focused, so a pending leave while unfocused means the user is closing the
+ * window — exactly when the dialog must show. Gating it there holds the close
+ * open with nothing on screen to answer it, leaving the window unclosable.
  */
 export function StorySettingsLeaveDialog() {
   const session = useStorySettingsSaveSession()

@@ -13,8 +13,8 @@ export type StorySettingsPanelData =
   | { status: 'missing' }
   | { status: 'uninitialized' }
   /**
-   * `definition` is a separate nullable column, not part of `settings`: the
-   * wizard inserts a draft row before either exists, so a story with settings
-   * and no definition is a real persisted state.
+   * `definition` is a separate nullable column, not part of `settings`, and
+   * nothing on the write path guarantees a settings-bearing row has one — so
+   * panels keying off `definition.mode` must handle its absence.
    */
   | { status: 'ready'; settings: StorySettings; definition: StoryDefinition | null }

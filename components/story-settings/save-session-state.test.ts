@@ -132,6 +132,20 @@ describe('computeSnapshot — validity', () => {
     ])
     expect(snapshot.invalidReason).toBe('generation-problem')
   })
+
+  // The reason is translated copy, so the log needs the id to name the offender
+  // in a form that survives a locale change.
+  it('names which section the reason came from', () => {
+    const snapshot = computeSnapshot([
+      { id: 'b', tab: 'memory', dirtyFields: ['x'], invalidReason: 'memory-problem' },
+      { id: 'a', tab: 'generation', dirtyFields: ['y'], invalidReason: 'generation-problem' },
+    ])
+    expect(snapshot.invalidSectionId).toBe('a')
+  })
+
+  it('leaves the section id unset when nothing is invalid', () => {
+    expect(computeSnapshot([generation]).invalidSectionId).toBeUndefined()
+  })
 })
 
 describe('upsertSection — validity', () => {

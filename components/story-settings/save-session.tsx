@@ -243,9 +243,11 @@ export function StorySettingsSaveSessionProvider({
     // Refused, not failed: nothing was attempted, so a waiting leave stays
     // queued rather than being settled or dropped — the user still has Discard
     // and Cancel, and Save re-arms the moment the section reports itself valid.
-    const invalidReason = computeSnapshot(stateRef.current.sections).invalidReason
+    const { invalidReason, invalidSectionId } = computeSnapshot(stateRef.current.sections)
     if (invalidReason != null) {
-      logger.warn('action_layer.story_settings_save_blocked', { reason: invalidReason })
+      // The section id, not the reason: the reason is translated UI copy, so it
+      // changes meaning per locale and never names which section refused.
+      logger.warn('action_layer.story_settings_save_blocked', { sectionId: invalidSectionId })
       return { status: 'invalid', reason: invalidReason }
     }
 
@@ -489,12 +491,13 @@ export function useStorySettingsSection({
   fieldsRef.current = dirtyFields
   const dirtyKey = JSON.stringify(dirtyFields)
   useEffect(() => {
-    // Empty string still satisfies `!= null`: read as invalid it blocks a save
-    // with a blank reason, read as valid it silently doesn't block at all.
+    // Empty string still satisfies `!= null`, so publishing it verbatim would
+    // refuse every save with a blank reason and leave Discard the only exit.
+    // The throw is compiled out of the builds users run, hence also the coerce.
     if (DEV_CHECKS && invalidReason === '') {
       throw new Error(`Story Settings section "${id}" published an empty invalidReason.`)
     }
-    publish({ id, tab, dirtyFields: fieldsRef.current, invalidReason })
+    publish({ id, tab, dirtyFields: fieldsRef.current, invalidReason: invalidReason || undefined })
   }, [publish, id, tab, dirtyKey, invalidReason])
 
   useEffect(() => () => unpublish(id), [unpublish, id])

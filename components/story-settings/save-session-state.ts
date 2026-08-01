@@ -17,6 +17,8 @@ export type SaveSessionSnapshot = {
   readonly dirtyFields: readonly string[]
   /** First dirty-and-invalid section's reason, in rail order. */
   readonly invalidReason?: string
+  /** Which section `invalidReason` came from. Logged instead of the translated copy. */
+  readonly invalidSectionId?: string
 }
 
 const CLEAN_SNAPSHOT: SaveSessionSnapshot = { dirtyFields: [] }
@@ -38,10 +40,11 @@ export function computeSnapshot(sections: readonly SectionDirtyState[]): SaveSes
   if (dirtyFields.length === 0) return CLEAN_SNAPSHOT
   // Gated on the section being dirty: the save skips clean sections entirely,
   // so an invalid draft the user never touched must not refuse the write.
-  const invalidReason = ordered.find(
+  const invalid = ordered.find(
     (section) => section.dirtyFields.length > 0 && section.invalidReason != null,
-  )?.invalidReason
-  return invalidReason != null ? { dirtyFields, invalidReason } : { dirtyFields }
+  )
+  if (invalid?.invalidReason == null) return { dirtyFields }
+  return { dirtyFields, invalidReason: invalid.invalidReason, invalidSectionId: invalid.id }
 }
 
 // Returns the SAME array reference when nothing changed, so the provider's
