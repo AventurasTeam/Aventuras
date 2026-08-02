@@ -17,6 +17,7 @@ export {
   entityStateSchemaForKind,
 } from './entities/entity-state-schema'
 export type { EntityKind } from './entities/entity-state-schema'
+export type { InjectionMode } from './enums'
 export { characterRelationshipWriteSchema } from './entities/character-relationship-schema'
 export type { CharacterRelationshipWrite } from './entities/character-relationship-schema'
 export { entityWriteSchema } from './entities/entity-schema'
