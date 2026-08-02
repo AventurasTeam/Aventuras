@@ -32,11 +32,17 @@ export function composePromptBuffer<T extends BufferEntry>(
   const open = ordered.filter((e) => e.chapterId === null)
   const closed = ordered.filter((e) => e.chapterId !== null)
 
+  const protectedCount = toCount(settings.protectedBuffer, 0)
+
+  // The floor widens the open-region window rather than reserving room for
+  // closed prose: spillover is gated on the open region running out, so a
+  // protectedBuffer above partialChapterBuffer has to be met from the open
+  // region first.
   const fromOpen = settings.fullChapterInBuffer
     ? open
-    : open.slice(-toCount(settings.partialChapterBuffer, 1))
+    : open.slice(-Math.max(toCount(settings.partialChapterBuffer, 1), protectedCount))
 
-  const shortfall = Math.max(0, toCount(settings.protectedBuffer, 0) - fromOpen.length)
+  const shortfall = Math.max(0, protectedCount - fromOpen.length)
   if (shortfall === 0) return fromOpen
 
   return [...closed.slice(-shortfall), ...fromOpen]

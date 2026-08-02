@@ -17,6 +17,15 @@ const range = (from: number, to: number, chapterId: string | null = null): E[] =
 
 const ids = (entries: readonly E[]): string[] => entries.map((e) => e.id)
 
+// A window that skips open-region entries while padding with older closed prose
+// still has the right length and endpoints, so count/first/last assertions miss
+// it. Compare the open portion against the open region's own tail instead.
+const expectOpenTail = (out: readonly E[], all: readonly E[]): void => {
+  const open = all.filter((e) => e.kind !== 'system' && e.chapterId === null)
+  const got = out.filter((e) => e.chapterId === null)
+  expect(ids(got)).toEqual(ids(open.slice(open.length - got.length)))
+}
+
 // 8 closed-chapter entries then 2 open ones.
 const mixed = [...range(1, 8, 'ch_1'), ...range(9, 10)]
 
@@ -51,6 +60,7 @@ describe('composePromptBuffer — partial mode', () => {
     )
     expect(ids(out)).toEqual(['e3', 'e4', 'e5', 'e6', 'e7', 'e8', 'e9', 'e10', 'e11', 'e12'])
     expect(new Set(out.map((e) => e.chapterId))).toEqual(new Set(['ch_1', 'ch_2', null]))
+    expectOpenTail(out, [...range(1, 6, 'ch_1'), ...range(7, 10, 'ch_2'), ...range(11, 12)])
   })
 
   it('stops short of protectedBuffer when the branch has too few entries', () => {
@@ -83,6 +93,56 @@ describe('composePromptBuffer — full mode', () => {
     const out = composePromptBuffer([...range(1, 20, 'ch_1'), ...range(21, 32)], settings)
     expect(out).toHaveLength(12)
     expect(out.every((e) => e.chapterId === null)).toBe(true)
+  })
+})
+
+// cadence.md gates spillover on the open region holding fewer entries than
+// protectedBuffer, and fixes the total at max(partialChapterBuffer,
+// protectedBuffer) above that — so the larger knob sizes the open-region window
+// and closed prose only ever backfills what the open region cannot supply.
+describe('composePromptBuffer — partialChapterBuffer against protectedBuffer', () => {
+  const all = [...range(1, 20, 'ch_1'), ...range(21, 32)]
+
+  it('widens the window to protectedBuffer when partial < protected', () => {
+    const out = composePromptBuffer(all, {
+      fullChapterInBuffer: false,
+      partialChapterBuffer: 5,
+      protectedBuffer: 10,
+    })
+    expect(ids(out)).toEqual(ids(range(23, 32)))
+    expect(out.every((e) => e.chapterId === null)).toBe(true)
+    expectOpenTail(out, all)
+  })
+
+  it('keeps the partialChapterBuffer window when partial > protected', () => {
+    const out = composePromptBuffer(all, {
+      fullChapterInBuffer: false,
+      partialChapterBuffer: 8,
+      protectedBuffer: 5,
+    })
+    expect(ids(out)).toEqual(ids(range(25, 32)))
+    expectOpenTail(out, all)
+  })
+
+  it('takes that one window when partial === protected', () => {
+    const out = composePromptBuffer(all, {
+      fullChapterInBuffer: false,
+      partialChapterBuffer: 6,
+      protectedBuffer: 6,
+    })
+    expect(ids(out)).toEqual(ids(range(27, 32)))
+    expectOpenTail(out, all)
+  })
+
+  it('still spills when partial < protected and the open region is exhausted', () => {
+    const short = [...range(1, 20, 'ch_1'), ...range(21, 23)]
+    const out = composePromptBuffer(short, {
+      fullChapterInBuffer: false,
+      partialChapterBuffer: 5,
+      protectedBuffer: 10,
+    })
+    expect(ids(out)).toEqual(ids(range(14, 23)))
+    expectOpenTail(out, short)
   })
 })
 
@@ -190,6 +250,7 @@ describe('composePromptBuffer — unvalidated settings', () => {
       partialChapterBuffer: 1,
       protectedBuffer: 5.9,
     })
-    expect(ids(out)).toEqual(['e5', 'e6', 'e7', 'e8', 'e10'])
+    expect(ids(out)).toEqual(['e6', 'e7', 'e8', 'e9', 'e10'])
+    expectOpenTail(out, mixed)
   })
 })
