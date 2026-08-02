@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
@@ -20,8 +21,14 @@ test.describe('reader — turn failure then retry', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so without an installed embedder the
+    // turn fails there first — and an `embedder`-kind failure is a DIFFERENT
+    // system entry (Switch embedder, describeTurnFailure) than the provider one
+    // this spec pins. Cold cache downloads ~24 MB from Hugging Face.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative(REPLY)
     setProviderEndpoint(seeded.dbPath, mock.url)

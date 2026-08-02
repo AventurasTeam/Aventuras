@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
@@ -20,8 +21,13 @@ test.describe('reader — cancel a turn mid-flight', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so without an installed embedder the
+    // turn dies there and no stream is ever opened to cancel. Cold cache
+    // downloads ~24 MB from Hugging Face before launch.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     setProviderEndpoint(seeded.dbPath, mock.url)
     app = await launchApp({ userDataDir, cleanupUserData: true })
@@ -43,6 +49,12 @@ test.describe('reader — cancel a turn mid-flight', () => {
 
     // The held stream keeps the turn in-flight, so the composer shows Cancel.
     await expect(reader.cancel(app.window)).toBeVisible({ timeout: 20_000 })
+    // Cancel is live from the first phase, and retrieval runs ahead of
+    // narrative — so waiting on the button alone would let the click land
+    // mid-retrieval, aborting a turn that never opened a stream and quietly
+    // retiring what this spec exists to cover. The mock recording the streaming
+    // request is the proof the held stream is actually open.
+    await expect.poll(() => mock.requests.some((r) => r.streamed), { timeout: 20_000 }).toBe(true)
     await reader.cancel(app.window).click()
 
     // Generation ends: the composer returns to its Send state.

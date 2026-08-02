@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 
+import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -25,8 +26,13 @@ test.describe('force-on structured output', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply (model-management.md → Embed failure is
+    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative('E2E-FORCEON-REPLY the courier waits.')
     setProviderEndpoint(seeded.dbPath, mock.url)
