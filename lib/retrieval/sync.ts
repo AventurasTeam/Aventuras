@@ -13,6 +13,25 @@ export type SyncStageResult =
   | { ok: false; reason: 'init' | 'call'; detail: string; staleCount: number | null }
 
 /**
+ * Typed embedder errors carry their own kind. Anything else — a failed read or
+ * write, a bug — has no standing to claim the session is fine, so it takes
+ * 'init', which means the session never came up (model-management.md → Failure
+ * surfaces).
+ */
+export function classifyEmbedderFailure(error: unknown): {
+  reason: 'init' | 'call'
+  detail: string
+} {
+  return {
+    reason:
+      error instanceof EmbedderInitError || error instanceof EmbedderCallError
+        ? error.kind
+        : 'init',
+    detail: error instanceof Error ? error.message : String(error),
+  }
+}
+
+/**
  * Embeds every dirty row in ONE batch and clears their flags in one transaction,
  * satisfying retrieval.md → Compute lifecycle: "no KNN without a preceding sync".
  *
@@ -37,18 +56,6 @@ export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult
     await deps.runInTransaction(await deps.embedRows(rows))
     return { ok: true, embedded: staleCount }
   } catch (error) {
-    return {
-      ok: false,
-      // Typed embedder errors carry their own kind. Anything else — a failed
-      // read or write, a bug — has no standing to claim the session is fine, so
-      // it takes 'init', which means the session never came up
-      // (model-management.md → Failure surfaces).
-      reason:
-        error instanceof EmbedderInitError || error instanceof EmbedderCallError
-          ? error.kind
-          : 'init',
-      detail: error instanceof Error ? error.message : String(error),
-      staleCount,
-    }
+    return { ok: false, ...classifyEmbedderFailure(error), staleCount }
   }
 }

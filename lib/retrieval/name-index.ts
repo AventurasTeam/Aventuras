@@ -1,5 +1,3 @@
-import type { QueryAll } from './types'
-
 export type NameKeywordIndex = {
   /** lowercased, NFC-normalized entity names present in the branch */
   entityNames: ReadonlySet<string>
@@ -14,35 +12,33 @@ export function normalizeTerm(s: string): string {
   return s.trim().toLowerCase().normalize('NFC')
 }
 
-export async function buildNameKeywordIndex(
-  queryAll: QueryAll,
-  branchId: string,
-): Promise<NameKeywordIndex> {
+export function parseKeywords(raw: unknown): string[] {
+  let parsed: unknown
+  try {
+    // Hand-edited rows must not fail the whole retrieval pass.
+    parsed = typeof raw === 'string' ? JSON.parse(raw) : []
+  } catch {
+    return []
+  }
+  return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : []
+}
+
+export function nameKeywordIndexFrom(
+  entities: readonly { name: string }[],
+  lore: readonly { keywords: readonly string[] }[],
+): NameKeywordIndex {
   const entityNames = new Set<string>()
   const loreKeywords = new Set<string>()
 
-  const entityRows = await queryAll('SELECT name FROM entities WHERE branch_id = ?', [branchId])
-  for (const row of entityRows) {
-    const [name] = row as [string]
-    const term = normalizeTerm(name)
+  for (const entity of entities) {
+    const term = normalizeTerm(entity.name)
     if (term === '') continue
     entityNames.add(term)
   }
 
-  const loreRows = await queryAll('SELECT keywords FROM lore WHERE branch_id = ?', [branchId])
-  for (const row of loreRows) {
-    const [raw] = row as [string | null]
-    let keywords: unknown
-    try {
-      // Hand-edited rows must not fail the whole retrieval pass.
-      keywords = raw == null ? [] : JSON.parse(raw)
-    } catch {
-      continue
-    }
-    if (!Array.isArray(keywords)) continue
-    for (const kw of keywords) {
-      if (typeof kw !== 'string') continue
-      const term = normalizeTerm(kw)
+  for (const row of lore) {
+    for (const keyword of row.keywords) {
+      const term = normalizeTerm(keyword)
       if (term === '') continue
       loreKeywords.add(term)
     }

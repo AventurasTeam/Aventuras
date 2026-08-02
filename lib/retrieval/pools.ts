@@ -136,6 +136,19 @@ export function filterEntityPool(rows: readonly EntityRow[], input: EntityPoolIn
   })
 }
 
+/**
+ * Lore has no structural status of its own — buildStructuralFloor already seats
+ * every `always` row — so the pool is everything else, minus `disabled`, which
+ * "never include[s] automatically" (data-model.md → Injection modes — unified
+ * enum + structural invariant).
+ */
+export function filterLorePool<T extends LoreRow>(
+  rows: readonly T[],
+  floorIds: ReadonlySet<string>,
+): T[] {
+  return rows.filter((r) => !floorIds.has(r.id) && r.injectionMode !== 'disabled')
+}
+
 /** Active threads are structural; pending / resolved / failed rank, by mode. */
 export function filterThreadPool(
   rows: readonly ThreadRow[],

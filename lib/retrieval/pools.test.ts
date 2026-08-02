@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildStructuralFloor,
   filterEntityPool,
+  filterLorePool,
   filterThreadPool,
   poolIdsFromKnn,
   type EntityRow,
@@ -261,16 +262,29 @@ describe('thread placement sweep', () => {
   })
 })
 
-// Lore has no status column, so its only floor question is injection_mode.
+type LoreDestination = 'always' | 'pool'
+
+// retrieval.md → Structural floor (always rows) and → `auto` injection mode
+// (everything the mode still admits ranks). Lore has no status column, so
+// injection_mode is its only placement question.
+const LORE_PLACEMENT: Record<string, LoreDestination[]> = {
+  always: ['always'],
+  auto: ['pool'],
+  disabled: [],
+}
+
 describe('lore placement sweep', () => {
-  it.each([
-    ['always', true],
-    ['auto', false],
-    ['disabled', false],
-  ] as const)('%s -> seated: %s', (injectionMode, seated) => {
-    const floor = floorOf({ lore: [lore({ id: 'x', injectionMode })] })
-    expect(ids(floor.alwaysLore).includes('x')).toBe(seated)
-    expect(floor.seatedIds.has('x')).toBe(seated)
+  it.each(Object.entries(LORE_PLACEMENT))('%s -> %j', (injectionMode, expected) => {
+    const row = lore({ id: 'x', injectionMode: injectionMode as LoreRow['injectionMode'] })
+    const floor = floorOf({ lore: [row] })
+    const pool = filterLorePool([row], floor.seatedIds)
+
+    const actual: LoreDestination[] = []
+    if (ids(floor.alwaysLore).includes('x')) actual.push('always')
+    if (ids(pool).includes('x')) actual.push('pool')
+
+    expect(actual).toEqual(expected)
+    expect(floor.seatedIds.has('x')).toBe(expected.includes('always'))
   })
 })
 

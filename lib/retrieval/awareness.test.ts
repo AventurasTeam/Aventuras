@@ -1,21 +1,11 @@
-import type { DatabaseSync } from 'node:sqlite'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { branches, happeningAwareness, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
+import { queryAllOf } from './__tests__/query-all'
 import { loadAwarenessForScene } from './awareness'
 import type { QueryAll } from './types'
-
-// Mirrors lib/db/runtime/exec.ts's queryRows: rows arrive as arrays of values
-// in SELECT order, which is what the positional destructure depends on.
-const queryAllOf =
-  (sqlite: DatabaseSync): QueryAll =>
-  async (sql, params) =>
-    (sqlite.prepare(sql).all(...(params as never[])) as Record<string, unknown>[]).map((r) =>
-      Object.values(r),
-    )
 
 type AwarenessSeed = {
   id: string

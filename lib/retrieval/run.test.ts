@@ -1,0 +1,920 @@
+import { describe, expect, it, vi } from 'vitest'
+
+import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
+
+import { KNN_K } from './constants'
+import {
+  runRetrieval,
+  type RetrievalDeps,
+  type RetrievalOutcome,
+  type RetrievalParams,
+} from './run'
+import type { QueryAll } from './types'
+
+const DIM = 2
+
+const unitBlob = (x: number, y: number): Uint8Array => {
+  const n = Math.hypot(x, y)
+  return new Uint8Array(Float32Array.from([x / n, y / n]).buffer)
+}
+
+type Row = unknown[]
+
+// vec0 returns id, distance AND the embedding on the match row, so a KNN fixture
+// row is three columns wide.
+const hit = (id: string, distance = 0, blob = unitBlob(1, 0)): Row => [id, distance, blob]
+
+const entityRow = (
+  id: string,
+  name: string,
+  o: {
+    kind?: string
+    status?: string
+    mode?: string
+    description?: string | null
+    stale?: 0 | 1
+  } = {},
+): Row => [
+  id,
+  o.kind ?? 'character',
+  o.status ?? 'active',
+  o.mode ?? 'auto',
+  name,
+  o.description ?? `About ${name}.`,
+  o.stale ?? 0,
+]
+
+const loreRow = (
+  id: string,
+  title: string,
+  o: {
+    body?: string
+    mode?: string
+    priority?: number
+    keywords?: string[]
+    /** Bypasses JSON encoding, for the hand-edited-blob cases. */
+    rawKeywords?: string
+    stale?: 0 | 1
+  } = {},
+): Row => [
+  id,
+  title,
+  o.body ?? `Body of ${title}.`,
+  o.mode ?? 'auto',
+  o.priority ?? 0,
+  o.rawKeywords ?? JSON.stringify(o.keywords ?? []),
+  o.stale ?? 0,
+]
+
+const happeningRow = (
+  id: string,
+  title: string,
+  o: { description?: string; common?: 0 | 1; occurredAt?: string | null; stale?: 0 | 1 } = {},
+): Row => [
+  id,
+  title,
+  o.description ?? `Description of ${title}.`,
+  o.common ?? 0,
+  o.occurredAt ?? null,
+  o.stale ?? 0,
+]
+
+const threadRow = (
+  id: string,
+  title: string,
+  o: { status?: string; mode?: string; description?: string; stale?: 0 | 1 } = {},
+): Row => [
+  id,
+  o.status ?? 'pending',
+  o.mode ?? 'auto',
+  title,
+  o.description ?? `Description of ${title}.`,
+  o.stale ?? 0,
+]
+
+const chapterRow = (
+  id: string,
+  title: string,
+  o: { summary?: string; theme?: string; keywords?: string[]; stale?: 0 | 1 } = {},
+): Row => [
+  id,
+  title,
+  o.summary ?? `Summary of ${title}.`,
+  o.theme ?? 'betrayal',
+  JSON.stringify(o.keywords ?? []),
+  o.stale ?? 0,
+]
+
+const awarenessRow = (
+  id: string,
+  happeningId: string,
+  o: { characterId?: string; learnedAt?: string | null; pin?: number | null; source?: string } = {},
+): Row => [
+  id,
+  happeningId,
+  o.characterId ?? 'char_a',
+  o.learnedAt ?? null,
+  o.pin ?? null,
+  o.source ?? 'saw it happen',
+]
+
+type Fixture = {
+  entities?: Row[]
+  lore?: Row[]
+  happenings?: Row[]
+  threads?: Row[]
+  chapters?: Row[]
+  awareness?: Row[]
+  chapterRanges?: Row[]
+  knn?: Row[]
+}
+
+/**
+ * Answers by SQL shape. These fixtures pin ranking logic, not the column
+ * contract — source-rows.test.ts runs the same statements against the real
+ * schema. Unhandled SQL throws rather than returning [], so a fixture gap fails
+ * loudly.
+ */
+function makeQueryAll(rows: Fixture): QueryAll & { mock: { calls: unknown[][] } } {
+  return vi.fn(async (sql: string) => {
+    if (sql.includes('MATCH')) return rows.knn ?? []
+    if (sql.includes('JOIN story_entries')) return rows.chapterRanges ?? []
+    if (sql.includes('happening_awareness')) return rows.awareness ?? []
+    if (sql.includes('FROM chapters')) return rows.chapters ?? []
+    if (sql.includes('FROM happenings')) return rows.happenings ?? []
+    if (sql.includes('FROM threads')) return rows.threads ?? []
+    if (sql.includes('FROM lore')) return rows.lore ?? []
+    if (sql.includes('FROM entities')) return rows.entities ?? []
+    throw new Error(`fixture has no arm for SQL: ${sql}`)
+  })
+}
+
+const embedder = () =>
+  vi.fn(async (texts: string[]) => ({
+    vectors: texts.map(() => Float32Array.from([1, 0])),
+    dim: DIM,
+  }))
+
+const deps = (over: Partial<RetrievalDeps> = {}): RetrievalDeps => ({
+  queryAll: makeQueryAll({}),
+  embedTexts: embedder(),
+  embedRows: vi.fn(async () => []),
+  loadStaleRows: vi.fn(async () => []),
+  runInTransaction: vi.fn(async () => undefined),
+  branchIds: ['br_1'],
+  ...over,
+})
+
+const BASE: RetrievalParams = {
+  branchId: 'br_1',
+  modelId: 'm',
+  dim: DIM,
+  budgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
+  query: {
+    userAction: 'I ask about the amulet.',
+    eraName: null,
+    piggybackSummary: null,
+    lastNarrativeContent: 'Kara Vex drew the blade.',
+  },
+  sceneCharacterIds: ['char_a'],
+  sceneEntityIds: ['char_a'],
+  currentLocationId: null,
+  recentProse: '',
+}
+
+const params = (
+  over: Partial<Omit<RetrievalParams, 'query'>> & {
+    query?: Partial<RetrievalParams['query']>
+  } = {},
+): RetrievalParams => ({ ...BASE, ...over, query: { ...BASE.query, ...over.query } })
+
+function expectOk(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: true }> {
+  if (!out.ok) throw new Error(`expected a successful pass, got ${out.failure.reason}`)
+  return out
+}
+
+function expectFailure(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }>['failure'] {
+  if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
+  return out.failure
+}
+
+const tracedIds = (bundle: { traces: readonly { id: string }[] }): string[] =>
+  bundle.traces.map((t) => t.id)
+
+type Mocked = { mock: { calls: unknown[][] } }
+
+/** The (sql, params) of every KNN pass the run issued, in call order. */
+const knnCalls = (queryAll: Mocked): { sql: string; params: unknown[] }[] =>
+  queryAll.mock.calls
+    .filter(([sql]) => String(sql).includes('MATCH'))
+    .map(([sql, params]) => ({ sql: String(sql), params: params as unknown[] }))
+
+describe('runRetrieval — sync ordering', () => {
+  it('throws when the branch being retrieved is outside the sync scope', async () => {
+    await expect(runRetrieval(deps({ branchIds: ['br_other'] }), params())).rejects.toThrow(
+      /sync scope/,
+    )
+    // Positive control: the same pass succeeds once the branch is in scope.
+    expect(expectOk(await runRetrieval(deps(), params())).ok).toBe(true)
+  })
+
+  it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
+    const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
+    const out = await runRetrieval(
+      deps({
+        queryAll,
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+        ],
+        embedRows: async () => {
+          throw new EmbedderInitError('embedder down')
+        },
+      }),
+      params(),
+    )
+
+    const failure = expectFailure(out)
+    expect(failure.reason).toBe('init')
+    expect(failure.detail).toBe('embedder down')
+    // The sync knew how many rows it was trying to embed, unlike a query-embed failure.
+    expect(failure.staleCount).toBe(1)
+    expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  it('reads the source rows AFTER the sync commits, not before', async () => {
+    // embedding_stale is the last column of every source-row projection.
+    const clearStale = (row: Row): void => {
+      row[row.length - 1] = 0
+    }
+    const run = async (sync: (row: Row) => void) => {
+      const dirty = entityRow('en_dirty', 'Mira', { stale: 1 })
+      return expectOk(
+        await runRetrieval(
+          deps({
+            queryAll: makeQueryAll({ entities: [dirty], knn: [hit('en_dirty')] }),
+            loadStaleRows: async () => [
+              { kind: 'entity', id: 'en_dirty', branchId: 'br_1', fields: ['Mira', null] },
+            ],
+            runInTransaction: async () => sync(dirty),
+          }),
+          params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+        ),
+      )
+    }
+
+    // Reading first would snapshot embedding_stale = 1 and fresh() would drop
+    // the row from every pool, even though the sync just repaired it.
+    expect(tracedIds((await run(clearStale)).bundles.entities)).toEqual(['en_dirty'])
+    // Positive control: the same row stays out when the sync does NOT clear it.
+    expect(tracedIds((await run(() => undefined)).bundles.entities)).toEqual([])
+  })
+
+  it('commits the sync transaction before the first KNN when rows are dirty', async () => {
+    const order: string[] = []
+    const inner = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
+    const out = await runRetrieval(
+      deps({
+        queryAll: async (sql, p) => {
+          if (sql.includes('MATCH')) order.push('knn')
+          return inner(sql, p)
+        },
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+        ],
+        runInTransaction: async () => {
+          order.push('sync')
+        },
+      }),
+      params(),
+    )
+
+    expectOk(out)
+    expect(order[0]).toBe('sync')
+    expect(order).toContain('knn')
+  })
+})
+
+describe('runRetrieval — query embed failure', () => {
+  // On an ordinary turn nothing is dirty, so runSyncStage returns before it ever
+  // reaches the embedder — a dead provider is invisible to it and only the query
+  // embed can report it.
+  const withQueryEmbed = async (embedTexts: RetrievalDeps['embedTexts']) => {
+    const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
+    const out = await runRetrieval(deps({ queryAll, embedTexts }), params())
+    return { failure: expectFailure(out), queryAll }
+  }
+
+  it('reports a typed init failure when the embedder session never comes up', async () => {
+    const { failure, queryAll } = await withQueryEmbed(async () => {
+      throw new EmbedderInitError('no local model')
+    })
+    expect(failure).toEqual({ reason: 'init', detail: 'no local model', staleCount: null })
+    expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  it('reports a typed call failure when the embed request itself fails', async () => {
+    const { failure } = await withQueryEmbed(async () => {
+      throw new EmbedderCallError('502 from provider')
+    })
+    expect(failure).toEqual({ reason: 'call', detail: '502 from provider', staleCount: null })
+  })
+
+  it("takes 'init' for an untyped throw, which has no standing to claim the session is up", async () => {
+    const { failure } = await withQueryEmbed(async () => {
+      throw new Error('socket hang up')
+    })
+    expect(failure).toEqual({ reason: 'init', detail: 'socket hang up', staleCount: null })
+  })
+
+  it('reports a non-Error throw rather than losing it', async () => {
+    const { failure } = await withQueryEmbed(async () => {
+      throw 'nope'
+    })
+    expect(failure).toEqual({ reason: 'init', detail: 'nope', staleCount: null })
+  })
+
+  it('fails when the provider serves a dim other than the one the KNN reads', async () => {
+    const { failure, queryAll } = await withQueryEmbed(async (texts) => ({
+      vectors: texts.map(() => Float32Array.from([1, 0])),
+      dim: DIM + 1,
+    }))
+    expect(failure.reason).toBe('call')
+    expect(failure.staleCount).toBeNull()
+    // Both dims named: the sqlite-vec error this pre-empts is opaque.
+    expect(failure.detail).toContain(String(DIM + 1))
+    expect(failure.detail).toContain(`dim-${DIM}`)
+    expect(knnCalls(queryAll)).toEqual([])
+    // Positive control: the same pass succeeds at the matching dim.
+    expect(expectOk(await runRetrieval(deps(), params())).ok).toBe(true)
+  })
+})
+
+describe('runRetrieval — KNN passes', () => {
+  /** The vec family each pass targeted, which encodes both the kind and the dim. */
+  const knnTables = (queryAll: Mocked): (string | undefined)[] =>
+    knnCalls(queryAll).map((c) => /FROM\s+(\S+)/.exec(c.sql)?.[1])
+
+  const perKind = (times: number): string[] =>
+    ['entities_vec', 'lore_vec', 'happenings_vec', 'threads_vec', 'chapter_summaries_vec'].flatMap(
+      (family) => Array<string>(times).fill(`${family}_${DIM}`),
+    )
+
+  // Every query is present here: Q1 from userAction, Q2 from the seated scene
+  // entity, Q3 from lastNarrativeContent.
+  const allThree = () => makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] })
+
+  it("issues one pass per present query per type, against that type's vec family", async () => {
+    const queryAll = allThree()
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    expect(out.queries.presence).toEqual([true, true, true])
+    expect(knnTables(queryAll)).toEqual(perKind(3))
+  })
+
+  it('collapses to one pass per type when only Q1 has text', async () => {
+    const queryAll = allThree()
+    const out = expectOk(
+      await runRetrieval(
+        deps({ queryAll }),
+        params({
+          sceneEntityIds: [],
+          sceneCharacterIds: [],
+          query: { lastNarrativeContent: '' },
+        }),
+      ),
+    )
+
+    expect(out.queries.presence).toEqual([true, false, false])
+    expect(knnTables(queryAll)).toEqual(perKind(1))
+  })
+
+  it('binds the configured k, branch and model on every pass', async () => {
+    const queryAll = allThree()
+    expectOk(await runRetrieval(deps({ queryAll }), params({ modelId: 'bge-m3' })))
+
+    const calls = knnCalls(queryAll)
+    expect(calls).toHaveLength(15)
+    for (const { sql, params: bound } of calls) {
+      expect(sql).toContain('k = ?')
+      // knnQuery binds [vector, k, branchId, modelId].
+      expect(bound[0]).toBeInstanceOf(Uint8Array)
+      expect(bound[1]).toBe(KNN_K)
+      expect(bound[2]).toBe('br_1')
+      expect(bound[3]).toBe('bge-m3')
+    }
+  })
+})
+
+describe('runRetrieval — query stack', () => {
+  it('renders Q2 from the structural floor', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('char_a', 'Kara Vex'),
+            entityRow('loc_1', 'The Hollow', { kind: 'location' }),
+          ],
+          threads: [threadRow('th_1', 'The Amulet', { status: 'active' })],
+        }),
+      }),
+      params({ currentLocationId: 'loc_1' }),
+    )
+
+    expect(expectOk(out).queries.q2.text).toBe('Kara Vex, The Hollow.\nActive threads: The Amulet.')
+  })
+
+  it('skips the embed call when every query is empty', async () => {
+    const embedTexts = embedder()
+    const out = await runRetrieval(
+      deps({
+        embedTexts,
+        queryAll: makeQueryAll({
+          lore: [loreRow('lore_1', 'Veilstone', { mode: 'always' })],
+          knn: [hit('lore_1')],
+        }),
+      }),
+      params({
+        sceneEntityIds: [],
+        sceneCharacterIds: [],
+        query: { userAction: '', lastNarrativeContent: '' },
+      }),
+    )
+
+    const ok = expectOk(out)
+    expect(embedTexts).not.toHaveBeenCalled()
+    // The floor never consults a vector, so it survives a fully absent query stack.
+    expect(ok.floor.alwaysLore.map((l) => l.id)).toEqual(['lore_1'])
+    expect(Object.values(ok.bundles).every((b) => b.selected.length === 0)).toBe(true)
+  })
+
+  it('scores against the surviving queries when the embedder returns fewer vectors', async () => {
+    const out = await runRetrieval(
+      deps({
+        embedTexts: vi.fn(async () => ({
+          vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
+          dim: DIM,
+        })),
+        queryAll: makeQueryAll({
+          entities: [entityRow('char_a', 'Kara Vex'), entityRow('char_b', 'Mira')],
+          knn: [hit('char_b')],
+        }),
+      }),
+      params(),
+    )
+
+    const trace = expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_b')
+    expect(trace).toBeDefined()
+    expect(trace?.simQ3).toBe(0)
+    // Q3 produced no vector, so the blend renormalizes over Q1 + Q2 only.
+    // Counting the absent slot would give 0.7.
+    expect(trace?.simBlend).toBe(1)
+  })
+})
+
+describe('runRetrieval — pools', () => {
+  it('excludes a floor-seated entity from the entity pool', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('char_a', 'Kara Vex'), entityRow('char_b', 'Mira')],
+          knn: [hit('char_a'), hit('char_b')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.floor.sceneEntities.map((e) => e.id)).toContain('char_a')
+    expect(tracedIds(ok.bundles.entities)).not.toContain('char_a')
+    expect(tracedIds(ok.bundles.entities)).toContain('char_b')
+  })
+
+  it('drops a KNN hit the pool predicates exclude', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [
+            loreRow('lore_off', 'Silenced', { mode: 'disabled' }),
+            loreRow('lore_on', 'Veilstone', { priority: 60 }),
+          ],
+          knn: [hit('lore_off'), hit('lore_on')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(tracedIds(ok.bundles.lore)).not.toContain('lore_off')
+    expect(tracedIds(ok.bundles.lore)).toContain('lore_on')
+    expect(ok.bundles.lore.traces[0].pinSignal).toBe(0.6)
+  })
+
+  it('limits the pool to the ids the KNN union returned', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [loreRow('lore_near', 'Veilstone'), loreRow('lore_far', 'Driftmark')],
+          knn: [hit('lore_near')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(tracedIds(ok.bundles.lore)).toEqual(['lore_near'])
+  })
+
+  it('seats active and always threads on the floor instead of the thread pool', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          threads: [
+            threadRow('th_active', 'The Siege', { status: 'active' }),
+            threadRow('th_always', 'The Debt', { mode: 'always' }),
+            threadRow('th_pending', 'The Amulet'),
+          ],
+          knn: [hit('th_active'), hit('th_always'), hit('th_pending')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.floor.activeThreads.map((t) => t.id)).toEqual(['th_active'])
+    expect(ok.floor.alwaysThreads.map((t) => t.id)).toEqual(['th_always'])
+    expect(tracedIds(ok.bundles.threads)).toEqual(['th_pending'])
+  })
+
+  it('counts stale rows per type', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('en_1', 'Kara Vex', { stale: 1 })],
+          lore: [loreRow('lo_1', 'A', { stale: 1 }), loreRow('lo_2', 'B', { stale: 1 })],
+          happenings: [
+            happeningRow('hp_1', 'A', { stale: 1 }),
+            happeningRow('hp_2', 'B', { stale: 1 }),
+            happeningRow('hp_3', 'C', { stale: 1 }),
+          ],
+          threads: [threadRow('th_1', 'A')],
+          chapters: [
+            chapterRow('ch_1', 'A', { stale: 1 }),
+            chapterRow('ch_2', 'B', { stale: 1 }),
+            chapterRow('ch_3', 'C', { stale: 1 }),
+            chapterRow('ch_4', 'D', { stale: 1 }),
+          ],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    expect(expectOk(out).staleCounts).toEqual({
+      entities: 1,
+      lore: 2,
+      happenings: 3,
+      threads: 0,
+      chapters: 4,
+    })
+  })
+
+  it('excludes a stale row from every pool', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('en_stale', 'Drifted', { stale: 1 }),
+            entityRow('en_fresh', 'Kara Vex'),
+          ],
+          lore: [loreRow('lo_stale', 'Drifted', { stale: 1 }), loreRow('lo_fresh', 'Veilstone')],
+          happenings: [
+            happeningRow('hp_stale', 'Drifted', { common: 1, stale: 1 }),
+            happeningRow('hp_fresh', 'The bell rang', { common: 1 }),
+          ],
+          threads: [
+            threadRow('th_stale', 'Drifted', { stale: 1 }),
+            threadRow('th_fresh', 'The Amulet'),
+          ],
+          chapters: [
+            chapterRow('ch_stale', 'Drifted', { stale: 1 }),
+            chapterRow('ch_fresh', 'Chapter One'),
+          ],
+          knn: [
+            hit('en_stale'),
+            hit('en_fresh'),
+            hit('lo_stale'),
+            hit('lo_fresh'),
+            hit('hp_stale'),
+            hit('hp_fresh'),
+            hit('th_stale'),
+            hit('th_fresh'),
+            hit('ch_stale'),
+            hit('ch_fresh'),
+          ],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    const ok = expectOk(out)
+    // flagEmbeddingStaleOps only sets the flag; the row keeps its old vector and
+    // vec0 still returns it, so every pool has to drop it explicitly.
+    expect(tracedIds(ok.bundles.entities)).toEqual(['en_fresh'])
+    expect(tracedIds(ok.bundles.lore)).toEqual(['lo_fresh'])
+    expect(tracedIds(ok.bundles.happenings)).toEqual(['hp_fresh'])
+    expect(tracedIds(ok.bundles.threads)).toEqual(['th_fresh'])
+    expect(tracedIds(ok.bundles.chapters)).toEqual(['ch_fresh'])
+  })
+
+  it('suppresses a staged entity whose name appears in recent prose', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('stg_a', 'Mira', { status: 'staged' }),
+            entityRow('stg_b', 'Dalen', { status: 'staged' }),
+          ],
+          knn: [hit('stg_a'), hit('stg_b')],
+        }),
+      }),
+      params({ sceneEntityIds: [], recentProse: 'Mira stepped out of the shadows.' }),
+    )
+
+    const ok = expectOk(out)
+    expect(tracedIds(ok.bundles.entities)).not.toContain('stg_a')
+    expect(tracedIds(ok.bundles.entities)).toContain('stg_b')
+    expect(ok.bundles.entities.selected.map((c) => c.renderedText)).toEqual([
+      'Dalen (available to introduce): About Dalen.',
+    ])
+  })
+
+  it('frames an off-scene active entity and a staged entity per canon', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('act_off', 'Mira', { description: 'A ranger.' }),
+            entityRow('stg', 'Dalen', { status: 'staged', description: 'A smith.' }),
+          ],
+          knn: [hit('act_off'), hit('stg')],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.bundles.entities.selected.map((c) => c.renderedText).sort()).toEqual([
+      'Dalen (available to introduce): A smith.',
+      'Mira (currently elsewhere): A ranger.',
+    ])
+  })
+
+  it('gives every candidate in a pool its own awarenessIds array', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [loreRow('lore_a', 'Veilstone'), loreRow('lore_b', 'Driftmark')],
+          knn: [hit('lore_a'), hit('lore_b')],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    const arrays = expectOk(out).bundles.lore.selected.map((c) => c.awarenessIds)
+    expect(arrays).toHaveLength(2)
+    // One instance spread across the pool would alias every candidate's list.
+    expect(arrays[0]).not.toBe(arrays[1])
+  })
+
+  it('drops the awareness pin on a common-knowledge happening, and only there', async () => {
+    const pinOf = async (common: 0 | 1) => {
+      const out = await runRetrieval(
+        deps({
+          queryAll: makeQueryAll({
+            happenings: [happeningRow('hap_1', 'The bell rang', { common })],
+            awareness: [awarenessRow('haw_1', 'hap_1', { pin: 0.9 })],
+            knn: [hit('hap_1')],
+          }),
+        }),
+        params(),
+      )
+      return expectOk(out).bundles.happenings.selected.find((c) => c.id === 'hap_1')?.pinSignal
+    }
+
+    // Nothing in the schema stops a common-knowledge row from carrying awareness
+    // rows too, and canon says it carries no decay_resistance signal.
+    expect(await pinOf(1)).toBe(0)
+    // Positive control: the same awareness row pins a non-common happening.
+    expect(await pinOf(0)).toBe(0.9)
+  })
+
+  it('admits a common-knowledge happening that has no awareness row', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          happenings: [happeningRow('hap_1', 'The bell rang', { common: 1 })],
+          awareness: [],
+          knn: [hit('hap_1', 0.2)],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    const trace = ok.bundles.happenings.traces.find((t) => t.id === 'hap_1')
+    expect(trace).toBeDefined()
+    expect(trace?.pinSignal).toBe(0)
+    expect(trace?.recencyFactor).toBe(1)
+    expect(ok.bundles.happenings.selected[0].commonKnowledge).toBe(true)
+  })
+
+  it('excludes a happening no in-scene awareness row came back for', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          happenings: [
+            happeningRow('hap_private', 'A secret', { occurredAt: 'e1' }),
+            happeningRow('hap_open', 'The bell rang', { common: 1 }),
+          ],
+          // loadAwarenessForScene filters on character_id IN (sceneCharacterIds),
+          // so an out-of-scene row simply never comes back.
+          awareness: [],
+          knn: [hit('hap_private'), hit('hap_open')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(tracedIds(ok.bundles.happenings)).not.toContain('hap_private')
+    expect(tracedIds(ok.bundles.happenings)).toContain('hap_open')
+  })
+
+  it('reports injectedAwarenessIds for every selected happening', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          happenings: [happeningRow('hap_1', 'The blade', { occurredAt: 'e1' })],
+          awareness: [awarenessRow('haw_1', 'hap_1', { pin: 0.5, source: 'Kara saw it' })],
+          knn: [hit('hap_1')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.bundles.happenings.selected.map((c) => c.id)).toContain('hap_1')
+    expect(ok.injectedAwarenessIds).toEqual(['haw_1'])
+    // decay_resistance rides in from the awareness row, not the happening.
+    expect(ok.bundles.happenings.traces[0].pinSignal).toBe(0.5)
+  })
+
+  it('boosts a happening inside the entry range of a selected chapter', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          chapters: [chapterRow('chap_1', 'Chapter One')],
+          chapterRanges: [['chap_1', 'e1']],
+          happenings: [
+            happeningRow('hap_in', 'The blade', { common: 1, occurredAt: 'e1' }),
+            happeningRow('hap_out', 'The bell', { common: 1, occurredAt: 'e9' }),
+          ],
+          knn: [hit('chap_1'), hit('hap_in'), hit('hap_out')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.bundles.chapters.selected.map((c) => c.id)).toContain('chap_1')
+    expect(ok.bundles.chapters.traces[0].displayName).toBe('Chapter One')
+    const boosted = (id: string) =>
+      ok.bundles.happenings.traces.find((t) => t.id === id)?.chapterBoostApplied
+    expect(boosted('hap_in')).toBe(true)
+    expect(boosted('hap_out')).toBe(false)
+  })
+})
+
+// The index is derived from the source rows the pass already loaded, so these
+// pin that derivation through its two consumers: the happening keyword surface
+// and Q3 sentence selection.
+describe('runRetrieval — name/keyword index', () => {
+  it('boosts a happening whose awareness source names a branch entity', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('char_a', 'Kara Vex')],
+          happenings: [
+            happeningRow('hap_named', 'The oath'),
+            happeningRow('hap_plain', 'The bell'),
+          ],
+          awareness: [
+            awarenessRow('haw_1', 'hap_named', { source: 'Kara Vex swore it' }),
+            awarenessRow('haw_2', 'hap_plain', { source: 'someone rang it' }),
+          ],
+          knn: [hit('hap_named'), hit('hap_plain')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    const boost = (id: string) =>
+      ok.bundles.happenings.traces.find((t) => t.id === id)?.kwBoostValue
+    expect(boost('hap_named')).toBeGreaterThan(0)
+    // Negative control: an awareness source naming nothing in the index.
+    expect(boost('hap_plain')).toBe(0)
+  })
+
+  it('scores Q3 sentence selection with the branch lore keywords', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [loreRow('lore_1', 'The Veil', { keywords: ['veilstone'] })],
+        }),
+      }),
+      params({
+        sceneEntityIds: [],
+        sceneCharacterIds: [],
+        query: {
+          lastNarrativeContent:
+            'Rain fell over the long grey afternoon and nothing happened. The veilstone hummed.',
+        },
+      }),
+    )
+
+    const scores = expectOk(out).queries.q3.sentenceScores ?? []
+    expect(scores).toHaveLength(2)
+    expect(scores[1]).toBeGreaterThan(scores[0])
+  })
+})
+
+describe('runRetrieval — keyword boost', () => {
+  it('matches the candidate keyword surface against the query texts, Q2 included', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [
+            loreRow('lore_hit', 'The Veil', { keywords: ['Veilstone'] }),
+            loreRow('lore_miss', 'The Drift', { keywords: ['Driftmark'] }),
+          ],
+          knn: [hit('lore_hit'), hit('lore_miss')],
+        }),
+      }),
+      // The era name reaches the query stack through Q2 only.
+      params({ query: { eraName: 'Veilstone' } }),
+    )
+
+    const ok = expectOk(out)
+    const boost = (id: string) => ok.bundles.lore.traces.find((t) => t.id === id)?.kwBoostValue
+    expect(boost('lore_hit')).toBeGreaterThan(0)
+    expect(boost('lore_miss')).toBe(0)
+  })
+
+  it('keeps ranking a lore row whose keywords blob is unusable', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [
+            loreRow('lore_broken', 'The Veil', { rawKeywords: '{' }),
+            loreRow('lore_scalar', 'The Drift', { rawKeywords: '"amulet"' }),
+            loreRow('lore_ok', 'The Relic', { keywords: ['amulet'] }),
+          ],
+          knn: [hit('lore_broken'), hit('lore_scalar'), hit('lore_ok')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    const boost = (id: string) => ok.bundles.lore.traces.find((t) => t.id === id)?.kwBoostValue
+    expect(boost('lore_ok')).toBeGreaterThan(0)
+    expect(boost('lore_broken')).toBe(0)
+    // A JSON scalar parses fine but is not a term list.
+    expect(boost('lore_scalar')).toBe(0)
+  })
+
+  it('matches a decomposed keyword against composed query prose', async () => {
+    // matchTerms NFC-normalizes its haystack but not its terms, so a keyword
+    // stored decomposed never matches composed prose unless the term is
+    // normalized the same way.
+    const nfd = `Zoe${String.fromCodePoint(0x308)}`
+    const nfc = nfd.normalize('NFC')
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          lore: [
+            loreRow('lore_nfd', 'The Sister', { keywords: [nfd] }),
+            loreRow('lore_ascii', 'The Relic', { keywords: ['amulet'] }),
+          ],
+          knn: [hit('lore_nfd'), hit('lore_ascii')],
+        }),
+      }),
+      params({ query: { userAction: `I ask ${nfc} about the amulet.` } }),
+    )
+
+    const ok = expectOk(out)
+    const boost = (id: string) => ok.bundles.lore.traces.find((t) => t.id === id)?.kwBoostValue
+    expect(boost('lore_ascii')).toBeGreaterThan(0)
+    expect(boost('lore_nfd')).toBeGreaterThan(0)
+  })
+})
