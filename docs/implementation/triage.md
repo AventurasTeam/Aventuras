@@ -1085,3 +1085,22 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   and the simplest to explain to a user who set the flag) or whether
   seating should be checked against them first. Surfaced by M3.4 Task 11
   (2026-08-02).
+- **The blocking sync stage sends the whole dirty set as one provider
+  request, with no size ceiling.** M3.4 Task 12's `runSyncStage` calls
+  `embedRows` once for every `embedding_stale = 1` row, and
+  `embedTexts` (`lib/embedder/service.ts`) does not chunk — unlike
+  `lib/embedder/drain.ts`, which batches at 16 and isolates poison rows.
+  A first retrieval on a large or freshly-imported story therefore hands
+  a remote provider thousands of texts in a single call, and because
+  this stage is **blocking** by design, a 413 or a provider row-limit
+  fails the turn outright rather than degrading. The drain worker
+  mitigates in practice by pre-warming, but only for the open branch,
+  while the sync stage's `branchIds` may be wider.
+  [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
+  says the stage "embeds every dirty row … in one batch", but that
+  sentence contrasts deferred sync against embedding-on-write — it is
+  about collapsing repeated writes into a single pass, not about issuing
+  a single HTTP request. **Chunking would not violate canon**, so this
+  is a deferred robustness decision rather than a constraint. If taken,
+  it belongs in the injected `embedRows` / the provider layer, not in
+  `sync.ts`. Surfaced by M3.4 Task 12 review (2026-08-02).
