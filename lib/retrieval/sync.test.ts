@@ -138,8 +138,21 @@ describe('runSyncStage', () => {
     expect(d.embedRows).toHaveBeenCalledTimes(1)
     expect(embeddedIds(d.embedRows)).toEqual(['en_a', 'lo_a', 'lo_b'])
     expect(d.runInTransaction).toHaveBeenCalledTimes(1)
-    expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 0, lo_b: 0, lo_fresh: 0 })
+    expect(staleFlags(sqlite, 'lore')).toMatchObject({ lo_a: 0, lo_b: 0 })
     expect(staleFlags(sqlite, 'entities')).toEqual({ en_a: 0 })
+  })
+
+  // The scope difference from the drain worker, which warms the open branch only.
+  it('embeds the union of every requested branch', async () => {
+    const { sqlite, runInTransaction } = await setup([
+      { kind: 'lore', id: 'lo_main', branchId: 'br_1' },
+      { kind: 'lore', id: 'lo_alt', branchId: 'br_2' },
+    ])
+    const d = depsFor(sqlite, runInTransaction, { branchIds: ['br_1', 'br_2'] })
+
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 2 })
+    expect(embeddedIds(d.embedRows)).toEqual(['lo_alt', 'lo_main'])
+    expect(staleFlags(sqlite, 'lore')).toEqual({ lo_alt: 0, lo_main: 0 })
   })
 
   it('loads the stale set for the requested branches only', async () => {
@@ -238,7 +251,12 @@ describe('runSyncStage', () => {
       },
     })
 
-    expect(await runSyncStage(d)).toMatchObject({ detail: 'embedder worker vanished' })
+    expect(await runSyncStage(d)).toEqual({
+      ok: false,
+      reason: 'init',
+      detail: 'embedder worker vanished',
+      staleCount: 1,
+    })
   })
 
   it('rolls back the batch when one op fails, leaving every flag set', async () => {
@@ -259,7 +277,7 @@ describe('runSyncStage', () => {
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 1, lo_b: 1 })
   })
 
-  it('propagates a stale-row load failure rather than typing it as blocking', async () => {
+  it('reports a stale-row load failure with an unknown stale count', async () => {
     const { sqlite, runInTransaction } = await setup([])
     const d = depsFor(sqlite, runInTransaction, {
       loadStaleRows: async () => {
@@ -267,7 +285,12 @@ describe('runSyncStage', () => {
       },
     })
 
-    await expect(runSyncStage(d)).rejects.toThrow('db unreachable')
+    expect(await runSyncStage(d)).toEqual({
+      ok: false,
+      reason: 'init',
+      detail: 'db unreachable',
+      staleCount: null,
+    })
     expect(d.embedRows).not.toHaveBeenCalled()
   })
 })

@@ -1,5 +1,5 @@
 import type { DbCtx, EmbeddedFieldRow, SqlOp } from '@/lib/db'
-import { EmbedderCallError } from '@/lib/embedder'
+import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
 
 export type SyncStageDeps = {
   branchIds: readonly string[]
@@ -10,7 +10,7 @@ export type SyncStageDeps = {
 
 export type SyncStageResult =
   | { ok: true; embedded: number }
-  | { ok: false; reason: 'init' | 'call'; detail: string; staleCount: number }
+  | { ok: false; reason: 'init' | 'call'; detail: string; staleCount: number | null }
 
 /**
  * Embeds every dirty row in ONE batch and clears their flags in one transaction,
@@ -21,26 +21,30 @@ export type SyncStageResult =
  * partial-success path — a half-synced index silently mis-ranks or drops the
  * un-embedded rows instead of reporting anything.
  *
- * A `loadStaleRows` rejection propagates: the failure branch has to report a
- * `staleCount`, and a failed load is the one case that doesn't know it.
+ * `staleCount` is null only when the dirty set itself failed to load, so a caller
+ * can drop the magnitude rather than present a confident zero — the same
+ * contract `countStoryEmbeddableRows` uses for an uncountable story.
  */
 export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult> {
-  const rows = await deps.loadStaleRows(deps.branchIds)
-  if (rows.length === 0) return { ok: true, embedded: 0 }
-
+  let rows: EmbeddedFieldRow[] | null = null
   try {
+    rows = await deps.loadStaleRows(deps.branchIds)
+    if (rows.length === 0) return { ok: true, embedded: 0 }
     await deps.runInTransaction(await deps.embedRows(rows))
     return { ok: true, embedded: rows.length }
   } catch (error) {
     return {
       ok: false,
-      // Only the call side is discriminated: 'call' means one post-init call
-      // failed and 'init' means the session never came up (model-management.md
-      // → Failure surfaces), so an untyped throw — a failed write, a bug —
-      // lands on 'init' rather than claiming the session is fine.
-      reason: error instanceof EmbedderCallError ? 'call' : 'init',
+      // Typed embedder errors carry their own kind. Anything else — a failed
+      // read or write, a bug — has no standing to claim the session is fine, so
+      // it takes 'init', which means the session never came up
+      // (model-management.md → Failure surfaces).
+      reason:
+        error instanceof EmbedderInitError || error instanceof EmbedderCallError
+          ? error.kind
+          : 'init',
       detail: error instanceof Error ? error.message : String(error),
-      staleCount: rows.length,
+      staleCount: rows === null ? null : rows.length,
     }
   }
 }
