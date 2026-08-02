@@ -26,12 +26,16 @@ export type SyncStageResult =
  * contract `countStoryEmbeddableRows` uses for an uncountable story.
  */
 export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult> {
-  let rows: EmbeddedFieldRow[] | null = null
+  // Captured before embedRows sees the array: re-reading rows.length in the
+  // catch would let a dep that drains its argument report a confident zero,
+  // which is the one value null is supposed to be distinguishable from.
+  let staleCount: number | null = null
   try {
-    rows = await deps.loadStaleRows(deps.branchIds)
+    const rows = await deps.loadStaleRows(deps.branchIds)
     if (rows.length === 0) return { ok: true, embedded: 0 }
+    staleCount = rows.length
     await deps.runInTransaction(await deps.embedRows(rows))
-    return { ok: true, embedded: rows.length }
+    return { ok: true, embedded: staleCount }
   } catch (error) {
     return {
       ok: false,
@@ -44,7 +48,7 @@ export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult
           ? error.kind
           : 'init',
       detail: error instanceof Error ? error.message : String(error),
-      staleCount: rows === null ? null : rows.length,
+      staleCount,
     }
   }
 }

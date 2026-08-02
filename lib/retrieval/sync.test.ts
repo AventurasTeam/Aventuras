@@ -227,6 +227,26 @@ describe('runSyncStage', () => {
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 1 })
   })
 
+  it('reports the stale count even when the embedder drains the row array', async () => {
+    const { sqlite, runInTransaction } = await setup([
+      { kind: 'lore', id: 'lo_a' },
+      { kind: 'lore', id: 'lo_b' },
+    ])
+    const d = depsFor(sqlite, runInTransaction, {
+      embedRows: async (rows) => {
+        rows.length = 0
+        throw new EmbedderCallError('drained then failed')
+      },
+    })
+
+    expect(await runSyncStage(d)).toEqual({
+      ok: false,
+      reason: 'call',
+      detail: 'drained then failed',
+      staleCount: 2,
+    })
+  })
+
   it('classifies an untyped throw as an init failure', async () => {
     const { sqlite, runInTransaction } = await setup([{ kind: 'lore', id: 'lo_a' }])
     const d = depsFor(sqlite, runInTransaction, {
