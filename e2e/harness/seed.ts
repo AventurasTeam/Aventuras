@@ -108,6 +108,23 @@ export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): vo
   }
 }
 
+// Every embeddable table at once. The seed leaves happenings, threads and
+// entities fresh, so their vec0 families stay empty and KNN returns nothing —
+// a retrieval spec that needs a ranked bundle has to give the embed path
+// something to embed. Runs before launch.
+const EMBEDDABLE_TABLES = ['entities', 'lore', 'chapters', 'threads', 'happenings'] as const
+
+export function markBranchEmbeddingStale(dbPath: string, branchId: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    for (const table of EMBEDDABLE_TABLES) {
+      db.prepare(`UPDATE "${table}" SET embedding_stale = 1 WHERE branch_id = ?`).run(branchId)
+    }
+  } finally {
+    db.close()
+  }
+}
+
 // Leave a story mid-swap: the marker is exactly what a crash mid-phase-1 leaves
 // behind, and the state the swap-paused pill exists to surface. Runs before launch.
 export function markSwapPending(dbPath: string, storyId: string, targetModelId: string): void {
