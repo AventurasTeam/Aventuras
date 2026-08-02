@@ -13,7 +13,7 @@
  * - The LLM sees variableName as the key, but stored values are keyed by defId
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
 import {
   classificationResultSchema,
@@ -60,7 +60,7 @@ function buildVariableDescription(def: RuntimeVariable): string {
  * Build the base (non-optional) Zod schema for a runtime variable.
  * Used internally; call buildVariableSchema() for the version with optionality.
  */
-function buildVariableBaseSchema(def: RuntimeVariable): z.ZodTypeAny {
+function buildVariableBaseSchema(def: RuntimeVariable): z.ZodType {
   const desc = buildVariableDescription(def)
 
   switch (def.variableType) {
@@ -106,6 +106,7 @@ export function buildVariableSchema(def: RuntimeVariable): z.ZodTypeAny {
  * Build a Zod shape (Record of field schemas) for runtime variables of one entity type.
  * Returns null if no variables.
  *
+ * @param variables - runtime variables
  * @param allOptional - true for update schemas (only include changed fields),
  *                      false for new entity schemas (required fields stay required)
  */

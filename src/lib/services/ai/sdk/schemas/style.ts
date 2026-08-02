@@ -4,7 +4,7 @@
  * Zod schemas for style analysis output from the LLM.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 export const phraseAnalysisSchema = z.object({
   phrase: z.string().describe('The repeated phrase or pattern'),

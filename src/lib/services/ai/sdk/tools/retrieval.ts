@@ -6,7 +6,7 @@
  */
 
 import { tool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { Entry, Chapter } from '$lib/types'
 import { entryTypeSchema } from '../schemas/lorebook'
 

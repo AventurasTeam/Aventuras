@@ -5,7 +5,7 @@
  * used in the interactive vault assistant approval workflow.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 import { visualDescriptorsSchema } from './classifier'
 import { vaultLorebookEntrySchema } from './lorebook'
 

@@ -8,7 +8,7 @@
 
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
 import { tool, type ModelMessage, type ToolSet } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 import { settings } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'

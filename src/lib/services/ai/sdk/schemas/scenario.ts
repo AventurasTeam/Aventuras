@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import * as z from 'zod'
 
 export const expandedSettingSchema = z.object({
   name: z.string().describe('memorable name for the setting'),

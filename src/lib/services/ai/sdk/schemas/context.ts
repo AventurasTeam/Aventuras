@@ -4,7 +4,7 @@
  * Schema for LLM-based entity selection in Tier 3 context building.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Result of LLM entity selection.

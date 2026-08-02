@@ -5,7 +5,7 @@
  * This replaces the manual JSON parsing and validation in SuggestionsService.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Schema for a single story suggestion.

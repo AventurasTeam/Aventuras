@@ -5,7 +5,7 @@
  * Used by TimelineFillService for memory retrieval.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Schema for a single timeline query.
