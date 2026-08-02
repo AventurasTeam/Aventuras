@@ -370,7 +370,7 @@
             value={reasoningValue}
             type="single"
             min={1}
-            max={6}
+            max={5}
             step={1}
             onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
           />
@@ -386,7 +386,7 @@
             value={reasoningValue}
             type="single"
             min={0}
-            max={6}
+            max={5}
             step={1}
             onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
           />
