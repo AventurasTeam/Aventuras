@@ -90,7 +90,12 @@ export type RetrievalOutcome =
        * non-zero one means the sync's scope or its ops missed rows.
        */
       staleCounts: Record<RetrievalType, number>
-      /** Awareness rows behind every selected happening — retrieval_count targets. */
+      /**
+       * Awareness rows behind every selected happening — retrieval_count
+       * targets. Duplicate-free by construction (disjoint per-happening
+       * buckets, each happening selected once), which is what lets the caller
+       * bump one counter per element without de-duplicating first.
+       */
       injectedAwarenessIds: string[]
     }
   | { ok: false; failure: RetrievalFailure }

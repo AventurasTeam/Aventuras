@@ -54,15 +54,13 @@ const EMPTY_BUNDLE: RankedType = {
   },
 }
 
-function okOutcome(
-  staleCounts: Record<RetrievalType, number> = {
-    entities: 0,
-    lore: 0,
-    happenings: 0,
-    threads: 0,
-    chapters: 0,
-  },
-): Extract<RetrievalOutcome, { ok: true }> {
+function okOutcome({
+  staleCounts = { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+  injectedAwarenessIds = ['haw_1'],
+}: {
+  staleCounts?: Record<RetrievalType, number>
+  injectedAwarenessIds?: string[]
+} = {}): Extract<RetrievalOutcome, { ok: true }> {
   return {
     ok: true,
     floor: {
@@ -89,7 +87,18 @@ function okOutcome(
       embedTexts: [],
     },
     staleCounts,
-    injectedAwarenessIds: ['haw_1'],
+    injectedAwarenessIds,
+  }
+}
+
+function bumpEvent(id: string): PhaseEmittedEvent {
+  return {
+    type: 'delta_emitted',
+    action: {
+      kind: 'bumpAwarenessRetrieval',
+      source: 'ai_classifier',
+      payload: { branchId: 'b1', id },
+    },
   }
 }
 
@@ -427,15 +436,37 @@ describe('retrieval phase — blocking failure mapping', () => {
 })
 
 describe('retrieval phase — success', () => {
-  it('stashes the outcome for the narrative phase and yields no events', async () => {
+  it('stashes the outcome for the narrative phase and bumps the injected awareness row', async () => {
     seedOpenStory()
 
     const { result, events, intermediates } = await runRetrievalPhase()
 
     expect(result).toEqual({ status: 'completed' })
     expect(intermediates[RETRIEVAL_INTERMEDIATE_KEY]).toBe(OK_OUTCOME)
-    // The phase is event-free; an accidental emission here would write an
-    // unregistered delta-action kind.
+    expect(events).toEqual([bumpEvent('haw_1')])
+  })
+
+  it('bumps every injected awareness row, one delta each', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({ injectedAwarenessIds: ['haw_1', 'haw_2', 'haw_3'] }),
+    )
+
+    const { events } = await runRetrievalPhase()
+
+    expect(events).toEqual([bumpEvent('haw_1'), bumpEvent('haw_2'), bumpEvent('haw_3')])
+  })
+
+  // Not a degenerate shape: runRetrieval admits a common-knowledge happening
+  // with no in-scene awareness row, so a turn can select happenings and still
+  // report no ids to bump.
+  it('emits nothing when the pass injected no awareness rows', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(okOutcome({ injectedAwarenessIds: [] }))
+
+    const { result, events } = await runRetrievalPhase()
+
+    expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])
   })
 
@@ -479,13 +510,16 @@ describe('retrieval phase — abort', () => {
       return OK_OUTCOME
     })
 
-    const { result, intermediates } = await runRetrievalPhase(controller.signal)
+    const { result, events, intermediates } = await runRetrievalPhase(controller.signal)
 
     // Distinct from the case above: the pass DID run, so only the poll after it
     // can catch this.
     expect(runRetrievalMock).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ status: 'aborted' })
     expect(intermediates).toEqual({})
+    // The outcome reported haw_1 as injected; the bumps sit downstream of the
+    // poll so a cancelled turn leaves no counter for reverse-replay to walk back.
+    expect(events).toEqual([])
   })
 
   it('reports a cancelled turn as aborted even when the pass also failed', async () => {
@@ -533,7 +567,7 @@ describe('retrieval phase — diagnostics', () => {
   it('trips on rows the blocking sync stage left stale', async () => {
     seedOpenStory()
     const counts = { entities: 0, lore: 3, happenings: 0, threads: 0, chapters: 0 }
-    runRetrievalMock.mockResolvedValue(okOutcome(counts))
+    runRetrievalMock.mockResolvedValue(okOutcome({ staleCounts: counts }))
 
     const { result, log } = await runRetrievalPhase()
 

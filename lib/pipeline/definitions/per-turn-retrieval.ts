@@ -140,5 +140,18 @@ export async function* retrievalPhase(
     ctx.log.warn('retrieval.stale_after_sync', outcome.staleCounts)
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
+
+  // Downstream of the abort poll on purpose: bumping a cancelled turn's counters
+  // leaves reverse-replay work for a turn that produced no prose.
+  for (const awarenessId of outcome.injectedAwarenessIds) {
+    yield {
+      type: 'delta_emitted',
+      action: {
+        kind: 'bumpAwarenessRetrieval',
+        source: 'ai_classifier',
+        payload: { branchId, id: awarenessId },
+      },
+    }
+  }
   return { status: 'completed' }
 }

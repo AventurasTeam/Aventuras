@@ -22,6 +22,7 @@ declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
     upsertHappeningAwareness: { source: DeltaSource; payload: AwarenessUpsertPayload }
     deleteHappeningAwareness: { source: DeltaSource; payload: { branchId: string; id: string } }
+    bumpAwarenessRetrieval: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
 }
 
@@ -140,6 +141,40 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
   }
 }
 
+// chapter-close.md → 3d awareness pin tuning ranks awareness rows by
+// retrieval_count, so a turn the user rolled back must leave nothing counted.
+const bumpRetrievalHandler: ActionHandler = async (action, branchId, ctx) => {
+  if (action.kind !== 'bumpAwarenessRetrieval')
+    throw new Error(`handler/kind mismatch: ${action.kind}`)
+  const { branchId: bid, id } = action.payload
+  if (bid !== branchId)
+    return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
+  const [current] = await ctx.db
+    .select()
+    .from(happeningAwareness)
+    .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
+  if (!current)
+    return { status: 'rejected', reason: `bump target awareness ${bid}:${id} not found` }
+
+  const next = current.retrievalCount + 1
+  return {
+    status: 'ok',
+    targetTable: 'happening_awareness',
+    targetId: id,
+    op: 'update',
+    // retrievalCount has no columnSchemas entry, so reverse-replay restores it by assignment.
+    undoPayload: { retrievalCount: current.retrievalCount },
+    ops: [
+      ctx.db
+        .update(happeningAwareness)
+        .set({ retrievalCount: next })
+        .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
+        .toSQL(),
+    ],
+    patch: { op: 'update', id, columns: { retrievalCount: next } },
+  }
+}
+
 export function registerHappeningAwareness(): void {
   register({
     table: 'happening_awareness',
@@ -149,7 +184,11 @@ export function registerHappeningAwareness(): void {
       branchCol: happeningAwareness.branchId,
     },
     columnSchemas: {},
-    handlers: { upsertHappeningAwareness: upsertHandler, deleteHappeningAwareness: deleteHandler },
+    handlers: {
+      upsertHappeningAwareness: upsertHandler,
+      deleteHappeningAwareness: deleteHandler,
+      bumpAwarenessRetrieval: bumpRetrievalHandler,
+    },
     patcher: (branchId, p) => happeningAwarenessStore.patch(branchId, p),
   })
 }

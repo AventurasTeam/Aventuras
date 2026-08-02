@@ -768,6 +768,46 @@ describe('runRetrieval — pools', () => {
     expect(ok.bundles.happenings.traces[0].pinSignal).toBe(0.5)
   })
 
+  // Two in-scene characters aware of one event is the ordinary production shape,
+  // and the only one where the per-happening bucket holds more than one row.
+  it('folds every in-scene holder of one happening into its ids, pin and text', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          happenings: [
+            happeningRow('hap_1', 'The oath', {
+              description: 'An oath was sworn.',
+              occurredAt: 'e1',
+            }),
+          ],
+          awareness: [
+            awarenessRow('haw_a', 'hap_1', {
+              characterId: 'char_a',
+              pin: 0.2,
+              source: 'Kara saw it',
+            }),
+            awarenessRow('haw_b', 'hap_1', {
+              characterId: 'char_b',
+              pin: 0.7,
+              source: 'Mira heard it',
+            }),
+          ],
+          knn: [hit('hap_1')],
+        }),
+      }),
+      params({ sceneCharacterIds: ['char_a', 'char_b'], sceneEntityIds: [] }),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.injectedAwarenessIds).toEqual(['haw_a', 'haw_b'])
+    const selected = ok.bundles.happenings.selected.find((c) => c.id === 'hap_1')
+    // Max over the holders, not min or first-wins: the most pinned holder is
+    // what keeps the row alive against decay.
+    expect(selected?.pinSignal).toBe(0.7)
+    // Every holder's source reaches the prompt, not just the first bucket entry.
+    expect(selected?.renderedText).toBe('The oath\nAn oath was sworn.\nKara saw it\nMira heard it')
+  })
+
   it('boosts a happening inside the entry range of a selected chapter', async () => {
     const out = await runRetrieval(
       deps({
