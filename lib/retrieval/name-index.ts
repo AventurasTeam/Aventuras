@@ -7,6 +7,13 @@ export type NameKeywordIndex = {
   loreKeywords: ReadonlySet<string>
 }
 
+// matchTerms NFC-normalizes and lowercases its haystack but leaves its terms
+// untouched, so every producer of a term has to match that shape or the lookup
+// silently misses.
+export function normalizeTerm(s: string): string {
+  return s.trim().toLowerCase().normalize('NFC')
+}
+
 export async function buildNameKeywordIndex(
   queryAll: QueryAll,
   branchId: string,
@@ -17,7 +24,7 @@ export async function buildNameKeywordIndex(
   const entityRows = await queryAll('SELECT name FROM entities WHERE branch_id = ?', [branchId])
   for (const row of entityRows) {
     const [name] = row as [string]
-    const term = name.trim().toLowerCase().normalize('NFC')
+    const term = normalizeTerm(name)
     if (term === '') continue
     entityNames.add(term)
   }
@@ -35,7 +42,7 @@ export async function buildNameKeywordIndex(
     if (!Array.isArray(keywords)) continue
     for (const kw of keywords) {
       if (typeof kw !== 'string') continue
-      const term = kw.trim().toLowerCase().normalize('NFC')
+      const term = normalizeTerm(kw)
       if (term === '') continue
       loreKeywords.add(term)
     }

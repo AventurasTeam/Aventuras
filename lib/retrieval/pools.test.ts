@@ -1,10 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 import {
   buildStructuralFloor,
   filterEntityPool,
   filterThreadPool,
-  loadAwarenessForScene,
   poolIdsFromKnn,
   type EntityRow,
   type LoreRow,
@@ -430,66 +429,5 @@ describe('poolIdsFromKnn', () => {
 
   it('is empty when no query ran at all', () => {
     expect(poolIdsFromKnn([])).toEqual([])
-  })
-})
-
-describe('loadAwarenessForScene', () => {
-  const capturing = (rows: unknown[][] = []) => {
-    const calls: { sql: string; params: unknown[] }[] = []
-    const queryAll = vi.fn(async (sql: string, params: unknown[]) => {
-      calls.push({ sql, params })
-      return rows
-    })
-    return { calls, queryAll }
-  }
-
-  it('queries the union of in-scene character ids', async () => {
-    const { calls, queryAll } = capturing()
-    await loadAwarenessForScene(queryAll, 'br_1', ['char_a', 'char_b'])
-    expect(calls[0].sql).toContain('character_id IN (?, ?)')
-    expect(calls[0].params).toEqual(['br_1', 'char_a', 'char_b'])
-  })
-
-  it('scopes the union to the branch, so a non-scene character is never asked for', async () => {
-    const { calls, queryAll } = capturing()
-    await loadAwarenessForScene(queryAll, 'br_1', ['char_a'])
-    expect(calls[0].sql).toContain('branch_id = ?')
-    expect(calls[0].params).toEqual(['br_1', 'char_a'])
-  })
-
-  it('selects the awareness columns in the order the row mapping reads them', async () => {
-    const { calls, queryAll } = capturing()
-    await loadAwarenessForScene(queryAll, 'br_1', ['char_a'])
-    expect(calls[0].sql).toContain(
-      'SELECT id, happening_id, character_id, learned_at_entry_id, decay_resistance, source',
-    )
-  })
-
-  it('returns nothing without querying when the scene has no characters', async () => {
-    const { calls, queryAll } = capturing()
-    expect(await loadAwarenessForScene(queryAll, 'br_1', [])).toEqual([])
-    expect(calls).toEqual([])
-  })
-
-  it('maps positional columns onto the awareness row shape', async () => {
-    const { queryAll } = capturing([['ha_1', 'hap_1', 'char_a', 'e_9', 0.4, 'Kara saw it']])
-    expect(await loadAwarenessForScene(queryAll, 'br_1', ['char_a'])).toEqual([
-      {
-        id: 'ha_1',
-        happeningId: 'hap_1',
-        characterId: 'char_a',
-        learnedAtEntryId: 'e_9',
-        decayResistance: 0.4,
-        source: 'Kara saw it',
-      },
-    ])
-  })
-
-  it('keeps the nullable awareness columns null rather than coercing them', async () => {
-    const { queryAll } = capturing([['ha_1', 'hap_1', 'char_a', null, null, null]])
-    const [row] = await loadAwarenessForScene(queryAll, 'br_1', ['char_a'])
-    expect(row.learnedAtEntryId).toBeNull()
-    expect(row.decayResistance).toBeNull()
-    expect(row.source).toBeNull()
   })
 })

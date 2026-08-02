@@ -1,11 +1,10 @@
-import type { InjectionMode } from '@/lib/db'
+import type { EntityKind, InjectionMode } from '@/lib/db'
 
-import { matchTerms } from './name-index'
-import type { QueryAll } from './types'
+import { matchTerms, normalizeTerm } from './name-index'
 
 export type EntityRow = {
   id: string
-  kind: 'character' | 'location' | 'item' | 'faction'
+  kind: EntityKind
   status: 'staged' | 'active' | 'retired'
   injectionMode: InjectionMode
   name: string
@@ -76,13 +75,11 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     ...activeThreads.map((t) => t.id),
   ])
 
-  // 'always' is a user-intent override across entities / lore / threads. Lore
-  // takes no already-seated check because no other floor row can hold a lore
-  // row, so it cannot be listed twice.
+  // 'always' is a user-intent override across entities / lore / threads.
   const alwaysEntities = input.entities.filter(
     (e) => e.injectionMode === 'always' && !seatedIds.has(e.id),
   )
-  const alwaysLore = input.lore.filter((l) => l.injectionMode === 'always')
+  const alwaysLore = input.lore.filter((l) => l.injectionMode === 'always' && !seatedIds.has(l.id))
   const alwaysThreads = input.threads.filter(
     (t) => t.injectionMode === 'always' && !seatedIds.has(t.id),
   )
@@ -105,15 +102,12 @@ export type EntityPoolInput = {
   recentProse: string
 }
 
-// name-index.ts stores its terms this way; matchTerms compares against an
-// NFC-normalized haystack, so an NFD name would otherwise never match.
-const term = (s: string): string => s.trim().toLowerCase().normalize('NFC')
-
 /**
  * retrieval.md → Three-sub-pool entity model: active off-scene, staged, and
- * retired only via injection_mode='always'. The retired branch below fires
- * only for a caller passing a floor narrower than buildStructuralFloor's,
- * which seats every always row itself.
+ * retired only via injection_mode='always'. The retired branch below excludes
+ * on every call — that is canon's default-exclusion — but it only ever admits
+ * for a caller passing a floor narrower than buildStructuralFloor's, which
+ * seats every always row itself.
  *
  * Layer-A suppression (edge-cases.md → Name collision) drops a STAGED entity
  * whose name appears in recent un-classified prose — the AI may have just
@@ -126,10 +120,12 @@ export function filterEntityPool(rows: readonly EntityRow[], input: EntityPoolIn
   const hits = new Set(
     matchTerms(
       input.recentProse,
-      staged.map((r) => term(r.name)),
+      staged.map((r) => normalizeTerm(r.name)),
     ),
   )
-  const suppressedIds = new Set(staged.filter((r) => hits.has(term(r.name))).map((r) => r.id))
+  const suppressedIds = new Set(
+    staged.filter((r) => hits.has(normalizeTerm(r.name))).map((r) => r.id),
+  )
 
   return rows.filter((r) => {
     if (input.floorIds.has(r.id)) return false
@@ -150,7 +146,10 @@ export function filterThreadPool(
   )
 }
 
-/** One KNN row's identity. `distance` is carried for logging, never scored. */
+/**
+ * One KNN row reduced to what pool assembly needs. Nothing scores on
+ * `distance`; the ranker computes cosine over the returned vectors instead.
+ */
 export type KnnHit = readonly [id: string, distance: number]
 
 /** Union of the per-query KNN id sets, de-duplicated, first-seen order. */
@@ -165,45 +164,4 @@ export function poolIdsFromKnn(perQuery: readonly (readonly KnnHit[])[]): string
     }
   }
   return out
-}
-
-export type AwarenessRow = {
-  id: string
-  happeningId: string
-  characterId: string
-  learnedAtEntryId: string | null
-  decayResistance: number | null
-  source: string | null
-}
-
-/**
- * retrieval.md → POV-awareness scope: the UNION of all in-scene characters'
- * awareness rows in both modes, not lead-only. Detached-POV moments need the
- * wider scope; the `narration` setting is the lever for POV constraint via
- * prompt, not retrieval.
- */
-export async function loadAwarenessForScene(
-  queryAll: QueryAll,
-  branchId: string,
-  sceneCharacterIds: readonly string[],
-): Promise<AwarenessRow[]> {
-  if (sceneCharacterIds.length === 0) return []
-  const placeholders = sceneCharacterIds.map(() => '?').join(', ')
-  const rows = await queryAll(
-    `SELECT id, happening_id, character_id, learned_at_entry_id, decay_resistance, source
-     FROM happening_awareness
-     WHERE branch_id = ? AND character_id IN (${placeholders})`,
-    [branchId, ...sceneCharacterIds],
-  )
-  return rows.map((r) => {
-    const [id, happeningId, characterId, learnedAtEntryId, decayResistance, source] = r as [
-      string,
-      string,
-      string,
-      string | null,
-      number | null,
-      string | null,
-    ]
-    return { id, happeningId, characterId, learnedAtEntryId, decayResistance, source }
-  })
 }
