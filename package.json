@@ -92,7 +92,8 @@
     "typescript-eslint": "^8.65.0",
     "vaul-svelte": "^1.0.0-next.7",
     "vite": "^8.2.0",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
   },
   "aube": {
     "allowBuilds": {
