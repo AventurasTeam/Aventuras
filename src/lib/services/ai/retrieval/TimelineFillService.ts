@@ -185,10 +185,21 @@ export class TimelineFillService extends BaseAIService {
     maxChapterTokens: number,
     getChapterEntries?: (chapter: Chapter) => StoryEntry[],
   ): string {
-    const read = buildChapterRead(
+    return this.buildContentFrom(
       this.renderChapters(targetChapters, getChapterEntries),
       maxChapterTokens,
     )
+  }
+
+  /**
+   * `buildContent` for chapters that have already been rendered.
+   *
+   * `runTimelineFill` renders every chapter once and reuses it: it needs the per-chapter
+   * token cost before grouping anyway, and rendering per group repeated the whole
+   * concatenation for each one.
+   */
+  private buildContentFrom(rendered: ChapterForRead[], maxChapterTokens: number): string {
+    const read = buildChapterRead(rendered, maxChapterTokens)
     if (read.omittedChapters.length > 0 || read.partialChapters.length > 0) {
       log('Chapter text truncated to budget', {
         budget: maxChapterTokens,
@@ -370,19 +381,35 @@ export class TimelineFillService extends BaseAIService {
     // away below, rather than reaching the narrator as a non-answer.
     const results = new Array<TimelineQueryResult | undefined>(pending.length)
 
+    // Rendered once for the whole run. Needed before grouping to cost each candidate group,
+    // and reused when the groups are assembled.
+    const renderedByNumber = new Map<number, ChapterForRead>(
+      this.renderChapters(chapters, getChapterEntries).map((c) => [c.number, c]),
+    )
+    const tokensOf = (chapterNumber: number) =>
+      renderedByNumber.get(chapterNumber)?.entries.reduce((n, e) => n + e.tokens, 0) ?? 0
+
     // Questions whose chapters are a subset of a wider question's join that group and are
-    // answered from its content -- see `groupByChapterCoverage`.
-    const groups = groupByChapterCoverage(pending)
+    // answered from its content -- but only while that content is sent whole. A group over
+    // budget is truncated from its highest chapter down, so it can no longer answer for the
+    // narrow questions it absorbed. See `groupByChapterCoverage`.
+    const groups = groupByChapterCoverage(
+      pending,
+      (chapterNumbers) =>
+        chapterNumbers.reduce((n, num) => n + tokensOf(num), 0) <= maxChapterTokens,
+    )
 
     const perGroupCalls = await Promise.all(
       groups.map(async (group) => {
-        // Filtered directly, not through `resolveTargetChapters`: the group's list is already
-        // resolved, and there an empty list means "all chapters" -- so a query naming only
-        // chapters that do not exist would come back having read the whole story.
-        const targetChapters = chapters.filter((c) => group.chapterNumbers.includes(c.number))
+        // Taken from the rendered map, not filtered out of `chapters`: the group's list is
+        // already resolved against the chapters that exist, and the map is keyed the same
+        // way. Ascending, which is the order `buildChapterRead` spends the budget in.
+        const targetChapters = group.chapterNumbers
+          .map((n) => renderedByNumber.get(n))
+          .filter((c): c is ChapterForRead => c !== undefined)
         if (targetChapters.length === 0) return 0
 
-        const content = this.buildContent(targetChapters, maxChapterTokens, getChapterEntries)
+        const content = this.buildContentFrom(targetChapters, maxChapterTokens)
 
         const { answers, llmCalls } =
           group.items.length === 1

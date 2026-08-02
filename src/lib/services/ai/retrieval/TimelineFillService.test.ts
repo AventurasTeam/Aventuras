@@ -222,6 +222,45 @@ describe('runTimelineFill - subset grouping', () => {
     expect(result.responses[1].chapterNumbers).toEqual([2])
   })
 
+  it('does not fold a narrow question into a wide group the budget will truncate', async () => {
+    const service = new TimelineFillService('timelineFill', 3)
+    generateStructured
+      .mockResolvedValueOnce({
+        queries: [
+          { query: 'Wide question?', chapters: [1, 2, 3] },
+          { query: 'Narrow question?', chapters: [3] },
+        ],
+      })
+      // A usable batch answer, so a fold produces exactly one assembled content and the
+      // assertion below cannot pass by way of the incomplete-batch retry path.
+      .mockResolvedValue({
+        answers: [
+          { index: 0, answer: 'Wide answer.' },
+          { index: 1, answer: 'Narrow answer.' },
+        ],
+      })
+    generatePlainText.mockResolvedValue('An answer.')
+
+    // Each chapter is ~4,006 tokens, so {1,2,3} cannot fit in 6,000 and is cut from chapter
+    // 3 down -- exactly the chapter the narrow question is about. {3} alone fits. Folded,
+    // the narrow question would be answered from a text that stops inside chapter 1.
+    await service.runTimelineFill(
+      mockEntries,
+      [chapter(1), chapter(2), chapter(3)],
+      (c) => fatEntries(c.number),
+      undefined,
+      6_000,
+    )
+
+    const contents = rendered
+      .filter((v) => 'chapterContent' in v)
+      .map((v) => v.chapterContent as string)
+
+    // The narrow question got chapter 3's real text, which the wide group never contained.
+    expect(contents.some((c) => c.includes('VERBATIM-3'))).toBe(true)
+    expect(contents).toHaveLength(2)
+  })
+
   it('does not merge sets that merely overlap', async () => {
     const service = new TimelineFillService('timelineFill', 3)
     generateStructured.mockResolvedValueOnce({

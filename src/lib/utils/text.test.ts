@@ -258,8 +258,18 @@ describe('truncateAroundMatch', () => {
   it('respects caseSensitive', () => {
     const text = `${pad(30)} HOPE ${pad(60)} hope ${pad(30)}`
 
-    expect(truncateAroundMatch(text, 'hope', 8, true)).toContain('hope')
-    expect(truncateAroundMatch(text, 'hope', 8, true)).not.toContain('HOPE')
+    expect(truncateAroundMatch(text, 'hope', 8, { caseSensitive: true })).toContain('hope')
+    expect(truncateAroundMatch(text, 'hope', 8, { caseSensitive: true })).not.toContain('HOPE')
+  })
+
+  it('respects wholeWord when placing the window', () => {
+    // The passage was selected by a whole-word search, so the excerpt has to open on the
+    // standalone name -- not on the substring inside "surrender" that the search never
+    // counted as a hit.
+    const text = `He would surrender it. ${pad(60)} Ren waited at the gate. ${pad(30)}`
+
+    expect(truncateAroundMatch(text, 'Ren', 10, { wholeWord: true })).toContain('Ren waited')
+    expect(truncateAroundMatch(text, 'Ren', 10)).toContain('surrender')
   })
 
   it('falls back to the head when the query really is absent', () => {

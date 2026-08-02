@@ -49,9 +49,26 @@ export interface ChapterCoverageGroup<T> {
  *
  * Widest first, so a wide set always exists as a group before the narrow ones that fold into
  * it. Ties break on the joined key, which keeps grouping deterministic for a given input.
+ *
+ * `canHostSubsets` is what keeps that reasoning true once a token budget enters the picture.
+ * "A subset is answerable from the superset's content" holds only while the superset's
+ * content is actually *sent whole*: `buildChapterRead` cuts a group's chapters off in
+ * ascending order once the budget is spent, so a question about chapter 19 folded into
+ * {17,18,19} can be answered from a read that stops inside chapter 18. Left on its own it
+ * would have had the entire budget for chapter 19. The predicate is asked once per candidate
+ * host, and a host that cannot fit its own chapters stops absorbing narrower questions --
+ * they keep their own groups and their own full budget. Default: everything hosts, which is
+ * the old behaviour.
+ *
+ * An *identical* set folds either way, budget or not. Two questions that resolve to the same
+ * chapters get the same content and the same truncation whether they share a call or not, so
+ * splitting them buys nothing and costs a whole extra call -- and the commonest case of it
+ * is two open-ended questions, which both resolve to every chapter and so are never within
+ * budget on a long story.
  */
 export function groupByChapterCoverage<T extends { chapterNumbers: number[] }>(
   items: T[],
+  canHostSubsets: (chapterNumbers: number[]) => boolean = () => true,
 ): ChapterCoverageGroup<T>[] {
   const sorted = [...items].sort(
     (a, b) =>
@@ -59,17 +76,32 @@ export function groupByChapterCoverage<T extends { chapterNumbers: number[] }>(
       chapterNumbersKey(a.chapterNumbers).localeCompare(chapterNumbersKey(b.chapterNumbers)),
   )
 
-  const groups: { chapters: Set<number>; chapterNumbers: number[]; items: T[] }[] = []
+  const groups: {
+    chapters: Set<number>
+    chapterNumbers: number[]
+    key: string
+    hosts: boolean
+    items: T[]
+  }[] = []
 
   for (const item of sorted) {
     const wanted = item.chapterNumbers
-    const host = groups.find((g) => wanted.every((n) => g.chapters.has(n)))
+    // Deduped before the key is taken, so `[1, 1, 2]` and `[1, 2]` are recognised as the
+    // same set. A key built from the raw list would miss that, and the two would be split
+    // into groups whose assembled content is byte-identical.
+    const chapterNumbers = [...new Set(wanted)].sort((a, b) => a - b)
+    const key = chapterNumbersKey(chapterNumbers)
+    const host = groups.find(
+      (g) => g.key === key || (g.hosts && wanted.every((n) => g.chapters.has(n))),
+    )
     if (host) {
       host.items.push(item)
     } else {
       groups.push({
-        chapters: new Set(wanted),
-        chapterNumbers: [...new Set(wanted)].sort((a, b) => a - b),
+        chapters: new Set(chapterNumbers),
+        chapterNumbers,
+        key,
+        hosts: canHostSubsets(chapterNumbers),
         items: [item],
       })
     }

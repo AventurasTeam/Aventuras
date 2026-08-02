@@ -130,4 +130,74 @@ describe('groupByChapterCoverage', () => {
   it('returns no groups for an empty input', () => {
     expect(groupByChapterCoverage([])).toEqual([])
   })
+
+  it('treats a set with duplicates as the same set', () => {
+    const groups = groupByChapterCoverage([
+      { id: 'a', chapterNumbers: [1, 2] },
+      { id: 'b', chapterNumbers: [2, 1, 1] },
+    ])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].chapterNumbers).toEqual([1, 2])
+  })
+})
+
+describe('groupByChapterCoverage — budget-aware hosting', () => {
+  /** Hosts only sets of two chapters or fewer, standing in for a token budget. */
+  const fitsTwo = (chapterNumbers: number[]) => chapterNumbers.length <= 2
+
+  it('does not fold a narrow question into a host that will be truncated', () => {
+    // The whole hazard: {17,18,19} is over budget and gets cut from chapter 19 down, so a
+    // question about chapter 19 answered from it reads a text that stops before its own
+    // chapter -- where alone it would have had the entire budget for it.
+    const groups = groupByChapterCoverage(
+      [
+        { id: 'wide', chapterNumbers: [17, 18, 19] },
+        { id: 'narrow', chapterNumbers: [19] },
+      ],
+      fitsTwo,
+    )
+
+    expect(groups).toHaveLength(2)
+    expect(groups.find((g) => g.chapterNumbers.length === 1)?.items.map((i) => i.id)).toEqual([
+      'narrow',
+    ])
+  })
+
+  it('still folds into a host that fits', () => {
+    const groups = groupByChapterCoverage(
+      [
+        { id: 'wide', chapterNumbers: [17, 18] },
+        { id: 'narrow', chapterNumbers: [18] },
+      ],
+      fitsTwo,
+    )
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].items.map((i) => i.id)).toEqual(['wide', 'narrow'])
+  })
+
+  it('folds identical sets even when they are over budget', () => {
+    // Two open-ended questions both resolve to every chapter. Splitting them would send the
+    // same truncated text twice and buy nothing -- the truncation is identical either way.
+    const groups = groupByChapterCoverage(
+      [
+        { id: 'a', chapterNumbers: [1, 2, 3] },
+        { id: 'b', chapterNumbers: [1, 2, 3] },
+      ],
+      fitsTwo,
+    )
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].items.map((i) => i.id)).toEqual(['a', 'b'])
+  })
+
+  it('hosts everything when no predicate is given', () => {
+    const groups = groupByChapterCoverage([
+      { id: 'wide', chapterNumbers: [17, 18, 19] },
+      { id: 'narrow', chapterNumbers: [19] },
+    ])
+
+    expect(groups).toHaveLength(1)
+  })
 })

@@ -347,6 +347,32 @@ alongside a sampled spread of excerpts, so the agent can narrow rather than page
 `ACTION` or `NARRATIVE`, because the corpus includes what the player typed and handing that back to the
 narrator as established fact is a real failure mode.
 
+**A substring search on a short name is mostly noise, and the tool handles that itself.** A character
+called "Ren" matched 1,000+ paragraphs — "rendered", "surrender", "children" — and the answer was 40
+excerpts of unrelated prose plus a per-chapter table saying only that the letters occur throughout. Two
+guards, both in `createGrepChaptersTool`:
+
+- **Auto-narrowing.** When the agent leaves `wholeWord` unset and the search exceeds
+  `GREP_NOISE_RATIO` (5) matches per excerpt slot, the search is re-run on word boundaries. The
+  whole-word result replaces the substring one only if it removes at least half the matches
+  (`AUTO_NARROW_MAX_SHARE`) without falling to zero — so a short name collapses to its real mentions
+  while a stem the agent meant loosely, `"rune"` finding `"runes"` and `"runic"`, barely moves and is
+  left alone. That threshold is the whole reason there is no rule on query _length_: `"rune"` is four
+  characters and is exactly the search a length rule would break. An explicit `wholeWord: false` is a
+  decision and is always honoured; the result reports the flag it actually ran under, plus an
+  `autoNarrowed` note, since every count in it is the narrowed search's.
+- **A noise signal.** A search still past the threshold quotes `NOISY_EXCERPT_LIMIT` (8) excerpts
+  instead of the full allowance and carries a `tooManyMatches` note naming the narrowings that would
+  help. Spending 40 excerpts on prose that matched by accident is the expensive half of the failure,
+  and it is paid into a prompt on every turn. The per-chapter counts stay complete either way — they
+  are what tells the agent where to narrow _to_. This is a separate note from the ordinary
+  "more matched than fit" one, because it needs a different fix: narrowing the query rather than the
+  chapter range.
+
+`truncateAroundMatch` takes the same `wholeWord` flag, so a whole-word search cannot position its
+excerpt on a substring occurrence it never counted — otherwise a passage returned for "Ren" opens on
+"surrender".
+
 Density is what the budget follows, in three places at once. `sampleMatches` shares excerpt _slots_
 by hit count rather than by passage count — `findTextMatches` merges neighbouring matching
 paragraphs, so counting passages penalises exactly the chapters where a term concentrates. Each
@@ -379,6 +405,12 @@ Two properties of that path are worth knowing before tuning it:
   because an answering model that is not told will report on chapters it never saw. Still exactly
   one call — `query_chapter` is never multiplied.
 
+  **The cut is a single stop point.** Once a chapter cannot be finished the read ends rather than
+  filling later chapters from whatever tokens are left: spending the remainder produced a text that
+  opened three chapters and finished none, which answers nothing and multiplies the risk that the
+  model reports on a chapter it saw only the first entry of. At most one chapter is ever partial,
+  which is what makes the marker's wording true.
+
   The budget is `CHAPTER_READ_BUDGET_RATIO` (2.5) × the story's own `memoryConfig.tokenThreshold`,
   not a number chosen here: a chapter _is_ roughly `tokenThreshold` tokens by construction, since
   `ChapterBatchPlanner` accumulates entries until it crosses it. So it reads as "about 2.5 chapters"
@@ -389,6 +421,14 @@ Two properties of that path are worth knowing before tuning it:
   `groupByChapterCoverage` folds them together, so a question about chapter 18 and one about 17-19
   assemble and send chapter 18's text once instead of twice. Strictly subsets — unioning merely
   overlapping sets would widen both and make every member pay for a chapter it did not ask about.
+
+  **Only while the wider group fits the budget.** "A subset is answerable from the superset's
+  content" holds only if that content is sent whole, and the read above is cut from its highest
+  chapter down — so a question about chapter 19 folded into {17,18,19} could be answered from a
+  text that stops inside chapter 18, where alone it would have had the entire budget for chapter 19. `runTimelineFill` therefore passes a predicate: a candidate host whose own chapters exceed
+  `maxChapterTokens` stops absorbing narrower questions. Identical sets still fold either way —
+  they get the same truncation whether they share a call or not, and two open-ended questions
+  both resolve to every chapter.
 
 - **An unanswered question does not reach the narrator.** `answerQuestionWithContent` returns
   `confidence: 0` for both give-up paths (a failed call, and no chapters resolved), and

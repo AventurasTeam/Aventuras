@@ -136,6 +136,45 @@ export const UNCHAPTERIZED = -1
 export const MAX_CHAPTER_QUERIES = 3
 
 /**
+ * Matches per excerpt slot above which a search is treated as noise rather than as an
+ * answer.
+ *
+ * A spread is only informative while the excerpts stand for something. At five matches per
+ * slot the sample already shows a fifth of what matched; far past that it is a random
+ * handful of sentences, and the agent cannot tell "this term is everywhere" from "these are
+ * the places that matter". Measured case: a character named "Ren" matched 1,000+ paragraphs
+ * as a substring -- "rendered", "surrender", "wren" -- and the result was 40 excerpts of
+ * unrelated prose plus a per-chapter table saying only that the letters occur throughout.
+ *
+ * Five rather than one, because a genuinely dense term is still worth reading a spread of:
+ * `"rune"` at 120 matches against 40 slots is the case the sampler was built for and must
+ * keep working.
+ */
+export const GREP_NOISE_RATIO = 5
+
+/**
+ * Excerpts quoted when a search is past `GREP_NOISE_RATIO`.
+ *
+ * Not zero: the agent still needs enough of a look to judge *which* narrowing to apply, and
+ * a count with no prose to go on is what sends it to `query_chapter`. Enough to see what the
+ * matches look like, cheap enough that the wasted ones cost little.
+ */
+export const NOISY_EXCERPT_LIMIT = 8
+
+/**
+ * How much of a substring search's match count the whole-word retry must remove to be
+ * adopted in its place.
+ *
+ * A short name is the case this exists for: "Ren" as a substring is mostly other words,
+ * and the whole-word count collapses to a fraction. A stem the agent meant loosely --
+ * "rune" finding "runes", "runic" -- barely moves, so the retry is discarded and the
+ * substring search stands. The threshold decides which of the two happened without having
+ * to guess from the query's length: a rule on length alone would break `wholeWord`-hostile
+ * searches like "rune" at exactly the size where they are most useful.
+ */
+const AUTO_NARROW_MAX_SHARE = 0.5
+
+/**
  * Whether there is any live world state worth registering `inspect_world_state` for.
  *
  * Exported because the prompt template must describe that tool on exactly the same
@@ -399,14 +438,18 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
       wholeWord: z
         .boolean()
         .optional()
-        .default(false)
-        .describe('Match whole words only (e.g. "orc" won\'t match "orchestra").'),
+        .describe(
+          'Match whole words only (e.g. "orc" won\'t match "orchestra"). Leave this out ' +
+            'and a search that drowns in substring noise -- a short name like "Ren" ' +
+            'matching "surrender" -- is retried as a whole-word search automatically; the ' +
+            'result says when that happened. Pass false to force the substring search.',
+        ),
       caseSensitive: z.boolean().optional().default(false).describe('Match case sensitively.'),
     }),
     execute: async ({
       query,
       chapterNumbers,
-      wholeWord = false,
+      wholeWord,
       caseSensitive = false,
     }: {
       query: string
@@ -429,7 +472,9 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
           kind: 'grep',
           query,
           chapters: targetChapterNumbers,
-          wholeWord,
+          // The flag the cached run actually searched under, which auto-narrowing may have
+          // flipped -- not the one the agent asked for.
+          wholeWord: (cached.wholeWord as boolean) ?? false,
           caseSensitive,
           totalMatches: (cached.totalMatches as number) ?? 0,
           excerptsShown: (cached.excerptsShown as number) ?? 0,
@@ -511,42 +556,78 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
         hits: number
       }
 
-      const groups = corpus.map((item) => {
-        const matches: GrepMatchItem[] = []
-        for (let idx = 0; idx < item.entries.length; idx++) {
-          const entry = item.entries[idx]
-          if (!entry.content) continue
-          const textMatches = findTextMatches(entry.content, query, {
-            wholeWord,
-            caseSensitive,
-            minWords: MIN_EXCERPT_WORDS,
-          })
-          for (const textMatch of textMatches) {
-            matches.push({
-              chapterNumber: item.chapterNumber,
-              chapterTitle: item.chapterTitle,
-              entryIndex: idx,
-              // With the chapter, so entries written before time tracking existed still
-              // get the chapter's span as an approximate stamp instead of "unknown".
-              timestamp: entryTimeTag(entry, item.chapter),
-              // Which side of the table this text came from. Without it the agent cannot
-              // tell the narration from what the player typed, and can hand the player's
-              // own words back to the narrator as established fact.
-              role: entry.type === 'user_action' ? 'ACTION' : 'NARRATIVE',
-              excerpt: textMatch.excerpt,
-              hits: textMatch.paragraphIndexes.length,
-            })
-          }
-        }
-        return { chapterNumber: item.chapterNumber, matches }
-      })
-
       const countHits = (items: GrepMatchItem[]) => items.reduce((n, m) => n + m.hits, 0)
-      const totalMatches = groups.reduce((n, g) => n + countHits(g.matches), 0)
+
+      /** One full pass over the corpus under a given whole-word setting. */
+      const collect = (useWholeWord: boolean) => {
+        const found = corpus.map((item) => {
+          const matches: GrepMatchItem[] = []
+          for (let idx = 0; idx < item.entries.length; idx++) {
+            const entry = item.entries[idx]
+            if (!entry.content) continue
+            const textMatches = findTextMatches(entry.content, query, {
+              wholeWord: useWholeWord,
+              caseSensitive,
+              minWords: MIN_EXCERPT_WORDS,
+            })
+            for (const textMatch of textMatches) {
+              matches.push({
+                chapterNumber: item.chapterNumber,
+                chapterTitle: item.chapterTitle,
+                entryIndex: idx,
+                // With the chapter, so entries written before time tracking existed still
+                // get the chapter's span as an approximate stamp instead of "unknown".
+                timestamp: entryTimeTag(entry, item.chapter),
+                // Which side of the table this text came from. Without it the agent cannot
+                // tell the narration from what the player typed, and can hand the player's
+                // own words back to the narrator as established fact.
+                role: entry.type === 'user_action' ? 'ACTION' : 'NARRATIVE',
+                excerpt: textMatch.excerpt,
+                hits: textMatch.paragraphIndexes.length,
+              })
+            }
+          }
+          return { chapterNumber: item.chapterNumber, matches }
+        })
+        return { groups: found, total: found.reduce((n, g) => n + countHits(g.matches), 0) }
+      }
 
       // Same allowance every call; see `grepExcerptsPerSearch`.
       const callLimit = grepExcerptsPerSearch
-      const sampleResult = sampleMatches(groups, callLimit)
+      const noiseThreshold = callLimit * GREP_NOISE_RATIO
+
+      let effectiveWholeWord = wholeWord ?? false
+      let pass = collect(effectiveWholeWord)
+      let autoNarrowedFrom: number | null = null
+
+      // A substring search that drowns is retried on word boundaries. Only when the agent
+      // left `wholeWord` unset -- an explicit `false` is a decision, and honouring it is
+      // what makes the flag usable at all. The retry is a second pass over text already in
+      // memory, and it only happens on a search that was going to be useless anyway.
+      if (wholeWord === undefined && pass.total > noiseThreshold) {
+        const narrowed = collect(true)
+        if (narrowed.total > 0 && narrowed.total <= pass.total * AUTO_NARROW_MAX_SHARE) {
+          autoNarrowedFrom = pass.total
+          pass = narrowed
+          effectiveWholeWord = true
+        }
+      }
+
+      const groups = pass.groups
+      const totalMatches = pass.total
+
+      // Past the threshold the spread stops being a sample of anything, so it is cut to a
+      // look at what the matches are, and the result says how to narrow instead. Spending
+      // the full allowance here is the expensive half of the failure: 40 excerpts of prose
+      // that matched by accident, quoted into a prompt paid for every turn.
+      const noisy = totalMatches > noiseThreshold
+      const excerptLimit = noisy ? Math.min(NOISY_EXCERPT_LIMIT, callLimit) : callLimit
+
+      // Weighted by hits, not by passage count: `findTextMatches` merges neighbouring
+      // matching paragraphs, so counting passages penalises exactly the chapters where the
+      // term concentrates -- twenty mentions in one scene weigh two, four scattered ones
+      // weigh four. See `sampleMatches`.
+      const sampleResult = sampleMatches(groups, excerptLimit, (m) => m.hits)
 
       /**
        * Hits the agent can actually read in a passage once it has been length-capped.
@@ -561,7 +642,9 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
         if (shown === match.excerpt) return match.hits
         const seen = shown
           .split(/\n\s*\n/)
-          .filter((p) => paragraphMatches(p, query, { wholeWord, caseSensitive })).length
+          .filter((p) =>
+            paragraphMatches(p, query, { wholeWord: effectiveWholeWord, caseSensitive }),
+          ).length
         return Math.min(Math.max(seen, 1), match.hits)
       }
 
@@ -579,7 +662,10 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
        */
       const sampledMatches = sampleResult.groups.flatMap((g) => g.matches)
       const totalHits = sampledMatches.reduce((n, m) => n + m.hits, 0)
-      const volume = callLimit * MAX_EXCERPT_WORDS
+      // `excerptLimit`, not `callLimit`: a noisy search quotes fewer passages, and the
+      // volume of prose has to shrink with them. Sizing off the full allowance would hand
+      // eight excerpts the word budget of forty and undo the trim entirely.
+      const volume = excerptLimit * MAX_EXCERPT_WORDS
       const wordsFor = (match: GrepMatchItem) => {
         const share = totalHits > 0 ? Math.floor((volume * match.hits) / totalHits) : 0
         const ceiling = Math.max(WIDE_EXCERPT_WORDS, match.hits * MAX_EXCERPT_WORDS)
@@ -589,7 +675,12 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
       const shownByChapter = new Map<number, number>()
       const excerpts = sampleResult.groups.flatMap((group) =>
         group.matches.map((match) => {
-          const excerpt = truncateAroundMatch(match.excerpt, query, wordsFor(match), caseSensitive)
+          const excerpt = truncateAroundMatch(match.excerpt, query, wordsFor(match), {
+            caseSensitive,
+            // Same rule the passage was selected under, so the excerpt opens on a hit that
+            // was actually counted rather than on a substring inside a longer word.
+            wholeWord: effectiveWholeWord,
+          })
           const visible = hitsVisible(match, excerpt)
           shownByChapter.set(
             group.chapterNumber,
@@ -626,7 +717,7 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
         kind: 'grep',
         query,
         chapters: targetChapterNumbers,
-        wholeWord,
+        wholeWord: effectiveWholeWord,
         caseSensitive,
         totalMatches,
         excerptsShown: excerpts.length,
@@ -637,6 +728,9 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
       const result: Record<string, unknown> = {
         query,
         searchedChapters: targetChapterNumbers ?? 'all',
+        // What actually ran. Auto-narrowing can flip it, and a result that does not say so
+        // reads as though the substring search returned these counts.
+        wholeWord: effectiveWholeWord,
         // Named so it cannot be read as "searched and found nothing".
         ...(chaptersThatDoNotExist.length > 0
           ? {
@@ -653,10 +747,37 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
         sampled: sampleResult.sampled,
         excerpts,
       }
+      // Said before anything else about the result, because every count below it is the
+      // narrowed search's, not the one the agent asked for.
+      if (autoNarrowedFrom !== null) {
+        result.autoNarrowed =
+          `A substring search for "${query}" matched ${autoNarrowedFrom} paragraphs, mostly ` +
+          `inside longer words, so this is the whole-word search instead: ${totalMatches} ` +
+          'matches. Every count and excerpt below is from that search. Pass wholeWord false ' +
+          'to get the substring search back.'
+      }
+
+      // The distinct failure the sampled note does not cover: not "more matched than fit",
+      // but "this search did not discriminate". Different fix, so it says a different thing
+      // -- narrowing the *query* rather than the chapter range, which is what a term this
+      // common actually needs.
+      if (noisy) {
+        result.tooManyMatches =
+          `"${query}" matches ${totalMatches} paragraphs across the story. That is too many ` +
+          `to sample usefully, so only ${excerpts.length} excerpts were quoted -- read them ` +
+          'as a look at what the matches are, not as an answer. Narrow the search rather ' +
+          'than paying query_chapter: use a longer and more distinctive phrase, set ' +
+          'chapterNumbers to the chapters with the highest counts above, or set ' +
+          'caseSensitive to separate a name from an ordinary word.' +
+          (effectiveWholeWord
+            ? ''
+            : ' wholeWord true would also drop the matches inside longer words.')
+      }
+
       // A count and a next step, not a list of chapter numbers: naming them reads as a
       // to-do list whose cheapest-looking fix is query_chapter. `matchesByChapter` already
       // says which they are.
-      if (sampleResult.sampled) {
+      if (sampleResult.sampled && !noisy) {
         const unseen = sampleResult.omittedChapters.length
         result.note =
           'More matched than fit. The excerpts above are spread across the matching ' +

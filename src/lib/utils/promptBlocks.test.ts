@@ -4,8 +4,10 @@ import { joinPromptBlocks } from './promptBlocks'
 /** The shapes the real blocks actually have, so the regressions are the measured ones. */
 const WORLD_STATE = '\n\n[ACTIVE THREADS]\n• Ren’s Liberation: she is now his devoted pet.'
 const LOREBOOK = '\n\n[LOREBOOK CONTEXT]\n(CANONICAL - ...)'
+// One heading: synthesis and chapter material are paragraphs of the same block, not two
+// blocks with the same name. See `AgenticRetrievalService`.
 const AGENTIC =
-  '[RELEVANT STORY DATA]\nI searched for all mentions of runes\n\n## Relevant Story Data'
+  '[RELEVANT STORY DATA]\nI searched for all mentions of runes\n\nThe runes were carved by Aria.'
 
 describe('joinPromptBlocks', () => {
   it('inserts the blank line a block does not bring itself', () => {
@@ -73,7 +75,7 @@ describe('joinPromptBlocks', () => {
     const all = joinPromptBlocks(WORLD_STATE, AGENTIC, LOREBOOK)
 
     expect(all).toContain('devoted pet.\n\n[RELEVANT STORY DATA]')
-    expect(all).toContain('Relevant Story Data\n\n[LOREBOOK CONTEXT]')
+    expect(all).toContain('carved by Aria.\n\n[LOREBOOK CONTEXT]')
     expect(all).not.toContain('\n\n\n')
   })
 })

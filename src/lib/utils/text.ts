@@ -308,8 +308,12 @@ export function findTextMatches(
  * cannot search for the raw query: an apostrophe typed as `'` will not be found in prose
  * written with `’`, and a query spanning a line break will not be found at all. Folding
  * the excerpt instead is not an option -- it is the text the caller displays.
+ *
+ * `wholeWord` mirrors `paragraphContains`: without it a whole-word search can still be
+ * *positioned* on a substring occurrence the search itself never counted, so an excerpt
+ * returned for the name "Ren" would open on "surrender" instead.
  */
-function searchPattern(query: string): string {
+function searchPattern(query: string, wholeWord = false): string {
   const groups = ["'‘’ʼ′", '"“”″', '-–—−']
   let pattern = ''
   let i = 0
@@ -333,6 +337,11 @@ function searchPattern(query: string): string {
     const group = groups.find((g) => g.includes(char))
     pattern += group ? `[${group}]` : escapeRegex(char)
     i++
+  }
+
+  if (pattern && wholeWord) {
+    if (/^[\p{L}\p{N}]/u.test(query)) pattern = '(?<![\\p{L}\\p{N}])' + pattern
+    if (/[\p{L}\p{N}]$/u.test(query)) pattern = pattern + '(?![\\p{L}\\p{N}])'
   }
 
   return pattern
@@ -417,15 +426,27 @@ function matchSpans(text: string, pattern: string, caseSensitive: boolean): [num
  * Falls back to the head only when the query genuinely is not present, which, thanks to
  * `searchPattern`, now means what it says.
  */
+export interface TruncateAroundMatchOptions {
+  /** See `FindTextMatchesOptions.caseSensitive`. */
+  caseSensitive?: boolean
+  /**
+   * See `FindTextMatchesOptions.wholeWord`. Must be given the same value the search that
+   * produced `text` ran under: a whole-word search positioned on a substring occurrence
+   * opens the excerpt somewhere the caller never counted a hit.
+   */
+  wholeWord?: boolean
+}
+
 export function truncateAroundMatch(
   text: string,
   query: string,
   maxWords: number,
-  caseSensitive = false,
+  options: TruncateAroundMatchOptions = {},
 ): string {
+  const { caseSensitive = false, wholeWord = false } = options
   if (countWords(text) <= maxWords) return text
 
-  const pattern = searchPattern(query.trim())
+  const pattern = searchPattern(query.trim(), wholeWord)
   const spans = pattern ? matchSpans(text, pattern, caseSensitive) : []
   const matchIndex = spans.length > 0 ? spans[0][0] : -1
 

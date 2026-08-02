@@ -31,7 +31,10 @@ export interface ChapterReadResult {
   content: string
   /** Chapters that got no text at all. */
   omittedChapters: number[]
-  /** Chapters included only in part. At most one, since the cut is a single stop point. */
+  /**
+   * The chapter the cut landed inside. At most one: the read stops there, so no later
+   * chapter can be partial either.
+   */
   partialChapters: number[]
 }
 
@@ -42,21 +45,36 @@ const JOIN = '\n\n'
  *
  * A chapter left out entirely is named in a leading marker rather than silently dropped: the
  * answering model would otherwise report on chapters it never saw.
+ *
+ * **The cut is a single stop point.** Once a chapter cannot be finished the read ends, and
+ * every chapter after it is reported as omitted rather than filled opportunistically from
+ * whatever tokens happen to be left. Spending the remainder produced a text that opened
+ * three chapters and finished none -- `## Chapter 1` first entry, `## Chapter 2` first entry,
+ * `## Chapter 3` first entry -- which is the same failure the grep sampler was rebuilt to
+ * avoid: one fragment per chapter answers nothing, and it multiplies the risk that the
+ * answering model reports on a chapter it saw only the opening of. A contiguous run plus an
+ * honest list of what is missing is worth more than a few extra tokens of scattered prose.
  */
 export function buildChapterRead(chapters: ChapterForRead[], maxTokens: number): ChapterReadResult {
   const blocks: string[] = []
   const omittedChapters: number[] = []
   const partialChapters: number[] = []
   let remaining = maxTokens
+  let stopped = false
 
   for (const chapter of chapters) {
     const kept: string[] = []
-    for (const entry of chapter.entries) {
-      // Always take the first entry of the first chapter: an empty prompt is worse than an
-      // over-budget one, and only a budget below a single entry can reach this.
-      if (entry.tokens > remaining && (kept.length > 0 || blocks.length > 0)) break
-      kept.push(entry.text)
-      remaining -= entry.tokens
+    if (!stopped) {
+      for (const entry of chapter.entries) {
+        // Always take the first entry of the first chapter: an empty prompt is worse than an
+        // over-budget one, and only a budget below a single entry can reach this.
+        if (entry.tokens > remaining && (kept.length > 0 || blocks.length > 0)) {
+          stopped = true
+          break
+        }
+        kept.push(entry.text)
+        remaining -= entry.tokens
+      }
     }
 
     if (kept.length === 0) {

@@ -91,6 +91,26 @@ function quoted(values: string[]): string {
 }
 
 /**
+ * A grep identified by everything that changes its answer, not by its query alone.
+ *
+ * Deduping on the query told the agent it had already grepped "ren" when what it had run
+ * was "ren" over a single chapter, or the whole-word variant an auto-narrow substituted for
+ * it. Both are the cases where re-running is the *right* move -- narrowing to a chapter is
+ * what `grep_chapters` own result tells it to do next, and going back to the substring
+ * search is the only way to undo an auto-narrow. A line reading "already done" against the
+ * advice the agent has just been given is worse than no line.
+ *
+ * Carries its own quoting, since the scope belongs outside them.
+ */
+function grepLabel(event: Extract<RetrievalEvent, { kind: 'grep' }>): string {
+  const scope: string[] = []
+  if (event.chapters && event.chapters.length > 0) scope.push(`ch.${event.chapters.join(',')}`)
+  if (event.wholeWord) scope.push('whole-word')
+  if (event.caseSensitive) scope.push('case')
+  return scope.length > 0 ? `"${event.query}" (${scope.join(', ')})` : `"${event.query}"`
+}
+
+/**
  * Step budget. `steps` must come from the loop's stop condition, not `events.length`:
  * one step can call several tools, or none, so an event count misstates the budget.
  */
@@ -128,7 +148,7 @@ export function summarizeProgress(events: RetrievalEvent[], budget: ProgressBudg
   }
 
   for (const event of events) {
-    if (event.kind === 'grep') remember(grepped, event.query)
+    if (event.kind === 'grep') remember(grepped, grepLabel(event))
     if (event.kind === 'search' && event.query) remember(searchedEntries, event.query)
     if (event.kind === 'world_state' && event.query) remember(inspectedWs, event.query)
     if (event.kind === 'entry' && event.found && event.name) remember(readEntries, event.name)
@@ -137,15 +157,21 @@ export function summarizeProgress(events: RetrievalEvent[], budget: ProgressBudg
   }
 
   const parts: string[] = []
-  /** Most recent first-use, since that is what the agent is most likely to repeat. */
-  const listed = (label: string, values: string[]) => {
+  /**
+   * Most recent first-use, since that is what the agent is most likely to repeat.
+   *
+   * `quote` is off for the grep list, whose entries carry their own quoting around the term
+   * so the scope can sit outside it -- see `grepLabel`.
+   */
+  const listed = (label: string, values: string[], quote = true) => {
     if (values.length === 0) return
     const shown = values.slice(-MAX_TERMS_IN_PROGRESS)
     const extra = values.length - shown.length
-    parts.push(`${label}: ${quoted(shown)}${extra > 0 ? ` (+${extra} more)` : ''}`)
+    const body = quote ? quoted(shown) : shown.join(', ')
+    parts.push(`${label}: ${body}${extra > 0 ? ` (+${extra} more)` : ''}`)
   }
 
-  listed('grepped', grepped)
+  listed('grepped', grepped, false)
   listed('searched entries', searchedEntries)
   listed('inspected world state', inspectedWs)
   listed('read entries', readEntries)

@@ -642,28 +642,6 @@ export class WorldStateInjector extends BaseAIService {
   }
 
   /**
-   * Build the context block string for injection into the system prompt.
-   *
-   * World state only. Whatever memory retrieval produced is concatenated by the caller --
-   * see `buildContext`.
-   *
-   * The sections split along two axes at once, and conflating them is what went wrong when
-   * stickiness was added to Tier 1. `[INVENTORY]` and `[ACTIVE THREADS]` are *claims about
-   * current state*; `[RELEVANT ...]` are claims about relevance only. Tier 1 used to
-   * contain nothing but the former, so reading "tier 1" as "current state" was safe. It is
-   * not any more: a sticky entry is in Tier 1 precisely *because* its state condition
-   * stopped holding -- an item that left the inventory, a beat that just completed. Sending
-   * those through the state sections told the narrator the protagonist carries an item they
-   * dropped and is pursuing a quest they finished.
-   *
-   * So the state sections take Tier 1 minus the sticky carry-over, and the sticky entries
-   * join Tier 2 and Tier 3 in the relevance sections, which is what they are. That also
-   * gives sticky locations somewhere to go: they matched neither `metadata.current` nor
-   * "tier 2 or 3", so they were rendered nowhere at all -- while still being counted in
-   * `all`, and so announced to the retrieval agent, via `formatAlreadyInContext`, as
-   * already in a prompt they never reached.
-   */
-  /**
    * Traits and appearance for one character, in the compact bracketed form the narrator
    * prompt uses. Shared by the protagonist line and the known-characters list so the two
    * cannot drift -- and so the appearance fallback for the pre-object `visualDescriptors`
@@ -712,6 +690,28 @@ export class WorldStateInjector extends BaseAIService {
     return out
   }
 
+  /**
+   * Build the context block string for injection into the system prompt.
+   *
+   * World state only. Whatever memory retrieval produced is concatenated by the caller --
+   * see `buildContext`.
+   *
+   * The sections split along two axes at once, and conflating them is what went wrong when
+   * stickiness was added to Tier 1. `[INVENTORY]` and `[ACTIVE THREADS]` are *claims about
+   * current state*; `[RELEVANT ...]` are claims about relevance only. Tier 1 used to
+   * contain nothing but the former, so reading "tier 1" as "current state" was safe. It is
+   * not any more: a sticky entry is in Tier 1 precisely *because* its state condition
+   * stopped holding -- an item that left the inventory, a beat that just completed. Sending
+   * those through the state sections told the narrator the protagonist carries an item they
+   * dropped and is pursuing a quest they finished.
+   *
+   * So the state sections take Tier 1 minus the sticky carry-over, and the sticky entries
+   * join Tier 2 and Tier 3 in the relevance sections, which is what they are. That also
+   * gives sticky locations somewhere to go: they matched neither `metadata.current` nor
+   * "tier 2 or 3", so they were rendered nowhere at all -- while still being counted in
+   * `all`, and so announced to the retrieval agent, via `formatAlreadyInContext`, as
+   * already in a prompt they never reached.
+   */
   private buildContextBlock(
     tier1: WorldStateContextEntry[],
     tier2: WorldStateContextEntry[],

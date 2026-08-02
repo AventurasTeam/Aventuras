@@ -69,6 +69,34 @@ describe('summarizeProgress', () => {
     expect(line).toBe('grepped: "tower" · tool calls: 2')
   })
 
+  it('tells a narrowed re-run apart from the search it narrowed', () => {
+    // Re-running with chapterNumbers is what grep_chapters' own result tells the agent to do
+    // next. Collapsing both into `grepped: "tower"` reads as "already done" against that.
+    const line = summarizeProgress(log(grep('tower'), grep('tower', { chapters: [5] })))
+
+    expect(line).toContain('"tower", "tower" (ch.5)')
+  })
+
+  it('tells a whole-word search apart from the substring one', () => {
+    // The pair an auto-narrow produces: going back to the substring search is the only way
+    // to undo it, and the agent has to be able to see which one it has.
+    const line = summarizeProgress(log(grep('ren', { wholeWord: true }), grep('ren')))
+
+    expect(line).toContain('"ren" (whole-word)')
+    expect(line).toContain('"ren"')
+  })
+
+  it('still collapses a genuinely identical re-run', () => {
+    const line = summarizeProgress(
+      log(
+        grep('tower', { chapters: [5], caseSensitive: true }),
+        grep('tower', { chapters: [5], caseSensitive: true }),
+      ),
+    )
+
+    expect(line).toBe('grepped: "tower" (ch.5, case) · tool calls: 2')
+  })
+
   it('keeps grep terms apart from lorebook search terms', () => {
     // Both used to land in one "already searched" list, so a word greppped through the
     // story text read as though the lorebook had been searched for it too. They answer

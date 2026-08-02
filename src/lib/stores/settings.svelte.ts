@@ -2469,7 +2469,19 @@ class SettingsStore {
   }
 
   /**
-   * Apply font family to the DOM using CSS custom property
+   * Apply font family to the DOM using CSS custom property.
+   *
+   * **This half is live; do not delete it as dead code.** There is no settings UI for the
+   * custom font any more -- `FontSelector.svelte` was already imported by nothing and has
+   * since been removed -- so `setFontFamily` below has no caller and the font cannot be
+   * *changed*. The read path is a different matter: `loadSettings` still reads the persisted
+   * `font_family` row on every startup and calls this, and `app.css` resolves
+   * `font-family: var(--font-story-custom, var(--font-story))`. An install that set a font
+   * while the picker existed still renders in it, and removing this would silently change
+   * how the app looks for those users without a migration to go with it.
+   *
+   * So: the write path is orphaned, the read path is load-bearing. Restoring a picker means
+   * wiring a caller to `setFontFamily`; nothing else here needs to change.
    */
   private applyFontFamily(fontFamily: string, source: FontSource) {
     if (source === 'default' || fontFamily === 'default') {

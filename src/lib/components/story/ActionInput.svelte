@@ -7,7 +7,6 @@
   import { aiService } from '$lib/services/ai'
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
-  import { chapterReadBudget } from '$lib/services/ai/core/defaults'
   import { TranslationService } from '$lib/services/ai/utils/TranslationService'
   import {
     Send,
@@ -232,14 +231,14 @@
         }),
       // The chapter-read budget is derived from this story's own chapterization threshold, so
       // it is bound here with the rest of the store rather than read from settings: a chapter
-      // is about `tokenThreshold` tokens by construction. See `chapterReadBudget`.
+      // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
       runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
         aiService.runTimelineFill(
           visibleEntries,
           chapters,
           story.getChapterEntries.bind(story),
           alreadyInContext,
-          chapterReadBudget(story.memoryConfig?.tokenThreshold),
+          story.chapterReadBudget,
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
@@ -247,7 +246,7 @@
           question,
           chapters,
           story.getChapterEntries.bind(story),
-          chapterReadBudget(story.memoryConfig?.tokenThreshold),
+          story.chapterReadBudget,
         ),
       buildWorldStateContext: (worldState, userInput, recentEntries, signal, activationTracker) =>
         aiService.buildWorldStateContext(
@@ -365,6 +364,7 @@
             question,
             story.currentBranchChapters,
             story.getChapterEntries.bind(story),
+            story.chapterReadBudget,
           )
         },
       },

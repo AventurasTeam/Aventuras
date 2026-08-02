@@ -29,6 +29,7 @@ import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-va
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
+import { chapterReadBudget } from '$lib/services/ai/core/defaults'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { countTokens } from '$lib/services/tokenizer'
 import type { STChatMessage } from '$lib/services/stChatImporter'
@@ -215,6 +216,21 @@ class StoryStore {
 
   get memoryConfig(): MemoryConfig {
     return this.currentStory?.memoryConfig || DEFAULT_MEMORY_CONFIG
+  }
+
+  /**
+   * Token budget for one chapter-reading prompt, derived from *this* story's own
+   * chapterization threshold. See `chapterReadBudget`.
+   *
+   * A getter rather than the expression at each call site because there are four of them --
+   * the generation pipeline's timeline fill and chapter query, and the lore management
+   * agent's chapter query in both the turn path and the bulk-chapterization path. Three of
+   * those were passing nothing and silently reading against the 40,000-token fallback, which
+   * on a story with a low threshold is an order of magnitude more chapter text than the
+   * budget exists to allow. One expression with four readers cannot drift that way.
+   */
+  get chapterReadBudget(): number {
+    return chapterReadBudget(this.memoryConfig.tokenThreshold)
   }
 
   get storyMode(): StoryMode {
@@ -3363,6 +3379,7 @@ class StoryStore {
                 question,
                 this.currentBranchChapters,
                 this.getChapterEntries.bind(this),
+                this.chapterReadBudget,
               ),
           },
           loreUICallbacks: {

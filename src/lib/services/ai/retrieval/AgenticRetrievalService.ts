@@ -440,37 +440,68 @@ export class AgenticRetrievalService extends BaseAIService {
           .join('\n\n')
       : ''
 
-    const chapterContext = terminalResult?.chapterSummary || salvagedChapterContext
+    const narratorContext = buildRetrievalContext({
+      reasoning: reasoning ?? '',
+      chapterContext: terminalResult?.chapterSummary || salvagedChapterContext,
+      reachedFinish: !truncated,
+    })
 
-    // Nothing gathered means an empty context, not a context containing an apology. But
-    // "nothing gathered" is not the same as "chapterSummary is empty".
-    //
-    // The field is optional in `finish_retrieval`'s schema, and a run that puts its findings
-    // in `synthesis` instead is a normal outcome, not a failure -- so keying the whole result
-    // off `chapterSummary` threw away completed work whenever the model made that choice.
-    // What actually has to be suppressed is the *apology*: a run that died, or ran out of
-    // steps with nothing to show, whose only output is a note about the retrieval agent's own
-    // troubles, which the narrator reads as story material.
-    //
-    // So: a truncated run needs real findings to be worth reporting; a run that reached
-    // `finish_retrieval` is reported on whatever it produced.
-    const synthesis = terminalResult ? reasoning : ''
-    if (!chapterContext && !synthesis) {
+    if (!narratorContext) {
       log('Run produced no findings -- returning empty context', {
         iterations: stepsTaken,
         failure,
         truncated,
       })
-      return { context: '' }
     }
 
-    const contextParts: string[] = []
-    if (reasoning) {
-      contextParts.push(`[RELEVANT STORY DATA]\n${reasoning}`)
-    }
-    if (chapterContext) {
-      contextParts.push(`## Relevant Story Data\n${chapterContext}`)
-    }
-    return { context: contextParts.join('\n\n') }
+    return { context: narratorContext }
   }
+}
+
+/**
+ * Assemble the block the narrator receives, or `''` when there is nothing worth sending.
+ *
+ * Split out of `runRetrieval` because it is the one part of the run whose rules are worth
+ * pinning and the only one testable without an agent: everything above it needs a provider,
+ * a prompt pack and the debug store.
+ *
+ * **Nothing gathered means an empty context, not a context containing an apology** -- but
+ * "nothing gathered" is not the same as "chapterSummary is empty". That field is optional in
+ * `finish_retrieval`'s schema, and a run that puts its findings in `synthesis` instead is a
+ * normal outcome, so keying the whole result off `chapterSummary` threw away completed work
+ * whenever the model made that choice. What has to be suppressed is narrower: a run that did
+ * not reach `finish_retrieval` and salvaged nothing, whose only output would be a note about
+ * the retrieval agent's own troubles -- which the narrator reads as story material. Hence
+ * `reachedFinish`: a truncated run needs real findings to be worth reporting, a finished one
+ * is reported on whatever it produced.
+ *
+ * **One heading, because this is one block.** The two label conventions in this codebase are
+ * structural, not stylistic: `[BRACKETS]` is a top-level block of the narrator's prompt
+ * (`MemoryService.buildRelevantContextBlock`), `##` is a markdown subsection inside one
+ * (`buildChapterSummariesBlock`, which sits within `<story_history>` beside the chapter
+ * summaries). This block is top-level, so it takes the bracket form. Emitting both -- as this
+ * did -- gave the block a subsection carrying its own name, which reads as two separate
+ * pieces of retrieved context rather than one.
+ *
+ * `reasoning` and `chapterContext` stay two paragraphs rather than two headings: the prompt
+ * already tells the agent they are a sentence of framing and the material itself, and on a
+ * salvaged run the first is literally "raw findings below".
+ */
+export function buildRetrievalContext(input: {
+  /** The agent's synthesis, or the salvage note when the run did not finish. */
+  reasoning: string
+  /** `chapterSummary`, or the chapter answers salvaged from a run that died. */
+  chapterContext: string
+  /** Whether the run reached `finish_retrieval`. */
+  reachedFinish: boolean
+}): string {
+  const { reasoning, chapterContext, reachedFinish } = input
+
+  const synthesis = reachedFinish ? reasoning : ''
+  if (!chapterContext && !synthesis) return ''
+
+  const parts = [reasoning, chapterContext].filter((part) => part.length > 0)
+  if (parts.length === 0) return ''
+
+  return `[RELEVANT STORY DATA]\n${parts.join('\n\n')}`
 }

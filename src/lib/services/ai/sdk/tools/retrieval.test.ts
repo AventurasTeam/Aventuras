@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   createRetrievalTools,
+  GREP_NOISE_RATIO,
   MAX_EXCERPT_WORDS,
   MAX_CHAPTER_QUERIES,
   MAX_GREP_EXCERPTS,
+  NOISY_EXCERPT_LIMIT,
   UNCHAPTERIZED,
   type RetrievalToolContext,
 } from './retrieval'
@@ -25,8 +27,9 @@ function makeContext(overrides: Partial<RetrievalToolContext> = {}): RetrievalTo
     onEvent: () => {},
     describeProgress: () => 'progress',
     getChapterEntries: () => [],
-    // Off in production (experimental), so these tests have to ask for it. The exposure
-    // block below covers the off case.
+    // `RetrievalToolContext.grepEnabled` has no default -- the setting does, and it is on.
+    // Set explicitly here because the context is built by hand; the exposure block below
+    // covers the off case.
     grepEnabled: true,
     ...overrides,
   }
@@ -525,6 +528,118 @@ describe('grep_chapters — sampling', () => {
     expect(shown(2)).toBe(1)
     expect(shown(3)).toBe(1)
     expect(shown(1)).toBe(MAX_GREP_EXCERPTS - 2)
+  })
+
+  it('shares the budget by hit count, not by passage count', async () => {
+    // More matching chapters than slots, so the proportional branch runs -- the one regime
+    // where the weight function decides anything.
+    //
+    // Chapter 1 holds 20 mentions that `findTextMatches` merges into a single passage;
+    // every other chapter holds one. Weighed by passage each chapter counts 1, chapter 1
+    // has the lowest number and so loses every tie, and the densest stretch in the story
+    // is the one chapter quoted nowhere. Weighed by hits it outranks them all.
+    const chapterCount = MAX_GREP_EXCERPTS + 10
+    const chapters = Array.from({ length: chapterCount }, (_, i) => chapter(i + 1, 's'))
+    const merged = Array(20).fill('Aria speaks.').join('\n\n')
+
+    const result = await grepOf(
+      makeContext({
+        chapters,
+        getChapterEntries: (c) => [narration(c.number === 1 ? merged : para('Aria once.'))],
+      }),
+    )!({ query: 'Aria' })
+
+    expect(result.sampled).toBe(true)
+    const byChapter = (n: number) =>
+      result.matchesByChapter.find((m: { chapter: number }) => m.chapter === n)
+    expect(byChapter(1).matches).toBe(20)
+    expect(byChapter(1).matchesShown).toBeGreaterThan(0)
+    expect(result.excerpts.some((e: { chapter: number }) => e.chapter === 1)).toBe(true)
+  })
+})
+
+describe('grep_chapters — noisy searches', () => {
+  /** `hits` paragraphs where the query only occurs inside a longer word. */
+  const substringOnly = (hits: number) =>
+    Array.from({ length: hits }, (_, i) => narration(para(`He would surrender it, ${i}.`)))
+
+  /** One chapter: `noise` substring-only paragraphs plus `real` standalone mentions. */
+  const context = (noise: number, real: number) =>
+    makeContext({
+      chapters: [chapter(1, 'Ren everywhere.')],
+      getChapterEntries: () => [
+        ...substringOnly(noise),
+        ...Array.from({ length: real }, (_, i) => narration(para(`Ren waited, ${i}.`))),
+      ],
+    })
+
+  const noiseThreshold = MAX_GREP_EXCERPTS * GREP_NOISE_RATIO
+
+  it('retries a drowning substring search on word boundaries', async () => {
+    const result = await grepOf(context(noiseThreshold + 20, 4))!({ query: 'ren' })
+
+    expect(result.wholeWord).toBe(true)
+    expect(result.autoNarrowed).toContain(String(noiseThreshold + 24))
+    expect(result.totalMatches).toBe(4)
+    // Below the threshold once narrowed, so the noise advice is gone with it.
+    expect(result.tooManyMatches).toBeUndefined()
+  })
+
+  it('keeps the substring search when the agent asked for it explicitly', async () => {
+    const result = await grepOf(context(noiseThreshold + 20, 4))!({
+      query: 'ren',
+      wholeWord: false,
+    })
+
+    expect(result.wholeWord).toBe(false)
+    expect(result.autoNarrowed).toBeUndefined()
+    expect(result.totalMatches).toBe(noiseThreshold + 24)
+  })
+
+  it('leaves a dense stem alone: narrowing it removes too little to be worth it', async () => {
+    // Every paragraph matches whole-word too, so the retry saves nothing and is discarded.
+    const result = await grepOf(
+      makeContext({
+        chapters: [chapter(1, 's')],
+        getChapterEntries: () =>
+          Array.from({ length: noiseThreshold + 10 }, (_, i) =>
+            narration(para(`Ren waited ${i}.`)),
+          ),
+      }),
+    )!({ query: 'ren' })
+
+    expect(result.wholeWord).toBe(false)
+    expect(result.autoNarrowed).toBeUndefined()
+    expect(result.totalMatches).toBe(noiseThreshold + 10)
+  })
+
+  it('cuts the excerpt spend and says how to narrow when a search stays noisy', async () => {
+    const result = await grepOf(context(noiseThreshold + 20, 0))!({
+      query: 'ren',
+      wholeWord: false,
+    })
+
+    expect(result.excerptsShown).toBe(NOISY_EXCERPT_LIMIT)
+    expect(result.tooManyMatches).toContain('chapterNumbers')
+    expect(result.tooManyMatches).toContain('wholeWord')
+    // The per-chapter counts stay complete: that is what tells the agent where to narrow to.
+    expect(result.matchesByChapter[0].matches).toBe(noiseThreshold + 20)
+    // The two notes address different problems, so only the applicable one is emitted.
+    expect(result.note).toBeUndefined()
+  })
+
+  it('spends the full allowance on a search that is merely large', async () => {
+    const result = await grepOf(
+      makeContext({
+        chapters: [chapter(1, 's')],
+        getChapterEntries: () =>
+          Array.from({ length: MAX_GREP_EXCERPTS + 8 }, (_, i) => narration(para(`Aria ${i}.`))),
+      }),
+    )!({ query: 'Aria' })
+
+    expect(result.excerptsShown).toBe(MAX_GREP_EXCERPTS)
+    expect(result.tooManyMatches).toBeUndefined()
+    expect(result.note).toContain('chapterNumbers')
   })
 })
 
