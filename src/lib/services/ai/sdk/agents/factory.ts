@@ -13,6 +13,7 @@ import {
   type ToolSet,
   type StepResult,
   type PrepareStepFunction,
+  type ToolLoopAgentSettings,
 } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
 import { createModelFromProfile, PROVIDERS } from '../providers'
@@ -162,7 +163,9 @@ export function createAgentFromPreset<TTools extends ToolSet>(
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
     reasoning,
     providerOptions,
-  })
+    // Cast: TS can't resolve ToolsContextParameter's conditional type for a
+    // generic TTools, so no object literal is assignable without it.
+  } as unknown as ToolLoopAgentSettings<never, TTools>)
 
   return {
     agent,
@@ -229,7 +232,9 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
     reasoning,
     providerOptions,
-  })
+    // Cast: TS can't resolve ToolsContextParameter's conditional type for a
+    // generic TTools, so no object literal is assignable without it.
+  } as unknown as ToolLoopAgentSettings<never, TTools>)
 
   return {
     agent,

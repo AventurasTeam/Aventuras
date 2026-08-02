@@ -116,7 +116,9 @@ export function buildEntityVarsShape(
 ): z.ZodRawShape | null {
   if (variables.length === 0) return null
 
-  const shape: z.ZodRawShape = {}
+  // Built as a mutable Record: Zod 4's ZodRawShape is Readonly and can't be
+  // assembled by index assignment.
+  const shape: Record<string, z.ZodType> = {}
   for (const def of variables) {
     // For updates: all vars optional (only send what changed)
     // For new entities: respect defaultValue-based optionality
