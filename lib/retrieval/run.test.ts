@@ -41,7 +41,9 @@ const entityRow = (
   o.status ?? 'active',
   o.mode ?? 'auto',
   name,
-  o.description ?? `About ${name}.`,
+  // Not `??`: these columns are nullable, and a null the caller asked for must
+  // reach the row rather than fall back to the default string.
+  o.description === undefined ? `About ${name}.` : o.description,
   o.stale ?? 0,
 ]
 
@@ -49,7 +51,7 @@ const loreRow = (
   id: string,
   title: string,
   o: {
-    body?: string
+    body?: string | null
     mode?: string
     priority?: number
     keywords?: string[]
@@ -60,7 +62,7 @@ const loreRow = (
 ): Row => [
   id,
   title,
-  o.body ?? `Body of ${title}.`,
+  o.body === undefined ? `Body of ${title}.` : o.body,
   o.mode ?? 'auto',
   o.priority ?? 0,
   o.rawKeywords ?? JSON.stringify(o.keywords ?? []),
@@ -83,13 +85,13 @@ const happeningRow = (
 const threadRow = (
   id: string,
   title: string,
-  o: { status?: string; mode?: string; description?: string; stale?: 0 | 1 } = {},
+  o: { status?: string; mode?: string; description?: string | null; stale?: 0 | 1 } = {},
 ): Row => [
   id,
   o.status ?? 'pending',
   o.mode ?? 'auto',
   title,
-  o.description ?? `Description of ${title}.`,
+  o.description === undefined ? `Description of ${title}.` : o.description,
   o.stale ?? 0,
 ]
 
@@ -667,6 +669,72 @@ describe('runRetrieval — pools', () => {
       'Dalen (available to introduce): A smith.',
       'Mira (currently elsewhere): A ranger.',
     ])
+  })
+
+  // renderedText is the only string the ranker measures, so anything a block
+  // would otherwise render beside a row has to live inside it — a chapter's
+  // title is length the type budget never charged for once it sits on a
+  // separate `##` line.
+  it('carries the chapter title inside renderedText, ahead of summary and theme', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          chapters: [chapterRow('ch_1', 'The Long Road', { summary: 'She left.', theme: 'exile' })],
+          knn: [hit('ch_1')],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    expect(expectOk(out).bundles.chapters.selected.map((c) => c.renderedText)).toEqual([
+      'The Long Road\nShe left.\nexile',
+    ])
+  })
+
+  // data-model.md → threads: "failed is distinct because lumping them together
+  // loses useful information", and the whole thread pool is non-active, so a
+  // lone title leaves a paid debt indistinguishable from an open one.
+  it.each(['pending', 'resolved', 'failed'])(
+    'carries a %s thread status inside renderedText',
+    async (status) => {
+      const out = await runRetrieval(
+        deps({
+          queryAll: makeQueryAll({
+            threads: [threadRow('th_1', 'The debt', { status, description: 'Unpaid.' })],
+            knn: [hit('th_1')],
+          }),
+        }),
+        params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+      )
+
+      expect(expectOk(out).bundles.threads.selected.map((c) => c.renderedText)).toEqual([
+        `The debt (${status})\nUnpaid.`,
+      ])
+    },
+  )
+
+  // A null column must not leave its separator behind: "Mira: " reads to the
+  // model as a truncated description rather than an absent one, and the ranker
+  // charges the budget for the separator either way.
+  it('drops the separator on a row whose nullable column is null', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('act_off', 'Mira', { description: null })],
+          lore: [loreRow('lo_1', 'The Concord', { body: null })],
+          threads: [threadRow('th_1', 'The debt', { description: null })],
+          knn: [hit('act_off'), hit('lo_1'), hit('th_1')],
+        }),
+      }),
+      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.bundles.entities.selected.map((c) => c.renderedText)).toEqual([
+      'Mira (currently elsewhere)',
+    ])
+    expect(ok.bundles.lore.selected.map((c) => c.renderedText)).toEqual(['The Concord'])
+    expect(ok.bundles.threads.selected.map((c) => c.renderedText)).toEqual(['The debt (pending)'])
   })
 
   it('gives every candidate in a pool its own awarenessIds array', async () => {

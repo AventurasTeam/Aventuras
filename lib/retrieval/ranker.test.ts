@@ -41,6 +41,12 @@ const emptyPools = (): Record<RetrievalType, Candidate[]> => ({
   chapters: [],
 })
 
+// What one default pool row costs: its 10 text tokens plus the type's macro
+// overhead. Derived, not written out, so the budget-fill cases below stay about
+// budget-fill semantics instead of re-encoding whatever the memory-blocks macro
+// happens to cost this month.
+const HAPPENING_COST = 10 + RANKER_DEFAULTS.typeOverhead.happenings
+
 const base = {
   params: RANKER_DEFAULTS,
   presence: [true, true, true] as const,
@@ -188,8 +194,9 @@ describe('rankPerType — MMR and budget fill', () => {
       candidate({ id: 'dupe', sims: [0.88, 0.88, 0.88], vector: v(1, 0, 0) }),
       candidate({ id: 'other', sims: [0.7, 0.7, 0.7], vector: v(0, 1, 0) }),
     ]
-    // Budget seats two candidates (10 tokens + 20 overhead each = 30).
-    const r = rankPerType(pool, 'happenings', 60, base)
+    // A budget one token short of a third row, so the near-duplicate MMR pushed
+    // to the back is the one that misses out.
+    const r = rankPerType(pool, 'happenings', HAPPENING_COST * 3 - 1, base)
     expect(r.selected.map((c) => c.id)).toEqual(['first', 'other'])
     expect(r.traces.find((t) => t.id === 'dupe')?.dropReason).toBe('over_budget')
   })
@@ -220,7 +227,7 @@ describe('rankPerType — MMR and budget fill', () => {
       candidate({ id: 'a', sims: [0.9, 0.9, 0.9] }),
       candidate({ id: 'b', sims: [0.8, 0.8, 0.8], vector: v(0, 1, 0) }),
     ]
-    const r = rankPerType(pool, 'happenings', 35, base) // seats one 30-token row
+    const r = rankPerType(pool, 'happenings', HAPPENING_COST * 2 - 1, base) // seats one row
     expect(r.selected.map((c) => c.id)).toEqual(['a'])
     expect(r.traces.find((t) => t.id === 'b')?.dropReason).toBe('over_budget')
   })
@@ -241,7 +248,7 @@ describe('rankPerType — MMR and budget fill', () => {
       candidate({ id: 'a', sims: [0.9, 0.9, 0.9] }),
       candidate({ id: 'b', sims: [0.8, 0.8, 0.8], vector: v(0, 1, 0) }),
     ]
-    const r = rankPerType(pool, 'happenings', 35, base)
+    const r = rankPerType(pool, 'happenings', HAPPENING_COST * 2 - 1, base)
     expect(r.funnel.selectedCount).toBe(1)
     expect(r.funnel.mmrSize).toBe(2)
   })

@@ -186,8 +186,11 @@ simulator re-runs it bit-for-bit.
 - **Entity-name / keyword index shape** — in-memory per-branch
   index rebuilt on hydrate vs SQL-side matching; Q3 and Layer A
   share it.
-- **Per-type overhead constants** — measured after the memory
-  macros are concrete; record the measured values.
+- **Per-type overhead constants** — **resolved:** measured against
+  the shipped macro; the values and what shapes them are canon at
+  [`retrieval.md → Token estimation`](../../../../memory/retrieval.md#token-estimation),
+  the measurement narrative is in
+  [Per-type overhead constants](#per-type-overhead-constants) below.
 - **vec0 returns L2 distance, not cosine similarity** — the
   `0005_embedder_vec0.sql` tables declare no `distance_metric`, so
   KNN ranks by raw L2. That matches cosine ranking only because
@@ -200,4 +203,34 @@ simulator re-runs it bit-for-bit.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### Per-type overhead constants
+
+Method: render exactly one row of a block with an empty
+`renderedText` through the shipped `macro_memory_blocks`
+(`lib/prompts/bundled/memory-blocks.ts`) and count the remainder with
+the same `countTokens` the ranker uses. The measurement is a test
+assertion, not a one-off script —
+`lib/prompts/bundled/memory-blocks.test.ts` fails, naming the file and
+the new value, when the macro moves and
+`RANKER_DEFAULTS.typeOverhead` does not.
+
+The canon estimates were 2-5x high across the board: entities 30 → 11,
+lore 10 → 4, happenings 20 → 5, threads 10 → 4, chapters 20 → 4. The
+values and the rules that shape them are canon at
+[`retrieval.md → Token estimation`](../../../../memory/retrieval.md#token-estimation).
+
+Chapters measured 6 before the title moved off its `##` line and into
+`renderedText`. Measured at the default
+`retrievalBudgets.chapters = 600` with a 14-token title and 36-token
+`summary` + `theme`: budget-fill seated 14 rows charged at 588 that
+rendered **732 — a 132-token, 22% overrun of a hard partition**,
+scaling with title length times row count. The same shape after the
+move seats 10 rows charged at 550 that render 514, i.e. back to
+under-filling. Chapters were the only block putting a variable-length
+string outside `renderedText`.
+
+Three `lib/retrieval/ranker.test.ts` budget cases moved: they encoded
+the old `10 text + 20 overhead = 30` row cost as literal budgets
+(`60`, `35`). They now derive the budget from
+`RANKER_DEFAULTS.typeOverhead.happenings`, so they assert budget-fill
+semantics rather than a constant's current value.

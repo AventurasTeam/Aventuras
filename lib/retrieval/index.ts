@@ -11,7 +11,7 @@ export { extractProse, splitSentences } from './prose-extract'
 export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
-export { runRetrieval } from './run'
+export { ENTITY_FRAMING, runRetrieval } from './run'
 export type {
   RetrievalDeps,
   RetrievalFailure,

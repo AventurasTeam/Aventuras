@@ -1112,3 +1112,42 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   provider path already chunks by row count, so the work is a token
   budget per request, a concurrency cap on the fan-out, and a split on
   the local backend. Surfaced by M3.4 Task 12 review (2026-08-02).
+- **Nothing implements the window-level accounting that
+  [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
+  describes.** Canon reads "recent buffer + active+in-scene entities +
+  their location + active threads consume tokens unconditionally. Then
+  prompt-overhead reservation. Then the per-type retrieval budgets
+  allocate the remainder", and the UI is meant to show allocations "of
+  remaining ~X tokens after structural inject". Three pieces are absent:
+  no context-window total is tracked anywhere, no prompt-overhead
+  reservation exists, and the story-settings sliders show absolute
+  numbers with no remaining-window figure beside them. `runRetrieval`
+  passing `settings.retrievalBudgets` through to `rankAll` unmodified is
+  **correct** under this reading — the floor is subtracted from the
+  window, not from each type's partition, which is why the prompt
+  buffer, a floor member with no retrieval type, appears in that list at
+  all. Subtracting per type instead would silently redefine the user's
+  sliders every turn and double-count against the UI figure canon asks
+  for. What is missing is the window arithmetic and the surface that
+  reports it, which spans retrieval, the prompt builder and
+  story-settings and so has no single owning slice. Surfaced by M3.4
+  Task 17 review (2026-08-02).
+- **`lib/piggyback/apply.ts` writes `<current_location>` with no kind
+  check.** `block.currentLocation` lands in `metadata.currentLocationId`
+  verbatim; `buildStructuralFloor` then seats whatever it names as the
+  location if that row is `active`, and `apply.ts` writes
+  `state.current_location_id` for every in-scene character. A model that
+  answers with a character or item id corrupts scene state with no
+  diagnostic. M3.4 Task 17 narrowed the prompt-side exposure (the
+  `<current_location>` instruction now fires only when the floor seats a
+  location), but the parser accepts any id regardless of what the prompt
+  asked for. The fix belongs with piggyback parsing, not the prompt.
+  Surfaced by M3.4 Task 17 review (2026-08-02).
+- **`structuralSceneEntities` has no template consumer.**
+  `buildGenerationContext` emits it and `templateContextMap` documents
+  it, but the bundled per-turn and suggestion-refresh templates both
+  render the scene from `entities` filtered by `sceneEntities` so the
+  active+in-scene invariant survives a render with no retrieval behind
+  it. Either the bundle earns a consumer or it is documented as
+  pack-author-only surface. Surfaced by M3.4 Task 17 review
+  (2026-08-02).

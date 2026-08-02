@@ -294,14 +294,23 @@ async function buildPool(
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)
 
-// Canon frames two of the three sub-pools (retrieval.md → Three-sub-pool entity
-// model), so the model reads an active pool row as elsewhere rather than present
-// and a staged one as introducible rather than as cast. Retired has no framing,
-// hence Partial.
-const ENTITY_FRAMING: Partial<Record<EntityRow['status'], string>> = {
+/**
+ * Canon frames two of the three sub-pools (retrieval.md → Three-sub-pool entity
+ * model), so the model reads an active pool row as elsewhere rather than present
+ * and a staged one as introducible rather than as cast. Retired has no framing,
+ * hence Partial. The memory-blocks macro repeats these words for pinned rows,
+ * which never reach the ranker; memory-blocks.test.ts pins the two together.
+ */
+export const ENTITY_FRAMING: Partial<Record<EntityRow['status'], string>> = {
   active: 'currently elsewhere',
   staged: 'available to introduce',
 }
+
+// A blank field must not leave its separator behind: a null description renders
+// "Mira: " to the model, which reads as a truncated line rather than an absent
+// one, and the ranker charges the budget for it either way.
+const lines = (...parts: (string | null)[]): string =>
+  parts.filter((p) => p !== null && p !== '').join('\n')
 
 /** The one place KNN ids, vectors, source rows and pool predicates meet. */
 function assembleCandidates(
@@ -361,15 +370,13 @@ function assembleCandidates(
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         const framing = ENTITY_FRAMING[r.status]
+        const head = framing === undefined ? r.name : `${r.name} (${framing})`
         return {
           ...shared(),
           kind: 'entity' as const,
           id: r.id,
           displayName: r.name,
-          renderedText:
-            framing === undefined
-              ? `${r.name}: ${r.description ?? ''}`
-              : `${r.name} (${framing}): ${r.description ?? ''}`,
+          renderedText: r.description ? `${head}: ${r.description}` : head,
           sims: simsFor(vector),
           vector,
           pinSignal: 0,
@@ -387,7 +394,7 @@ function assembleCandidates(
           kind: 'lore' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: `${r.title}\n${r.body ?? ''}`,
+          renderedText: lines(r.title, r.body),
           sims: simsFor(vector),
           vector,
           pinSignal: r.priority / 100,
@@ -417,9 +424,7 @@ function assembleCandidates(
           kind: 'happening' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: [r.title, r.description ?? '', ...rows.map((a) => a.source ?? '')]
-            .filter((s) => s !== '')
-            .join('\n'),
+          renderedText: lines(r.title, r.description, ...rows.map((a) => a.source)),
           sims: simsFor(vector),
           vector,
           commonKnowledge: r.commonKnowledge,
@@ -451,7 +456,11 @@ function assembleCandidates(
           kind: 'thread' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: `${r.title}\n${r.description ?? ''}`,
+          // Status is content, not decoration: the pool is pending / resolved /
+          // failed, and "resolved means done, failed is distinct" (data-model.md
+          // → threads) is exactly what a lone title loses. In renderedText so
+          // the ranker charges the budget for it.
+          renderedText: lines(`${r.title} (${r.status})`, r.description),
           sims: simsFor(vector),
           vector,
           pinSignal: 0,
@@ -470,7 +479,10 @@ function assembleCandidates(
           kind: 'chapter' as const,
           id: r.id,
           displayName: r.title,
-          renderedText: `${r.summary}\n${r.theme}`,
+          // The title is here rather than on a `##` line in the macro because
+          // only renderedText is measured; a variable-length string outside it
+          // overruns the type budget by its own length times the row count.
+          renderedText: lines(r.title, r.summary, r.theme),
           sims: simsFor(vector),
           vector,
           pinSignal: 0,

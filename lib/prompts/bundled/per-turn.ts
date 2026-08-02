@@ -1,7 +1,10 @@
 // `entities` use the drizzle row shape (camelCase: id/kind/name/description/
 // status/injectionMode). `sceneEntities` is the id array from entry metadata.
 // The scene loop is intentionally injectionMode-agnostic — that IS the
-// structural-floor invariant (active + in-scene always inject).
+// structural-floor invariant (active + in-scene always inject). It reads
+// `entities` rather than `structuralSceneEntities` so the invariant survives a
+// render with no retrieval behind it — readRetrievalOutcome returns undefined
+// for a stashed failure, and every floor bundle then arrives empty.
 export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
@@ -17,43 +20,48 @@ export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 {{ definition.tone.promptBody }}
 
 {% endif -%}
+{%- comment -%}
+The second half of the condition de-dupes the row the classifier named as both
+in-scene and the location; it is nil-safe, since a null structuralLocation
+makes the comparison "e.id != nil", which is true.
+{%- endcomment -%}
 {%- assign hasScene = false -%}
 {%- for e in entities | active -%}
-{%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
+{%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}{%- assign hasScene = true -%}{%- endif -%}
 {%- endfor -%}
 {% if hasScene -%}
 # In scene
 {% for e in entities | active -%}
-{%- if sceneEntities contains e.id %}
-## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}
-{{ e.description }}
+{%- if sceneEntities contains e.id and e.id != structuralLocation.id %}
+## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
+{{ e.description }}{% endif %}
 {% endif -%}
 {%- endfor %}
 
 {% endif -%}
-{%- assign stagedList = entities | staged -%}
-{% if stagedList.size > 0 -%}
-# Staged characters (introduce when narratively appropriate)
-{% for e in stagedList %}
-- {% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.name }}: {{ e.description }}
-{%- endfor %}
+{% if structuralLocation -%}
+# Current location
+
+{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}
+
+{% endif -%}
+{% include 'macro_memory_blocks' -%}
 {% if piggybackFires -%}
+{% if structuralPinnedEntities.size > 0 or retrievedEntities.size > 0 -%}
+If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
-If you introduce any staged character, include their ID (without brackets) in the trailing <scene_entities> block.
 {% endif -%}
+{%- comment -%}
+Gated on structuralLocation alone, and named rather than "one of the IDs
+above": every other id above belongs to the memory blocks, which are
+kind-blind — RetrievedRow has no EntityKind — so widening this to
+retrievedEntities points <current_location> at a set that can be all
+characters, and nothing downstream kind-checks what comes back.
+{%- endcomment -%}
+{% if structuralLocation -%}
+Use the current location's ID above (without brackets) for <current_location> if the scene is at that place; leave it out if the scene moves somewhere not listed here.
 
 {% endif -%}
-{%- assign locationList = entities | active | by_kind: 'location' -%}
-{% if locationList.size > 0 -%}
-# Known locations
-{% for e in locationList %}
-- {% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.description != blank %}: {{ e.description }}{% endif %}
-{%- endfor %}
-{% if piggybackFires -%}
-
-Use one of these IDs (without brackets) for <current_location> if the scene is at one of them; leave it out if the scene moves somewhere not listed here.
-{% endif -%}
-
 {% endif -%}
 {% if calendarVocabulary -%}
 # Calendar

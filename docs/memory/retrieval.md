@@ -1310,10 +1310,54 @@ token_count(c) = tiktoken(c.rendered_field_text) + type_overhead(type_of(c))
 ```
 
 Per-type overhead is a small constant for the Liquid macro / block
-wrapping (entity character_block ≈ 30 tokens, lore block ≈ 10 tokens,
-happening memory block ≈ 20 tokens, thread block ≈ 10 tokens).
-Measured empirically once the macros are concrete; constant in code
-thereafter.
+wrapping — measured empirically against the shipped macro, constant in
+code thereafter:
+
+| Type         | Overhead | What the constant covers                         |
+| ------------ | -------- | ------------------------------------------------ |
+| `entities`   | 11       | `# Elsewhere in the world` plus the bracketed id |
+| `lore`       | 4        | `# Relevant lore`                                |
+| `happenings` | 5        | `# What has happened`                            |
+| `threads`    | 4        | `# Background threads`                           |
+| `chapters`   | 4        | `# Earlier chapters`                             |
+
+Three rules hold those numbers in place:
+
+- **A ranked row renders its `rendered_field_text` and nothing else.**
+  Anything a block puts outside that string — a heading, a label — is
+  length the estimate never charged for, so the type overruns its
+  partition by that length times the row count. A chapter's title
+  therefore lives inside the string rather than on a `##` line above
+  it.
+- **Only the entity block brackets an id.** The `<state>` block
+  references entities and nothing else, so an id on lore / happenings
+  / threads / chapters is spend that invites a reference no parser
+  resolves.
+- **Emission instructions belong to the including template, not the
+  macro.** They cost once per prompt, while anything inside a block is
+  charged once per row: the `<scene_entities>` instruction is 27
+  tokens on its own, and moving it into the entity block would take
+  that type's overhead from 11 to 38.
+
+Measured on a one-row block, so an N-row block is charged its header N
+times and renders it once: the estimate carries `N − 1` headers of
+slack, at least 3 tokens per extra row. That is the safe direction
+against a hard partition, and a marginal-cost measurement would be
+tighter but can overshoot.
+
+The slack is not a guarantee at `N = 1`, where there is none. BPE is
+not additive across the seam between the wrapper and the row's own
+text — a row whose text splits a newline run the empty probe had
+merged renders one token more than it was charged. Probed across the
+five blocks, that boundary case never exceeded **1 token**, so it is
+noise against partitions in the hundreds; the thing that actually
+overruns a partition is a variable-length string rendered outside
+`rendered_field_text`, which is what the first rule above forbids.
+
+The constants live in `RANKER_DEFAULTS.typeOverhead`;
+`lib/prompts/bundled/memory-blocks.test.ts` re-derives them from the
+shipped macro and fails when the macro moves and the constant does
+not.
 
 **No stored column on candidate tables.** Tokenization is fast enough
 (microseconds per row); per-turn cost is sub-millisecond total.
