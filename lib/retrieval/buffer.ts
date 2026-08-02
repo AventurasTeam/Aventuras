@@ -12,9 +12,10 @@ export type BufferSettings = {
   protectedBuffer: number
 }
 
-// Neither count carries .min() or .int() in storySettingsSchema, and slice()
-// reads both -0 and -0.5 as "the whole branch" — clamp to an integer floor
-// rather than trusting the bound.
+// Neither count carries .min() or .int() in storySettingsSchema. Fractions have
+// to go before the count reaches a slice index, and the floors differ per knob:
+// partialChapterBuffer 0 asks for no window at all, whereas protectedBuffer 0
+// legitimately means "no spillover floor".
 function toCount(value: number, floor: number): number {
   return Number.isFinite(value) ? Math.max(floor, Math.floor(value)) : floor
 }
@@ -28,22 +29,19 @@ export function composePromptBuffer<T extends BufferEntry>(
   settings: BufferSettings,
 ): T[] {
   const ordered = entries.filter((e) => e.kind !== 'system').sort((a, b) => a.position - b.position)
+  const openCount = ordered.filter((e) => e.chapterId === null).length
 
-  const open = ordered.filter((e) => e.chapterId === null)
-  const closed = ordered.filter((e) => e.chapterId !== null)
+  const wanted = settings.fullChapterInBuffer
+    ? openCount
+    : toCount(settings.partialChapterBuffer, 1)
 
-  const protectedCount = toCount(settings.protectedBuffer, 0)
+  // Spillover is gated on the open region running out, so the floor widens this
+  // one window rather than reserving room alongside it. Taking a tail of the
+  // whole branch is what makes the two sources contiguous.
+  const take = Math.max(toCount(settings.protectedBuffer, 0), Math.min(openCount, wanted))
 
-  // The floor widens the open-region window rather than reserving room for
-  // closed prose: spillover is gated on the open region running out, so a
-  // protectedBuffer above partialChapterBuffer has to be met from the open
-  // region first.
-  const fromOpen = settings.fullChapterInBuffer
-    ? open
-    : open.slice(-Math.max(toCount(settings.partialChapterBuffer, 1), protectedCount))
-
-  const shortfall = Math.max(0, protectedCount - fromOpen.length)
-  if (shortfall === 0) return fromOpen
-
-  return [...closed.slice(-shortfall), ...fromOpen]
+  // Front-indexed and clamped: a bare negative start is a tail of that size, so
+  // a floor wider than the branch would return the last take - length entries
+  // instead of everything.
+  return ordered.slice(Math.max(0, ordered.length - take))
 }
