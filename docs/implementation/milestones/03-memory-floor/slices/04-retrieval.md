@@ -74,10 +74,11 @@ simulator re-runs it bit-for-bit.
 - **Pre-retrieval sync stage:** batch-embed `embedding_stale` rows
   via C1 at the head of the retrieval phase (inserted before the
   narrative phase through the C6 phase-list seam); blocking failure
-  surface (`Retry / Switch embedder / Roll back this turn`,
-  next-turn affordance disabled — the switch action imports 3.1b's
-  swap-dialog open action per C8); stale-at-KNN rows excluded from
-  pools.
+  surface (`Switch embedder / Retry / Dismiss` — no rollback action,
+  the orchestrator already reverse-replayed the turn, and no composer
+  gate, since a resubmit re-runs the same blocking sync stage; the
+  switch action imports 3.1b's swap-dialog open action per C8);
+  stale-at-KNN rows excluded from pools.
 - **Query stack:** Q1 user action; Q2 structural digest
   (code-template floor + optional piggyback `summary` enrichment,
   handed off by 3.2's parse);

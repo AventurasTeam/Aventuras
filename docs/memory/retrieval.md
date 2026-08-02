@@ -218,9 +218,12 @@ leaves it flagged and absent from vec0. There is no separate
 **Embed failure is blocking, not "queue and continue."** When the
 pre-retrieval sync stage can't embed a dirty row, the turn can't
 reach retrieval. Treated identically to a failed LLM call: surfaced
-as an error, must be resolved, no ignore path. The next-turn
-affordance disables until the user picks Retry / Switch embedder /
-Roll back this turn. See
+as an error, must be resolved, no ignore path. The user picks Switch
+embedder / Retry / Dismiss. There is no rollback action — the
+orchestrator has already reverse-replayed the turn by the time the
+error surfaces — and the composer is not gated, because a resubmit
+re-runs this same blocking sync stage, so a still-broken embedder
+fails the turn again. The block is self-enforcing. See
 [`model-management.md → Embedder failures`](./model-management.md#embedder-failures)
 for the action surface and the wider failure-mode discussion.
 

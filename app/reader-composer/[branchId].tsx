@@ -469,10 +469,14 @@ export default function ReaderComposerRoute() {
     [entries],
   )
 
-  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(systemFailure, () => {
-    const submission = lastSubmission ?? systemFailure?.submission
-    if (submission) void runSubmit(submission.content, submission.composerMode)
-  })
+  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
+    systemFailure,
+    () => {
+      const submission = lastSubmission ?? systemFailure?.submission
+      if (submission) void runSubmit(submission.content, submission.composerMode)
+    },
+    storyId,
+  )
 
   const dismissSystemEntry = useCallback(async () => {
     await clearSystemEntry(branchId, ctx)
