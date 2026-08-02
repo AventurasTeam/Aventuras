@@ -1071,9 +1071,11 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   entity-type token budget" — but a retired row that opted in is
   already seated, so the retired sub-pool is empty in production and
   cannot compete. M3.4 Task 11 resolves this in favour of the floor, so
-  that "always" means always; its `filterEntityPool` retains and
-  unit-tests a retired branch that is unreachable once `floorIds` comes
-  from `buildStructuralFloor`. Second, same-name suppression is defined
+  that "always" means always; `filterEntityPool` still excludes every
+  retired row by default, but the `always` opt-in that would readmit one
+  is unreachable whenever `floorIds` comes from `buildStructuralFloor`,
+  because that floor has already seated it. Second, same-name
+  suppression is defined
   as removing staged namesakes "from the current pool", so a staged row
   carrying `always` is injected even when its name appears in recent
   buffer prose — which is the collision the rule exists to prevent. The
