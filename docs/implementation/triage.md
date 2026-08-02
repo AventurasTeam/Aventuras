@@ -1037,3 +1037,24 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   it. Fix by scoping the second assertion to import statements rather
   than scanning bare identifiers, or by exempting injected parameter
   names. Surfaced by M3.4 Task 9 review (2026-08-02).
+- **The buffer composition rule's spillover source is stated two ways
+  that cannot both hold.**
+  [`cadence.md → Composition rule`](../memory/cadence.md#composition-rule)
+  says to "fill from the **previous chapter** to satisfy the
+  `protectedBuffer` floor" — singular — while the same section states
+  the unconditional arithmetic invariant that total entries before the
+  chapter reaches the floor equal `protectedBuffer`, "with
+  previous-chapter spillover making up the gap". Those disagree
+  whenever the previous chapter holds fewer entries than the shortfall:
+  honouring the singular source leaves the total below the floor, and
+  honouring the invariant means walking backwards across as many closed
+  chapters as it takes. M3.4 Task 10 implements the invariant reading
+  and pins it with a test asserting output that spans two closed
+  chapters plus the open region, on the grounds that a floor which
+  silently stops short is not a floor. The case is uncommon in practice
+  — `chapterTokenThreshold` defaults to 24000 tokens, so a chapter
+  normally holds far more than the default `protectedBuffer` of 10 —
+  which is likely why the wording was never stress-tested. Tighten the
+  sentence to say "walking backwards from the chapter boundary", or
+  state the single-chapter cap explicitly and accept a total below the
+  floor. Surfaced by M3.4 Task 10 (2026-08-02).
