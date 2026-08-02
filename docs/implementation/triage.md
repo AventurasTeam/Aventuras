@@ -1151,3 +1151,33 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   it. Either the bundle earns a consumer or it is documented as
   pack-author-only surface. Surfaced by M3.4 Task 17 review
   (2026-08-02).
+- **The token-progress strip reads a 50-entry window, so it cannot
+  reach its own threshold.** `useOpenRegionTokens` sums the open region
+  out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
+  (50) slice rather than the branch. Measured: 50 entries at realistic
+  length is **37.7%** of the default 24 000 `chapterTokenThreshold`, and
+  reaching 100% would need ~132 entries. Once the open region exceeds 50
+  — the normal state, since nothing closes a chapter before M5 — the
+  strip reports a fraction of the truth and reads "plenty of room" while
+  chapter-close is overdue. `generation-pipeline.md → Chapter close`
+  sketches `openRegionTokens(branchId)` reading from the **DB**, so the
+  two will diverge the moment M5 wires the real trigger. The strip is
+  still better than the hardcoded `0` it replaced; the number is not
+  trustworthy. Surfaced by M3.4 Task 19 (2026-08-02).
+- **The same strip is non-monotonic across a reload.** `entriesStore`
+  grows within a session (`patch` never evicts) but `reload()`
+  re-hydrates to the trailing 50, discarding paged-in older rows.
+  `reload()` fires on turn failure, on submit-with-system-tail, and on
+  system-entry dismissal — so **dismissing a system entry visibly
+  shrinks the progress strip**, as does restarting the app. Same story,
+  same open region, different number. Follows from the entry above and
+  is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
+- **`countEntryTokens` now runs on the reader's first render, adding a
+  synchronous tiktoken encoder build before first paint.** It had zero
+  production callers before M3.4 Task 19 — `countTokens` was reached
+  only through the ranker, inside the async per-turn retrieval phase.
+  The BPE map build measured **116ms** on desktop under Node
+  (`lib/retrieval/tokens.ts` documents ~135ms) and will be worse on
+  Android. If story-open shows a hitch, this is it, and the fix is to
+  warm the encoder during story open rather than to change the hook.
+  **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).

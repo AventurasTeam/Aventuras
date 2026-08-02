@@ -30,6 +30,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -712,6 +713,7 @@ export default function ReaderComposerRoute() {
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
+  const openRegionPct = useOpenRegionTokens()
   const { theme } = useTheme()
 
   const surfaceProps = {
@@ -734,7 +736,7 @@ export default function ReaderComposerRoute() {
     <ScreenShell
       variant="in-story"
       title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
-      chapterProgress={0}
+      chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {
         if (storyId != null) router.push(`/story-settings/${storyId}`)

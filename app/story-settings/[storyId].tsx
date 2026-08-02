@@ -30,6 +30,7 @@ import {
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
+import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard'
 import { StorySettingsStaleStoreError, updateStorySettings } from '@/lib/actions'
@@ -138,6 +139,10 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       )
     : undefined
 
+  // Sourced from the open story, not the row read above: a cold entry has no
+  // open story and so no loaded entries, and the strip reads 0 there.
+  const openRegionPct = useOpenRegionTokens()
+
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)
 
@@ -233,7 +238,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
             : t('storySettings:title')}
         </Text>
       }
-      chapterProgress={0}
+      chapterProgress={openRegionPct}
       hideSelfReferentialIcon
       onBack={handleBack}
       actions={<AppActionsMenu beforeNavigate={session.requestLeave} />}
