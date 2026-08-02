@@ -4,7 +4,7 @@
  * Fixes provider response issues that cause SDK validation errors.
  */
 
-import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+import type { LanguageModelMiddleware } from 'ai'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('PatchResponse')
@@ -36,10 +36,8 @@ function ensureUsage(usage: unknown): UsageV6 {
   }
 }
 
-export function patchResponseMiddleware(): LanguageModelV3Middleware {
+export function patchResponseMiddleware(): LanguageModelMiddleware {
   return {
-    specificationVersion: 'v3',
-
     wrapGenerate: async ({ doGenerate }) => {
       const result = await doGenerate()
 

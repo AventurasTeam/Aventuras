@@ -8,6 +8,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { createPollinations } from 'ai-sdk-pollinations'
 import { createXai } from '@ai-sdk/xai'
@@ -19,7 +20,6 @@ import type { APIProfile } from '$lib/types'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
 import { settings } from '$lib/stores/settings.svelte'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
 
 export function createModelFromProfile(options: {
   profile: APIProfile
@@ -29,7 +29,7 @@ export function createModelFromProfile(options: {
   structuredOutputs?: boolean
   manualBody?: string
   serviceId?: string
-}): LanguageModelV3 {
+}): LanguageModelV4 {
   const { profile, modelId, presetId, debugId, structuredOutputs, manualBody, serviceId } = options
   const provider = createProviderFromProfile({
     profile,
@@ -40,7 +40,7 @@ export function createModelFromProfile(options: {
     serviceId,
   })
 
-  return provider(modelId) as LanguageModelV3
+  return provider(modelId) as LanguageModelV4
 }
 
 function createProviderFromProfile(options: {

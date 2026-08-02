@@ -499,7 +499,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: false,
     },
     imageDefaults: {
       defaultModel: 'cogview-3-plus',
@@ -527,7 +526,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: false,
     },
     fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings

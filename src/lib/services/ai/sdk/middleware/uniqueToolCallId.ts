@@ -16,8 +16,6 @@ import type { LanguageModelMiddleware } from 'ai'
 
 export function uniqueToolCallIdMiddleware(): LanguageModelMiddleware {
   return {
-    specificationVersion: 'v3',
-
     wrapStream: async ({ doStream }) => {
       const { stream, ...rest } = await doStream()
 

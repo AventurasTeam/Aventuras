@@ -5,6 +5,7 @@
  * Integrates with the existing settings and provider system.
  */
 
+import type { LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
 import {
   ToolLoopAgent,
   wrapLanguageModel,
@@ -13,8 +14,6 @@ import {
   type StepResult,
   type PrepareStepFunction,
 } from 'ai'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
-import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import { settings } from '$lib/stores/settings.svelte'
 import { createModelFromProfile, PROVIDERS } from '../providers'
 import { buildProviderOptions } from '../generate'
@@ -32,8 +31,8 @@ export interface ResolvedAgentConfig {
   preset: GenerationPreset
   profile: APIProfile
   providerType: ProviderType
-  model: LanguageModelV3
-  providerOptions: ProviderOptions | undefined
+  model: LanguageModelV4
+  providerOptions?: SharedV4ProviderOptions
   reasoning: SdkEffort
 }
 

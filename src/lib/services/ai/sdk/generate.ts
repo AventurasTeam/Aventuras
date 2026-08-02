@@ -11,13 +11,11 @@ import { debug } from '$lib/stores/debug.svelte'
 import { settings } from '$lib/stores/settings.svelte'
 import { ToSdkEffort } from '$lib/types'
 import type { APIProfile, GenerationPreset, ProviderType, SdkEffort } from '$lib/types'
-import type { AnthropicProviderOptions } from '@ai-sdk/anthropic'
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
-import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai'
-import type { LanguageModelV3, LanguageModelV3Middleware } from '@ai-sdk/provider'
-import type { ProviderOptions } from '@ai-sdk/provider-utils'
+import type { JSONObject, LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
+import type { LanguageModelMiddleware } from 'ai'
 import type { XaiProviderOptions } from '@ai-sdk/xai'
 import {
   extractJsonMiddleware,
@@ -29,7 +27,7 @@ import {
 } from 'ai'
 import type { PollinationsLanguageModelSettings } from 'ai-sdk-pollinations'
 import { jsonrepair } from 'jsonrepair'
-import type { z } from 'zod'
+import * as z from 'zod'
 import { loggingMiddleware, patchResponseMiddleware, promptSchemaMiddleware } from './middleware'
 import { retryOn429Middleware } from './middleware/retryMiddleware'
 import { createModelFromProfile } from './providers'
@@ -40,9 +38,6 @@ const log = createLogger('Generate')
 // ============================================================================
 // Types
 // ============================================================================
-
-type JSONValue = null | string | number | boolean | JSONObject | JSONValue[]
-type JSONObject = { [key: string]: JSONValue | undefined }
 
 interface BaseGenerateOptions {
   presetId: string
@@ -88,33 +83,13 @@ const thinkTagMiddleware = extractReasoningMiddleware({ tagName: 'think' })
 export function buildProviderOptions(
   preset: GenerationPreset,
   providerType: ProviderType,
-): ProviderOptions | undefined {
+): SharedV4ProviderOptions | undefined {
   let options: JSONObject = {}
 
   const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
 
   if (!settings.advancedRequestSettings.manualMode) {
     switch (providerType) {
-      case 'openai':
-        if (reasoning !== 'none') {
-          options = {
-            reasoningSummary: 'auto',
-          } satisfies OpenAIResponsesProviderOptions
-        }
-        break
-      case 'anthropic':
-        // all 4.6+ models support adaptive thinking
-        // everything older than 4.5 has been deprecated and removed from most providers
-        if (reasoning !== 'none' && !preset.model.includes('-4-5')) {
-          options = {
-            thinking: {
-              type: 'adaptive',
-              display: 'summarized',
-            },
-            effort: reasoning,
-          } satisfies AnthropicProviderOptions
-        }
-        break
       case 'xai':
         options = { parallel_function_calling: true } satisfies XaiProviderOptions
         break
@@ -169,7 +144,7 @@ export function buildProviderOptions(
   }
 
   const providerKey = PROVIDER_OPTIONS_KEY[providerType]
-  return { [providerKey]: options } as ProviderOptions
+  return { [providerKey]: options }
 }
 
 // ============================================================================
@@ -180,8 +155,8 @@ interface ResolvedConfig {
   preset: GenerationPreset
   profile: APIProfile
   providerType: ProviderType
-  model: LanguageModelV3
-  providerOptions: ProviderOptions | undefined
+  model: LanguageModelV4
+  providerOptions?: SharedV4ProviderOptions
   reasoning: SdkEffort
   supportsStructuredOutput: boolean
   useThinkTag: boolean
@@ -190,10 +165,10 @@ interface ResolvedConfig {
 interface NarrativeConfig {
   profile: APIProfile
   providerType: ProviderType
-  model: LanguageModelV3
+  model: LanguageModelV4
   temperature: number
   maxTokens: number
-  providerOptions: ProviderOptions | undefined
+  providerOptions?: SharedV4ProviderOptions
   reasoning: SdkEffort
   useThinkTag: boolean
 }
@@ -273,7 +248,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     manualBody: settings.apiSettings.manualBody ?? '',
   })
 
-  const reasoningEffort = ToSdkEffort(settings.apiSettings.reasoningEffort)
+  const reasoningEffort = settings.apiSettings.reasoningEffort
 
   const narrativePreset: GenerationPreset = {
     id: '_narrative',
@@ -298,7 +273,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     temperature: settings.apiSettings.temperature,
     maxTokens: settings.apiSettings.maxTokens,
     providerOptions: buildProviderOptions(narrativePreset, profile.providerType),
-    reasoning: reasoningEffort === 'off' ? 'none' : reasoningEffort,
+    reasoning: ToSdkEffort(reasoningEffort),
     useThinkTag,
   }
 }
@@ -307,7 +282,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
 // Middleware
 // ============================================================================
 
-function createJsonExtractMiddleware(): LanguageModelV3Middleware {
+function createJsonExtractMiddleware(): LanguageModelMiddleware {
   return extractJsonMiddleware({
     transform: (text) => {
       try {
@@ -329,12 +304,12 @@ function buildStructuredMiddleware(
   useThinkTag: boolean,
   reasoningEnabled: boolean,
   thinkingNudge: boolean,
-): LanguageModelV3Middleware[] {
+): LanguageModelMiddleware[] {
   // retryOn429Middleware is intentionally outermost: it re-invokes the whole
   // inner chain (including patchResponseMiddleware) on each retry. Do not
   // reorder without understanding this — putting retry after patchResponse
   // would cause patched state to leak across attempts.
-  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
+  const base: LanguageModelMiddleware[] = [retryOn429Middleware, patchResponseMiddleware()]
 
   base.push(createJsonExtractMiddleware())
 
@@ -357,12 +332,12 @@ function buildStructuredMiddleware(
   return base
 }
 
-function buildPlainTextMiddleware(useThinkTag: boolean): LanguageModelV3Middleware[] {
+function buildPlainTextMiddleware(useThinkTag: boolean): LanguageModelMiddleware[] {
   // retryOn429Middleware is intentionally outermost: it re-invokes the whole
   // inner chain (including patchResponseMiddleware) on each retry. Do not
   // reorder without understanding this — putting retry after patchResponse
   // would cause patched state to leak across attempts.
-  const base: LanguageModelV3Middleware[] = [retryOn429Middleware, patchResponseMiddleware()]
+  const base: LanguageModelMiddleware[] = [retryOn429Middleware, patchResponseMiddleware()]
   if (useThinkTag) {
     base.push(thinkTagMiddleware)
   }
@@ -399,7 +374,7 @@ export async function generateStructured<T extends z.ZodType>(
 
   const result = await generateText({
     model: wrapLanguageModel({
-      model,
+      model: model as LanguageModelV4,
       middleware: buildStructuredMiddleware(
         supportsStructuredOutput,
         useThinkTag,

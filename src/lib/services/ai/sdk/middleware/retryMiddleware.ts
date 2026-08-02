@@ -1,4 +1,4 @@
-import type { LanguageModelV3Middleware } from '@ai-sdk/provider'
+import type { LanguageModelMiddleware } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
 
 const RETRY_DELAYS_MS = [10_000, 20_000, 30_000]
@@ -109,8 +109,7 @@ async function withRetry<T>(fn: () => PromiseLike<T>, signal?: AbortSignal): Pro
 // (i.e. pre-stream, on the initial HTTP response headers). A 429 emitted as an
 // error event *after* the stream has started is not caught here — rare on
 // OpenAI-compatible providers, but not impossible.
-export const retryOn429Middleware: LanguageModelV3Middleware = {
-  specificationVersion: 'v3',
+export const retryOn429Middleware: LanguageModelMiddleware = {
   wrapGenerate: async ({ doGenerate, params }) => withRetry(() => doGenerate(), params.abortSignal),
   wrapStream: async ({ doStream, params }) => withRetry(() => doStream(), params.abortSignal),
 }
