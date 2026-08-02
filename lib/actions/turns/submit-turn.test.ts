@@ -3,20 +3,82 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
+  stories,
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
   type StoryEntry,
 } from '@/lib/db'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
-import { currentStoryStore, entriesStore, hydrateAppSettings, undoRedoStore } from '@/lib/stores'
+import { runRetrieval, type RankedType, type RetrievalOutcome } from '@/lib/retrieval'
+import {
+  currentStoryStore,
+  entriesStore,
+  hydrateAppSettings,
+  rehydrateStories,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 
+// The retrieval phase's own coverage lives in per-turn-retrieval.test.ts; here
+// it only has to let the turn through, and its real pass would reach for a DB
+// bridge this harness has no counterpart for.
+vi.mock('@/lib/retrieval', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, runRetrieval: vi.fn(async () => OK_RETRIEVAL) }
+})
+
+const EMPTY_BUNDLE: RankedType = {
+  selected: [],
+  traces: [],
+  funnel: {
+    poolSize: 0,
+    preFilteredSize: 0,
+    mmrSize: 0,
+    selectedCount: 0,
+    tokensUsed: 0,
+    typeBudget: 0,
+  },
+}
+
+// Typed against the real outcome rather than cast: nothing reads it while the
+// narrative phase ignores intermediates.retrieval, but a fabricated shape starts
+// lying the moment a consumer narrows it.
+const OK_RETRIEVAL: Extract<RetrievalOutcome, { ok: true }> = {
+  ok: true,
+  floor: {
+    sceneEntities: [],
+    currentLocation: null,
+    activeThreads: [],
+    alwaysEntities: [],
+    alwaysLore: [],
+    alwaysThreads: [],
+    seatedIds: new Set<string>(),
+  },
+  bundles: {
+    entities: EMPTY_BUNDLE,
+    lore: EMPTY_BUNDLE,
+    happenings: EMPTY_BUNDLE,
+    threads: EMPTY_BUNDLE,
+    chapters: EMPTY_BUNDLE,
+  },
+  queries: {
+    q1: { text: '', source: 'user_action' },
+    q2: { text: '', source: 'structural_digest' },
+    q3: { text: '', source: 'prose_extract' },
+    presence: [false, false, false],
+    embedTexts: [],
+  },
+  staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+  injectedAwarenessIds: [],
+}
+
 // The phase streams via the real openai-compatible provider path; stub global
-// fetch (a call-time seam, unlike a module mock which the setup-file's eager
-// load of this module graph would defeat) with a canned OpenAI SSE stream so the
+// fetch (a call-time seam, unlike a module mock of the AI/provider graph, which
+// the setup-file's eager load of that graph would defeat — `@/lib/retrieval`
+// above sits outside it and mocks fine) with a canned OpenAI SSE stream so the
 // happy path gets deterministic streamed tokens without a network round-trip.
 function sseFetch(tokens: readonly string[]): typeof fetch {
   const chunks = tokens.map(
@@ -80,7 +142,10 @@ const STORY_SETTINGS = storySettingsSchema.parse({
   classifierCadence: 8,
   piggybackMode: 'off',
   embeddingBackend: 'local',
-  embedding_model_id: 'm',
+  // A catalog id, not a placeholder: the retrieval phase resolves this story's
+  // embedder config and blocks the turn when it can't (model-management.md →
+  // Embed failure is blocking).
+  embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
   retrievalBudgets: { entities: 1, lore: 1, happenings: 1, threads: 1, chapters: 1 },
   composerModesEnabled: true,
   composerWrapPov: 'first',
@@ -106,8 +171,18 @@ const STORY_SETTINGS = storySettingsSchema.parse({
 
 // narrativePhase (pipeline.ts) reads the open story from currentStoryStore, not
 // from the run's own storyId/branchId — mirrors the real app opening a story
-// before the composer can submit a turn.
-function openStory(storyId: string, branchId: string) {
+// before the composer can submit a turn. storiesStore is populated from the same
+// committed row because the retrieval phase resolves the embedder config there.
+async function openStory(
+  db: Awaited<ReturnType<typeof makeHarness>>['db'],
+  storyId: string,
+  branchId: string,
+): Promise<void> {
+  await db
+    .update(stories)
+    .set({ definition: STORY_DEFINITION, settings: STORY_SETTINGS })
+    .where(eq(stories.id, storyId))
+  await rehydrateStories(db)
   currentStoryStore.set({
     storyId,
     branchId,
@@ -130,9 +205,9 @@ describe('submitTurn', () => {
     resetSingletons()
   })
 
-  it('registers a three-phase pill-and-banner hard-gate per-turn pipeline', async () => {
-    const { ctx } = await makeHarness()
-    openStory('s1', 'b1')
+  it('registers a four-phase pill-and-banner hard-gate per-turn pipeline', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -140,15 +215,15 @@ describe('submitTurn', () => {
 
     const pipeline = getPipeline(PER_TURN_KIND)
     expect(pipeline.kind).toBe(PER_TURN_KIND)
-    expect(pipeline.phases).toHaveLength(3)
+    expect(pipeline.phases).toHaveLength(4)
     expect(pipeline.affordance).toBe('pill-and-banner')
     expect(pipeline.gateBehavior).toBe('hard-gate')
     expect(pipeline.concurrencyPolicy.blockedBy).toEqual([PER_TURN_KIND, 'chapter-close'])
   })
 
   it('completes a turn: persists the user action and the streamed AI reply', async () => {
-    const { ctx } = await makeHarness()
-    openStory('s1', 'b1')
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -177,7 +252,7 @@ describe('submitTurn', () => {
   })
 
   it('inherits scene state from the tail entry onto the user_action, and the ai_reply inherits it too', async () => {
-    const { ctx } = await makeHarness()
+    const { ctx, db } = await makeHarness()
     const opening: StoryEntry = {
       id: 'seed-opening',
       branchId: 'b1',
@@ -193,7 +268,7 @@ describe('submitTurn', () => {
       createdAt: 1,
     }
     await ctx.db.insert(storyEntries).values(opening)
-    openStory('s1', 'b1')
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [opening])
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -221,7 +296,7 @@ describe('submitTurn', () => {
   })
 
   it('inherits worldTime from the last non-system entry when a system tail lingers', async () => {
-    const { ctx } = await makeHarness()
+    const { ctx, db } = await makeHarness()
     const opening: StoryEntry = {
       id: 'seed-opening',
       branchId: 'b1',
@@ -246,7 +321,7 @@ describe('submitTurn', () => {
       createdAt: 2,
     }
     await ctx.db.insert(storyEntries).values([opening, systemTail])
-    openStory('s1', 'b1')
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [opening, systemTail])
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -265,7 +340,7 @@ describe('submitTurn', () => {
   })
 
   it('positions the new user action at MAX(position)+1, not the store row count', async () => {
-    const { ctx } = await makeHarness()
+    const { ctx, db } = await makeHarness()
     // Non-contiguous tail: gaps mean the store's row count (4) is LOWER than the
     // real MAX(position) (5), so a count-based position would collide at 5.
     const seeded: StoryEntry[] = [1, 2, 3, 5].map((position) => ({
@@ -279,7 +354,7 @@ describe('submitTurn', () => {
       createdAt: position,
     }))
     for (const row of seeded) await ctx.db.insert(storyEntries).values(row)
-    openStory('s1', 'b1')
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', seeded)
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -298,8 +373,8 @@ describe('submitTurn', () => {
   })
 
   it('assigns distinct positions to two turns submitted concurrently on the same branch', async () => {
-    const { ctx } = await makeHarness()
-    openStory('s1', 'b1')
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
@@ -375,8 +450,8 @@ describe('submitTurn', () => {
   })
 
   it('clears the redo stack on success (a new turn is a new unrelated action)', async () => {
-    const { ctx } = await makeHarness()
-    openStory('s1', 'b1')
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
     undoRedoStore.pushRedoGroup([])
@@ -388,8 +463,8 @@ describe('submitTurn', () => {
   })
 
   it('fails the turn and writes no ai_reply when the provider stream errors', async () => {
-    const { ctx } = await makeHarness()
-    openStory('s1', 'b1')
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
     // Matches the live "TypeError: Failed to fetch" — a network reject, not an
@@ -415,6 +490,37 @@ describe('submitTurn', () => {
     // the user_action shares the turn's actionId (C6), so abortRun's
     // reverse-replay drops it too — same clean-rollback path as preflight
     // failure. The composer preserves the text for retry, not a persisted row.
+    expect(branchEntries('b1')).toHaveLength(0)
+  })
+
+  it('blocks the turn and reverses the user action when the retrieval pass fails', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    vi.mocked(runRetrieval).mockResolvedValueOnce({
+      ok: false,
+      failure: { reason: 'call', detail: 'embedder session died', staleCount: 3 },
+    })
+
+    const result = expectRan(
+      await submitTurn(
+        { storyId: 's1', branchId: 'b1' },
+        { content: 'Hello there', composerMode: 'say' },
+        ctx,
+      ),
+    )
+
+    // The blocking half of "embed failure is blocking" (model-management.md →
+    // Embed failure is blocking): the turn dies before the narrative call, and
+    // the already-committed user_action reverses with the rest of the run.
+    expect(result.outcome).toBe('failed')
+    expect(result.error).toEqual({
+      kind: 'embedder',
+      reason: 'call',
+      detail: 'embedder session died',
+      staleCount: 3,
+    })
     expect(branchEntries('b1')).toHaveLength(0)
   })
 

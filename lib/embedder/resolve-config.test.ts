@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import type { StorySettings } from '@/lib/db'
 
-import { resolveEmbedderConfig, type EmbedderAppDefaults } from './resolve-config'
-import { EmbedderCallError, EmbedderInitError } from './types'
+import { embedderReadDim, resolveEmbedderConfig, type EmbedderAppDefaults } from './resolve-config'
+import {
+  EmbedderCallError,
+  EmbedderInitError,
+  type EmbedderConfig,
+  type EmbedderTruncation,
+} from './types'
 
 type StoryInput = Pick<
   StorySettings,
@@ -279,6 +284,44 @@ describe('resolveEmbedderConfig', () => {
         truncation: null,
       },
     })
+  })
+})
+
+describe('embedderReadDim', () => {
+  const provider = (dim: number | null, truncation: EmbedderTruncation | null): EmbedderConfig => ({
+    backend: 'provider',
+    providerId: 'openai',
+    modelId: 'text-embedding-3-large',
+    dim,
+    truncation,
+  })
+
+  it('reads a local config at the catalog dim', () => {
+    expect(
+      embedderReadDim({ backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', dim: 384 }),
+    ).toBe(384)
+  })
+
+  it('reads an untruncated provider config at its probed native dim', () => {
+    expect(embedderReadDim(provider(3072, null))).toBe(3072)
+  })
+
+  it('cannot answer for an unprobed, untruncated provider config', () => {
+    expect(embedderReadDim(provider(null, null))).toBeNull()
+  })
+
+  // The one cell where this diverges from the swap engine's configStorageDim,
+  // which stays null here so a staging run can adopt the served dim instead.
+  it("reads an unprobed truncating provider config at the story's locked dim", () => {
+    expect(embedderReadDim(provider(null, { effectiveDim: 512, serverSide: true }))).toBe(512)
+  })
+
+  it('clamps a truncation wider than the native dim', () => {
+    expect(embedderReadDim(provider(768, { effectiveDim: 1536, serverSide: false }))).toBe(768)
+  })
+
+  it('honours a truncation narrower than the native dim', () => {
+    expect(embedderReadDim(provider(1536, { effectiveDim: 512, serverSide: false }))).toBe(512)
   })
 })
 

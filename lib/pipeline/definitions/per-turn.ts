@@ -21,6 +21,7 @@ import {
   piggybackFallbackClassifierPhase,
   resolvePiggybackFires,
 } from './per-turn-piggyback'
+import { RETRIEVAL_PHASE_NAME, retrievalPhase } from './per-turn-retrieval'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -318,6 +319,7 @@ export function ensurePerTurnPipelineRegistered(): void {
       kind: PER_TURN_KIND,
       phases: [
         { name: 'user-action-translation', run: userActionTranslationPhase },
+        { name: RETRIEVAL_PHASE_NAME, run: retrievalPhase },
         { name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] },
         {
           name: PIGGYBACK_FALLBACK_PHASE_NAME,

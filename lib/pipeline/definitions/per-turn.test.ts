@@ -66,7 +66,7 @@ function failingStreamCall() {
 
 async function runNarrativePhase(abortSignal = new AbortController().signal) {
   ensurePerTurnPipelineRegistered()
-  const phase = getPipeline(PER_TURN_KIND).phases[1]
+  const phase = getPipeline(PER_TURN_KIND).phases[2]
   if (!phase || !('run' in phase)) throw new Error('expected a single-run narrative phase node')
   const gen = phase.run({
     actionId: 'act_1',
@@ -89,11 +89,12 @@ beforeEach(() => {
 })
 
 describe('per-turn pipeline declaration', () => {
-  it('registers phase 0 user-action-translation then narrative then piggyback-fallback-classifier, aligned to canonical V1', () => {
+  it('registers phase 0 user-action-translation then retrieval then narrative then piggyback-fallback-classifier, aligned to canonical V1', () => {
     ensurePerTurnPipelineRegistered()
     const p = getPipeline(PER_TURN_KIND)
     expect(p.phases.map((n) => n.name)).toEqual([
       'user-action-translation',
+      'retrieval',
       'narrative',
       'piggyback-fallback-classifier',
     ])
@@ -309,7 +310,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -423,7 +424,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -508,7 +509,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -585,7 +586,7 @@ describe('per-turn pipeline declaration', () => {
     })
 
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const intermediates: Record<string, unknown> = {}
@@ -668,7 +669,7 @@ describe('per-turn pipeline declaration', () => {
     })
 
     ensurePerTurnPipelineRegistered()
-    const narrativeNode = getPipeline(PER_TURN_KIND).phases[1]
+    const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
     if (!narrativeNode || !('run' in narrativeNode)) throw new Error('expected narrative phase')
 
     const intermediates: Record<string, unknown> = {}
@@ -696,7 +697,7 @@ describe('per-turn pipeline declaration', () => {
     expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
 
     // Verify fallback classifier phase fires when outcome is { attempted: true, succeeded: false }
-    const fallbackNode = getPipeline(PER_TURN_KIND).phases[2]
+    const fallbackNode = getPipeline(PER_TURN_KIND).phases[3]
     if (!fallbackNode || !('run' in fallbackNode)) throw new Error('expected fallback phase')
 
     // Branch has no entries so fallback phase returns completed cleanly without throws
@@ -777,7 +778,7 @@ async function runNarrativeWith(opts: {
   })
 
   ensurePerTurnPipelineRegistered()
-  const phase = getPipeline(PER_TURN_KIND).phases[1]
+  const phase = getPipeline(PER_TURN_KIND).phases[2]
   if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
   const intermediates: Record<string, unknown> = {}
   const gen = phase.run({

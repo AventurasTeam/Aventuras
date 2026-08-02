@@ -22,6 +22,11 @@ export type PipelineError =
       phaseName: string
       detail?: string
     }
+  // The blocking pre-retrieval sync stage and the query embed beside it
+  // (model-management.md → Embed failure is blocking). Distinct from 'provider',
+  // whose retry story is the LLM's. `staleCount` is null when there is no
+  // magnitude to report — see RetrievalFailure in lib/retrieval.
+  | { kind: 'embedder'; reason: 'init' | 'call'; detail: string; staleCount: number | null }
 
 export type PhaseResult =
   | { status: 'completed' }

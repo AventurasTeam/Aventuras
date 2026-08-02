@@ -19,13 +19,16 @@ import {
   type DbCtx,
   type EmbeddedFieldRow,
   type EmbeddingTarget,
+  type SqlOp,
   type StorySettings,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   createDrainController,
+  embedderReadDim,
   embedRowsToVecOps,
+  embedTexts,
   type DrainDeps,
   resolveEmbedderConfig,
   type EmbedderAppDefaults,
@@ -211,14 +214,31 @@ function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefin
     .providers.find((provider) => provider.id === config.providerId)
 }
 
-// Single-sources the engine/drain embed composition: raw DDL through execRaw,
-// provider instance resolved from the config's own providerId. The drain takes the
-// ops alone — only a swap's phase-2 sweep needs the dim its staging landed on.
+// Single-sources the embed composition for the swap engine, the drain worker and
+// the blocking sync stage: raw DDL through execRaw, provider instance resolved
+// from the config's own providerId. Only a swap's phase-2 sweep needs the dim its
+// staging landed on; the other two take the ops alone.
 const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
   embedRowsToVecOps(config, rows, execRaw, providerFor(config))
 
 const makeDrainEmbedRows = (): DrainDeps['embedRows'] => async (config, rows) =>
   (await embedRowsToVecOps(config, rows, execRaw, providerFor(config))).ops
+
+/** The embed surface a retrieval pass needs, resolved off the open story. */
+export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
+  embedTexts: (texts: string[]) => Promise<{ vectors: Float32Array[]; dim: number }>
+  embedRows: (rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
+  loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
+} {
+  const drainEmbedRows = makeDrainEmbedRows()
+  return {
+    // 'query' intent, not 'document': the local model's query prefix is what
+    // puts the three query vectors in the same space as the stored rows.
+    embedTexts: (texts) => embedTexts(config, texts, 'query', providerFor(config)),
+    embedRows: (rows) => drainEmbedRows(config, rows),
+    loadStaleRows,
+  }
+}
 
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
   return {
@@ -457,19 +477,6 @@ export async function cancelStorySwap(
   })
 }
 
-/**
- * The dim a target would be READ at, or null when only an embed could answer.
- * A local target's dim is the catalog's; a provider target truncating to the
- * story's locked `effectiveDim` is read at that dim, and an untruncated provider
- * target is native — unknowable until it responds.
- */
-function targetReadDim(config: EmbedderConfig): number | null {
-  if (config.backend === 'local' || config.truncation == null) return config.dim
-  return config.dim == null
-    ? config.truncation.effectiveDim
-    : Math.min(config.truncation.effectiveDim, config.dim)
-}
-
 export async function relabelStory(
   storyId: string,
   target: EmbeddingTarget,
@@ -495,7 +502,7 @@ export async function relabelStory(
       branchIds,
       oldModelId: settings.embedding_model_id,
       target,
-      targetReadDim: resolution.ok ? targetReadDim(resolution.config) : null,
+      targetReadDim: resolution.ok ? embedderReadDim(resolution.config) : null,
     })
     await refreshStores(storyId, ctx)
   })

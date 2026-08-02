@@ -7,6 +7,7 @@ export { defineAction } from './define-action'
 export {
   buildDrainController,
   cancelStorySwap,
+  composeRetrievalEmbedDeps,
   kickStoryDrain,
   countStoryEmbeddableRows,
   refreshEmbeddingStatus,
