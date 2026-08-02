@@ -59,7 +59,7 @@
   const reasoningTokens = $derived(entry.reasoning ? countTokens(entry.reasoning) : 0)
 
   // Check if reasoning is enabled in API settings
-  const isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'off')
+  const isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'none')
 
   // TTS generation state
   let isGeneratingTTS = $state(false)

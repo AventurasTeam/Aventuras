@@ -32,7 +32,7 @@
   let isThinking = $derived(ui.isStreaming && content.length === 0 && reasoning.length === 0)
 
   // Check if reasoning is enabled in API settings
-  let isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'off')
+  let isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'none')
 
   // Live token counts (separate)
   let reasoningTokens = $derived(ui.streamingReasoningTokens)

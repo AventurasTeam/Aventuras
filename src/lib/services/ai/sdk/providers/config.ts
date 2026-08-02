@@ -131,7 +131,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       agentic: {
         model: 'z-ai/glm-5',
@@ -143,13 +143,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       translation: {
         model: 'google/gemini-3-flash-preview',
         temperature: 1.0,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
     },
   },
@@ -200,7 +200,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       agentic: {
         model: 'zai-org/glm-5:thinking',

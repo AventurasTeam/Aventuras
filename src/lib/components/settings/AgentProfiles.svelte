@@ -299,7 +299,7 @@
       model: settings.apiSettings.defaultModel ?? '',
       temperature: 0.7,
       maxTokens: 4096,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     }
     settings.generationPresets = [...settings.generationPresets, newPreset]

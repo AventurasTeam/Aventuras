@@ -458,7 +458,7 @@
       model: settings.apiSettings.defaultModel,
       profileId: narrativeProfile?.id,
       profileName: narrativeProfile?.name,
-      reasoningEffort: settings.apiSettings.reasoningEffort ?? 'off',
+      reasoningEffort: settings.apiSettings.reasoningEffort ?? 'none',
       temperature: settings.apiSettings.temperature,
     }
 

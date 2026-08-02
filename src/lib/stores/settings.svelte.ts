@@ -1015,7 +1015,7 @@ export function getDefaultGenerationPresetsForProvider(provider: ProviderType): 
     model: '',
     temperature: 0.5,
     maxTokens: 8192,
-    reasoningEffort: 'off' as const,
+    reasoningEffort: 'none' as const,
   }
 
   return [
@@ -1184,7 +1184,7 @@ class SettingsStore {
     defaultModel: 'z-ai/glm-4.7',
     temperature: 0.8,
     maxTokens: 8192,
-    reasoningEffort: 'off',
+    reasoningEffort: 'none',
     manualBody: '',
     enableThinking: false,
     llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
@@ -1250,7 +1250,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.7,
       maxTokens: 8192,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
     {
@@ -1272,7 +1272,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.7,
       maxTokens: 8192,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
     {
@@ -1283,7 +1283,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.3,
       maxTokens: 4096,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
   ])
@@ -1322,9 +1322,11 @@ class SettingsStore {
       const reasoningEffort = await database.getSetting('main_reasoning_effort')
       if (
         reasoningEffort &&
-        ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(reasoningEffort)
+        ['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)
       ) {
-        this.apiSettings.reasoningEffort = reasoningEffort as ReasoningEffort
+        // Patch old settings had 'none' instead of 'off'
+        this.apiSettings.reasoningEffort =
+          reasoningEffort !== 'off' ? (reasoningEffort as ReasoningEffort) : 'none'
       } else if (this.apiSettings.enableThinking) {
         this.apiSettings.reasoningEffort = 'high'
       }
@@ -1792,14 +1794,14 @@ class SettingsStore {
 
   async setEnableThinking(enabled: boolean) {
     this.apiSettings.enableThinking = enabled
-    this.apiSettings.reasoningEffort = enabled ? 'high' : 'off'
+    this.apiSettings.reasoningEffort = enabled ? 'high' : 'none'
     await database.setSetting('enable_thinking', enabled.toString())
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
   }
 
   async setMainReasoningEffort(effort: ReasoningEffort) {
     this.apiSettings.reasoningEffort = effort
-    this.apiSettings.enableThinking = effort !== 'off'
+    this.apiSettings.enableThinking = effort !== 'none'
     await database.setSetting('main_reasoning_effort', effort)
     await database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString())
   }
@@ -2889,7 +2891,7 @@ class SettingsStore {
 
     // For providers without service defaults, use empty model (requires manual configuration)
     const defaultNarrativeModel = defaults.services?.narrative.model ?? ''
-    const defaultReasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'off'
+    const defaultReasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'none'
 
     // Reset API settings (except URL/key/profiles if preserving)
     this.apiSettings = {
@@ -3031,7 +3033,7 @@ class SettingsStore {
     this.apiSettings.defaultModel = defaults.services?.narrative.model ?? ''
     this.apiSettings.temperature = defaults.services?.narrative.temperature ?? 0.8
     this.apiSettings.maxTokens = defaults.services?.narrative.maxTokens ?? 8192
-    this.apiSettings.reasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'off'
+    this.apiSettings.reasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'none'
     this.apiSettings.manualBody = ''
     this.apiSettings.enableThinking = false
     await database.setSetting('default_model', this.apiSettings.defaultModel)

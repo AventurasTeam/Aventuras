@@ -19,8 +19,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { createModelFromProfile, PROVIDERS } from '../providers'
 import { buildProviderOptions } from '../generate'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import type { GenerationPreset, APIProfile, ProviderType, SdkEffort } from '$lib/types'
-import { ToSdkEffort } from '$lib/types'
+import type { GenerationPreset, APIProfile, ProviderType, ReasoningEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
@@ -34,7 +33,7 @@ export interface ResolvedAgentConfig {
   providerType: ProviderType
   model: LanguageModelV4
   providerOptions?: SharedV4ProviderOptions
-  reasoning: SdkEffort
+  reasoning: ReasoningEffort
 }
 
 /**
@@ -76,7 +75,7 @@ function resolveAgentConfig(
       break
   }
 
-  const reasoning = ToSdkEffort(preset.reasoningEffort)
+  const reasoning = preset.reasoningEffort
 
   const baseModel = createModelFromProfile({
     profile,
@@ -244,7 +243,7 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
         ...params,
         abortSignal: signal,
       }),
-  }
+  } as AssistantWithSignal<TTools>
 }
 /**
  * Agent result type helper.

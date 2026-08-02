@@ -20,7 +20,7 @@ export interface ExtraBodyOptions {
 }
 
 export function buildReasoningConfig(effort: ReasoningEffort | undefined): Record<string, unknown> {
-  if (!effort || effort === 'off') {
+  if (!effort || effort === 'none') {
     return { enabled: false }
   }
   return { effort }
@@ -68,7 +68,7 @@ export function buildExtraBody(options: ExtraBodyOptions): Record<string, unknow
     return undefined
   }
 
-  const reasoning = buildReasoningConfig(options.reasoningEffort ?? 'off')
+  const reasoning = buildReasoningConfig(options.reasoningEffort ?? 'none')
   const provider = buildProviderConfig(options.baseProvider)
   const extraBody: Record<string, unknown> = {}
 
@@ -84,7 +84,7 @@ export function buildExtraBody(options: ExtraBodyOptions): Record<string, unknow
 
 export function buildManualBodyDefaults(options: ManualBodyDefaults): Record<string, unknown> {
   const provider = buildProviderConfig(options.baseProvider)
-  const reasoning = buildReasoningConfig(options.reasoningEffort ?? 'off')
+  const reasoning = buildReasoningConfig(options.reasoningEffort ?? 'none')
   const body: Record<string, unknown> = {
     model: options.model,
     temperature: options.temperature,

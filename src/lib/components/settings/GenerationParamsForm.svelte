@@ -137,27 +137,18 @@
 
   let effectiveProfileId = $derived(profileId || settings.getDefaultProfileIdForProvider())
 
-  const REASONING_LEVELS: ReasoningEffort[] = [
-    'off',
-    'minimal',
-    'low',
-    'medium',
-    'high',
-    'xhigh',
-    'max',
-  ]
+  const REASONING_LEVELS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
   const REASONING_LABELS: Record<ReasoningEffort, string> = {
-    off: 'Off',
+    none: 'Off',
     minimal: 'Minimal',
     low: 'Low',
     medium: 'Medium',
     high: 'High',
     xhigh: 'Extra',
-    max: 'Max',
   }
 
   function getReasoningIndex(value?: ReasoningEffort): number {
-    const index = REASONING_LEVELS.indexOf(value ?? 'off')
+    const index = REASONING_LEVELS.indexOf(value ?? 'none')
     return index === -1 ? 0 : index
   }
 
@@ -192,21 +183,21 @@
   // 1. Reset reasoning to off when the provider/model stops supporting it
   // 2. Force high reasoning for NanoGPT models that require it
   $effect(() => {
-    // const _model = model // track model
-    // const _profile = effectiveProfileId // track profile
+    const _model = model // track model
+    const _profile = effectiveProfileId // track profile
 
     // Enforcement (NanoGPT)
-    // if (settings.shouldForceHighReasoning(_profile, _model) && reasoningEffort === 'off') {
-    //   onReasoningChange('high')
-    //   return
-    // }
+    if (settings.shouldForceHighReasoning(_profile, _model) && reasoningEffort === 'none') {
+      onReasoningChange('high')
+      return
+    }
 
     // Capability check
     const reasoningSupported =
       globalProviderReasoningCapability &&
       (!providerModelCapabilityFetching || modelReasoningCapability !== 'unsupported')
     if (!reasoningSupported && reasoningValue > 0) {
-      onReasoningChange('off')
+      onReasoningChange('none')
     }
   })
 
@@ -389,7 +380,6 @@
             <span>Med</span>
             <span>High</span>
             <span>Extra</span>
-            <span>Max</span>
           </div>
         {:else}
           <Slider
@@ -407,7 +397,6 @@
             <span>Med</span>
             <span>High</span>
             <span>Extra</span>
-            <span>Max</span>
           </div>
         {/if}
       </div>

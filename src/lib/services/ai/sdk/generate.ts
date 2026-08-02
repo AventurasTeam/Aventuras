@@ -9,8 +9,7 @@ import { createLogger } from '$lib/log'
 import { debug } from '$lib/stores/debug.svelte'
 
 import { settings } from '$lib/stores/settings.svelte'
-import { ToSdkEffort } from '$lib/types'
-import type { APIProfile, GenerationPreset, ProviderType, SdkEffort } from '$lib/types'
+import type { APIProfile, GenerationPreset, ProviderType, ReasoningEffort } from '$lib/types'
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google'
 import type { GroqProviderOptions } from '@ai-sdk/groq'
 import type { MistralLanguageModelOptions } from '@ai-sdk/mistral'
@@ -86,7 +85,7 @@ export function buildProviderOptions(
 ): SharedV4ProviderOptions | undefined {
   let options: JSONObject = {}
 
-  const reasoning = preset.reasoningEffort === 'off' ? 'none' : preset.reasoningEffort
+  const reasoning_effort = preset.reasoningEffort
 
   if (!settings.advancedRequestSettings.manualMode) {
     switch (providerType) {
@@ -98,7 +97,7 @@ export function buildProviderOptions(
         options = {
           safetySettings: GOOGLE_SAFETY_SETTINGS,
         } satisfies GoogleGenerativeAIProviderOptions
-        if (reasoning !== 'none') {
+        if (reasoning_effort !== 'none') {
           options = {
             ...options,
             thinkingConfig: { includeThoughts: true },
@@ -107,11 +106,11 @@ export function buildProviderOptions(
         break
       }
       case 'nanogpt':
-        options = { reasoning_effort: reasoning !== 'max' ? reasoning : 'xhigh' }
+        options = { reasoning_effort }
         break
       case 'pollinations':
         options = {
-          reasoning_effort: reasoning !== 'max' ? reasoning : 'xhigh',
+          reasoning_effort,
           parallel_tool_calls: true,
         } satisfies PollinationsLanguageModelSettings
         break
@@ -119,10 +118,10 @@ export function buildProviderOptions(
         options = { parallelToolCalls: true } satisfies GroqProviderOptions
         break
       case 'zhipu':
-        if (reasoning !== 'none') {
+        if (reasoning_effort !== 'none') {
           options = {
             thinking: { type: 'enabled' },
-            reasoning_effort: reasoning,
+            reasoning_effort,
           }
         } else {
           options = {
@@ -157,7 +156,7 @@ interface ResolvedConfig {
   providerType: ProviderType
   model: LanguageModelV4
   providerOptions?: SharedV4ProviderOptions
-  reasoning: SdkEffort
+  reasoning: ReasoningEffort
   supportsStructuredOutput: boolean
   useThinkTag: boolean
 }
@@ -169,7 +168,7 @@ interface NarrativeConfig {
   temperature: number
   maxTokens: number
   providerOptions?: SharedV4ProviderOptions
-  reasoning: SdkEffort
+  reasoning: ReasoningEffort
   useThinkTag: boolean
 }
 
@@ -210,7 +209,6 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     serviceId,
   })
 
-  const reasoning = ToSdkEffort(preset.reasoningEffort)
   const useThinkTag =
     profile.providerType === 'openai-compatible' ||
     getReasoningExtraction(profile.providerType) === 'think-tag'
@@ -223,7 +221,7 @@ function resolveConfig(presetId: string, serviceId: string, debugId?: string): R
     providerType: profile.providerType,
     model,
     providerOptions,
-    reasoning,
+    reasoning: preset.reasoningEffort,
     supportsStructuredOutput: structuredOutputs,
     useThinkTag,
   }
@@ -273,7 +271,7 @@ function resolveNarrativeConfig(debugId?: string): NarrativeConfig {
     temperature: settings.apiSettings.temperature,
     maxTokens: settings.apiSettings.maxTokens,
     providerOptions: buildProviderOptions(narrativePreset, profile.providerType),
-    reasoning: ToSdkEffort(reasoningEffort),
+    reasoning: reasoningEffort,
     useThinkTag,
   }
 }
@@ -378,7 +376,7 @@ export async function generateStructured<T extends z.ZodType>(
       middleware: buildStructuredMiddleware(
         supportsStructuredOutput,
         useThinkTag,
-        !!preset.reasoningEffort && preset.reasoningEffort !== 'off',
+        !!preset.reasoningEffort && preset.reasoningEffort !== 'none',
         !!preset.thinkingNudgePrompt,
       ),
     }),
@@ -490,7 +488,7 @@ export function streamStructured<T extends z.ZodType>(
       middleware: buildStructuredMiddleware(
         supportsStructuredOutput,
         useThinkTag,
-        !!preset.reasoningEffort && preset.reasoningEffort !== 'off',
+        !!preset.reasoningEffort && preset.reasoningEffort !== 'none',
         !!preset.thinkingNudgePrompt,
       ),
     }),
