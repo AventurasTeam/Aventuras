@@ -32,6 +32,10 @@ export const storySettings = {
   // The standalone re-index is gated by a confirm dialog; this is its start button.
   reindexConfirmStart: (page: Page): Locator => page.getByTestId('reindex-confirm-start'),
 
+  // The swap dialog's own title — the observable half of an action that both
+  // routes to the memory panel and opens the dialog on top of it.
+  swapDialogTitle: (page: Page): Locator => page.getByText(t('storySettings:swap.title')),
+
   // SwapDialog's CandidateRow testID embeds the whole target, not the model id:
   // a model installed locally AND served by the provider is two rows, and a bare
   // id would match both and trip strict mode. getByTestId matches through
