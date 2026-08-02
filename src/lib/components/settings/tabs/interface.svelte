@@ -16,7 +16,7 @@
   import { Separator } from '$lib/components/ui/separator'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService } from '$lib/services/updater'
-  import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from 'lucide-svelte'
+  import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from '@lucide/svelte'
 
   const storyWidthIndex = $derived(
     Math.max(

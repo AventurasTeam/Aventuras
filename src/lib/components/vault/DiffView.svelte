@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
   import type { VaultLorebookEntry } from '$lib/types'
-  import { Check, X, ArrowRight, Trash2, GitMerge, Plus } from 'lucide-svelte'
+  import { Check, X, ArrowRight, Trash2, GitMerge, Plus } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
 
   interface Props {

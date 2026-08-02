@@ -3,7 +3,7 @@
   import type { WithElementRef } from 'bits-ui'
   import { cn } from '$lib/utils/cn.js'
   import { Label } from '$lib/components/ui/label'
-  import { Eye, EyeOff } from 'lucide-svelte'
+  import { Eye, EyeOff, Search } from '@lucide/svelte'
 
   type InputType = Exclude<HTMLInputTypeAttribute, 'file'>
 
@@ -11,8 +11,8 @@
     Omit<HTMLInputAttributes, 'type'> &
       ({ type: 'file'; files?: FileList } | { type?: InputType; files?: undefined })
   > & {
-    leftIcon?: typeof import('lucide-svelte').Search
-    rightIcon?: typeof import('lucide-svelte').Search
+    leftIcon?: typeof Search
+    rightIcon?: typeof Search
     label?: string
     fullWidth?: boolean
   }

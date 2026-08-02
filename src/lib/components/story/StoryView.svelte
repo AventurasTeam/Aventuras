@@ -2,7 +2,7 @@
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings, STORY_WIDTH_OPTIONS } from '$lib/stores/settings.svelte'
-  import { Loader2, BookOpen, ChevronDown, ChevronUp } from 'lucide-svelte'
+  import { Loader2, BookOpen, ChevronDown, ChevronUp } from '@lucide/svelte'
   import { tick, untrack } from 'svelte'
   import { fade } from 'svelte/transition'
   import StoryEntry from './StoryEntry.svelte'

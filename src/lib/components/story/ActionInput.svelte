@@ -22,7 +22,7 @@
     Square,
     ImageIcon,
     Loader2,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
   import { Button } from '$lib/components/ui/button'

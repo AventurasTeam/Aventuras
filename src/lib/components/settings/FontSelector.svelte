@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { FontSource } from '$lib/types'
   import { settings } from '$lib/stores/settings.svelte'
-  import { Loader2 } from 'lucide-svelte'
+  import { Loader2 } from '@lucide/svelte'
   import { onMount } from 'svelte'
   import { getAvailableSystemFonts } from '$lib/utils/fontDetection'
 

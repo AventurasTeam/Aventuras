@@ -19,7 +19,7 @@
     Bot,
     FileCode,
     Download,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import UniversalVaultCard from './UniversalVaultCard.svelte'
   import InteractiveVaultAssistant from './InteractiveVaultAssistant.svelte'
   import VaultCharacterForm from './VaultCharacterForm.svelte'

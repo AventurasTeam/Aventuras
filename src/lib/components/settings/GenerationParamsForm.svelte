@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
-  import { Brain, Settings2 } from 'lucide-svelte'
+  import { Brain, Settings2 } from '@lucide/svelte'
   import type { ReasoningEffort } from '$lib/types'
   import { cn } from '$lib/utils/cn'
   import { supportsReasoning, supportsCapabilityFetch } from '$lib/services/ai/sdk/providers'

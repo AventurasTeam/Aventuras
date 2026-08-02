@@ -12,7 +12,7 @@
     X,
     CheckCircle2,
     Circle,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import * as Card from '$lib/components/ui/card'
   import * as Alert from '$lib/components/ui/alert'
   import { Input } from '$lib/components/ui/input'

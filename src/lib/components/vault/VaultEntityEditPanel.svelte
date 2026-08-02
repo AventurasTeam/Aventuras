@@ -3,7 +3,7 @@
   import type { VaultCharacterInput, VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { VaultLorebook, VaultLorebookEntry } from '$lib/types'
   import { Button } from '$lib/components/ui/button'
-  import { X, Check, Save, User, BookOpen, Map as MapIcon } from 'lucide-svelte'
+  import { X, Check, Save, User, BookOpen, Map as MapIcon } from '@lucide/svelte'
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
   import VaultScenarioFormFields from './VaultScenarioFormFields.svelte'
   import VaultLorebookEditorContent from './VaultLorebookEditorContent.svelte'

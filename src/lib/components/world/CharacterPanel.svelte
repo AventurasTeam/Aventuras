@@ -18,7 +18,7 @@
     Archive,
     UserPlus,
     Save,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import type { Character } from '$lib/types'
   import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import {

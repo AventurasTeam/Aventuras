@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { BookOpen, Users, MapPin, Package, Shield, Lightbulb, Calendar } from 'lucide-svelte'
+  import { BookOpen, Users, MapPin, Package, Shield, Lightbulb, Calendar } from '@lucide/svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { ScrollArea } from '$lib/components/ui/scroll-area'

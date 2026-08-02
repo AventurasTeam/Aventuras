@@ -11,7 +11,7 @@
     BookOpen,
     BookMarked,
     Brain,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import CharacterPanel from '$lib/components/world/CharacterPanel.svelte'
 
   import LocationPanel from '$lib/components/world/LocationPanel.svelte'

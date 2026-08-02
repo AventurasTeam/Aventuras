@@ -13,7 +13,7 @@
     Brain,
     Calendar,
     Link,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import TagBadge from '$lib/components/tags/TagBadge.svelte'
   import { tagStore } from '$lib/stores/tags.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'

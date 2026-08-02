@@ -23,7 +23,7 @@
     GitMerge,
     Bot,
     Download,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { untrack, onDestroy } from 'svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import VaultLorebookEntryFields from './VaultLorebookEntryFields.svelte'

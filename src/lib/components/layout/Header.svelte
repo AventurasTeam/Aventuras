@@ -31,7 +31,7 @@
     ImageIcon,
     MessageSquare,
     AlertTriangle,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   let showExportMenu = $state(false)
   let showMobileMenu = $state(false)

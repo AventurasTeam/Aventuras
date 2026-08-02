@@ -11,7 +11,7 @@
   import LorebookImportModal from './LorebookImportModal.svelte'
   import LorebookExportModal from './LorebookExportModal.svelte'
   import LorebookVaultImportModal from './LorebookVaultImportModal.svelte'
-  import { BookOpen, Plus, ArrowLeft, Loader2, Bot } from 'lucide-svelte'
+  import { BookOpen, Plus, ArrowLeft, Loader2, Bot } from '@lucide/svelte'
 
   import { Button } from '$lib/components/ui/button'
   import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert'

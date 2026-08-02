@@ -12,7 +12,7 @@
     Trash2,
     ChevronDown,
     User,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'

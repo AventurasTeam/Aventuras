@@ -23,7 +23,7 @@
     RotateCcw,
     Search,
     Star,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import X from '@lucide/svelte/icons/x'
 
   interface Props {

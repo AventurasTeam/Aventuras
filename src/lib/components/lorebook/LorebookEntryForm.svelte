@@ -9,7 +9,7 @@
   } from '$lib/types'
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { ChevronDown, ChevronUp, Plus, X } from 'lucide-svelte'
+  import { ChevronDown, ChevronUp, Plus, X } from '@lucide/svelte'
 
   import { Input } from '$lib/components/ui/input'
   import { Textarea } from '$lib/components/ui/textarea'

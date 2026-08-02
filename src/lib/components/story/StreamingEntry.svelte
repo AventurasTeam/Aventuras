@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { BookOpen, Volume2, Pencil, Trash2 } from 'lucide-svelte'
+  import { BookOpen, Volume2, Pencil, Trash2 } from '@lucide/svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'

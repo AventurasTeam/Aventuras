@@ -18,7 +18,7 @@
   import SyncModal from '$lib/components/sync/SyncModal.svelte'
   import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
   import { swipe } from '$lib/utils/swipe'
-  import { Bug } from 'lucide-svelte'
+  import { Bug } from '@lucide/svelte'
   import { MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MAX_SIDEBAR_RATIO } from '$lib/constants/layout'
   import type { Snippet } from 'svelte'
 

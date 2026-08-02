@@ -3,7 +3,7 @@
   import { database } from '$lib/services/database'
   import VariableCard from './VariableCard.svelte'
   import { Button } from '$lib/components/ui/button'
-  import { Plus, Variable } from 'lucide-svelte'
+  import { Plus, Variable } from '@lucide/svelte'
 
   interface Props {
     packId: string

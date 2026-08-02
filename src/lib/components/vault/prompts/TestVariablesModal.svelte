@@ -10,7 +10,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Switch } from '$lib/components/ui/switch'
   import { Badge } from '$lib/components/ui/badge'
-  import { RotateCcw, Search, ChevronDown } from 'lucide-svelte'
+  import { RotateCcw, Search, ChevronDown } from '@lucide/svelte'
 
   interface Props {
     open: boolean

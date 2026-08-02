@@ -1,7 +1,7 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { RefreshCw, AlertTriangle } from 'lucide-svelte'
+  import { RefreshCw, AlertTriangle } from '@lucide/svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { ScrollArea } from '$lib/components/ui/scroll-area'

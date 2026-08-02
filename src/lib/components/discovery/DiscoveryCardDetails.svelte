@@ -9,11 +9,11 @@
     Download as DownloadIcon,
     AlertTriangle,
     ChevronsUpDown,
-  } from 'lucide-svelte'
+    Loader2,
+  } from '@lucide/svelte'
   import * as Alert from '$lib/components/ui/alert'
   import { slide } from 'svelte/transition'
   import { discoveryService } from '$lib/services/discovery'
-  import { Loader2 } from 'lucide-svelte'
 
   interface Props {
     card: DiscoveryCard

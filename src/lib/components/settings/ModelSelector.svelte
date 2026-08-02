@@ -1,6 +1,6 @@
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
-  import { Server, Check, RefreshCw, Star, AlertTriangle, Brain, Braces } from 'lucide-svelte'
+  import { Server, Check, RefreshCw, Star, AlertTriangle, Brain, Braces } from '@lucide/svelte'
   import Autocomplete from '$lib/components/ui/autocomplete/Autocomplete.svelte'
   import * as Select from '$lib/components/ui/select'
   import { Button } from '$lib/components/ui/button'

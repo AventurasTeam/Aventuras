@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-  import { Search } from 'lucide-svelte'
+  import { Search } from '@lucide/svelte'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Skeleton } from '$lib/components/ui/skeleton'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'

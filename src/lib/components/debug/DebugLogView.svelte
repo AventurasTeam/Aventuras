@@ -10,7 +10,7 @@
     CirclePlus,
     Trash2,
     WrapText,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
   import * as Select from '$lib/components/ui/select'

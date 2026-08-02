@@ -4,7 +4,7 @@
   import { exportService } from '$lib/services/export'
   import { errMessage } from '$lib/utils/error'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { BookOpen, Upload, RefreshCw, Archive, Plus, MessageSquareShare } from 'lucide-svelte'
+  import { BookOpen, Upload, RefreshCw, Archive, Plus, MessageSquareShare } from '@lucide/svelte'
   import SetupWizard from '../wizard/SetupWizard.svelte'
   import STImportWizard from '../wizard/STImportWizard.svelte'
 

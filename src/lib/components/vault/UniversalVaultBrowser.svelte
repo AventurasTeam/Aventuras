@@ -3,7 +3,7 @@
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
   import type { VaultCharacter, VaultLorebook, VaultScenario } from '$lib/types'
-  import { User, Archive, MapPin, Link } from 'lucide-svelte'
+  import { User, Archive, MapPin, Link } from '@lucide/svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
   import { Badge } from '$lib/components/ui/badge'
   import * as Avatar from '$lib/components/ui/avatar'

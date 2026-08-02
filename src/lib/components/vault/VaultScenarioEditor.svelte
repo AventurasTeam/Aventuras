@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { VaultScenario } from '$lib/types'
   import { scenarioVault } from '$lib/stores/scenarioVault.svelte'
-  import { Save, MapPin, Loader2, Bot, X } from 'lucide-svelte'
+  import { Save, MapPin, Loader2, Bot, X } from '@lucide/svelte'
   import VaultScenarioFormFields from './VaultScenarioFormFields.svelte'
   import type { VaultScenarioInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'

@@ -8,7 +8,7 @@
   import ChapterCard from './ChapterCard.svelte'
   import ManualChapterModal from './ManualChapterModal.svelte'
   import ResummarizeModal from './ResummarizeModal.svelte'
-  import { BookOpen, ArrowLeft } from 'lucide-svelte'
+  import { BookOpen, ArrowLeft } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { EmptyState } from '$lib/components/ui/empty-state'
 

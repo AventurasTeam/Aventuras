@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Button } from '$lib/components/ui/button'
-  import { Trash2, X, Check } from 'lucide-svelte'
+  import { Trash2, X, Check } from '@lucide/svelte'
   import type { Snippet } from 'svelte'
 
   interface Props {

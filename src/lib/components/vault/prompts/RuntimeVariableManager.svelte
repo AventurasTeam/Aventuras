@@ -7,7 +7,7 @@
   import { database } from '$lib/services/database'
   import RuntimeVariableCard from './RuntimeVariableCard.svelte'
   import { Button } from '$lib/components/ui/button'
-  import { Plus, Activity, AlertTriangle } from 'lucide-svelte'
+  import { Plus, Activity, AlertTriangle } from '@lucide/svelte'
 
   interface Props {
     packId: string

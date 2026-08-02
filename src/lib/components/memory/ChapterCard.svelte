@@ -15,7 +15,7 @@
     Clock,
     Save,
     X,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import { Button } from '$lib/components/ui/button'
   import { Card, CardContent } from '$lib/components/ui/card'

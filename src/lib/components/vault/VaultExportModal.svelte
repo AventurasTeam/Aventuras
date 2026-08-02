@@ -1,6 +1,6 @@
 <script lang="ts">
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-  import { Download, FileJson, FileText, Loader2 } from 'lucide-svelte'
+  import { Download, FileJson, FileText, Loader2 } from '@lucide/svelte'
   import type { VaultLorebook, VaultCharacter, VaultScenario } from '$lib/types'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'

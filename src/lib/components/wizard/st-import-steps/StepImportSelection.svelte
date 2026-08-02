@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Users, Map, BookOpen, Loader2, AlertCircle, Check, RefreshCw } from 'lucide-svelte'
+  import { Users, Map, BookOpen, Loader2, AlertCircle, Check, RefreshCw } from '@lucide/svelte'
   import * as Card from '$lib/components/ui/card'
   import * as Alert from '$lib/components/ui/alert'
   import { Switch } from '$lib/components/ui/switch'

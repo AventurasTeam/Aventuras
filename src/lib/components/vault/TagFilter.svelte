@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tagStore } from '$lib/stores/tags.svelte'
   import type { VaultType } from '$lib/types'
-  import { Filter, Check, X } from 'lucide-svelte'
+  import { Filter, Check, X } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { Badge } from '$lib/components/ui/badge'
   import * as Command from '$lib/components/ui/command'

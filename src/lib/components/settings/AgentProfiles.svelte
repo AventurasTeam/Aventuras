@@ -27,7 +27,7 @@
     Copy,
     AlertCircle,
     AlertTriangle,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { fetchModelsFromProvider, getReasoningExtraction } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components

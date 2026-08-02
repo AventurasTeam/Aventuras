@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Trash2, Clock } from 'lucide-svelte'
+  import { Trash2, Clock } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import * as Card from '$lib/components/ui/card'
   import TagBadge from '$lib/components/tags/TagBadge.svelte'

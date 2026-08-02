@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tagStore } from '$lib/stores/tags.svelte'
   import type { VaultTag, VaultType } from '$lib/types'
-  import { Trash2, Edit2, Check, Plus } from 'lucide-svelte'
+  import { Trash2, Edit2, Check, Plus } from '@lucide/svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Tabs, TabsList, TabsTrigger } from '$lib/components/ui/tabs'
   import { Input } from '$lib/components/ui/input'

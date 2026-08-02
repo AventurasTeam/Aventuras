@@ -11,7 +11,7 @@
     ChevronRight,
     Search,
     User,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
 

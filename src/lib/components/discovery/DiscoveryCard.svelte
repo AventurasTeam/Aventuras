@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { DiscoveryCard } from '$lib/services/discovery'
-  import { Download, Check, Eye } from 'lucide-svelte'
+  import { Download, Check, Eye } from '@lucide/svelte'
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'

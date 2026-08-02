@@ -18,7 +18,7 @@
     Bookmark,
     Volume2,
     Image as ImageIcon,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
   import { parseMarkdown } from '$lib/utils/markdown'

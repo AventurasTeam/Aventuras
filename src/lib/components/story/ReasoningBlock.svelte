@@ -3,7 +3,7 @@
   import { parseMarkdown } from '$lib/utils/markdown'
   import { ui } from '$lib/stores/ui.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import { Brain } from 'lucide-svelte'
+  import { Brain } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { cn } from '$lib/utils/cn'
 

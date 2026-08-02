@@ -3,7 +3,7 @@
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import { cn } from '$lib/utils/cn'
-  import { Check } from 'lucide-svelte'
+  import { Check } from '@lucide/svelte'
 
   interface Props {
     value: string

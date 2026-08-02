@@ -1,7 +1,7 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { Plus, Settings } from 'lucide-svelte'
+  import { Plus, Settings } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Progress } from '$lib/components/ui/progress'

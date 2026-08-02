@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { Archive, Loader2, FileJson, ChevronRight, AlertCircle, X, BookOpen } from 'lucide-svelte'
+  import {
+    Archive,
+    Loader2,
+    FileJson,
+    ChevronRight,
+    AlertCircle,
+    X,
+    BookOpen,
+  } from '@lucide/svelte'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import type { EntryType, VaultLorebook } from '$lib/types'
   import type { ImportedLorebookItem } from '../wizardTypes'

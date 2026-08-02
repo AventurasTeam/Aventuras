@@ -2,7 +2,7 @@
   import { getTemplateGroups } from './templateGroups'
   import * as Collapsible from '$lib/components/ui/collapsible'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { ChevronRight, Variable, Settings, Activity } from 'lucide-svelte'
+  import { ChevronRight, Variable, Settings, Activity } from '@lucide/svelte'
   import { cn } from '$lib/utils/cn'
 
   interface Props {
