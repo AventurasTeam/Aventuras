@@ -12,6 +12,7 @@ import {
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import type { RetrievalSuccess } from '@/lib/retrieval'
 import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
@@ -21,12 +22,29 @@ import {
   piggybackFallbackClassifierPhase,
   resolvePiggybackFires,
 } from './per-turn-piggyback'
-import { RETRIEVAL_PHASE_NAME, retrievalPhase } from './per-turn-retrieval'
+import {
+  RETRIEVAL_INTERMEDIATE_KEY,
+  RETRIEVAL_PHASE_NAME,
+  retrievalPhase,
+} from './per-turn-retrieval'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const PER_TURN_KIND = 'per-turn'
+
+// `ctx.intermediates` is Record<string, unknown>, so presence is the discriminant:
+// only ok outcomes are ever stashed, and the phase fails the run before this one
+// otherwise — absence degrades the prompt to empty buckets rather than throwing.
+// The `ok` check is defensive: a future stash of the failure variant must not
+// reach the builder as a bundle.
+function readRetrievalOutcome(
+  intermediates: Record<string, unknown>,
+): RetrievalSuccess | undefined {
+  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
+  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
+  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
+}
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId, storyId } = ctx
@@ -96,6 +114,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     idMap,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
+    retrieval: readRetrievalOutcome(ctx.intermediates),
   })
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 

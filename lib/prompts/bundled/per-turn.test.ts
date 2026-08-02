@@ -47,6 +47,20 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(out).toMatchSnapshot()
   })
 
+  // The builder hands over an already-composed window (cadence.md → Composition
+  // rule), which partialChapterBuffer alone cannot reproduce: a template that
+  // re-trims by it sends the model less prose than the caller composed.
+  it('renders every entry it is handed, ignoring partialChapterBuffer', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      userSettings: { partialChapterBuffer: 1 },
+      entries: [{ content: 'alpha-line' }, { content: 'beta-line' }, { content: 'gamma-line' }],
+    })
+    expect(rendered).toContain('alpha-line')
+    expect(rendered).toContain('beta-line')
+    expect(rendered).toContain('gamma-line')
+  })
+
   it('renders the staged-entities block with promotion instructions when a staged entity exists', () => {
     const contextWithStaged = {
       ...m2Context,

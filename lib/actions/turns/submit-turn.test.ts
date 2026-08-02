@@ -10,7 +10,7 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
-import { runRetrieval, type RankedType, type RetrievalOutcome } from '@/lib/retrieval'
+import { runRetrieval, type RankedType, type RetrievalSuccess } from '@/lib/retrieval'
 import {
   currentStoryStore,
   entriesStore,
@@ -46,7 +46,7 @@ const EMPTY_BUNDLE: RankedType = {
 // Typed against the real outcome rather than cast: nothing reads it while the
 // narrative phase ignores intermediates.retrieval, but a fabricated shape starts
 // lying the moment a consumer narrows it.
-const OK_RETRIEVAL: Extract<RetrievalOutcome, { ok: true }> = {
+const OK_RETRIEVAL: RetrievalSuccess = {
   ok: true,
   floor: {
     sceneEntities: [],

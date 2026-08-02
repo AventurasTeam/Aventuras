@@ -1,15 +1,14 @@
 import { inheritedEntryMetadata, queryRows, runInTransaction, type StoryEntry } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
-import { composePromptBuffer, runRetrieval, type RetrievalOutcome } from '@/lib/retrieval'
+import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const RETRIEVAL_PHASE_NAME = 'retrieval'
 
-/** `ctx.intermediates` is `Record<string, unknown>`; consumers re-narrow with this pair. */
+/** Where this phase parks its outcome; consumers re-narrow to `RetrievalSuccess`. */
 export const RETRIEVAL_INTERMEDIATE_KEY = 'retrieval'
-export type RetrievalIntermediate = Extract<RetrievalOutcome, { ok: true }>
 
 const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening'])
 

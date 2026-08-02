@@ -9,7 +9,7 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import type { RankedType, RetrievalOutcome, RetrievalParams, RetrievalType } from '@/lib/retrieval'
+import type { RankedType, RetrievalParams, RetrievalSuccess, RetrievalType } from '@/lib/retrieval'
 import {
   currentStoryStore,
   entitiesStore,
@@ -60,7 +60,7 @@ function okOutcome({
 }: {
   staleCounts?: Record<RetrievalType, number>
   injectedAwarenessIds?: string[]
-} = {}): Extract<RetrievalOutcome, { ok: true }> {
+} = {}): RetrievalSuccess {
   return {
     ok: true,
     floor: {

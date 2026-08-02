@@ -61,8 +61,7 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 # Story so far
-{%- assign recentEntries = entries | recent: userSettings.partialChapterBuffer %}
-{% for entry in recentEntries %}
+{% for entry in entries %}
 {{ entry.content }}
 {% endfor %}
 {% include 'macro_output_format_narrative' %}

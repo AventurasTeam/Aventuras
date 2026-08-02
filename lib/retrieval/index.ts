@@ -12,7 +12,13 @@ export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
 export { runRetrieval } from './run'
-export type { RetrievalDeps, RetrievalFailure, RetrievalOutcome, RetrievalParams } from './run'
+export type {
+  RetrievalDeps,
+  RetrievalFailure,
+  RetrievalOutcome,
+  RetrievalParams,
+  RetrievalSuccess,
+} from './run'
 export { runSyncStage } from './sync'
 export type { SyncStageDeps, SyncStageResult } from './sync'
 export { countEntryTokens, countTokens } from './tokens'

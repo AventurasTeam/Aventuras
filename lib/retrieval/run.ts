@@ -100,6 +100,9 @@ export type RetrievalOutcome =
     }
   | { ok: false; failure: RetrievalFailure }
 
+/** The ok arm alone — what a caller holds once it has checked `ok`. */
+export type RetrievalSuccess = Extract<RetrievalOutcome, { ok: true }>
+
 const KINDS = Object.keys(TYPE_OF_KIND) as VecTargetKind[]
 
 export async function runRetrieval(

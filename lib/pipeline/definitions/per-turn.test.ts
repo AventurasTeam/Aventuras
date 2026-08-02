@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
+import type { TemplateId } from '@/lib/prompts'
+import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -11,10 +13,12 @@ import {
 } from '@/lib/stores'
 
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
 
-const { streamTextMock } = vi.hoisted(() => ({
+const { streamTextMock, renderTemplateMock } = vi.hoisted(() => ({
   streamTextMock: vi.fn(),
+  renderTemplateMock: vi.fn(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -22,6 +26,21 @@ vi.mock('@/lib/ai', async (importOriginal) => {
   return {
     ...actual,
     streamText: streamTextMock,
+  }
+})
+
+// Records the context each phase hands over, then renders for real — the
+// generation context is the only place a retrieval bundle is observable until
+// the bundled pack renders one.
+vi.mock('@/lib/prompts', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  const render = actual.renderTemplate as (id: TemplateId, ctx: Record<string, unknown>) => string
+  return {
+    ...actual,
+    renderTemplate: (templateId: TemplateId, context: Record<string, unknown>) => {
+      renderTemplateMock(templateId, context)
+      return render(templateId, context)
+    },
   }
 })
 
@@ -85,6 +104,7 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
 beforeEach(() => {
   vi.restoreAllMocks()
   streamTextMock.mockReset().mockReturnValue(failingStreamCall())
+  renderTemplateMock.mockReset()
   resetAllStores()
 })
 
@@ -728,10 +748,76 @@ const SUGGESTION_CATEGORIES = [
   },
 ]
 
+const RETRIEVED_ENTITY_ID = 'char_00000000-0000-4000-8000-0000000000e9'
+
+function retrievalIntermediate(): RetrievalSuccess {
+  const selected: Candidate[] = [
+    {
+      kind: 'entity',
+      id: RETRIEVED_ENTITY_ID,
+      displayName: 'Corvin',
+      renderedText: 'Corvin (currently elsewhere): a smuggler.',
+      sims: [0, 0, 0],
+      vector: new Float32Array([1, 0, 0]),
+      chaptersOld: 0,
+      pinSignal: 0,
+      commonKnowledge: false,
+      keywordHits: [],
+      occurredAtEntryId: null,
+      awarenessIds: [],
+      embeddingStale: false,
+    },
+  ]
+  const emptyBundle = {
+    selected: [],
+    traces: [],
+    funnel: {
+      poolSize: 0,
+      preFilteredSize: 0,
+      mmrSize: 0,
+      selectedCount: 0,
+      tokensUsed: 0,
+      typeBudget: 0,
+    },
+  }
+  const spec = { text: '', source: 'user_action' as const }
+  return {
+    ok: true,
+    floor: {
+      sceneEntities: [],
+      currentLocation: null,
+      activeThreads: [
+        {
+          id: 'thr_00000000-0000-4000-8000-0000000000f9',
+          status: 'active',
+          injectionMode: 'auto',
+          title: 'Find the heir',
+          description: null,
+        },
+      ],
+      alwaysEntities: [],
+      alwaysLore: [],
+      alwaysThreads: [],
+      seatedIds: new Set<string>(),
+    },
+    bundles: {
+      entities: { ...emptyBundle, selected },
+      lore: emptyBundle,
+      happenings: emptyBundle,
+      threads: emptyBundle,
+      chapters: emptyBundle,
+    },
+    queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
+    staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+    injectedAwarenessIds: [],
+  }
+}
+
 async function runNarrativeWith(opts: {
   narrative: string
   settings?: Partial<StorySettings>
   log?: Logger
+  intermediates?: Record<string, unknown>
 }) {
   currentStoryStore.set({
     storyId: 's1',
@@ -780,7 +866,7 @@ async function runNarrativeWith(opts: {
   ensurePerTurnPipelineRegistered()
   const phase = getPipeline(PER_TURN_KIND).phases[2]
   if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
-  const intermediates: Record<string, unknown> = {}
+  const intermediates: Record<string, unknown> = { ...opts.intermediates }
   const gen = phase.run({
     actionId: 'act_1',
     abortSignal: new AbortController().signal,
@@ -810,8 +896,42 @@ async function runNarrativeWith(opts: {
     metadata,
     intermediates,
     prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
+    context: renderTemplateMock.mock.calls.at(-1)?.[1] as Record<string, unknown>,
   }
 }
+
+describe('narrative fold — retrieval handoff', () => {
+  const namesOf = (bucket: unknown) =>
+    (bucket as { displayName: string }[]).map((r) => r.displayName)
+
+  it('passes the stashed retrieval outcome into the generation context', async () => {
+    const { context } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() },
+    })
+    expect(namesOf(context.retrievedEntities)).toEqual(['Corvin'])
+    expect((context.structuralActiveThreads as { title: string }[]).map((t) => t.title)).toEqual([
+      'Find the heir',
+    ])
+  })
+
+  // The negative control for the case above: same fold, no intermediate.
+  it('renders empty buckets when the retrieval phase stashed nothing', async () => {
+    const { context } = await runNarrativeWith({ narrative: 'prose' })
+    expect(context.retrievedEntities).toEqual([])
+    expect(context.structuralActiveThreads).toEqual([])
+  })
+
+  // ctx.intermediates is Record<string, unknown>: a non-outcome value must not
+  // reach the builder as if it were one.
+  it('ignores a value parked under the retrieval key that is not an ok outcome', async () => {
+    const { context } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: { ok: false, failure: { reason: 'call' } } },
+    })
+    expect(context.retrievedEntities).toEqual([])
+  })
+})
 
 describe('narrative fold — suggestions', () => {
   it('persists parsed chips with source piggyback on the created entry', async () => {

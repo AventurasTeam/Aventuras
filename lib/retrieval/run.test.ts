@@ -8,6 +8,7 @@ import {
   type RetrievalDeps,
   type RetrievalOutcome,
   type RetrievalParams,
+  type RetrievalSuccess,
 } from './run'
 import type { QueryAll } from './types'
 
@@ -188,7 +189,7 @@ const params = (
   } = {},
 ): RetrievalParams => ({ ...BASE, ...over, query: { ...BASE.query, ...over.query } })
 
-function expectOk(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: true }> {
+function expectOk(out: RetrievalOutcome): RetrievalSuccess {
   if (!out.ok) throw new Error(`expected a successful pass, got ${out.failure.reason}`)
   return out
 }
