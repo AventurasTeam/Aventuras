@@ -61,8 +61,10 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   const currentLocation =
     input.entities.find((e) => e.id === input.currentLocationId && e.status === 'active') ?? null
 
-  // Canon seats the location as its own floor row; listing it here too would
-  // seat one entity twice.
+  // Scene presence is kind-aware (data-model.md → Entry metadata shape):
+  // sceneEntities carries characters and items, so a location should never
+  // arrive here. If a classifier emits one anyway, the singleton location slot
+  // is the seat that carries "we are here".
   const sceneEntities = input.entities.filter(
     (e) => e.status === 'active' && scene.has(e.id) && e.id !== currentLocation?.id,
   )

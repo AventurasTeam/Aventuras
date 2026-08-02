@@ -87,7 +87,9 @@ describe('buildStructuralFloor', () => {
     expect(floorOf({ entities }).currentLocation).toBeNull()
   })
 
-  it('seats the current location once, not also as a scene entity', () => {
+  // Only reachable from classifier output that violates the kind-aware scene
+  // contract; canon never puts a location in sceneEntities.
+  it('seats a malformed scene-listed location once, not also as a scene entity', () => {
     const floor = floorOf({
       entities,
       sceneEntityIds: ['char_a', 'loc_a'],
@@ -152,6 +154,11 @@ type EntityDestination = 'scene' | 'location' | 'always' | 'pool'
 // retrieval.md → Structural floor and → Three-sub-pool entity model. Keyed
 // `status|injectionMode|inScene|isCurrentLocation`; [] means the row is
 // dropped entirely this turn.
+//
+// The `|1|1` rows pin a state canon rules out — scene presence is kind-aware
+// (data-model.md → Entry metadata shape), so no row is both a scene entity and
+// the current location. They are kept as a defence against malformed classifier
+// metadata, not as a legal configuration.
 const ENTITY_PLACEMENT: Record<string, EntityDestination[]> = {
   'active|always|0|0': ['always'],
   'active|always|0|1': ['location'],
