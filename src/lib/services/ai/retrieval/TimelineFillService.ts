@@ -200,11 +200,11 @@ export class TimelineFillService extends BaseAIService {
    */
   private buildContentFrom(rendered: ChapterForRead[], maxChapterTokens: number): string {
     const read = buildChapterRead(rendered, maxChapterTokens)
-    if (read.omittedChapters.length > 0 || read.partialChapters.length > 0) {
+    if (read.omittedChapters.length > 0 || read.partialChapter !== null) {
       log('Chapter text truncated to budget', {
         budget: maxChapterTokens,
         omitted: read.omittedChapters,
-        partial: read.partialChapters,
+        partial: read.partialChapter,
       })
     }
     return read.content

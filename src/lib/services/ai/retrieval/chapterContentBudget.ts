@@ -32,10 +32,13 @@ export interface ChapterReadResult {
   /** Chapters that got no text at all. */
   omittedChapters: number[]
   /**
-   * The chapter the cut landed inside. At most one: the read stops there, so no later
-   * chapter can be partial either.
+   * The chapter the cut landed inside, or null when nothing was cut.
+   *
+   * Singular because the read stops at the cut, so no later chapter can be partial either --
+   * expressed in the type rather than left as a one-element array, since the truncation
+   * marker's wording ("Chapter N is incomplete") depends on it and an array invites a second.
    */
-  partialChapters: number[]
+  partialChapter: number | null
 }
 
 const JOIN = '\n\n'
@@ -58,7 +61,7 @@ const JOIN = '\n\n'
 export function buildChapterRead(chapters: ChapterForRead[], maxTokens: number): ChapterReadResult {
   const blocks: string[] = []
   const omittedChapters: number[] = []
-  const partialChapters: number[] = []
+  let partialChapter: number | null = null
   let remaining = maxTokens
   let stopped = false
 
@@ -81,19 +84,19 @@ export function buildChapterRead(chapters: ChapterForRead[], maxTokens: number):
       omittedChapters.push(chapter.number)
       continue
     }
-    if (kept.length < chapter.entries.length) partialChapters.push(chapter.number)
+    if (kept.length < chapter.entries.length) partialChapter = chapter.number
 
     blocks.push(`${chapter.header}\n${kept.join(JOIN)}`)
   }
 
   const content = blocks.join(JOIN)
-  if (omittedChapters.length === 0 && partialChapters.length === 0) {
-    return { content, omittedChapters, partialChapters }
+  if (omittedChapters.length === 0 && partialChapter === null) {
+    return { content, omittedChapters, partialChapter }
   }
 
   const notes = ['[TRUNCATED: the chapter text below was cut to fit.']
-  if (partialChapters.length > 0) {
-    notes.push(` Chapter ${partialChapters.join(', ')} is incomplete.`)
+  if (partialChapter !== null) {
+    notes.push(` Chapter ${partialChapter} is incomplete.`)
   }
   if (omittedChapters.length > 0) {
     notes.push(
@@ -103,5 +106,5 @@ export function buildChapterRead(chapters: ChapterForRead[], maxTokens: number):
   }
   notes.push(']')
 
-  return { content: `${notes.join('')}\n\n${content}`, omittedChapters, partialChapters }
+  return { content: `${notes.join('')}\n\n${content}`, omittedChapters, partialChapter }
 }

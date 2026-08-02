@@ -277,3 +277,64 @@ describe('renderSinglePicTag', () => {
     expect(html).toContain(`data-prompt="${long}"`)
   })
 })
+
+describe('PIC_TAG — malformed input', () => {
+  /**
+   * The attribute section is `(?:"[^"]*"|'[^']*'|[^>"'])*?`, and the three branches are what
+   * keep it linear: each is anchored on a distinct first character, so there is no input the
+   * engine can match two ways and no exponential path to explore. Widening the last branch to
+   * `[^>]` -- the obvious-looking simplification -- would overlap the quoted ones and
+   * reintroduce exactly that.
+   *
+   * These pin the behaviour that depends on it. The timing bound is deliberately loose: it is
+   * there to fail on a pattern that degenerates, not to measure anything.
+   */
+  const budgetMs = 500
+
+  const timed = (fn: () => void) => {
+    const started = performance.now()
+    fn()
+    return performance.now() - started
+  }
+
+  it('does not match an unterminated quote, however much prose follows', () => {
+    // The failure this guards against is not a missing image: it is the literal `<pic ...`
+    // text surviving into rendered narration while the parser reports nothing to strip.
+    const content = `<pic prompt="never closed ${'word '.repeat(4000)}`
+
+    expect(extractPicTags(content)).toEqual([])
+    expect(hasPicTags(content)).toBe(false)
+  })
+
+  it('stays linear on a long run of paired quotes', () => {
+    const content = `<pic ${'"a"'.repeat(3000)}`
+    expect(timed(() => extractPicTags(content))).toBeLessThan(budgetMs)
+  })
+
+  it('stays linear on a long run of unpaired quotes', () => {
+    const content = `<pic ${'"'.repeat(3000)}`
+    expect(timed(() => extractPicTags(content))).toBeLessThan(budgetMs)
+  })
+
+  it('stays linear when both quote characters alternate', () => {
+    const content = `<pic ${`'a'"b"`.repeat(2000)}`
+    expect(timed(() => extractPicTags(content))).toBeLessThan(budgetMs)
+  })
+
+  it('stays linear on an opened tag that never closes', () => {
+    const content = `<pic prompt="a" ${'x'.repeat(20000)}`
+    expect(timed(() => extractPicTags(content))).toBeLessThan(budgetMs)
+  })
+
+  it('recovers on the next well-formed tag after a broken one', () => {
+    // A single malformed tag must not cost the rest of the narration its images. The broken
+    // prefix is discarded whole: the match that succeeds starts at the second `<pic`, so the
+    // good tag arrives with its own prompt intact rather than one spanning both.
+    const content = `<pic prompt="broken ${SELF_CLOSING}`
+
+    const tags = extractPicTags(content)
+    expect(tags).toHaveLength(1)
+    expect(tags[0].prompt).toBe('a lone knight on a windswept ridge')
+    expect(content.slice(tags[0].startIndex, tags[0].endIndex)).toBe(SELF_CLOSING)
+  })
+})
