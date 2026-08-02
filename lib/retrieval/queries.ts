@@ -11,7 +11,10 @@ export type QueryStackInput = {
   eraName: string | null
   /** One-sentence enrichment off the piggyback trailing block; null when absent. */
   piggybackSummary: string | null
-  /** The last narrative entry's prose — the opening entry on turn 1; '' only when the branch has no narrative entry. */
+  /**
+   * The last narrative entry's prose — the opening entry on turn 1; '' only
+   * when the branch has no narrative entry.
+   */
   lastNarrativeContent: string
   index: NameKeywordIndex
 }

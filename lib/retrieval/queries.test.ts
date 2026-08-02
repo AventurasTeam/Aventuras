@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { PROSE_EXTRACT_TOP_K } from './constants'
-import { extractProse } from './prose-extract'
+import { extractProse, splitSentences } from './prose-extract'
 import { buildQueryStack, distributeQueryVectors, type QueryStackInput } from './queries'
 
 const index = {
@@ -140,6 +140,7 @@ describe('buildQueryStack', () => {
     // Scored per sentence over all five, not only the four that survive top-K —
     // the probe pairs scores against sentences positionally.
     expect(s.q3.sentenceScores).toHaveLength(5)
+    expect(splitSentences(s.q3.text)).toHaveLength(PROSE_EXTRACT_TOP_K)
     expect(s.q3.text).toContain('Kara Vex drew the blade.')
     expect(s.q3.text).not.toContain('The lamps were unlit')
   })
