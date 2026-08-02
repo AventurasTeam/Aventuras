@@ -163,7 +163,7 @@
     if (!profile || !model) return 'unsupported'
     const m = settings.getProfileModels(effectiveProfileId).find((x) => x.id === model)
     if (!!m?.reasoning && profile.providerType === 'nanogpt')
-      return m?.id.match('/[-:]thinking(?::.+)?$/i') !== null ? 'enforced' : 'supported'
+      return m?.id.match(/[-:]thinking(?::.+)?$/i) !== null ? 'enforced' : 'supported'
     if (!!m?.reasoning) return 'supported'
     return 'unsupported'
   })

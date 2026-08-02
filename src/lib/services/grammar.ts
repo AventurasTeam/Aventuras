@@ -92,7 +92,7 @@ class GrammarService {
       try {
         log('Initializing Harper linter...')
 
-        // Load the WASM binary using Vite's URL import
+        // Use Harper's package-provided WASM binary
         this.linter = new LocalLinter({ binary })
         await this.linter.setup()
 
