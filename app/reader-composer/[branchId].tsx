@@ -6,11 +6,9 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import {
-  GenerationStatusPill,
-  type GenerationPhase,
-} from '@/components/compounds/generation-status-pill'
+import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
+import { readerPillPhase } from '@/components/reader/generation-phase'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
   type EditResult,
@@ -125,11 +123,14 @@ export default function ReaderComposerRoute() {
   // Cancel and raise the streaming placeholder over a branch that isn't
   // streaming. Note this is only about the turn-shaped chrome — the refresh
   // does hold the edit gate, so `editBlocked` above already covers undo/redo.
-  const isGenerating = generationStore.useGeneration((s) =>
-    [...s.txState.runs.values()].some(
-      (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND,
-    ),
+  // The phase, not a boolean: one source for whether a turn runs and what it does.
+  const turnPhase = generationStore.useGeneration(
+    (s) =>
+      [...s.txState.runs.values()].find(
+        (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND,
+      )?.currentPhase ?? null,
   )
+  const isGenerating = turnPhase !== null
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
@@ -205,11 +206,7 @@ export default function ReaderComposerRoute() {
   // A suggestion refresh occupies the pill exactly like a turn does, and the
   // pill prioritizes activePhase over error — so the two branches must be
   // derived from one value, or a refresh would leave the warning tone visible.
-  const activePhase: GenerationPhase | undefined = isGenerating
-    ? 'generating-narrative'
-    : refreshingSuggestions
-      ? 'refreshing-suggestions'
-      : undefined
+  const activePhase = readerPillPhase({ turnPhase, refreshingSuggestions })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.

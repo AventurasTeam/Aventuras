@@ -10,6 +10,7 @@ import { t } from '@/lib/i18n'
 
 type GenerationPhase =
   | 'reasoning'
+  | 'recalling-memory'
   | 'generating-narrative'
   | 'classifying'
   | 'closing-chapter'
@@ -39,6 +40,8 @@ function phaseCopy(phase: GenerationPhase): string {
   switch (phase) {
     case 'reasoning':
       return t('chrome.generationStatusPill.phase.reasoning')
+    case 'recalling-memory':
+      return t('chrome.generationStatusPill.phase.recallingMemory')
     case 'generating-narrative':
       return t('chrome.generationStatusPill.phase.generatingNarrative')
     case 'classifying':
@@ -68,6 +71,7 @@ function errorCopy(error: ErrorState): string {
 function cancelCopy(phase: GenerationPhase): string {
   switch (phase) {
     case 'reasoning':
+    case 'recalling-memory':
     case 'generating-narrative':
     case 'classifying':
       return t('chrome.generationStatusPill.cancelGeneration')

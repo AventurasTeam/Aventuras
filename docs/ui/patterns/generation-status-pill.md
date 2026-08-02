@@ -43,6 +43,7 @@ and must stay in lockstep across consumers:
 ```ts
 type GenerationPhase =
   | 'reasoning'
+  | 'recalling-memory'
   | 'generating-narrative'
   | 'classifying'
   | 'closing-chapter'
@@ -94,6 +95,7 @@ The compound owns phase → copy and error → copy:
 | Phase                    | Label                     |
 | ------------------------ | ------------------------- |
 | `reasoning`              | `reasoning…`              |
+| `recalling-memory`       | `recalling memory…`       |
 | `generating-narrative`   | `generating narrative…`   |
 | `classifying`            | `classifying…`            |
 | `closing-chapter`        | `closing chapter…`        |
@@ -128,8 +130,8 @@ same consequence framing.
 
 Tap opens a `Popover` anchored to the tag. Body is a single button:
 
-- `Cancel generation` — for `reasoning` / `generating-narrative` /
-  `classifying`.
+- `Cancel generation` — for `reasoning` / `recalling-memory` /
+  `generating-narrative` / `classifying`.
 - `Cancel chapter close` — for `closing-chapter`.
 - `Cancel suggestion refresh` — for `refreshing-suggestions`.
 
@@ -201,11 +203,18 @@ come from props on every render.
 ## Open items
 
 - **Pipeline orchestrator wiring.** Real `activePhase` source from
-  the per-turn + chapter-close pipelines per
+  the per-turn / chapter-close pipelines per
   [`generation-pipeline.md → Orchestrator topology`](../../generation-pipeline.md#orchestrator-topology).
   The compound takes `activePhase` as a prop; consumers wire it from
   the orchestrator state via a derived selector on `txState`
-  (foreground-first heuristic).
+  (foreground-first heuristic). **Done for the reader**, whose
+  `components/reader/generation-phase.ts` maps the running phase's
+  node name to a `GenerationPhase` — exhaustively over the per-turn
+  phase-name union, so a phase added to that pipeline fails the
+  build until it is labelled, and with a generic-label fallback so an
+  unmapped name never blanks the pill mid-run. Story Settings still
+  derives its phase from the run's _kind_, and the remaining in-story
+  surfaces are unwired.
 - **Memory error observation.** Surface `embedder-offline` from
   staleness detection per
   [`memory/model-management.md → Staleness UI`](../../memory/model-management.md#staleness-ui);

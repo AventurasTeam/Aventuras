@@ -41,6 +41,7 @@
     "generationStatusPill": {
       "phase": {
         "reasoning": "reasoning…",
+        "recallingMemory": "recalling memory…",
         "generatingNarrative": "generating narrative…",
         "classifying": "classifying…",
         "closingChapter": "closing chapter…",

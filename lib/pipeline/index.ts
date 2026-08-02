@@ -1,6 +1,10 @@
 export { toPipelineError } from './call-error'
 export { definePhase, definePipeline } from './authoring/define'
-export { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './definitions/per-turn'
+export {
+  ensurePerTurnPipelineRegistered,
+  PER_TURN_KIND,
+  type PerTurnPhaseName,
+} from './definitions/per-turn'
 export {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,

@@ -47,6 +47,16 @@ export const ActiveReasoning: Story = {
   ),
 }
 
+export const ActiveRecallingMemory: Story = {
+  render: () => (
+    <GenerationStatusPill
+      activePhase="recalling-memory"
+      onCancel={onCancel}
+      onErrorTap={onErrorTap}
+    />
+  ),
+}
+
 export const ActiveGeneratingNarrative: Story = {
   render: () => (
     <GenerationStatusPill
