@@ -1058,3 +1058,28 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   sentence to say "walking backwards from the chapter boundary", or
   state the single-chapter cap explicitly and accept a total below the
   floor. Surfaced by M3.4 Task 10 (2026-08-02).
+- **Structural-floor seating silently bypasses two pool-level rules
+  canon states elsewhere.**
+  [`retrieval.md → Structural floor`](../memory/retrieval.md#structural-floor--always-inject)
+  seats every `injection_mode='always'` row unconditionally, "across
+  entities / lore / threads". Two later sections assume those same rows
+  still pass through pool machinery, which seated rows never reach.
+  First,
+  [`retrieval.md → Three-sub-pool entity model`](../memory/retrieval.md#three-sub-pool-entity-model)
+  makes `injection_mode='always'` the **only** opt-in for retired
+  entities and then states all three sub-pools "compete for the
+  entity-type token budget" — but a retired row that opted in is
+  already seated, so the retired sub-pool is empty in production and
+  cannot compete. M3.4 Task 11 resolves this in favour of the floor, so
+  that "always" means always; its `filterEntityPool` retains and
+  unit-tests a retired branch that is unreachable once `floorIds` comes
+  from `buildStructuralFloor`. Second, same-name suppression is defined
+  as removing staged namesakes "from the current pool", so a staged row
+  carrying `always` is injected even when its name appears in recent
+  buffer prose — which is the collision the rule exists to prevent. The
+  shipped behaviour matches canon's literal wording in both cases; what
+  is unclear is whether canon means it. Decide whether `always` should
+  outrank the retired-exclusion and same-name rules (current behaviour,
+  and the simplest to explain to a user who set the flag) or whether
+  seating should be checked against them first. Surfaced by M3.4 Task 11
+  (2026-08-02).
