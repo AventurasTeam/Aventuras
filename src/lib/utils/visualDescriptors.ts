@@ -70,20 +70,3 @@ export function hasDescriptors(descriptors: VisualDescriptors | null | undefined
   if (!descriptors) return false
   return Object.values(descriptors).some((v) => v && v.trim())
 }
-
-/**
- * Format descriptors for display in prompts/context.
- */
-export function formatDescriptorsForPrompt(
-  descriptors: VisualDescriptors | null | undefined,
-): string {
-  if (!descriptors) return ''
-
-  const parts: string[] = []
-  for (const key of CATEGORY_ORDER) {
-    if (descriptors[key]) {
-      parts.push(`${CATEGORY_LABELS[key]}: ${descriptors[key]}`)
-    }
-  }
-  return parts.join(', ')
-}

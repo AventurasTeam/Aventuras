@@ -8,9 +8,11 @@
  */
 
 import type { StoryEntry, Entry, Character, Location, Item, StoryBeat } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
+import { getContextConfig } from '../core/config'
 import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/actionchoices'
 
 const log = createLogger('ActionChoices')
@@ -36,7 +38,7 @@ export interface ActionChoicesContext {
  * Service that generates action choices for adventure mode.
  */
 export class ActionChoicesService extends BaseAIService {
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 
@@ -53,7 +55,7 @@ export class ActionChoicesService extends BaseAIService {
 
     // Format recent context
     const recentContext = context.recentEntries
-      .slice(-5)
+      .slice(-getContextConfig().recentEntriesForChoices)
       .map((e) => `[${e.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}]: ${e.content}`)
       .join('\n\n')
 

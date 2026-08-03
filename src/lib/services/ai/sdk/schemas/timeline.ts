@@ -30,6 +30,23 @@ export const timelineQueriesResultSchema = z.object({
   queries: z.array(timelineQuerySchema).describe('Queries to run against chapter summaries'),
 })
 
+/**
+ * Schema for a batched answer to multiple questions about the same chapter(s).
+ * Answers are keyed by the index of the question they answer (matching the order
+ * questions were listed in the prompt), not necessarily returned in that order.
+ */
+export const timelineBatchAnswerResultSchema = z.object({
+  answers: z
+    .array(
+      z.object({
+        index: z.number().describe('Index of the question being answered, from the QUESTIONS list'),
+        answer: z.string().describe('Concise, factual answer to that question'),
+      }),
+    )
+    .describe('One answer per question, keyed by index'),
+})
+
 // Type exports inferred from schemas
 export type TimelineQuery = z.infer<typeof timelineQuerySchema>
 export type TimelineQueriesResult = z.infer<typeof timelineQueriesResultSchema>
+export type TimelineBatchAnswerResult = z.infer<typeof timelineBatchAnswerResultSchema>

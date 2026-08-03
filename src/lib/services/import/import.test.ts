@@ -119,6 +119,23 @@ describe('runImport — rollback', () => {
     expect(calls.deleted).toEqual([])
   })
 
+  it('deletes the half-imported story when a row fails inside importStructure itself', async () => {
+    // Regression test: a failure partway through importStructure (e.g. a bad chapter row) used
+    // to be missed by the rollback entirely, because `storyCreated` was only set true *after*
+    // importStructure fully resolved. That left the story, its entries, and everything else
+    // already written stuck in the database forever while `runImport` reported failure.
+    const { database } = await import('$lib/services/database')
+    vi.mocked(database.addChapter).mockRejectedValueOnce(new Error('FOREIGN KEY constraint failed'))
+
+    const data = { ...sampleExport(), chapters: [{ id: 'chap-1', storyId: 'story-old' }] }
+    const result = await runImport(data)
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('FOREIGN KEY constraint failed')
+    // The story row and the entry already written before the failure must not be left orphaned.
+    expect(calls.deleted).toEqual([calls.stories[0].id])
+  })
+
   it('reports the original failure even when the rollback itself fails', async () => {
     const { database } = await import('$lib/services/database')
     vi.mocked(database.deleteStory).mockRejectedValueOnce(new Error('rollback also failed'))

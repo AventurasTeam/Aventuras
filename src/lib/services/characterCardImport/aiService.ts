@@ -1,4 +1,5 @@
 import { createLogger } from '$lib/log'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '$lib/services/ai/BaseAIService'
 import type { GeneratedCharacter } from '$lib/services/ai/sdk'
 import type { Genre } from '$lib/services/ai/wizard'
@@ -38,7 +39,7 @@ function buildCardContext(card: ParsedCard): string {
 }
 
 class AIService extends BaseAIService {
-  constructor(serviceId: string = 'characterCardImport') {
+  constructor(serviceId: ServiceId = 'characterCardImport') {
     super(serviceId)
   }
 

@@ -33,6 +33,33 @@ class DebugStore {
   private unlistenRequestLogs: UnlistenFn | null = null
   private unlistenClearLogs: UnlistenFn | null = null
   private unlistenToggleRenderNewlines: UnlistenFn | null = null
+  /** See emitToDebugWindow: false from window creation until the window reports ready. */
+  private debugWindowReady = false
+
+  /**
+   * Send an event to the pop-out window, but only once that window is ready.
+   *
+   * Emitting while the new window is still making its own setup IPC calls deadlocks the
+   * whole app. Tauri 2.11 holds `webviews_lock` for the entire emit (manager/mod.rs:548)
+   * and the emit blocks waiting on the main thread, while the main thread needs that same
+   * lock to answer the new window's `listen`/`emit` calls. Neither side yields, the GTK
+   * event loop stops, and every window freezes with the CPU at zero.
+   *
+   * Events sent before then are dropped rather than queued: every one of them is already
+   * reflected in `debugLogs`, which `initial-debug-logs` hands over in full.
+   */
+  private emitToDebugWindow(event: string, payload: unknown) {
+    // `debugWindowReady` alone, deliberately: it is set by the window announcing itself, so
+    // it already implies the window exists. Requiring `debugWindowActive` as well would
+    // reintroduce a race in the other direction -- that flag is assigned at the *end* of
+    // `popOutDebug`, after the window is constructed, so a window that announced itself
+    // first would have its own initial-logs reply dropped.
+    if (!this.debugWindowReady) return
+
+    emit(event, payload).catch((err) => {
+      console.warn(`[UI] Failed to emit ${event}:`, err)
+    })
+  }
 
   /**
    * Get a snapshot of current logs. UI should call this when logsVersion changes.
@@ -101,13 +128,7 @@ class DebugStore {
 
     this.appendLogEntry(entry)
 
-    // Notify external window if active
-    if (this.debugWindowActive) {
-      console.log('[UI] Emitting debug-log-added', entry.id)
-      emit('debug-log-added', this.safeIpcEntry(entry)).catch((err) => {
-        console.warn('[UI] Failed to emit debug-log-added:', err)
-      })
-    }
+    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
 
     return id
   }
@@ -136,12 +157,7 @@ class DebugStore {
       // Signal that logs have changed
       this.logsVersion++
 
-      // Notify external window
-      if (this.debugWindowActive) {
-        emit('debug-log-added', this.safeIpcEntry(existingEntry)).catch((err) => {
-          console.warn('[UI] Failed to emit debug-log-added:', err)
-        })
-      }
+      this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(existingEntry))
       return
     }
 
@@ -157,13 +173,7 @@ class DebugStore {
 
     this.appendLogEntry(entry)
 
-    // Notify external window if active
-    if (this.debugWindowActive) {
-      console.log('[UI] Emitting debug-log-added', entry.id)
-      emit('debug-log-added', this.safeIpcEntry(entry)).catch((err) => {
-        console.warn('[UI] Failed to emit debug-log-added:', err)
-      })
-    }
+    this.emitToDebugWindow('debug-log-added', this.safeIpcEntry(entry))
   }
 
   /**
@@ -172,11 +182,7 @@ class DebugStore {
   clearDebugLogs() {
     this.debugLogs = []
     this.logsVersion++
-    if (this.debugWindowActive) {
-      emit('debug-logs-cleared', {}).catch((err) => {
-        console.warn('[UI] Failed to emit debug-logs-cleared:', err)
-      })
-    }
+    this.emitToDebugWindow('debug-logs-cleared', {})
   }
 
   /**
@@ -206,11 +212,34 @@ class DebugStore {
   toggleDebugRenderNewlines() {
     this.debugRenderNewlines = !this.debugRenderNewlines
     console.log('[UI] toggleDebugRenderNewlines', this.debugRenderNewlines)
-    if (this.debugWindowActive) {
-      emit('debug-render-newlines-changed', this.debugRenderNewlines).catch((err) => {
-        console.warn('[UI] Failed to emit debug-render-newlines-changed:', err)
+    this.emitToDebugWindow('debug-render-newlines-changed', this.debugRenderNewlines)
+  }
+
+  /** Listeners for everything the pop-out window sends back. */
+  private async registerDebugWindowListeners() {
+    this.unlistenPopIn = await listen('pop-in-debug', () => {
+      console.log('[UI] Received pop-in-debug request')
+      this.popInDebug()
+    })
+
+    // The window sends this once its own listeners are up, which is also our signal that
+    // it is done making setup IPC calls and is safe to emit to. See emitToDebugWindow.
+    this.unlistenRequestLogs = await listen('request-initial-debug-logs', () => {
+      console.log('[UI] Received request-initial-debug-logs')
+      this.debugWindowReady = true
+      this.emitToDebugWindow('initial-debug-logs', {
+        logs: this.debugLogs.map((e) => this.safeIpcEntry(e) as DebugLogEntry),
+        renderNewlines: this.debugRenderNewlines,
       })
-    }
+    })
+
+    this.unlistenClearLogs = await listen('request-clear-debug-logs', () => {
+      this.clearDebugLogs()
+    })
+
+    this.unlistenToggleRenderNewlines = await listen('request-toggle-debug-render-newlines', () => {
+      this.toggleDebugRenderNewlines()
+    })
   }
 
   /**
@@ -220,6 +249,12 @@ class DebugStore {
     if (this.debugWindowActive) return
 
     try {
+      // Listeners go up before the window exists. They used to be registered after, which
+      // left a gap where a fast-loading window could announce itself to nobody -- and,
+      // worse, put our own `listen` IPC calls in the same instant as the new window's.
+      this.debugWindowReady = false
+      await this.registerDebugWindowListeners()
+
       const win = new WebviewWindow('debug-logs', {
         url: '/debug',
         title: 'API Debug Logs',
@@ -232,11 +267,13 @@ class DebugStore {
       win.once('tauri://error', (e) => {
         console.error('[UI] Failed to create debug window:', e)
         this.debugWindowActive = false
+        this.debugWindowReady = false
       })
 
       win.once('tauri://destroyed', () => {
         console.log('[UI] Debug window destroyed')
         this.debugWindowActive = false
+        this.debugWindowReady = false
         if (this.unlistenPopIn) {
           this.unlistenPopIn()
           this.unlistenPopIn = null
@@ -254,36 +291,6 @@ class DebugStore {
           this.unlistenToggleRenderNewlines = null
         }
       })
-
-      // Listen for "pop in" request from the external window
-      this.unlistenPopIn = await listen('pop-in-debug', () => {
-        console.log('[UI] Received pop-in-debug request')
-        this.popInDebug()
-      })
-
-      // Listen for requests for initial logs from the external window
-      this.unlistenRequestLogs = await listen('request-initial-debug-logs', () => {
-        console.log('[UI] Received request-initial-debug-logs')
-        emit('initial-debug-logs', {
-          logs: this.debugLogs.map((e) => this.safeIpcEntry(e) as DebugLogEntry),
-          renderNewlines: this.debugRenderNewlines,
-        }).catch((err) => {
-          console.warn('[UI] Failed to emit initial-debug-logs:', err)
-        })
-      })
-
-      // Listen for clear requests from the external window
-      this.unlistenClearLogs = await listen('request-clear-debug-logs', () => {
-        this.clearDebugLogs()
-      })
-
-      // Listen for toggle render newlines requests
-      this.unlistenToggleRenderNewlines = await listen(
-        'request-toggle-debug-render-newlines',
-        () => {
-          this.toggleDebugRenderNewlines()
-        },
-      )
 
       this.debugWindowActive = true
     } catch (err) {
@@ -308,6 +315,10 @@ class DebugStore {
         console.warn('[UI] debug-logs window not found by label')
       }
       this.debugWindowActive = false
+      // Cleared here as well as in the `tauri://destroyed` handler, which does not fire on
+      // the branch above where the window could not be found by label. Leaving it set would
+      // keep every subsequent log emitting to a window that is gone.
+      this.debugWindowReady = false
       this.debugModalOpen = true
     } catch (err) {
       console.error('[UI] Error popping in debug window:', err)

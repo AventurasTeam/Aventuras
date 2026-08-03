@@ -77,21 +77,3 @@ export function validatePackImport(data: unknown): {
     errors: result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`),
   }
 }
-
-/**
- * Validate a single custom variable definition.
- * Used when creating/editing variables in the UI.
- */
-export function validateCustomVariable(data: unknown): {
-  valid: boolean
-  errors?: string[]
-} {
-  const result = CustomVariableSchema.safeParse(data)
-  if (result.success) {
-    return { valid: true }
-  }
-  return {
-    valid: false,
-    errors: result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`),
-  }
-}

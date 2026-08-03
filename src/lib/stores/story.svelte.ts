@@ -29,6 +29,7 @@ import { extractInlineCustomVars } from '$lib/services/ai/sdk/schemas/runtime-va
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { RuntimeVariable } from '$lib/services/packs/types'
 import { DEFAULT_MEMORY_CONFIG } from '$lib/services/ai/generation/MemoryService'
+import { chapterReadBudget } from '$lib/services/ai/core/defaults'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { countTokens } from '$lib/services/tokenizer'
 import type { STChatMessage } from '$lib/services/stChatImporter'
@@ -215,6 +216,21 @@ class StoryStore {
 
   get memoryConfig(): MemoryConfig {
     return this.currentStory?.memoryConfig || DEFAULT_MEMORY_CONFIG
+  }
+
+  /**
+   * Token budget for one chapter-reading prompt, derived from *this* story's own
+   * chapterization threshold. See `chapterReadBudget`.
+   *
+   * A getter rather than the expression at each call site because there are four of them --
+   * the generation pipeline's timeline fill and chapter query, and the lore management
+   * agent's chapter query in both the turn path and the bulk-chapterization path. Three of
+   * those were passing nothing and silently reading against the 40,000-token fallback, which
+   * on a story with a low threshold is an order of magnitude more chapter text than the
+   * budget exists to allow. One expression with four readers cannot drift that way.
+   */
+  get chapterReadBudget(): number {
+    return chapterReadBudget(this.memoryConfig.tokenThreshold)
   }
 
   get storyMode(): StoryMode {
@@ -450,6 +466,12 @@ class StoryStore {
       try {
         await database.deleteChapters(chaptersToDelete)
         log('Deleted invalid chapters:', chaptersToDelete)
+        // This repair is otherwise invisible in production (the logger above is a dev-only
+        // no-op), so a story can silently lose chapters with no trace for the user to report.
+        ui.showToast(
+          `Removed ${chaptersToDelete.length} chapter${chaptersToDelete.length === 1 ? '' : 's'} with broken entry references`,
+          'warning',
+        )
       } catch (error) {
         log('Failed to delete invalid chapters:', chaptersToDelete, error)
       }
@@ -923,6 +945,97 @@ class StoryStore {
     await database.updateStory(this.currentStory.id, {})
 
     this.postDeleteCleanup()
+  }
+
+  /**
+   * Undo a narration and the world state its classification applied, so it can be
+   * regenerated from the same user action.
+   *
+   * Distinct from `deleteEntry`, whose rollback is gated on the `rollbackOnDelete`
+   * preference: that flag is about what a *manual* delete should do, and answering "no"
+   * to it does not mean the user wants a regenerate to stack a second set of world state
+   * changes on top of the first. Undoing is intrinsic to regenerating, so it is not
+   * optional here.
+   *
+   * How much can actually be undone depends on what was recorded:
+   * - With `stateTracking` on, the entry carries a `worldStateDelta` and
+   *   `rollbackFromPosition` reverses created/updated entities and the time tracker.
+   * - Without it there is no delta and entity changes are unrecoverable -- but the time
+   *   tracker still is, from the entry's own `metadata.timeStart`, captured in `addEntry`
+   *   when the narration was appended and therefore *before* its classification ran
+   *   `applyTimeProgression`. That progression is applied unconditionally, so leaving it
+   *   in place would advance story time twice for one user action.
+   *
+   * Returns what was reversed so the caller can tell the user what it could not undo.
+   */
+  async undoNarrationForRegenerate(
+    entryId: string,
+  ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
+    if (!this.currentStory) throw new Error('No story loaded')
+    if (this._isRetryInProgress || ui.isGenerating) {
+      throw new Error('Cannot regenerate while a generation or retry is in progress')
+    }
+
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+    if (entry.type !== 'narration') throw new Error('Only a narration entry can be regenerated')
+
+    // Must be the very last entry, not merely the last *narration*: regenerating one with
+    // a trailing user_action after it would append the new narration below that action,
+    // leaving it answering an earlier prompt than the one it sits under.
+    if (this.entries[this.entries.length - 1]?.id !== entryId) {
+      throw new Error('Only the last entry in the story can be regenerated')
+    }
+
+    const currentBranchId = this.currentStory.currentBranchId
+    if ((entry.branchId ?? null) !== currentBranchId) {
+      throw new Error('Cannot regenerate an entry inherited from another branch')
+    }
+
+    const branchUsingEntry = this.branches.find((b) => b.forkEntryId === entryId)
+    if (branchUsingEntry) {
+      throw new Error(
+        `Cannot regenerate this entry because it is the fork point for branch "${branchUsingEntry.name}".`,
+      )
+    }
+
+    let entitiesUndone = false
+    let timeUndone = false
+
+    try {
+      const summary = await rollbackService.rollbackFromPosition(
+        this.currentStory.id,
+        currentBranchId ?? null,
+        entry.position,
+        this.entries,
+      )
+      log('Regenerate rollback summary:', summary)
+      entitiesUndone = summary.entriesWithDelta > 0
+      timeUndone = summary.restoredTimeTracker
+    } catch (error) {
+      console.error('[StoryStore] Rollback failed before regenerate:', error)
+    }
+
+    // Fallback for the no-delta case, and for a delta that recorded no time tracker.
+    if (!timeUndone && entry.metadata?.timeStart) {
+      await this.restoreTimeTrackerSnapshot(entry.metadata.timeStart)
+      timeUndone = true
+    }
+
+    // Cascade-delete rather than deleteStoryEntry: this also clears chapters whose
+    // start/end reference the entry and its embedded images, which the single-row path
+    // does not.
+    await this.deleteEntriesFromPosition(entry.position, { skipRollback: true })
+    await this.reloadEntriesForCurrentBranch()
+
+    const freshStory = await database.getStory(this.currentStory.id)
+    if (freshStory) {
+      this.currentStory = { ...this.currentStory, timeTracker: freshStory.timeTracker }
+    }
+
+    this.postDeleteCleanup()
+
+    return { entitiesUndone, timeUndone }
   }
 
   /**
@@ -2874,6 +2987,36 @@ class StoryStore {
     return this.entries.slice(startIdx, endIdx + 1)
   }
 
+  /**
+   * Entries after the last chapter's end -- the tail that hasn't been chapterized yet.
+   *
+   * Anything that walks the story chapter by chapter (retrieval, grep) is otherwise
+   * blind to it, which is backwards: that tail is the most recent material and the most
+   * likely to be what a question is about. Returns [] when every entry is chapterized.
+   */
+  getUnchapterizedEntries(): StoryEntry[] {
+    if (this._entryIdToIndex.size !== this.entries.length) {
+      this.rebuildEntryIdIndex()
+    }
+
+    const chapters = this.currentBranchChapters
+    let lastChapterEnd = -1
+    let resolved = 0
+    for (const chapter of chapters) {
+      const endIdx = this._entryIdToIndex.get(chapter.endEntryId)
+      if (endIdx === undefined) continue
+      resolved++
+      if (endIdx > lastChapterEnd) lastChapterEnd = endIdx
+    }
+
+    // Chapters exist but none could be placed (broken endEntryId refs): returning
+    // everything would label the whole story "not yet chapterized" and make grep count
+    // it twice. Better to return nothing than to lie about what it is.
+    if (chapters.length > 0 && resolved === 0) return []
+
+    return this.entries.slice(lastChapterEnd + 1)
+  }
+
   // Delete a chapter
   async deleteChapter(chapterId: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
@@ -3236,6 +3379,7 @@ class StoryStore {
                 question,
                 this.currentBranchChapters,
                 this.getChapterEntries.bind(this),
+                this.chapterReadBudget,
               ),
           },
           loreUICallbacks: {
@@ -4233,6 +4377,25 @@ class StoryStore {
 
     if (this.currentStory?.id === storyId) {
       this.clearCurrentStory()
+    }
+  }
+
+  // Rename a story
+  async renameStory(storyId: string, title: string): Promise<void> {
+    const trimmed = title.trim()
+    if (!trimmed) return
+
+    await database.updateStory(storyId, { title: trimmed })
+
+    // updateStory always stamps updated_at, so mirror that onto both in-memory copies
+    // rather than letting the library card and the open story disagree about it.
+    const updatedAt = Date.now()
+    this.allStories = this.allStories.map((s) =>
+      s.id === storyId ? { ...s, title: trimmed, updatedAt } : s,
+    )
+
+    if (this.currentStory?.id === storyId) {
+      this.currentStory = { ...this.currentStory, title: trimmed, updatedAt }
     }
   }
 

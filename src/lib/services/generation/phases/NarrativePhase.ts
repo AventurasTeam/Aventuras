@@ -30,11 +30,11 @@ export interface NarrativeDependencies {
     entries: StoryEntry[],
     worldState: WorldState,
     story: Story | null | undefined,
-    useTieredContext: boolean,
     styleReview: StyleReviewResult | null | undefined,
     retrievedContext: string | null | undefined,
     signal: AbortSignal | undefined,
     timelineFillResult: RetrievalResult['timelineFillResult'],
+    worldStateBlock: string | null | undefined,
   ) => AsyncIterable<StreamChunk>
 }
 
@@ -68,6 +68,7 @@ export class NarrativePhase {
     yield { type: 'phase_start', phase: 'narrative' } satisfies PhaseStartEvent
 
     const { visibleEntries, worldState, story, retrievalResult, styleReview, abortSignal } = input
+
     let fullResponse = ''
     let fullReasoning = ''
     let chunkCount = 0
@@ -88,11 +89,11 @@ export class NarrativePhase {
           visibleEntries,
           worldState,
           story,
-          true, // useTieredContext
           styleReview,
           retrievalResult.combinedContext,
           abortSignal,
           retrievalResult.timelineFillResult,
+          retrievalResult.worldStateBlock,
         )) {
           if (abortSignal?.aborted) {
             yield { type: 'aborted', phase: 'narrative' } satisfies AbortedEvent

@@ -1,10 +1,10 @@
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { generateStructured } from './sdk/generate'
 
 export abstract class BaseAIService {
-  protected readonly serviceId: string
+  protected readonly serviceId: ServiceId
 
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     this.serviceId = serviceId
   }
 

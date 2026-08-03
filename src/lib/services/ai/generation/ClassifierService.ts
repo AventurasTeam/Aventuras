@@ -20,6 +20,7 @@ import type {
   StoryBeat,
   TimeTracker,
 } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
@@ -55,7 +56,7 @@ export interface ClassificationContext {
 export class ClassifierService extends BaseAIService {
   private chatHistoryTruncation: number
 
-  constructor(serviceId: string, chatHistoryTruncation: number = 100) {
+  constructor(serviceId: ServiceId, chatHistoryTruncation: number = 100) {
     super(serviceId)
     this.chatHistoryTruncation = chatHistoryTruncation
   }

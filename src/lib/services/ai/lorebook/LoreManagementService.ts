@@ -6,6 +6,7 @@
  */
 
 import type { Entry, VaultLorebookEntry } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
@@ -90,7 +91,7 @@ function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
 export class LoreManagementService extends BaseAIService {
   private maxIterations: number
 
-  constructor(serviceId: string, maxIterations: number = 3) {
+  constructor(serviceId: ServiceId, maxIterations: number = 3) {
     super(serviceId)
     this.maxIterations = maxIterations
   }

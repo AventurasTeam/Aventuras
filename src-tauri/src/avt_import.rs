@@ -333,8 +333,8 @@ impl<'de, F: FnMut(ImageRow) -> Result<(), String>> Visitor<'de> for ImportRootS
 async fn open_rw_pool(app: &AppHandle) -> Result<SqlitePool, String> {
     let db = app
         .path()
-        .app_data_dir()
-        .map_err(|e| format!("failed to resolve app data dir: {e}"))?
+        .app_config_dir()
+        .map_err(|e| format!("failed to resolve app config dir: {e}"))?
         .join("aventura.db");
 
     let options = SqliteConnectOptions::new()

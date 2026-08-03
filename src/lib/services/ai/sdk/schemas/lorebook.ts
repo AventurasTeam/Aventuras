@@ -98,34 +98,6 @@ export const vaultLorebookPendingChangeSchema = z.object({
 export type VaultLorebookPendingChangeSchema = z.infer<typeof vaultLorebookPendingChangeSchema>
 
 /**
- * Tool result schemas for lorebook operations.
- */
-export const entryListResultSchema = z.object({
-  entries: z.array(
-    z.object({
-      index: z.number(),
-      name: z.string(),
-      type: entryTypeSchema,
-      description: z.string(),
-      keywords: z.array(z.string()),
-    }),
-  ),
-  total: z.number(),
-})
-
-export const entryReadResultSchema = z.object({
-  found: z.boolean(),
-  entry: vaultLorebookEntrySchema.optional(),
-  index: z.number().optional(),
-})
-
-export const entryChangeResultSchema = z.object({
-  success: z.boolean(),
-  pendingChange: lorebookEntryPendingChangeSchema.optional(),
-  error: z.string().optional(),
-})
-
-/**
  * Finish lore management result schema.
  */
 export const finishLoreManagementSchema = z.object({

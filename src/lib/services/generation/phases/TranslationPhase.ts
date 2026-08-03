@@ -6,8 +6,8 @@
  * - Coordinate translations (narration, suggestions, action choices done elsewhere)
  * - Handle translation errors gracefully (non-fatal)
  *
- * NOTE: Translation service is currently stubbed. This phase gracefully handles
- * errors so the pipeline continues even when translation fails.
+ * Errors are handled gracefully (non-fatal) so the pipeline continues even when
+ * a translation call fails.
  */
 
 import type {

@@ -9,7 +9,7 @@
 import type { VaultCharacter, VaultLorebook, VaultLorebookEntry, VaultScenario } from '$lib/types'
 import { tool, type ModelMessage, type ToolSet } from 'ai'
 import { z } from 'zod'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { characterVault } from '$lib/stores/characterVault.svelte'
 import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
@@ -201,7 +201,7 @@ export class InteractiveVaultService extends BaseAIService {
    */
   readonly generatedPortraitIds: Map<string, string> = new Map()
 
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
     this.fandomService = new FandomService()
   }

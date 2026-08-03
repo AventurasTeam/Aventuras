@@ -17,6 +17,7 @@ export interface StyleReviewCheckInput {
   tense: Tense
   enabled: boolean
   triggerInterval: number
+  recentEntriesCount: number
   currentCounter: number
   shouldIncrement: boolean
   source: string
@@ -28,6 +29,7 @@ export interface StyleReviewDependencies {
     mode: StoryMode,
     pov: POV,
     tense: Tense,
+    recentEntriesCount: number,
   ) => Promise<StyleReviewResult>
 }
 
@@ -64,6 +66,7 @@ export class StyleReviewScheduler {
       tense,
       enabled,
       triggerInterval,
+      recentEntriesCount,
       currentCounter,
       shouldIncrement,
       source,
@@ -92,7 +95,7 @@ export class StyleReviewScheduler {
     uiCallbacks?.setLoading(true, storyId)
 
     try {
-      const result = await this.deps.analyzeStyle(entries, mode, pov, tense)
+      const result = await this.deps.analyzeStyle(entries, mode, pov, tense, recentEntriesCount)
       uiCallbacks?.setResult(result, storyId)
       log('Style review complete', { phrasesFound: result.phrases.length })
       return { triggered: true, result }

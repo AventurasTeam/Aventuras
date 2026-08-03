@@ -84,6 +84,8 @@ export interface CreateAgentOptions<TTools extends ToolSet> {
   stopWhen: StopCondition<TTools>
   /** Optional abort signal for cancellation - passed to generate() calls */
   signal?: AbortSignal
+  /** Optional per-step hook to narrow the tools available on the next step. */
+  prepareStep?: PrepareStepFunction<TTools>
 }
 
 /**
@@ -117,7 +119,7 @@ export function createAgentFromPreset<TTools extends ToolSet>(
   options: CreateAgentOptions<TTools>,
   serviceId: string,
 ): AgentWithSignal<TTools> {
-  const { presetId, instructions, tools, stopWhen, signal } = options
+  const { presetId, instructions, tools, stopWhen, signal, prepareStep } = options
   const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
 
   log('createAgentFromPreset', {
@@ -132,6 +134,7 @@ export function createAgentFromPreset<TTools extends ToolSet>(
     instructions,
     tools,
     stopWhen,
+    prepareStep,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
     providerOptions,

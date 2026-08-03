@@ -1,7 +1,9 @@
 /**
- * ImagePhase - Handles image generation coordination
- * Supports inline (<pic> tags) and analyzed (LLM scene detection) modes.
- * Uses interchangeable profiles - this phase does NOT change that architecture.
+ * BackgroundImagePhase - Handles background image generation
+ *
+ * Asks the background analyser whether the scene changed enough to warrant a new
+ * background, and lets it generate one. Skipped entirely in inline mode, where images come
+ * from <pic> tags during streaming rather than from scene analysis.
  */
 
 import type {
@@ -53,7 +55,6 @@ export class BackgroundImagePhase {
   async *execute(
     input: BackgroundImageInput,
   ): AsyncGenerator<GenerationEvent, BackgroundImageResult> {
-    console.log('BackgroundImagePhase.execute')
     yield { type: 'phase_start', phase: 'image' } satisfies PhaseStartEvent
 
     const { storyId, storyEntries, imageSettings, abortSignal } = input

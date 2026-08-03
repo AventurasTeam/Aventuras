@@ -6,6 +6,7 @@
  */
 
 import type { TranslationSettings } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
 import { generatePlainText } from '../sdk/generate'
@@ -81,7 +82,7 @@ export interface UITranslationItem {
  * Service that handles translation of narrative and UI content.
  */
 export class TranslationService extends BaseAIService {
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 
@@ -410,16 +411,4 @@ export function getSupportedLanguages(): { code: string; name: string }[] {
       return { code, name: code }
     }
   }).sort((a, b) => a.name.localeCompare(b.name))
-}
-
-/**
- * Get language name for display using Intl API
- */
-export function getLanguageDisplayName(code: string): string {
-  if (code === 'auto') return 'Auto-detect'
-  try {
-    return languageDisplayNames.of(code) || code
-  } catch {
-    return code
-  }
 }

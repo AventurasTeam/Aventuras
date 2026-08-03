@@ -223,7 +223,13 @@ export function buildProviderOptions(
       case 'lmstudio':
       case 'llamacpp':
       case 'openai-compatible':
-        options = { reasoningEffort: reasoningEffort } satisfies OpenAICompatibleProviderOptions
+        // 'off' has to be sent as the explicit 'none', not omitted. Omitting the field means
+        // "no preference", and the default on these endpoints is thinking *on*: llama-server
+        // only disables reasoning when it sees `reasoning_effort: "none"`, and it ignores every
+        // other value. Sending nothing made 'off' silently reason at full budget.
+        options = {
+          reasoningEffort: preset.reasoningEffort === 'off' ? 'none' : reasoningEffort,
+        } satisfies OpenAICompatibleProviderOptions
         break
     }
   }

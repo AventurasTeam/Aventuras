@@ -161,7 +161,9 @@ class ImportExportService {
     })
 
     for (const template of packData.templates) {
-      await database.setPackTemplateContent(pack.id, template.templateId, template.content)
+      // The imported file *is* this pack's baseline; edits the user makes afterwards are
+      // what must be protected from a later refresh.
+      await database.setPackTemplateContent(pack.id, template.templateId, template.content, true)
     }
 
     for (let i = 0; i < packData.variables.length; i++) {

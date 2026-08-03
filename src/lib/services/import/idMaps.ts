@@ -72,5 +72,3 @@ export function createMappers(maps: IdMaps) {
     remapEntityId: (id: string) => oldToNewId.get(id) ?? id,
   }
 }
-
-export type Mappers = ReturnType<typeof createMappers>

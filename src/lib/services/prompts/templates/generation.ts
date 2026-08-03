@@ -63,15 +63,19 @@ You will be provided with the entirety of the current chapter, as well as summar
 </task>
 
 <constraints>
-Query based ONLY on the information visible in the chapter summaries or things that may be implied to have happened in them. Do not reference current events in your queries, as the assistant that answers queries is only provided the history of that chapter, and would have no knowledge of events outside of the chapters queried. However, do not ask about information directly answered in the summaries. Instead, try to ask questions that 'fill in the gaps'. The maximum range of chapters (startChapter - endChapter) for a single query is 3, but you may make as many queries as you wish.
+Query based ONLY on the information visible in the chapter summaries or things that may be implied to have happened in them. Do not reference current events in your queries, as the assistant that answers queries is only provided the history of that chapter, and would have no knowledge of events outside of the chapters queried. However, do not ask about information directly answered in the summaries. Instead, try to ask questions that 'fill in the gaps'.
+
+One chapter per query. Widen only when an event genuinely spans two; beyond that the text is truncated and every answer gets worse. Make as many queries as you need.
 </constraints>`,
   userContent: `Visible chat history:
 {{ chapterHistory }}
 
 Existing chapter timeline:
 {{ timeline }}
-
-Identify what information from past chapters would help understand the current scene. Generate queries about specific chapters or chapter ranges. The maximum number of chapters per query is 3.`,
+{% if alreadyInContext != blank %}
+{{ alreadyInContext }}
+{% endif %}
+Identify what information from past chapters would help understand the current scene. Every query must name the chapters it targets — one per query wherever the summaries let you tell which one it is.`,
 }
 
 const timelineFillAnswerPromptTemplate: PromptTemplate = {
@@ -87,8 +91,23 @@ QUESTION: {{ query }}
 Provide a concise, factual answer based only on the chapter content above. If the information isn't available in these chapters, say "Not mentioned in these chapters."`,
 }
 
+const timelineFillBatchAnswerPromptTemplate: PromptTemplate = {
+  id: 'timeline-fill-batch-answer',
+  name: 'Timeline Fill Batch Answer',
+  category: 'service',
+  description: 'Answers multiple questions about the same chapter(s) in a single call',
+  content: `You answer specific questions about story chapters. Be concise and factual. Only include information that directly answers each question. If the chapters don't contain relevant information for a question, say "Not mentioned in these chapters." Answer every question listed, keyed by its index.`,
+  userContent: `{{ chapterContent }}
+
+QUESTIONS:
+{{ questionsList }}
+
+Provide a concise, factual answer to each question above, based only on the chapter content. If information for a question isn't available in these chapters, say "Not mentioned in these chapters." Return one answer per question, keyed by its index.`,
+}
+
 export const generationTemplates: PromptTemplate[] = [
   actionChoicesPromptTemplate,
   timelineFillPromptTemplate,
   timelineFillAnswerPromptTemplate,
+  timelineFillBatchAnswerPromptTemplate,
 ]

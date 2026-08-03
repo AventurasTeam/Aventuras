@@ -230,6 +230,12 @@ pub fn run() {
             sql: include_str!("../migrations/035_entry_versions.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 36,
+            description: "pack_template_baseline",
+            sql: include_str!("../migrations/036_pack_template_baseline.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]
@@ -252,8 +258,8 @@ pub fn run() {
         .setup(|app| {
             let db_path = app
                 .path()
-                .app_data_dir()
-                .expect("failed to get app data dir")
+                .app_config_dir()
+                .expect("failed to get app config dir")
                 .join("aventura.db");
 
             if db_path.try_exists().expect("failed to check db path") {
