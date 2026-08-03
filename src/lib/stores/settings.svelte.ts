@@ -56,6 +56,30 @@ function normalizeProfile(profile: APIProfile): APIProfile {
   }
 }
 
+function normalizeReasoningEffort(value?: string | null): ReasoningEffort | undefined {
+  if (value && ['off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
+    return value != 'off' ? (value as ReasoningEffort) : 'none'
+  } else {
+    return undefined
+  }
+}
+
+function normalizeReasoningForSettings(settings?: any | null): any {
+  if (!settings) return undefined
+
+  for (const key of Object.keys(settings)) {
+    const value = settings[key]
+    if (value && typeof value === 'object') {
+      const normalizedEffort = normalizeReasoningEffort(value.reasoningEffort)
+      if (normalizedEffort !== undefined) {
+        value.reasoningEffort = normalizedEffort
+      }
+    }
+  }
+
+  return settings
+}
+
 // ===== System Services Settings =====
 
 // Advanced settings for customizing generation processes
@@ -1319,14 +1343,11 @@ class SettingsStore {
       const enableThinking = await database.getSetting('enable_thinking')
       if (enableThinking) this.apiSettings.enableThinking = enableThinking === 'true'
 
-      const reasoningEffort = await database.getSetting('main_reasoning_effort')
-      if (
-        reasoningEffort &&
-        ['none', 'off', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(reasoningEffort)
-      ) {
-        // Patch old settings had 'none' instead of 'off'
-        this.apiSettings.reasoningEffort =
-          reasoningEffort !== 'off' ? (reasoningEffort as ReasoningEffort) : 'none'
+      const reasoningEffort = normalizeReasoningEffort(
+        await database.getSetting('main_reasoning_effort'),
+      )
+      if (reasoningEffort) {
+        this.apiSettings.reasoningEffort = reasoningEffort
       } else if (this.apiSettings.enableThinking) {
         this.apiSettings.reasoningEffort = 'high'
       }
@@ -1510,7 +1531,7 @@ class SettingsStore {
       const wizardSettingsJson = await database.getSetting('wizard_settings')
       if (wizardSettingsJson) {
         try {
-          const loaded = JSON.parse(wizardSettingsJson)
+          const loaded = normalizeReasoningForSettings(JSON.parse(wizardSettingsJson))
           // Merge with defaults to ensure all fields exist
           const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
@@ -1542,7 +1563,7 @@ class SettingsStore {
       const presetsJson = await database.getSetting('generation_presets')
       if (presetsJson) {
         try {
-          const loadedPresets = JSON.parse(presetsJson)
+          const loadedPresets = normalizeReasoningForSettings(JSON.parse(presetsJson))
           if (Array.isArray(loadedPresets) && loadedPresets.length > 0) {
             // Populate null profileIds with default profile
             const defaultProfileId = this.getDefaultProfileIdForProvider()
@@ -1632,7 +1653,7 @@ class SettingsStore {
       const systemServicesJson = await database.getSetting('system_services_settings')
       if (systemServicesJson) {
         try {
-          const loaded = JSON.parse(systemServicesJson)
+          const loaded = normalizeReasoningForSettings(JSON.parse(systemServicesJson))
           const defaults = getDefaultSystemServicesSettingsForProvider(
             this.getDefaultProviderType(),
           )
@@ -1889,7 +1910,7 @@ class SettingsStore {
 
     // Reset main narrative profile to default if the deleted profile is currently set as main narrative
     if (id === this.apiSettings.mainNarrativeProfileId) {
-      this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
+      await this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
     }
 
     // Prevent deleting the default profile for the current provider
