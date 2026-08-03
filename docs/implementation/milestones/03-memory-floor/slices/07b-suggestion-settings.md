@@ -117,67 +117,76 @@ that until now could never have unsaved work.
   validation, and the order serialization.
 - Storybook: the section bound over a fixture, including the
   master-toggle-off dimmed state and a label-collision error.
+- E2E: `e2e/tests/story-settings-suggestions.spec.ts` — the save
+  round-trip (edit → save → DB → reopen → toggle back on) and the
+  dirty navigate-away guard.
 - Manual smoke: full edit round-trip on desktop + Android, and the
   mid-story toggle matrix against a live reader.
 
 ## Open questions
 
-- **The section contract has no validity channel.** `story-settings.md`
-  requires a label collision to block save with an inline error, but
-  3.11's `SectionRegistration` carries only an id, a tab, its
-  `dirtyFields`, and a `getPatch` / `reset` pair — nothing that can
-  say "dirty but invalid" — and `SaveBar` has no invalid state to
-  render even if it could. Decide whether to extend the C7
-  contract (a `valid` / `errors` field, which changes a shipped
-  interface and its other consumer, 3.1b's embedding-status panel),
-  or to self-heal the collision instead of blocking. Surfaced by
-  M3.7a (2026-07-26).
-- **The editor hard-codes its English chrome.** `SuggestionCategoriesEditor`
-  ships `+ Add category` and `aria-label="Add category"` as literals,
-  against the i18n discipline in
-  [`code-conventions.md`](../../../../code-conventions.md#i18n-discipline).
-  It takes no label props today, so wiring it as-is imports the
-  violation into a shipped surface. Add label props, or migrate the
-  compound to `t()` — decide which before binding. Surfaced by
-  M3.7a (2026-07-26).
-- **Which navigate-away intercepts the section needs.**
-  [`save-sessions.md → Navigate-away guard`](../../../../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
-  lists window-close intent and Actions-menu route jumps among its
-  required categories. 3.11 shipped the window-close half
-  (`useUnsavedChangesGuard`, both the Electron bridge and the
-  `beforeunload` fallback), but the Actions-menu jump to Diagnostics
-  still bypasses `requestLeave`. Note expo-router keeps the
-  pushed-under screen mounted, so the draft survives the jump — the
-  sharper risk is a window close while Diagnostics is on top, where
-  the guard fires against a screen whose dialog is not visible.
-  Decide whether to wire the route jump or accept it. Surfaced by
-  M3.11 (2026-07-22), re-scoped after 3.11 shipped.
-- **The save bar is invisible in the phone collapsed state.** The
-  shell renders it inside the detail pane, and `MasterDetailLayout`
-  hides that pane on phone whenever no tab is selected — so a dirty
-  session collapsed back to the rail shows no bar, no dirty count,
-  and no way to save or discard. Nothing is lost (every panel stays
-  mounted, and leaving still routes through the guard), but the user
-  cannot see or act on the unsaved changes.
-  [`save-sessions.md → Save bar`](../../../../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
-  does not cover the collapsed case, and its positioning rule
-  ("spans the editable pane only — never the rail or the surrounding
-  chrome") argues against the obvious fix. This slice is the first
-  that can make the session dirty, so it inherits the call: lift the
-  bar to the surface footer on phone, or accept rail-state
-  invisibility. Surfaced by M3.11 (2026-07-22).
-- **The route-to-session wiring has no test coverage.**
-  [Slice 3.11](./11-story-settings-shell.md)'s route mounts the save
-  bar on the snapshot's dirty flag and the guard dialog on a pending
-  leave while focused, then maps their actions onto `resolveLeave`.
-  With zero
-  registered sections none of that can execute, so deleting both
-  blocks outright still passes the full suite — and running the app
-  cannot catch it either. This slice is the first able to exercise
-  the path end to end; decide whether to pin the seam with a story
-  or a test that mounts the provider over a fixture section.
-  Surfaced by M3.11 (2026-07-22).
+None. Resolved at planning; see Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Resolved developer decisions.**
+
+- _Validity channel._ Extended the C7 contract with `invalidReason`
+  (see [milestone.md → C7](../milestone.md#c7--story-settings-section-registration))
+  rather than self-healing the label collision. The slice doc's
+  stated cost of extending the contract — churning 3.1b's
+  embedding-status panel, its other consumer — was wrong: that panel
+  never registered with `useStorySettingsSection`, so this slice is
+  the contract's first consumer, and the extension had no second
+  caller to update.
+- _Editor compound API._ `SuggestionCategoriesEditor` migrated its
+  chrome to `t()` under `common.suggestionCategories`, not
+  `storySettings` — M7.1's App Settings → Story Defaults tab reuses
+  the same compound over a different data source, so its chrome
+  can't live in a Story Settings-scoped namespace. The compound also
+  gained an `onRequestDelete` prop so the host owns the confirmation
+  [`story-settings.md → Suggestion categories`](../../../../ui/screens/story-settings/story-settings.md#suggestion-categories)
+  requires, rather than the compound owning its own dialog.
+- _Actions-menu intercept wired, not accepted._ `AppActionsMenu`
+  gained an optional `beforeNavigate` prop; the Story Settings route
+  wires it to `session.requestLeave`.
+- _Phone collapsed save bar accepted, not lifted._ Canon places the
+  bar inside the detail route
+  ([`save-sessions.md → Save bar`](../../../../ui/patterns/save-sessions.md#save-bar--the-visible-ui)),
+  so a dirty session collapsed back to the phone rail shows no bar.
+  Changing where the bar lives is M4.4's call, the surface's real
+  owner — queued in [triage](../../../triage.md#inbox).
+- _Authoring aids ships the suggestions trio only._ Composer modes
+  and wrap POV — the section's other two canonical fields — wait for
+  M4.4; this slice binds `suggestionsEnabled`, `suggestionCount`, and
+  the categories editor.
+- _`suggestionCount` got a new `Stepper` primitive_
+  (`components/ui/stepper.tsx`). The
+  [Select primitive](../../../../ui/patterns/forms.md#select-primitive)
+  cascade would have sent its 1-6 range to a dropdown; a stepper
+  reads better for a small-integer count.
+- _Reset mutates the draft, never writing directly_, and is gated on
+  the master toggle so `Reset to mode defaults` can't mutate a
+  dimmed, otherwise-inert editor.
+- _`invalidReason` is gated on the categories being dirty_, so a
+  collision already sitting in stored data can't refuse an unrelated
+  toggle flip.
+- _Dirty-route protection lives at navigator removal._ Story Settings
+  uses React Navigation's removal guard and replays the exact blocked
+  action through the save session; route-local back handlers alone do
+  not see iOS edge swipes or reset/pop actions.
+- _Generation gating follows `gateBehavior`, not a run-kind list._ The
+  surface disables draft, Save, and direct Memory mutations while the
+  canonical hard gate is active, and the action layer rejects those
+  writes before reading or writing story state. Custom-picker copy is
+  resolved above its portal and passed down, since native portal
+  content cannot rely on inherited localization context.
+
+**Deviations worth carrying forward.**
+
+- This repo's `Popover` is uncontrolled — `@rn-primitives/popover`'s
+  `Root` has no `open` prop; the imperative handle lives on the
+  trigger ref instead. Follow `importer-menu.tsx`'s pattern.
+- Component behavior belongs in Storybook, not the `unit` vitest
+  project, which cannot render RN-Web chrome at all. See
+  [Lessons learned → The `unit` Vitest project cannot render RN-Web component chrome](../../../lessons-learned/unit-project-no-rn-web-chrome.md).

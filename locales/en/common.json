@@ -1,5 +1,17 @@
 {
   "cancel": "Cancel",
+  "colorPicker": {
+    "customColor": "Custom color",
+    "pickCustomColor": "Pick custom color",
+    "customColorValue": "Custom color {{hex}}",
+    "hexColor": "Hex color",
+    "invalidHex": "Enter a hex color, e.g. {{example}}",
+    "apply": "Apply"
+  },
+  "generationGate": {
+    "inFlight": "Generation is in flight. Cancel to edit.",
+    "chapterClose": "Chapter close in progress. Cancel to edit."
+  },
   "recovery": {
     "title": "Couldn't load settings",
     "body": "Your saved settings are corrupted and can't be read. Open the file to repair it by hand, or reset settings to defaults.",
@@ -87,5 +99,27 @@
     "delete": "Delete",
     "draft": "Draft",
     "archived": "Archived"
+  },
+  "suggestionCategories": {
+    "add": "+ Add category",
+    "addAria": "Add category",
+    "labelPlaceholder": "Category label",
+    "labelRequired": "Label is required",
+    "labelDuplicate": "Label must be unique",
+    "color": "Color",
+    "fallbackColor": "Default",
+    "promptHintPlaceholder": "Prompt hint (optional — label is used as the sole hint when blank)",
+    "delete": "Delete category",
+    "deleteLast": "Delete category (last one)",
+    "deleteBlocked": "Delete category (at least one is required)",
+    "enable": "Enable category",
+    "disable": "Disable category",
+    "expand": "Expand category",
+    "collapse": "Collapse category",
+    "dragReorder": "Drag to reorder",
+    "dragHandle": "Long-press to drag and reorder",
+    "dragHandleDisabled": "Drag handle (disabled)",
+    "unnamed": "Unnamed category",
+    "off": "off"
   }
 }

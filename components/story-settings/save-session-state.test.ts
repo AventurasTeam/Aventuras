@@ -104,6 +104,64 @@ describe('upsertSection', () => {
   })
 })
 
+describe('computeSnapshot — validity', () => {
+  it('carries the invalid reason of a dirty section', () => {
+    const snapshot = computeSnapshot([
+      {
+        id: 'aids',
+        tab: 'generation',
+        dirtyFields: ['suggestion categories'],
+        invalidReason: 'dup',
+      },
+    ])
+    expect(snapshot.invalidReason).toBe('dup')
+  })
+
+  it('ignores an invalid section that is clean', () => {
+    const snapshot = computeSnapshot([
+      { id: 'aids', tab: 'generation', dirtyFields: [], invalidReason: 'dup' },
+    ])
+    expect(snapshot.invalidReason).toBeUndefined()
+    expect(snapshot.dirtyFields).toEqual([])
+  })
+
+  it('reports the first invalid section in rail order', () => {
+    const snapshot = computeSnapshot([
+      { id: 'b', tab: 'memory', dirtyFields: ['x'], invalidReason: 'memory-problem' },
+      { id: 'a', tab: 'generation', dirtyFields: ['y'], invalidReason: 'generation-problem' },
+    ])
+    expect(snapshot.invalidReason).toBe('generation-problem')
+  })
+
+  // The reason is translated copy, so the log needs the id to name the offender
+  // in a form that survives a locale change.
+  it('names which section the reason came from', () => {
+    const snapshot = computeSnapshot([
+      { id: 'b', tab: 'memory', dirtyFields: ['x'], invalidReason: 'memory-problem' },
+      { id: 'a', tab: 'generation', dirtyFields: ['y'], invalidReason: 'generation-problem' },
+    ])
+    expect(snapshot.invalidSectionId).toBe('a')
+  })
+
+  it('leaves the section id unset when nothing is invalid', () => {
+    expect(computeSnapshot([generation]).invalidSectionId).toBeUndefined()
+  })
+})
+
+describe('upsertSection — validity', () => {
+  it('replaces a section whose only change is going invalid', () => {
+    const before = [{ id: 'aids', tab: 'generation' as const, dirtyFields: ['label'] }]
+    const after = upsertSection(before, {
+      id: 'aids',
+      tab: 'generation',
+      dirtyFields: ['label'],
+      invalidReason: 'dup',
+    })
+    expect(after).not.toBe(before)
+    expect(after[0]?.invalidReason).toBe('dup')
+  })
+})
+
 describe('removeSection', () => {
   it('drops the matching section', () => {
     expect(removeSection([generation, memory], 'authoring-aids')).toEqual([memory])

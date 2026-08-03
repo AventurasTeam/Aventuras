@@ -2,6 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import type { ReactNode } from 'react'
 import { Platform, Pressable, type PressableProps } from 'react-native'
 
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { TextClassContext } from '@/components/ui/text'
 import type { ThemeColorSlots } from '@/lib/themes'
@@ -78,6 +79,8 @@ type ButtonProps = Omit<PressableProps, 'children'> &
     loading?: boolean
     children?: ReactNode
     className?: string
+    /** Explains a disabled action through accessibility hint and a web tooltip. */
+    disabledReason?: string
   }
 
 export function Button({
@@ -86,24 +89,28 @@ export function Button({
   size,
   loading,
   disabled,
+  disabledReason,
   children,
   ...props
 }: ButtonProps) {
   const isDisabled = disabled || loading
   const spinnerSlot = SPINNER_SLOT_BY_VARIANT[(variant ?? 'primary') as ButtonVariant]
   return (
-    <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
-        disabled={isDisabled ?? undefined}
-        className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
-        {...props}
-      >
-        {loading ? <Spinner size="sm" colorSlot={spinnerSlot} /> : null}
-        {children}
-      </Pressable>
-    </TextClassContext.Provider>
+    <DisabledReasonTooltip reason={isDisabled ? disabledReason : undefined}>
+      <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
+          accessibilityHint={isDisabled ? disabledReason : undefined}
+          disabled={isDisabled ?? undefined}
+          className={cn(isDisabled && 'opacity-50', buttonVariants({ variant, size }), className)}
+          {...props}
+        >
+          {loading ? <Spinner size="sm" colorSlot={spinnerSlot} /> : null}
+          {children}
+        </Pressable>
+      </TextClassContext.Provider>
+    </DisabledReasonTooltip>
   )
 }
 

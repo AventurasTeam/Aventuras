@@ -135,6 +135,11 @@ slice plans when relevant.
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias
   the specifier to a stub in `viteFinal`, don't touch the guard.
+- [The `unit` Vitest project cannot render RN-Web component chrome](./unit-project-no-rn-web-chrome.md)
+  — `@rn-primitives/*`'s un-transpiled `.mjs` JSX and `react-native-svg` /
+  `lucide-react-native` / `nativewind`'s externalized `require('react-native')`
+  both fail outside Storybook's full `vite-plugin-rnw` combination; component
+  behavior belongs in Storybook, not `unit`.
 
 ### Native deps / install ritual
 

@@ -33,4 +33,20 @@ describe('lib/i18n', () => {
     expect(t('chrome.appSettings')).toBe('App Settings')
     expect(t('chrome.back')).toBe('Back')
   })
+
+  it('resolves every custom color picker label and interpolation', () => {
+    expect(t('colorPicker.customColor')).toBe('Custom color')
+    expect(t('colorPicker.pickCustomColor')).toBe('Pick custom color')
+    expect(t('colorPicker.customColorValue', { hex: '#123456' })).toBe('Custom color #123456')
+    expect(t('colorPicker.hexColor')).toBe('Hex color')
+    expect(t('colorPicker.invalidHex', { example: '#3b82f6' })).toBe(
+      'Enter a hex color, e.g. #3b82f6',
+    )
+    expect(t('colorPicker.apply')).toBe('Apply')
+  })
+
+  it('resolves the principle-owned hard-gate reasons', () => {
+    expect(t('generationGate.inFlight')).toBe('Generation is in flight. Cancel to edit.')
+    expect(t('generationGate.chapterClose')).toBe('Chapter close in progress. Cancel to edit.')
+  })
 })

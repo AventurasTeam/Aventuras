@@ -1,3 +1,4 @@
+import { useNavigation, usePreventRemove } from '@react-navigation/native'
 import { useEffect, useRef } from 'react'
 import { Platform } from 'react-native'
 
@@ -58,9 +59,11 @@ function syncBridge(native: CloseBridge): void {
 }
 
 /**
- * Extends a surface's unsaved-changes guard to the window itself.
+ * Extends a surface's unsaved-changes guard to navigator removal and the window.
  *
- * On Electron the main process holds the close until every dirty surface has
+ * Navigator actions are replayed exactly after the surface confirms leaving,
+ * preserving the original pop/reset target. On Electron the main process
+ * holds the close until every dirty surface has
  * run the callback it is handed, so the user answers each surface's own Save /
  * Discard / Cancel dialog in turn. In a browser `beforeunload` cannot be
  * resumed once it returns, so the guard can only raise the browser's native
@@ -70,8 +73,17 @@ function syncBridge(native: CloseBridge): void {
  * @param requestLeave - Runs its argument once the user confirms leaving.
  */
 export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveRequest): void {
+  const navigation = useNavigation()
   const requestLeaveRef = useRef(requestLeave)
-  requestLeaveRef.current = requestLeave
+  // Post-commit, not in render: React can discard a render pass, and both
+  // readers below only fire on a later user gesture.
+  useEffect(() => {
+    requestLeaveRef.current = requestLeave
+  })
+
+  usePreventRemove(dirty, ({ data }) => {
+    requestLeaveRef.current(() => navigation.dispatch(data.action))
+  })
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined

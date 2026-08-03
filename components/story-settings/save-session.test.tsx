@@ -52,6 +52,7 @@ type SectionFixture = {
   dirtyFields: readonly string[]
   getPatch: Mock<() => Partial<StorySettings>>
   reset: Mock<() => void>
+  invalidReason?: string
 }
 
 function makeSection(
@@ -70,6 +71,7 @@ function Section({ fixture }: { fixture: SectionFixture }) {
     dirtyFields: fixture.dirtyFields,
     getPatch: fixture.getPatch,
     reset: fixture.reset,
+    invalidReason: fixture.invalidReason,
   })
   return null
 }
@@ -1017,6 +1019,15 @@ describe('useStorySettingsSection', () => {
     )
   })
 
+  it('throws when a section publishes an empty invalidReason', () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: '' }
+
+    expect(() => mountSession({ children: sectionsOf(invalid) })).toThrow(
+      /published an empty invalidReason/,
+    )
+  })
+
   it('settles instead of looping when a section republishes a fresh array', async () => {
     const renders = { count: 0 }
     const ChurningSection = churningSection(renders)
@@ -1045,5 +1056,68 @@ describe('useStorySettingsSection', () => {
 
     expect(renders.count).toBeLessThanOrEqual(3)
     expect(session.api().snapshot.dirtyFields).toHaveLength(2)
+  })
+})
+
+describe('StorySettingsSaveSessionProvider — validity', () => {
+  it('refuses the save while a dirty section is invalid, attempting nothing', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+
+    let outcome: SaveOutcome | undefined
+    await act(async () => {
+      outcome = await session.api().save()
+    })
+
+    expect(outcome).toEqual({ status: 'invalid', reason: 'dup' })
+    expect(session.onCommit).not.toHaveBeenCalled()
+    expect(aids.getPatch).not.toHaveBeenCalled()
+    expect(aids.reset).not.toHaveBeenCalled()
+    // Nothing entered the commit branch: a stray `committing: true` on this
+    // path has no `finally` to clear it and would brick every button behind
+    // `saving` — Save, Discard, and the leave dialog — for the rest of the session.
+    expect(session.api().saving).toBe(false)
+  })
+
+  it('leaves a pending leave open when the save is refused as invalid', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'])
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+    const proceed = vi.fn()
+
+    act(() => session.api().requestLeave(proceed))
+    await act(async () => {
+      session.api().resolveLeave('save')
+    })
+
+    expect(proceed).not.toHaveBeenCalled()
+    expect(session.api().pendingLeave).toBe(true)
+  })
+
+  it('re-arms once the section reports itself valid again, without changing dirtyFields', async () => {
+    const aids = makeSection('authoring-aids', 'generation', ['suggestion categories'], {
+      suggestionsEnabled: true,
+    })
+    const invalid: SectionFixture = { ...aids, invalidReason: 'dup' }
+    const session = mountSession({ children: sectionsOf(invalid) })
+
+    expect(session.api().snapshot.invalidReason).toBe('dup')
+
+    // Same dirtyFields throughout — fixing the collision doesn't change the
+    // label, so only invalidReason moves. The publish effect must key on it
+    // directly: dirtyKey alone would never re-fire this republish.
+    const revalidated: SectionFixture = { ...aids, invalidReason: undefined }
+    act(() => {
+      session.rerenderWith(sectionsOf(revalidated))
+    })
+
+    expect(session.api().snapshot.invalidReason).toBeUndefined()
+
+    await act(async () => {
+      await session.api().save()
+    })
+
+    expect(session.onCommit).toHaveBeenCalledTimes(1)
   })
 })

@@ -34,6 +34,7 @@ export {
   SwapMarkerChangedError,
   SwapNotInProgressError,
   SwapStoryMissingError,
+  type StoryEmbedderActionRejection,
   type SwapCancelOutcome,
 } from './embedder-swap'
 export { applyDeltaAction } from './delta/apply-delta-action'
@@ -63,7 +64,11 @@ export type { SettingsActionCtx } from './settings'
 export { createStoryWithBranch, type CreateStoryInput } from './stories/create-story'
 export { deleteStory } from './stories/delete-story'
 export { resetStorySettings } from './stories/reset-settings'
-export { StorySettingsStaleStoreError, updateStorySettings } from './stories/update-story-settings'
+export {
+  StorySettingsStaleStoreError,
+  updateStorySettings,
+  type UpdateStorySettingsResult,
+} from './stories/update-story-settings'
 export {
   loadOpenStory,
   openStory,

@@ -8,11 +8,13 @@ import {
   appSettingsStore,
   embedderSwapStore,
   embeddingStatusStore,
+  generationStore,
   hydrateAppSettings,
+  isUserEditBlocked,
   openEmbedderSwapDialog,
 } from '@/lib/stores'
 
-import { MemoryPanel } from './memory-panel'
+import { MemoryPanel, type MemoryPanelProps } from './memory-panel'
 
 const STORY_ID = 'story-1'
 const MINILM = 'Xenova/all-MiniLM-L6-v2'
@@ -58,14 +60,26 @@ function resetStores() {
   embedderSwapStore.__reset()
   embeddingStatusStore.__reset()
   appSettingsStore.__reset()
+  generationStore.__reset()
+}
+
+function Harness(props: MemoryPanelProps) {
+  const disabled = generationStore.useGeneration((state) => isUserEditBlocked(state.txState))
+  return (
+    <MemoryPanel
+      {...props}
+      disabled={disabled}
+      disabledReason={disabled ? t('generationGate.inFlight') : undefined}
+    />
+  )
 }
 
 // MemoryPanel reads three module-global Zustand stores directly (swap
 // dialog/progress, stale-count, and app-settings defaults) — each story
 // resets and re-seeds them so a prior story's picks never leak forward.
-const meta: Meta<typeof MemoryPanel> = {
+const meta: Meta<typeof Harness> = {
   title: 'Compounds/StorySettings/MemoryPanel',
-  component: MemoryPanel,
+  component: Harness,
   parameters: { layout: 'centered' },
   decorators: [
     (Story) => (
@@ -175,6 +189,117 @@ export const ReindexConfirmGate: Story = {
 
     await userEvent.click(within(dialog).getByRole('button', { name: t('cancel') }))
     await waitFor(() => expect(screen.queryByTestId('reindex-confirm')).not.toBeInTheDocument())
+  },
+}
+
+export const HardGateDisablesAnOpenReindexConfirmation: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings(),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByTestId('reindex-now'))
+    const dialog = await screen.findByTestId('reindex-confirm')
+
+    generationStore.startRun({
+      runId: 'run-hard-gate',
+      kind: 'per-turn',
+      gateBehavior: 'hard-gate',
+      actionId: 'action-hard-gate',
+      storyId: STORY_ID,
+      branchId: 'branch-1',
+      abortController: new AbortController(),
+      currentPhase: 'narrative',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+
+    await waitFor(() => expect(within(dialog).getByTestId('reindex-confirm-start')).toBeDisabled())
+    const cancel = within(dialog).getByRole('button', { name: t('cancel') })
+    expect(cancel).not.toBeDisabled()
+    expect(within(dialog).getByTestId('reindex-confirm-start').parentElement).toHaveAttribute(
+      'title',
+      t('generationGate.inFlight'),
+    )
+
+    await userEvent.click(cancel)
+    await waitFor(() => expect(screen.queryByTestId('reindex-confirm')).not.toBeInTheDocument())
+    expect(screen.getByTestId('reindex-now')).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
+    ).toBeDisabled()
+  },
+}
+
+export const HardGateDisablesOpenSwapActions: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings(),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 0)
+    openEmbedderSwapDialog(STORY_ID)
+  },
+  play: async () => {
+    await userEvent.click(await screen.findByTestId(`swap-candidate-local:${GEMMA}`))
+    await userEvent.click(screen.getByRole('button', { name: t('storySettings:swap.next') }))
+    await screen.findByTestId('swap-reindex')
+
+    generationStore.startRun({
+      runId: 'run-hard-gate',
+      kind: 'chapter-close',
+      gateBehavior: 'hard-gate',
+      actionId: 'action-hard-gate',
+      storyId: STORY_ID,
+      branchId: 'branch-1',
+      abortController: new AbortController(),
+      currentPhase: 'chapter-metadata',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+
+    await waitFor(() => expect(screen.getByTestId('swap-reindex')).toBeDisabled())
+    expect(screen.getByTestId('swap-relabel')).toBeDisabled()
+    expect(screen.getByRole('button', { name: t('storySettings:swap.keep') })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: t('storySettings:swap.cancel') })).not.toBeDisabled()
+  },
+}
+
+export const HardGateDisablesResumeButKeepsCancel: Story = {
+  args: {
+    storyId: STORY_ID,
+    settings: buildSettings({ embedding_swap_target: GEMMA }),
+    listInstalled,
+  },
+  beforeEach: () => {
+    resetStores()
+    embeddingStatusStore.setStatus(STORY_ID, 5)
+    generationStore.startRun({
+      runId: 'run-hard-gate',
+      kind: 'per-turn',
+      gateBehavior: 'hard-gate',
+      actionId: 'action-hard-gate',
+      storyId: STORY_ID,
+      branchId: 'branch-1',
+      abortController: new AbortController(),
+      currentPhase: 'narrative',
+      intermediates: {},
+      terminal: Promise.resolve(),
+      resolveTerminal: () => {},
+    })
+  },
+  play: async () => {
+    expect(await screen.findByTestId('memory-swap-pending-resume')).toBeDisabled()
+    expect(screen.getByTestId('memory-swap-pending-cancel')).not.toBeDisabled()
   },
 }
 

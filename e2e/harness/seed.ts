@@ -52,6 +52,25 @@ export function setProviderEndpoint(dbPath: string, url: string): void {
   }
 }
 
+// Turn the diagnostics gate on. Off in the defaults, and the Actions menu drops
+// capability-gated entries rather than disabling them, so the Diagnostics Hub
+// row — the only route jump that menu owns — is absent without this.
+export function enableDiagnostics(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT diagnostics FROM app_settings WHERE id = 'singleton'`).get() as {
+      diagnostics: string
+    }
+    const diagnostics = JSON.parse(row.diagnostics) as Record<string, boolean>
+    diagnostics.enabled = true
+    db.prepare(`UPDATE app_settings SET diagnostics = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(diagnostics),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Set a profile's structuredOutput mode (auto | force-on | force-off). force-on
 // routes structured calls through native response_format instead of the
 // prompt-injected schema. Runs before launch.

@@ -94,6 +94,11 @@ function getTxState(): TxState {
   return store.getState().txState
 }
 
+// Selectors must return a value that is stable under Object.is while the state
+// they read is unchanged: zustand v5 hands the selector straight to
+// useSyncExternalStore with no equality function, so a freshly allocated object
+// or array re-renders without end. Derive primitives here, shape them in the
+// component.
 function useGeneration<T>(selector: (s: { txState: TxState }) => T): T {
   return useStore(store, selector as (s: GenerationState) => T)
 }

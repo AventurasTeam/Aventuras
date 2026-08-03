@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
+
+import { t } from '@/lib/i18n'
 
 import { ColorPicker, type ColorValue } from './color-picker'
 import { Text } from './text'
@@ -66,6 +69,22 @@ export const WithCustom: Story = {
         </Text>
       </View>
     )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: t('colorPicker.pickCustomColor') }))
+
+    expect(
+      await screen.findByRole('heading', { name: t('colorPicker.customColor') }),
+    ).toBeInTheDocument()
+    const input = screen.getByLabelText(t('colorPicker.hexColor'))
+    await userEvent.clear(input)
+    await userEvent.type(input, '#12')
+
+    expect(
+      screen.getByText(t('colorPicker.invalidHex', { example: '#3b82f6' })),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: t('cancel') })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: t('colorPicker.apply') })).toBeDisabled()
   },
 }
 

@@ -9,6 +9,25 @@ const labeledPromptSchema = z.object({
   promptBody: z.string(),
 })
 
+/** Inclusive bounds on `suggestionCount`. The stepper reads these, so the control
+ *  and the schema cannot drift into a range the user can reach but not save. */
+export const SUGGESTION_COUNT_MIN = 1
+export const SUGGESTION_COUNT_MAX = 6
+
+/** Backs both the schema enum and the predicate, so a mode added to one cannot
+ *  go missing from the other. */
+export const STORY_MODES = ['adventure', 'creative'] as const
+export type StoryMode = (typeof STORY_MODES)[number]
+
+/**
+ * Rows reach the store as a `$type` cast over stored JSON rather than a parsed
+ * value, so a `mode` read off one is only typed, not checked. Callers that index
+ * by it need this first.
+ */
+export function isStoryMode(value: unknown): value is StoryMode {
+  return typeof value === 'string' && (STORY_MODES as readonly string[]).includes(value)
+}
+
 export const suggestionCategorySchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -20,7 +39,7 @@ export const suggestionCategorySchema = z.object({
 
 export const storyDefinitionSchema = z
   .object({
-    mode: z.enum(['adventure', 'creative']),
+    mode: z.enum(STORY_MODES),
     leadEntityId: z.string().nullable(),
     narration: z.enum(['first', 'second', 'third']),
     genre: labeledPromptSchema,
@@ -96,7 +115,7 @@ export const storySettingsSchema = z.object({
   composerModesEnabled: z.boolean(),
   composerWrapPov: z.enum(['first', 'third']),
   suggestionsEnabled: z.boolean(),
-  suggestionCount: z.number().min(1).max(6).default(3),
+  suggestionCount: z.number().min(SUGGESTION_COUNT_MIN).max(SUGGESTION_COUNT_MAX).default(3),
   suggestionCategories: z.array(suggestionCategorySchema),
   translation: translationSchema,
   models: modelsSchema,
