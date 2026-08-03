@@ -1181,3 +1181,157 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   Android. If story-open shows a hitch, this is it, and the fix is to
   warm the encoder during story open rather than to change the hook.
   **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
+- **A retrieval pass costs more than its whole budget at 60-chapter
+  volumes, and the budget table has no line for most of what the pass
+  does.** Measured against a real migrated SQLite plus sqlite-vec
+  database, median of 7 warm in-process passes on desktop, **excluding**
+  the embedder, the blocking sync stage and all IPC: **60 ms** at 1200
+  happenings / 3000 awareness rows, **137 ms** at 3600 / 9000, **166 ms**
+  at 6000 / 15 000.
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  targets **under 100 ms total including the three query embeds**, so
+  the largest figure already exceeds the entire budget with the
+  embedder subtracted out of it. 6000 / 15 000 is not a worst case:
+  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions) puts
+  60 chapters at 3-6k happenings and 15-60k awareness rows, and its own
+  "5-10× happenings" ratio puts a 6000-happening branch at 30-60k
+  awareness — so the measurement sits at that row's awareness floor,
+  2.5× rather than 5-10×. Supporting numbers, dim 384 and `k = 200`:
+  vec0 KNN costs 0.96 / 4.41 / 22.58 ms at 1k / 10k / 60k rows, and a
+  `WHERE branch_id = ?` source scan costs 0.94 / 9.56 / 33.27 ms at
+  2k / 20k / 60k. The budget table prices only the query embed, a
+  cosine batch, MMR, token estimation and budget fill — it has no line
+  at all for the KNN passes, the five source reads, the awareness read
+  or the chapter-ranges JOIN. It also inherits the "three queries per
+  pass" of
+  [`Performance characteristics`](../memory/retrieval.md#performance-characteristics--poc-findings),
+  which is the PoC baseline M3.4's own AC7 is written against, where
+  the shipped pass issues **fifteen** — three query vectors across five
+  types. Two of the overruns are already filed above (MMR, eager
+  tokenization) and
+  are inside these totals; what is missing is a budget re-derived
+  against the pass that actually ships. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **A retrieval pass makes 27 sequential DB round-trips and
+  parallelises none of them.** `runRetrieval` (`lib/retrieval/run.ts`)
+  awaits, in order: five `loadStaleRows` reads (one per `VEC_FAMILIES`
+  kind — `lib/actions/embedder-swap/app-deps.ts:532`), five
+  `loadSourceRows` reads (`lib/retrieval/source-rows.ts:51`), one
+  awareness read, fifteen KNN passes (three query vectors across five
+  types), and the chapter-ranges JOIN. There is no `Promise.all`
+  anywhere in `lib/retrieval/`, and on desktop every one of those is an
+  IPC round-trip, so the fixed per-call cost is paid 27 times. The five
+  source reads are mutually independent, and so are the fifteen KNN
+  passes: every query vector is in hand before the loop starts, and the
+  per-kind vector map each pass writes into is order-independent. Only
+  two orderings are load-bearing — sync before any source read, floor
+  before the query stack. Surfaced by the M3.4 whole-slice review
+  (2026-08-03).
+- **`loadSourceRows` reads every happening on the branch each turn,
+  purely to filter down to at most 600 KNN ids.** The happenings arm of
+  `lib/retrieval/source-rows.ts:51` is a full
+  `WHERE branch_id = ?` scan, and its only consumers are the pool
+  intersection in `assembleCandidates` (`lib/retrieval/run.ts:465`) and
+  the `staleCounts` tripwire, which wants a count rather than rows. At
+  60 chapters that is ~33 ms of SQL plus ~21 ms of structured-clone
+  across the IPC boundary to discard over 99% of what it read. Entities,
+  lore and threads genuinely need the full scan — `buildStructuralFloor`
+  looks for `injection_mode='always'` across all three,
+  `nameKeywordIndexFrom` indexes every entity name and lore keyword, and
+  Layer-A suppression needs every staged entity. Happenings needs none
+  of that, and it is the one table
+  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions)
+  projects into the thousands. The KNN top-k is supposed to be the
+  scaling mechanism, and this read defeats it. The fix needs no
+  restructuring: nothing before the KNN pass touches
+  `sourceRows.happenings`, so that one read can move after the pool ids
+  are known and fetch by id, bounding it at the pool size. (Chapters has
+  the same shape and does not matter — ~60 rows at 60 chapters.)
+  Surfaced by the M3.4 whole-slice review (2026-08-03).
+- **`poolIdsFromKnn`'s ordering is computed and then discarded.** Its
+  JSDoc (`lib/retrieval/pools.ts:168`) promises a "de-duplicated,
+  first-seen order" union of the per-query KNN id sets, and it builds
+  exactly that — but `assembleCandidates` consumes the result only as
+  `new Set(ids)` membership (`lib/retrieval/run.ts:371`), so the pool's
+  actual order is SQL row order from `loadSourceRows`, not KNN rank.
+  That order is not inert: it decides ties in the ranker's
+  `scored.sort((a, b) => b.score - a.score)`, which is stable, and in
+  MMR's strict-`>` pick, which keeps the first of an equal pair. Two
+  candidates with identical scores are therefore ranked by whatever
+  order SQLite returned them in. Either thread the KNN order through to
+  pool assembly or return a `Set` and drop the array — the current
+  shape documents a guarantee it does not deliver. Surfaced by the M3.4
+  whole-slice review (2026-08-03).
+- **`countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
+  keys an unbounded module-level `Map` on entry id and holds it for the
+  process lifetime, across deletes, rollbacks, branch switches and story
+  switches; `__resetTokenCache` has no production caller. Deleting an
+  entry and later reinstating that id — reverse-replay of a delete
+  re-inserts with the original id — resurrects a memo entry written
+  before the deletion. The content check on read bounds the damage to a
+  stale-content miss rather than a wrong count, so this is a leak rather
+  than a defect today, but it is precisely the shape
+  [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
+  records. Surfaced by the M3.4 whole-slice review (2026-08-03).
+- **`rankPerType` recomputes `tokensEstimated` rather than accepting a
+  captured one, which desynchronises M3.5's simulator from its own
+  capture.** `score` (`lib/retrieval/ranker.ts:101`) always evaluates
+  `input.countTokens(c.renderedText) + params.typeOverhead[type]`; there
+  is no path that takes a stored value. The probe's simulator re-runs
+  budget-fill against `CaptureCandidate.tokens_estimated`
+  ([`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)),
+  so any drift between the js-tiktoken version that produced the capture
+  and the one loaded at replay makes the two disagree row by row, with
+  nothing reporting it. The ranker's purity is not at issue — the
+  function is deterministic given its inputs; the tokenizer is one of
+  its inputs and is not pinned by the capture. Wants either an optional
+  captured-token input on `RankTypeInput` or a recorded encoding
+  identity the simulator can refuse to replay across. Needs deciding
+  before 3.5 builds the simulator. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **The C4 purity guard is an identifier scan, not a purity check.**
+  Distinct from the transitive-closure hole filed above: that entry is
+  about a file the guard claims to cover and cannot list, this one is
+  about what the guard checks at all. Its second assertion
+  (`lib/retrieval/ranker.test.ts:402`) is
+  `expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)` — a
+  scan for three bare identifiers anywhere in the file, including
+  comments and parameter names. It catches an import-shaped violation
+  only because imports happen to mention those words, and it says
+  nothing about the ways replay actually breaks: a clock, an RNG, a
+  locale-sensitive format, or module-level mutable state read across
+  calls. Behavioural purity does currently hold — the whole
+  value-import closure (`ranker`, `mmr`, `vector`, `constants`,
+  `queries`, `prose-extract`, `name-index`; `types` and `@/lib/db` are
+  type-only) was grepped for `Date.`, `Math.random`, `performance.`,
+  `Intl` and `toLocale` with zero hits, and every value import inside it
+  is intra-module. So the guard is not hiding a live violation; it is
+  claiming coverage it does not have. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **Four hand-built `RetrievalSuccess` fixtures, and a factory home that
+  already exists.** `lib/actions/turns/submit-turn.test.ts:50`,
+  `lib/pipeline/definitions/per-turn-retrieval.test.ts:71`,
+  `lib/pipeline/definitions/generation-context.test.ts:128` and
+  `lib/pipeline/definitions/per-turn.test.ts:774` each construct the
+  full outcome — five `RankedType` bundles, a `StructuralFloor`, a
+  `QueryStack`, `staleCounts`, `timings` — by hand, and every field
+  added to the type has to be added four times.
+  `lib/retrieval/__tests__/` exists (it holds the shared `queryAll`
+  stub) and is the natural home for a factory. Hygiene, not risk:
+  `RetrievalSuccess` is a closed object type, so typecheck fails all
+  four the moment a required field lands. Surfaced by the M3.4
+  whole-slice review (2026-08-03).
+- **`retrieval.md → Token estimation` describes a ranker-side token
+  cache that does not exist.**
+  [The section](../memory/retrieval.md#token-estimation) ends "Ranker
+  passes cache results in memory for reuse within the turn." No such
+  cache exists: `score` calls the injected `countTokens` once per
+  candidate and keeps the result on the `Scored` row, and the only memo
+  in `lib/retrieval/tokens.ts` is `countEntryTokens`, which the ranker
+  never touches. Each candidate is tokenized exactly once per pass, so
+  the intent — do not pay twice for the same row — is satisfied; the
+  sentence describes a mechanism that was never built, and it shares a
+  paragraph with the "per-turn cost is sub-millisecond total" claim the
+  measurements above already contradict. Fix with the same pass that
+  re-derives the cost budget. Surfaced by the M3.4 whole-slice review
+  (2026-08-03).
