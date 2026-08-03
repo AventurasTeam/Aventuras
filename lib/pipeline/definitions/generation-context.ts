@@ -145,6 +145,18 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   const tail = narrative.at(-1)
   const floor = retrieval?.floor
 
+  // Every place the prompt brackets an id for, in the order the blocks render.
+  // A template that instead named "the ids above" would point <current_location>
+  // at a set that can be all characters: ranked rows reach a template as
+  // RetrievedRow, which carries no EntityKind, so their kinds come off the
+  // retrieval outcome, which still held the source row.
+  const locationIds = [
+    ...(floor?.sceneEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
+    ...(floor?.currentLocation?.kind === 'location' ? [floor.currentLocation.id] : []),
+    ...(floor?.alwaysEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
+    ...(retrieval?.selectedLocationIds ?? []),
+  ]
+
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
@@ -175,6 +187,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     structuralPinnedEntities: floorEntities(floor?.alwaysEntities),
     structuralPinnedLore: floorLore(floor?.alwaysLore),
     structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
+    locationIds: [...new Set(locationIds)],
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller

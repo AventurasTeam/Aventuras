@@ -151,7 +151,8 @@ describe('buildStructuralFloor', () => {
 type EntityDestination = 'scene' | 'location' | 'always' | 'pool'
 
 // Every entities row lands in exactly one place, hand-derived from
-// retrieval.md → Structural floor and → Three-sub-pool entity model. Keyed
+// retrieval.md → Structural floor (both seats carry `status='active'`) and
+// → Three-sub-pool entity model. Keyed
 // `status|injectionMode|inScene|isCurrentLocation`; [] means the row is
 // dropped entirely this turn.
 //
@@ -264,9 +265,10 @@ describe('thread placement sweep', () => {
 
 type LoreDestination = 'always' | 'pool'
 
-// retrieval.md → Structural floor (always rows) and → `auto` injection mode
-// (everything the mode still admits ranks). Lore has no status column, so
-// injection_mode is its only placement question.
+// retrieval.md → Structural floor seats the `always` rows; `disabled` is
+// "never include automatically" (data-model.md → Injection modes — unified enum
+// + structural invariant) and `auto` is what is left to rank. Lore has no
+// status column, so injection_mode is its only placement question.
 const LORE_PLACEMENT: Record<string, LoreDestination[]> = {
   always: ['always'],
   auto: ['pool'],

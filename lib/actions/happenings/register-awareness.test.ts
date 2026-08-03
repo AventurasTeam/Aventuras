@@ -359,8 +359,10 @@ describe('bumpAwarenessRetrieval', () => {
   })
 
   // Distinct from the single-bump reverse above: two deltas land under one
-  // action_id, each carrying the value it replaced, so reversing them in log
-  // order walks 6 → 5 → 4.
+  // action_id, each carrying the value it replaced, and reverse-replay walks
+  // them newest-first (log_position DESC), so the count goes 6 → 5 → 4. Oldest
+  // first would land on 5, since the older delta's replaced value is applied
+  // before the newer one overwrites it.
   it('reverses two bumps of the same row in one reversal window back to the original count', async () => {
     const { ctx } = await setup([awarenessRow('haw_1', 4)])
     await applyDeltaAction(bump('haw_1'), ctx)

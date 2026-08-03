@@ -710,7 +710,7 @@ export default function ReaderComposerRoute() {
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
-  const openRegionPct = useOpenRegionTokens()
+  const openRegionPct = useOpenRegionTokens(openForBranch?.storyId)
   const { theme } = useTheme()
 
   const surfaceProps = {

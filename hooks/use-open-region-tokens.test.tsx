@@ -117,8 +117,8 @@ function openStory(chapterTokenThreshold = THRESHOLD): void {
 
 let latest = 0
 
-function Probe(_: { nonce: number }) {
-  latest = useOpenRegionTokens()
+function Probe({ storyId = 's1' }: { nonce: number; storyId?: string | null }) {
+  latest = useOpenRegionTokens(storyId)
   return null
 }
 
@@ -148,6 +148,28 @@ describe('useOpenRegionTokens', () => {
     openStory()
     render(<Probe nonce={0} />)
     expect(latest).toBeGreaterThan(0)
+  })
+
+  // The strip belongs to the surface's own story. Reading whichever story
+  // happens to be open would show story A's open region against A's threshold
+  // on story B's settings screen — reachable by opening a reader, then
+  // navigating to another story's settings, which never clears the open story.
+  it("returns 0 when the open story is not the caller's", () => {
+    entriesStore.hydrate('b1', [row('e2', SHORT)])
+    openStory()
+    render(<Probe nonce={0} storyId="s2" />)
+    expect(latest).toBe(0)
+    // Positive control: the same store state reports non-zero for its own story.
+    cleanup()
+    render(<Probe nonce={0} storyId="s1" />)
+    expect(latest).toBeGreaterThan(0)
+  })
+
+  it('returns 0 for a caller with no story of its own yet', () => {
+    entriesStore.hydrate('b1', [row('e2', SHORT)])
+    openStory()
+    render(<Probe nonce={0} storyId={null} />)
+    expect(latest).toBe(0)
   })
 
   it('does not re-walk the branch on a re-render with no entries write', () => {

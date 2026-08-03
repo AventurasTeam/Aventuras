@@ -18,9 +18,10 @@ export function countTokens(text: string): number {
   return getEncoder().encode(text, [], []).length
 }
 
-// Content is part of the key, not just the id: a reader edit rewrites an
-// entry's body under its existing id, and an id-only cache would serve the
-// pre-edit count for the rest of the session.
+// The id keys the memo but the content is stored beside the count and compared
+// on read: a reader edit rewrites an entry's body under its existing id, and a
+// hit that checked only the id would serve the pre-edit count for the rest of
+// the session.
 const entryTokens = new Map<string, { content: string; tokens: number }>()
 let entryTokensComputeCount = 0
 

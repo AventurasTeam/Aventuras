@@ -139,9 +139,10 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       )
     : undefined
 
-  // Sourced from the open story, not the row read above: a cold entry has no
-  // open story and so no loaded entries, and the strip reads 0 there.
-  const openRegionPct = useOpenRegionTokens()
+  // Scoped to THIS route's story: the open story survives navigation, so an
+  // unscoped read would show whichever story the session last opened in the
+  // reader against that story's threshold.
+  const openRegionPct = useOpenRegionTokens(storyId)
 
   const isDirty = session.snapshot.dirtyFields.length > 0
   useUnsavedChangesGuard(isDirty, session.requestLeave)

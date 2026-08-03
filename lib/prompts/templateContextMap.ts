@@ -125,6 +125,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'locationIds',
+      type: 'string[]',
+      category: 'Retrieval',
+      description:
+        'Every id above that belongs to a place — the legal <current_location> set. Union of the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use this rather than "the IDs above": ranked entity rows arrive as RetrievedRow with no kind, so the bracketed IDs in the memory blocks can be entirely characters. Empty when the prompt shows no place, or no retrieval ran.',
+      required: true,
+    },
+    {
       name: 'structuralActiveThreads',
       type: 'FloorThread[]',
       category: 'Retrieval',
@@ -269,6 +277,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'retrievedChapters',
     'structuralSceneEntities',
     'structuralLocation',
+    'locationIds',
     'structuralActiveThreads',
     'structuralPinnedEntities',
     'structuralPinnedLore',

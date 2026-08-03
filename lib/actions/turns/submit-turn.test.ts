@@ -43,9 +43,10 @@ const EMPTY_BUNDLE: RankedType = {
   },
 }
 
-// Typed against the real outcome rather than cast: nothing reads it while the
-// narrative phase ignores intermediates.retrieval, but a fabricated shape starts
-// lying the moment a consumer narrows it.
+// Typed against the real outcome rather than cast: the narrative phase reads
+// this into buildGenerationContext, which projects a dozen template variables
+// off it, so a fabricated shape would render a prompt no production pass can
+// produce.
 const OK_RETRIEVAL: RetrievalSuccess = {
   ok: true,
   floor: {
@@ -73,6 +74,8 @@ const OK_RETRIEVAL: RetrievalSuccess = {
   },
   staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   injectedAwarenessIds: [],
+  selectedLocationIds: [],
+  timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
 }
 
 // The phase streams via the real openai-compatible provider path; stub global

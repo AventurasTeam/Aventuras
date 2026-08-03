@@ -9,7 +9,13 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
-import type { RankedType, RetrievalParams, RetrievalSuccess, RetrievalType } from '@/lib/retrieval'
+import type {
+  RankedType,
+  RetrievalParams,
+  RetrievalSuccess,
+  RetrievalTimings,
+  RetrievalType,
+} from '@/lib/retrieval'
 import {
   currentStoryStore,
   entitiesStore,
@@ -57,9 +63,11 @@ const EMPTY_BUNDLE: RankedType = {
 function okOutcome({
   staleCounts = { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   injectedAwarenessIds = ['haw_1'],
+  timings = { totalMs: 12, syncMs: 3, embedMs: 4, knnMs: 2, rankMs: 1 },
 }: {
   staleCounts?: Record<RetrievalType, number>
   injectedAwarenessIds?: string[]
+  timings?: RetrievalTimings
 } = {}): RetrievalSuccess {
   return {
     ok: true,
@@ -88,6 +96,8 @@ function okOutcome({
     },
     staleCounts,
     injectedAwarenessIds,
+    selectedLocationIds: [],
+    timings,
   }
 }
 
@@ -582,6 +592,30 @@ describe('retrieval phase — diagnostics', () => {
     const { log } = await runRetrievalPhase()
 
     expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  // AC7: the per-turn cost has to be observable against the PoC baseline, which
+  // is a per-KNN-query figure — so the breakdown reaches the log, not just a total.
+  it('logs the pass timing the run reported, breakdown included', async () => {
+    seedOpenStory()
+    const timings = { totalMs: 91, syncMs: 40, embedMs: 30, knnMs: 15, rankMs: 5 }
+    runRetrievalMock.mockResolvedValue(okOutcome({ timings }))
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.debug).toHaveBeenCalledWith('retrieval.timing', timings)
+  })
+
+  it('logs no timing for a pass that failed before it produced one', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue({
+      ok: false,
+      failure: { reason: 'call', detail: 'embedder session died', staleCount: 4 },
+    })
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.debug).not.toHaveBeenCalledWith('retrieval.timing', expect.anything())
   })
 })
 

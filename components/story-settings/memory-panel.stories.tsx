@@ -2,7 +2,12 @@ import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
-import { APP_SETTINGS_DEFAULTS, storySettingsSchema, type StorySettings } from '@/lib/db'
+import {
+  APP_SETTINGS_DEFAULTS,
+  STORY_SETTINGS_DEFAULTS,
+  storySettingsSchema,
+  type StorySettings,
+} from '@/lib/db'
 import { t } from '@/lib/i18n'
 import {
   appSettingsStore,
@@ -26,7 +31,7 @@ function buildSettings(overrides: Partial<StorySettings> = {}): StorySettings {
     piggybackMode: 'on',
     embeddingBackend: 'local',
     embedding_model_id: MINILM,
-    retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
+    retrievalBudgets: STORY_SETTINGS_DEFAULTS.retrievalBudgets,
     composerModesEnabled: true,
     composerWrapPov: 'third',
     suggestionsEnabled: true,

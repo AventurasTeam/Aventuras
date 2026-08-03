@@ -29,6 +29,7 @@ const m2Context = {
   // every call, so a fixture that omits them tests `nil.size > 0` — a
   // comparison that is false for the wrong reason and lets a broken guard pass.
   structuralLocation: null,
+  locationIds: [],
   structuralSceneEntities: [],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
@@ -74,6 +75,7 @@ describe('bundled per-turn template — empty-guard contract', () => {
           name: 'The Keep',
           description: 'A weathered hilltop fortress.',
         },
+        locationIds: ['loc_1'],
         structuralActiveThreads: [
           { id: 'thr_1', status: 'active', title: 'The siege', description: 'Three weeks in.' },
         ],
@@ -202,10 +204,11 @@ describe('bundled per-turn template — empty-guard contract', () => {
         name: 'The Keep',
         description: 'A weathered hilltop fortress.',
       },
+      locationIds: ['loc_1'],
     })
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('[loc_1] The Keep: A weathered hilltop fortress.')
-    expect(rendered).toContain('for <current_location> if the scene is at that place')
+    expect(rendered).toContain('for <current_location> when the scene is at that place: loc_1.')
   })
 
   it('drops the colon on a current location with no description', () => {
@@ -227,15 +230,43 @@ describe('bundled per-turn template — empty-guard contract', () => {
       structuralLocation: null,
     })
     expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('<current_location> if the scene is at that place')
+    expect(rendered).not.toContain('<current_location> when the scene is at that place')
     expect(rendered).toContain('## Aria [char_1]')
   })
 
-  // RetrievedRow is { id, displayName, renderedText } — no EntityKind — so a
-  // guard that fired on the ranked bundle would point <current_location> at an
-  // ID set that can be entirely characters, and nothing downstream kind-checks
-  // what comes back (lib/piggyback/apply.ts writes it through unvalidated).
-  it('drops the <current_location> instruction when only ranked entities carry IDs', () => {
+  // The regression this pins: a ranked location renders with a bracketed ID, so
+  // the scene moving there has to be expressible. locationIds is what tells the
+  // template which of those IDs are places.
+  it('offers a ranked location as a <current_location> target', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      structuralLocation: {
+        id: 'loc_1',
+        kind: 'location',
+        status: 'active',
+        name: 'The Keep',
+        description: 'A weathered hilltop fortress.',
+      },
+      retrievedEntities: [
+        {
+          id: 'loc_9',
+          displayName: 'The Market',
+          renderedText: 'The Market (currently elsewhere): Stalls under sailcloth.',
+        },
+      ],
+      locationIds: ['loc_1', 'loc_9'],
+    })
+    expect(rendered).toContain('[loc_9] The Market (currently elsewhere): Stalls under sailcloth.')
+    expect(rendered).toContain(
+      'for <current_location> when the scene is at that place: loc_1, loc_9.',
+    )
+  })
+
+  // RetrievedRow is { id, displayName, renderedText } — no EntityKind — so an
+  // instruction naming "the IDs above" would point <current_location> at an ID
+  // set that can be entirely characters, and nothing downstream kind-checks what
+  // comes back (lib/piggyback/apply.ts writes it through unvalidated).
+  it('drops the <current_location> instruction when no ranked entity is a place', () => {
     const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
       ...m2Context,
       structuralLocation: null,
@@ -246,9 +277,10 @@ describe('bundled per-turn template — empty-guard contract', () => {
           renderedText: 'Mira (currently elsewhere): A courier.',
         },
       ],
+      locationIds: [],
     })
     expect(rendered).not.toContain('# Current location')
-    expect(rendered).not.toContain('for <current_location> if the scene is at that place')
+    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
     // Positive control: the ranked row and its own instruction still render, so
     // the exclusion above is not passing on an empty block.
     expect(rendered).toContain('[char_9] Mira (currently elsewhere): A courier.')
@@ -366,6 +398,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
       name: 'The Keep',
       description: 'A weathered hilltop fortress.',
     },
+    locationIds: ['loc_1'],
     calendarVocabulary: {
       baseUnitName: 'second',
       secondsPerBaseUnit: 1,
@@ -386,7 +419,7 @@ describe('bundled per-turn template — piggybackFires gating', () => {
     expect(rendered).toContain('# Current location')
     expect(rendered).toContain('The Keep: A weathered hilltop fortress.')
     expect(rendered).not.toContain('[loc_1]')
-    expect(rendered).not.toContain('for <current_location> if the scene is at that place')
+    expect(rendered).not.toContain('for <current_location> when the scene is at that place')
     expect(rendered).toContain('# Calendar')
     expect(rendered).not.toContain('<world_time_delta>')
     expect(rendered).not.toContain('<state>')

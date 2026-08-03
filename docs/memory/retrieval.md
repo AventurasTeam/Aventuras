@@ -767,7 +767,7 @@ The retrieval pool per type after the structural floor is satisfied.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Prompt buffer                  | Partial mode: last `partialChapterBuffer` entries of current chapter. Full mode: entire current chapter. Both modes: previous-chapter spillover to satisfy `protectedBuffer` floor. See [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs) |
 | Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                          |
-| Current location entity        | `currentLocationId` — same short-circuit                                                                                                                                                                                                                     |
+| Current location entity        | `entities.status='active' AND id = currentLocationId` — same short-circuit. A staged, retired or deleted `currentLocationId` seats nothing, so the location block is guarded on the seated row, never on the id                                              |
 | Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
 | `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
 
@@ -974,9 +974,15 @@ Entities:    [====      ]  1200 tokens
 Lore:        [======    ]  1800 tokens
 Happenings:  [=====     ]  1500 tokens
 Threads:     [==        ]   400 tokens
+Chapters:    [===       ]   600 tokens
                           ─────
-Total:                    4900 tokens
+Total:                    5500 tokens
 ```
+
+These five are the shipped `stories.settings.retrievalBudgets`
+defaults (`STORY_SETTINGS_DEFAULTS`). They are **token** budgets;
+migration `0007_retrieval_budget_tokens` rewrites the row-count
+values stories carried before that.
 
 The user feels the cost directly per type. Tuning is "I want more
 lore in retrieval; drag the slider up" — not "I want lore at 35% of

@@ -104,10 +104,10 @@ describe('composePromptBuffer — full mode', () => {
   })
 })
 
-// cadence.md gates spillover on the open region holding fewer entries than
-// protectedBuffer, and fixes the total at max(partialChapterBuffer,
-// protectedBuffer) above that — so the larger knob sizes the open-region window
-// and closed prose only ever backfills what the open region cannot supply.
+// cadence.md → Composition rule puts the total at max(protectedBuffer,
+// min(openCount, partialChapterBuffer)) — so the larger knob sizes the window,
+// but only protectedBuffer reaches past the boundary: partialChapterBuffer is a
+// window over the open region and clamps to it.
 describe('composePromptBuffer — partialChapterBuffer against protectedBuffer', () => {
   it('widens the window to protectedBuffer when partial < protected', () => {
     const out = composePromptBuffer(longOpen, {

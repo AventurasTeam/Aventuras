@@ -3,8 +3,8 @@
 // The scene loop is intentionally injectionMode-agnostic — that IS the
 // structural-floor invariant (active + in-scene always inject). It reads
 // `entities` rather than `structuralSceneEntities` so the invariant survives a
-// render with no retrieval behind it — readRetrievalOutcome returns undefined
-// for a stashed failure, and every floor bundle then arrives empty.
+// context built with no retrieval outcome — no retrieval phase ran ahead of the
+// render — where every floor bundle arrives empty.
 export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
@@ -52,14 +52,14 @@ If any off-scene character above enters the scene, include their ID (without bra
 
 {% endif -%}
 {%- comment -%}
-Gated on structuralLocation alone, and named rather than "one of the IDs
-above": every other id above belongs to the memory blocks, which are
-kind-blind — RetrievedRow has no EntityKind — so widening this to
-retrievedEntities points <current_location> at a set that can be all
-characters, and nothing downstream kind-checks what comes back.
+The ids are enumerated rather than referred to as "the IDs above": the memory
+blocks are kind-blind (RetrievedRow has no EntityKind), so pointing
+<current_location> at them would offer a set that can be all characters, and
+nothing downstream kind-checks what comes back. locationIds is the kind-filtered
+union the builder assembles for exactly this line.
 {%- endcomment -%}
-{% if structuralLocation -%}
-Use the current location's ID above (without brackets) for <current_location> if the scene is at that place; leave it out if the scene moves somewhere not listed here.
+{% if locationIds.size > 0 -%}
+Use one of these place IDs (without brackets) for <current_location> when the scene is at that place: {{ locationIds | join: ', ' }}. Leave it out if the scene moves somewhere not listed above.
 
 {% endif -%}
 {% endif -%}

@@ -141,6 +141,8 @@ function retrievalOutcome(
     queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
     staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
     injectedAwarenessIds: [],
+    selectedLocationIds: [],
+    timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
   }
 }
 
@@ -520,7 +522,8 @@ describe('buildGenerationContext', () => {
   })
 })
 
-// 40 entries, the last `openTail` of them in the open region (chapterId null).
+// `total` entries, the last `openTail` of them in the open region (chapterId
+// null); everything before that closed under one chapter.
 function branchEntries(total: number, openTail: number) {
   return Array.from({ length: total }, (_, i) => ({
     ...entry(`e${i + 1}`, i + 1, `line-${i + 1}`),
@@ -819,6 +822,84 @@ describe('buildGenerationContext — structural floor', () => {
     const leaked = { ...entityRow(CHAR_ID, 'Mara'), ...LOADED_EXTRAS }
     expect(Object.keys(leaked)).toContain('embeddingStale')
     expect(Object.keys(leaked)).toContain('keywords')
+  })
+})
+
+describe('buildGenerationContext — locationIds', () => {
+  const LOC_C = 'loc_00000000-0000-4000-8000-0000000000c3'
+  const LOC_D = 'loc_00000000-0000-4000-8000-0000000000d4'
+
+  const place = (id: string, name: string): EntityRow => ({
+    ...entityRow(id, name),
+    kind: 'location',
+  })
+
+  const base = () => ({
+    branchId: 'b1',
+    entries: [] as never[],
+    entities: [],
+    definition,
+    settings,
+    idMap: seededIdMap(LOC_A, LOC_B, LOC_C, LOC_D, CHAR_ID, CHAR_ID_2),
+  })
+
+  it('is empty when no retrieval ran', () => {
+    expect(buildGenerationContext({ ...base(), retrieval: undefined }).locationIds).toEqual([])
+  })
+
+  it('collects every place the prompt renders an ID for, in reading order', () => {
+    const ctx = buildGenerationContext({
+      ...base(),
+      retrieval: {
+        ...retrievalOutcome({
+          floor: {
+            sceneEntities: [place(LOC_B, 'The yard')],
+            currentLocation: place(LOC_A, 'The keep'),
+            alwaysEntities: [place(LOC_C, 'The shrine')],
+          },
+          selected: { entities: [candidate('entity', LOC_D, 'The market')] },
+        }),
+        selectedLocationIds: [LOC_D],
+      },
+    })
+    expect(ctx.locationIds).toEqual(['l2', 'l1', 'l3', 'l4'])
+  })
+
+  it('leaves out entities that are not places, from either the floor or the ranker', () => {
+    const ctx = buildGenerationContext({
+      ...base(),
+      retrieval: {
+        ...retrievalOutcome({
+          floor: {
+            sceneEntities: [entityRow(CHAR_ID, 'Mara')],
+            currentLocation: place(LOC_A, 'The keep'),
+            alwaysEntities: [entityRow(CHAR_ID_2, 'Corvin')],
+          },
+          selected: { entities: [candidate('entity', CHAR_ID_2, 'Corvin')] },
+        }),
+        // The pass reports no ranked place, so the ranked character below must
+        // not reach the list even though it renders with a bracketed ID.
+        selectedLocationIds: [],
+      },
+    })
+    expect(ctx.locationIds).toEqual(['l1'])
+    // Positive control: those same rows do render with IDs of their own.
+    expect((ctx.structuralSceneEntities as { id: string }[]).map((e) => e.id)).toEqual(['c1'])
+    expect((ctx.retrievedEntities as { id: string }[]).map((e) => e.id)).toEqual(['c2'])
+  })
+
+  it('de-duplicates a place the floor and the ranker both name', () => {
+    const ctx = buildGenerationContext({
+      ...base(),
+      retrieval: {
+        ...retrievalOutcome({
+          floor: { currentLocation: place(LOC_A, 'The keep') },
+          selected: { entities: [candidate('entity', LOC_A, 'The keep')] },
+        }),
+        selectedLocationIds: [LOC_A],
+      },
+    })
+    expect(ctx.locationIds).toEqual(['l1'])
   })
 })
 

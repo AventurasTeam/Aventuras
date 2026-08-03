@@ -906,6 +906,132 @@ describe('runRetrieval — pools', () => {
 // The index is derived from the source rows the pass already loaded, so these
 // pin that derivation through its two consumers: the happening keyword surface
 // and Q3 sentence selection.
+describe('runRetrieval — timings', () => {
+  const STAGES = ['syncMs', 'embedMs', 'knnMs', 'rankMs'] as const
+
+  it('reports a finite non-negative duration for the pass and each stage', async () => {
+    const ok = expectOk(
+      await runRetrieval(
+        deps({
+          queryAll: makeQueryAll({
+            entities: [entityRow('char_b', 'Mira')],
+            knn: [hit('char_b')],
+          }),
+        }),
+        params(),
+      ),
+    )
+
+    for (const key of ['totalMs', ...STAGES] as const) {
+      expect(Number.isFinite(ok.timings[key]), key).toBe(true)
+      expect(ok.timings[key], key).toBeGreaterThanOrEqual(0)
+    }
+  })
+
+  // Each injectable stage burns a distinct span, so a clock wrapped around the
+  // wrong one reads under its own floor. A busy-wait rather than a timer:
+  // setTimeout is scheduled off a coarser clock than performance.now() and can
+  // return marginally short of its delay, which made a timer-based floor flake.
+  it('attributes each stage its own span, all of them inside the total', async () => {
+    const spin = (ms: number) => {
+      const until = performance.now() + ms
+      while (performance.now() < until) {
+        /* hold the same clock the timings are measured with */
+      }
+    }
+    const SYNC_MS = 20
+    const EMBED_MS = 10
+    const KNN_MS = 1
+
+    const rows = { entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }
+    const inner = makeQueryAll(rows)
+    const ok = expectOk(
+      await runRetrieval(
+        deps({
+          queryAll: async (sql, bound) => {
+            if (sql.includes('MATCH')) spin(KNN_MS)
+            return inner(sql, bound)
+          },
+          loadStaleRows: async () => [
+            { kind: 'entity', id: 'char_b', branchId: 'br_1', fields: ['Mira', null] },
+          ],
+          embedRows: async () => {
+            spin(SYNC_MS)
+            return []
+          },
+          embedTexts: async (texts) => {
+            spin(EMBED_MS)
+            return { vectors: texts.map(() => Float32Array.from([1, 0])), dim: DIM }
+          },
+        }),
+        params(),
+      ),
+    )
+
+    expect(ok.timings.syncMs).toBeGreaterThanOrEqual(SYNC_MS)
+    expect(ok.timings.embedMs).toBeGreaterThanOrEqual(EMBED_MS)
+    // One KNN pass per present query per type; the floor is one pass' worth.
+    expect(ok.timings.knnMs).toBeGreaterThanOrEqual(KNN_MS)
+    const stages = STAGES.reduce((sum, key) => sum + ok.timings[key], 0)
+    expect(stages).toBeLessThanOrEqual(ok.timings.totalMs)
+    expect(ok.timings.totalMs).toBeGreaterThanOrEqual(SYNC_MS + EMBED_MS + KNN_MS)
+  })
+})
+
+describe('runRetrieval — selected location ids', () => {
+  it('reports which selected entity rows are places, and only those', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [
+            entityRow('loc_market', 'The Market', { kind: 'location' }),
+            entityRow('char_b', 'Mira'),
+          ],
+          knn: [hit('loc_market'), hit('char_b')],
+        }),
+      }),
+      params(),
+    )
+
+    const ok = expectOk(out)
+    // Positive control: both rows were selected, so the exclusion below is
+    // about EntityKind rather than about one row missing the bundle.
+    expect(ok.bundles.entities.selected.map((c) => c.id).sort()).toEqual(['char_b', 'loc_market'])
+    expect(ok.selectedLocationIds).toEqual(['loc_market'])
+  })
+
+  it('omits a place the ranker never seated', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('loc_market', 'The Market', { kind: 'location' })],
+          knn: [hit('loc_market')],
+        }),
+      }),
+      // A budget under the entity type overhead seats nothing at all.
+      params({ budgets: { ...BASE.budgets, entities: 1 } }),
+    )
+
+    const ok = expectOk(out)
+    expect(ok.bundles.entities.selected).toEqual([])
+    expect(ok.selectedLocationIds).toEqual([])
+    // Positive control: the same row is reported once its budget admits it.
+    expect(
+      expectOk(
+        await runRetrieval(
+          deps({
+            queryAll: makeQueryAll({
+              entities: [entityRow('loc_market', 'The Market', { kind: 'location' })],
+              knn: [hit('loc_market')],
+            }),
+          }),
+          params(),
+        ),
+      ).selectedLocationIds,
+    ).toEqual(['loc_market'])
+  })
+})
+
 describe('runRetrieval — name/keyword index', () => {
   it('boosts a happening whose awareness source names a branch entity', async () => {
     const out = await runRetrieval(

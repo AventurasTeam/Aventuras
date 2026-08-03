@@ -60,7 +60,7 @@ Three weeks in.
 
 If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
-Use the current location's ID above (without brackets) for <current_location> if the scene is at that place; leave it out if the scene moves somewhere not listed here.
+Use one of these place IDs (without brackets) for <current_location> when the scene is at that place: loc_1. Leave it out if the scene moves somewhere not listed above.
 
 # Story so far
 

@@ -18,6 +18,7 @@ export type {
   RetrievalOutcome,
   RetrievalParams,
   RetrievalSuccess,
+  RetrievalTimings,
 } from './run'
 export { runSyncStage } from './sync'
 export type { SyncStageDeps, SyncStageResult } from './sync'

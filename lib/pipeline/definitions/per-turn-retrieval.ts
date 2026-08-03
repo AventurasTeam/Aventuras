@@ -1,8 +1,8 @@
 import { inheritedEntryMetadata, queryRows, runInTransaction, type StoryEntry } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
-import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
+import { loadPerTurnWorkingSet } from './working-set'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const RETRIEVAL_PHASE_NAME = 'retrieval'
@@ -16,22 +16,9 @@ export async function* retrievalPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
-  const open = currentStoryStore.getCurrentStory()
-  if (!open || open.branchId !== branchId || open.storyId !== ctx.storyId)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'retrieval: no open story for branch' },
-    }
-
-  // Same defense-in-depth as narrativePhase: the scene, the buffer and the
-  // entity kinds below all read the working-set stores, and rows hydrated for
-  // another branch are dropped wholesale by the branch filter — a silently
-  // degenerate pass rather than a failure.
-  if (entriesStore.getLoadedBranch() !== branchId)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'retrieval: entries store loaded for another branch' },
-    }
+  const working = loadPerTurnWorkingSet(ctx, RETRIEVAL_PHASE_NAME)
+  if (!working.ok) return working.result
+  const { open, entries, entities } = working.set
 
   // Lazy: lib/actions' barrel reaches submitTurn, which imports lib/pipeline.
   // A module-eval import would close that require cycle and warn under Metro.
@@ -66,11 +53,6 @@ export async function* retrievalPhase(
         staleCount: null,
       },
     }
-
-  const entries = [...entriesStore.getEntries().values()]
-    .filter((e) => e.branchId === branchId)
-    .sort((a, b) => a.position - b.position)
-  const entities = [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
 
   const tail = entries.at(-1)
   const scene = inheritedEntryMetadata(tail?.metadata)
@@ -131,6 +113,10 @@ export async function* retrievalPhase(
     })
     return { status: 'failed', error: { kind: 'embedder', ...outcome.failure } }
   }
+
+  // AC7 wants the per-turn cost observable against the PoC baseline (~43 ms per
+  // KNN query at 10k rows), so the KNN span is reported apart from the total.
+  ctx.log.debug('retrieval.timing', outcome.timings)
 
   // staleCounts is a tripwire, not a report (lib/retrieval → RetrievalOutcome):
   // the sync stage is blocking and clears every flag it embeds, so a non-zero

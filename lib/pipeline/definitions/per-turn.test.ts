@@ -749,24 +749,31 @@ const SUGGESTION_CATEGORIES = [
 ]
 
 const RETRIEVED_ENTITY_ID = 'char_00000000-0000-4000-8000-0000000000e9'
+const RETRIEVED_LOCATION_ID = 'loc_00000000-0000-4000-8000-0000000000ea'
 
-function retrievalIntermediate(): RetrievalSuccess {
-  const selected: Candidate[] = [
-    {
-      kind: 'entity',
-      id: RETRIEVED_ENTITY_ID,
-      displayName: 'Corvin',
-      renderedText: 'Corvin (currently elsewhere): a smuggler.',
-      sims: [0, 0, 0],
-      vector: new Float32Array([1, 0, 0]),
-      chaptersOld: 0,
-      pinSignal: 0,
-      commonKnowledge: false,
-      keywordHits: [],
-      occurredAtEntryId: null,
-      awarenessIds: [],
-      embeddingStale: false,
-    },
+function entityCandidate(id: string, displayName: string, renderedText: string): Candidate {
+  return {
+    kind: 'entity',
+    id,
+    displayName,
+    renderedText,
+    sims: [0, 0, 0],
+    vector: new Float32Array([1, 0, 0]),
+    chaptersOld: 0,
+    pinSignal: 0,
+    commonKnowledge: false,
+    keywordHits: [],
+    occurredAtEntryId: null,
+    awarenessIds: [],
+    embeddingStale: false,
+  }
+}
+
+function retrievalIntermediate(
+  over: { entities?: Candidate[]; selectedLocationIds?: string[] } = {},
+): RetrievalSuccess {
+  const selected: Candidate[] = over.entities ?? [
+    entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
   ]
   const emptyBundle = {
     selected: [],
@@ -810,6 +817,8 @@ function retrievalIntermediate(): RetrievalSuccess {
     queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
     staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
     injectedAwarenessIds: [],
+    selectedLocationIds: over.selectedLocationIds ?? [],
+    timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
   }
 }
 
@@ -920,6 +929,42 @@ describe('narrative fold — retrieval handoff', () => {
     const { context } = await runNarrativeWith({ narrative: 'prose' })
     expect(context.retrievedEntities).toEqual([])
     expect(context.structuralActiveThreads).toEqual([])
+  })
+
+  // The whole round trip for a scene that MOVES: the ranked place has to reach
+  // the prompt as a nameable ID, and what the model names has to land on the
+  // entry. Omitting <current_location> means "inherit" (lib/piggyback/apply.ts),
+  // so a prompt that offers no place freezes the location forever.
+  it('lets the model move the scene to a ranked location', async () => {
+    const { prompt, metadata } = await runNarrativeWith({
+      narrative:
+        'They cross to the stalls.\n<state><current_location>l1</current_location></state>',
+      intermediates: {
+        [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate({
+          entities: [
+            entityCandidate(
+              RETRIEVED_LOCATION_ID,
+              'The Market',
+              'The Market (currently elsewhere): stalls under sailcloth.',
+            ),
+          ],
+          selectedLocationIds: [RETRIEVED_LOCATION_ID],
+        }),
+      },
+    })
+    expect(prompt).toContain('for <current_location> when the scene is at that place: l1.')
+    expect(metadata.currentLocationId).toBe(RETRIEVED_LOCATION_ID)
+  })
+
+  // Negative control for the case above: the same fold with a ranked CHARACTER
+  // offers no place, so the instruction stays out of the prompt entirely.
+  it('offers no <current_location> target when the ranked entity is not a place', async () => {
+    const { prompt } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() },
+    })
+    expect(prompt).toContain('Corvin (currently elsewhere): a smuggler.')
+    expect(prompt).not.toContain('for <current_location> when the scene is at that place')
   })
 
   // ctx.intermediates is Record<string, unknown>: a non-outcome value must not

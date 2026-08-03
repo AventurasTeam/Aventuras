@@ -139,9 +139,83 @@ describe('per-turn-piggyback', () => {
         done: true,
         value: {
           status: 'failed',
-          error: { kind: 'orchestrator', detail: 'piggyback-fallback: no open story' },
+          error: { kind: 'orchestrator', detail: 'piggyback-fallback: no open story for branch' },
         },
       })
+    })
+
+    // Same working-set guards the retrieval and narrative folds carry: this
+    // phase writes scene state back onto the tail entry, so a store hydrated
+    // for another branch would classify one branch's prose against another's
+    // cast and land the patch on the wrong row.
+    it.each([
+      {
+        case: 'the open story is another branch',
+        open: { storyId: 's1', branchId: 'b2' },
+        loaded: 'b1',
+        detail: 'piggyback-fallback: no open story for branch',
+      },
+      {
+        case: 'the open story is another story',
+        open: { storyId: 's2', branchId: 'b1' },
+        loaded: 'b1',
+        detail: 'piggyback-fallback: no open story for branch',
+      },
+      {
+        case: 'the entries store holds another branch',
+        open: { storyId: 's1', branchId: 'b1' },
+        loaded: 'b2',
+        detail: 'piggyback-fallback: entries store loaded for another branch',
+      },
+    ])('refuses a desynced store when $case', async ({ open, loaded, detail }) => {
+      currentStoryStore.set({
+        ...open,
+        definition,
+        settings: baseSettings({ piggybackMode: 'off' }),
+      })
+      entriesStore.hydrate(loaded, [])
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const res = await gen.next()
+
+      expect(res).toEqual({
+        done: true,
+        value: { status: 'failed', error: { kind: 'orchestrator', detail } },
+      })
+      expect(generateStructuredMock).not.toHaveBeenCalled()
+    })
+
+    // Positive control for the three refusals above: the same setup with every
+    // identity agreeing runs the phase instead of failing it.
+    it('runs when the open story and the entries store both match the run', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ piggybackMode: 'off' }),
+      })
+      entriesStore.hydrate('b1', [])
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: {} as never,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const res = await gen.next()
+
+      expect(res).toEqual({ done: true, value: { status: 'completed' } })
     })
 
     it('completes early without calling generateStructured if fallback should not fire', async () => {

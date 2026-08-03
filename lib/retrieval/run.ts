@@ -66,6 +66,23 @@ export type RetrievalParams = {
   recentProse: string
 }
 
+/**
+ * Wall-clock cost of one pass, in ms, for the AC7 timing log. The four stages
+ * are disjoint sub-spans of `totalMs`; what is left over is the source-row,
+ * awareness and chapter-range reads plus floor and query-stack assembly.
+ */
+export type RetrievalTimings = {
+  totalMs: number
+  /** Blocking embed of every row a classifier dirtied since the last pass. */
+  syncMs: number
+  /** The one embedder call behind the three-vector query stack. */
+  embedMs: number
+  /** Every vec0 KNN round trip, summed over the five types and three queries. */
+  knnMs: number
+  /** Scoring, MMR, and the eager token estimate the ranker costs each pool row. */
+  rankMs: number
+}
+
 /** Blocking failure from either embedder call the pass makes — the sync's or the query's. */
 export type RetrievalFailure = {
   reason: 'init' | 'call'
@@ -97,6 +114,16 @@ export type RetrievalOutcome =
        * bump one counter per element without de-duplicating first.
        */
       injectedAwarenessIds: string[]
+      /**
+       * Which of `bundles.entities.selected` are places. A Candidate's `kind` is
+       * the VecTargetKind ('entity'), not the EntityKind, and this pass is the
+       * last place that still holds the source row — without this a prompt
+       * cannot tell a retrieved location from a retrieved character, and an
+       * instruction naming "the IDs above" would point at a set that can be all
+       * characters.
+       */
+      selectedLocationIds: string[]
+      timings: RetrievalTimings
     }
   | { ok: false; failure: RetrievalFailure }
 
@@ -115,9 +142,12 @@ export async function runRetrieval(
     throw new Error(`runRetrieval: branch ${params.branchId} is outside the sync scope`)
   }
 
+  const startedAt = performance.now()
+
   // No KNN without a preceding sync (retrieval.md → Compute lifecycle), and
   // every read below depends on the embedding_stale flags this clears.
   const sync = await runSyncStage(deps)
+  const syncMs = performance.now() - startedAt
   if (!sync.ok) {
     return {
       ok: false,
@@ -149,7 +179,9 @@ export async function runRetrieval(
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
 
+  const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
+  const embedMs = performance.now() - embedStartedAt
   if (!embed.ok) return embed
 
   const queryVectors = distributeQueryVectors(embed.vectors, queries.presence)
@@ -184,18 +216,29 @@ export async function runRetrieval(
     threads: [],
     chapters: [],
   }
+  let knnMs = 0
   for (const kind of KINDS) {
-    pools[TYPE_OF_KIND[kind]] = await buildPool(deps, params, { ...poolCtx, kind })
+    const pool = await buildPool(deps, params, { ...poolCtx, kind })
+    pools[TYPE_OF_KIND[kind]] = pool.candidates
+    knnMs += pool.knnMs
   }
 
+  const chapterRanges = await loadChapterRanges(deps.queryAll, params.branchId)
+
+  const rankStartedAt = performance.now()
   const bundles = rankAll({
     pools,
     budgets: params.budgets,
     params: RANKER_DEFAULTS,
     presence,
-    chapterRanges: await loadChapterRanges(deps.queryAll, params.branchId),
+    chapterRanges,
     countTokens,
   })
+  const rankMs = performance.now() - rankStartedAt
+
+  const placeIds = new Set(
+    sourceRows.entities.filter((e) => e.kind === 'location').map((e) => e.id),
+  )
 
   return {
     ok: true,
@@ -204,6 +247,10 @@ export async function runRetrieval(
     queries,
     staleCounts: staleCountsOf(sourceRows),
     injectedAwarenessIds: bundles.happenings.selected.flatMap((c) => [...c.awarenessIds]),
+    selectedLocationIds: bundles.entities.selected
+      .filter((c) => placeIds.has(c.id))
+      .map((c) => c.id),
+    timings: { totalMs: performance.now() - startedAt, syncMs, embedMs, knnMs, rankMs },
   }
 }
 
@@ -260,9 +307,10 @@ async function buildPool(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
-): Promise<Candidate[]> {
+): Promise<{ candidates: Candidate[]; knnMs: number }> {
   const vectorById = new Map<string, Float32Array>()
   const perQuery: KnnHit[][] = []
+  let knnMs = 0
 
   for (const vector of ctx.queryVectors) {
     if (vector === null) {
@@ -275,7 +323,9 @@ async function buildPool(
       k: KNN_K,
       vector: new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength),
     })
+    const knnStartedAt = performance.now()
     const rows = await deps.queryAll(query.sql, query.params)
+    knnMs += performance.now() - knnStartedAt
     perQuery.push(
       rows.map((row) => {
         const id = String(row[0])
@@ -288,8 +338,7 @@ async function buildPool(
   }
 
   const ids = poolIdsFromKnn(perQuery)
-  if (ids.length === 0) return []
-  return assembleCandidates(ctx, ids, vectorById)
+  return { candidates: ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById), knnMs }
 }
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)
