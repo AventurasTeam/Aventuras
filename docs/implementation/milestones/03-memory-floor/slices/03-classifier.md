@@ -192,39 +192,225 @@ head]` with the placeholder universe;
 
 ## Open questions
 
-- **Gating user scene-state edits against this pass** — the scheduled
-  world-state-block edit surface ([`followups.md`](../../../../followups.md))
-  applies its edits to entity rows, which collides with this pipeline's
-  `entities.status` writes (staged promotion vs classifier status flip).
-  `'no-gate'` is deliberate and shouldn't be inverted wholesale; the gate
-  wants to be **field-scoped to status** rather than blocking metadata
-  edits at large. Entry metadata itself is uncontested — this pass
-  doesn't write it.
-- **Happening involvements drift when scene membership is edited after
-  the fact** — involvements record who was present at an entry, so a
-  later edit to that entry's `sceneEntities` can contradict them.
-  Rolling back and re-running the pass is disproportionate: it
-  over-reverses (facts anchored to surviving entries must be spared per
-  the survival anchor), costs a full LLM pass for a small correction,
-  and can silently rewrite happenings the user never touched. Prefer
-  flagging affected involvements for review over recomputing, which
-  also matches the established posture that user edits stick only until
-  the classifier reads contradicting prose
-  ([`data-model.md → Authorship contract`](../../../../data-model.md#authorship-contract)
-  parks the manual-edit-vs-overwrite policy as its own question).
-- **Output wire format** — strict structured-output mode
-  (capability-gated) vs tagged trailing block; also whether one
-  call emits all write kinds or the pass splits into a small number
-  of calls.
-- **Scheduler placement** — store-subscription on entry commits vs
-  an orchestrator-adjacent tick module.
-- **τ_high / τ_low starting values** — canon suggests 0.75 / 0.50
-  cosine as starting ranges; pin the constants and their config
-  location (hardcoded v1 per the tuning-surface parking).
-- **Prompt-window truncation cap** — `app_settings` carries
-  classifier truncation caps (app-only settings); confirm the M1.5
-  field and apply it to the window build.
+Resolved during slice planning; the resolutions are recorded in
+[Implementation notes](#implementation-notes) below. The one question
+the slice did not settle — involvement drift when scene membership is
+edited after the fact — outlived the slice and moved to
+[`followups.md`](../../../../followups.md), since it is triggered by the
+world-state-block edit surface rather than by this pipeline.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### Decisions that constrain future slices
+
+- **The field-scoped gate on `entities.status` is deliberately
+  unbuilt.** `gateBehavior` stays `'no-gate'`. The colliding surface —
+  the scheduled world-state-block edit
+  ([`followups.md`](../../../../followups.md)) — is still unimplemented,
+  and [Slice 3.8](./08-worldtime-edit.md) writes only
+  `story_entries.metadata`, which the
+  [write-set table](../../../../memory/cadence.md#concurrency) gives to
+  the per-turn layer. Whoever lands the edit surface owns the gate; it
+  must stay scoped to `status` rather than inverting `no-gate`
+  wholesale.
+- **`processedThrough` is written after the delta burst, not
+  transactionally with it** — a direct non-delta `UPDATE branches` once
+  the burst has landed. The orchestrator applies each delta as it is
+  yielded, so there is no run-wide transaction to join. Watermark-after
+  is the right order — the reverse would advance over facts that were
+  then reversed, a silent permanent hole in the graph — but it is **not**
+  coherent by construction, as this note originally claimed. The claim
+  assumed boot recovery reverse-replays an interrupted pass; nothing
+  does. Classifier runs leave no `pipeline_runs` marker, and
+  `resetStuckClassifierRunState` only repairs `$.state`, so a crash
+  between two committed deltas leaves those deltas on disk with the
+  watermark unmoved and the next pass re-writes the window's happenings.
+  Tracked in [`followups.md`](../../../../followups.md); closing it needs
+  either a transactional watermark, a run marker, or an idempotency key.
+- **`bracketProseReversal` is the only sanctioned entry to the reversal
+  sweep.** It owns both classifier-era obligations (drain the in-flight
+  run, hold `reversalInProgress` across the whole wait → sweep window),
+  and it is deliberately non-re-entrant — it throws — so the constraint
+  is discovered at the first test run rather than by a dropped barrier
+  in production. [Slice 3.9](./09-undo-batched.md) and
+  [Slice 3.10](./10-regenerate.md) must call it, never
+  `reverseAndPruneDeltaRows` directly. The clamp bound is
+  `B = target.position`: `rollbackToEntry`'s target is itself the first
+  removed entry.
+
+### Contracts to preserve
+
+- **`branches.classifier_status` has two independent writers** — the
+  reversal clamp owns `$.processedThrough`, the pipeline owns the
+  lifecycle keys (`state`, `retryCount`, timestamps). Every write is a
+  key-scoped `json_set`; a whole-blob read-modify-write from either side
+  silently reverts the other, which
+  [`cadence.md → Concurrency`](../../../../memory/cadence.md#concurrency)
+  bans.
+- **`newCharacters` handles live in a reserved namespace (`new:`), and
+  the return trip enforces it structurally.** The placeholder walker runs
+  before the planner, so a handle that collides with a live placeholder
+  (`c1`, `hp1`, …) would have every ref to the new character rewritten
+  into the _existing_ entity's uuid — silent misattribution with no
+  unresolved ref and no warning. The prompt reserves the prefix, but the
+  guard that actually holds is `substituteClassifierIds` refusing to
+  rewrite any ref a declared handle claims, so a non-compliant model
+  cannot reach the failure. Any future ref-bearing field must keep both
+  halves.
+- **A pre-flight failure is recorded by `runClassifierNow`, not by the
+  phase.** An unresolvable `classifier` agent halts the run before phase
+  0, so the phase's own `nextStatusOnFailure` bookkeeping never executes:
+  left alone the status stays `idle`, the backoff never arms,
+  `failed-persistent` is unreachable, and the cadence re-fires the doomed
+  run on every committed turn. Whoever adds a second pre-phase failure
+  mode owns extending that mapping.
+- **Cross-turn attribution is a prompt obligation, not an enforceable
+  one.** The extraction schema carries one `sourceTurn` per fact, so the
+  planner structurally cannot apply the "latest turn wins" rule; the
+  only guard is an assertion that the rendered template still carries
+  the directive.
+- **`redoLastAction` keeps its own bracket and has no classifier
+  drain** — an exemption, not an oversight. It re-inserts prose rather
+  than removing it, so the barrier's premise ("don't derive from prose
+  about to vanish") does not apply. It is now the only hand-rolled
+  `setReversalInProgress` left in `undo.ts`; if a drain turns out to be
+  wanted, that is a followups entry, not a silent fix.
+- **`reverseReplayDeltas` (orchestrator abort, crash recovery,
+  `submit-turn.ts`) carries neither obligation, correctly:** the entry it
+  removes is at head, and a hard-gate per-turn run is in flight
+  throughout, which `blockedBy` prevents the classifier from starting
+  under.
+- **Redo after an undo does not restore `processedThrough`** — settled
+  by canon, not open.
+  [`data-model.md → Survival anchor`](../../../../data-model.md#survival-anchor)
+  accepts the re-derive, and the duplicate happenings are cleaned at
+  chapter-close dedup.
+
+### Resolved developer decisions
+
+- **Wire format:** one `generateStructured('classifier', …)` call over a
+  single Zod schema with per-kind arrays. Keeps the pass literally "one
+  response, one burst of deltas" as the barrier contract requires;
+  splitting would double input cost over the window the cadence exists
+  to amortize. Constraint discovered while building it: no schema field
+  may use `.transform()` — `z.toJSONSchema` throws on transforms, so the
+  `severity` clamp lives in the planner instead.
+- **`common_knowledge` is absent from the schema** (auto-emission is
+  forbidden by canon); happenings take the SQLite default `0`.
+- **Scheduler placement:** `lib/classifier/scheduler.ts`, a pure
+  controller with injected deps, wired in `bootstrap.ts` off
+  `pipelineEventBus`'s `run_complete` — the drain worker's precedent. Its
+  state is keyed **per branch**: global timer state let a tick on one
+  branch destroy another branch's pending backoff, i.e. a failed run
+  losing its recovery. `runNow` returns a marker rather than `void`
+  (`'busy'` for an in-flight run, `'stopped'` for a torn-down scheduler),
+  because it is the only escape from `failed-persistent` and a silent
+  no-op there is unreportable.
+- **Prompt-window cap:** new `classifierWindowMaxEntries` app setting
+  (default 20), filling the app-scope truncation cap
+  `architecture.md` specifies but M1.5 never landed. The pass advances
+  the watermark only to the cut, so a long backlog drains over
+  successive passes instead of skipping prose permanently.
+- **The window is read from SQLite, never from `entriesStore`.** The
+  store holds only the last `ENTRIES_WINDOW_SIZE` (50) entries, so a
+  store-fed window starts at the reader's oldest loaded row — and since
+  the pass then advances the watermark over the cut, every turn between
+  the watermark and that row is skipped permanently, which is the exact
+  failure the cap above is supposed to prevent. The phase queries
+  `position > processedThrough` with `LIMIT maxEntries + 1`, the `+1`
+  being what still lets `buildClassifierWindow` see the cut and set
+  `truncated`. Unit tests that hydrate the store cannot catch a
+  regression here; `periodic-classifier.spec.ts` covers it end to end.
+- **`τ_high` / `τ_low`:** hardcoded `0.75` / `0.50` in
+  `lib/classifier/reconcile.ts`; the tuning surface is parked to M7.5, and
+  a config field with no UI is surface without a consumer. `τ_low` is
+  load-bearing via `flagReason` (`'distinct'` / `'ambiguous'` /
+  `'no-signal'`), which the M4 collision-review surface consumes.
+- **Disambiguation similarity** embeds both the extracted description
+  and the existing entity's in one call and cosines them in memory,
+  rather than reading the stored vec0 vector — a first-introduction row
+  is written `embedding_stale = 1`, so reading vec0 would make the
+  decision depend on drain timing.
+- **Slice size:** one slice / one PR organized as commit-sized task
+  clusters; the 3.3a/3.3b split was recommended and declined.
+
+### Deviations from the brief
+
+- **The pass bounds its own model call (5 min), separately from
+  `profile.timeout`.** The retry policy in scope here can only act on a call
+  that _returns_; a provider that accepts the request and never answers is not
+  a failure, so the backoff never armed. That case is uniquely unrecoverable
+  for this pipeline: `state: 'running'` is persisted, and both
+  `shouldCadenceFire` and `runNow`'s in-flight guard read it, so the pass stayed
+  dead until the next boot with the pill showing `classifying` throughout — and
+  unlike every foreground kind, the user has no cancel affordance to break it.
+  The expiry is routed to `nextStatusOnFailure`, not the abort arm, so it burns
+  a retry rather than silently rescheduling the same dead provider. A profile
+  timeout shorter than the cap still wins (the SDK aborts first); a longer one
+  is deliberately capped.
+
+- **The cascade's "merge" arm is not built.** No merge action exists in
+  the delta registry and this planner only ever creates happenings;
+  happening consolidation and dedup are chapter-close lore-mgmt (M5.2).
+  The cascade landed on the delete arm — the only one that can orphan
+  rows today — and a future merge arm inherits the same child-row
+  handling. The acceptance criterion is met on that arm, not silently
+  unmet.
+- **Boot gained `resetStuckClassifierRunState`.** Persisting
+  `state: 'running'` at run start (needed to make `shouldCadenceFire`'s
+  guard live) meant a crash between that write and the next status write
+  wedged the cadence silently, with no escape until M7.2 ships the
+  manual-run UI — unlike `failed-persistent`, which is deliberate and
+  loudly reported. The reconciliation is a sibling step in
+  `runBootstrap`, not part of `recoverInFlightRuns` (which is scoped to
+  `pipeline_runs`), and is one key-scoped UPDATE on `$.state`;
+  `retrying` and `failed-persistent` are explicitly left alone, since
+  resetting those would erase a real error state and re-arm a broken
+  provider.
+- **The reader was narrowed rather than the classifier widened.**
+  `isGenerating` was "any run on this branch", which gave a `no-gate`
+  classifier run a phantom streaming placeholder and a
+  `generating-narrative` pill; it now tracks foreground kinds only.
+  `GenerationStatusPill.onCancel` became optional rather than wiring a
+  per-turn cancel that would no-op during a classifier-only run.
+- **Disambiguation was hardened in review, against both of the shortcuts
+  this note originally recorded as deliberate.** A truncating `cosine`
+  scores a shared prefix of two differently-sized vectors — reachable
+  mid embedder-swap — and hands a fabricated similarity to a
+  create-or-merge decision; a dimension mismatch now degrades to
+  `'no-signal'` instead. First-match-wins on namesakes is worse than the
+  canon limitation it was justified by, because create-with-flag
+  _manufactures_ namesakes: from the second flagged duplicate onward,
+  insertion order decided whether the real match was ever scored. All
+  namesakes are embedded in the same single call and the best is taken.
+- **`unresolvedRefs` mixes entity refs with turn handles and merges
+  "unknown" with "wrong kind".** Adequate as a counter; a future
+  diagnostics consumer will want the two separated.
+
+### Outstanding
+
+The manual smoke is **done**, automated as
+`e2e/tests/classifier-real-provider.smoke.spec.ts` (opt-in: it skips unless
+`SMOKE_LLM_URL` / `SMOKE_LLM_MODEL` are set). Run against a local koboldcpp
+serving a 4B-class Q4 model, it confirms the chain end to end — cadence tick →
+pass → anchored deltas → graph rows → watermark — with every
+`periodic_classifier` delta carrying an `entry_id`.
+
+What it also showed, and what the M7.5 tuning pass should start from:
+
+- **Extraction quality swings hard on a small model.** Two runs over the same
+  window produced nine happenings and one. Titles and descriptions were sound
+  both times and `occurredAtTurn` resolved to real entries, so provenance held.
+- **`unresolvedRefs` dominates, not `window_head_fallback`.** 7 and 19
+  unresolved refs against a single head fallback: the model invents its own
+  handles rather than reusing the `[c1]` placeholders it was given. Involvements
+  and awareness are what get dropped, so the graph gains happenings but few
+  edges. The reserved `new:` namespace does not help here — these are refs to
+  entities that already exist. That is a prompt/model-compliance problem and the
+  first thing worth measuring.
+- **Polymorphic involvement works:** the one edge that did resolve bound a
+  happening to the `faction` "The City Watch", not a character.
+- **The embedding contract is observable only before the drain.** The pass
+  writes `embedding_stale = 1` and the drain clears it moments later, so a
+  post-hoc assertion on that column races; the mock-LLM spec covers the
+  write-path half instead.

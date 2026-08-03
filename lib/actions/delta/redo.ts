@@ -31,6 +31,8 @@ export async function snapshotForRedo(rows: Delta[], ctx: DbCtx): Promise<RedoSn
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
 export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx): Promise<void> {
   const ops = []
+  const cascadeInfo: Map<string, Record<string, Record<string, unknown>[]>> = new Map()
+
   for (const { delta, rowBeforeUndo } of snapshots) {
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo apply: unknown target_table ${delta.targetTable}`)
@@ -40,6 +42,15 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
       if (rowBeforeUndo)
         ops.push(ctx.db.insert(entry.descriptor.table).values(rowBeforeUndo).toSQL())
     } else if (delta.op === 'delete') {
+      if (entry.cascadeDeleteOps) {
+        const { ops: childOps, children } = await entry.cascadeDeleteOps(
+          delta.branchId,
+          delta.targetId,
+          ctx,
+        )
+        ops.push(...childOps)
+        cascadeInfo.set(delta.targetId, children)
+      }
       ops.push(ctx.db.delete(entry.descriptor.table).where(where).toSQL())
     } else if (rowBeforeUndo) {
       ops.push(ctx.db.update(entry.descriptor.table).set(rowBeforeUndo).where(where).toSQL())
@@ -55,6 +66,15 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
       const entry = resolveByTable(delta.targetTable)
       if (delta.op === 'delete') {
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
+        const children = cascadeInfo.get(delta.targetId)
+        if (children) {
+          for (const [childTableName, childRows] of Object.entries(children)) {
+            const childEntry = resolveByTable(childTableName)
+            for (const childRow of childRows) {
+              childEntry?.patcher?.(delta.branchId, { op: 'delete', id: childRow.id as string })
+            }
+          }
+        }
       } else if (rowBeforeUndo) {
         entry?.patcher?.(
           delta.branchId,

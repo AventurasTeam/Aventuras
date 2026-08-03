@@ -2,6 +2,7 @@ import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack } from '../types'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
+import { PERIODIC_CLASSIFIER } from './periodic-classifier'
 import { PIGGYBACK_FALLBACK_CLASSIFIER } from './piggyback-fallback-classifier'
 import { STATE_EMISSION } from './state-emission'
 import { SUGGESTION_EMISSION } from './suggestion-emission'
@@ -15,6 +16,10 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.piggybackFallbackClassifier]: {
       group: 'generationContext',
       source: PIGGYBACK_FALLBACK_CLASSIFIER,
+    },
+    [TEMPLATE_IDS.periodicClassifier]: {
+      group: 'classifierContext',
+      source: PERIODIC_CLASSIFIER,
     },
     [TEMPLATE_IDS.suggestionRefresh]: {
       group: 'generationContext',

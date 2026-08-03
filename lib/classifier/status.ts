@@ -1,0 +1,82 @@
+import type { ClassifierStatus } from '@/lib/db'
+
+// classifier.md -> Auto-retry policy. One attempt plus three backed-off retries,
+// then failed-persistent.
+export const BACKOFF_MS = [30_000, 120_000, 300_000] as const
+
+export function idleStatus(): ClassifierStatus {
+  return {
+    state: 'idle',
+    lastSuccessAt: null,
+    lastError: null,
+    retryCount: 0,
+    processedThrough: null,
+  }
+}
+
+/**
+ * Seed document for the key-scoped `json_set` writers. They patch individual
+ * keys, so a `COALESCE(classifier_status, '{}')` on a never-written branch
+ * persists an object missing whichever keys that writer does not own — the
+ * column then type-lies about ClassifierStatus. Seeding a complete idle status
+ * keeps every write total without making any writer touch a key it doesn't own.
+ */
+export const IDLE_STATUS_JSON = JSON.stringify(idleStatus())
+
+export function nextStatusOnStart(status: ClassifierStatus): ClassifierStatus {
+  return { ...status, state: 'running' }
+}
+
+export function nextStatusOnSuccess(
+  status: ClassifierStatus,
+  pass: { coversThrough: number; at: number },
+): ClassifierStatus {
+  return {
+    state: 'idle',
+    lastSuccessAt: pass.at,
+    lastError: null,
+    retryCount: 0,
+    // A pass never un-processes prose: a clamp is the only way back.
+    processedThrough: Math.max(status.processedThrough ?? 0, pass.coversThrough),
+  }
+}
+
+/**
+ * The wait before the next attempt, or null when the backoff is exhausted.
+ * `retryCount` counts failures so far, so attempt N waits `BACKOFF_MS[N - 1]`.
+ * Sole owner of that mapping — the scheduler re-derives the delay from here.
+ */
+export function retryDelayForStatus(status: ClassifierStatus): number | null {
+  if (status.state !== 'retrying') return null
+  return BACKOFF_MS[status.retryCount - 1] ?? null
+}
+
+export function nextStatusOnFailure(
+  status: ClassifierStatus,
+  failure: { error: string; at: number },
+): { status: ClassifierStatus; retryDelayMs: number | null } {
+  const attempt = status.retryCount
+  const exhausted = attempt >= BACKOFF_MS.length
+  const next: ClassifierStatus = {
+    ...status,
+    state: exhausted ? 'failed-persistent' : 'retrying',
+    lastError: failure.error,
+    retryCount: Math.min(attempt + 1, BACKOFF_MS.length),
+  }
+  return { status: next, retryDelayMs: retryDelayForStatus(next) }
+}
+
+/**
+ * Turn-counted cadence (canon ships no token trigger in v1). Suspended in
+ * failed-persistent so a broken provider is not spammed on every tick — the
+ * manual run is the only way out.
+ */
+export function shouldCadenceFire(args: {
+  status: ClassifierStatus
+  unprocessedTurns: number
+  cadence: number
+}): boolean {
+  const { status, unprocessedTurns, cadence } = args
+  if (status.state === 'failed-persistent' || status.state === 'running') return false
+  return unprocessedTurns >= Math.max(1, cadence)
+}

@@ -6,6 +6,7 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
+import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
 export type StoryEntryRejection = {
@@ -60,7 +61,7 @@ export async function resolveRollbackWindow(
   branchId: string,
   targetId: string,
   ctx: DbCtx,
-): Promise<{ where: SQL | undefined } | StoryEntryRejection> {
+): Promise<{ where: SQL | undefined; earliestRemovedPosition: number } | StoryEntryRejection> {
   const [target] = await ctx.db
     .select()
     .from(storyEntries)
@@ -107,6 +108,9 @@ export async function resolveRollbackWindow(
       sql`${deltas.logPosition} >= ${createDelta.lp}`,
       sql`(${deltas.entryId} IS NULL OR (SELECT ${storyEntries.position} FROM ${storyEntries} WHERE ${storyEntries.branchId} = ${deltas.branchId} AND ${storyEntries.id} = ${deltas.entryId}) >= ${target.position})`,
     ),
+    // B: the target is itself the first entry the sweep removes, for both the
+    // rollback and the CTRL-Z turn arm.
+    earliestRemovedPosition: target.position,
   }
 }
 
@@ -147,8 +151,7 @@ export async function rollbackToEntry(
       code: STORY_ENTRY_REJECTION.inFlight,
     }
 
-  generationStore.setReversalInProgress(true)
-  try {
+  return bracketProseReversal(branchId, async () => {
     const win = await resolveRollbackWindow(branchId, targetId, ctx)
     if ('status' in win) return win
     const rows = (await ctx.db
@@ -157,11 +160,10 @@ export async function rollbackToEntry(
       .where(win.where)
       .orderBy(desc(deltas.logPosition))) as Delta[]
     const counts = countBuckets(rows)
-    await reverseAndPruneDeltaRows(rows, ctx)
+    const clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
+    await reverseAndPruneDeltaRows(rows, ctx, clampOps)
     // A second unrelated action clears the redo stack (data-model.md).
     undoRedoStore.clear()
     return { status: 'ok', counts }
-  } finally {
-    generationStore.setReversalInProgress(false)
-  }
+  })
 }

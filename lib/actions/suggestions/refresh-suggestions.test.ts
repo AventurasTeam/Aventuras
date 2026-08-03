@@ -9,9 +9,15 @@ import {
   STORY_SETTINGS_DEFAULTS,
   type StorySettings,
 } from '@/lib/db'
-import { awaitRunTerminal, runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
+import { runPipeline, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import { makeHarness, resetSingletons } from '@/lib/pipeline/__tests__/harness'
-import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import {
+  appSettingsStore,
+  awaitRunTerminal,
+  currentStoryStore,
+  entitiesStore,
+  entriesStore,
+} from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
 import { undoLastAction } from '../story-entries/undo'
@@ -240,7 +246,7 @@ describe('refreshSuggestions', () => {
 
     // abort() fires synchronously; the terminal cannot resolve until the held
     // call returns, so release after arming the wait rather than before it.
-    const cancelled = awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
+    const cancelled = awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'b1', 'cancel')
     release()
     await cancelled
 

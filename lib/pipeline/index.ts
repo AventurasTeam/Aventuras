@@ -6,6 +6,11 @@ export {
   fallbackClassifierWithSuggestionsSchema,
 } from './definitions/per-turn-piggyback'
 export {
+  __resetClassifierEmbedder,
+  configureClassifierEmbedder,
+  ensurePeriodicClassifierPipelineRegistered,
+} from './definitions/periodic-classifier'
+export {
   ensureSuggestionRefreshPipelineRegistered,
   SUGGESTION_EMISSION_PHASE,
   SUGGESTION_REFRESH_KIND,
@@ -21,7 +26,9 @@ export {
   configureDeltaActionPort,
   type DeltaActionPort,
 } from './runtime/action-port'
-export { awaitRunTerminal, runPipeline, type RunCtx, type RunCtxFor } from './runtime/orchestrator'
+// awaitRunTerminal is deliberately absent: it moved to lib/stores/generation so
+// lib/actions can await a terminal without importing the orchestrator.
+export { runPipeline, type RunCtx, type RunCtxFor } from './runtime/orchestrator'
 export { recoverInFlightRuns } from './runtime/recovery'
 export type { RecoveredRun, RecoveryFailure, RecoveryReport } from './runtime/recovery'
 export type {

@@ -83,9 +83,13 @@ function buildStatePatchOutcome(
     ),
   }
   if (Object.keys(undoPayload.state).length === 0) {
+    // 'noop', not a plain rejection: a model restating an entity's current state
+    // is well-formed and merely redundant, and an unmarked rejection reverses the
+    // user's whole turn (orchestrator handleEvent).
     return {
       status: 'rejected' as const,
       reason: `no-op state patch for entities ${branchId}:${id}`,
+      code: 'noop' as const,
     }
   }
 

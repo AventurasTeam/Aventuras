@@ -59,7 +59,6 @@ import {
   shouldShowSuggestionStrip,
 } from '@/lib/piggyback'
 import {
-  awaitRunTerminal,
   PER_TURN_KIND,
   pipelineEventBus,
   SUGGESTION_REFRESH_KIND,
@@ -67,12 +66,15 @@ import {
 } from '@/lib/pipeline'
 import {
   appSettingsStore,
+  awaitRunTerminal,
+  backgroundClassifierRunning,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
+  isBackgroundKind,
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
@@ -125,14 +127,20 @@ export default function ReaderComposerRoute() {
   // streaming. Note this is only about the turn-shaped chrome — the refresh
   // does hold the edit gate, so `editBlocked` above already covers undo/redo.
   const isGenerating = generationStore.useGeneration((s) =>
+    // Narrative only: a refresh gets its own phase below, and a background kind
+    // (the classifier) must not light the streaming placeholder at all.
     [...s.txState.runs.values()].some(
-      (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND,
+      (r) =>
+        r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND && !isBackgroundKind(r.kind),
     ),
   )
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
     ),
+  )
+  const classifierRunning = generationStore.useGeneration((s) =>
+    backgroundClassifierRunning(s.txState, branchId),
   )
 
   const open = currentStoryStore.useCurrentStory((s) => s)
@@ -208,7 +216,9 @@ export default function ReaderComposerRoute() {
     ? 'generating-narrative'
     : refreshingSuggestions
       ? 'refreshing-suggestions'
-      : undefined
+      : classifierRunning
+        ? 'classifying'
+        : undefined
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -256,7 +266,7 @@ export default function ReaderComposerRoute() {
       const running = [...generationStore.getTxState().runs.values()].some(
         (r) => r.kind === SUGGESTION_REFRESH_KIND && r.branchId === branchId,
       )
-      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
+      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
     },
     [branchId],
   )
@@ -533,8 +543,8 @@ export default function ReaderComposerRoute() {
   const handleToggleStripCollapsed = useCallback(() => setStripCollapsed((prev) => !prev), [])
 
   const handleCancelSuggestions = useCallback(() => {
-    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
-  }, [])
+    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+  }, [branchId])
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
@@ -748,9 +758,18 @@ export default function ReaderComposerRoute() {
                   ? { code: 'memory-incomplete', pendingRows: staleTotal }
                   : undefined
           }
-          onCancel={() =>
-            void awaitRunTerminal(isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND, 'cancel')
-          }
+          // A background classifier pass has no cancel affordance, so the prop is
+          // absent rather than a no-op handler that would still open the popover.
+          {...(isGenerating || refreshingSuggestions
+            ? {
+                onCancel: () =>
+                  void awaitRunTerminal(
+                    isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
+                    branchId,
+                    'cancel',
+                  ),
+              }
+            : {})}
           onErrorTap={(code) => {
             if (code !== 'classifier-offline' && storyId != null)
               router.push(`/story-settings/${storyId}?tab=memory`)
@@ -840,7 +859,7 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel')}
               />
             </View>
           </View>
