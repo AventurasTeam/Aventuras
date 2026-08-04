@@ -12,7 +12,7 @@
     ChevronDown,
     Save,
     X,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import type { Item } from '$lib/types'
   import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import { Button } from '$lib/components/ui/button'

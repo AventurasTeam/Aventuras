@@ -5,7 +5,7 @@
  * Used by TranslationService for structured translation results.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 // ============================================================================
 // UI Elements Translation

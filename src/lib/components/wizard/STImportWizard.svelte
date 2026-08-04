@@ -4,7 +4,7 @@
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
-  import { ChevronLeft, ChevronRight, Play } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Play } from '@lucide/svelte'
 
   import {
     StepUploadFiles,

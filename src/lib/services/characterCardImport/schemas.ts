@@ -4,7 +4,7 @@
  * Zod schemas for SillyTavern character card import operations.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 import { visualDescriptorsSchema } from '$lib/services/ai/sdk/schemas/classifier'
 
 /**

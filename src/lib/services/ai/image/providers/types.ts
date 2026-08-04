@@ -6,6 +6,7 @@
  */
 
 import type { ImageProviderType } from '$lib/types'
+import type { DeepKeys } from '@saintno/comfyui-sdk'
 // Provider specific types
 export type ComfySamplerInfo = {
   samplers: string[]
@@ -20,13 +21,13 @@ export interface ComfyCustomWorkflow {
     { inputs: Record<string, unknown>; class_type: string; _meta?: { title?: string } }
   >
   /** Dot-path to the positive CLIPTextEncode text input, e.g. "57:27.inputs.text" */
-  positivePromptPath: string
+  positivePromptPath: DeepKeys<any>
   /** Dot-path to the seed input on the KSampler node, e.g. "57:3.inputs.seed" */
-  seedPath: string
+  seedPath: DeepKeys<any>
   /** Node ID of the SaveImage output node, e.g. "9" */
-  outputNodeId: string
+  outputNodeId: DeepKeys<any>
   /** Dot-path to the negative CLIPTextEncode text input, if detected — null otherwise. */
-  negativePromptPath: string | null
+  negativePromptPath: DeepKeys<any> | null
 }
 
 export interface ImageGenerateOptions {

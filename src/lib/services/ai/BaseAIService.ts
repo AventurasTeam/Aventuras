@@ -1,3 +1,4 @@
+import * as z from 'zod'
 import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 import { generateStructured } from './sdk/generate'
 
@@ -13,7 +14,7 @@ export abstract class BaseAIService {
   }
 
   protected async generate<T>(
-    schema: import('zod').ZodType<T>,
+    schema: z.ZodType<T>,
     system: string,
     prompt: string,
     templateId: string,

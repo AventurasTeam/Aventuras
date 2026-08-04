@@ -6,7 +6,7 @@
   import { Badge } from '$lib/components/ui/badge'
   import * as Alert from '$lib/components/ui/alert'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { AlertTriangle } from 'lucide-svelte'
+  import { AlertTriangle } from '@lucide/svelte'
   import { renderDescription } from '$lib/utils/markdown'
 
   interface Props {

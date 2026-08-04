@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte'
   import { countRequests, debug, type DebugLogEntry } from '$lib/stores/debug.svelte'
-  import { ExternalLink, RefreshCcw } from 'lucide-svelte'
+  import { ExternalLink, RefreshCcw } from '@lucide/svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import DebugLogView from './DebugLogView.svelte'

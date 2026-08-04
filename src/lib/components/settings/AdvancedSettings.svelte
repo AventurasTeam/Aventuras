@@ -13,7 +13,7 @@
     Sparkles,
     Users,
     PenLine,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
   import { Button } from '$lib/components/ui/button'

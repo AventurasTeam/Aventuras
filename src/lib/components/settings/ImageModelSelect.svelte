@@ -2,7 +2,7 @@
   import type { ImageModelInfo } from '$lib/services/ai/image'
   import { Autocomplete } from '$lib/components/ui/autocomplete'
   import { Button } from '$lib/components/ui/button'
-  import { RefreshCw, Loader2, Check, ImagePlus } from 'lucide-svelte'
+  import { RefreshCw, Loader2, Check, ImagePlus } from '@lucide/svelte'
   import { cn } from '$lib/utils/cn'
   import {
     DEFAULT_AVG_PROMPT_TOKENS,

@@ -7,7 +7,7 @@
   import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
   import { pingProfileModels, isPingEligible } from '$lib/services/modelHealthOrchestrator'
   import { isPingEligibleProvider } from '$lib/constants/modelHealth'
-  import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from 'lucide-svelte'
+  import { Plus, Check, ChevronRight, Key as KeyIcon, Star } from '@lucide/svelte'
 
   import { Button } from '$lib/components/ui/button'
   import { Card, CardContent } from '$lib/components/ui/card'

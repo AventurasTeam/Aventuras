@@ -1,10 +1,7 @@
 // Reasoning detail types per OpenRouter API spec
 // https://openrouter.ai/docs/guides/best-practices/reasoning-tokens
 export type ReasoningDetailFormat =
-  | 'unknown'
-  | 'openai-responses-v1'
-  | 'xai-responses-v1'
-  | 'anthropic-claude-v1'
+  'unknown' | 'openai-responses-v1' | 'xai-responses-v1' | 'anthropic-claude-v1'
 
 export interface ReasoningDetailBase {
   id?: string | null
@@ -29,9 +26,7 @@ export interface ReasoningTextDetail extends ReasoningDetailBase {
 }
 
 export type ReasoningDetail =
-  | ReasoningSummaryDetail
-  | ReasoningEncryptedDetail
-  | ReasoningTextDetail
+  ReasoningSummaryDetail | ReasoningEncryptedDetail | ReasoningTextDetail
 
 export interface Message {
   role: 'system' | 'user' | 'assistant'

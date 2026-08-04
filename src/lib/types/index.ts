@@ -634,14 +634,7 @@ export interface LoreManagementResult {
 
 // UI State types
 export type ActivePanel =
-  | 'story'
-  | 'library'
-  | 'settings'
-  | 'templates'
-  | 'lorebook'
-  | 'memory'
-  | 'vault'
-  | 'gallery'
+  'story' | 'library' | 'settings' | 'templates' | 'lorebook' | 'memory' | 'vault' | 'gallery'
 export type SidebarTab = 'characters' | 'locations' | 'inventory' | 'quests' | 'time' | 'branches'
 
 // Provider types matching Vercel AI SDK providers
@@ -708,7 +701,7 @@ export interface APISettings {
   llmTimeoutMs: number // Request timeout in milliseconds (default: 360000 = 6 minutes)
 }
 
-export type ReasoningEffort = 'off' | 'low' | 'medium' | 'high'
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh'
 
 import type { ThemeId as ThemeIdImport } from '../../themes/themes'
 export type ThemeId = ThemeIdImport

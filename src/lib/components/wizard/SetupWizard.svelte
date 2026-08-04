@@ -2,7 +2,7 @@
   import { WizardStore } from '$lib/stores/wizard/wizard.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
-  import { ChevronLeft, ChevronRight, Play } from 'lucide-svelte'
+  import { ChevronLeft, ChevronRight, Play } from '@lucide/svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
@@ -34,8 +34,7 @@
   // Auto-link embedded lorebook when selecting a vault character
   function autoLinkCharacterLorebook(char: VaultCharacter, isProtagonist = false) {
     const linkedId = (char.metadata as Record<string, unknown>)?.linkedLorebookId as
-      | string
-      | undefined
+      string | undefined
     if (!linkedId) return
     if (isProtagonist) wizard.setProtagonistLinkedLorebook(linkedId)
     const lorebook = lorebookVault.getById(linkedId)

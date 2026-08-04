@@ -13,7 +13,7 @@
     AlertTriangle,
     RefreshCw,
     Check,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
   import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
   import { onDestroy } from 'svelte'

@@ -12,7 +12,7 @@
     Filter,
     ArrowUpDown,
     Archive,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import LorebookEntryCard from './LorebookEntryCard.svelte'
 
   import { Input } from '$lib/components/ui/input'

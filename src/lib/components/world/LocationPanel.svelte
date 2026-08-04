@@ -1,7 +1,7 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { Plus, MapPin, Navigation, Pencil, ChevronDown, Save, X } from 'lucide-svelte'
+  import { Plus, MapPin, Navigation, Pencil, ChevronDown, Save, X } from '@lucide/svelte'
   import type { Location } from '$lib/types'
   import type { RuntimeVariable, RuntimeVarsMap } from '$lib/services/packs/types'
   import { Button } from '$lib/components/ui/button'

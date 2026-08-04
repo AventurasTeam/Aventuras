@@ -13,7 +13,7 @@
     Pencil,
     Trash2,
     ArrowLeft,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import LorebookEntryForm from './LorebookEntryForm.svelte'
 
   interface Props {

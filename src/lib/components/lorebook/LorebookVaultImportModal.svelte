@@ -6,7 +6,7 @@
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
-  import { Archive, Loader2 } from 'lucide-svelte'
+  import { Archive, Loader2 } from '@lucide/svelte'
 
   interface Props {
     open: boolean

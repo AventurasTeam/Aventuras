@@ -18,7 +18,7 @@
     Bookmark,
     Volume2,
     Image as ImageIcon,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
   import { parseMarkdown } from '$lib/utils/markdown'
@@ -60,7 +60,7 @@
   const reasoningTokens = $derived(entry.reasoning ? countTokens(entry.reasoning) : 0)
 
   // Check if reasoning is enabled in API settings
-  const isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'off')
+  const isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'none')
 
   // TTS generation state
   let isGeneratingTTS = $state(false)
@@ -2244,8 +2244,8 @@
   .story-text.linking-mode :global(p:hover),
   .story-text.linking-mode :global(li:hover),
   .story-text.linking-mode :global(blockquote:hover) {
-    background-color: var(--primary-500/10);
-    box-shadow: 0 0 0 1px var(--primary-500/30);
+    background-color: var(--primary-500) / 10;
+    box-shadow: 0 0 0 1px var(--primary-500) / 30;
   }
 
   :global(.drop-target) {

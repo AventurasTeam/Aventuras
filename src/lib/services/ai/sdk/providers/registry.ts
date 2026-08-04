@@ -8,6 +8,7 @@ import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import type { LanguageModelV4 } from '@ai-sdk/provider'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import { createPollinations } from 'ai-sdk-pollinations'
 import { createXai } from '@ai-sdk/xai'
@@ -19,7 +20,6 @@ import type { APIProfile } from '$lib/types'
 import { createTimeoutFetch } from './fetch'
 import { PROVIDERS, getBaseUrl } from './config'
 import { settings } from '$lib/stores/settings.svelte'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
 
 export function createModelFromProfile(options: {
   profile: APIProfile
@@ -28,28 +28,36 @@ export function createModelFromProfile(options: {
   debugId?: string
   structuredOutputs?: boolean
   manualBody?: string
-}): LanguageModelV3 {
-  const { profile, modelId, presetId, debugId, structuredOutputs, manualBody } = options
+  serviceId?: string
+}): LanguageModelV4 {
+  const { profile, modelId, presetId, debugId, structuredOutputs, manualBody, serviceId } = options
   const provider = createProviderFromProfile({
     profile,
     presetId,
     debugId,
     structuredOutputs,
     manualBody,
+    serviceId,
   })
 
-  return provider(modelId) as LanguageModelV3
+  return provider(modelId) as LanguageModelV4
 }
 
-export function createProviderFromProfile(options: {
+function createProviderFromProfile(options: {
   profile: APIProfile
   presetId: string
   debugId?: string
   structuredOutputs?: boolean
   manualBody?: string
+  serviceId?: string
 }) {
-  const { profile, presetId, debugId, structuredOutputs, manualBody } = options
-  const fetch = createTimeoutFetch(settings.apiSettings.llmTimeoutMs, presetId, manualBody, debugId)
+  const { profile, presetId, debugId, structuredOutputs, manualBody, serviceId } = options
+  const fetch = createTimeoutFetch(
+    settings.apiSettings.llmTimeoutMs,
+    serviceId ?? presetId,
+    manualBody,
+    debugId,
+  )
   const baseURL = profile.baseUrl || getBaseUrl(profile.providerType)
   const supportsStructuredOutputs = structuredOutputs ?? false
 
@@ -152,7 +160,13 @@ export function createProviderFromProfile(options: {
       if (!baseURL) {
         throw new Error('Zhipu provider requires a custom base URL') // It does not
       }
-      return createOpenAICompatible({ name: 'zhipu', apiKey: profile.apiKey, baseURL, fetch })
+      return createOpenAICompatible({
+        name: 'zhipu',
+        apiKey: profile.apiKey,
+        baseURL,
+        supportsStructuredOutputs,
+        fetch,
+      })
 
     case 'deepseek':
       return createDeepSeek({ apiKey: profile.apiKey, baseURL, fetch })

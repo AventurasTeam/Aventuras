@@ -62,6 +62,30 @@ function normalizeProfile(profile: APIProfile): APIProfile {
   }
 }
 
+function normalizeReasoningEffort(value?: string | null): ReasoningEffort | undefined {
+  if (value && ['off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
+    return value != 'off' ? (value as ReasoningEffort) : 'none'
+  } else {
+    return undefined
+  }
+}
+
+function normalizeReasoningForSettings(settings?: any | null): any {
+  if (!settings) return undefined
+
+  for (const key of Object.keys(settings)) {
+    const value = settings[key]
+    if (value && typeof value === 'object') {
+      const normalizedEffort = normalizeReasoningEffort(value.reasoningEffort)
+      if (normalizedEffort !== undefined) {
+        value.reasoningEffort = normalizedEffort
+      }
+    }
+  }
+
+  return settings
+}
+
 // ===== System Services Settings =====
 
 // Advanced settings for customizing generation processes
@@ -1015,7 +1039,7 @@ export function getDefaultGenerationPresetsForProvider(provider: ProviderType): 
     model: '',
     temperature: 0.5,
     maxTokens: 8192,
-    reasoningEffort: 'off' as const,
+    reasoningEffort: 'none' as const,
   }
 
   return [
@@ -1195,7 +1219,7 @@ class SettingsStore {
     defaultModel: 'z-ai/glm-4.7',
     temperature: 0.8,
     maxTokens: 8192,
-    reasoningEffort: 'off',
+    reasoningEffort: 'none',
     manualBody: '',
     enableThinking: false,
     llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
@@ -1261,7 +1285,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.7,
       maxTokens: 8192,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
     {
@@ -1283,7 +1307,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.7,
       maxTokens: 8192,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
     {
@@ -1294,7 +1318,7 @@ class SettingsStore {
       model: 'deepseek/deepseek-v3.2',
       temperature: 0.3,
       maxTokens: 4096,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     },
   ])
@@ -1330,9 +1354,11 @@ class SettingsStore {
       const enableThinking = await database.getSetting('enable_thinking')
       if (enableThinking) this.apiSettings.enableThinking = enableThinking === 'true'
 
-      const reasoningEffort = await database.getSetting('main_reasoning_effort')
-      if (reasoningEffort && ['off', 'low', 'medium', 'high'].includes(reasoningEffort)) {
-        this.apiSettings.reasoningEffort = reasoningEffort as ReasoningEffort
+      const reasoningEffort = normalizeReasoningEffort(
+        await database.getSetting('main_reasoning_effort'),
+      )
+      if (reasoningEffort) {
+        this.apiSettings.reasoningEffort = reasoningEffort
       } else if (this.apiSettings.enableThinking) {
         this.apiSettings.reasoningEffort = 'high'
       }
@@ -1525,7 +1551,7 @@ class SettingsStore {
       const wizardSettingsJson = await database.getSetting('wizard_settings')
       if (wizardSettingsJson) {
         try {
-          const loaded = JSON.parse(wizardSettingsJson)
+          const loaded = normalizeReasoningForSettings(JSON.parse(wizardSettingsJson))
           // Merge with defaults to ensure all fields exist
           const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
@@ -1557,7 +1583,7 @@ class SettingsStore {
       const presetsJson = await database.getSetting('generation_presets')
       if (presetsJson) {
         try {
-          const loadedPresets = JSON.parse(presetsJson)
+          const loadedPresets = normalizeReasoningForSettings(JSON.parse(presetsJson))
           if (Array.isArray(loadedPresets) && loadedPresets.length > 0) {
             // Populate null profileIds with default profile
             const defaultProfileId = this.getDefaultProfileIdForProvider()
@@ -1646,7 +1672,7 @@ class SettingsStore {
       const systemServicesJson = await database.getSetting('system_services_settings')
       if (systemServicesJson) {
         try {
-          const loaded = JSON.parse(systemServicesJson)
+          const loaded = normalizeReasoningForSettings(JSON.parse(systemServicesJson))
           const defaults = getDefaultSystemServicesSettingsForProvider(
             this.getDefaultProviderType(),
           )
@@ -1815,14 +1841,14 @@ class SettingsStore {
 
   async setEnableThinking(enabled: boolean) {
     this.apiSettings.enableThinking = enabled
-    this.apiSettings.reasoningEffort = enabled ? 'high' : 'off'
+    this.apiSettings.reasoningEffort = enabled ? 'high' : 'none'
     await database.setSetting('enable_thinking', enabled.toString())
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
   }
 
   async setMainReasoningEffort(effort: ReasoningEffort) {
     this.apiSettings.reasoningEffort = effort
-    this.apiSettings.enableThinking = effort !== 'off'
+    this.apiSettings.enableThinking = effort !== 'none'
     await database.setSetting('main_reasoning_effort', effort)
     await database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString())
   }
@@ -1910,7 +1936,7 @@ class SettingsStore {
 
     // Reset main narrative profile to default if the deleted profile is currently set as main narrative
     if (id === this.apiSettings.mainNarrativeProfileId) {
-      this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
+      await this.setMainNarrativeProfile(this.getDefaultProfileIdForProvider())
     }
 
     // Prevent deleting the default profile for the current provider
@@ -2326,11 +2352,9 @@ class SettingsStore {
 
     for (const [profileField, modelField] of Object.entries(profileFieldMap)) {
       const apiProfileId = (imgSettings as unknown as Record<string, unknown>)[profileField] as
-        | string
-        | undefined
+        string | undefined
       const model = (imgSettings as unknown as Record<string, unknown>)[modelField] as
-        | string
-        | undefined
+        string | undefined
 
       if (!apiProfileId || !model) continue
 
@@ -2925,7 +2949,7 @@ class SettingsStore {
 
     // For providers without service defaults, use empty model (requires manual configuration)
     const defaultNarrativeModel = defaults.services?.narrative.model ?? ''
-    const defaultReasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'off'
+    const defaultReasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'none'
 
     // Reset API settings (except URL/key/profiles if preserving)
     this.apiSettings = {
@@ -3067,7 +3091,7 @@ class SettingsStore {
     this.apiSettings.defaultModel = defaults.services?.narrative.model ?? ''
     this.apiSettings.temperature = defaults.services?.narrative.temperature ?? 0.8
     this.apiSettings.maxTokens = defaults.services?.narrative.maxTokens ?? 8192
-    this.apiSettings.reasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'off'
+    this.apiSettings.reasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'none'
     this.apiSettings.manualBody = ''
     this.apiSettings.enableThinking = false
     await database.setSetting('default_model', this.apiSettings.defaultModel)

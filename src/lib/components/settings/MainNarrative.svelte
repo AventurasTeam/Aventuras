@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte'
   import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings } from '$lib/stores/settings.svelte'
-  import { Cpu, AlertTriangle } from 'lucide-svelte'
+  import { Cpu, AlertTriangle } from '@lucide/svelte'
   import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
@@ -114,7 +114,7 @@
       }}
       onReasoningChange={(v) => {
         settings.apiSettings.reasoningEffort = v
-        settings.apiSettings.enableThinking = v !== 'off'
+        settings.apiSettings.enableThinking = v !== 'none'
         debouncedSave()
       }}
       onRefreshModels={fetchModelsToProfile}

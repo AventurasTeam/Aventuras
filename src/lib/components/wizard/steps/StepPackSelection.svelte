@@ -5,7 +5,7 @@
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
   import { Badge } from '$lib/components/ui/badge'
-  import { Package } from 'lucide-svelte'
+  import { Package } from '@lucide/svelte'
   import { renderDescription } from '$lib/utils/markdown'
   import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
 

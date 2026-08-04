@@ -8,7 +8,7 @@
     BookOpen,
     X,
     ChevronRight,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import * as Card from '$lib/components/ui/card'
   import * as Alert from '$lib/components/ui/alert'
   import * as Collapsible from '$lib/components/ui/collapsible'

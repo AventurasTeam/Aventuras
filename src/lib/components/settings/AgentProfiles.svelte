@@ -29,7 +29,7 @@
     Copy,
     AlertCircle,
     AlertTriangle,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { fetchModelsFromProvider, getReasoningExtraction } from '$lib/services/ai/sdk/providers'
 
   // Shadcn Components
@@ -312,7 +312,7 @@
       model: settings.apiSettings.defaultModel ?? '',
       temperature: 0.7,
       maxTokens: 4096,
-      reasoningEffort: 'off',
+      reasoningEffort: 'none',
       manualBody: '',
     }
     settings.generationPresets = [...settings.generationPresets, newPreset]

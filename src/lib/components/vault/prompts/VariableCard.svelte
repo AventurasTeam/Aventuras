@@ -8,7 +8,7 @@
   import { Switch } from '$lib/components/ui/switch'
   import { Separator } from '$lib/components/ui/separator'
   import * as Select from '$lib/components/ui/select'
-  import { ChevronDown, ChevronUp, Trash2, Plus, ArrowUp, ArrowDown, X } from 'lucide-svelte'
+  import { ChevronDown, ChevronUp, Trash2, Plus, ArrowUp, ArrowDown, X } from '@lucide/svelte'
 
   interface Props {
     variable: CustomVariable

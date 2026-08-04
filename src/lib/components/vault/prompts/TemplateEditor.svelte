@@ -12,7 +12,7 @@
   import type { ValidationError } from '$lib/services/templates/types'
   import type { CustomVariable } from '$lib/services/packs/types'
   import type { Completion } from '@codemirror/autocomplete'
-  import { AlertTriangle, CircleCheck, FlaskConical } from 'lucide-svelte'
+  import { AlertTriangle, CircleCheck, FlaskConical } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import TemplatePreview from './TemplatePreview.svelte'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'

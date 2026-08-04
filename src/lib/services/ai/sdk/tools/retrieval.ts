@@ -5,8 +5,8 @@
  * Used by AgenticRetrievalService for multi-turn reasoning about which entries to include.
  */
 
-import { tool } from 'ai'
-import { z } from 'zod'
+import { tool, type ToolSet } from 'ai'
+import * as z from 'zod'
 import type { Entry, Chapter, StoryEntry, Character, Location, Item, StoryBeat } from '$lib/types'
 import { entryTypeSchema } from '../schemas/lorebook'
 import {
@@ -1014,13 +1014,13 @@ function createInspectWorldStateTool({
  * Build the tools available to the retrieval agent.
  *
  * `Tool` is generic in its own input/output schema, so a heterogeneous map of them has no
- * single instantiation to name. The `any` is confined to the map's value type -- each tool is
+ * single instantiation to name. `ToolSet` is the SDK's own type for such a map -- each tool is
  * still checked against its own `inputSchema` where it is written.
  */
 export function createRetrievalTools(context: RetrievalToolContext) {
   const state: RunState = { grepResults: new Map(), chapterQueries: 0 }
 
-  const tools: Record<string, ReturnType<typeof tool<any, any>>> = {
+  const tools: ToolSet = {
     search_entries: createSearchEntriesTool(context),
     get_entry: createGetEntryTool(context),
     finish_retrieval: createFinishRetrievalTool(context),

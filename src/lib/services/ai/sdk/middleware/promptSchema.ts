@@ -8,7 +8,8 @@
  * Works with extractJsonMiddleware to parse the output.
  */
 
-import type { LanguageModelV3Middleware, LanguageModelV3Prompt } from '@ai-sdk/provider'
+import type { TextPart } from 'ai'
+import type { LanguageModelV4Message, LanguageModelV4Middleware } from '@ai-sdk/provider'
 import type { JSONSchema7, JSONSchema7Type } from 'json-schema'
 
 // ============================================================================
@@ -95,9 +96,9 @@ const SIMPLE_JSON_INSTRUCTION =
   'Respond strictly with valid JSON. Output ONLY the JSON, no other text.'
 
 function injectSchemaIntoPrompt(
-  prompt: LanguageModelV3Prompt,
+  prompt: Array<LanguageModelV4Message>,
   instruction: string,
-): LanguageModelV3Prompt {
+): Array<LanguageModelV4Message> {
   const newPrompt = [...prompt]
   const lastUserIdx = newPrompt.findLastIndex((msg) => msg.role === 'user')
 
@@ -106,7 +107,8 @@ function injectSchemaIntoPrompt(
     if (lastUserMsg.role === 'user') {
       const textParts = lastUserMsg.content.filter((p) => p.type === 'text')
       const otherParts = lastUserMsg.content.filter((p) => p.type !== 'text')
-      const combinedText = textParts.map((p) => p.text).join('\n') + '\n\n' + instruction
+      const combinedText =
+        textParts.map((p) => (p as TextPart).text).join('\n') + '\n\n' + instruction
 
       newPrompt[lastUserIdx] = {
         ...lastUserMsg,
@@ -134,13 +136,12 @@ export interface PromptSchemaMiddlewareOptions {
 
 export function promptSchemaMiddleware(
   options: PromptSchemaMiddlewareOptions = {},
-): LanguageModelV3Middleware {
+): LanguageModelV4Middleware {
   const instructionTemplate = options.instruction ?? SCHEMA_INSTRUCTION_TEMPLATE
   const typeName = options.typeName ?? 'Response'
 
   return {
-    specificationVersion: 'v3',
-
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       const { responseFormat } = params
 

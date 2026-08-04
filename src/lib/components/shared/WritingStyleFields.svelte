@@ -4,7 +4,7 @@
   import { Label } from '$lib/components/ui/label'
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
-  import { BookOpen, User, Eye } from 'lucide-svelte'
+  import { BookOpen, User, Eye } from '@lucide/svelte'
   import type { POV, Tense } from '$lib/types'
 
   interface Props {

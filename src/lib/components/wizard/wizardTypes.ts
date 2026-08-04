@@ -2,7 +2,7 @@
  * Type definitions and constants for the Setup Wizard
  */
 
-import type { Wand2 } from 'lucide-svelte'
+import type { Wand2 } from '@lucide/svelte'
 import type { Genre, Tense } from '$lib/services/ai/wizard'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import type { POV, EntryType } from '$lib/types'

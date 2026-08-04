@@ -1,6 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
-  import { Lightbulb, ArrowRight, Loader2, RefreshCw, ChevronDown, ChevronUp } from 'lucide-svelte'
+  import { Lightbulb, ArrowRight, Loader2, RefreshCw, ChevronDown, ChevronUp } from '@lucide/svelte'
   import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
   import { swipe } from '$lib/utils/swipe'
 

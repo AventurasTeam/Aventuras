@@ -4,7 +4,7 @@
  * Single entry point for all Vercel AI SDK provider operations.
  */
 
-export { createModelFromProfile, createProviderFromProfile } from './registry'
+export { createModelFromProfile } from './registry'
 export { fetchModelsFromProvider } from './modelFetcher'
 export {
   PROVIDERS,

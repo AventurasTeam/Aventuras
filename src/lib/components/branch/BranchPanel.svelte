@@ -10,7 +10,7 @@
     Edit2,
     Check,
     X,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
 

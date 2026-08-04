@@ -7,7 +7,7 @@
  */
 
 import { tool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { VaultCharacter } from '$lib/types'
 import type { VaultPendingChange } from '$lib/services/ai/sdk/schemas/vault'
 import {

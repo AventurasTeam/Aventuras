@@ -9,7 +9,7 @@
     Calendar,
     BookOpen,
     ChevronRight,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { Checkbox } from '$lib/components/ui/checkbox'
   import { cn } from '$lib/utils/cn'

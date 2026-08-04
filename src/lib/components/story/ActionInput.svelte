@@ -18,7 +18,7 @@
     X,
     PenLine,
     Square,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import Suggestions from './Suggestions.svelte'
   import GrammarCheck from './GrammarCheck.svelte'
   import {
@@ -457,7 +457,7 @@
       model: settings.apiSettings.defaultModel,
       profileId: narrativeProfile?.id,
       profileName: narrativeProfile?.name,
-      reasoningEffort: settings.apiSettings.reasoningEffort ?? 'off',
+      reasoningEffort: settings.apiSettings.reasoningEffort ?? 'none',
       temperature: settings.apiSettings.temperature,
     }
 
@@ -1251,8 +1251,7 @@
             onkeydown={handleKeydown}
             placeholder="Describe what happens next in the story..."
             class="text-surface-200 placeholder-surface-500 max-h-40 min-h-6 w-full resize-none border-none bg-transparent px-2 text-base leading-relaxed focus:ring-0 focus:outline-none sm:min-h-6"
-            rows="1"
-          ></textarea>
+            rows="1"></textarea>
         </div>
         {#if ui.isGenerating}
           {#if !ui.isRetryingLastMessage}<button
@@ -1321,8 +1320,7 @@
                     ? 'Write anything...'
                     : 'What do you do?'}
             class="text-surface-200 placeholder-surface-500 max-h-[160px] min-h-[24px] w-full resize-none border-none bg-transparent px-2 text-base leading-relaxed focus:ring-0 focus:outline-none sm:min-h-[24px]"
-            rows="1"
-          ></textarea>
+            rows="1"></textarea>
         </div>
         {#if ui.isGenerating}
           {#if !ui.isRetryingLastMessage}<button

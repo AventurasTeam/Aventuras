@@ -3,7 +3,7 @@
   import { variableRegistry } from '$lib/services/templates/variables'
   import type { CustomVariable } from '$lib/services/packs/types'
   import type { TemplateContext } from '$lib/services/templates/types'
-  import { AlertTriangle } from 'lucide-svelte'
+  import { AlertTriangle } from '@lucide/svelte'
 
   interface Props {
     content: string

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Trash2, Clock, Pencil, Check, X } from 'lucide-svelte'
+  import { Trash2, Clock, Pencil, Check, X } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
   import * as Card from '$lib/components/ui/card'

@@ -5,7 +5,7 @@
  * Used by ActionChoicesService for adventure mode.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Schema for a single action choice.

@@ -10,7 +10,7 @@
     RefreshCw,
     ChevronDown,
     AlertCircle,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import UniversalVaultBrowser from '$lib/components/vault/UniversalVaultBrowser.svelte'
   import type { ExpandedSetting, GeneratedProtagonist } from '$lib/services/ai/sdk'
   import type { StoryMode, VaultCharacter } from '$lib/types'

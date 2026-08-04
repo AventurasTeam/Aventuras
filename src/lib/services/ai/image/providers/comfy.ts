@@ -14,7 +14,7 @@ import type {
   ComfySamplerInfo,
   ComfyCustomWorkflow,
 } from './types'
-import { ComfyApi, PromptBuilder, CallWrapper } from '@saintno/comfyui-sdk'
+import { ComfyApi, PromptBuilder, CallWrapper, type ImageInfo } from '@saintno/comfyui-sdk'
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
@@ -311,6 +311,9 @@ export function detectWorkflowFields(workflow: ComfyCustomWorkflow['workflow']):
 // Shared CallWrapper helper
 // ---------------------------------------------------------------------------
 
+/** Runtime shape of the mapped 'images' output node delivered to onFinished. */
+type ComfyImagesNodeOutput = { images?: ImageInfo[] }
+
 /**
  * Builds a standardised onFailed handler for a ComfyUI CallWrapper.
  * Parses node-level validation errors from the cause object and rejects
@@ -404,7 +407,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
           new CallWrapper(api, builder)
             .onFinished(async (data) => {
               try {
-                const imageInfos = data.images?.images || []
+                const imageInfos = (data.images as ComfyImagesNodeOutput | undefined)?.images || []
                 if (imageInfos.length === 0) {
                   return reject(new Error('ComfyUI produced no images'))
                 }
@@ -431,8 +434,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
       const sizeToUse = parseImageSize(size)
 
       const loraOptions = providerOptions?.lora as
-        | { name: string; strengthModel?: number; strengthClip?: number }
-        | undefined
+        { name: string; strengthModel?: number; strengthClip?: number } | undefined
 
       // Explicit mode always wins. Auto-detection only runs when no mode is set.
       const hasExplicitOverride = !!explicitMode
@@ -611,7 +613,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         new CallWrapper(api, workflow)
           .onFinished(async (data) => {
             try {
-              const imageInfos = data.images?.images || []
+              const imageInfos = (data.images as ComfyImagesNodeOutput | undefined)?.images || []
               if (imageInfos.length === 0) {
                 return reject(new Error('ComfyUI produced no images'))
               }

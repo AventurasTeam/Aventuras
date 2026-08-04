@@ -2,7 +2,7 @@
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Button } from '$lib/components/ui/button'
   import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { Star, Pencil, Loader2, Download, Copy } from 'lucide-svelte'
+  import { Star, Pencil, Loader2, Download, Copy } from '@lucide/svelte'
   import { cn } from '$lib/utils/cn'
   import type { Snippet } from 'svelte'
 

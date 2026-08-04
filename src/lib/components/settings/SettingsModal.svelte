@@ -17,7 +17,7 @@
     Settings as SettingsIcon,
     FlaskConical,
     BookOpen,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Tabs, TabsContent } from '$lib/components/ui/tabs'

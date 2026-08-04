@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settings } from '$lib/stores/settings.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { AlertTriangle, Settings } from 'lucide-svelte'
+  import { AlertTriangle, Settings } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
 
   let hasIssues = $derived(settings.hasGenerationConfigIssues)

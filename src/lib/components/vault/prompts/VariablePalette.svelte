@@ -3,7 +3,7 @@
   import type { CustomVariable } from '$lib/services/packs/types'
   import * as Popover from '$lib/components/ui/popover'
   import * as Command from '$lib/components/ui/command'
-  import { Braces } from 'lucide-svelte'
+  import { Braces } from '@lucide/svelte'
 
   interface Props {
     customVariables: CustomVariable[]

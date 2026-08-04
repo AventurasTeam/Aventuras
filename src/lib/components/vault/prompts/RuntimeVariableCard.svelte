@@ -26,7 +26,7 @@
     Save,
     Check,
     Pin,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   // Icon map for rendering selected icon in collapsed state
   import {
@@ -73,7 +73,7 @@
     Wand2,
     Users,
     Gauge,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   const ICON_COMPONENTS: Record<string, typeof Icon> = {
     Heart,

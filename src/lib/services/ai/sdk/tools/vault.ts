@@ -6,7 +6,7 @@
  */
 
 import { tool } from 'ai'
-import { z } from 'zod'
+import * as z from 'zod'
 import type { VaultCharacter, VaultLorebook } from '$lib/types'
 import type { VaultPendingChange } from '../schemas/vault'
 import { entryTypeSchema, injectionModeSchema } from '../schemas/lorebook'

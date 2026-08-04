@@ -131,7 +131,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       agentic: {
         model: 'z-ai/glm-5',
@@ -143,13 +143,13 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       translation: {
         model: 'google/gemini-3-flash-preview',
         temperature: 1.0,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
     },
   },
@@ -162,7 +162,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: true,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       modelCapabilityFetching: true,
     },
@@ -200,7 +200,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
         model: 'deepseek/deepseek-v3.2',
         temperature: 0.8,
         maxTokens: 8192,
-        reasoningEffort: 'off',
+        reasoningEffort: 'none',
       },
       agentic: {
         model: 'zai-org/glm-5:thinking',
@@ -254,7 +254,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: true,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       modelCapabilityFetching: true,
     },
@@ -275,7 +275,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -291,7 +291,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -307,7 +307,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
@@ -477,7 +477,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: true,
     },
     fallbackModels: [
@@ -499,7 +499,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: true,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: true,
     },
     imageDefaults: {
       defaultModel: 'cogview-3-plus',
@@ -527,7 +526,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       imageGeneration: false,
       structuredOutput: true,
       reasoning: true,
-      binaryReasoning: true,
     },
     fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings
@@ -541,7 +539,7 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
     capabilities: {
       textGeneration: true,
       imageGeneration: false,
-      structuredOutput: false,
+      structuredOutput: true,
       reasoning: false,
     },
     fallbackModels: [

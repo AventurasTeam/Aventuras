@@ -3,7 +3,7 @@
   import { errMessage } from '$lib/utils/error'
   import { story } from '$lib/stores/story.svelte'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-  import { Download, FileJson, FileText, Loader2 } from 'lucide-svelte'
+  import { Download, FileJson, FileText, Loader2 } from '@lucide/svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'

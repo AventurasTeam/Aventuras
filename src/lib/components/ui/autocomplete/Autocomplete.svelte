@@ -1,5 +1,5 @@
 <script lang="ts" generics="T">
-  import { Check, ChevronsUpDown, Plus } from 'lucide-svelte'
+  import { Check, ChevronsUpDown, Plus } from '@lucide/svelte'
   import VirtualList from '@tutorlatin/svelte-tiny-virtual-list'
   import * as Command from '$lib/components/ui/command'
   import * as Popover from '$lib/components/ui/popover'

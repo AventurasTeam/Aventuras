@@ -11,7 +11,7 @@
     Type,
     Languages,
     ArrowRight,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { fade, blur, slide } from 'svelte/transition'
   import { quintOut } from 'svelte/easing'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'

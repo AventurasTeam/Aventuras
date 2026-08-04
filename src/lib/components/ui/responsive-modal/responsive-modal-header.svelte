@@ -3,7 +3,7 @@
   import * as Drawer from '$lib/components/ui/drawer'
   import { getResponsiveModalContext } from './context'
   import { cn } from '$lib/utils/cn'
-  import { X } from 'lucide-svelte'
+  import { X } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
   import type { Snippet } from 'svelte'
 

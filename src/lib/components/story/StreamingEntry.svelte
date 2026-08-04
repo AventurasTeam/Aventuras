@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
-  import { BookOpen, Volume2, Pencil, Trash2 } from 'lucide-svelte'
+  import { BookOpen, Volume2, Pencil, Trash2 } from '@lucide/svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -32,7 +32,7 @@
   let isThinking = $derived(ui.isStreaming && content.length === 0 && reasoning.length === 0)
 
   // Check if reasoning is enabled in API settings
-  let isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'off')
+  let isReasoningEnabled = $derived(settings.apiSettings.reasoningEffort !== 'none')
 
   // Live token counts (separate)
   let reasoningTokens = $derived(ui.streamingReasoningTokens)

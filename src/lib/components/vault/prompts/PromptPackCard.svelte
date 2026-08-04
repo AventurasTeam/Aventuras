@@ -3,7 +3,7 @@
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
-  import { Download, Trash2, Lock } from 'lucide-svelte'
+  import { Download, Trash2, Lock } from '@lucide/svelte'
   import { stripToPlainText } from '$lib/utils/markdown'
 
   interface Props {

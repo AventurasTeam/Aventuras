@@ -5,7 +5,7 @@
  * Used by ImageAnalysisService to identify imageable moments in narrative text.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Schema for a single imageable scene identified in narrative text.

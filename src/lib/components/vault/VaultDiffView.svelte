@@ -20,7 +20,7 @@
     CheckCircle2,
     XCircle,
     Zap,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { fade } from 'svelte/transition'
   import { vaultEditor } from '$lib/stores/vaultEditorStore.svelte'
   import { computeDelta } from '$lib/utils/vaultMerge'

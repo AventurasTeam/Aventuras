@@ -13,7 +13,7 @@
     GitBranch,
     RefreshCw,
     X,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'

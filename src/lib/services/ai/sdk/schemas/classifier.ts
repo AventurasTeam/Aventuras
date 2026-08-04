@@ -5,7 +5,7 @@
  * The .describe() calls provide semantic guidance to LLMs via schema introspection.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 import type { RuntimeVariable } from '$lib/services/packs/types'
 
 // ============================================================================

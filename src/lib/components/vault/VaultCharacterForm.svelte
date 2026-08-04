@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { VaultCharacter } from '$lib/types'
   import { characterVault } from '$lib/stores/characterVault.svelte'
-  import { Loader2, Bot, X } from 'lucide-svelte'
+  import { Loader2, Bot, X } from '@lucide/svelte'
   import VaultCharacterFormFields from './VaultCharacterFormFields.svelte'
   import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
   import type { FocusedEntity } from '$lib/services/ai/vault/InteractiveVaultService'

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { VaultCharacterInput } from '$lib/services/ai/sdk/schemas/vault'
   import { descriptorsToString, stringToDescriptors } from '$lib/utils/visualDescriptors'
-  import { X, User, ImageUp, Loader2 } from 'lucide-svelte'
+  import { X, User, ImageUp, Loader2 } from '@lucide/svelte'
   import { normalizeImageDataUrl } from '$lib/utils/image'
   import TagInput from '$lib/components/tags/TagInput.svelte'
   import { Input } from '$lib/components/ui/input'

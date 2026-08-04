@@ -6,7 +6,7 @@
   import { Button } from '$lib/components/ui/button'
   import * as Select from '$lib/components/ui/select'
   import { Slider } from '$lib/components/ui/slider'
-  import { Play, Square, RefreshCw, Loader2 } from 'lucide-svelte'
+  import { Play, Square, RefreshCw, Loader2 } from '@lucide/svelte'
   import { GOOGLE_TRANSLATE_LANGUAGES, aiTTSService } from '$lib/services/ai/utils/TTSService'
 
   const PREVIEW_TEXT =

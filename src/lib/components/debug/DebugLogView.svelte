@@ -11,7 +11,7 @@
     Trash2,
     WrapText,
     Download,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
   import { writeTextFile } from '@tauri-apps/plugin-fs'
   import { resolveSaveTarget } from '$lib/services/exportTarget'
   import { Button } from '$lib/components/ui/button'

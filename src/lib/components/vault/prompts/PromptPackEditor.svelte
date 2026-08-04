@@ -31,7 +31,7 @@
     Check,
     X,
     Settings,
-  } from 'lucide-svelte'
+  } from '@lucide/svelte'
 
   interface Props {
     packId: string

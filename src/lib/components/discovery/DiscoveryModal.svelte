@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, Search, Loader2, Filter, Check, EyeOff, Eye, Blend, Globe } from 'lucide-svelte'
+  import { X, Search, Loader2, Filter, Check, EyeOff, Eye, Blend, Globe } from '@lucide/svelte'
   import { discoveryService, type DiscoveryCard, type SearchResult } from '$lib/services/discovery'
   import DiscoveryCardComponent from './DiscoveryCard.svelte'
   import DiscoveryCardDetails from './DiscoveryCardDetails.svelte'

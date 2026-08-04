@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Sword, Feather, MessageSquare, FileText } from 'lucide-svelte'
+  import { Sword, Feather, MessageSquare, FileText } from '@lucide/svelte'
   import * as Card from '$lib/components/ui/card'
   import { Label } from '$lib/components/ui/label'
   import { ScrollArea } from '$lib/components/ui/scroll-area'

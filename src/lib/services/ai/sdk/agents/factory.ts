@@ -5,6 +5,7 @@
  * Integrates with the existing settings and provider system.
  */
 
+import type { LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
 import {
   ToolLoopAgent,
   wrapLanguageModel,
@@ -12,14 +13,13 @@ import {
   type ToolSet,
   type StepResult,
   type PrepareStepFunction,
+  type ToolLoopAgentSettings,
 } from 'ai'
-import type { LanguageModelV3 } from '@ai-sdk/provider'
-import type { ProviderOptions } from '@ai-sdk/provider-utils'
 import { settings } from '$lib/stores/settings.svelte'
-import { createProviderFromProfile } from '../providers'
+import { createModelFromProfile, PROVIDERS } from '../providers'
 import { buildProviderOptions } from '../generate'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import type { GenerationPreset, APIProfile, ProviderType } from '$lib/types'
+import type { GenerationPreset, APIProfile, ProviderType, ReasoningEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
@@ -31,8 +31,9 @@ export interface ResolvedAgentConfig {
   preset: GenerationPreset
   profile: APIProfile
   providerType: ProviderType
-  model: LanguageModelV3
-  providerOptions: ProviderOptions | undefined
+  model: LanguageModelV4
+  providerOptions?: SharedV4ProviderOptions
+  reasoning: ReasoningEffort
 }
 
 /**
@@ -40,13 +41,15 @@ export interface ResolvedAgentConfig {
  * This follows the same pattern as resolveConfig in generate.ts
  *
  * @param presetId - The preset ID (e.g., 'agentic', 'loreManagement')
+ * @param serviceId - The Service ID
+ * @param debugId - Request ID for debug logging
  */
-export function resolveAgentConfig(
+function resolveAgentConfig(
   presetId: string,
   serviceId: string,
   debugId?: string,
 ): ResolvedAgentConfig {
-  const preset = settings.getPresetConfig(presetId)
+  const preset = settings.getPresetConfig(presetId, serviceId)
   const profileId = preset.profileId ?? settings.apiSettings.mainNarrativeProfileId
   const profile = settings.getProfile(profileId)
 
@@ -54,20 +57,40 @@ export function resolveAgentConfig(
     throw new Error(`Profile not found: ${profileId}`)
   }
 
-  const provider = createProviderFromProfile({
+  const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
+
+  let structuredOutputs = false
+  switch (preset.structuredOutputOverride) {
+    case 'on':
+      structuredOutputs = true
+      break
+    case 'off':
+      structuredOutputs = false
+      break
+    case 'auto':
+      const capabilities = PROVIDERS[profile.providerType].capabilities
+      structuredOutputs = capabilities?.modelCapabilityFetching
+        ? !!fetchedModel?.structuredOutput
+        : (capabilities?.structuredOutput ?? true)
+      break
+  }
+
+  const reasoning = preset.reasoningEffort
+
+  const baseModel = createModelFromProfile({
     profile,
-    presetId: serviceId,
+    modelId: preset.model,
+    presetId,
     debugId,
-    manualBody: preset.manualBody ?? '',
+    structuredOutputs,
+    serviceId,
   })
-  // Call provider directly - all providers support provider(modelId) syntax
-  const baseModel = provider(preset.model) as LanguageModelV3
   // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps
   // (e.g. Google's `functions.tool:0` scheme) get globally unique tool call IDs.
   const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })
   const providerOptions = buildProviderOptions(preset, profile.providerType)
 
-  return { preset, profile, providerType: profile.providerType, model, providerOptions }
+  return { preset, profile, providerType: profile.providerType, model, providerOptions, reasoning }
 }
 
 /**
@@ -120,7 +143,10 @@ export function createAgentFromPreset<TTools extends ToolSet>(
   serviceId: string,
 ): AgentWithSignal<TTools> {
   const { presetId, instructions, tools, stopWhen, signal, prepareStep } = options
-  const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
+  const { preset, providerType, model, providerOptions, reasoning } = resolveAgentConfig(
+    presetId,
+    serviceId,
+  )
 
   log('createAgentFromPreset', {
     presetId,
@@ -137,8 +163,11 @@ export function createAgentFromPreset<TTools extends ToolSet>(
     prepareStep,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
-  })
+    // Cast: TS can't resolve ToolsContextParameter's conditional type for a
+    // generic TTools, so no object literal is assignable without it.
+  } as unknown as ToolLoopAgentSettings<never, TTools>)
 
   return {
     agent,
@@ -183,7 +212,10 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
   serviceId: string,
 ): AssistantWithSignal<TTools> {
   const { presetId, instructions, tools, stopWhen, signal, prepareStep } = options
-  const { preset, providerType, model, providerOptions } = resolveAgentConfig(presetId, serviceId)
+  const { preset, providerType, model, providerOptions, reasoning } = resolveAgentConfig(
+    presetId,
+    serviceId,
+  )
 
   log('createStreamingAgenticAssistant', {
     presetId,
@@ -200,8 +232,11 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     prepareStep,
     temperature: !settings.advancedRequestSettings.manualMode ? preset.temperature : undefined,
     maxOutputTokens: !settings.advancedRequestSettings.manualMode ? preset.maxTokens : undefined,
+    reasoning,
     providerOptions,
-  })
+    // Cast: TS can't resolve ToolsContextParameter's conditional type for a
+    // generic TTools, so no object literal is assignable without it.
+  } as unknown as ToolLoopAgentSettings<never, TTools>)
 
   return {
     agent,
@@ -211,7 +246,7 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
         ...params,
         abortSignal: signal,
       }),
-  }
+  } as AssistantWithSignal<TTools>
 }
 /**
  * Agent result type helper.

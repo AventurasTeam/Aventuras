@@ -4,7 +4,7 @@
  * Shared schemas for lorebook-related tool definitions and validation.
  */
 
-import { z } from 'zod'
+import * as z from 'zod'
 
 /**
  * Entry type classification for lorebook entries.

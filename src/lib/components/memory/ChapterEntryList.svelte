@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { StoryEntry } from '$lib/types'
   import { slide } from 'svelte/transition'
-  import { MessageSquare, Scroll } from 'lucide-svelte'
+  import { MessageSquare, Scroll } from '@lucide/svelte'
   import { Badge } from '$lib/components/ui/badge'
 
   interface Props {

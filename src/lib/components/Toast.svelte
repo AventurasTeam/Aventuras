@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ui } from '$lib/stores/ui.svelte'
-  import { X, AlertTriangle, Info, AlertCircle } from 'lucide-svelte'
+  import { X, AlertTriangle, Info, AlertCircle } from '@lucide/svelte'
 
   function getIcon() {
     switch (ui.toastType) {
