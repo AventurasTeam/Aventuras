@@ -135,13 +135,20 @@
     color: var(--text-secondary);
   }
 
-  /* Font size variants based on user setting */
   :root[data-font-size='small'] .story-text {
     @apply text-base;
   }
 
   :root[data-font-size='large'] .story-text {
     @apply text-xl;
+  }
+
+  :root[data-font-size='xlarge'] .story-text {
+    @apply text-2xl;
+  }
+
+  :root[data-font-size='xxlarge'] .story-text {
+    @apply text-3xl;
   }
 
   .user-action {

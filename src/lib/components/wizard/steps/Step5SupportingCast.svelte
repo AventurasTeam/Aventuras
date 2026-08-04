@@ -419,7 +419,14 @@
               </p>
 
               {#if char.relationship}
-                <p class="text-muted-foreground/70 mt-0.5 text-[10px] italic">
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <p
+                  class="text-muted-foreground/70 mt-0.5 max-h-12 overflow-y-auto text-[10px] break-words italic"
+                  title={char.relationship}
+                  tabindex={0}
+                  role="region"
+                  aria-label="Character relationship"
+                >
                   {char.relationship}
                 </p>
               {/if}
