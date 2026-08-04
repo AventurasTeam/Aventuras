@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { STImportWizardStore } from '$lib/stores/wizard/stImportWizard.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
@@ -23,7 +24,32 @@
 
   let { onClose }: Props = $props()
 
-  const wizard = new STImportWizardStore(() => onClose())
+  let isOpen = $state(true)
+
+  function handleClose() {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    isOpen = false
+    setTimeout(() => {
+      if (typeof document !== 'undefined') {
+        document.body.style.pointerEvents = ''
+        document.body.style.overflow = ''
+        document.body.removeAttribute('data-scroll-locked')
+      }
+      onClose()
+    }, 150)
+  }
+
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.style.pointerEvents = ''
+      document.body.style.overflow = ''
+      document.body.removeAttribute('data-scroll-locked')
+    }
+  })
+
+  const wizard = new STImportWizardStore(() => handleClose())
 
   const imageGenerationEnabled = $derived(hasRequiredCredentials())
 
@@ -40,8 +66,8 @@
 </script>
 
 <ResponsiveModal.Root
-  open={true}
-  onOpenChange={(open) => !open && !wizard.isCreatingStory && onClose()}
+  open={isOpen}
+  onOpenChange={(open) => !open && !wizard.isCreatingStory && handleClose()}
 >
   <ResponsiveModal.Content
     class="flex h-full flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl"

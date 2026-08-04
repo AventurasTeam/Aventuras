@@ -708,9 +708,11 @@ export type ThemeId = ThemeIdImport
 
 export type FontSource = 'default' | 'system' | 'google'
 
+export type FontSizeOption = 'small' | 'medium' | 'large' | 'xlarge' | 'xxlarge'
+
 export interface UISettings {
   theme: ThemeId
-  fontSize: 'small' | 'medium' | 'large'
+  fontSize: FontSizeOption
   fontFamily: string
   fontSource: FontSource
   showWordCount: boolean

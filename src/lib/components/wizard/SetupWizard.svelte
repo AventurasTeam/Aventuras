@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { WizardStore } from '$lib/stores/wizard/wizard.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -28,8 +29,33 @@
 
   let { onClose }: Props = $props()
 
+  let isOpen = $state(true)
+
+  function handleClose() {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+    isOpen = false
+    setTimeout(() => {
+      if (typeof document !== 'undefined') {
+        document.body.style.pointerEvents = ''
+        document.body.style.overflow = ''
+        document.body.removeAttribute('data-scroll-locked')
+      }
+      onClose()
+    }, 150)
+  }
+
+  onDestroy(() => {
+    if (typeof document !== 'undefined') {
+      document.body.style.pointerEvents = ''
+      document.body.style.overflow = ''
+      document.body.removeAttribute('data-scroll-locked')
+    }
+  })
+
   // Initialize Wizard Store
-  const wizard = new WizardStore(() => onClose())
+  const wizard = new WizardStore(() => handleClose())
 
   // Auto-link embedded lorebook when selecting a vault character
   function autoLinkCharacterLorebook(char: VaultCharacter, isProtagonist = false) {
@@ -78,9 +104,14 @@
   })
 </script>
 
-<ResponsiveModal.Root open={true} onOpenChange={(open) => !open && onClose()}>
+<ResponsiveModal.Root
+  open={isOpen}
+  onOpenChange={(open) => !open && !wizard.isCreatingStory && handleClose()}
+>
   <ResponsiveModal.Content
     class="flex h-full flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl"
+    interactOutsideBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
+    escapeKeydownBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
   >
     <!-- Header -->
     <div class="flex flex-col border-b p-4 pb-4">

@@ -34,6 +34,7 @@ export class WizardStore {
   // Wizard State
   currentStep = $state(1)
   totalSteps = 9
+  isCreatingStory = $state(false)
 
   // Pack selection state
   selectedPackId = $state<string>('default-pack')
@@ -307,279 +308,288 @@ export class WizardStore {
 
   // Create Story
   async createStory() {
+    if (this.isCreatingStory) return
     if (!this.narrative.storyTitle.trim()) return
 
-    // Use manual opening if provided
-    if (!this.narrative.generatedOpening && this.narrative.manualOpeningText.trim()) {
-      this.narrative.generatedOpening = {
-        scene: this.narrative.manualOpeningText.trim(),
-        title: this.narrative.storyTitle || 'Untitled Story',
-        initialLocation: {
-          name: 'Starting Location',
-          description: 'The place where your journey begins.',
+    this.isCreatingStory = true
+    try {
+      // Use manual opening if provided
+      if (!this.narrative.generatedOpening && this.narrative.manualOpeningText.trim()) {
+        this.narrative.generatedOpening = {
+          scene: this.narrative.manualOpeningText.trim(),
+          title: this.narrative.storyTitle || 'Untitled Story',
+          initialLocation: {
+            name: 'Starting Location',
+            description: 'The place where your journey begins.',
+          },
+        }
+      }
+
+      // Use card imported opening if available
+      if (!this.narrative.generatedOpening && this.character.cardImportedFirstMessage) {
+        this.narrative.generatedOpening = {
+          scene: this.character.cardImportedFirstMessage,
+          title: this.character.cardImportedTitle || this.narrative.storyTitle || 'Untitled Story',
+          initialLocation: {
+            name: 'Starting Location',
+            description: 'The place where your journey begins.',
+          },
+        }
+      }
+
+      if (!this.narrative.generatedOpening) {
+        this.narrative.openingError =
+          'Please provide an opening scene (write your own or generate with AI)'
+        return
+      }
+
+      const protagonistName = this.character.protagonist?.name || 'the protagonist'
+
+      const processedSettingSeed = replaceUserPlaceholders(
+        this.setting.settingSeed,
+        protagonistName,
+      )
+
+      let processedExpandedSetting: ExpandedSetting | null = null
+      if (this.setting.expandedSetting) {
+        processedExpandedSetting = {
+          ...this.setting.expandedSetting,
+          description: replaceUserPlaceholders(
+            this.setting.expandedSetting.description,
+            protagonistName,
+          ),
+          keyLocations: this.setting.expandedSetting.keyLocations.map((l) => ({
+            ...l,
+            description: replaceUserPlaceholders(l.description, protagonistName),
+          })),
+          atmosphere: replaceUserPlaceholders(
+            this.setting.expandedSetting.atmosphere,
+            protagonistName,
+          ),
+          themes: this.setting.expandedSetting.themes.map((t) =>
+            replaceUserPlaceholders(t, protagonistName),
+          ),
+          potentialConflicts: this.setting.expandedSetting.potentialConflicts.map((c) =>
+            replaceUserPlaceholders(c, protagonistName),
+          ),
+        }
+      }
+
+      const processedOpening = {
+        ...this.narrative.generatedOpening,
+        scene: replaceUserPlaceholders(this.narrative.generatedOpening.scene, protagonistName),
+      }
+
+      const processedCharacters = this.character.supportingCharacters.map((char) => ({
+        ...char,
+        name: replaceUserPlaceholders(char.name, protagonistName),
+        description: replaceUserPlaceholders(char.description, protagonistName),
+        role: char.role ? replaceUserPlaceholders(char.role, protagonistName) : '',
+        relationship: char.relationship
+          ? replaceUserPlaceholders(char.relationship, protagonistName)
+          : '',
+        traits: char.traits.map((t) => replaceUserPlaceholders(t, protagonistName)),
+      }))
+
+      const processedEntries = this.narrative.importedEntries.map((e) => ({
+        ...e,
+        name: replaceUserPlaceholders(e.name, protagonistName),
+        description: replaceUserPlaceholders(e.description, protagonistName),
+        keywords: e.keywords.map((k) => replaceUserPlaceholders(k, protagonistName)),
+        // To fix a regression issue where lorebooks from older versions didnt default to empty array when no aliases were set
+        aliases: e.aliases ?? [],
+      }))
+
+      const wizardData: WizardData = {
+        mode: this.narrative.selectedMode,
+        genre: this.narrative.selectedGenre,
+        customGenre: this.narrative.customGenre || undefined,
+        settingSeed: processedSettingSeed,
+        expandedSetting: processedExpandedSetting || undefined,
+        protagonist: this.character.protagonist || undefined,
+        characters: processedCharacters.length > 0 ? processedCharacters : undefined,
+        writingStyle: {
+          pov: this.narrative.selectedPOV,
+          tense: this.narrative.selectedTense,
+          tone: this.narrative.tone,
+          visualProseMode: this.narrative.visualProseMode,
+          imageGenerationMode: this.narrative.imageGenerationMode,
+          backgroundImagesEnabled: this.narrative.backgroundImagesEnabled,
+          referenceMode: this.narrative.referenceMode,
         },
+        title: this.narrative.storyTitle,
+        openingGuidance: this.narrative.openingGuidance.trim() || undefined,
       }
-    }
 
-    // Use card imported opening if available
-    if (!this.narrative.generatedOpening && this.character.cardImportedFirstMessage) {
-      this.narrative.generatedOpening = {
-        scene: this.character.cardImportedFirstMessage,
-        title: this.character.cardImportedTitle || this.narrative.storyTitle || 'Untitled Story',
-        initialLocation: {
-          name: 'Starting Location',
-          description: 'The place where your journey begins.',
-        },
+      const storyData = await scenarioService.prepareStoryData(wizardData, processedOpening)
+
+      if (storyData.protagonist) {
+        storyData.protagonist.portrait = this.image.protagonistPortrait ?? undefined
+        storyData.protagonist.visualDescriptors = this.image.protagonistVisualDescriptors
+          ? stringToDescriptors(this.image.protagonistVisualDescriptors)
+          : {}
       }
-    }
 
-    if (!this.narrative.generatedOpening) {
-      this.narrative.openingError =
-        'Please provide an opening scene (write your own or generate with AI)'
-      return
-    }
+      storyData.characters = storyData.characters.map((char) => ({
+        ...char,
+        portrait: char.name
+          ? (this.image.supportingCharacterPortraits[char.name] ?? undefined)
+          : undefined,
+        visualDescriptors:
+          char.name && this.image.supportingCharacterVisualDescriptors[char.name]
+            ? stringToDescriptors(this.image.supportingCharacterVisualDescriptors[char.name])
+            : {},
+      }))
 
-    const protagonistName = this.character.protagonist?.name || 'the protagonist'
-
-    const processedSettingSeed = replaceUserPlaceholders(this.setting.settingSeed, protagonistName)
-
-    let processedExpandedSetting: ExpandedSetting | null = null
-    if (this.setting.expandedSetting) {
-      processedExpandedSetting = {
-        ...this.setting.expandedSetting,
-        description: replaceUserPlaceholders(
-          this.setting.expandedSetting.description,
-          protagonistName,
-        ),
-        keyLocations: this.setting.expandedSetting.keyLocations.map((l) => ({
-          ...l,
-          description: replaceUserPlaceholders(l.description, protagonistName),
-        })),
-        atmosphere: replaceUserPlaceholders(
-          this.setting.expandedSetting.atmosphere,
-          protagonistName,
-        ),
-        themes: this.setting.expandedSetting.themes.map((t) =>
-          replaceUserPlaceholders(t, protagonistName),
-        ),
-        potentialConflicts: this.setting.expandedSetting.potentialConflicts.map((c) =>
-          replaceUserPlaceholders(c, protagonistName),
-        ),
-      }
-    }
-
-    const processedOpening = {
-      ...this.narrative.generatedOpening,
-      scene: replaceUserPlaceholders(this.narrative.generatedOpening.scene, protagonistName),
-    }
-
-    const processedCharacters = this.character.supportingCharacters.map((char) => ({
-      ...char,
-      name: replaceUserPlaceholders(char.name, protagonistName),
-      description: replaceUserPlaceholders(char.description, protagonistName),
-      role: char.role ? replaceUserPlaceholders(char.role, protagonistName) : '',
-      relationship: char.relationship
-        ? replaceUserPlaceholders(char.relationship, protagonistName)
-        : '',
-      traits: char.traits.map((t) => replaceUserPlaceholders(t, protagonistName)),
-    }))
-
-    const processedEntries = this.narrative.importedEntries.map((e) => ({
-      ...e,
-      name: replaceUserPlaceholders(e.name, protagonistName),
-      description: replaceUserPlaceholders(e.description, protagonistName),
-      keywords: e.keywords.map((k) => replaceUserPlaceholders(k, protagonistName)),
-      // To fix a regression issue where lorebooks from older versions didnt default to empty array when no aliases were set
-      aliases: e.aliases ?? [],
-    }))
-
-    const wizardData: WizardData = {
-      mode: this.narrative.selectedMode,
-      genre: this.narrative.selectedGenre,
-      customGenre: this.narrative.customGenre || undefined,
-      settingSeed: processedSettingSeed,
-      expandedSetting: processedExpandedSetting || undefined,
-      protagonist: this.character.protagonist || undefined,
-      characters: processedCharacters.length > 0 ? processedCharacters : undefined,
-      writingStyle: {
-        pov: this.narrative.selectedPOV,
-        tense: this.narrative.selectedTense,
-        tone: this.narrative.tone,
-        visualProseMode: this.narrative.visualProseMode,
-        imageGenerationMode: this.narrative.imageGenerationMode,
-        backgroundImagesEnabled: this.narrative.backgroundImagesEnabled,
-        referenceMode: this.narrative.referenceMode,
-      },
-      title: this.narrative.storyTitle,
-      openingGuidance: this.narrative.openingGuidance.trim() || undefined,
-    }
-
-    const storyData = await scenarioService.prepareStoryData(wizardData, processedOpening)
-
-    if (storyData.protagonist) {
-      storyData.protagonist.portrait = this.image.protagonistPortrait ?? undefined
-      storyData.protagonist.visualDescriptors = this.image.protagonistVisualDescriptors
-        ? stringToDescriptors(this.image.protagonistVisualDescriptors)
-        : {}
-    }
-
-    storyData.characters = storyData.characters.map((char) => ({
-      ...char,
-      portrait: char.name
-        ? (this.image.supportingCharacterPortraits[char.name] ?? undefined)
-        : undefined,
-      visualDescriptors:
-        char.name && this.image.supportingCharacterVisualDescriptors[char.name]
-          ? stringToDescriptors(this.image.supportingCharacterVisualDescriptors[char.name])
-          : {},
-    }))
-
-    // Build translations object if we have translations
-    const translationSettings = settings.translationSettings
-    let translations:
-      | {
-          language: string
-          openingScene?: string
-          protagonist?: {
-            name?: string
-            description?: string
-            traits?: string[]
-            visualDescriptors?: string[]
-          }
-          startingLocation?: { name?: string; description?: string }
-          characters?: {
-            [originalName: string]: {
+      // Build translations object if we have translations
+      const translationSettings = settings.translationSettings
+      let translations:
+        | {
+            language: string
+            openingScene?: string
+            protagonist?: {
               name?: string
               description?: string
-              relationship?: string
               traits?: string[]
               visualDescriptors?: string[]
             }
-          }
-        }
-      | undefined
-
-    if (TranslationService.shouldTranslate(translationSettings)) {
-      const targetLanguage = translationSettings.targetLanguage
-      translations = { language: targetLanguage }
-
-      // Opening scene translation
-      if (this.narrative.generatedOpeningTranslated?.scene) {
-        translations.openingScene = this.narrative.generatedOpeningTranslated.scene
-      }
-
-      // Protagonist translation
-      if (this.character.protagonistTranslated) {
-        // Translate visual descriptors if present
-        let protagonistVisualDescriptorsTranslated: string[] | undefined
-        if (this.image.protagonistVisualDescriptors?.trim()) {
-          try {
-            const visualDescriptorsArray = this.image.protagonistVisualDescriptors
-              .split(',')
-              .map((d) => d.trim())
-              .filter(Boolean)
-            if (visualDescriptorsArray.length > 0) {
-              const translated = await aiService.translateWizardBatch(
-                { visualDescriptors: visualDescriptorsArray.join(', ') },
-                targetLanguage,
-              )
-              if (translated.visualDescriptors) {
-                protagonistVisualDescriptorsTranslated = translated.visualDescriptors
-                  .split(',')
-                  .map((d) => d.trim())
-                  .filter(Boolean)
+            startingLocation?: { name?: string; description?: string }
+            characters?: {
+              [originalName: string]: {
+                name?: string
+                description?: string
+                relationship?: string
+                traits?: string[]
+                visualDescriptors?: string[]
               }
             }
-          } catch (e) {
-            console.error('[Wizard] Failed to translate protagonist visual descriptors:', e)
           }
-        }
-        translations.protagonist = {
-          name: this.character.protagonistTranslated.name,
-          description: this.character.protagonistTranslated.description,
-          traits: this.character.protagonistTranslated.traits,
-          visualDescriptors: protagonistVisualDescriptorsTranslated,
-        }
-      }
+        | undefined
 
-      // Starting location translation (from opening's initialLocation)
-      if (this.narrative.generatedOpeningTranslated?.initialLocation) {
-        translations.startingLocation = {
-          name: this.narrative.generatedOpeningTranslated.initialLocation.name,
-          description: this.narrative.generatedOpeningTranslated.initialLocation.description,
-        }
-      }
+      if (TranslationService.shouldTranslate(translationSettings)) {
+        const targetLanguage = translationSettings.targetLanguage
+        translations = { language: targetLanguage }
 
-      // Supporting characters translation - key by processed name (after placeholder replacement)
-      if (this.character.supportingCharactersTranslated.length > 0) {
-        translations.characters = {}
-        for (let i = 0; i < this.character.supportingCharacters.length; i++) {
-          const processed = processedCharacters[i]
-          const translated = this.character.supportingCharactersTranslated[i]
-          // Use processed name as key since createStoryFromWizard looks up by processed name
-          if (processed?.name && translated) {
-            // Translate visual descriptors if present for this character
-            let charVisualDescriptorsTranslated: string[] | undefined
-            const charVisualDescriptors =
-              this.image.supportingCharacterVisualDescriptors[processed.name]
-            if (charVisualDescriptors?.trim()) {
-              try {
-                const visualDescriptorsArray = charVisualDescriptors
-                  .split(',')
-                  .map((d) => d.trim())
-                  .filter(Boolean)
-                if (visualDescriptorsArray.length > 0) {
-                  const translatedVD = await aiService.translateWizardBatch(
-                    { visualDescriptors: visualDescriptorsArray.join(', ') },
-                    targetLanguage,
-                  )
-                  if (translatedVD.visualDescriptors) {
-                    charVisualDescriptorsTranslated = translatedVD.visualDescriptors
-                      .split(',')
-                      .map((d) => d.trim())
-                      .filter(Boolean)
-                  }
+        // Opening scene translation
+        if (this.narrative.generatedOpeningTranslated?.scene) {
+          translations.openingScene = this.narrative.generatedOpeningTranslated.scene
+        }
+
+        // Protagonist translation
+        if (this.character.protagonistTranslated) {
+          // Translate visual descriptors if present
+          let protagonistVisualDescriptorsTranslated: string[] | undefined
+          if (this.image.protagonistVisualDescriptors?.trim()) {
+            try {
+              const visualDescriptorsArray = this.image.protagonistVisualDescriptors
+                .split(',')
+                .map((d) => d.trim())
+                .filter(Boolean)
+              if (visualDescriptorsArray.length > 0) {
+                const translated = await aiService.translateWizardBatch(
+                  { visualDescriptors: visualDescriptorsArray.join(', ') },
+                  targetLanguage,
+                )
+                if (translated.visualDescriptors) {
+                  protagonistVisualDescriptorsTranslated = translated.visualDescriptors
+                    .split(',')
+                    .map((d) => d.trim())
+                    .filter(Boolean)
                 }
-              } catch (e) {
-                console.error('[Wizard] Failed to translate character visual descriptors:', e)
               }
+            } catch (e) {
+              console.error('[Wizard] Failed to translate protagonist visual descriptors:', e)
             }
-            translations.characters[processed.name] = {
-              name: translated.name,
-              description: translated.description,
-              relationship: translated.relationship,
-              traits: translated.traits,
-              visualDescriptors: charVisualDescriptorsTranslated,
+          }
+          translations.protagonist = {
+            name: this.character.protagonistTranslated.name,
+            description: this.character.protagonistTranslated.description,
+            traits: this.character.protagonistTranslated.traits,
+            visualDescriptors: protagonistVisualDescriptorsTranslated,
+          }
+        }
+
+        // Starting location translation (from opening's initialLocation)
+        if (this.narrative.generatedOpeningTranslated?.initialLocation) {
+          translations.startingLocation = {
+            name: this.narrative.generatedOpeningTranslated.initialLocation.name,
+            description: this.narrative.generatedOpeningTranslated.initialLocation.description,
+          }
+        }
+
+        // Supporting characters translation - key by processed name (after placeholder replacement)
+        if (this.character.supportingCharactersTranslated.length > 0) {
+          translations.characters = {}
+          for (let i = 0; i < this.character.supportingCharacters.length; i++) {
+            const processed = processedCharacters[i]
+            const translated = this.character.supportingCharactersTranslated[i]
+            // Use processed name as key since createStoryFromWizard looks up by processed name
+            if (processed?.name && translated) {
+              // Translate visual descriptors if present for this character
+              let charVisualDescriptorsTranslated: string[] | undefined
+              const charVisualDescriptors =
+                this.image.supportingCharacterVisualDescriptors[processed.name]
+              if (charVisualDescriptors?.trim()) {
+                try {
+                  const visualDescriptorsArray = charVisualDescriptors
+                    .split(',')
+                    .map((d) => d.trim())
+                    .filter(Boolean)
+                  if (visualDescriptorsArray.length > 0) {
+                    const translatedVD = await aiService.translateWizardBatch(
+                      { visualDescriptors: visualDescriptorsArray.join(', ') },
+                      targetLanguage,
+                    )
+                    if (translatedVD.visualDescriptors) {
+                      charVisualDescriptorsTranslated = translatedVD.visualDescriptors
+                        .split(',')
+                        .map((d) => d.trim())
+                        .filter(Boolean)
+                    }
+                  }
+                } catch (e) {
+                  console.error('[Wizard] Failed to translate character visual descriptors:', e)
+                }
+              }
+              translations.characters[processed.name] = {
+                name: translated.name,
+                description: translated.description,
+                relationship: translated.relationship,
+                traits: translated.traits,
+                visualDescriptors: charVisualDescriptorsTranslated,
+              }
             }
           }
         }
+
+        // Debug: log what translations we're passing
+        console.log('[Wizard] Translations being passed to createStoryFromWizard:', {
+          hasOpeningScene: !!translations.openingScene,
+          hasProtagonist: !!translations.protagonist,
+          hasStartingLocation: !!translations.startingLocation,
+          startingLocation: translations.startingLocation,
+          characterCount: translations.characters ? Object.keys(translations.characters).length : 0,
+          characters: translations.characters,
+        })
       }
 
-      // Debug: log what translations we're passing
-      console.log('[Wizard] Translations being passed to createStoryFromWizard:', {
-        hasOpeningScene: !!translations.openingScene,
-        hasProtagonist: !!translations.protagonist,
-        hasStartingLocation: !!translations.startingLocation,
-        startingLocation: translations.startingLocation,
-        characterCount: translations.characters ? Object.keys(translations.characters).length : 0,
-        characters: translations.characters,
+      const newStory = await story.createStoryFromWizard({
+        ...storyData,
+        importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
+        translations,
       })
+
+      // Assign pack and save custom variable values
+      await database.setStoryPack(newStory.id, this.selectedPackId)
+      if (Object.keys(this.customVariableValues).length > 0) {
+        await database.setStoryCustomVariables(newStory.id, this.customVariableValues)
+      }
+
+      await story.loadStory(newStory.id)
+      ui.setActivePanel('story')
+      this.onClose()
+    } finally {
+      this.isCreatingStory = false
     }
-
-    const newStory = await story.createStoryFromWizard({
-      ...storyData,
-      importedEntries: processedEntries.length > 0 ? processedEntries : undefined,
-      translations,
-    })
-
-    // Assign pack and save custom variable values
-    await database.setStoryPack(newStory.id, this.selectedPackId)
-    if (Object.keys(this.customVariableValues).length > 0) {
-      await database.setStoryCustomVariables(newStory.id, this.customVariableValues)
-    }
-
-    await story.loadStory(newStory.id)
-    ui.setActivePanel('story')
-    this.onClose()
   }
 }

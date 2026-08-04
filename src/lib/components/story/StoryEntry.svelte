@@ -18,6 +18,7 @@
     Bookmark,
     Volume2,
     Image as ImageIcon,
+    Copy,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
@@ -65,6 +66,30 @@
   // TTS generation state
   let isGeneratingTTS = $state(false)
   let isPlayingTTS = $state(false)
+
+  // Copy state
+  let isCopied = $state(false)
+  let copyTimeout: ReturnType<typeof setTimeout> | null = null
+
+  async function handleCopyContent() {
+    if (!entry.content) return
+
+    try {
+      await navigator.clipboard.writeText(entry.content)
+      isCopied = true
+      ui.showToast('Copied to clipboard', 'info', 2000)
+
+      if (copyTimeout) clearTimeout(copyTimeout)
+      copyTimeout = setTimeout(() => {
+        isCopied = false
+      }, 2000)
+    } catch (error) {
+      if (copyTimeout) clearTimeout(copyTimeout)
+      isCopied = false
+      console.error('[StoryEntry] Failed to copy content:', error)
+      ui.showToast('Failed to copy text', 'error')
+    }
+  }
 
   // Check if this entry is an error entry (either tracked or detected by content)
   const isErrorEntry = $derived(
@@ -1305,6 +1330,20 @@
             {/if}
           </Button>
         {/if}
+        <Button
+          variant="text"
+          size="icon"
+          onclick={handleCopyContent}
+          class="text-muted-foreground hover:text-foreground h-7 w-7"
+          title={isCopied ? 'Copied!' : 'Copy message text'}
+          aria-label={isCopied ? 'Message copied' : 'Copy message text'}
+        >
+          {#if isCopied}
+            <Check class="h-4 w-4 text-green-500" />
+          {:else}
+            <Copy class="h-4 w-4" />
+          {/if}
+        </Button>
         <Button
           variant="text"
           size="icon"

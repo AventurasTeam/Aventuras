@@ -142,10 +142,14 @@
     }
   }
 
+  import type { FontSizeOption } from '$lib/types'
+
   const fontSizes = [
     { value: 'small', label: 'Small' },
     { value: 'medium', label: 'Medium' },
     { value: 'large', label: 'Large' },
+    { value: 'xlarge', label: 'X-Large' },
+    { value: 'xxlarge', label: 'XX-Large' },
   ] as const
 </script>
 
@@ -180,7 +184,7 @@
     <Select.Root
       type="single"
       value={settings.uiSettings.fontSize}
-      onValueChange={(v) => settings.setFontSize(v as 'small' | 'medium' | 'large')}
+      onValueChange={(v) => settings.setFontSize(v as FontSizeOption)}
     >
       <Select.Trigger class="h-10 w-full">
         {fontSizes.find((s) => s.value === settings.uiSettings.fontSize)?.label ?? 'Select size'}

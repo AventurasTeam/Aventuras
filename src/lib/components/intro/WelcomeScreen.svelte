@@ -16,6 +16,7 @@
   import { quintOut } from 'svelte/easing'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { THEMES } from '../../../themes/themes'
+  import type { FontSizeOption } from '$lib/types'
 
   import * as Card from '$lib/components/ui/card'
   import { Button } from '$lib/components/ui/button'
@@ -29,6 +30,14 @@
   }
 
   let { onComplete }: Props = $props()
+
+  const fontSizes: { value: FontSizeOption; label: string }[] = [
+    { value: 'small', label: 'Small' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'large', label: 'Large' },
+    { value: 'xlarge', label: 'XL' },
+    { value: 'xxlarge', label: 'XXL' },
+  ]
 
   // State
   let step = $state<'interface' | 'select' | 'configure'>('interface')
@@ -189,14 +198,14 @@
                 <Type size={18} class="text-primary" />
                 Font Size
               </Label>
-              <div class="grid grid-cols-3 gap-2">
-                {#each ['small', 'medium', 'large'] as size (size)}
+              <div class="grid grid-cols-5 gap-1.5">
+                {#each fontSizes as option (option.value)}
                   <Button
-                    variant={settings.uiSettings.fontSize === size ? 'default' : 'outline'}
-                    class="w-full capitalize"
-                    onclick={() => settings.setFontSize(size as 'small' | 'medium' | 'large')}
+                    variant={settings.uiSettings.fontSize === option.value ? 'default' : 'outline'}
+                    class="w-full px-1 text-xs"
+                    onclick={() => settings.setFontSize(option.value)}
                   >
-                    {size}
+                    {option.label}
                   </Button>
                 {/each}
               </div>

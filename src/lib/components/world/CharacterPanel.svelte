@@ -558,9 +558,15 @@
                 <h4 class="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
                   Editing {character.name}
                 </h4>
-                <Button variant="text" size="icon" class="h-6 w-6" onclick={cancelEdit}
-                  ><X class="h-4 w-4" /></Button
+                <Button
+                  variant="text"
+                  size="icon"
+                  class="h-6 w-6"
+                  onclick={cancelEdit}
+                  title="Cancel edit"
                 >
+                  <X class="h-4 w-4" />
+                </Button>
               </div>
 
               <div class="grid grid-cols-2 gap-3">
@@ -756,6 +762,7 @@
               {#if character.portrait}
                 <button
                   class="relative shrink-0 focus:outline-none"
+                  title="View full portrait"
                   onclick={() =>
                     (expandedPortrait = {
                       src: normalizeImageDataUrl(character.portrait) ?? '',
@@ -825,7 +832,11 @@
                 {:else if character.relationship || character.translatedRelationship}
                   <Badge
                     variant="secondary"
-                    class="text-muted-foreground w-fit px-2 py-0.5 text-[10px] font-normal"
+                    class="text-muted-foreground max-h-12 max-w-full overflow-y-auto px-2 py-0.5 text-[10px] font-normal break-words whitespace-normal"
+                    title={character.translatedRelationship ?? character.relationship}
+                    tabindex={0}
+                    role="region"
+                    aria-label="Character relationship"
                   >
                     {character.translatedRelationship ?? character.relationship}
                   </Badge>
@@ -877,7 +888,7 @@
                 ? getVisualDescriptorsList(displayDescriptors)
                 : []}
               {@const descriptorsExpanded = expandedDescriptors.has(character.id)}
-              <div class="mt-2 flex flex-col gap-1.5">
+              <div class="mt-2 flex max-h-48 flex-col gap-1.5 overflow-y-auto pr-0.5">
                 {#if hasTraits}
                   <div class="flex flex-wrap gap-1">
                     {#each character.translatedTraits ?? character.traits as trait (trait)}
@@ -982,7 +993,7 @@
                     size="icon"
                     class="text-muted-foreground h-6 w-6 hover:text-amber-500"
                     onclick={() => beginSwap(character)}
-                    title="Make protagonist"
+                    title="Make protagonist (Impersonate)"
                   >
                     <Star class="h-3.5 w-3.5" />
                   </Button>
@@ -992,7 +1003,7 @@
                   size="icon"
                   class="text-muted-foreground hover:text-foreground h-6 w-6"
                   onclick={() => startEdit(character)}
-                  title="Edit"
+                  title="Edit character"
                 >
                   <Pencil class="h-3.5 w-3.5" />
                 </Button>
@@ -1006,7 +1017,9 @@
                       : 'text-muted-foreground hover:text-primary',
                   )}
                   onclick={() => saveCharacterToVault(character)}
-                  title="Save to vault"
+                  title={savedToVaultId === character.id
+                    ? 'Saved to vault'
+                    : 'Save character to vault'}
                 >
                   <Archive class="h-3.5 w-3.5" />
                 </Button>

@@ -3,6 +3,7 @@ import type {
   APISettings,
   ExperimentalFeatures,
   FontSource,
+  FontSizeOption,
   GenerationPreset,
   ImageProfile,
   ImageProviderType,
@@ -1477,7 +1478,7 @@ class SettingsStore {
         // Apply theme immediately to prevent FOUC
         this.applyTheme(theme as ThemeId)
       }
-      if (fontSize) this.uiSettings.fontSize = fontSize as 'small' | 'medium' | 'large'
+      if (fontSize) this.uiSettings.fontSize = fontSize as FontSizeOption
       // Apply font size immediately (uses default 'medium' if not stored)
       this.applyFontSize(this.uiSettings.fontSize)
 
@@ -2459,11 +2460,11 @@ class SettingsStore {
   /**
    * Apply font size to the DOM using data-font-size attribute
    */
-  private applyFontSize(size: 'small' | 'medium' | 'large') {
+  private applyFontSize(size: FontSizeOption) {
     document.documentElement.setAttribute('data-font-size', size)
   }
 
-  async setFontSize(size: 'small' | 'medium' | 'large') {
+  async setFontSize(size: FontSizeOption) {
     this.uiSettings.fontSize = size
     await database.setSetting('font_size', size)
     this.applyFontSize(size)

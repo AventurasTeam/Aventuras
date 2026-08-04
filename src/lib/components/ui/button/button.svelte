@@ -157,11 +157,13 @@
   {/if}
 {:else}
   <!-- Standard Button (Non-Responsive) -->
+  {@const finalTitle = title ?? label}
   {#if href}
     <a
       bind:this={ref}
       class={cn(buttonVariants({ variant, size }), className)}
       {href}
+      title={finalTitle}
       {...restProps}
     >
       {@render children?.()}
@@ -171,6 +173,7 @@
       bind:this={ref}
       class={cn(buttonVariants({ variant, size }), className)}
       {type}
+      title={finalTitle}
       {...restProps}
     >
       {@render children?.()}

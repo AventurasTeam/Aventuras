@@ -79,6 +79,7 @@
     "eslint-plugin-unused-imports": "^4.4.1",
     "globals": "^17.8.0",
     "lefthook": "^2.1.10",
+    "picomatch": "^4.0.5",
     "prettier": "^3.9.6",
     "prettier-plugin-svelte": "^4.1.1",
     "prettier-plugin-tailwindcss": "^0.8.1",
