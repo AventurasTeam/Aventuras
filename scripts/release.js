@@ -93,16 +93,21 @@ try {
   // 4. Update Cargo.lock
   console.log('Updating Cargo.lock...')
   try {
-    execSync('cargo update -p aventura --offline', { cwd: path.join(rootDir, 'src-tauri') })
-  } catch {
-    console.error('Offline update failed.')
+    execSync('cargo update -p aventura', { cwd: path.join(rootDir, 'src-tauri'), stdio: 'inherit' })
+  } catch (err) {
+    console.error('Cargo update failed:', err.message)
     process.exit(1)
   }
+
+  // 4b. Format & Lint modified files
+  console.log('Formatting and linting files...')
+  execSync('npm run format', { stdio: 'inherit' })
+  execSync('npm run lint:fix', { stdio: 'inherit' })
 
   // 5. Commit changes
   console.log('Committing changes...')
   execSync('git add .')
-  execSync(`git commit -m "chore: bump version to ${newVersion}"`)
+  execSync(`git commit -m "chore: bump version to ${newVersion}"`, { stdio: 'inherit' })
 
   // 6. Create tag
   console.log(`Creating tag v${newVersion}...`)
