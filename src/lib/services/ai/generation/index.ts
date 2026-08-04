@@ -9,7 +9,7 @@
  * - SuggestionsService: Story direction suggestions
  * - ActionChoicesService: RPG-style action choices
  * - StyleReviewerService: Writing style analysis
- * - EntryInjector: Tiered entry injection for prompts
+ * - WorldStateInjector: Tiered live-WorldState injection for prompts
  */
 
 // Narrative generation
@@ -19,7 +19,6 @@ export {
   type NarrativeOptions,
   type WorldStateContext,
   buildChapterSummariesBlock,
-  formatStoryTime,
 } from './NarrativeService'
 
 // Classification
@@ -45,12 +44,13 @@ export {
   type PhraseAnalysis,
 } from './StyleReviewerService'
 
-// Entry injection
+// World state injection
 export {
-  EntryInjector,
-  DEFAULT_CONTEXT_CONFIG,
-  type ContextResult,
-  type ContextConfig,
-  type WorldState,
-  type RelevantEntry,
-} from './EntryInjector'
+  WorldStateInjector,
+  DEFAULT_WORLD_STATE_INJECTOR_CONFIG,
+  getWorldStateInjectorConfigFromSettings,
+  type WorldStateInjectionResult,
+  type WorldStateInjectorConfig,
+  type WorldStateInjectorInput,
+  type WorldStateContextEntry,
+} from './WorldStateInjector'

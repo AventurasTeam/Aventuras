@@ -3623,7 +3623,25 @@ class DatabaseService {
     return results.length > 0 ? this.mapPackTemplate(results[0]) : null
   }
 
-  async setPackTemplateContent(packId: string, templateId: string, content: string): Promise<void> {
+  /**
+   * Write a pack template.
+   *
+   * `isBaseline` marks a write that comes from the code baseline -- seeding a pack,
+   * backfilling a newly added template, refreshing the default pack, or resetting one to
+   * default -- as opposed to a user's edit in the template editor.
+   *
+   * The distinction is what stops the refresh on startup from reverting the user's work:
+   * `baseline_hash` moves only on a baseline write, so a row whose content no longer hashes
+   * to it has been edited by hand and must be left alone. Passing this wrongly is a silent
+   * data-loss bug in one direction and a permanently stale template in the other, which is
+   * why it is required rather than defaulted.
+   */
+  async setPackTemplateContent(
+    packId: string,
+    templateId: string,
+    content: string,
+    isBaseline: boolean,
+  ): Promise<void> {
     const db = await this.getDb()
     const now = Date.now()
     const contentHash = await hashContent(content)
@@ -3631,15 +3649,25 @@ class DatabaseService {
     // Need to preserve original created_at if exists
     const existing = await this.getPackTemplate(packId, templateId)
     const createdAt = existing ? existing.createdAt : now
+
+    // A user edit keeps the baseline it was edited *from*, so the two hashes diverge and
+    // the startup refresh leaves the row alone.
+    //
+    // When there is no such row -- the editor saving a template the pack never had -- there
+    // is no baseline to keep, and recording the edit's own hash as one would mark it
+    // untouched and hand it straight back to the refresh to overwrite. The empty string is
+    // a hash nothing produces, so the row reads as edited, which is exactly what it is.
+    const baselineHash = isBaseline ? contentHash : (existing?.baselineHash ?? '')
     await db.execute(
-      `INSERT OR REPLACE INTO pack_templates (id, pack_id, template_id, content, content_hash, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO pack_templates (id, pack_id, template_id, content, content_hash, baseline_hash, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         existing?.id ?? crypto.randomUUID(),
         packId,
         templateId,
         content,
         contentHash,
+        baselineHash,
         createdAt,
         now,
       ],
@@ -4059,6 +4087,9 @@ class DatabaseService {
       templateId: row.template_id,
       content: row.content,
       contentHash: row.content_hash,
+      // Rows written before migration 036 have no baseline; treating their current content
+      // as the baseline is the reading that keeps whatever the user has.
+      baselineHash: row.baseline_hash ?? row.content_hash,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }

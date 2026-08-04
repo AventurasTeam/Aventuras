@@ -4,6 +4,7 @@
   import { createDebouncedSave } from '$lib/utils/debounce'
   import { settings, DEFAULT_SERVICE_PRESET_ASSIGNMENTS } from '$lib/stores/settings.svelte'
   import type { GenerationPreset } from '$lib/types'
+  import type { ServiceId } from '$lib/stores/settings.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     X,
@@ -19,6 +20,7 @@
     Search,
     Clock,
     Download,
+    Users,
     Wand2,
     Languages,
     Plus,
@@ -44,9 +46,9 @@
     // Classification tasks
     {
       id: 'classifier',
-      label: 'World State',
+      label: 'World State Classifier',
       icon: Bot,
-      description: 'Extracts entities and world state',
+      description: 'Reads the narration and updates characters, locations, items & quests',
     },
     {
       id: 'lorebookClassifier',
@@ -59,6 +61,12 @@
       label: 'Entry Retrieval',
       icon: Search,
       description: 'Selects relevant lorebook entries',
+    },
+    {
+      id: 'worldStateInjection',
+      label: 'World State Injection',
+      icon: Users,
+      description: 'Injects live characters, locations, items & quests into the prompt',
     },
     {
       id: 'characterCardImport',
@@ -221,7 +229,12 @@
       icon: Languages,
       description: 'Translates wizard content',
     },
-  ] as const
+  ] as const satisfies readonly {
+    id: ServiceId
+    label: string
+    icon: unknown
+    description: string
+  }[]
 
   // State
   let editingPresetId = $state<string | null>(null)
@@ -343,7 +356,7 @@
     }
   }
 
-  async function handleAssignPreset(serviceId: string, presetId: string | 'custom') {
+  async function handleAssignPreset(serviceId: ServiceId, presetId: string | 'custom') {
     settings.setServicePresetId(serviceId, presetId === 'custom' ? '' : presetId)
   }
 
@@ -385,7 +398,7 @@
     }
   }
 
-  async function moveTask(serviceId: string, targetProfileId: string | 'custom') {
+  async function moveTask(serviceId: ServiceId, targetProfileId: string | 'custom') {
     await handleAssignPreset(serviceId, targetProfileId)
     activeTaskMenu = null
   }

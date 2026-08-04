@@ -10,8 +10,9 @@
     Bug,
     Code2,
     Layers,
-    ListTree,
     Sparkles,
+    Users,
+    PenLine,
   } from '@lucide/svelte'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
@@ -19,15 +20,29 @@
   import { Slider } from '$lib/components/ui/slider'
   import * as Collapsible from '$lib/components/ui/collapsible'
   import { Separator } from '$lib/components/ui/separator'
+  import { advancedPanelView } from './advancedPanelView'
+  import { AGENTIC_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
 
-  // Section visibility state
-  let showLorebookImportSection = $state(false)
-  let showLoreManagementSection = $state(false)
-  let showClassifierSection = $state(false)
-  let showEntryRetrievalSection = $state(false)
-  let showContextWindowSection = $state(false)
-  let showLorebookLimitsSection = $state(false)
-  let showAgenticRetrievalSection = $state(false)
+  // Open/closed state for every collapsible section, keyed by id so `sectionHeader` can
+  // bind to it generically instead of each section carrying its own `let`.
+  //
+  // Every id is listed with an explicit `false`, and `SectionId` is derived from this
+  // object rather than being `string`. Both matter: `bind:open` refuses a value of
+  // `undefined` when the prop has a fallback, so an id that is missing here does not
+  // degrade -- it throws and takes the whole tab down. Deriving the type means a section
+  // whose id is not in this list fails `npm run check` instead.
+  const openSections = $state({
+    entryRetrieval: false,
+    worldStateInjection: false,
+    memoryRetrieval: false,
+    classifier: false,
+    styleReviewer: false,
+    loreManagement: false,
+    suggestions: false,
+    lorebookImport: false,
+  })
+
+  type SectionId = keyof typeof openSections
 
   // Manual mode toggle handler
   async function handleManualModeToggle(checked: boolean) {
@@ -38,7 +53,159 @@
   function handleDebugModeToggle(checked: boolean) {
     settings.setDebugMode(checked)
   }
+
+  const system = $derived(settings.systemServicesSettings)
+  const service = $derived(settings.serviceSpecificSettings)
+
+  // Which controls currently do anything, what the headers say, and how the help lines
+  // are worded. Lives in `advancedPanelView` so the rules can be tested -- this project has
+  // no DOM test setup, and the panel is exactly where a control quietly ceasing to matter
+  // goes unnoticed.
+  const view = $derived(advancedPanelView(system))
+
+  interface SectionConfig {
+    /** Must be a key of `openSections`; see the note there. */
+    id: SectionId
+    title: string
+    subtitle: string
+    /** Any lucide-svelte icon; they all share this shape. */
+    icon: typeof Search
+    /** Full Tailwind classes, not fragments -- the scanner only sees literals. */
+    iconWrap: string
+    iconColor: string
+    onReset: () => void
+    badge?: { text: string; muted?: boolean }
+  }
+
+  interface SliderConfig {
+    label: string
+    value: number
+    min: number
+    max: number
+    step: number
+    onChange: (value: number) => void
+    /** Reading shown in the pill. Defaults to the raw value. */
+    display?: string
+    /** Explanatory line under the control. */
+    help?: string
+    /** Labels for the two ends of the track, in place of `help`. */
+    ends?: [string, string]
+    /** When set, the control is dimmed, taken out of the tab order, and explained. */
+    inactiveReason?: string
+  }
+
+  interface SwitchConfig {
+    label: string
+    description: string
+    checked: boolean
+    onChange: (checked: boolean) => void
+  }
+
+  const saveSystem = () => settings.saveSystemServicesSettings()
+  const saveService = () => settings.saveServiceSpecificSettings()
 </script>
+
+{#snippet stateBadge(text: string, muted = false)}
+  <span
+    class="rounded px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase {muted
+      ? 'text-muted-foreground bg-muted'
+      : 'bg-primary/10 text-primary'}"
+  >
+    {text}
+  </span>
+{/snippet}
+
+{#snippet sectionHeader(cfg: SectionConfig)}
+  {@const Icon = cfg.icon}
+  <div class="flex items-center gap-3 p-3 pl-4">
+    <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
+      <div
+        class="flex h-8 w-8 items-center justify-center rounded-md transition-colors {cfg.iconWrap}"
+      >
+        <Icon class="h-4 w-4 {cfg.iconColor}" />
+      </div>
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <Label class="leading-none font-medium">{cfg.title}</Label>
+          {#if cfg.badge}{@render stateBadge(cfg.badge.text, cfg.badge.muted)}{/if}
+        </div>
+        <p class="text-muted-foreground mt-1 text-xs">{cfg.subtitle}</p>
+      </div>
+    </Collapsible.Trigger>
+    <div class="flex shrink-0 items-center gap-1">
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-8 w-8"
+        onclick={cfg.onReset}
+        title="Reset to default"
+      >
+        <RotateCcw class="h-3.5 w-3.5" />
+      </Button>
+      <Collapsible.Trigger>
+        {#snippet child({ props })}
+          <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
+            <ChevronDown
+              class="h-4 w-4 transition-transform duration-200 {openSections[cfg.id]
+                ? 'rotate-180'
+                : ''}"
+            />
+            <span class="sr-only">Toggle</span>
+          </Button>
+        {/snippet}
+      </Collapsible.Trigger>
+    </div>
+  </div>
+{/snippet}
+
+{#snippet sliderRow(cfg: SliderConfig)}
+  <div class="space-y-3" class:opacity-50={!!cfg.inactiveReason} inert={!!cfg.inactiveReason}>
+    <div class="flex justify-between">
+      <Label>{cfg.label}</Label>
+      <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
+        {cfg.display ?? cfg.value}
+      </span>
+    </div>
+    <Slider
+      value={cfg.value}
+      min={cfg.min}
+      max={cfg.max}
+      step={cfg.step}
+      type="single"
+      onValueChange={cfg.onChange}
+    />
+    {#if cfg.ends}
+      <div
+        class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
+      >
+        <span>{cfg.ends[0]}</span>
+        <span>{cfg.ends[1]}</span>
+      </div>
+    {:else if cfg.help}
+      <p class="text-muted-foreground text-xs">{cfg.help}</p>
+    {/if}
+    {#if cfg.inactiveReason}
+      <p class="text-muted-foreground/80 text-[11px] italic">Inactive — {cfg.inactiveReason}</p>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet switchRow(cfg: SwitchConfig)}
+  <div class="flex flex-row items-center justify-between">
+    <div class="space-y-0.5">
+      <Label class="text-sm">{cfg.label}</Label>
+      <p class="text-muted-foreground text-xs">{cfg.description}</p>
+    </div>
+    <Switch checked={cfg.checked} onCheckedChange={cfg.onChange} />
+  </div>
+{/snippet}
+
+{#snippet groupHeading(text: string, subtitle: string)}
+  <div class="px-1 pt-2">
+    <h3 class="text-xs font-semibold tracking-wide uppercase">{text}</h3>
+    <p class="text-muted-foreground mt-0.5 text-xs">{subtitle}</p>
+  </div>
+{/snippet}
 
 <div class="space-y-6">
   <!-- General Settings -->
@@ -85,455 +252,257 @@
 
   <Separator />
 
-  <!-- Service Configurations -->
+  <!-- ==================================================================== -->
+  <!-- Group 1: what is assembled into the narrator's prompt, before a turn  -->
+  <!-- ==================================================================== -->
+  {@render groupHeading(
+    "The narrator's prompt",
+    'Chosen before each turn and sent with it. Entry Retrieval and World State Injection draw from two separate pools; Memory Retrieval reaches back into past chapters.',
+  )}
+
   <div class="space-y-3">
-    <!-- Lorebook Import Settings -->
+    <!-- Entry Retrieval -->
     <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showLorebookImportSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-green-500/10 transition-colors group-hover/trigger:bg-green-500/20"
-            >
-              <FolderOpen class="h-4 w-4 text-green-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Lorebook Import</Label>
-              <p class="text-muted-foreground mt-1 text-xs">Batch size and concurrency</p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetLorebookClassifierSpecificSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showLorebookImportSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
+      <Collapsible.Root bind:open={openSections.entryRetrieval}>
+        {@render sectionHeader({
+          id: 'entryRetrieval',
+          title: 'Entry Retrieval',
+          subtitle: 'Selects Lorebook entries (authored lore) for the prompt',
+          icon: Search,
+          iconWrap: 'bg-amber-500/10 group-hover/trigger:bg-amber-500/20',
+          iconColor: 'text-amber-500',
+          onReset: () => settings.resetEntryRetrievalSettings(),
+          badge: view.badges.entryRetrieval,
+        })}
 
         <Collapsible.Content>
           <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Batch Size -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Batch Size</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookClassifier?.batchSize ?? 50}
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookClassifier?.batchSize ?? 50}
-                min={10}
-                max={100}
-                step={10}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookClassifier.batchSize = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Reliable</span>
-                <span>Fast</span>
-              </div>
-            </div>
+            <p class="text-muted-foreground text-xs leading-relaxed">
+              Selects which <strong>Lorebook entries</strong> (`Entry` records you or the AI wrote:
+              characters, locations, items, factions, concepts, events) get injected into the
+              narrator prompt. Authored lore only — the current location, active characters and
+              inventory are handled by <strong>World State Injection</strong> below, which selects from
+              the live, turn-by-turn tracked game state. Runs on every narrator turn, in every Memory
+              Retrieval mode: Agentic Retrieval reads lorebook entries while reasoning about the past,
+              but does not choose which ones reach the narrator — that is decided here, and only here.
+            </p>
 
-            <!-- Max Concurrent -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Max Concurrent Requests</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookClassifier?.maxConcurrent ?? 5}
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookClassifier?.maxConcurrent ?? 5}
-                min={1}
-                max={10}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookClassifier.maxConcurrent = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Sequential</span>
-                <span>Parallel</span>
-              </div>
-            </div>
+            {@render switchRow({
+              label: 'Enable LLM Selection',
+              description: 'Use LLM to intelligently select lorebook entries',
+              checked: view.entryLLMOn,
+              onChange: (v) => {
+                system.entryRetrieval.enableLLMSelection = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Tier 2 Entries',
+              value: system.entryRetrieval?.maxTier2Entries ?? 20,
+              display: `${system.entryRetrieval?.maxTier2Entries ?? 20} entries`,
+              min: 5,
+              max: 40,
+              step: 5,
+              help: 'Cap on entries pulled in by keyword matching. Lower than the World State caps on purpose: a lorebook entry is a paragraph, a world-state record is a sentence.',
+              onChange: (v) => {
+                system.entryRetrieval.maxTier2Entries = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Tier 3 Entries',
+              value: system.entryRetrieval?.maxTier3Entries ?? 30,
+              display: `${system.entryRetrieval?.maxTier3Entries ?? 30} entries`,
+              min: 5,
+              max: 50,
+              step: 5,
+              help: 'Cap on entries the LLM picked.',
+              inactiveReason: view.inactive.maxTier3Entries,
+              onChange: (v) => {
+                system.entryRetrieval.maxTier3Entries = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Words Per Entry',
+              value: system.entryRetrieval?.maxWordsPerEntry ?? 0,
+              display:
+                (system.entryRetrieval?.maxWordsPerEntry ?? 0) === 0
+                  ? 'Unlimited'
+                  : String(system.entryRetrieval?.maxWordsPerEntry ?? 0),
+              min: 0,
+              max: 500,
+              step: 50,
+              ends: ['Unlimited', '500 Words'],
+              onChange: (v) => {
+                system.entryRetrieval.maxWordsPerEntry = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Recent Entries Window',
+              value: system.entryRetrieval?.recentEntriesCount ?? 5,
+              display: `${system.entryRetrieval?.recentEntriesCount ?? 5} entries`,
+              min: 2,
+              max: 15,
+              step: 1,
+              help: view.help.entryRecentEntries,
+              onChange: (v) => {
+                system.entryRetrieval.recentEntriesCount = v
+                saveSystem()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
     </div>
 
-    <!-- Lore Management Settings -->
+    <!-- World State Injection -->
     <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showLoreManagementSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-purple-500/10 transition-colors group-hover/trigger:bg-purple-500/20"
-            >
-              <BookOpen class="h-4 w-4 text-purple-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Lore Management</Label>
-              <p class="text-muted-foreground mt-1 text-xs">Autonomous agent iteration limits</p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetLoreManagementSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showLoreManagementSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
+      <Collapsible.Root bind:open={openSections.worldStateInjection}>
+        {@render sectionHeader({
+          id: 'worldStateInjection',
+          title: 'World State Injection',
+          subtitle: 'Selects live-tracked characters, locations, items & quests for the prompt',
+          icon: Users,
+          iconWrap: 'bg-teal-500/10 group-hover/trigger:bg-teal-500/20',
+          iconColor: 'text-teal-500',
+          onReset: () => settings.resetWorldStateInjectionSettings(),
+          badge: view.badges.worldState,
+        })}
 
         <Collapsible.Content>
           <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Max Iterations -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Max Iterations</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.systemServicesSettings.loreManagement?.maxIterations ?? 50}
-                </span>
-              </div>
-              <Slider
-                value={settings.systemServicesSettings.loreManagement?.maxIterations ?? 50}
-                min={10}
-                max={100}
-                step={5}
-                type="single"
-                onValueChange={(v) => {
-                  settings.systemServicesSettings.loreManagement.maxIterations = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Conservative</span>
-                <span>Extensive</span>
-              </div>
-            </div>
+            <p class="text-muted-foreground text-xs leading-relaxed">
+              Selects which pieces of the story's <strong>live-tracked World State</strong> -- the
+              `Character`/`Location`/`Item`/`StoryBeat` records that the "World State Classifier"
+              updates after every narrator turn (who's present, where you are, your inventory,
+              active quests) -- get injected into the prompt. Separate from
+              <strong>Entry Retrieval</strong> above, which selects from authored Lorebook entries
+              instead. Unlike Entry Retrieval, this runs in full on <strong>every</strong> narrator turn,
+              in every Memory Retrieval mode: Agentic Retrieval searches Lorebook entries and chapters,
+              never live World State, so there is nothing here for it to stand in for.
+            </p>
+
+            {@render switchRow({
+              label: 'Enable LLM Selection',
+              description:
+                'Above the threshold below, have the LLM pick which leftover characters/locations/items/quests matter. With this off, a leftover that large is left out instead — smaller ones are still included either way.',
+              checked: view.worldStateLLMOn,
+              onChange: (v) => {
+                system.worldStateInjection.enableLLMSelection = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'LLM Selection Threshold',
+              value: system.worldStateInjection?.llmThreshold ?? 30,
+              display: `${system.worldStateInjection?.llmThreshold ?? 30} entities`,
+              min: 10,
+              max: 100,
+              step: 10,
+              help: 'Where "include it all" turns into "pick the relevant ones". At or below this many not-yet-selected entities, all of them go into the prompt as-is; above it, the LLM selects.',
+              inactiveReason: view.inactive.llmThreshold,
+              onChange: (v) => {
+                system.worldStateInjection.llmThreshold = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Tier 2 Entities',
+              value: system.worldStateInjection?.maxTier2Entries ?? 40,
+              display: `${system.worldStateInjection?.maxTier2Entries ?? 40} entities`,
+              min: 5,
+              max: 60,
+              step: 5,
+              help: 'Cap on entities pulled in by name matching.',
+              onChange: (v) => {
+                system.worldStateInjection.maxTier2Entries = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Tier 3 Entities',
+              value: system.worldStateInjection?.maxTier3Entries ?? 50,
+              display: `${system.worldStateInjection?.maxTier3Entries ?? 50} entities`,
+              min: 5,
+              max: 80,
+              step: 5,
+              help: "Cap on entities the LLM picked. Applies only above the threshold — below it the whole leftover goes in uncapped. Always-included state (where you are, who's present, what you're carrying, active quests) and the recently-mentioned carry-over are never capped.",
+              inactiveReason: view.inactive.worldStateMaxTier3,
+              onChange: (v) => {
+                system.worldStateInjection.maxTier3Entries = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Recent Entries Window',
+              value: system.worldStateInjection?.recentEntriesCount ?? 5,
+              display: `${system.worldStateInjection?.recentEntriesCount ?? 5} entries`,
+              min: 2,
+              max: 15,
+              step: 1,
+              help: view.help.worldStateRecentEntries,
+              onChange: (v) => {
+                system.worldStateInjection.recentEntriesCount = v
+                saveSystem()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
     </div>
 
-    <!-- Classifier Settings -->
+    <!-- Memory Retrieval -->
     <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showClassifierSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-cyan-500/10 transition-colors group-hover/trigger:bg-cyan-500/20"
-            >
-              <Brain class="h-4 w-4 text-cyan-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">World State Classifier</Label>
-              <p class="text-muted-foreground mt-1 text-xs">Context window management</p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetClassifierSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showClassifierSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
+      <Collapsible.Root bind:open={openSections.memoryRetrieval}>
+        {@render sectionHeader({
+          id: 'memoryRetrieval',
+          title: 'Memory Retrieval',
+          subtitle: 'How past chapters are retrieved for context',
+          icon: Sparkles,
+          iconWrap: 'bg-pink-500/10 group-hover/trigger:bg-pink-500/20',
+          iconColor: 'text-pink-500',
+          onReset: () => {
+            settings.resetTimelineFillSettings()
+            settings.resetAgenticRetrievalSettings()
+          },
+          badge: view.badges.memory,
+        })}
 
         <Collapsible.Content>
           <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Chat History Truncation -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Chat History Truncation (Words)</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.systemServicesSettings.classifier?.chatHistoryTruncation === 0
-                    ? 'No Limit'
-                    : (settings.systemServicesSettings.classifier?.chatHistoryTruncation ?? 0)}
-                </span>
-              </div>
-              <Slider
-                value={settings.systemServicesSettings.classifier?.chatHistoryTruncation ?? 0}
-                min={0}
-                max={500}
-                step={50}
-                type="single"
-                onValueChange={(v) => {
-                  settings.systemServicesSettings.classifier.chatHistoryTruncation = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Unlimited</span>
-                <span>500 Words</span>
-              </div>
-            </div>
-          </div>
-        </Collapsible.Content>
-      </Collapsible.Root>
-    </div>
+            {@render switchRow({
+              label: 'Enable Memory Retrieval',
+              description: 'Retrieve context from past chapters during generation',
+              checked: view.memoryOn,
+              onChange: (v) => {
+                system.timelineFill.enabled = v
+                saveSystem()
+              },
+            })}
 
-    <!-- Entry Retrieval Settings -->
-    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showEntryRetrievalSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-amber-500/10 transition-colors group-hover/trigger:bg-amber-500/20"
-            >
-              <Search class="h-4 w-4 text-amber-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Entry Retrieval</Label>
-              <p class="text-muted-foreground mt-1 text-xs">LLM-based selection settings</p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetEntryRetrievalSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showEntryRetrievalSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
-
-        <Collapsible.Content>
-          <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Enable LLM Selection -->
-            <div class="flex flex-row items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">Enable LLM Selection</Label>
-                <p class="text-muted-foreground text-xs">
-                  Use LLM to intelligently select lorebook entries
-                </p>
-              </div>
-              <Switch
-                checked={settings.systemServicesSettings.entryRetrieval?.enableLLMSelection ?? true}
-                onCheckedChange={(v) => {
-                  settings.systemServicesSettings.entryRetrieval.enableLLMSelection = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-            </div>
-
-            <!-- Max Tier 3 Entries -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Max Tier 3 Entries</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.systemServicesSettings.entryRetrieval?.maxTier3Entries === 0
-                    ? 'Unlimited'
-                    : (settings.systemServicesSettings.entryRetrieval?.maxTier3Entries ?? 0)}
-                </span>
-              </div>
-              <Slider
-                value={settings.systemServicesSettings.entryRetrieval?.maxTier3Entries ?? 0}
-                min={0}
-                max={20}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.systemServicesSettings.entryRetrieval.maxTier3Entries = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Unlimited</span>
-                <span>20 Entries</span>
-              </div>
-            </div>
-
-            <!-- Max Words Per Entry -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Max Words Per Entry</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.systemServicesSettings.entryRetrieval?.maxWordsPerEntry === 0
-                    ? 'Unlimited'
-                    : (settings.systemServicesSettings.entryRetrieval?.maxWordsPerEntry ?? 0)}
-                </span>
-              </div>
-              <Slider
-                value={settings.systemServicesSettings.entryRetrieval?.maxWordsPerEntry ?? 0}
-                min={0}
-                max={1000}
-                step={50}
-                type="single"
-                onValueChange={(v) => {
-                  settings.systemServicesSettings.entryRetrieval.maxWordsPerEntry = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-              <div
-                class="text-muted-foreground flex justify-between text-[10px] font-medium tracking-wider uppercase"
-              >
-                <span>Unlimited</span>
-                <span>1000 Words</span>
-              </div>
-            </div>
-          </div>
-        </Collapsible.Content>
-      </Collapsible.Root>
-    </div>
-
-    <!-- Memory Retrieval Settings -->
-    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showAgenticRetrievalSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-pink-500/10 transition-colors group-hover/trigger:bg-pink-500/20"
-            >
-              <Sparkles class="h-4 w-4 text-pink-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Memory Retrieval</Label>
-              <p class="text-muted-foreground mt-1 text-xs">
-                How past chapters are retrieved for context
-              </p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => {
-                settings.resetTimelineFillSettings()
-                settings.resetAgenticRetrievalSpecificSettings()
-              }}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showAgenticRetrievalSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
-
-        <Collapsible.Content>
-          <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Enable Memory Retrieval -->
-            <div class="flex flex-row items-center justify-between">
-              <div class="space-y-0.5">
-                <Label class="text-sm">Enable Memory Retrieval</Label>
-                <p class="text-muted-foreground text-xs">
-                  Retrieve context from past chapters during generation
-                </p>
-              </div>
-              <Switch
-                checked={settings.systemServicesSettings.timelineFill?.enabled ?? true}
-                onCheckedChange={(v) => {
-                  settings.systemServicesSettings.timelineFill.enabled = v
-                  settings.saveSystemServicesSettings()
-                }}
-              />
-            </div>
-
-            {#if settings.systemServicesSettings.timelineFill?.enabled}
+            {#if view.memoryOn}
               <!-- Mode Selection -->
               <div class="space-y-3">
                 <Label>Retrieval Mode</Label>
                 <div class="grid grid-cols-2 gap-2">
                   <button
-                    class="flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors {settings
-                      .systemServicesSettings.timelineFill?.mode === 'static' ||
-                    !settings.systemServicesSettings.timelineFill?.mode
+                    class="flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors {view.memoryMode ===
+                    'static'
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50'}"
                     onclick={() => {
-                      settings.systemServicesSettings.timelineFill.mode = 'static'
-                      settings.saveSystemServicesSettings()
+                      system.timelineFill.mode = 'static'
+                      saveSystem()
                     }}
                   >
                     <span class="text-sm font-medium">Static</span>
@@ -542,13 +511,13 @@
                     </span>
                   </button>
                   <button
-                    class="flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors {settings
-                      .systemServicesSettings.timelineFill?.mode === 'agentic'
+                    class="flex flex-col items-start gap-1 rounded-lg border p-3 text-left transition-colors {view.memoryMode ===
+                    'agentic'
                       ? 'border-primary bg-primary/5'
                       : 'border-border hover:bg-muted/50'}"
                     onclick={() => {
-                      settings.systemServicesSettings.timelineFill.mode = 'agentic'
-                      settings.saveSystemServicesSettings()
+                      system.timelineFill.mode = 'agentic'
+                      saveSystem()
                     }}
                   >
                     <span class="text-sm font-medium">Agentic</span>
@@ -559,311 +528,327 @@
                 </div>
               </div>
 
-              <!-- Static Mode Options -->
-              {#if settings.systemServicesSettings.timelineFill?.mode === 'static' || !settings.systemServicesSettings.timelineFill?.mode}
-                <div class="space-y-3">
-                  <div class="flex justify-between">
-                    <Label>Max Queries</Label>
-                    <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                      {settings.systemServicesSettings.timelineFill?.maxQueries ?? 5}
-                    </span>
-                  </div>
-                  <Slider
-                    value={settings.systemServicesSettings.timelineFill?.maxQueries ?? 5}
-                    min={1}
-                    max={10}
-                    step={1}
-                    type="single"
-                    onValueChange={(v) => {
-                      settings.systemServicesSettings.timelineFill.maxQueries = v
-                      settings.saveSystemServicesSettings()
-                    }}
-                  />
-                  <p class="text-muted-foreground text-xs">
-                    Number of questions generated to query chapter history
-                  </p>
-                </div>
+              {#if view.memoryMode === 'static'}
+                {@render sliderRow({
+                  label: 'Max Queries',
+                  value: system.timelineFill?.maxQueries ?? 5,
+                  min: 1,
+                  max: 10,
+                  step: 1,
+                  help: 'Number of questions generated to query chapter history',
+                  onChange: (v) => {
+                    system.timelineFill.maxQueries = v
+                    saveSystem()
+                  },
+                })}
               {/if}
 
-              <!-- Agentic Mode Options -->
-              {#if settings.systemServicesSettings.timelineFill?.mode === 'agentic'}
-                <div class="space-y-3">
-                  <div class="flex justify-between">
-                    <Label>Max Iterations</Label>
-                    <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                      {settings.systemServicesSettings.agenticRetrieval?.maxIterations ?? 30}
-                    </span>
-                  </div>
-                  <Slider
-                    value={settings.systemServicesSettings.agenticRetrieval?.maxIterations ?? 30}
-                    min={1}
-                    max={30}
-                    step={1}
-                    type="single"
-                    onValueChange={(v) => {
-                      settings.systemServicesSettings.agenticRetrieval.maxIterations = v
-                      settings.saveSystemServicesSettings()
-                    }}
-                  />
-                  <p class="text-muted-foreground text-xs">
-                    Maximum tool-calling rounds for the retrieval agent
-                  </p>
-                </div>
+              {#if view.memoryMode !== 'static'}
+                {@render sliderRow({
+                  label: 'Max Iterations',
+                  value:
+                    system.agenticRetrieval?.maxIterations ??
+                    AGENTIC_RETRIEVAL_DEFAULTS.maxIterations,
+                  min: 5,
+                  max: 50,
+                  step: 5,
+                  help: 'Maximum tool-calling rounds for the retrieval agent',
+                  onChange: (v) => {
+                    system.agenticRetrieval.maxIterations = v
+                    saveSystem()
+                  },
+                })}
+
+                {@render switchRow({
+                  label: 'Enable Grep Tool',
+                  description:
+                    'Give the agent a no-LLM tool to search verbatim story text across chapters. It looks things up directly instead of asking a second model to read whole chapters, which is far cheaper.',
+                  checked: view.grepOn,
+                  onChange: (v) => {
+                    system.agenticRetrieval.grepEnabled = v
+                    saveSystem()
+                  },
+                })}
+
+                {#if view.grepOn}
+                  {@render sliderRow({
+                    label: 'Quotes Per Search',
+                    value: system.agenticRetrieval?.grepExcerptsPerSearch ?? 40,
+                    display: `${system.agenticRetrieval?.grepExcerptsPerSearch ?? 40} quotes`,
+                    min: 5,
+                    max: 60,
+                    step: 1,
+                    help: 'How much of one search the agent gets to read. Too low and a broad search shows a few percent of its hits, which is not enough to answer with — the agent then falls back to reading a whole chapter with a second model, which costs far more than the quotes would have.',
+                    onChange: (v) => {
+                      system.agenticRetrieval.grepExcerptsPerSearch = v
+                      saveSystem()
+                    },
+                  })}
+                {/if}
               {/if}
             {/if}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
     </div>
+  </div>
 
-    <!-- Context Window Settings -->
+  <Separator />
+
+  <!-- ==================================================================== -->
+  <!-- Group 2: work that happens after the narrator has answered            -->
+  <!-- ==================================================================== -->
+  {@render groupHeading(
+    'After each turn',
+    'Reads the narration that was just produced. Nothing here affects the turn it runs on — only later ones, through the state and notes it leaves behind.',
+  )}
+
+  <div class="space-y-3">
+    <!-- World State Classifier -->
     <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showContextWindowSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-blue-500/10 transition-colors group-hover/trigger:bg-blue-500/20"
-            >
-              <Layers class="h-4 w-4 text-blue-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Context Window</Label>
-              <p class="text-muted-foreground mt-1 text-xs">
-                Recent entries included in AI operations
-              </p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetContextWindowSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showContextWindowSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
+      <Collapsible.Root bind:open={openSections.classifier}>
+        {@render sectionHeader({
+          id: 'classifier',
+          title: 'World State Classifier',
+          subtitle: 'Extracts world state changes from each narration',
+          icon: Brain,
+          iconWrap: 'bg-cyan-500/10 group-hover/trigger:bg-cyan-500/20',
+          iconColor: 'text-cyan-500',
+          onReset: () => settings.resetClassifierSettings(),
+        })}
 
         <Collapsible.Content>
           <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Retrieval Context -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Retrieval/Classification</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.contextWindow?.recentEntriesForRetrieval ?? 5} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.contextWindow?.recentEntriesForRetrieval ??
-                  5}
-                min={2}
-                max={15}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.contextWindow.recentEntriesForRetrieval = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">
-                Entries for retrieval and classification operations
-              </p>
-            </div>
-
-            <!-- Tiered Context -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Tiered Context Building</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.contextWindow?.recentEntriesForTiered ?? 10} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.contextWindow?.recentEntriesForTiered ?? 10}
-                min={3}
-                max={20}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.contextWindow.recentEntriesForTiered = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">Entries for lorebook entry injection</p>
-            </div>
-
-            <!-- Action Choices Context -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Action Choices</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 5} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.contextWindow?.recentEntriesForChoices ?? 5}
-                min={1}
-                max={10}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.contextWindow.recentEntriesForChoices = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">Entries for generating action choices</p>
-            </div>
+            {@render sliderRow({
+              label: 'Chat History Truncation (Words)',
+              value: system.classifier?.chatHistoryTruncation ?? 0,
+              display:
+                (system.classifier?.chatHistoryTruncation ?? 0) === 0
+                  ? 'No Limit'
+                  : String(system.classifier?.chatHistoryTruncation ?? 0),
+              min: 0,
+              max: 500,
+              step: 50,
+              ends: ['Unlimited', '500 Words'],
+              onChange: (v) => {
+                system.classifier.chatHistoryTruncation = v
+                saveSystem()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>
     </div>
 
-    <!-- Lorebook Limits Settings -->
+    <!-- Style Reviewer -->
     <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
-      <Collapsible.Root bind:open={showLorebookLimitsSection}>
-        <div class="flex items-center gap-3 p-3 pl-4">
-          <Collapsible.Trigger class="group/trigger flex flex-1 items-center gap-2 text-left">
-            <div
-              class="flex h-8 w-8 items-center justify-center rounded-md bg-orange-500/10 transition-colors group-hover/trigger:bg-orange-500/20"
-            >
-              <ListTree class="h-4 w-4 text-orange-500" />
-            </div>
-            <div class="flex-1">
-              <Label class="leading-none font-medium">Lorebook Limits</Label>
-              <p class="text-muted-foreground mt-1 text-xs">Max entries injected per operation</p>
-            </div>
-          </Collapsible.Trigger>
-          <div class="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              class="h-8 w-8"
-              onclick={() => settings.resetLorebookLimitsSettings()}
-              title="Reset to default"
-            >
-              <RotateCcw class="h-3.5 w-3.5" />
-            </Button>
-            <Collapsible.Trigger>
-              {#snippet child({ props })}
-                <Button {...props} variant="ghost" size="icon" class="h-8 w-8">
-                  {#if showLorebookLimitsSection}
-                    <ChevronDown class="h-4 w-4 rotate-180 transition-transform duration-200" />
-                  {:else}
-                    <ChevronDown class="h-4 w-4 transition-transform duration-200" />
-                  {/if}
-                  <span class="sr-only">Toggle</span>
-                </Button>
-              {/snippet}
-            </Collapsible.Trigger>
-          </div>
-        </div>
+      <Collapsible.Root bind:open={openSections.styleReviewer}>
+        {@render sectionHeader({
+          id: 'styleReviewer',
+          title: 'Style Reviewer',
+          subtitle: 'Detects repetitive phrases and prose patterns from recent narration',
+          icon: PenLine,
+          iconWrap: 'bg-violet-500/10 group-hover/trigger:bg-violet-500/20',
+          iconColor: 'text-violet-500',
+          onReset: () => settings.resetStyleReviewerSettings(),
+          badge: view.badges.styleReviewer,
+        })}
 
         <Collapsible.Content>
           <div class="bg-muted/10 space-y-6 border-t p-4">
-            <!-- Max for Suggestions -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Suggestions</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookLimits?.maxForSuggestions ?? 15} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookLimits?.maxForSuggestions ?? 15}
-                min={5}
-                max={30}
-                step={5}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookLimits.maxForSuggestions = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">Max entries for suggestion generation</p>
-            </div>
+            {@render switchRow({
+              label: 'Enable Style Reviewer',
+              description:
+                'Periodically analyze recent narration for overused phrases and structural repetition, feeding the results back into the narrator prompt',
+              checked: view.styleReviewerOn,
+              onChange: (v) => {
+                system.styleReviewer.enabled = v
+                saveSystem()
+              },
+            })}
 
-            <!-- Max for Action Choices -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Action Choices</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookLimits?.maxForActionChoices ?? 12} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookLimits?.maxForActionChoices ?? 12}
-                min={5}
-                max={25}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookLimits.maxForActionChoices = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">Max entries for action choice generation</p>
-            </div>
+            {#if view.styleReviewerOn}
+              {@render sliderRow({
+                label: 'Review Every',
+                value: system.styleReviewer?.triggerInterval ?? 6,
+                display: `${system.styleReviewer?.triggerInterval ?? 6} turns`,
+                min: 2,
+                max: 32,
+                step: 1,
+                help: 'How often the review runs. Its findings stay in the narrator prompt between runs, so a short interval costs a call more often without changing what the narrator sees in between.',
+                onChange: (v) => {
+                  system.styleReviewer.triggerInterval = v
+                  saveSystem()
+                },
+              })}
 
-            <!-- Max per Tier -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>Per Tier</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 20} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookLimits?.maxEntriesPerTier ?? 20}
-                min={3}
-                max={20}
-                step={1}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookLimits.maxEntriesPerTier = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">Max entries per injection tier</p>
-            </div>
+              {@render sliderRow({
+                label: 'Recent Entries Window',
+                value: system.styleReviewer?.recentEntriesCount ?? 32,
+                display: `${system.styleReviewer?.recentEntriesCount ?? 32} entries`,
+                min: 4,
+                max: 64,
+                step: 1,
+                help: 'Most recent narration entries analyzed for repetition. Player action entries are always ignored.',
+                onChange: (v) => {
+                  system.styleReviewer.recentEntriesCount = v
+                  saveSystem()
+                },
+              })}
+            {/if}
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+    </div>
 
-            <!-- LLM Threshold -->
-            <div class="space-y-3">
-              <div class="flex justify-between">
-                <Label>LLM Selection Threshold</Label>
-                <span class="bg-muted rounded px-2 py-0.5 text-xs font-medium">
-                  {settings.serviceSpecificSettings.lorebookLimits?.llmThreshold ?? 30} entries
-                </span>
-              </div>
-              <Slider
-                value={settings.serviceSpecificSettings.lorebookLimits?.llmThreshold ?? 30}
-                min={10}
-                max={100}
-                step={10}
-                type="single"
-                onValueChange={(v) => {
-                  settings.serviceSpecificSettings.lorebookLimits.llmThreshold = v
-                  settings.saveServiceSpecificSettings()
-                }}
-              />
-              <p class="text-muted-foreground text-xs">
-                Entry count that triggers LLM-based selection
-              </p>
-            </div>
+    <!-- Lore Management -->
+    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
+      <Collapsible.Root bind:open={openSections.loreManagement}>
+        {@render sectionHeader({
+          id: 'loreManagement',
+          title: 'Lore Management',
+          subtitle: 'Autonomous agent iteration limits',
+          icon: BookOpen,
+          iconWrap: 'bg-purple-500/10 group-hover/trigger:bg-purple-500/20',
+          iconColor: 'text-purple-500',
+          onReset: () => settings.resetLoreManagementSettings(),
+        })}
+
+        <Collapsible.Content>
+          <div class="bg-muted/10 space-y-6 border-t p-4">
+            {@render sliderRow({
+              label: 'Max Iterations',
+              value: system.loreManagement?.maxIterations ?? 50,
+              min: 10,
+              max: 100,
+              step: 5,
+              ends: ['Conservative', 'Extensive'],
+              onChange: (v) => {
+                system.loreManagement.maxIterations = v
+                saveSystem()
+              },
+            })}
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+    </div>
+  </div>
+
+  <Separator />
+
+  <!-- ==================================================================== -->
+  <!-- Group 3: everything that is not the narrator turn                     -->
+  <!-- ==================================================================== -->
+  {@render groupHeading(
+    'Suggestions and import',
+    'Side features with their own context budgets. None of these touch the narration itself.',
+  )}
+
+  <div class="space-y-3">
+    <!-- Suggestions & Choices (was "Context Window") -->
+    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
+      <Collapsible.Root bind:open={openSections.suggestions}>
+        {@render sectionHeader({
+          id: 'suggestions',
+          title: 'Suggestions & Choices',
+          subtitle: 'How much context the suggestion and action-choice generators get',
+          icon: Layers,
+          iconWrap: 'bg-blue-500/10 group-hover/trigger:bg-blue-500/20',
+          iconColor: 'text-blue-500',
+          onReset: () => {
+            settings.resetContextWindowSettings()
+            settings.resetLorebookLimitsSettings()
+          },
+        })}
+
+        <Collapsible.Content>
+          <div class="bg-muted/10 space-y-6 border-t p-4">
+            {@render sliderRow({
+              label: 'Plot Suggestions',
+              value: service.contextWindow?.recentEntriesForRetrieval ?? 5,
+              display: `${service.contextWindow?.recentEntriesForRetrieval ?? 5} entries`,
+              min: 2,
+              max: 15,
+              step: 1,
+              help: 'Recent story entries read when generating plot suggestions. Entry Retrieval and World State Injection have their own Recent Entries Window; this is not it.',
+              onChange: (v) => {
+                service.contextWindow.recentEntriesForRetrieval = v
+                saveService()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Action Choices',
+              value: service.contextWindow?.recentEntriesForChoices ?? 5,
+              display: `${service.contextWindow?.recentEntriesForChoices ?? 5} entries`,
+              min: 1,
+              max: 10,
+              step: 1,
+              help: 'Entries for generating action choices',
+              onChange: (v) => {
+                service.contextWindow.recentEntriesForChoices = v
+                saveService()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Suggestions (lorebook entries)',
+              value: service.lorebookLimits?.maxForSuggestions ?? 15,
+              display: `${service.lorebookLimits?.maxForSuggestions ?? 15} entries`,
+              min: 5,
+              max: 30,
+              step: 5,
+              help: 'Max lorebook entries included when generating plot suggestions',
+              onChange: (v) => {
+                service.lorebookLimits.maxForSuggestions = v
+                saveService()
+              },
+            })}
+          </div>
+        </Collapsible.Content>
+      </Collapsible.Root>
+    </div>
+
+    <!-- Lorebook Import -->
+    <div class="bg-card text-card-foreground rounded-lg border shadow-sm">
+      <Collapsible.Root bind:open={openSections.lorebookImport}>
+        {@render sectionHeader({
+          id: 'lorebookImport',
+          title: 'Lorebook Import',
+          subtitle: 'Batch size and concurrency',
+          icon: FolderOpen,
+          iconWrap: 'bg-green-500/10 group-hover/trigger:bg-green-500/20',
+          iconColor: 'text-green-500',
+          onReset: () => settings.resetLorebookClassifierSpecificSettings(),
+        })}
+
+        <Collapsible.Content>
+          <div class="bg-muted/10 space-y-6 border-t p-4">
+            {@render sliderRow({
+              label: 'Batch Size',
+              value: service.lorebookClassifier?.batchSize ?? 50,
+              min: 10,
+              max: 100,
+              step: 10,
+              ends: ['Reliable', 'Fast'],
+              onChange: (v) => {
+                service.lorebookClassifier.batchSize = v
+                saveService()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Concurrent Requests',
+              value: service.lorebookClassifier?.maxConcurrent ?? 5,
+              min: 1,
+              max: 10,
+              step: 1,
+              ends: ['Sequential', 'Parallel'],
+              onChange: (v) => {
+                service.lorebookClassifier.maxConcurrent = v
+                saveService()
+              },
+            })}
           </div>
         </Collapsible.Content>
       </Collapsible.Root>

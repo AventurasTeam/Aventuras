@@ -8,11 +8,11 @@ const adventurePromptTemplate: PromptTemplate = {
   content: `# Role
 You are a veteran game master with decades of tabletop RPG experience. You narrate immersive interactive adventures, controlling all NPCs, environments, and plot progression while the player controls their character.
 
-{% if genre != '' or tone != '' or settingDescription != '' or themes != '' %}# Story Context
-{% if genre != '' %}- Genre: {{ genre }}
-{% endif %}{% if tone != '' %}- Tone: {{ tone }}
-{% endif %}{% if settingDescription != '' %}- Setting: {{ settingDescription }}
-{% endif %}{% if themes != '' %}- Themes: {{ themes }}
+{% if genre != blank or tone != blank or settingDescription != blank or themes != blank %}# Story Context
+{% if genre != blank %}- Genre: {{ genre }}
+{% endif %}{% if tone != blank %}- Tone: {{ tone }}
+{% endif %}{% if settingDescription != blank %}- Setting: {{ settingDescription }}
+{% endif %}{% if themes != blank %}- Themes: {{ themes }}
 {% endif %}{% endif %}
 
 # Style Requirements
@@ -122,14 +122,27 @@ End with a natural opening for action, not a direct question.{% endif %}
 </response_instruction>
 
 {% if visualProseMode %}{{ visualProseInstructions }}{% endif %}
-{% if inlineImageMode %}{{ inlineImageInstructions }}{% endif %}
+{% comment %}
+  Chapter summaries sit here, ahead of the story time and the world-state block, because
+  they are the largest stable thing in this prompt and everything below them changes every
+  turn. Measured on two consecutive turns of a 40-chapter story: the summaries were
+  byte-identical at 54,351 characters, while the block that used to precede them differed
+  immediately -- so the request's reusable prefix was 5,619 characters of 155,835, or 3.6%.
+  Moving them up makes it about 60,000.
 
-{% if storyTime != '' %}
+  This does not reach the user message, which is 99.6% identical between turns and entirely
+  wasted: the system message is sent first, so a divergence inside it invalidates everything
+  after, user message included. Recovering that needs the volatile block moved out of the
+  system prompt altogether, which is a larger change and worth doing only if this one shows
+  the reuse actually materialising.
+{% endcomment %}{% if inlineImageMode %}{{ inlineImageInstructions }}{% endif %}{% if chapterSummaries != blank %}{{ chapterSummaries }}{% endif %}
+
+{% if storyTime != blank %}
 [CURRENT STORY TIME]
 {{ storyTime }}
-{% endif %}{% if tieredContextBlock != '' %}
+{% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
-{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
 }
 
 const creativeWritingPromptTemplate: PromptTemplate = {
@@ -142,11 +155,11 @@ You are an experienced fiction writer with a talent for literary prose. You coll
 
 CRITICAL DISTINCTION: The person giving you directions is the AUTHOR, not a character. They sit outside the story, directing what happens. They are NOT the protagonist. When the author says "I go to the store," they mean "write {{ protagonistName }} going to the store"—the author is directing, not roleplaying.
 
-{% if genre != '' or tone != '' or settingDescription != '' or themes != '' %}# Story Context
-{% if genre != '' %}- Genre: {{ genre }}
-{% endif %}{% if tone != '' %}- Tone: {{ tone }}
-{% endif %}{% if settingDescription != '' %}- Setting: {{ settingDescription }}
-{% endif %}{% if themes != '' %}- Themes: {{ themes }}
+{% if genre != blank or tone != blank or settingDescription != blank or themes != blank %}# Story Context
+{% if genre != blank %}- Genre: {{ genre }}
+{% endif %}{% if tone != blank %}- Tone: {{ tone }}
+{% endif %}{% if settingDescription != blank %}- Setting: {{ settingDescription }}
+{% endif %}{% if themes != blank %}- Themes: {{ themes }}
 {% endif %}{% endif %}
 
 # Style Requirements
@@ -290,14 +303,27 @@ End at a natural narrative beat.{% endif %}
 </response_instruction>
 
 {% if visualProseMode %}{{ visualProseInstructions }}{% endif %}
-{% if inlineImageMode %}{{ inlineImageInstructions }}{% endif %}
+{% comment %}
+  Chapter summaries sit here, ahead of the story time and the world-state block, because
+  they are the largest stable thing in this prompt and everything below them changes every
+  turn. Measured on two consecutive turns of a 40-chapter story: the summaries were
+  byte-identical at 54,351 characters, while the block that used to precede them differed
+  immediately -- so the request's reusable prefix was 5,619 characters of 155,835, or 3.6%.
+  Moving them up makes it about 60,000.
 
-{% if storyTime != '' %}
+  This does not reach the user message, which is 99.6% identical between turns and entirely
+  wasted: the system message is sent first, so a divergence inside it invalidates everything
+  after, user message included. Recovering that needs the volatile block moved out of the
+  system prompt altogether, which is a larger change and worth doing only if this one shows
+  the reuse actually materialising.
+{% endcomment %}{% if inlineImageMode %}{{ inlineImageInstructions }}{% endif %}{% if chapterSummaries != blank %}{{ chapterSummaries }}{% endif %}
+
+{% if storyTime != blank %}
 [CURRENT STORY TIME]
 {{ storyTime }}
-{% endif %}{% if tieredContextBlock != '' %}
+{% endif %}{% if tieredContextBlock != blank %}
 {{ tieredContextBlock }}
-{% endif %}{% if chapterSummaries != '' %}{{ chapterSummaries }}{% endif %}{% if styleGuidance != '' %}{{ styleGuidance }}{% endif %}`,
+{% endif %}{% if styleGuidance != blank %}{{ styleGuidance }}{% endif %}`,
 }
 
 export const storyTemplates: PromptTemplate[] = [

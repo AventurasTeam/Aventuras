@@ -34,21 +34,6 @@ export function parseMarkdown(text: string): string {
 }
 
 /**
- * Parse inline markdown only (no block elements like headers, lists).
- * Useful for single-line content.
- */
-export function parseInlineMarkdown(text: string): string {
-  if (!text) return ''
-
-  try {
-    return marked.parseInline(text) as string
-  } catch (error) {
-    console.error('[Markdown] Inline parse error:', error)
-    return escapeHtml(text)
-  }
-}
-
-/**
  * Render a description that may be HTML or Markdown.
  * If content starts with an HTML tag, render directly (bypasses marked
  * which mangles raw HTML with its breaks/paragraph wrapping).

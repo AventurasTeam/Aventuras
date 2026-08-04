@@ -9,8 +9,19 @@
   import { Label } from '$lib/components/ui/label'
   import { ToggleGroup, ToggleGroupItem } from '$lib/components/ui/toggle-group'
 
+  /**
+   * Threshold bounds. The ceiling was 100,000, which nothing could use: a chapter is built to
+   * be about one threshold's worth of tokens, and the chapter-read budget is 2.5x it, so a
+   * 100k threshold asks for a 250k-token read.
+   *
+   * A story saved with a higher value keeps it until the control is touched — the slider
+   * shows the ceiling, the debounced save only runs on interaction.
+   */
+  const THRESHOLD_MIN = 4000
+  const THRESHOLD_MAX = 32000
+
   // Local state for editing — seeded from store, written back on debounced save
-  let localThreshold = $state(story.memoryConfig.tokenThreshold)
+  let localThreshold = $state(Math.min(story.memoryConfig.tokenThreshold, THRESHOLD_MAX))
   let localBuffer = $state(story.memoryConfig.chapterBuffer)
 
   const detailOptions = [
@@ -52,7 +63,6 @@
     { label: '16K', value: 16000 },
     { label: '24K', value: 24000 },
     { label: '32K', value: 32000 },
-    { label: '48K', value: 48000 },
   ]
 </script>
 
@@ -72,8 +82,8 @@
           <Slider
             id="token-threshold"
             value={localThreshold}
-            min={4000}
-            max={100000}
+            min={THRESHOLD_MIN}
+            max={THRESHOLD_MAX}
             step={1000}
             type="single"
             onValueChange={(vals) => scheduleThresholdSave(vals)}

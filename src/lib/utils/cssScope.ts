@@ -36,14 +36,17 @@ export function scopeCssSelectors(css: string, scopeClass: string): string {
 function prefixSelectorsInBlock(css: string, scopeClass: string): string {
   // Match selector { properties } patterns
   return css.replace(/([^{}@]+?)(\{[^{}]*\})/g, (match, selectors, block) => {
-    const trimmedSelectors = selectors.trim()
+    // A `@keyframes` block has already been swapped out for a `__KEYFRAMES_n__` placeholder,
+    // and that placeholder lands in the same chunk as whatever selector follows it --
+    // `__KEYFRAMES_0__ .a` is one match, not two. Split the placeholder off instead of
+    // skipping the whole chunk: treating it as an unscopable selector left *every rule
+    // after an animation* unscoped, which is precisely the leak this module exists to
+    // prevent. Rules before the animation were scoped normally, so it looked like it worked.
+    const leading = /^\s*(?:__KEYFRAMES_\d+__\s*)*/.exec(selectors)?.[0] ?? ''
+    const trimmedSelectors = selectors.slice(leading.length).trim()
 
-    // Skip if empty or starts with @ or is a placeholder
-    if (
-      !trimmedSelectors ||
-      trimmedSelectors.startsWith('@') ||
-      trimmedSelectors.startsWith('__KEYFRAMES_')
-    ) {
+    // Skip if empty or starts with @
+    if (!trimmedSelectors || trimmedSelectors.startsWith('@')) {
       return match
     }
 
@@ -56,8 +59,9 @@ function prefixSelectorsInBlock(css: string, scopeClass: string): string {
       return match
     }
 
-    // Prefix each selector
-    const prefixedSelectors = selectors
+    // Prefix each selector. Split the placeholder-stripped text, not the raw chunk, or the
+    // placeholder ends up inside the first selector and the restored @keyframes block with it.
+    const prefixedSelectors = trimmedSelectors
       .split(',')
       .map((s: string) => {
         const trimmed = s.trim()
@@ -72,6 +76,6 @@ function prefixSelectorsInBlock(css: string, scopeClass: string): string {
       })
       .join(', ')
 
-    return `${prefixedSelectors}${block}`
+    return `${leading}${prefixedSelectors}${block}`
   })
 }

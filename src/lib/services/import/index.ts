@@ -58,8 +58,12 @@ export async function runImport(
   let storyCreated = false
 
   try {
-    await importStructure(data, maps, { skipImportedSuffix })
-    storyCreated = true
+    await importStructure(data, maps, {
+      skipImportedSuffix,
+      onStoryCreated: () => {
+        storyCreated = true
+      },
+    })
     await importImages(data, maps)
     return { success: true, storyId: maps.newStoryId }
   } catch (error) {

@@ -10,14 +10,12 @@
  * - analyzeForChapter(), summarizeChapter(), decideRetrieval() - MemoryService
  * - generateSuggestions() - SuggestionsService
  * - generateActionChoices() - ActionChoicesService
- * - runTimelineFill(), answerChapterQuestion(), answerChapterRangeQuestion() - TimelineFillService
- * - buildTieredContext(), getRelevantLorebookEntries() - EntryInjector/EntryRetrievalService
+ * - runTimelineFill(), answerChapterQuestion() - TimelineFillService
+ * - buildWorldStateContext(), getRelevantLorebookEntries() - WorldStateInjector/EntryRetrievalService
  * - analyzeStyle() - StyleReviewerService
  * - runLoreManagement() - LoreManagementService
  * - generateImagesForNarrative() (both inline and analyzed modes) - ImageAnalysisService
  * - runAgenticRetrieval() - AgenticRetrievalService
- *
- * STUBBED (awaiting migration):
  * - translate*() - TranslationService
  */
 
@@ -42,8 +40,6 @@ import type {
   EmbeddedImage,
   Entry,
   ImageProfile,
-  Item,
-  Location,
   LoreChange,
   LoreManagementResult,
   MemoryConfig,
@@ -68,11 +64,15 @@ import {
 } from './image'
 import type { InlineImageContext, ImageAnalysisContext } from './image'
 import { generateImage as registryGenerateImage } from './image/providers/registry'
-import { EntryInjector, MemoryService, NarrativeService } from './generation'
+import {
+  MemoryService,
+  NarrativeService,
+  getWorldStateInjectorConfigFromSettings,
+} from './generation'
 import type {
   ClassificationContext,
-  ContextConfig,
-  ContextResult,
+  WorldStateInjectorConfig,
+  WorldStateInjectionResult,
   RetrievalContext,
   StyleReviewResult,
   WorldStateContext,
@@ -80,7 +80,7 @@ import type {
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
 import type { TimelineFillResult, EntryRetrievalResult, ActivationTracker } from './retrieval'
 import type {
-  AgenticRetrievalResult,
+  RetrievalResult as AgenticRetrievalResult,
   RetrievalContext as AgenticRetrievalContext,
 } from './retrieval/AgenticRetrievalService'
 import type {
@@ -94,6 +94,8 @@ import type {
   SuggestionsResult,
 } from './sdk'
 import type { TranslationResult, UITranslationItem } from './utils'
+import { recentContent, AS_HAYSTACK, AS_PROSE } from '$lib/utils/recentContent'
+import { joinPromptBlocks } from '$lib/utils/promptBlocks'
 
 // Timeline Fill service settings (per design doc section 3.1.4: Static Retrieval)
 export interface TimelineFillSettings {
@@ -171,6 +173,32 @@ interface WorldState extends WorldStateContext {
   lorebookEntries?: Entry[]
 }
 
+/**
+ * Everything `runAgenticRetrieval` needs.
+ *
+ * One object rather than a parameter list: this had grown to eleven positional
+ * parameters, seven of them optional, several of them same-shaped callbacks. `RetrievalPhase`
+ * declares its own dependency signature in a different order, so the two were bridged by a
+ * hand-written adapter whose only job was to shuffle arguments -- and whose only defence
+ * against shuffling them wrong was that two of the types happened to differ.
+ */
+export interface AgenticRetrievalOptions {
+  userInput: string
+  recentEntries: StoryEntry[]
+  chapters: Chapter[]
+  entries: Entry[]
+  /** Live world state, so the agent can be told what the narrator already has. */
+  worldState?: WorldState
+  /** Where the story stands now, the anchor for reading excerpt timestamps. */
+  currentStoryTime?: TimeTracker | null
+  /** Summary of what world state and lorebook selection already put in the prompt. */
+  alreadyInContext?: string
+  onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
+  getChapterEntries?: (chapter: Chapter) => StoryEntry[]
+  getUnchapterizedEntries?: () => StoryEntry[]
+  signal?: AbortSignal
+}
+
 class AIService {
   private narrativeService: NarrativeService
 
@@ -197,33 +225,39 @@ class AIService {
     entries: StoryEntry[],
     worldState: WorldState,
     currentStory?: Story | null,
-    useTieredContext = true,
     styleReview?: StyleReviewResult | null,
     retrievedChapterContext?: string | null,
     signal?: AbortSignal,
     timelineFillResult?: TimelineFillResult | null,
+    worldStateBlock?: string | null,
   ): AsyncIterable<StreamChunk> {
     log('streamNarrative called', {
       entriesCount: entries.length,
-      useTieredContext,
+      hasWorldStateBlock: !!worldStateBlock,
       hasStyleReview: !!styleReview,
       hasRetrievedContext: !!retrievedChapterContext,
       hasTimelineFill: !!timelineFillResult,
     })
 
-    // Build tiered context if requested
-    let tieredContextBlock: string | undefined
-    if (useTieredContext) {
-      const lastEntry = entries[entries.length - 1]
-      const userInput = lastEntry?.content ?? ''
-      const contextResult = await this.buildTieredContext(
-        worldState,
-        userInput,
-        entries,
-        retrievedChapterContext ?? undefined,
-      )
-      tieredContextBlock = contextResult.contextBlock
-    }
+    // Both blocks are built in RetrievalPhase now; this only joins them.
+    //
+    // The narrative template renders one variable and must keep seeing one string: adding a
+    // second would leave every pack predating the change without the retrieval block.
+    // Always a string, '' when both are empty -- which is what the injector returned before,
+    // and what NarrativeService's `if (tieredContextBlock)` guard already expects. Coalescing
+    // with `??` here would be wrong: '' is not nullish, so an empty world state would have
+    // swallowed the retrieval text instead of concatenating it.
+    //
+    // Joined with a blank line rather than concatenated raw. Every block in this prompt
+    // opens with "\n\n" except the agentic retrieval one, so raw concatenation -- which is
+    // what `EntryInjector` did before the split, and what was faithfully preserved here --
+    // produced this in a real turn:
+    //
+    //     ...She is now his devoted pet.[Retrieved Context - I searched for all mentions...
+    //
+    // `joinPromptBlocks` adds only what is missing, so the static path, where the lorebook
+    // block already starts with "\n\n", stays byte-identical.
+    const tieredContextBlock = joinPromptBlocks(worldStateBlock, retrievedChapterContext)
 
     // Delegate to NarrativeService
     yield* this.narrativeService.stream(entries, worldState, currentStory, {
@@ -385,9 +419,10 @@ class AIService {
     mode: StoryMode = 'adventure',
     pov?: POV,
     tense?: Tense,
+    recentEntriesCount?: number,
   ): Promise<StyleReviewResult> {
     const service = serviceFactory.createStyleReviewerService()
-    return service.analyzeStyle(entries, mode, pov, tense)
+    return service.analyzeStyle(entries, mode, pov, tense, recentEntriesCount)
   }
 
   /**
@@ -474,7 +509,7 @@ class AIService {
     const memoryService = serviceFactory.createMemoryService()
     const context: RetrievalContext = {
       userInput,
-      recentNarrative: recentEntries.map((e) => e.content).join(' '),
+      recentNarrative: recentContent(recentEntries, recentEntries.length, AS_HAYSTACK),
       availableChapters: chapters,
     }
     return memoryService.decideRetrieval(context, mode, pov, tense)
@@ -494,31 +529,38 @@ class AIService {
   }
 
   /**
-   * Build tiered context using the EntryInjector.
-   * NOTE: Tier 1 & 2 work. Tier 3 (LLM selection) is stubbed.
+   * Build live-WorldState context using the WorldStateInjector.
    */
-  async buildTieredContext(
+  async buildWorldStateContext(
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],
-    retrievedChapterContext?: string,
-    config?: Partial<ContextConfig>,
-  ): Promise<ContextResult> {
-    log('buildTieredContext called', {
+    config?: Partial<WorldStateInjectorConfig>,
+    signal?: AbortSignal,
+    activationTracker?: ActivationTracker,
+  ): Promise<WorldStateInjectionResult> {
+    log('buildWorldStateContext called', {
       userInputLength: userInput.length,
       recentEntriesCount: recentEntries.length,
-      hasRetrievedContext: !!retrievedChapterContext,
+      hasActivationTracker: !!activationTracker,
     })
 
-    const contextBuilder = new EntryInjector(config, 'entryRetrieval')
-    const result = await contextBuilder.buildContext(
+    // Read from settings when the caller does not override, same as
+    // getRelevantLorebookEntries does with getEntryRetrievalConfigFromSettings(). Keeps the
+    // settings lookup in the service layer so RetrievalPhase can stay injected with a
+    // config-free signature.
+    const injector = serviceFactory.createWorldStateInjector(
+      config ?? getWorldStateInjectorConfigFromSettings(),
+    )
+    const result = await injector.buildContext(
       worldState,
       userInput,
       recentEntries,
-      retrievedChapterContext,
+      signal,
+      activationTracker,
     )
 
-    log('buildTieredContext complete', {
+    log('buildWorldStateContext complete', {
       tier1: result.tier1.length,
       tier2: result.tier2.length,
       tier3: result.tier3.length,
@@ -530,22 +572,17 @@ class AIService {
 
   /**
    * Get relevant lorebook entries using tiered injection.
-   * NOTE: Tier 1 & 2 work. Tier 3 (LLM selection) is stubbed.
    */
   async getRelevantLorebookEntries(
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    liveState?: { characters: Character[]; locations: Location[]; items: Item[] },
     activationTracker?: ActivationTracker,
     signal?: AbortSignal,
   ): Promise<EntryRetrievalResult> {
     log('getRelevantLorebookEntries called', {
       totalEntries: entries.length,
       userInputLength: userInput.length,
-      liveCharacters: liveState?.characters.length ?? 0,
-      liveLocations: liveState?.locations.length ?? 0,
-      liveItems: liveState?.items.length ?? 0,
       hasActivationTracker: !!activationTracker,
     })
 
@@ -555,7 +592,6 @@ class AIService {
       entries,
       userInput,
       recentStoryEntries,
-      liveState,
       activationTracker,
       signal,
     )
@@ -661,50 +697,39 @@ class AIService {
    * Run agentic retrieval to find relevant lorebook entries and chapter context.
    * Uses an LLM agent with tools to intelligently search and select entries.
    */
-  async runAgenticRetrieval(
-    userInput: string,
-    recentEntries: StoryEntry[],
-    chapters: Chapter[],
-    entries: Entry[],
-    onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>,
-    onQueryChapters?: (
-      startChapter: number,
-      endChapter: number,
-      question: string,
-    ) => Promise<string>,
-    signal?: AbortSignal,
-    _mode: StoryMode = 'adventure',
-    _pov?: POV,
-    _tense?: Tense,
-  ): Promise<AgenticRetrievalResult> {
+  // See AgenticRetrievalOptions for why this takes one object.
+  async runAgenticRetrieval(options: AgenticRetrievalOptions): Promise<AgenticRetrievalResult> {
+    const { userInput, recentEntries, chapters, entries, worldState, signal } = options
+
     log('runAgenticRetrieval called', {
       userInputLength: userInput.length,
       recentEntriesCount: recentEntries.length,
       chaptersCount: chapters.length,
       entriesCount: entries.length,
+      hasWorldState: !!worldState,
     })
 
     const service = serviceFactory.createAgenticRetrievalService()
 
-    // Build recent narrative from entries
-    const recentNarrative = recentEntries.map((e) => e.content).join('\n\n')
-
     // Build context for the service
     const context: AgenticRetrievalContext = {
       userInput,
-      recentNarrative,
+      // Build recent narrative from entries
+      recentNarrative: recentContent(recentEntries, recentEntries.length, AS_PROSE),
       availableEntries: entries,
       chapters,
+      worldState,
+      currentStoryTime: options.currentStoryTime,
+      alreadyInContext: options.alreadyInContext,
       // Pass through the chapter query callback directly
-      queryChapter: onQueryChapter,
+      queryChapter: options.onQueryChapter,
+      getChapterEntries: options.getChapterEntries,
+      getUnchapterizedEntries: options.getUnchapterizedEntries,
     }
 
     const result = await service.runRetrieval(context, signal)
 
-    log('runAgenticRetrieval complete', {
-      entriesFound: result.entries.length,
-      hasReasoning: !!result.reasoning,
-    })
+    log('runAgenticRetrieval complete', { contextLength: result.context.length })
 
     return result
   }
@@ -713,7 +738,6 @@ class AIService {
    * Determine if agentic retrieval should be used.
    */
   shouldUseAgenticRetrieval(
-    _chapters: Chapter[],
     timelineFillSettings: Pick<TimelineFillSettings, 'enabled' | 'mode'>,
   ): boolean {
     if (!timelineFillSettings?.enabled) {
@@ -724,28 +748,31 @@ class AIService {
   }
 
   /**
-   * Format agentic retrieval result for prompt injection.
-   */
-  formatAgenticRetrievalForPrompt(result: AgenticRetrievalResult): string {
-    // The service now builds the context string internally
-    return result.context || ''
-  }
-
-  /**
    * Run timeline fill to gather context from past chapters.
    */
   async runTimelineFill(
     visibleEntries: StoryEntry[],
     chapters: Chapter[],
     getChapterEntries: (chapter: Chapter) => StoryEntry[],
+    alreadyInContext?: string,
+    /** Budget for each answer prompt's chapter text; see `chapterReadBudget`. */
+    maxChapterTokens?: number,
   ): Promise<TimelineFillResult> {
     log('runTimelineFill called', {
       visibleEntriesCount: visibleEntries.length,
       chaptersCount: chapters.length,
+      hasAlreadyInContext: !!alreadyInContext,
+      maxChapterTokens,
     })
 
     const timelineFillService = serviceFactory.createTimelineFillService()
-    return timelineFillService.runTimelineFill(visibleEntries, chapters, getChapterEntries)
+    return timelineFillService.runTimelineFill(
+      visibleEntries,
+      chapters,
+      getChapterEntries,
+      alreadyInContext,
+      maxChapterTokens,
+    )
   }
 
   /**
@@ -756,11 +783,14 @@ class AIService {
     question: string,
     chapters: Chapter[],
     getChapterEntries: (chapter: Chapter) => StoryEntry[],
+    /** Budget for the chapter text; see `chapterReadBudget`. */
+    maxChapterTokens?: number,
   ): Promise<string> {
     log('answerChapterQuestion called', {
       chapterNumber,
       question,
       chaptersCount: chapters.length,
+      maxChapterTokens,
     })
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
@@ -769,86 +799,9 @@ class AIService {
       chapters,
       [chapterNumber],
       getChapterEntries,
+      maxChapterTokens,
     )
     return answer.answer
-  }
-
-  /**
-   * Answer a range question across chapters.
-   */
-  async answerChapterRangeQuestion(
-    startChapter: number,
-    endChapter: number,
-    question: string,
-    chapters: Chapter[],
-    getChapterEntries: (chapter: Chapter) => StoryEntry[],
-  ): Promise<string> {
-    log('answerChapterRangeQuestion called', {
-      startChapter,
-      endChapter,
-      question,
-      chaptersCount: chapters.length,
-    })
-
-    // Build chapter numbers array for the range
-    const chapterNumbers: number[] = []
-    for (let i = startChapter; i <= endChapter; i++) {
-      chapterNumbers.push(i)
-    }
-
-    const chapterQueryService = serviceFactory.createChapterQueryService()
-    const answer = await chapterQueryService.answerQuestion(
-      question,
-      chapters,
-      chapterNumbers,
-      getChapterEntries,
-    )
-    return answer.answer
-  }
-
-  /**
-   * Determine if timeline fill should be used.
-   */
-  shouldUseTimelineFill(
-    _chapters: Chapter[],
-    timelineFillSettings: Pick<TimelineFillSettings, 'enabled' | 'mode'>,
-  ): boolean {
-    if (!timelineFillSettings?.enabled) {
-      return false
-    }
-    const mode = timelineFillSettings.mode ?? 'static'
-    return mode === 'static'
-  }
-
-  /**
-   * Format timeline fill result for prompt injection.
-   */
-  formatTimelineFillForPrompt(
-    _chapters: Chapter[],
-    result: TimelineFillResult,
-    _currentEntryPosition: number,
-    _firstVisibleEntryPosition: number,
-    _locations?: Location[],
-  ): string {
-    if (!result.responses || result.responses.length === 0) {
-      return ''
-    }
-
-    const lines: string[] = ['## Retrieved Context from Past Chapters']
-
-    for (const response of result.responses) {
-      if (response.answer && response.answer !== 'Not mentioned in these chapters.') {
-        lines.push(`\n**Q: ${response.query}**`)
-        lines.push(response.answer)
-        if (response.chapterNumbers.length > 0) {
-          lines.push(
-            `(From chapter${response.chapterNumbers.length > 1 ? 's' : ''} ${response.chapterNumbers.join(', ')})`,
-          )
-        }
-      }
-    }
-
-    return lines.length > 1 ? lines.join('\n') : ''
   }
 
   /**

@@ -9,6 +9,7 @@
  */
 
 import { settings } from '$lib/stores/settings.svelte'
+import { MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS } from './defaults'
 
 /**
  * AI service configuration constants (defaults).
@@ -20,8 +21,6 @@ export const AI_CONFIG = {
   context: {
     /** Number of recent entries for main narrative context */
     recentEntriesForNarrative: 20,
-    /** Number of recent entries for tiered context building */
-    recentEntriesForTiered: 10,
     /** Number of recent entries for classification/retrieval operations */
     recentEntriesForRetrieval: 5,
     /** Number of recent entries for action choices context */
@@ -30,22 +29,13 @@ export const AI_CONFIG = {
     userActionsForStyle: 6,
     /** Number of recent entries for lore management context */
     recentEntriesForLoreManagement: 10,
-    /** Number of recent entries for name matching in tiered context */
-    recentEntriesForNameMatching: 3,
   },
 
-  /** Lorebook injection limits */
+  /** Lorebook injection limits. Values live in ./defaults.ts: the settings store needs
+   * them too, and cannot import this module (it imports the store). */
   lorebook: {
-    /** Max lorebook entries for action choices */
-    maxForActionChoices: 12,
     /** Max lorebook entries for suggestions */
-    maxForSuggestions: 15,
-    /** Max lorebook entries for agentic preview */
-    maxForAgenticPreview: 20,
-    /** Threshold for switching to LLM-based selection */
-    llmThreshold: 30,
-    /** Max entries per tier in context building */
-    maxEntriesPerTier: 20,
+    maxForSuggestions: MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   },
 
   /** Memory/chapter system defaults */
@@ -72,7 +62,6 @@ export function getContextConfig() {
   return {
     recentEntriesForNarrative:
       ctx?.recentEntriesForNarrative ?? AI_CONFIG.context.recentEntriesForNarrative,
-    recentEntriesForTiered: ctx?.recentEntriesForTiered ?? AI_CONFIG.context.recentEntriesForTiered,
     recentEntriesForRetrieval:
       ctx?.recentEntriesForRetrieval ?? AI_CONFIG.context.recentEntriesForRetrieval,
     recentEntriesForChoices:
@@ -80,8 +69,6 @@ export function getContextConfig() {
     userActionsForStyle: ctx?.userActionsForStyle ?? AI_CONFIG.context.userActionsForStyle,
     recentEntriesForLoreManagement:
       ctx?.recentEntriesForLoreManagement ?? AI_CONFIG.context.recentEntriesForLoreManagement,
-    recentEntriesForNameMatching:
-      ctx?.recentEntriesForNameMatching ?? AI_CONFIG.context.recentEntriesForNameMatching,
   }
 }
 
@@ -92,20 +79,6 @@ export function getContextConfig() {
 export function getLorebookConfig() {
   const lb = settings.serviceSpecificSettings?.lorebookLimits
   return {
-    maxForActionChoices: lb?.maxForActionChoices ?? AI_CONFIG.lorebook.maxForActionChoices,
     maxForSuggestions: lb?.maxForSuggestions ?? AI_CONFIG.lorebook.maxForSuggestions,
-    maxForAgenticPreview: lb?.maxForAgenticPreview ?? AI_CONFIG.lorebook.maxForAgenticPreview,
-    llmThreshold: lb?.llmThreshold ?? AI_CONFIG.lorebook.llmThreshold,
-    maxEntriesPerTier: lb?.maxEntriesPerTier ?? AI_CONFIG.lorebook.maxEntriesPerTier,
-  }
-}
-
-/**
- * Get agentic retrieval configuration from user settings with fallback to defaults.
- */
-export function getAgenticRetrievalConfig() {
-  const ar = settings.serviceSpecificSettings?.agenticRetrieval
-  return {
-    maxIterations: ar?.maxIterations ?? 10,
   }
 }

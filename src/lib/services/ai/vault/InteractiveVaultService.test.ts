@@ -142,13 +142,13 @@ describe('getActiveToolNames', () => {
 
 describe('initialize', () => {
   it('starts with no categories loaded when opened with no focused entity', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
     expect(service.loadedCategories.size).toBe(0)
   })
 
   it('pre-loads the matching category when opened from an entity editor', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary, {
       entityType: 'character',
       entityId: 'char-1',
@@ -158,7 +158,7 @@ describe('initialize', () => {
   })
 
   it('clears previously loaded categories on re-initialize', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary, {
       entityType: 'scenario',
       entityId: 's-1',
@@ -172,7 +172,7 @@ describe('initialize', () => {
 
 describe('saveConversation / loadConversation', () => {
   it('creates a new conversation with an auto-generated, truncated title', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     const longMessage =
       'Please help me build out a whole new fantasy kingdom with a dozen NPCs and lore'
     const id = await service.saveConversation(
@@ -192,7 +192,7 @@ describe('saveConversation / loadConversation', () => {
   })
 
   it('falls back to "New Conversation" when the first message is only a system note', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     const id = await service.saveConversation(
       [{ id: 'm1', role: 'user', content: '[System: approved]', timestamp: 1 }],
       [],
@@ -201,7 +201,7 @@ describe('saveConversation / loadConversation', () => {
   })
 
   it('reuses the same conversation id on subsequent saves (update, not re-create)', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     const id1 = await service.saveConversation(
       [{ id: 'm1', role: 'user', content: 'hello', timestamp: 1 }],
       [],
@@ -220,7 +220,7 @@ describe('saveConversation / loadConversation', () => {
   })
 
   it('round-trips chat messages and pending changes through save/load', async () => {
-    const writer = new InteractiveVaultService('vault-test')
+    const writer = new InteractiveVaultService('interactiveVault')
     const pendingChange = {
       id: 'pc-1',
       toolCallId: 'call-1',
@@ -234,7 +234,7 @@ describe('saveConversation / loadConversation', () => {
       [pendingChange as never],
     )
 
-    const reader = new InteractiveVaultService('vault-test')
+    const reader = new InteractiveVaultService('interactiveVault')
     const loaded = await reader.loadConversation(id)
 
     expect(loaded).not.toBeNull()
@@ -246,14 +246,14 @@ describe('saveConversation / loadConversation', () => {
   })
 
   it('returns null for a conversation id that does not exist', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     expect(await service.loadConversation('does-not-exist')).toBeNull()
   })
 })
 
 describe('sendMessageStreaming', () => {
   it('errors immediately if called before initialize()', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     const events = []
     for await (const event of service.sendMessageStreaming(emptyVaultState(), 'hi')) {
       events.push(event)
@@ -264,7 +264,7 @@ describe('sendMessageStreaming', () => {
   })
 
   it('streams text deltas and yields a final message, then done', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [
@@ -294,7 +294,7 @@ describe('sendMessageStreaming', () => {
   })
 
   it('emits tool_start/tool_end for a tool call step', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [
@@ -325,7 +325,7 @@ describe('sendMessageStreaming', () => {
   })
 
   it('yields a single "aborted" event when the underlying stream is cancelled by the user', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [{ type: 'start-step' }, { type: 'text-delta', text: 'partial' }]
@@ -352,7 +352,7 @@ describe('sendMessageStreaming', () => {
     // it and fell through to a generic "Unknown error" bubble. The service
     // must also trust `signal.aborted` regardless of what shape the thrown
     // value has.
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [{ type: 'start-step' }]
@@ -379,7 +379,7 @@ describe('sendMessageStreaming', () => {
     // throwing. Without a dedicated case for it, this part would fall through
     // the switch unhandled, the loop would end normally, and the caller would
     // see a 'done' event as if the response had actually completed.
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [
@@ -398,7 +398,7 @@ describe('sendMessageStreaming', () => {
   })
 
   it('still yields a normal error event for a real (non-abort) failure', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [{ type: 'start-step' }]
@@ -413,7 +413,7 @@ describe('sendMessageStreaming', () => {
   })
 
   it('load_toolset updates the activeTools prepareStep exposes for the next step', async () => {
-    const service = new InteractiveVaultService('vault-test')
+    const service = new InteractiveVaultService('interactiveVault')
     await service.initialize(emptySummary)
 
     nextStreamEvents = [{ type: 'start-step' }, { type: 'finish-step' }]

@@ -47,6 +47,18 @@ export interface PackTemplate {
   content: string
   /** SHA-256 hash of normalized content */
   contentHash: string
+  /**
+   * Hash of the code baseline this row was last written from.
+   *
+   * Equal to `contentHash` while the template is untouched; they diverge the moment a user
+   * edits it. That difference is the only signal separating "the app has a newer default"
+   * from "the user changed this", and the startup refresh needs it to avoid reverting the
+   * second.
+   *
+   * `''` when a user edit *created* the row -- there was no baseline to keep, and no hash
+   * is ever the empty string, so the row correctly reads as edited rather than pristine.
+   */
+  baselineHash: string
   /** Creation timestamp (epoch milliseconds) */
   createdAt: number
   /** Last modification timestamp (epoch milliseconds) */

@@ -157,8 +157,6 @@ class GrammarService {
     issue: GrammarIssue,
     suggestionIndex: number,
   ): Promise<string> {
-    if (!this.linter) return text
-
     try {
       // Reconstruct by replacing the span with the suggestion text
       const suggestion = issue.suggestions[suggestionIndex]

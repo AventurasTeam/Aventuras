@@ -302,11 +302,11 @@
   // Public methods for parent component
   export async function save(): Promise<boolean> {
     try {
-      await database.setPackTemplateContent(packId, templateId, systemContent)
+      await database.setPackTemplateContent(packId, templateId, systemContent, false)
       originalSystem = systemContent
 
       if (hasUserContent) {
-        await database.setPackTemplateContent(packId, `${templateId}-user`, userContent)
+        await database.setPackTemplateContent(packId, `${templateId}-user`, userContent, false)
         originalUser = userContent
       }
       return true

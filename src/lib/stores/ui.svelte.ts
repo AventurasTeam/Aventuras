@@ -245,6 +245,11 @@ class UIStore {
   // Retry last message callback - set by ActionInput for edit-and-retry feature
   private retryLastMessageCallback: (() => Promise<void>) | null = null
 
+  // Regenerate narration callback - set by ActionInput. Lighter-weight fallback used when
+  // no full retry backup is available (e.g. the latest narration survived a manual delete
+  // of the entries that came after it).
+  private regenerateNarrationCallback: ((entryId: string) => Promise<void>) | null = null
+
   // Reasoning block state persistence
   streamingReasoningExpanded = $state(false)
   expandedReasoningIds = new SvelteSet<string>()
@@ -1078,6 +1083,19 @@ class UIStore {
     }
   }
 
+  // Regenerate narration callback management (fallback when no retry backup exists)
+  setRegenerateNarrationCallback(callback: ((entryId: string) => Promise<void>) | null) {
+    this.regenerateNarrationCallback = callback
+  }
+
+  async triggerRegenerateNarration(entryId: string) {
+    if (this.regenerateNarrationCallback) {
+      await this.regenerateNarrationCallback(entryId)
+    } else {
+      console.log('[UI] No regenerate narration callback registered!')
+    }
+  }
+
   // Style reviewer methods
 
   /**
@@ -1397,20 +1415,10 @@ class UIStore {
    * The tracker maintains references to our state so activations are persisted.
    */
   getActivationTracker(storyPosition: number): ActivationTracker {
-    const previousPosition = this.currentStoryPosition
     this.currentStoryPosition = storyPosition
     const tracker = new SimpleActivationTracker(storyPosition)
     // Create a fresh copy of activation data for the tracker
-    const activationDataCopy = Object.fromEntries(Object.entries(this.activationData))
-    tracker.loadActivationData(activationDataCopy)
-
-    console.log('[UI] getActivationTracker called', {
-      previousPosition,
-      newPosition: storyPosition,
-      activationDataEntryCount: Object.keys(activationDataCopy).length,
-      activationEntryIds: Object.keys(activationDataCopy),
-    })
-
+    tracker.loadActivationData(Object.fromEntries(Object.entries(this.activationData)))
     return tracker
   }
 
@@ -1419,8 +1427,8 @@ class UIStore {
    * Called with the tracker that was modified during retrieval.
    */
   updateActivationData(tracker: SimpleActivationTracker, storyId?: string) {
-    this.activationData = tracker.getActivationData()
-    // Prune old activations (beyond max stickiness of 10 turns)
+    // Prune first, then read once. Reading before the prune as well was dead: the value
+    // was overwritten two lines later without ever being observed.
     tracker.pruneOldActivations(10)
     this.activationData = tracker.getActivationData()
 
@@ -1450,7 +1458,7 @@ class UIStore {
       activationData: { ...this.activationData },
       storyPosition: this.currentStoryPosition,
     }
-    database.setSetting('lorebook_activation', JSON.stringify(data)).catch((err) => {
+    database.setSetting(`lorebook_activation_${storyId}`, JSON.stringify(data)).catch((err) => {
       console.warn('[UI] Failed to persist activation data:', err)
     })
   }
@@ -1461,7 +1469,33 @@ class UIStore {
    */
   async loadActivationData(storyId: string) {
     try {
-      const data = await database.getSetting('lorebook_activation')
+      let data = await database.getSetting(`lorebook_activation_${storyId}`)
+      // Activation data used to live under one global key, so only the last story played
+      // had any. Migrate it to whichever story it belonged to, then drop it -- kept around
+      // it would be read on every load of every story, forever, to answer "not yours".
+      //
+      // The migration deliberately does not depend on which story triggered it. Deleting
+      // the legacy row while only adopting it for the story being opened threw away data
+      // belonging to a *different* story, before that story was ever loaded -- the one
+      // outcome this whole path exists to avoid.
+      if (!data) {
+        const legacyData = await database.getSetting('lorebook_activation')
+        if (legacyData) {
+          let ownerId: string | null = null
+          try {
+            ownerId = (JSON.parse(legacyData) as PersistedActivationData).storyId ?? null
+          } catch (err) {
+            // Unparseable: there is no story to give it to, so dropping it below is right.
+            console.warn('[UI] Discarding unreadable legacy activation data:', err)
+          }
+
+          if (ownerId) {
+            await database.setSetting(`lorebook_activation_${ownerId}`, legacyData)
+            if (ownerId === storyId) data = legacyData
+          }
+          await database.deleteSetting('lorebook_activation')
+        }
+      }
       if (data) {
         const parsed: PersistedActivationData = JSON.parse(data)
         // Only restore if it's for the same story

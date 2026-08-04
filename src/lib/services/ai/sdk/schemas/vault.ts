@@ -223,15 +223,3 @@ export const vaultPendingChangeSchema = z.union([
 ])
 
 export type VaultPendingChange = z.infer<typeof vaultPendingChangeSchema>
-
-// ============================================================================
-// Change Result Schema (tool response shape)
-// ============================================================================
-
-export const vaultChangeResultSchema = z.object({
-  success: z.boolean(),
-  pendingChange: vaultPendingChangeSchema.optional(),
-  message: z.string().optional(),
-})
-
-export type VaultChangeResult = z.infer<typeof vaultChangeResultSchema>

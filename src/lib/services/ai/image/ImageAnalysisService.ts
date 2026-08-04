@@ -8,11 +8,17 @@
  * which phrases/moments should have images generated.
  */
 
+import { NoObjectGeneratedError } from 'ai'
 import type { VisualDescriptors } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
-import { sceneAnalysisResultSchema, type ImageableScene } from '../sdk/schemas/imageanalysis'
+import {
+  sceneAnalysisResultSchema,
+  imageableSceneSchema,
+  type ImageableScene,
+} from '../sdk/schemas/imageanalysis'
 
 const log = createLogger('ImageAnalysis')
 
@@ -60,7 +66,7 @@ export class ImageAnalysisService extends BaseAIService {
    * Create a new ImageAnalysisService.
    * @param serviceId - The service ID used to resolve the preset dynamically
    */
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 
@@ -131,9 +137,60 @@ ${context.translatedNarrative}`
 
       return sortedScenes as ImageableScene[]
     } catch (error) {
+      const recovered = this.recoverScenesFromMalformedOutput(error)
+      if (recovered && recovered.length > 0) {
+        log('identifyScenes recovered scenes from malformed output', {
+          scenesFound: recovered.length,
+        })
+        return recovered.sort((a, b) => b.priority - a.priority)
+      }
       log('identifyScenes failed', error)
       return []
     }
+  }
+
+  /**
+   * Providers without real structured-output support (e.g. local llama.cpp models
+   * without a forced JSON schema grammar) sometimes return the scene array directly
+   * instead of the required `{ scenes: [...] }` wrapper, or include one malformed
+   * scene among otherwise-valid ones. jsonrepair only fixes JSON *syntax*, not this
+   * kind of *shape* mismatch, so `Output.object` rejects the whole response as
+   * AI_NoObjectGeneratedError even though most of the data is usable. Re-parse the
+   * already-repaired raw text (`error.text`) here, accept either shape, and keep
+   * whichever individual scenes validate instead of discarding the entire batch.
+   */
+  private recoverScenesFromMalformedOutput(error: unknown): ImageableScene[] | null {
+    if (!NoObjectGeneratedError.isInstance(error) || !error.text) {
+      return null
+    }
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(error.text)
+    } catch {
+      return null
+    }
+
+    const rawScenes = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray((parsed as { scenes?: unknown })?.scenes)
+        ? (parsed as { scenes: unknown[] }).scenes
+        : null
+    if (!rawScenes) {
+      return null
+    }
+
+    const scenes: ImageableScene[] = []
+    for (const raw of rawScenes) {
+      const validated = imageableSceneSchema.safeParse(raw)
+      if (validated.success) {
+        scenes.push(validated.data)
+      } else {
+        log('Dropping malformed scene during recovery', validated.error.flatten())
+      }
+    }
+
+    return scenes.length > 0 ? scenes : null
   }
 
   /**

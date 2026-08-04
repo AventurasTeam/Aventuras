@@ -17,6 +17,7 @@ import { StyleReviewerService } from './StyleReviewerService'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
+import { formatTimeSpan } from '$lib/utils/storyTime'
 import type { StreamChunk } from '../core/types'
 import type {
   Story,
@@ -27,7 +28,6 @@ import type {
   Item,
   StoryBeat,
   Chapter,
-  TimeTracker,
 } from '$lib/types'
 import type { StyleReviewResult } from './StyleReviewerService'
 import type { TimelineFillResult } from '../retrieval/TimelineFillService'
@@ -147,17 +147,6 @@ export interface NarrativeWorldState extends WorldStateContext {
 }
 
 /**
- * Format a TimeTracker into a human-readable string for the narrative prompt.
- * Always returns a value, defaulting to Year 1, Day 1, 0 hours 0 minutes if null.
- */
-export function formatStoryTime(time: TimeTracker | null | undefined): string {
-  const t = time ?? { years: 0, days: 0, hours: 0, minutes: 0 }
-  const year = t.years + 1
-  const day = t.days + 1
-  return `Year ${year}, Day ${day}, ${t.hours} hours ${t.minutes} minutes`
-}
-
-/**
  * Build a block containing chapter summaries for injection into the system prompt.
  * Per design doc: summarized entries are excluded from direct context,
  * but their summaries provide narrative continuity.
@@ -176,26 +165,36 @@ export function buildChapterSummariesBlock(
   for (const chapter of chapters) {
     block += `### Chapter ${chapter.number}`
     if (chapter.title) {
-      block += `: ${chapter.title}`
+      const cleanTitle = chapter.title.replace(/^Chapter\s+\d+:\s*/i, '')
+      block += `: ${cleanTitle}`
     }
     block += '\n'
 
-    const startTime = formatStoryTime(chapter.startTime)
-    const endTime = formatStoryTime(chapter.endTime)
-    if (startTime && endTime) {
-      block += `*Time: ${startTime} \u2192 ${endTime}*\n`
-    } else if (startTime) {
-      block += `*Time: ${startTime}*\n`
+    // `formatTimeSpan`, the same renderer the chapter headers in MemoryService and
+    // TimelineFillService use, so all three describe a chapter's time identically.
+    //
+    // It also refuses to invent one. The previous local formatter defaulted a missing time
+    // to the start of the story and never returned empty, which made the "start only" branch
+    // below unreachable: a chapter that recorded when it began but not when it ended was
+    // rendered to the narrator as having *ended at Year 1, Day 1* -- days of story collapsed
+    // into an instant, stated as fact.
+    const span = formatTimeSpan(chapter.startTime, chapter.endTime)
+    if (span) {
+      block += `*Time: ${span}*\n`
     }
 
     block += chapter.summary
     block += '\n'
 
+    // Guarded, though the type says these are always arrays: chapters are persisted JSON,
+    // and one written by a version that predates a field arrives without it. Every other
+    // reader of these arrays already checks (MemoryService, ChapterCard); this one did not,
+    // and it is the narrator prompt -- so a single old chapter took the whole turn down.
     const metadata: string[] = []
-    if (chapter.characters.length > 0) {
+    if (chapter.characters?.length) {
       metadata.push(`Characters: ${chapter.characters.join(', ')}`)
     }
-    if (chapter.locations.length > 0) {
+    if (chapter.locations?.length) {
       metadata.push(`Locations: ${chapter.locations.join(', ')}`)
     }
     if (chapter.emotionalTone) {
@@ -208,7 +207,7 @@ export function buildChapterSummariesBlock(
   }
 
   if (timelineFillResult && timelineFillResult.responses.length > 0) {
-    block += '## Retrieved Context\n'
+    block += '## Relevant Story Data\n'
     block +=
       'The following information was retrieved from past chapters and is relevant to the current scene:\n\n'
 
@@ -399,6 +398,21 @@ export class NarrativeService {
       })
     }
 
+    // Every conditional block defaults to '' before anything is added.
+    //
+    // The templates guard these with `{% if x != '' %}`, and in Liquid an *absent* variable
+    // is nil -- and `nil != ''` is true, so the guard passes and the block renders empty.
+    // For `storyTime` that means a story with no time tracker got a bare
+    // `[CURRENT STORY TIME]` header with nothing under it. Seeding the keys makes the guards
+    // mean what they read as.
+    ctx.add({
+      styleGuidance: '',
+      tieredContextBlock: '',
+      retrievedChapterContext: '',
+      chapterSummaries: '',
+      storyTime: (ctx.getContext().storyTime as string) ?? '',
+    })
+
     // Add runtime variables for template rendering
     // These are pre-formatted blocks that templates inject via {{ variable }}
 
@@ -406,6 +420,14 @@ export class NarrativeService {
       ctx.add({ tieredContextBlock })
     }
 
+    // Looks dead -- no built-in template renders {{ retrievedChapterContext }}, because
+    // WorldStateInjector already appends this same string to `tieredContextBlock` above.
+    // It is not: the variable is advertised to users in the template editor
+    // (`templates/variables.ts`), so a custom pack template may reference it and would
+    // silently render empty without this. A template using both gets the chapter context
+    // twice; that is the user's call to make, and the reason to keep the two composed in
+    // one place is the same reason 3.1 of the retrieval rework wants them separated here
+    // rather than inside the injector.
     if (retrievedChapterContext) {
       ctx.add({ retrievedChapterContext })
     }

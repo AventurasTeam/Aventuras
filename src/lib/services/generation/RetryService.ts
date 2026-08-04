@@ -261,7 +261,6 @@ export class RetryService {
       clearGenerationError: () => void
       clearSuggestions: () => void
       clearActionChoices: () => void
-      clearImageContext: () => void
     },
   ): Promise<RestoreResult> {
     log('handleRetryLastMessage called', {
@@ -273,7 +272,6 @@ export class RetryService {
     uiCleanup.clearGenerationError()
     uiCleanup.clearSuggestions()
     uiCleanup.clearActionChoices()
-    uiCleanup.clearImageContext()
 
     // Clear lorebook retrieval debug state
     callbacks.setLastLorebookRetrieval(null)

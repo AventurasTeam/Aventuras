@@ -57,7 +57,7 @@ export interface PipelineConfig {
   rawInput: string
   actionType: ActionInputType
   wasRawActionChoice: boolean
-  timelineFillEnabled: boolean
+  memoryRetrievalEnabled: boolean
   storyMode: StoryMode
   pov: POV
   tense: Tense
@@ -137,11 +137,8 @@ export class GenerationPipeline {
         retrieval = yield* this.retrievalPhase.execute({
           context: ctx,
           dependencies: this.deps,
-          timelineFillEnabled: cfg.timelineFillEnabled,
+          memoryRetrievalEnabled: cfg.memoryRetrievalEnabled,
           activationTracker: cfg.activationTracker,
-          storyMode: cfg.storyMode,
-          pov: cfg.pov,
-          tense: cfg.tense,
         })
       }
       if (ctx.abortSignal?.aborted) return { ...r, aborted: true }

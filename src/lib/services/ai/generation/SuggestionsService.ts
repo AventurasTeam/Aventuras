@@ -8,6 +8,7 @@
  */
 
 import type { StoryEntry, StoryBeat, Entry } from '$lib/types'
+import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { ContextBuilder } from '$lib/services/context'
 import { getContextConfig, getLorebookConfig } from '../core/config'
@@ -27,7 +28,7 @@ export class SuggestionsService extends BaseAIService {
    * Create a new SuggestionsService.
    * @param serviceId - The service ID used to resolve the preset dynamically
    */
-  constructor(serviceId: string) {
+  constructor(serviceId: ServiceId) {
     super(serviceId)
   }
 

@@ -12,7 +12,7 @@ import { MemoryService } from '../generation/MemoryService'
 import { SuggestionsService } from '../generation/SuggestionsService'
 import { ActionChoicesService } from '../generation/ActionChoicesService'
 import { StyleReviewerService } from '../generation/StyleReviewerService'
-import { EntryInjector, type ContextConfig } from '../generation/EntryInjector'
+import { WorldStateInjector, type WorldStateInjectorConfig } from '../generation/WorldStateInjector'
 import { LoreManagementService } from '../lorebook/LoreManagementService'
 import { AgenticRetrievalService } from '../retrieval/AgenticRetrievalService'
 import { TimelineFillService } from '../retrieval/TimelineFillService'
@@ -78,10 +78,10 @@ export class ServiceFactory {
   }
 
   /**
-   * Create an entry injector instance.
+   * Create a world state injector instance.
    */
-  createEntryInjector(config?: Partial<ContextConfig>): EntryInjector {
-    return new EntryInjector(config, 'entryRetrieval')
+  createWorldStateInjector(config?: Partial<WorldStateInjectorConfig>): WorldStateInjector {
+    return new WorldStateInjector(config, 'worldStateInjection')
   }
 
   /**
@@ -105,7 +105,12 @@ export class ServiceFactory {
    */
   createAgenticRetrievalService(): AgenticRetrievalService {
     const agenticRetrievalSettings = settings.systemServicesSettings.agenticRetrieval
-    return new AgenticRetrievalService('agenticRetrieval', agenticRetrievalSettings.maxIterations)
+    return new AgenticRetrievalService(
+      'agenticRetrieval',
+      agenticRetrievalSettings.maxIterations,
+      agenticRetrievalSettings.grepEnabled,
+      agenticRetrievalSettings.grepExcerptsPerSearch,
+    )
   }
 
   /**

@@ -10,7 +10,10 @@
     CirclePlus,
     Trash2,
     WrapText,
+    Download,
   } from '@lucide/svelte'
+  import { writeTextFile } from '@tauri-apps/plugin-fs'
+  import { resolveSaveTarget } from '$lib/services/exportTarget'
   import { Button } from '$lib/components/ui/button'
   import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
   import * as Select from '$lib/components/ui/select'
@@ -29,6 +32,9 @@
   let { logs, onClear, renderNewlines, onToggleRenderNewlines }: Props = $props()
 
   let copiedId = $state<string | null>(null)
+  let exporting = $state(false)
+  let exported = $state(false)
+  let exportError = $state<string | null>(null)
   let selectedCategories = $state<string[]>([])
   let scrollContainer: HTMLDivElement | null = $state(null)
   let userScrolledAway = $state(false)
@@ -65,6 +71,57 @@
   const jsonCache = new Map<string, string>()
 
   const MAX_DISPLAY_CHARS = 200_000
+
+  /** JSON.stringify that survives circular references instead of throwing. */
+  function safeStringify(value: unknown, indent = 2): string {
+    try {
+      return JSON.stringify(value, null, indent) ?? ''
+    } catch {
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity -- plain Set: not reactive state
+      const seen = new Set()
+      return JSON.stringify(
+        value,
+        (_key, v) => {
+          if (typeof v === 'object' && v !== null) {
+            if (seen.has(v)) return '[Circular]'
+            seen.add(v)
+          }
+          return v
+        },
+        indent,
+      )
+    }
+  }
+
+  /**
+   * Write every log entry to a JSON file. Exports the full set, not the current filter:
+   * the point is to hand the whole session to someone else.
+   */
+  async function exportLogs() {
+    if (logs.length === 0 || exporting) return
+    exporting = true
+    try {
+      const content = safeStringify({
+        exportedAt: new Date().toISOString(),
+        count: logs.length,
+        logs,
+      })
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      const target = await resolveSaveTarget(`aventura-debug-${stamp}.json`, [
+        { name: 'JSON', extensions: ['json'] },
+      ])
+      if (!target) return // cancelled
+      await writeTextFile(target.destPath, content)
+      exported = true
+      setTimeout(() => (exported = false), 2000)
+    } catch (err) {
+      console.error('[DebugLogView] Failed to export logs:', err)
+      exportError = err instanceof Error ? err.message : String(err)
+      setTimeout(() => (exportError = null), 4000)
+    } finally {
+      exporting = false
+    }
+  }
 
   function formatJson(entry: DebugLogEntry): string {
     const cacheKey = `${entry.id}-${renderNewlines}`
@@ -278,6 +335,21 @@
           <WrapText class="h-4 w-4" />
         </Button>
       {/if}
+
+      <Button
+        variant="ghost"
+        size="icon"
+        class="text-muted-foreground hover:text-foreground h-8 w-8"
+        onclick={exportLogs}
+        disabled={logs.length === 0 || exporting}
+        title={exportError ?? `Export all ${logs.length} log entries as JSON`}
+      >
+        {#if exported}
+          <Check class="h-4 w-4 text-green-400" />
+        {:else}
+          <Download class={cn('h-4 w-4', exportError && 'text-red-400')} />
+        {/if}
+      </Button>
 
       {#if onClear}
         <Button

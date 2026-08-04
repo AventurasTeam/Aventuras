@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { Trash2, Clock } from '@lucide/svelte'
+  import { Trash2, Clock, Pencil, Check, X } from '@lucide/svelte'
   import { Button } from '$lib/components/ui/button'
+  import { Input } from '$lib/components/ui/input'
   import * as Card from '$lib/components/ui/card'
   import TagBadge from '$lib/components/tags/TagBadge.svelte'
   import type { Story } from '$lib/types'
@@ -9,9 +10,62 @@
     story: Story
     onOpen: (id: string) => void
     onDelete: (id: string, event: MouseEvent) => void
+    onRename: (id: string, title: string) => void
   }
 
-  let { story: s, onOpen, onDelete }: Props = $props()
+  let { story: s, onOpen, onDelete, onRename }: Props = $props()
+
+  let editing = $state(false)
+  let editValue = $state('')
+  let inputEl: HTMLInputElement | null = $state(null)
+  // Set by any path that ends editing without saving, so the blur that fires as the
+  // input is torn down cannot resurrect the discarded value. The X button suppresses
+  // its own blur via onmousedown, but Escape has no such lever, and whether removing a
+  // focused element fires blur at all differs between engines (notably the Android
+  // WebView). Guarding the commit is the only way that holds in both cases.
+  let cancelled = false
+
+  $effect(() => {
+    if (editing && inputEl) {
+      inputEl.focus()
+      inputEl.select()
+    }
+  })
+
+  function startEdit(e: MouseEvent) {
+    e.stopPropagation()
+    editValue = s.title
+    cancelled = false
+    editing = true
+  }
+
+  function commitEdit(e?: MouseEvent) {
+    e?.stopPropagation()
+    if (cancelled) return
+
+    const trimmed = editValue.trim()
+    editing = false
+    if (trimmed && trimmed !== s.title) {
+      onRename(s.id, trimmed)
+    }
+  }
+
+  function cancelEdit(e?: MouseEvent) {
+    e?.stopPropagation()
+    cancelled = true
+    editing = false
+  }
+
+  function handleInputKeydown(e: KeyboardEvent) {
+    e.stopPropagation()
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      commitEdit()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      cancelEdit()
+    }
+  }
 
   function formatDate(timestamp: number): string {
     return new Date(timestamp).toLocaleDateString('en-US', {
@@ -44,8 +98,8 @@
 <div
   role="button"
   tabindex="0"
-  onclick={() => onOpen(s.id)}
-  onkeydown={(e) => e.key === 'Enter' && onOpen(s.id)}
+  onclick={() => !editing && onOpen(s.id)}
+  onkeydown={(e) => e.key === 'Enter' && !editing && onOpen(s.id)}
   class="h-full"
 >
   <Card.Root
@@ -53,17 +107,62 @@
   >
     <Card.Header>
       <div class="flex items-center justify-between gap-2">
-        <Card.Title class="truncate text-lg leading-tight font-semibold">
-          {s.title}
-        </Card.Title>
-        <Button
-          icon={Trash2}
-          variant="ghost"
-          class="text-muted-foreground hover:text-foreground h-8 w-8 hover:bg-transparent"
-          size="icon"
-          onclick={(e) => onDelete(s.id, e)}
-          title="Delete story"
-        />
+        {#if editing}
+          <div
+            class="flex flex-1 items-center gap-1"
+            onclick={(e) => e.stopPropagation()}
+            role="presentation"
+          >
+            <Input
+              bind:ref={inputEl}
+              bind:value={editValue}
+              class="h-8 flex-1"
+              enterkeyhint="done"
+              onkeydown={handleInputKeydown}
+              onblur={() => commitEdit()}
+            />
+            <Button
+              icon={Check}
+              variant="ghost"
+              class="text-muted-foreground hover:text-foreground h-8 w-8 shrink-0 hover:bg-transparent"
+              size="icon"
+              onmousedown={(e: MouseEvent) => e.preventDefault()}
+              onclick={commitEdit}
+              title="Save title"
+            />
+            <Button
+              icon={X}
+              variant="ghost"
+              class="text-muted-foreground hover:text-foreground h-8 w-8 shrink-0 hover:bg-transparent"
+              size="icon"
+              onmousedown={(e: MouseEvent) => e.preventDefault()}
+              onclick={cancelEdit}
+              title="Cancel"
+            />
+          </div>
+        {:else}
+          <Card.Title class="truncate text-lg leading-tight font-semibold">
+            {s.title}
+          </Card.Title>
+          <div class="flex shrink-0 items-center">
+            <Button
+              icon={Pencil}
+              variant="ghost"
+              class="text-muted-foreground hover:text-foreground h-8 w-8 hover:bg-transparent"
+              size="icon"
+              onclick={startEdit}
+              title="Rename story"
+            />
+            <Button
+              icon={Trash2}
+              variant="ghost"
+              class="text-muted-foreground hover:text-foreground h-8 w-8 hover:bg-transparent"
+              size="icon"
+              onclick={(e) => onDelete(s.id, e)}
+              title="Delete story"
+            />
+          </div>
+        {/if}
       </div>
       {#if s.genre}
         <div>

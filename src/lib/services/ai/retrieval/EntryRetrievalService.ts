@@ -1,5 +1,4 @@
-import { generateStructured } from '../sdk/generate'
-import { settings } from '$lib/stores/settings.svelte'
+import { settings, type ServiceId } from '$lib/stores/settings.svelte'
 /**
  * Entry Retrieval Service for Aventura
  * Per design doc section 3.2.3: Tiered Injection
@@ -7,40 +6,48 @@ import { settings } from '$lib/stores/settings.svelte'
  * Implements three tiers of entry injection for lorebook entries:
  * - Tier 1: Always inject (injection.mode === 'always', or state-based like isPresent)
  * - Tier 2: Keyword matching (match name/aliases/keywords against user input & recent story)
- * - Tier 3: LLM selection (STUBBED - awaiting SDK migration)
+ * - Tier 3: LLM selection (see `getLLMSelectedEntries`, shared with `WorldStateInjector`
+ *   via `./tier3Selection.ts`) -- on a different trigger, for a reason: here it runs
+ *   whenever any candidate is uncovered, because a lorebook entry is long-form authored
+ *   prose and including uncovered ones wholesale is not an option. The injector's
+ *   candidates are one-line entity records, so below `llmThreshold` it includes them
+ *   instead of asking. Neither drops a small leftover on the floor.
+ *
+ * Selects from authored Lorebook `Entry[]` records only. The live-tracked
+ * `Character`/`Location`/`Item`/`StoryBeat` state is `WorldStateInjector`'s job and is
+ * not duplicated here -- this service used to synthesize `live-*` pseudo-entries for it,
+ * which put the same entities in the prompt twice.
+ *
+ * Runs on every narrator turn, in every Memory Retrieval mode. It used to be skipped in
+ * Agentic mode, where the agent selected entries with its own `select_entry` tool and a
+ * fallback caught the case where it delivered nothing. That tool is gone: the agent reads
+ * lore to reason about chapters but returns none, so entry selection has one owner and
+ * there is nothing to skip or fall back to. Sharing `tier3Selection.ts` with
+ * `WorldStateInjector` is code reuse, not a shared responsibility.
  */
 
-import { escapeRegex } from '$lib/utils/text'
-import type {
-  Entry,
-  EntryType,
-  StoryEntry,
-  Character,
-  Location,
-  Item,
-  GenerationPreset,
-} from '$lib/types'
+import { entityNameMatches } from '$lib/utils/text'
+import type { Entry, EntryType, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
-import { buildExtraBody } from '../core/requestOverrides'
 import { createLogger } from '$lib/log'
-import { entitySelectionSchema } from '../sdk/schemas/context'
-import { ContextBuilder } from '$lib/services/context'
+import { runTier3Selection, resolveTier3Selection } from './tier3Selection'
+import { resolveStickiness } from './stickiness'
+import { ENTRY_RETRIEVAL_DEFAULTS } from '../core/defaults'
+import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
 
 const log = createLogger('EntryRetrieval')
 
 /**
- * Live world state - the actively tracked entities that should always be Tier 1
- */
-export interface LiveWorldState {
-  characters: Character[]
-  locations: Location[]
-  items: Item[]
-}
-
-/**
- * Stickiness duration by entry type (in story entries/turns).
- * After an entry is activated, it stays in Tier 1 for this many turns.
- * Each new activation resets the timer.
+ * How long an entry of each type stays in Tier 1 after being activated, in story
+ * positions. The fading priority that goes with it is shared with `WorldStateInjector` --
+ * see `./stickiness.ts`; only these durations are specific to lorebook entry types.
+ *
+ * The timer is *not* refreshed while an entry is sticky, and cannot be: a sticky entry is
+ * in Tier 1, Tier 1 is excluded from the candidate pool, and only Tier 2/3 record
+ * activations. So an entry named in every single turn still drops out when its window
+ * expires and is re-matched the turn after. That is deliberate -- it is what stops a
+ * once-relevant entry from pinning itself in the prompt forever -- but it means the
+ * duration is a hard ceiling on continuous presence, not a sliding one.
  */
 export const STICKINESS_BY_TYPE: Record<EntryType, number> = {
   concept: 5, // Magic systems, world rules - foundational context
@@ -50,6 +57,20 @@ export const STICKINESS_BY_TYPE: Record<EntryType, number> = {
   event: 2, // Historical references fade quickly
   item: 2, // Items are situational
 }
+
+/**
+ * Section headings for the lorebook context block, in the order they are emitted.
+ *
+ * Not derived from the type name: the narrator reads "Lore", not "Concepts".
+ */
+const SECTION_HEADINGS: [EntryType, string][] = [
+  ['character', 'Characters'],
+  ['location', 'Locations'],
+  ['item', 'Items'],
+  ['faction', 'Factions'],
+  ['concept', 'Lore'],
+  ['event', 'Events'],
+]
 
 /**
  * Activation tracking - maps entry ID to the story position when it was last activated.
@@ -65,7 +86,9 @@ export interface ActivationTracker {
 }
 
 export interface EntryRetrievalConfig {
-  /** Maximum entries to include from Tier 3 (0 = unlimited) */
+  /** Maximum entries to include from Tier 2 (keyword matched) */
+  maxTier2Entries: number
+  /** Maximum entries to include from Tier 3 (LLM selected) */
   maxTier3Entries: number
   /** Maximum words per lorebook entry (0 = unlimited) */
   maxWordsPerEntry: number
@@ -73,19 +96,17 @@ export interface EntryRetrievalConfig {
   enableLLMSelection: boolean
   /** Number of recent story entries to check for keyword matching */
   recentEntriesCount: number
-  /** Model to use for Tier 3 selection */
-  tier3Model: string
-  /** Temperature for Tier 3 selection */
-  temperature: number
 }
 
 export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
-  maxTier3Entries: 0, // No limit - select all relevant
+  // Lower than WorldStateInjector's caps on purpose. A lorebook entry is a paragraph of
+  // authored prose; a world-state record is one sentence the classifier rewrote last turn.
+  // Matching counts would put roughly ten times as much text in the prompt on this side.
+  maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
+  maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
   maxWordsPerEntry: 0,
   enableLLMSelection: true,
   recentEntriesCount: 5,
-  tier3Model: 'x-ai/grok-4.1-fast',
-  temperature: 0.2,
 }
 
 /**
@@ -94,22 +115,27 @@ export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
  */
 export function getEntryRetrievalConfigFromSettings(): EntryRetrievalConfig {
   const entrySettings = settings.systemServicesSettings.entryRetrieval
-  const preset = settings.getPresetConfig(settings.getServicePresetId('entryRetrieval'))
-  const maxWordsPerEntryRaw =
-    typeof entrySettings.maxWordsPerEntry === 'number'
-      ? entrySettings.maxWordsPerEntry
-      : Number(entrySettings.maxWordsPerEntry)
-  const maxWordsPerEntry = Number.isFinite(maxWordsPerEntryRaw)
-    ? Math.min(Math.max(0, Math.floor(maxWordsPerEntryRaw)), 500)
-    : 0
   return {
-    maxTier3Entries: entrySettings.maxTier3Entries ?? 0,
-    maxWordsPerEntry,
+    maxTier2Entries: entrySettings.maxTier2Entries ?? ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
+    maxTier3Entries: entrySettings.maxTier3Entries ?? ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
+    // Not clamped here: the constructor clamps whatever it is handed, so doing it twice
+    // meant two copies of the same bounds that had to agree. Passed through as stored --
+    // including a non-number from an old settings blob, which `clampMaxWords` handles.
+    maxWordsPerEntry: entrySettings.maxWordsPerEntry,
     enableLLMSelection: entrySettings.enableLLMSelection ?? true,
-    recentEntriesCount: 5, // Not configurable currently
-    tier3Model: preset.model,
-    temperature: preset.temperature,
+    recentEntriesCount: entrySettings.recentEntriesCount ?? 5,
   }
+}
+
+/**
+ * `maxWordsPerEntry` as the truncator needs it: a whole number in [0, 500], where 0 means
+ * no limit. Applied at construction so every path -- settings, an explicit config, the
+ * defaults -- lands on the same bounds.
+ */
+function clampMaxWords(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(n)) return 0
+  return Math.min(Math.max(0, Math.floor(n)), 500)
 }
 
 export interface RetrievedEntry {
@@ -135,44 +161,28 @@ export interface EntryRetrievalResult {
 export class EntryRetrievalService extends BaseAIService {
   private config: EntryRetrievalConfig
 
-  constructor(config: Partial<EntryRetrievalConfig> = {}, serviceId: string = 'entryRetrieval') {
+  constructor(config: Partial<EntryRetrievalConfig> = {}, serviceId: ServiceId = 'entryRetrieval') {
     super(serviceId)
     this.config = { ...DEFAULT_ENTRY_RETRIEVAL_CONFIG, ...config }
-    const maxWords = Number.isFinite(this.config.maxWordsPerEntry)
-      ? this.config.maxWordsPerEntry
-      : 0
-    this.config.maxWordsPerEntry = Math.min(Math.max(0, Math.floor(maxWords)), 500)
-  }
-
-  private get preset(): GenerationPreset {
-    return settings.getPresetConfig(this.presetId)
-  }
-
-  private get extraBody(): Record<string, unknown> | undefined {
-    return buildExtraBody({
-      manualMode: settings.advancedRequestSettings.manualMode,
-      manualBody: this.preset.manualBody,
-      reasoningEffort: this.preset.reasoningEffort,
-    })
+    this.config.maxWordsPerEntry = clampMaxWords(this.config.maxWordsPerEntry)
   }
 
   /**
    * Retrieve relevant entries using tiered injection.
    *
    * Tier 1: Always injected - includes:
-   *   - Live-tracked characters (active status)
-   *   - Live-tracked locations (current location)
-   *   - Live-tracked items (in inventory)
    *   - Lorebook entries with injection.mode === 'always'
    *   - "Sticky" entries (recently activated via Tier 2/3, duration based on type)
    * Tier 2: Keyword matched (name/aliases/keywords match user input or recent story)
-   * Tier 3: LLM selection (STUBBED - awaiting SDK migration)
+   * Tier 3: LLM selection (see `getLLMSelectedEntries`)
+   *
+   * Live-tracked characters/locations/items/story beats are handled by
+   * `WorldStateInjector` instead -- not duplicated here.
    */
   async getRelevantEntries(
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    liveState?: LiveWorldState,
     activationTracker?: ActivationTracker,
     signal?: AbortSignal,
   ): Promise<EntryRetrievalResult> {
@@ -183,20 +193,14 @@ export class EntryRetrievalService extends BaseAIService {
       userInputLength: userInput.length,
       recentCount: recentStoryEntries.length,
       currentPosition,
-      liveCharacters: liveState?.characters.length ?? 0,
-      liveLocations: liveState?.locations.length ?? 0,
-      liveItems: liveState?.items.length ?? 0,
     })
 
     // Build search content from user input and recent story
-    const recentContent = recentStoryEntries
-      .slice(-this.config.recentEntriesCount)
-      .map((e) => e.content)
-      .join(' ')
-    const searchContent = `${userInput} ${recentContent}`.toLowerCase()
+    const searchContent =
+      `${userInput} ${recentContent(recentStoryEntries, this.config.recentEntriesCount, AS_HAYSTACK)}`.toLowerCase()
 
-    // Tier 1: Live-tracked entities + always-inject + sticky entries
-    const tier1 = this.getTier1Entries(entries, liveState, activationTracker, currentPosition)
+    // Tier 1: Always-inject + sticky entries
+    const tier1 = this.getTier1Entries(entries, activationTracker, currentPosition)
     log(
       'Tier 1 entries (always active):',
       tier1.length,
@@ -226,7 +230,14 @@ export class EntryRetrievalService extends BaseAIService {
     const remainingEntries = candidateEntries.filter((e) => !tier1And2Ids.has(e.id))
     log('Remaining entries for Tier 3 LLM:', remainingEntries.length)
 
-    // Tier 3: LLM selection - runs when there are remaining entries and LLM selection is enabled
+    // Tier 3: LLM selection, whenever anything at all is left uncovered.
+    //
+    // No threshold, unlike WorldStateInjector, and the asymmetry is about what the
+    // candidates *are*: these are lorebook entries, paragraphs of authored prose, so
+    // "include the leftovers wholesale" -- the injector's cheap path below its threshold --
+    // would put the entire unmatched lorebook in the prompt. Selection is the only way to
+    // use them, so it runs whenever there is anything to select from. On any story with
+    // more lorebook entries than tiers 1-2 matched, that is one LLM call per turn.
     let tier3: RetrievedEntry[] = []
 
     if (this.config.enableLLMSelection && remainingEntries.length > 0) {
@@ -246,23 +257,34 @@ export class EntryRetrievalService extends BaseAIService {
       )
     }
 
-    // Record activations for Tier 2 entries (for stickiness tracking)
-    // Note: Tier 3 activations would also be recorded here once SDK migration is complete
+    // Record activations for stickiness tracking.
+    //
+    // Tier 3 counts as much as Tier 2: both mean "this entry is relevant right now", and
+    // the whole point of stickiness is that relevance does not end with the turn that
+    // noticed it. Recording only Tier 2 made an entry the LLM picked *less* durable than
+    // one matched by name -- it dropped out of the prompt the next turn, while the cheaper
+    // signal survived several. Sticky entries are excluded from the candidate pool, so
+    // this also stops the same entry being re-selected (and re-paid for) every turn.
     if (activationTracker) {
-      for (const retrieved of tier2) {
-        // Don't record activations for live entities (they have synthetic IDs)
-        if (!retrieved.entry.id.startsWith('live-')) {
-          activationTracker.recordActivation(retrieved.entry.id, currentPosition)
-        }
+      for (const retrieved of [...tier2, ...tier3]) {
+        activationTracker.recordActivation(retrieved.entry.id, currentPosition)
       }
-      log('Recorded activations for', tier2.length, 'entries at position', currentPosition)
+      log(
+        'Recorded activations for',
+        tier2.length + tier3.length,
+        'entries at position',
+        currentPosition,
+      )
     }
 
-    // Combine and sort by priority
+    // Combine and sort by priority. The context block is built from this same ordered
+    // list rather than re-concatenating the tiers: it used to take them in tier order, so
+    // the priority sort reached no prompt and an "always inject" entry could be listed
+    // below a sticky one that was two turns from expiring.
     const all = [...tier1, ...tier2, ...tier3].sort((a, b) => b.priority - a.priority)
 
     // Build context block
-    const contextBlock = this.buildContextBlock(tier1, tier2, tier3)
+    const contextBlock = this.buildContextBlock(all)
 
     return { tier1, tier2, tier3, all, contextBlock }
   }
@@ -278,14 +300,14 @@ export class EntryRetrievalService extends BaseAIService {
       const matchedKeywords: string[] = []
 
       // Check entry name
-      if (this.textMatches(entry.name, searchContent)) {
+      if (entityNameMatches(entry.name, searchContent)) {
         matchedKeywords.push(entry.name)
       }
 
       // Check aliases
       if (entry.aliases) {
         for (const alias of entry.aliases) {
-          if (this.textMatches(alias, searchContent)) {
+          if (entityNameMatches(alias, searchContent)) {
             matchedKeywords.push(alias)
           }
         }
@@ -294,7 +316,7 @@ export class EntryRetrievalService extends BaseAIService {
       // Check injection keywords
       if (entry.injection.keywords) {
         for (const keyword of entry.injection.keywords) {
-          if (this.textMatches(keyword, searchContent)) {
+          if (entityNameMatches(keyword, searchContent)) {
             matchedKeywords.push(keyword)
           }
         }
@@ -310,80 +332,29 @@ export class EntryRetrievalService extends BaseAIService {
       }
     }
 
-    return result
+    // Ranked before capping, by the priority the *author* gave the entry. Unlike the
+    // Tier 3 pool there is a real signal here, so the cap drops what was marked least
+    // important rather than whatever the lorebook happened to list last.
+    return result.sort((a, b) => b.priority - a.priority).slice(0, this.config.maxTier2Entries)
   }
 
   /**
    * Tier 1: Always inject entries.
-   *
-   * Live-tracked entities (highest priority):
-   * - Active characters from the tracker
-   * - Current location from the tracker
-   * - Items in inventory from the tracker
-   *
-   * Lorebook entries:
    * - Entries with injection.mode === 'always'
    * - Entries with state-based conditions (legacy, for imported lorebooks with state)
    * - "Sticky" entries (recently activated via Tier 2/3, duration based on entry type)
+   *
+   * Live-tracked characters/locations/items are handled by `WorldStateInjector`
+   * instead -- not duplicated here.
    */
   private getTier1Entries(
     entries: Entry[],
-    liveState?: LiveWorldState,
     activationTracker?: ActivationTracker,
     currentPosition?: number,
   ): RetrievedEntry[] {
     const result: RetrievedEntry[] = []
-    const includedIds = new Set<string>()
 
-    // First, add live-tracked entities (these are the primary Tier 1 sources)
-    if (liveState) {
-      // Active characters
-      for (const char of liveState.characters) {
-        if (char.status === 'active') {
-          const entry = this.characterToEntry(char)
-          result.push({
-            entry,
-            tier: 1,
-            priority: 95,
-            matchReason: 'active character',
-          })
-          includedIds.add(entry.id)
-        }
-      }
-
-      // Current location
-      for (const loc of liveState.locations) {
-        if (loc.current) {
-          const entry = this.locationToEntry(loc)
-          result.push({
-            entry,
-            tier: 1,
-            priority: 100,
-            matchReason: 'current location',
-          })
-          includedIds.add(entry.id)
-        }
-      }
-
-      // Items in inventory
-      for (const item of liveState.items) {
-        if (item.location === 'inventory') {
-          const entry = this.itemToEntry(item)
-          result.push({
-            entry,
-            tier: 1,
-            priority: 80,
-            matchReason: 'in inventory',
-          })
-          includedIds.add(entry.id)
-        }
-      }
-    }
-
-    // Then, process lorebook entries
     for (const entry of entries) {
-      if (includedIds.has(entry.id)) continue
-
       let shouldInclude = false
       let priority = 0
       let reason = ''
@@ -434,18 +405,16 @@ export class EntryRetrievalService extends BaseAIService {
 
       // Check stickiness (recently activated entries stay in Tier 1)
       if (!shouldInclude && activationTracker && currentPosition !== undefined) {
-        const lastActivation = activationTracker.getLastActivation(entry.id)
-        if (lastActivation !== null) {
-          const stickiness = STICKINESS_BY_TYPE[entry.type]
-          const turnsSinceActivation = currentPosition - lastActivation
-
-          if (turnsSinceActivation <= stickiness) {
-            shouldInclude = true
-            // Priority decreases as stickiness fades
-            const fadeRatio = 1 - turnsSinceActivation / (stickiness + 1)
-            priority = Math.max(priority, Math.round(60 + fadeRatio * 20)) // 60-80 range
-            reason = `sticky (${entry.type}, ${stickiness - turnsSinceActivation} turns left)`
-          }
+        const sticky = resolveStickiness(
+          activationTracker,
+          entry.id,
+          currentPosition,
+          STICKINESS_BY_TYPE[entry.type],
+        )
+        if (sticky) {
+          shouldInclude = true
+          priority = Math.max(priority, sticky.priority)
+          reason = `sticky (${entry.type}, ${sticky.turnsLeft} turns left)`
         }
       }
 
@@ -456,122 +425,10 @@ export class EntryRetrievalService extends BaseAIService {
           priority,
           matchReason: reason,
         })
-        includedIds.add(entry.id)
       }
     }
 
     return result
-  }
-
-  /**
-   * Convert a live Character to an Entry-like object for context injection.
-   */
-  private characterToEntry(char: Character): Entry {
-    return {
-      id: `live-char-${char.id}`,
-      storyId: char.storyId,
-      name: char.name,
-      type: 'character',
-      description: char.description || '',
-      hiddenInfo: null,
-      aliases: [],
-      state: {
-        type: 'character',
-        isPresent: char.status === 'active',
-        lastSeenLocation: null,
-        currentDisposition: char.relationship,
-        relationship: { level: 0, status: char.relationship || 'unknown', history: [] },
-        knownFacts: char.traits,
-        revealedSecrets: [],
-      },
-      adventureState: null,
-      creativeState: null,
-      injection: { mode: 'always', keywords: [], priority: 95 },
-      firstMentioned: null,
-      lastMentioned: null,
-      mentionCount: 0,
-      createdBy: 'ai',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      loreManagementBlacklisted: false,
-      branchId: char.branchId,
-    }
-  }
-
-  /**
-   * Convert a live Location to an Entry-like object for context injection.
-   */
-  private locationToEntry(loc: Location): Entry {
-    return {
-      id: `live-loc-${loc.id}`,
-      storyId: loc.storyId,
-      name: loc.name,
-      type: 'location',
-      description: loc.description || '',
-      hiddenInfo: null,
-      aliases: [],
-      state: {
-        type: 'location',
-        isCurrentLocation: loc.current,
-        visitCount: loc.visited ? 1 : 0,
-        changes: [],
-        presentCharacters: [],
-        presentItems: [],
-      },
-      adventureState: null,
-      creativeState: null,
-      injection: { mode: 'always', keywords: [], priority: 100 },
-      firstMentioned: null,
-      lastMentioned: null,
-      mentionCount: 0,
-      createdBy: 'ai',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      loreManagementBlacklisted: false,
-      branchId: loc.branchId,
-    }
-  }
-
-  /**
-   * Convert a live Item to an Entry-like object for context injection.
-   */
-  private itemToEntry(item: Item): Entry {
-    // Build description including quantity and equipped status
-    let desc = item.description || ''
-    if (item.quantity > 1) {
-      desc += ` (x${item.quantity})`
-    }
-    if (item.equipped) {
-      desc += ' [equipped]'
-    }
-
-    return {
-      id: `live-item-${item.id}`,
-      storyId: item.storyId,
-      name: item.name,
-      type: 'item',
-      description: desc,
-      hiddenInfo: null,
-      aliases: [],
-      state: {
-        type: 'item',
-        inInventory: item.location === 'inventory',
-        currentLocation: item.location,
-        condition: item.equipped ? 'equipped' : null,
-        uses: [],
-      },
-      adventureState: null,
-      creativeState: null,
-      injection: { mode: 'always', keywords: [], priority: 80 },
-      firstMentioned: null,
-      lastMentioned: null,
-      mentionCount: 0,
-      createdBy: 'ai',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      loreManagementBlacklisted: false,
-      branchId: item.branchId,
-    }
   }
 
   /**
@@ -588,107 +445,57 @@ export class EntryRetrievalService extends BaseAIService {
       return []
     }
 
-    // Format entries for the prompt
-    const entrySummaries = availableEntries
-      .map((e, i) => {
-        const desc = e.description ? e.description.slice(0, 100) : ''
-        return `${i}. [${e.type}] ${e.name}${desc ? `: ${desc}` : ''}`
-      })
-      .join('\n')
+    const candidates = availableEntries.map((e) => ({
+      id: e.id,
+      type: e.type,
+      name: e.name,
+      description: e.description,
+    }))
 
-    // Build recent content for context
-    const recentContent = recentStoryEntries
-      .slice(-this.config.recentEntriesCount)
-      .map((e) => e.content)
-      .join('\n\n')
-
-    const ctx = new ContextBuilder()
-    ctx.add({ recentContent, userInput, entrySummaries })
-    const { system, user: prompt } = await ctx.render('tier3-entry-selection')
-
-    try {
-      const result = await generateStructured(
-        {
-          presetId: this.presetId,
-          schema: entitySelectionSchema,
-          system,
-          prompt,
-          signal,
-        },
-        'tier3-entry-selection',
-      )
-
-      // Map selected IDs back to RetrievedEntry objects
-      const selectedSet = new Set(result.selectedIds)
-      const entries: RetrievedEntry[] = []
-
-      for (let i = 0; i < availableEntries.length; i++) {
-        const entry = availableEntries[i]
-        // Check if selected by ID or by index (some LLMs return indices)
-        if (selectedSet.has(entry.id) || selectedSet.has(i.toString())) {
-          entries.push({
-            entry,
-            tier: 3,
-            priority: 50 + entry.injection.priority,
-            matchReason: 'LLM selected',
-          })
-        }
-      }
-
-      log('Tier 3 LLM selection complete', {
-        candidates: availableEntries.length,
-        selected: entries.length,
-        reasoning: result.reasoning,
-      })
-
-      // Apply limit if configured
-      if (this.config.maxTier3Entries > 0) {
-        return entries.slice(0, this.config.maxTier3Entries)
-      }
-      return entries
-    } catch (error) {
-      log('Tier 3 LLM selection failed', error)
+    const result = await runTier3Selection({
+      candidates,
+      userInput,
+      recentEntries: recentStoryEntries,
+      recentEntriesCount: this.config.recentEntriesCount,
+      presetId: this.presetId,
+      serviceLabel: 'tier3-lorebook-selection',
+      signal,
+    })
+    if (!result) {
       return []
     }
-  }
 
-  /**
-   * Check if text matches in search content.
-   */
-  private textMatches(text: string, searchContent: string): boolean {
-    const normalized = text.toLowerCase().trim()
-    if (normalized.length < 2) return false
+    const entries: RetrievedEntry[] = resolveTier3Selection(availableEntries, result).map(
+      (entry) => ({
+        entry,
+        tier: 3,
+        priority: 50 + entry.injection.priority,
+        matchReason: 'LLM selected',
+      }),
+    )
 
-    // Check if the keyword contains characters from non-space-separated languages (CJK, Thai, Lao, Khmer, Burmese)
-    const isNonSpaceSeparated =
-      /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\u0e00-\u0e7f\u0e80-\u0eff\u1780-\u17ff\u1000-\u109f]/.test(
-        normalized,
-      )
-    if (isNonSpaceSeparated) {
-      // Non-space-separated languages must use substring matching
-      return searchContent.includes(normalized)
-    }
-    // Dynamic Unicode-aware word boundary match for space-separated languages
-    let patternStr = escapeRegex(normalized)
-    if (/^[\p{L}\p{N}]/u.test(normalized)) {
-      patternStr = '(?<![\\p{L}\\p{N}])' + patternStr
-    }
-    if (/[\p{L}\p{N}]$/u.test(normalized)) {
-      patternStr = patternStr + '(?![\\p{L}\\p{N}])'
-    }
-    const wordPattern = new RegExp(patternStr, 'iu')
-    return wordPattern.test(searchContent)
+    log('Tier 3 LLM selection complete', {
+      candidates: availableEntries.length,
+      selected: entries.length,
+      reasoning: result.reasoning,
+    })
+
+    // Ranked first: entries carry an authored injection priority, so capping the model's
+    // list without consulting it would drop entries the author marked as important in
+    // favour of ones they did not. Ties keep the model's ordering, which
+    // `resolveTier3Selection` preserves.
+    return [...entries]
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, this.config.maxTier3Entries)
   }
 
   /**
    * Build context block for prompt injection.
+   *
+   * `all` is expected priority-ordered; entries are grouped by type for readability and
+   * keep that order inside each group.
    */
-  private buildContextBlock(
-    tier1: RetrievedEntry[],
-    tier2: RetrievedEntry[],
-    tier3: RetrievedEntry[],
-  ): string {
-    const all = [...tier1, ...tier2, ...tier3]
+  private buildContextBlock(all: RetrievedEntry[]): string {
     if (all.length === 0) return ''
 
     let block = `\n\n[LOREBOOK CONTEXT]
@@ -708,63 +515,20 @@ export class EntryRetrievalService extends BaseAIService {
       byType[retrieved.entry.type].push(retrieved)
     }
 
-    // Characters
-    if (byType.character.length > 0) {
-      block += '\n\n• Characters:'
-      for (const { entry } of byType.character) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-        if (entry.state?.type === 'character') {
-          const state = entry.state
-          if (state.currentDisposition) {
-            block += ` [${state.currentDisposition}]`
-          }
+    // Section order is the emitted order, and the heading is not always the type name
+    // ("concept" reads as "Lore" to the narrator). Six near-identical blocks stood here
+    // before, which is six places for a formatting change to be applied five times.
+    for (const [type, heading] of SECTION_HEADINGS) {
+      const section = byType[type]
+      if (section.length === 0) continue
+
+      block += `\n\n• ${heading}:`
+      for (const { entry } of section) {
+        block += `\n  - ${entry.name}: ${this.truncateEntryText(entry.description)}`
+        // Only characters carry a disposition worth stating alongside the description.
+        if (entry.state?.type === 'character' && entry.state.currentDisposition) {
+          block += ` [${entry.state.currentDisposition}]`
         }
-      }
-    }
-
-    // Locations
-    if (byType.location.length > 0) {
-      block += '\n\n• Locations:'
-      for (const { entry } of byType.location) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Items
-    if (byType.item.length > 0) {
-      block += '\n\n• Items:'
-      for (const { entry } of byType.item) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Factions
-    if (byType.faction.length > 0) {
-      block += '\n\n• Factions:'
-      for (const { entry } of byType.faction) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Concepts
-    if (byType.concept.length > 0) {
-      block += '\n\n• Lore:'
-      for (const { entry } of byType.concept) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
-      }
-    }
-
-    // Events
-    if (byType.event.length > 0) {
-      block += '\n\n• Events:'
-      for (const { entry } of byType.event) {
-        const description = this.truncateEntryText(entry.description)
-        block += `\n  - ${entry.name}: ${description}`
       }
     }
 
@@ -780,28 +544,6 @@ export class EntryRetrievalService extends BaseAIService {
     if (words.length <= maxWords) return text
     return `${words.slice(0, maxWords).join(' ')} [...]`
   }
-}
-
-/**
- * Quick function to get relevant entries without a full service instance.
- * Uses settings from the settings store for configuration.
- */
-export async function getRelevantEntries(
-  entries: Entry[],
-  userInput: string,
-  recentStoryEntries: StoryEntry[],
-  liveState?: LiveWorldState,
-  activationTracker?: ActivationTracker,
-): Promise<EntryRetrievalResult> {
-  const config = getEntryRetrievalConfigFromSettings()
-  const service = new EntryRetrievalService(config, 'entryRetrieval')
-  return service.getRelevantEntries(
-    entries,
-    userInput,
-    recentStoryEntries,
-    liveState,
-    activationTracker,
-  )
 }
 
 /**

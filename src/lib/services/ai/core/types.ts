@@ -166,7 +166,6 @@ export interface ModelInfo {
   id: string
   name: string
   description?: string
-  contextLength: number
   pricing?: {
     prompt: number
     completion: number

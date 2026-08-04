@@ -53,6 +53,14 @@
     }
   }
 
+  async function renameStory(storyId: string, title: string) {
+    try {
+      await story.renameStory(storyId, title)
+    } catch (error) {
+      ui.showToast(errMessage(error), 'error')
+    }
+  }
+
   // Imports through the native picker, NOT an <input type="file">. Reading the file in JS means
   // materialising it as a string, and a .avt larger than V8's max string length (2^29-24 bytes,
   // ~512 MiB) cannot be one — a 546 MB export failed with a bogus "not valid JSON" error, because
@@ -142,7 +150,7 @@
     {:else}
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {#each story.allStories as s (s.id)}
-          <StoryCard story={s} onOpen={openStory} onDelete={deleteStory} />
+          <StoryCard story={s} onOpen={openStory} onDelete={deleteStory} onRename={renameStory} />
         {/each}
       </div>
     {/if}
