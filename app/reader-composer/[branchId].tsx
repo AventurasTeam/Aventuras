@@ -58,7 +58,6 @@ import {
   shouldShowSuggestionStrip,
 } from '@/lib/piggyback'
 import {
-  awaitRunTerminal,
   PER_TURN_KIND,
   pipelineEventBus,
   SUGGESTION_REFRESH_KIND,
@@ -66,12 +65,15 @@ import {
 } from '@/lib/pipeline'
 import {
   appSettingsStore,
+  awaitRunTerminal,
+  backgroundClassifierRunning,
   currentStoryStore,
   embedderSwapStore,
   embeddingStatusStore,
   entitiesStore,
   entriesStore,
   generationStore,
+  isBackgroundKind,
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
@@ -119,15 +121,18 @@ export default function ReaderComposerRoute() {
   )
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  // A suggestion refresh is not a turn: counting it here would swap Send for
-  // Cancel and raise the streaming placeholder over a branch that isn't
-  // streaming. Note this is only about the turn-shaped chrome — the refresh
-  // does hold the edit gate, so `editBlocked` above already covers undo/redo.
-  // The phase, not a boolean: one source for whether a turn runs and what it does.
+  // The phase, not a boolean: one source for whether a turn runs and what it
+  // does. Neither a refresh nor a background classifier pass is a turn — either
+  // counted here would swap Send for Cancel and raise the streaming placeholder
+  // over a branch that isn't streaming. Only the refresh is hard-gate, so
+  // `editBlocked` above still covers undo/redo for it.
   const turnPhase = generationStore.useGeneration(
     (s) =>
       [...s.txState.runs.values()].find(
-        (r) => r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND,
+        (r) =>
+          r.branchId === branchId &&
+          r.kind !== SUGGESTION_REFRESH_KIND &&
+          !isBackgroundKind(r.kind),
       )?.currentPhase ?? null,
   )
   const isGenerating = turnPhase !== null
@@ -135,6 +140,9 @@ export default function ReaderComposerRoute() {
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
     ),
+  )
+  const classifierRunning = generationStore.useGeneration((s) =>
+    backgroundClassifierRunning(s.txState, branchId),
   )
 
   const open = currentStoryStore.useCurrentStory((s) => s)
@@ -206,7 +214,7 @@ export default function ReaderComposerRoute() {
   // A suggestion refresh occupies the pill exactly like a turn does, and the
   // pill prioritizes activePhase over error — so the two branches must be
   // derived from one value, or a refresh would leave the warning tone visible.
-  const activePhase = readerPillPhase({ turnPhase, refreshingSuggestions })
+  const activePhase = readerPillPhase({ turnPhase, refreshingSuggestions, classifierRunning })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -254,7 +262,7 @@ export default function ReaderComposerRoute() {
       const running = [...generationStore.getTxState().runs.values()].some(
         (r) => r.kind === SUGGESTION_REFRESH_KIND && r.branchId === branchId,
       )
-      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
+      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
     },
     [branchId],
   )
@@ -535,8 +543,8 @@ export default function ReaderComposerRoute() {
   const handleToggleStripCollapsed = useCallback(() => setStripCollapsed((prev) => !prev), [])
 
   const handleCancelSuggestions = useCallback(() => {
-    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, 'cancel')
-  }, [])
+    void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+  }, [branchId])
 
   // Read at settle time, not from the closure: a branch-switch abort whose
   // reverse-replay fails resolves 'failed' well after the switch, and the
@@ -751,9 +759,18 @@ export default function ReaderComposerRoute() {
                   ? { code: 'memory-incomplete', pendingRows: staleTotal }
                   : undefined
           }
-          onCancel={() =>
-            void awaitRunTerminal(isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND, 'cancel')
-          }
+          // A background classifier pass has no cancel affordance, so the prop is
+          // absent rather than a no-op handler that would still open the popover.
+          {...(isGenerating || refreshingSuggestions
+            ? {
+                onCancel: () =>
+                  void awaitRunTerminal(
+                    isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
+                    branchId,
+                    'cancel',
+                  ),
+              }
+            : {})}
           onErrorTap={(code) => {
             if (code !== 'classifier-offline' && storyId != null)
               router.push(`/story-settings/${storyId}?tab=memory`)
@@ -843,7 +860,7 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, 'cancel')}
+                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel')}
               />
             </View>
           </View>

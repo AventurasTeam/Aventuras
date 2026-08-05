@@ -14,7 +14,7 @@ import type {
   ThreadRow,
 } from '@/lib/retrieval'
 
-import { buildGenerationContext } from './generation-context'
+import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
 
 const definition = {
   mode: 'adventure' as const,
@@ -234,6 +234,39 @@ describe('buildGenerationContext', () => {
       idMap: new IdBiMap(),
     })
     expect((ctx.entities as { id: string }[])[0]!.id).toBe('c1')
+  })
+
+  // Packs are user-authored, so whatever reaches the context is template surface
+  // whether the bundled template renders it or not. Passing the drizzle row whole
+  // would silently enrol every future column and make it undroppable.
+  it('projects entities to PROMPT_ENTITY_FIELDS, dropping the rest of the row', () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [],
+      entities: [
+        {
+          id: 'char_00000000-0000-4000-8000-000000000001',
+          branchId: 'b1',
+          kind: 'character',
+          name: 'Mara',
+          description: 'A knight.',
+          status: 'active',
+          retiredReason: null,
+          injectionMode: 'auto',
+          nameCollisionFlag: 0,
+          state: { traits: ['stoic'] },
+          tags: ['secret'],
+          embeddingStale: 1,
+          createdAt: 1,
+          updatedAt: 2,
+        } as never,
+      ],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+    const [entity] = ctx.entities as Record<string, unknown>[]
+    expect(Object.keys(entity).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
   })
 
   it('extracts sceneEntities from the last non-system entry, substituted like the entities', () => {

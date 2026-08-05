@@ -65,6 +65,33 @@ function blankIfWhitespace(value: string): string {
   return value.trim() === '' ? '' : value
 }
 
+/**
+ * The exact fields templateContextMap documents for `generationContext.entities`.
+ * Projected rather than passed whole: packs are user-authored, so an un-projected
+ * drizzle row silently makes every future column (`state`, `tags`,
+ * `embeddingStale`, timestamps) part of the template surface — reachable by a
+ * custom template and impossible to drop later without breaking it.
+ */
+export const PROMPT_ENTITY_FIELDS = [
+  'id',
+  'kind',
+  'name',
+  'description',
+  'status',
+  'injectionMode',
+] as const
+
+function promptEntity(entity: Entity): Record<string, unknown> {
+  return {
+    id: entity.id,
+    kind: entity.kind,
+    name: entity.name,
+    description: entity.description,
+    status: entity.status,
+    injectionMode: entity.injectionMode,
+  }
+}
+
 // Only the fields a prompt renders: `renderedText` is the exact string the
 // ranker measured the type budget against, and the Float32Array vector beside
 // it would be walked into a numeric-keyed object by substituteIds.
@@ -161,7 +188,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
     entries: composePromptBuffer(narrative, settings).map((e) => ({ content: e.content })),
-    entities: branchEntities,
+    entities: branchEntities.map(promptEntity),
     // Writers inherit scene state forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene and location.
     sceneEntities: tail?.metadata?.sceneEntities ?? [],

@@ -32,7 +32,9 @@ type ErrorState =
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
   error?: ErrorState
-  onCancel: () => void
+  // Absent for phases with no cancel affordance (e.g. a background classifier
+  // pass) — the pill then shows the phase with no popover trigger.
+  onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
 
@@ -94,13 +96,15 @@ export function GenerationStatusPill({
   // Priority: active generation > error state > hidden.
   if (activePhase != null) {
     const isPhone = tier === 'phone'
+    const tag = (
+      <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
+        {isPhone ? null : phaseCopy(activePhase)}
+      </Tag>
+    )
+    if (onCancel == null) return tag
     return (
       <Popover>
-        <PopoverTrigger ref={triggerRef}>
-          <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
-            {isPhone ? null : phaseCopy(activePhase)}
-          </Tag>
-        </PopoverTrigger>
+        <PopoverTrigger ref={triggerRef}>{tag}</PopoverTrigger>
         <PopoverContent>
           <Button
             variant="secondary"

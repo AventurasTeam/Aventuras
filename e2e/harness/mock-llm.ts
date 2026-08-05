@@ -4,6 +4,7 @@ import type { AddressInfo } from 'node:net'
 import { z } from 'zod'
 
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
+import { classifierExtractionSchema } from '@/lib/classifier'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -43,6 +44,13 @@ const STRUCTURED_AGENTS: StructuredAgent[] = [
     block: schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
     // No-op: empty scene, no time change — parses and applies cleanly.
     example: { sceneEntities: [], worldTimeDelta: 0 },
+  },
+  {
+    name: 'periodic-classifier',
+    block: schemaToTypeScriptBlock(z.toJSONSchema(classifierExtractionSchema) as JsonSchema),
+    // Silence is valid: the default reply must not write anything, so specs opt
+    // in to graph writes via setStructured.
+    example: { happenings: [], relationships: [], statusFlips: [], newCharacters: [] },
   },
   {
     // Same logical agent, second reply shape: the classifier's schema grows a

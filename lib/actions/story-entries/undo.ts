@@ -1,11 +1,12 @@
 import { desc, eq } from 'drizzle-orm'
 
-import type { Delta } from '@/lib/db'
+import type { Delta, SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
 import { resolveRollbackWindow } from './operational'
+import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
@@ -32,13 +33,14 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
   // Brackets the whole target-selection + reversal sweep, matching
   // rollbackToEntry — a concurrent edit/submit/generation mid-sweep must not
   // race the rows this undo is about to read and reverse.
-  generationStore.setReversalInProgress(true)
-  try {
+  return bracketProseReversal(branchId, async () => {
     const recent = await recentDeltaRows(branchId, ctx)
     const target = selectUndoTarget(recent)
     if (!target) return { status: 'rejected', reason: 'nothing to undo' }
 
     let rows: Delta[]
+    // An action group removes no entry, so there is no watermark to clamp.
+    let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
       const win = await resolveRollbackWindow(branchId, target.entryId, ctx)
       if ('status' in win) return { status: 'rejected', reason: win.reason }
@@ -47,13 +49,14 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
         .from(deltas)
         .where(win.where)
         .orderBy(desc(deltas.logPosition))) as Delta[]
+      clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
     } else {
       rows = recent.filter((r) => r.actionId === target.actionId)
     }
 
     const snapshot = await snapshotForRedo(rows, ctx)
     try {
-      await reverseAndPruneDeltaRows(rows, ctx)
+      await reverseAndPruneDeltaRows(rows, ctx, clampOps)
     } catch (e) {
       // A committed DeltaReplayError means the reversal + prune already landed in
       // SQLite; only the post-commit store sync failed. The data change is real,
@@ -63,9 +66,7 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     }
     undoRedoStore.pushRedoGroup(snapshot)
     return { status: 'ok' }
-  } finally {
-    generationStore.setReversalInProgress(false)
-  }
+  })
 }
 
 export async function redoLastAction(branchId: string, ctx: DbCtx): Promise<UndoResult> {

@@ -1,3 +1,11 @@
+export {
+  embedClassifierDescriptions,
+  readClassifierStatus,
+  recordClassifierPreflightFailure,
+  resetStuckClassifierRunState,
+  unprocessedTurnCount,
+} from './classifier/deps'
+export { runClassifierNow } from './classifier/run-now'
 export { defineAction } from './define-action'
 // The raw engine primitives (startSwap / resumeSwap / cancelSwap / reindexStory /
 // relabelModel) are deliberately absent: each requires the caller to already hold
@@ -15,6 +23,7 @@ export {
   relabelStory,
   RelabelBlockedError,
   RelabelDimMismatchError,
+  resolveDrainConfig,
   resolveStorySwapConfig,
   resumeStorySwap,
   setDrainKickSink,
@@ -77,6 +86,7 @@ export {
   type RollbackCounts,
   type StoryEntryRejection,
 } from './story-entries/operational'
+export { bracketProseReversal, classifierWatermarkClampOps } from './story-entries/prose-reversal'
 export { ENTRIES_WINDOW_SIZE, readRecentEntries } from './story-entries/recent-window'
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
 export { redoLastAction, undoLastAction, type UndoResult } from './story-entries/undo'

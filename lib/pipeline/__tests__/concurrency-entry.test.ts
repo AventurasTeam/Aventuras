@@ -1,13 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import {
-  awaitRunTerminal,
   definePipeline,
+  ensurePerTurnPipelineRegistered,
+  ensurePeriodicClassifierPipelineRegistered,
+  PER_TURN_KIND,
   runPipeline,
   type PhaseContext,
   type PhaseResult,
 } from '@/lib/pipeline'
-import { generationStore } from '@/lib/stores'
+import { checkConcurrencyContract } from '@/lib/pipeline/runtime/concurrency'
+import { awaitRunTerminal, generationStore, type RunState } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
@@ -16,6 +20,26 @@ const base = { affordance: 'invisible', gateBehavior: 'no-gate' } as const
 describe('runPipeline concurrency entry + coordination', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())
+
+  it('lets a per-turn run start while the classifier is in flight, and blocks a second classifier', () => {
+    // Asserted against the policies the two definitions actually register, not
+    // hand-written stand-ins: per-turn's blockedBy lacks periodic-classifier,
+    // and the classifier self-blocks.
+    ensurePerTurnPipelineRegistered()
+    ensurePeriodicClassifierPipelineRegistered()
+    const inflight = (kind: string): Map<string, RunState> =>
+      new Map([[`r_${kind}`, { runId: `r_${kind}`, kind } as RunState]])
+
+    expect(
+      checkConcurrencyContract(PER_TURN_KIND, inflight(PERIODIC_CLASSIFIER_KIND), false),
+    ).toMatchObject({ kind: 'start' })
+    expect(
+      checkConcurrencyContract(PERIODIC_CLASSIFIER_KIND, inflight(PERIODIC_CLASSIFIER_KIND), false),
+    ).toMatchObject({ kind: 'blocked' })
+    expect(
+      checkConcurrencyContract(PERIODIC_CLASSIFIER_KIND, inflight('chapter-close'), false),
+    ).toMatchObject({ kind: 'blocked' })
+  })
 
   it('rejects a start blocked by an in-flight run of a blocking kind', async () => {
     const { ctx } = await makeHarness()
@@ -59,7 +83,7 @@ describe('runPipeline concurrency entry + coordination', () => {
     })
 
     const inflight = runPipeline('bg', ctx)
-    await awaitRunTerminal('bg', 'cancel')
+    await awaitRunTerminal('bg', 'b1', 'cancel')
     expect(expectRan(await inflight).outcome).toBe('aborted')
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
@@ -83,7 +107,7 @@ describe('runPipeline concurrency entry + coordination', () => {
 
     const inflight = runPipeline('bg', ctx)
     let resolved = false
-    const waiter = awaitRunTerminal('bg', 'finish').then(() => {
+    const waiter = awaitRunTerminal('bg', 'b1', 'finish').then(() => {
       resolved = true
     })
     await Promise.resolve()
@@ -95,7 +119,7 @@ describe('runPipeline concurrency entry + coordination', () => {
   })
 
   it('awaitRunTerminal no-ops when no run of the kind is in flight', async () => {
-    await expect(awaitRunTerminal('absent', 'cancel')).resolves.toBeUndefined()
+    await expect(awaitRunTerminal('absent', 'b1', 'cancel')).resolves.toBeUndefined()
   })
 
   it('start-after-yields aborts the yielding run before starting the incoming one', async () => {

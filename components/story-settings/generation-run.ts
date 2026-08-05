@@ -1,5 +1,5 @@
 import { SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
-import type { TxState } from '@/lib/stores'
+import { isBackgroundKind, type TxState } from '@/lib/stores'
 
 type StorySettingsGenerationPhase =
   | 'generating-narrative'
@@ -17,7 +17,9 @@ export function selectStorySettingsGenerationRunKind(
   txState: TxState,
   storyId: string | undefined,
 ): string | null {
-  const storyRuns = [...txState.runs.values()].filter((run) => run.storyId === storyId)
+  const storyRuns = [...txState.runs.values()].filter(
+    (run) => run.storyId === storyId && !isBackgroundKind(run.kind),
+  )
   const hardGateRun =
     storyRuns.find(
       (candidate) =>

@@ -211,6 +211,30 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
   ],
+  classifierContext: [
+    {
+      name: 'turns',
+      type: 'WindowTurn[]',
+      category: 'Story',
+      description:
+        'Unclassified prose window, each turn carrying the provenance handle (t1..tN) the model must tag its facts with.',
+      required: true,
+    },
+    {
+      name: 'entities',
+      type: 'Entity[]',
+      category: 'Entities',
+      description: 'Branch entities (id/kind/name/description/status) — the placeholder universe.',
+      required: true,
+    },
+    {
+      name: 'happenings',
+      type: '{ id, title }[]',
+      category: 'Plot',
+      description: 'Existing happenings, so the model can reference rather than duplicate them.',
+      required: false,
+    },
+  ],
   wizard: [
     {
       name: 'definition',
@@ -258,6 +282,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
 export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, ContextGroup> = {
   [TEMPLATE_IDS.perTurnNarrative]: 'generationContext',
   [TEMPLATE_IDS.piggybackFallbackClassifier]: 'generationContext',
+  [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
@@ -267,8 +292,9 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries'],
+  Story: ['entries', 'turns'],
   Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId'],
+  Plot: ['happenings'],
   Retrieval: [
     'retrievedEntities',
     'retrievedLore',

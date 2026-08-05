@@ -53,13 +53,39 @@ async function buildUndoOps(
     }
     if (delta.op === 'delete') {
       const full = (delta.undoPayload ?? {}) as Record<string, unknown>
-      working.set(key, { ...full })
-      ops.push(ctx.db.insert(table).values(full).toSQL())
+      const { children, cascadeKeys } = entry.restoreCascade
+        ? entry.restoreCascade(full)
+        : { children: [], cascadeKeys: [] }
+
+      const rowData = { ...full }
+      for (const key of cascadeKeys) {
+        delete rowData[key]
+      }
+
+      working.set(key, { ...rowData })
+      ops.push(ctx.db.insert(table).values(rowData).toSQL())
       patches.push({
         table: delta.targetTable,
         branchId: delta.branchId,
-        patch: { op: 'create', id: delta.targetId, row: full },
+        patch: { op: 'create', id: delta.targetId, row: rowData },
       })
+
+      for (const { table: childTableName, rows: childRows } of children) {
+        // drizzle's values() throws on an empty array, so an empty child set must
+        // never reach it — a domain declaring one is saying "nothing to restore".
+        if (childRows.length === 0) continue
+        const childEntry = resolveByTable(childTableName)
+        if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
+        const { table: childTable } = childEntry.descriptor
+        ops.push(ctx.db.insert(childTable).values(childRows).toSQL())
+        for (const childRow of childRows) {
+          patches.push({
+            table: childTableName,
+            branchId: delta.branchId,
+            patch: { op: 'create', id: childRow.id as string, row: childRow },
+          })
+        }
+      }
       continue
     }
 
@@ -104,15 +130,19 @@ async function buildUndoOps(
 // Rollback path: reverse a pre-selected delta set AND prune those delta rows
 // from the log in one transaction (gaps in log_position are expected). The
 // actionId-scoped reverseReplayDeltas deliberately does not prune; this does.
-export async function reverseAndPruneDeltaRows(rows: Delta[], ctx: DbCtx): Promise<number> {
-  if (rows.length === 0) return 0
+export async function reverseAndPruneDeltaRows(
+  rows: Delta[],
+  ctx: DbCtx,
+  extraOps: readonly SqlOp[] = [],
+): Promise<number> {
+  if (rows.length === 0 && extraOps.length === 0) return 0
   const actionId = rows[0]?.actionId ?? 'rollback'
   let patches: PatchEmission[]
   try {
     const built = await buildUndoOps(rows, ctx)
     patches = built.patches
     const pruneOps = rows.map((r) => ctx.db.delete(deltas).where(eq(deltas.id, r.id)).toSQL())
-    await ctx.runInTransaction([...built.ops, ...pruneOps])
+    await ctx.runInTransaction([...built.ops, ...pruneOps, ...extraOps])
   } catch (e) {
     if (e instanceof DeltaReplayError) throw e
     throw new DeltaReplayError('Reverse-and-prune failed', { cause: e, actionId })

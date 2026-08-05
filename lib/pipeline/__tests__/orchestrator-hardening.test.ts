@@ -2,12 +2,14 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { type PipelineAction } from '@/lib/actions'
-import { pipelineRuns, storyEntries } from '@/lib/db'
+import { deltas, entities, pipelineRuns, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
 import { definePipeline, runPipeline, type PhaseResult } from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
+
+const NOOP_ENTITY = 'char_00000000-0000-4000-8000-0000000000aa'
 
 const base = { affordance: 'invisible', gateBehavior: 'hard-gate', concurrencyPolicy: {} } as const
 
@@ -44,6 +46,23 @@ async function* updateMissing(): AsyncGenerator<
         id: 'ghost',
         metadata: { sceneEntities: [], currentLocationId: null, worldTime: 1 },
       },
+    },
+  }
+  return { status: 'completed' }
+}
+
+// Patches an entity's state with the values it already holds → the handler
+// rejects with code 'noop'.
+async function* redundantStatePatch(): AsyncGenerator<
+  { type: 'delta_emitted'; action: PipelineAction },
+  PhaseResult
+> {
+  yield {
+    type: 'delta_emitted',
+    action: {
+      kind: 'updateEntityVisualState',
+      source: 'per_turn_classifier',
+      payload: { branchId: 'b1', id: NOOP_ENTITY, visual: { attire: 'plate' } },
     },
   }
   return { status: 'completed' }
@@ -95,6 +114,33 @@ describe('orchestrator hardening', () => {
 
     expect(result.outcome).toBe('failed')
     expect(result.error?.kind).toBe('action-layer')
+  })
+
+  // A model restating current state is ordinary, and an unmarked rejection cost
+  // the user the entire turn: the run failed and the reversal sweep took the
+  // committed prose with it. The 'noop' code exists to say "well-formed, changed
+  // nothing"; before this it was written by handlers and read by nobody.
+  it('skips a noop-coded rejection instead of failing the run', async () => {
+    const { db, ctx } = await makeHarness()
+    await db.insert(entities).values({
+      id: NOOP_ENTITY,
+      branchId: 'b1',
+      kind: 'character',
+      name: 'Mara',
+      description: 'A knight.',
+      status: 'active',
+      injectionMode: 'auto',
+      state: { visual: { attire: 'plate' } },
+      createdAt: 1,
+      updatedAt: 1,
+    } as never)
+    definePipeline({ kind: 'noopy', phases: [{ name: 'p', run: redundantStatePatch }], ...base })
+
+    const result = expectRan(await runPipeline('noopy', ctx))
+
+    expect(result.outcome).toBe('completed')
+    // Nothing to undo, so nothing is logged.
+    expect((await db.select().from(deltas)).length).toBe(0)
   })
 
   it('a non-action throw from a phase body maps to an orchestrator error', async () => {

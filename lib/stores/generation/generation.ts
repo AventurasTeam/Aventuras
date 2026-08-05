@@ -1,6 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
+
 export type RunState = {
   runId: string
   kind: string
@@ -115,4 +117,48 @@ export const generationStore = {
   abortRun: api.abortRun,
   setReversalInProgress: api.setReversalInProgress,
   __reset: api.__reset,
+}
+
+// Denylist, not an allowlist: an unlisted kind reads as foreground, so a pipeline
+// added later shows the pill instead of running invisibly.
+const BACKGROUND_KINDS: readonly string[] = [PERIODIC_CLASSIFIER_KIND]
+
+/** Exported so a caller narrowing further (the pill splits foreground by phase)
+ * composes with the denylist instead of re-hardcoding it. */
+export function isBackgroundKind(kind: string): boolean {
+  return BACKGROUND_KINDS.includes(kind)
+}
+
+export function isForegroundGenerating(txState: TxState, branchId: string): boolean {
+  return [...txState.runs.values()].some(
+    (r) => r.branchId === branchId && !BACKGROUND_KINDS.includes(r.kind),
+  )
+}
+
+export function backgroundClassifierRunning(txState: TxState, branchId: string): boolean {
+  return [...txState.runs.values()].some(
+    (r) => r.branchId === branchId && r.kind === PERIODIC_CLASSIFIER_KIND,
+  )
+}
+
+// Generic wait on an in-flight run of `kind` on `branchId`; no-op when none is
+// running. 'cancel' aborts then awaits terminal, 'finish' awaits the natural
+// commit. Lives here so lib/actions can await a terminal without importing the
+// orchestrator.
+//
+// branchId is required, not optional: matching on kind alone would let a
+// reversal on one branch abort another branch's run and then sweep while that
+// run is still writing. Only one story is open at a time today, but the
+// classifier scheduler already keys its state per branch, so the two must agree.
+export function awaitRunTerminal(
+  kind: string,
+  branchId: string,
+  disposition: 'finish' | 'cancel',
+): Promise<void> {
+  const run = [...getTxState().runs.values()].find(
+    (r) => r.kind === kind && r.branchId === branchId,
+  )
+  if (!run) return Promise.resolve()
+  if (disposition === 'cancel') run.abortController.abort()
+  return run.terminal
 }

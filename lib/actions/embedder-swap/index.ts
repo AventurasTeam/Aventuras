@@ -22,6 +22,7 @@ export {
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,
+  resolveDrainConfig,
   resolveStorySwapConfig,
   RelabelBlockedError,
   resumeStorySwap,

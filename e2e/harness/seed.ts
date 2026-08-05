@@ -139,6 +139,82 @@ export function markSwapPending(dbPath: string, storyId: string, targetModelId: 
   }
 }
 
+// Force the classifier to fire on the next committed turn. Runs before launch.
+export function setClassifierCadence(dbPath: string, storyId: string, cadence: number): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT settings FROM stories WHERE id = ?`).get(storyId) as {
+      settings: string
+    }
+    const settings = JSON.parse(row.settings) as Record<string, unknown>
+    settings.classifierCadence = cadence
+    db.prepare(`UPDATE stories SET settings = ? WHERE id = ?`).run(
+      JSON.stringify(settings),
+      storyId,
+    )
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Append `count` filler turns and park the classifier watermark at `processedThrough`,
+ * so the branch carries a backlog deeper than the reader's entry window. Each filler
+ * body embeds its position, so a spec can tell which turns a pass actually read.
+ * Runs before launch.
+ */
+export function seedClassifierBacklog(
+  dbPath: string,
+  branchId: string,
+  count: number,
+  processedThrough: number,
+): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db
+      .prepare(`SELECT COALESCE(MAX(position), 0) AS p FROM story_entries WHERE branch_id = ?`)
+      .get(branchId) as { p: number }
+    const insert = db.prepare(
+      `INSERT INTO story_entries (id, branch_id, position, kind, content, chapter_id, metadata, created_at)
+       VALUES (?, ?, ?, 'ai_reply', ?, NULL, '{}', 1)`,
+    )
+    for (let i = 1; i <= count; i++) {
+      const position = row.p + i
+      insert.run(
+        `e2e_filler_${position}`,
+        branchId,
+        position,
+        `FILLER-${position} nothing happens.`,
+      )
+    }
+    db.prepare(
+      `UPDATE branches SET classifier_status = json_set(
+         COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
+         '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
+       WHERE id = ?`,
+    ).run(processedThrough, branchId)
+  } finally {
+    db.close()
+  }
+}
+
+/** Strip the `classifier` agent assignment so the pass fails pre-flight. Runs before launch. */
+export function unassignClassifierAgent(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db.prepare(`SELECT assignments FROM app_settings WHERE id = 'singleton'`).get() as {
+      assignments: string
+    }
+    const assignments = JSON.parse(row.assignments) as Record<string, unknown>
+    delete assignments.classifier
+    db.prepare(`UPDATE app_settings SET assignments = ? WHERE id = 'singleton'`).run(
+      JSON.stringify(assignments),
+    )
+  } finally {
+    db.close()
+  }
+}
+
 // Clear taggedBlockReliable on every cached model so piggyback can't ride
 // in-band — forcing the per-turn fallback classifier (a separate structured
 // call) to fire. Runs before launch.

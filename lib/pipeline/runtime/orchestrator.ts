@@ -110,17 +110,6 @@ async function beginRun(run: RunState, ctx: RunCtx): Promise<void> {
   })
 }
 
-// Generic wait on an in-flight run of `kind`, optionally aborting it first.
-// No-op when none is running. 'cancel' fires abort then awaits terminal (the
-// doomed call winds down); 'finish' awaits the natural commit. The waiter need
-// not have started the run — it awaits the run's own terminal deferred.
-export function awaitRunTerminal(kind: string, disposition: 'finish' | 'cancel'): Promise<void> {
-  const run = [...generationStore.getTxState().runs.values()].find((r) => r.kind === kind)
-  if (!run) return Promise.resolve()
-  if (disposition === 'cancel') run.abortController.abort()
-  return run.terminal
-}
-
 async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx): Promise<void> {
   if (event.type === 'delta_emitted') {
     let result: MutationResult
@@ -139,7 +128,23 @@ async function handleEvent(event: PhaseEmittedEvent, run: RunState, ctx: RunCtx)
       // failure, not an orchestrator bug — preserve the kind for diagnostics.
       throw new ActionLayerError(e instanceof Error ? e.message : String(e))
     }
-    if (result.status === 'rejected') throw new ActionRejectedError(result.reason)
+    if (result.status === 'rejected') {
+      // A handler marks a rejection 'noop' when the action was well-formed and
+      // simply changed nothing — a state patch restating current values, or a
+      // promotion the other writer already landed. Both are ordinary with a real
+      // model, and failing the run would reverse the user's whole turn over a
+      // write that was never needed. Skipped, not logged as an error, and no
+      // delta is written: there is nothing to undo.
+      if (result.code === 'noop') {
+        logger.debug(
+          'pipeline.action_noop',
+          { kind: event.action.kind, reason: result.reason },
+          { actionId: run.actionId },
+        )
+        return
+      }
+      throw new ActionRejectedError(result.reason)
+    }
     if (event.action.kind === 'createStoryEntry' && event.entryId) {
       turnCaptureSink.recordTargetEntry(run.actionId, event.entryId)
     }
