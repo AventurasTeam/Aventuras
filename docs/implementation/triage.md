@@ -1397,3 +1397,40 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   measurements above already contradict. Fix with the same pass that
   re-derives the cost budget. Surfaced by the M3.4 whole-slice review
   (2026-08-03).
+- **`KNN_K` borrows canon's post-score pre-filter bound to gate
+  pre-score candidate membership, which puts the chapter-match boost
+  out of reach of the rows it exists to rescue.** _Blocks the M3.4 PR
+  merge — revisit before integration, not on the ordinary triage pass._
+  Two independent 200s are in play and only one is canon.
+  `preFilterTopN: 200` (`lib/retrieval/constants.ts:19`) is specified by
+  [`retrieval.md → Diversity — MMR`](../memory/retrieval.md#diversity--mmr)
+  and applies to the **boosted** score after `score` has run; canon
+  justifies it as "candidates ranking ~200th by raw score are unlikely
+  to make it into the budget anyway." `KNN_K = 200`
+  (`lib/retrieval/constants.ts:24`) appears nowhere in canon — it is an
+  implementation choice whose own comment reads "matches the pre-filter
+  bound." The two cuts act on different signals at different stages, so
+  that justification does not transfer: at KNN time
+  (`lib/retrieval/run.ts:315`) none of recency, `kwBoost`, `pinSignal`
+  or the 1.3× chapter boost exists yet. The consequence is that the
+  boost can reorder the candidate set but cannot change its membership —
+  a happening outside the KNN cut for all three query vectors is never
+  scored, so a row the boost would have carried well into the seated set
+  never gets the chance. Chapter membership never reaches pool
+  construction at all: `chapterRanges` is loaded at
+  `lib/retrieval/run.ts:226` and read only by `boostedEntryIdsFor`
+  (`lib/retrieval/ranker.ts:128`). That inverts the mechanism's purpose —
+  [`retrieval.md → Chapter-match boost on happenings`](../memory/retrieval.md#chapter-match-boost-on-happenings)
+  introduces it because pure-similarity happening retrieval comes out
+  "scattered," yet the set it operates on is gated purely by similarity.
+  Magnitude is unmeasured: the per-type union is at most 3 × 200 ids,
+  but all three query vectors describe the same turn, so heavy overlap
+  is expected and the effective pool is likely nearer 200-350 — against
+  the 3-6k happenings
+  [`retrieval.md → Scale assumptions`](../memory/retrieval.md#scale-assumptions)
+  contemplates at 60 chapters. Two directions worth weighing: size the
+  KNN depth against recall independently of `preFilterTopN`, or let
+  chapter membership feed pool construction via a bounded fetch by
+  range (ids are known, so it is a lookup rather than a second vector
+  search). Surfaced by a post-merge design question from the user
+  (2026-08-05).
