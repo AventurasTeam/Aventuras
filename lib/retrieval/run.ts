@@ -161,6 +161,23 @@ export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
 ): Promise<RetrievalOutcome> {
+  try {
+    return await runRetrievalPass(deps, params)
+  } catch (error) {
+    // cosine's dim and unit-norm guards, unpackFloat32's blob-length check and
+    // the KNN-hit vector invariant all mean the same thing: this branch's stored
+    // vectors do not match the model this pass reads. That is an embedder
+    // problem, so it takes the embedder surface — Switch embedder — rather than
+    // escaping as a generic orchestrator error whose only offer is a Retry that
+    // fails identically every time.
+    return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
+  }
+}
+
+async function runRetrievalPass(
+  deps: RetrievalDeps,
+  params: RetrievalParams,
+): Promise<RetrievalOutcome> {
   const startedAt = performance.now()
 
   // No KNN without a preceding sync (retrieval.md → Compute lifecycle), and

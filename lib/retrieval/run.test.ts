@@ -354,6 +354,27 @@ describe('runRetrieval — query embed failure', () => {
     // Positive control: the same pass succeeds at the matching dim.
     expect(expectOk(await runRetrieval(deps(), params())).ok).toBe(true)
   })
+
+  // A stored vector that is not unit-norm means this branch's vectors do not
+  // match the model the pass reads, which is an embedder problem: escaping as a
+  // raw throw would bucket it as an orchestrator error, whose only affordance is
+  // a Retry that fails identically instead of Switch embedder.
+  it('reports a corrupt stored vector on the embedder surface, not as a throw', async () => {
+    const notUnit = new Uint8Array(Float32Array.from([2, 2]).buffer)
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({
+          entities: [entityRow('char_b', 'Mira')],
+          knn: [hit('char_b', 0, notUnit)],
+        }),
+      }),
+      params(),
+    )
+
+    const failure = expectFailure(out)
+    expect(failure.reason).toBe('init')
+    expect(failure.detail).toMatch(/unit-norm/)
+  })
 })
 
 describe('runRetrieval — KNN passes', () => {

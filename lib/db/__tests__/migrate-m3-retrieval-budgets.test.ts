@@ -73,6 +73,31 @@ describe(TAG, () => {
     expect(settingsOf(db, 's1')?.retrievalBudgets).toEqual(STORY_SETTINGS_DEFAULTS.retrievalBudgets)
   })
 
+  // json_set raises on non-JSON text, which aborts the whole UPDATE: without the
+  // guard one unparseable blob leaves every other story unmigrated and the app
+  // unable to boot past migrate(), rather than badging that one story.
+  it.each([
+    ['unparseable text', '{not json'],
+    ['an empty string', ''],
+    ['a top-level array', '[1,2]'],
+    ['a top-level scalar', '42'],
+  ])('migrates good rows beside %s', (_label, raw) => {
+    insertStory(db, 's_good', LEGACY_SETTINGS)
+    db.prepare(
+      'insert into stories (id, title, settings, created_at, updated_at) values (?,?,?,?,?)',
+    ).run('s_bad', 's_bad', raw, 1, 1)
+
+    expect(() => applyMigration(db, TAG)).not.toThrow()
+
+    expect(settingsOf(db, 's_good')?.retrievalBudgets).toEqual(
+      STORY_SETTINGS_DEFAULTS.retrievalBudgets,
+    )
+    const bad = db.prepare('select settings from stories where id = ?').get('s_bad') as {
+      settings: string
+    }
+    expect(bad.settings).toBe(raw)
+  })
+
   it('leaves every sibling settings key untouched', () => {
     insertStory(db, 's1', LEGACY_SETTINGS)
 

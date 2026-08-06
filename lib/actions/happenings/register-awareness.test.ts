@@ -322,6 +322,20 @@ describe('bumpAwarenessRetrieval', () => {
     expect(happeningAwarenessStore.getById('haw_1')?.retrievalCount).toBe(5)
   })
 
+  // The periodic classifier and a turn do not block each other, so a classifier
+  // run that aborts after retrieval snapshotted its awareness rows reverse-
+  // replays them away mid-turn. Rejecting without 'noop' throws ActionRejectedError
+  // out of the orchestrator and reverses the user's whole turn over a counter.
+  it('treats a vanished bump target as a noop rather than failing the turn', async () => {
+    const { ctx } = await setup([awarenessRow('haw_1', 4)])
+
+    const result = await applyDeltaAction(bump('haw_gone'), ctx)
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'noop' })
+    // Nothing logged, so there is nothing for reverse-replay to undo.
+    expect(await deltaRows(ctx)).toEqual([])
+  })
+
   // Second arm so neither the read nor the increment can be a constant that
   // happens to fit the case above.
   it('starts a never-retrieved row at one', async () => {

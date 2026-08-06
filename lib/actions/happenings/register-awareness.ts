@@ -153,8 +153,17 @@ const bumpRetrievalHandler: ActionHandler = async (action, branchId, ctx) => {
     .select()
     .from(happeningAwareness)
     .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
+  // 'noop', not a plain rejection: the periodic classifier and a turn do not
+  // block each other, so a classifier run that aborts after retrieval snapshotted
+  // its awareness rows reverse-replays them away mid-turn. Failing here would
+  // reverse the user's whole turn over a counter that feeds chapter-close
+  // ranking, for a row that no longer exists to be counted.
   if (!current)
-    return { status: 'rejected', reason: `bump target awareness ${bid}:${id} not found` }
+    return {
+      status: 'rejected',
+      code: 'noop',
+      reason: `bump target awareness ${bid}:${id} not found`,
+    }
 
   const next = current.retrievalCount + 1
   return {

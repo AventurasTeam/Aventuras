@@ -29,4 +29,25 @@ describe('cosine', () => {
   it('throws on dimension mismatch instead of silently comparing a prefix', () => {
     expect(() => cosine(unit(1, 0), Float32Array.from([1]))).toThrow(RangeError)
   })
+
+  // The dot product of a non-unit vector exceeds 1, and the clamp turns that
+  // into a plausible PERFECT match rather than an obviously wrong number — so
+  // one such row top-ranks against every query, on every type, every turn.
+  it('throws on a non-unit vector rather than clamping it to a perfect score', () => {
+    const rogue = Float32Array.from([2, 2])
+    expect(() => cosine(rogue, unit(1, 0))).toThrow(RangeError)
+    expect(() => cosine(unit(1, 0), rogue)).toThrow(RangeError)
+  })
+
+  // NaN fails every comparison, so MMR's Math.max propagates it to every
+  // remaining candidate and the whole type drops out as below-threshold.
+  it.each([NaN, Infinity])('throws on a %p component instead of poisoning MMR', (bad) => {
+    expect(() => cosine(Float32Array.from([bad, 0]), unit(1, 0))).toThrow(RangeError)
+  })
+
+  it('accepts ordinary float32 drift around unit norm', () => {
+    // What a real vector looks like after a vec0 round trip.
+    const drifted = Float32Array.from(unit(0.37, 0.93), (x) => x * 1.00002)
+    expect(() => cosine(drifted, unit(1, 0))).not.toThrow()
+  })
 })

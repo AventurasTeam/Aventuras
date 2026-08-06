@@ -30,10 +30,11 @@ export type KnnParams = {
  * `embedding` rides along because vec0 returns it on the match row for almost
  * nothing, whereas fetching vectors by id afterwards cannot: `id` is a metadata
  * column with no push-down, so such a query scans the whole partition instead.
- * `distance` is logged, not scored: the ranker computes cosine over the
- * returned vectors. That top-k is cosine's top-k only because every stored and
- * query vector is unit-norm — enforced by lib/embedder's embedTexts, not by
- * vec0 — which is what makes L2 order and cosine order the same order.
+ * Nothing reads `distance`: the ranker computes cosine over the returned vectors
+ * instead, and vec0 will not return the match row without it. That top-k is
+ * cosine's top-k only because every stored and query vector is unit-norm —
+ * enforced by lib/embedder's embedTexts and re-checked in lib/retrieval's
+ * cosine, not by vec0 — which makes L2 order and cosine order the same order.
  */
 export function knnQuery(kind: VecTargetKind, dim: number, p: KnnParams): RowQuery {
   // vec0 treats k = 0 as valid and returns nothing, so a misconfigured budget
