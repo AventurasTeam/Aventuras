@@ -234,6 +234,19 @@ for the placement rule.
     redesign stalls.
   - **Brevity** is character-counted (`BREVITY_MAX_CHARS = 90`), so in
     CJK it fires on nearly every sentence and stops discriminating.
+  - **CJK is never split into sentences at all**, which sits upstream
+    of every signal above. `splitSentences` terminates on `[.!?…]`
+    followed by whitespace; CJK uses ideographic terminators and no
+    inter-sentence space, so a whole entry collapses to one
+    "sentence". Q3 then embeds the full 400-1000 token entry — the
+    cost the extract exists to avoid — and `scores` degenerates to a
+    single meaningless number, emptying the probe's per-sentence
+    capture. Verified against the shipped splitter (2026-08-06):
+    a three-sentence Japanese passage returns one element.
+    [`name-index.ts`](../lib/retrieval/name-index.ts) documents CJK as
+    out of scope for word-boundary matching; nothing documents it for
+    splitting, so this reads as an oversight rather than a deferral.
+    Whatever replaces the scorer has to own this first.
 
   Failure is silent throughout: when every sentence scores 0,
   `extractProse` still returns top-K by source-order tie-break, so Q3

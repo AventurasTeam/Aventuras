@@ -398,7 +398,26 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `recentEntries` would fix it but changes what already-merged piggyback
   behavior sends the model, so it needs an owner and a token-cost
   measurement before anyone touches it. Surfaced by M3.7a Task 1
-  (2026-07-25).
+  (2026-07-25). **M3.4 added two more consumers of the same raw
+  column, both in retrieval.** (1) Q3's prose extract runs over
+  `lastNarrative.content`, and the tail survives sentence splitting as
+  a single pseudo-sentence — `splitSentences` needs terminator plus
+  whitespace, which `</summary>` and `</state>` never provide — that
+  scores above real narrative (measured 5 against 0–3 on the shipped
+  scorer, since the `<summary>` line names entities and the XML
+  attribute quotes register as dialogue). One of Q3's four slots is
+  spent on tags, opaque ids, and suggested actions the story did not
+  take, which is what
+  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)
+  exists to avoid. (2) Layer-A same-name suppression scans
+  `composePromptBuffer(...).content`, so a reader clicking a
+  suggestion that names a staged entity suppresses that entity from
+  the pool on the very turn it is introduced — the "who is this
+  person" failure the structural floor exists to prevent, arriving
+  through the mechanism meant to prevent collisions. Stripping at the
+  caller fixes all three consumers at once; the retrieval module
+  cannot do it itself, since it has no way to know which tags a pack
+  emits. Surfaced by the M3.4 review (2026-08-06).
 - **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
   builds, so a story-level model override can't satisfy pre-flight even
   though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
@@ -1451,3 +1470,17 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
   Sits with the three token-progress-strip entries above, which the same
   change would resolve. Surfaced by review discussion (2026-08-06).
+- **A local embed cannot be cancelled, so Cancel during
+  `recalling-memory` works on provider backends only.** M3.4 made the
+  blocking embed interruptible by threading a bounded signal from the
+  retrieval phase down to `embedMany`, which closes the case where a
+  provider accepts the connection and stalls. `embedLocal`
+  (`lib/embedder/local/runtime.ts`) is one IPC call into the Electron
+  main process with no cancellation channel, so the signal cannot
+  reach it: a local pass runs to completion and the timeout fires only
+  after it returns. Closing the gap needs a cancellation channel in
+  `electron/` main plus preload plus the bridge, which is why M3.4
+  scoped it out rather than shipping a Cancel that silently no-ops on
+  one backend. Compounding it, the local backend does not chunk, so
+  the whole dirty set is a single call. Surfaced by the M3.4 review
+  (2026-08-06).
