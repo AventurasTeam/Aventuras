@@ -79,10 +79,28 @@ consumer concern, surfaced via `onErrorTap`.
 ## Priority resolution
 
 ```
-if (activePhase != null)  → render active variant
-else if (error != null)   → render error variant
-else                      → return null   (idle-hide)
+if (activePhase is blocking)          → render active variant
+else if (error != null)               → render error variant
+else if (activePhase != null)         → render active variant  (background phase)
+else                                  → return null            (idle-hide)
 ```
+
+A **blocking** phase is one the user is waiting on, and it also owns the
+cancel affordance — replacing it with a warning would take away the only
+way to stop a running generation, so it keeps the slot unconditionally.
+A **non-blocking** phase (see [below](#non-blocking-phases)) yields to
+any error: nothing is lost by waiting for background work, and the error
+may be the thing waiting on the user. `swap-paused` is the case that
+forces this — its remedy is a decision, not waiting, so a periodic
+classifier pass blanking it on a cadence is the failure mode this rule
+exists to prevent.
+
+Deliberately a blocking/non-blocking split rather than a rank on
+`ErrorState`. The two resolve identically in every combination except
+one — a self-clearing error (`memory-incomplete`, `embedder-offline`)
+during a background phase — and that cell is arguably miscast anyway:
+"N rows pending" is a drain reporting progress, not a fault. Revisit as
+an error-severity axis only if that cell reads wrong in practice.
 
 Returning `null` when both inputs are absent matches
 [`principles.md → Universal in-story chrome`](../principles.md#universal-in-story-chrome)'s
@@ -144,15 +162,22 @@ Esc / outside-tap closes the popover without firing `onCancel`.
 
 ### Non-blocking phases
 
-`updating-memory` — the periodic classifier's background pass — drops
-the accent fill for `tone="default"` (the header's own `bg-base` plus a
-border) and a `--fg-muted` spinner. Every other phase holds the turn up;
-this one doesn't, and the user can keep writing through it. Copy alone
-can't carry that, because the phone variant is icon-only.
+`updating-memory` — the periodic classifier's background pass — is the
+only phase that doesn't hold the turn up. It drops the accent fill for
+`tone="default"` (the header's own `bg-base` plus a border) and a
+`--fg-muted` spinner, and it yields the slot to any error per
+[Priority resolution](#priority-resolution). Copy alone can't carry the
+distinction, because the phone variant is icon-only.
 
 It is deliberately a separate phase from `classifying`, which is the
 per-turn piggyback fallback: same work, opposite answer to "can I keep
 writing?".
+
+Blocking is tracked per phase rather than inferred from a phase having
+no cancel label. The two coincide today only because the one background
+phase is also the one nothing can cancel; a blocking phase that is
+uncancellable for its own reasons (a committing transaction, say) would
+otherwise inherit the wrong priority.
 
 Pill dimensions stay stable — the popover is an overlay, never an
 inline expansion. The active label renders regardless of popover

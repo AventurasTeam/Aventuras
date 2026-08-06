@@ -18,20 +18,24 @@ type GenerationPhase =
   | 'closing-chapter'
   | 'refreshing-suggestions'
 
-// `updating-memory` is the one phase that doesn't hold the turn up, so it drops
-// the accent fill for the header's own background — the pill still says work is
-// happening without reading as "wait for this".
+// `blocking` is whether the phase holds the turn up, and it drives both columns
+// beside it and the priority rule below. A blocking phase also owns the cancel
+// affordance, so it keeps the slot even against an error; a background one drops
+// the accent fill and yields, since nothing is lost by waiting for it and the
+// error may be waiting on the user. Tracked separately from a null `cancelCopy`,
+// which the two coincide with today only because the one background phase is
+// also the one nothing can cancel.
 const PHASE_APPEARANCE: Record<
   GenerationPhase,
-  { tone: TagTone; spinnerSlot: keyof ThemeColorSlots }
+  { blocking: boolean; tone: TagTone; spinnerSlot: keyof ThemeColorSlots }
 > = {
-  reasoning: { tone: 'accent', spinnerSlot: '--accent-fg' },
-  'recalling-memory': { tone: 'accent', spinnerSlot: '--accent-fg' },
-  'generating-narrative': { tone: 'accent', spinnerSlot: '--accent-fg' },
-  classifying: { tone: 'accent', spinnerSlot: '--accent-fg' },
-  'updating-memory': { tone: 'default', spinnerSlot: '--fg-muted' },
-  'closing-chapter': { tone: 'accent', spinnerSlot: '--accent-fg' },
-  'refreshing-suggestions': { tone: 'accent', spinnerSlot: '--accent-fg' },
+  reasoning: { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
+  'recalling-memory': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
+  'generating-narrative': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
+  classifying: { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
+  'updating-memory': { blocking: false, tone: 'default', spinnerSlot: '--fg-muted' },
+  'closing-chapter': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
+  'refreshing-suggestions': { blocking: true, tone: 'accent', spinnerSlot: '--accent-fg' },
 }
 
 // `memory-incomplete` names the observable state, not a cause: the pill fires
@@ -116,8 +120,8 @@ export function GenerationStatusPill({
   const tier = useTier()
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
 
-  // Priority: active generation > error state > hidden.
-  if (activePhase != null) {
+  // Priority: blocking phase > error state > background phase > hidden.
+  if (activePhase != null && (PHASE_APPEARANCE[activePhase].blocking || error == null)) {
     const isPhone = tier === 'phone'
     const appearance = PHASE_APPEARANCE[activePhase]
     const tag = (

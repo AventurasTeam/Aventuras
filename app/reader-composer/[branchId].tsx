@@ -211,9 +211,6 @@ export default function ReaderComposerRoute() {
   const swapPaused =
     storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
 
-  // A suggestion refresh occupies the pill exactly like a turn does, and the
-  // pill prioritizes activePhase over error — so the two branches must be
-  // derived from one value, or a refresh would leave the warning tone visible.
   const activePhase = readerPillPhase({ turnPhase, refreshingSuggestions, classifierRunning })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
@@ -751,13 +748,11 @@ export default function ReaderComposerRoute() {
         <GenerationStatusPill
           activePhase={activePhase}
           error={
-            activePhase != null
-              ? undefined
-              : swapPaused
-                ? { code: 'swap-paused' }
-                : staleTotal > 0
-                  ? { code: 'memory-incomplete', pendingRows: staleTotal }
-                  : undefined
+            swapPaused
+              ? { code: 'swap-paused' }
+              : staleTotal > 0
+                ? { code: 'memory-incomplete', pendingRows: staleTotal }
+                : undefined
           }
           // A background classifier pass has no cancel affordance, so the prop is
           // absent rather than a no-op handler that would still open the popover.
