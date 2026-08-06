@@ -1,7 +1,12 @@
+import type { StoryEntry } from '@/lib/db'
+
 export type BufferEntry = {
   id: string
   position: number
-  kind: string
+  // Derived, not a bare string: the filter below turns on the 'system' literal,
+  // and a rename in the table would otherwise leak technical rows into both the
+  // prompt buffer and Layer-A's same-name haystack with nothing failing.
+  kind: StoryEntry['kind']
   chapterId: string | null
   content: string
 }

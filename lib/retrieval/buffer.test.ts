@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import { composePromptBuffer } from './buffer'
+import { composePromptBuffer, type BufferEntry } from './buffer'
 
-type E = { id: string; position: number; kind: string; chapterId: string | null; content: string }
+type E = BufferEntry
 
-const entry = (n: number, chapterId: string | null = null, kind = 'ai_reply'): E => ({
+const entry = (
+  n: number,
+  chapterId: string | null = null,
+  kind: BufferEntry['kind'] = 'ai_reply',
+): E => ({
   id: `e${n}`,
   position: n,
   kind,

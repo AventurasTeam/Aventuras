@@ -1,11 +1,11 @@
-import type { EntityKind, InjectionMode } from '@/lib/db'
+import type { Entity, EntityKind, InjectionMode, Thread } from '@/lib/db'
 
 import { matchTerms, normalizeTerm } from './name-index'
 
 export type EntityRow = {
   id: string
   kind: EntityKind
-  status: 'staged' | 'active' | 'retired'
+  status: Entity['status']
   injectionMode: InjectionMode
   name: string
   description: string | null
@@ -21,7 +21,7 @@ export type LoreRow = {
 
 export type ThreadRow = {
   id: string
-  status: 'pending' | 'active' | 'resolved' | 'failed'
+  status: Thread['status']
   injectionMode: InjectionMode
   title: string
   description: string | null
