@@ -50,7 +50,6 @@ export type Candidate = {
 
 export type DropReason =
   | 'pre_filtered'
-  | 'mmr_dedupe'
   | 'below_threshold'
   | 'over_budget'
   | 'candidate_too_large'
@@ -86,7 +85,6 @@ export type CandidateTrace = {
 export type PoolFunnel = {
   poolSize: number
   preFilteredSize: number
-  mmrSize: number
   selectedCount: number
   tokensUsed: number
   typeBudget: number

@@ -895,23 +895,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   dots is ~500 ms per type on mobile, which would dominate the turn.
   Nobody has run MMR on-device. Surfaced by M3.4 Task 5 review
   (2026-08-01).
-- **`mmr_dedupe` is a `DropReason` with no producer.**
-  [`retrieval.md → Diversity — MMR`](../memory/retrieval.md#diversity--mmr)
-  describes MMR as a pure **reordering** — "iteratively pick the
-  candidate with highest `mmr_score`, add to `S`, recompute, pick
-  next" — and the budget-fill pseudocode then iterates all of
-  `mmr_ranked`. Nothing drops a row at the MMR stage: a diversity
-  loser is demoted and subsequently dies at `below_threshold` or
-  `over_budget`. So the enum value declared in `lib/retrieval/types.ts`,
-  mirrored in `lib/db/world-json-types.ts`, and specified in
-  [`probe.md → What gets captured`](../memory/probe.md#what-gets-captured--light-mode-default)
-  is unreachable, and `PoolFunnel.mmrSize` is always identical to
-  `preFilteredSize`. M3.4's ranker is correct as written; the question
-  is what M3.5's probe UI should do with a drop-reason filter or legend
-  entry that never appears. Either delete the value from all three
-  places, or mark it explicitly reserved. Needs deciding before 3.5
-  builds the capture reader. Surfaced by M3.4 Task 6 review
-  (2026-08-01).
 - **Lore `priority` is inert in the shipped ranker, and a user-facing
   control promises otherwise.** Two canon statements conflict.
   [`retrieval.md → Per-type decay rates`](../memory/retrieval.md#per-type-decay-rates)
@@ -948,9 +931,8 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   tokenized at all. Capping eager tokenization at the kept ≤200/type
   would cut the worst case from ~3000 rows to ~1000 (~181 ms → ~60 ms).
   It requires making `tokensEstimated` nullable for pre-filtered rows,
-  which is a C4 trace-shape change and therefore wants the same
-  decision pass as the `mmr_dedupe` item. Surfaced by M3.4 Task 6
-  review (2026-08-01).
+  which is a C4 trace-shape change and therefore wants a deliberate
+  C4 decision pass. Surfaced by M3.4 Task 6 review (2026-08-01).
 - **The high-similarity bypass is mathematically inert under the
   default parameter set — it can never change which rows get
   injected.** [`retrieval.md → High-similarity bypass`](../memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)
@@ -1005,7 +987,7 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   without also knowing the age and the pin, so a λ slider is not
   actually simulatable as specified. Either add `chapters_old` to the
   capture shape (a C4 trace-contract change, same decision pass as the
-  `mmr_dedupe` and eager-tokenization items above) or drop λ from the
+  eager-tokenization item above) or drop λ from the
   simulatable list. M3.4 is not at fault — it emits exactly the fields
   C4 pins. Surfaced by M3.4 Task 6 review (2026-08-01).
 - **Q3's dialogue signal mis-pairs across unbalanced quotes.**

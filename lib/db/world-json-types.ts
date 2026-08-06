@@ -10,7 +10,6 @@ export type ClassifierStatus = {
 
 type DropReason =
   | 'pre_filtered'
-  | 'mmr_dedupe'
   | 'below_threshold'
   | 'over_budget'
   | 'candidate_too_large'
@@ -42,7 +41,6 @@ type CaptureCandidate = {
 type PoolFunnelSummary = {
   pool_size: number
   pre_filtered_size: number
-  mmr_size: number
   selected_count: number
   tokens_used: number
   type_budget: number

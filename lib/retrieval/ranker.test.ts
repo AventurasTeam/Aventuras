@@ -250,7 +250,7 @@ describe('rankPerType — MMR and budget fill', () => {
     ]
     const r = rankPerType(pool, 'happenings', HAPPENING_COST * 2 - 1, base)
     expect(r.funnel.selectedCount).toBe(1)
-    expect(r.funnel.mmrSize).toBe(2)
+    expect(r.funnel.preFilteredSize).toBe(2)
   })
 
   it('pre-filters to the top N and traces the excess with a null mmrRank', () => {

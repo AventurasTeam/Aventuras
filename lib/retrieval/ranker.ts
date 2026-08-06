@@ -184,7 +184,6 @@ export function rankPerType(
     funnel: {
       poolSize: pool.length,
       preFilteredSize: kept.length,
-      mmrSize: ranked.length,
       selectedCount: selected.length,
       tokensUsed: budget - remaining,
       typeBudget: budget,

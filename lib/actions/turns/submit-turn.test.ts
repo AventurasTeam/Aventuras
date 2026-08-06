@@ -36,7 +36,6 @@ const EMPTY_BUNDLE: RankedType = {
   funnel: {
     poolSize: 0,
     preFilteredSize: 0,
-    mmrSize: 0,
     selectedCount: 0,
     tokensUsed: 0,
     typeBudget: 0,

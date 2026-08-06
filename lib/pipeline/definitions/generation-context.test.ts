@@ -82,7 +82,6 @@ function ranked(selected: readonly Candidate[]) {
     funnel: {
       poolSize: selected.length,
       preFilteredSize: selected.length,
-      mmrSize: selected.length,
       selectedCount: selected.length,
       tokensUsed: 0,
       typeBudget: 0,
