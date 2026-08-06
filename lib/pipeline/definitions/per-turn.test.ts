@@ -761,10 +761,7 @@ function entityCandidate(id: string, displayName: string, renderedText: string):
     vector: new Float32Array([1, 0, 0]),
     chaptersOld: 0,
     pinSignal: 0,
-    commonKnowledge: false,
     keywordHits: [],
-    occurredAtEntryId: null,
-    awarenessIds: [],
     embeddingStale: false,
   }
 }

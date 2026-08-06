@@ -23,11 +23,11 @@ export type RetrievalType = (typeof TYPE_OF_KIND)[CandidateKind]
 export type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
 
 /**
- * One row that reached a type's ranker pool. Every field the ranker reads is
- * here — it never queries for more, which is what makes it replayable.
+ * What every candidate carries regardless of kind. Every field the ranker reads
+ * is here or on the variant — it never queries for more, which is what makes it
+ * replayable.
  */
-export type Candidate = {
-  kind: CandidateKind
+type CandidateBase = {
   id: string
   /** Display name/title, denormalized for the probe's capture snapshot. */
   displayName: string
@@ -41,17 +41,30 @@ export type Candidate = {
   chaptersOld: number
   /** decay_resistance for awareness, priority/100 for lore, 0 for the rest. */
   pinSignal: number
-  /** Happenings with common_knowledge = 1 skip recency and pin entirely. */
-  commonKnowledge: boolean
   /** Keyword-index terms this row matched; empty means no boost. */
   keywordHits: readonly string[]
-  /** Happenings only — the entry the happening occurred at, for the chapter boost. */
-  occurredAtEntryId: string | null
-  /** Awareness rows that put this happening in the pool; retrieval_count targets. */
-  awarenessIds: readonly string[]
   /** Flag at pool-build time. Stale rows never enter a pool, so this is false today. */
   embeddingStale: boolean
 }
+
+/** The three awareness-derived fields exist on no other kind. */
+export type HappeningCandidate = CandidateBase & {
+  kind: 'happening'
+  /** common_knowledge = 1 skips recency and pin entirely. */
+  commonKnowledge: boolean
+  /** The entry the happening occurred at, for the chapter boost. */
+  occurredAtEntryId: string | null
+  /** Awareness rows that put this happening in the pool; retrieval_count targets. */
+  awarenessIds: readonly string[]
+}
+
+export type SimpleCandidate = CandidateBase & { kind: Exclude<CandidateKind, 'happening'> }
+
+/** One row that reached a type's ranker pool. */
+export type Candidate = HappeningCandidate | SimpleCandidate
+
+export const isHappeningCandidate = (c: Candidate): c is HappeningCandidate =>
+  c.kind === 'happening'
 
 export type { DropReason }
 

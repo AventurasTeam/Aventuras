@@ -36,6 +36,7 @@ import {
 import { classifyEmbedderFailure, runSyncStage, type SyncStageDeps } from './sync'
 import { countTokens } from './tokens'
 import {
+  isHappeningCandidate,
   TYPE_OF_KIND,
   type Candidate,
   type QueryAll,
@@ -266,7 +267,9 @@ export async function runRetrieval(
     bundles,
     queries,
     staleCounts: staleCountsOf(sourceRows),
-    injectedAwarenessIds: bundles.happenings.selected.flatMap((c) => [...c.awarenessIds]),
+    injectedAwarenessIds: bundles.happenings.selected
+      .filter(isHappeningCandidate)
+      .flatMap((c) => [...c.awarenessIds]),
     selectedLocationIds: bundles.entities.selected
       .filter((c) => placeIds.has(c.id))
       .map((c) => c.id),
@@ -429,9 +432,6 @@ function assembleCandidates(
     // Mapping a row to a chapter distance needs the chapter-close pipeline (M5);
     // until then every row reads as current and recency_factor is 1.
     chaptersOld: 0,
-    occurredAtEntryId: null as string | null,
-    awarenessIds: [] as readonly string[],
-    commonKnowledge: false,
   })
 
   switch (ctx.kind) {

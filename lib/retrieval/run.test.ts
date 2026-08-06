@@ -10,7 +10,7 @@ import {
   type RetrievalParams,
   type RetrievalSuccess,
 } from './run'
-import type { QueryAll } from './types'
+import { isHappeningCandidate, type QueryAll } from './types'
 
 const DIM = 2
 
@@ -751,20 +751,25 @@ describe('runRetrieval — pools', () => {
     expect(ok.bundles.threads.selected.map((c) => c.renderedText)).toEqual(['The debt (pending)'])
   })
 
-  it('gives every candidate in a pool its own awarenessIds array', async () => {
+  // Non-happening kinds no longer carry the field at all, so the aliasing this
+  // once guarded is unrepresentable there; happenings still build one array per
+  // candidate, and a shared instance would make every bump target every row.
+  it('gives every happening candidate its own awarenessIds array', async () => {
     const out = await runRetrieval(
       deps({
         queryAll: makeQueryAll({
-          lore: [loreRow('lore_a', 'Veilstone'), loreRow('lore_b', 'Driftmark')],
-          knn: [hit('lore_a'), hit('lore_b')],
+          happenings: [happeningRow('hap_1', 'The bell rang'), happeningRow('hap_2', 'It rang on')],
+          awareness: [awarenessRow('haw_1', 'hap_1'), awarenessRow('haw_2', 'hap_2')],
+          knn: [hit('hap_1'), hit('hap_2')],
         }),
       }),
-      params({ sceneEntityIds: [], sceneCharacterIds: [] }),
+      params(),
     )
 
-    const arrays = expectOk(out).bundles.lore.selected.map((c) => c.awarenessIds)
+    const arrays = expectOk(out)
+      .bundles.happenings.selected.filter(isHappeningCandidate)
+      .map((c) => c.awarenessIds)
     expect(arrays).toHaveLength(2)
-    // One instance spread across the pool would alias every candidate's list.
     expect(arrays[0]).not.toBe(arrays[1])
   })
 
@@ -807,7 +812,9 @@ describe('runRetrieval — pools', () => {
     expect(trace).toBeDefined()
     expect(trace?.pinSignal).toBe(0)
     expect(trace?.recencyFactor).toBe(1)
-    expect(ok.bundles.happenings.selected[0].commonKnowledge).toBe(true)
+    expect(ok.bundles.happenings.selected.filter(isHappeningCandidate)[0].commonKnowledge).toBe(
+      true,
+    )
   })
 
   it('excludes a happening no in-scene awareness row came back for', async () => {
