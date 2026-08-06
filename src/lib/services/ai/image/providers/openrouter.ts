@@ -10,6 +10,7 @@
  * - Model discovery: GET /models, filter by output_modalities includes "image"
  */
 
+import { specToAspectRatio, type ImageSpec, type ImageSizeTier } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -37,52 +38,33 @@ interface OpenRouterModel {
   }
 }
 
-/**
- * Map a WIDTHxHEIGHT size string to OpenRouter's image_config format.
- * Returns { aspect_ratio, image_size } or empty object if no mapping.
- */
-function mapSizeToImageConfig(size: string): Record<string, string> {
-  const parts = size.split('x').map(Number)
-  if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return {}
+/** The aspect ratios OpenRouter documents. */
+const OPENROUTER_ASPECT_RATIOS = [
+  '1:1',
+  '2:3',
+  '3:2',
+  '3:4',
+  '4:3',
+  '4:5',
+  '5:4',
+  '9:16',
+  '16:9',
+  '21:9',
+] as const
 
-  const [width, height] = parts
+/** `0.5K` is accepted by a single model, so `1K` is the floor and `tiny` collapses onto it. */
+const OPENROUTER_IMAGE_SIZE: Record<ImageSizeTier, string> = {
+  tiny: '1K',
+  small: '1K',
+  medium: '2K',
+  large: '4K',
+}
 
-  // Determine image_size tier based on the larger dimension
-  // Note: '0.5K' is only supported by a single model, so we use '1K' as the minimum
-  const maxDim = Math.max(width, height)
-  let imageSize: string
-  if (maxDim <= 1280) {
-    imageSize = '1K'
-  } else if (maxDim <= 2560) {
-    imageSize = '2K'
-  } else {
-    imageSize = '4K'
+function specToImageConfig(spec: ImageSpec): Record<string, string> {
+  return {
+    aspect_ratio: specToAspectRatio(spec, OPENROUTER_ASPECT_RATIOS),
+    image_size: OPENROUTER_IMAGE_SIZE[spec.size],
   }
-
-  // Determine aspect ratio from width:height
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
-  const d = gcd(width, height)
-  const rw = width / d
-  const rh = height / d
-
-  // Map to OpenRouter's supported aspect ratios
-  const ratioKey = `${rw}:${rh}`
-  const supportedRatios = new Set([
-    '1:1',
-    '2:3',
-    '3:2',
-    '3:4',
-    '4:3',
-    '4:5',
-    '5:4',
-    '9:16',
-    '16:9',
-    '21:9',
-  ])
-
-  const aspectRatio = supportedRatios.has(ratioKey) ? ratioKey : '1:1'
-
-  return { aspect_ratio: aspectRatio, image_size: imageSize }
 }
 
 export function createOpenRouterProvider(config: ImageProviderConfig): ImageProvider {
@@ -93,7 +75,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
     name: 'OpenRouter',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, referenceImages, signal } = options
+      const { model, prompt, spec, referenceImages, signal } = options
 
       // Build user message content
       const contentParts: Array<Record<string, unknown>> = [{ type: 'text', text: prompt }]
@@ -108,7 +90,7 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
         }
       }
 
-      const imageConfig = mapSizeToImageConfig(size)
+      const imageConfig = specToImageConfig(spec)
 
       const body: Record<string, unknown> = {
         model,
@@ -204,7 +186,6 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
             id: m.id,
             name: m.name || m.id,
             description: m.description,
-            supportsSizes: OPENROUTER_SUPPORTED_SIZES,
             supportsImg2Img,
             costPerImage,
             costPerTextToken,
@@ -220,64 +201,36 @@ export function createOpenRouterProvider(config: ImageProviderConfig): ImageProv
   }
 }
 
-/**
- * All WIDTHxHEIGHT sizes derived from OpenRouter's documented aspect ratios at 1K tier.
- * OpenRouter handles fallback server-side if a model doesn't support a specific ratio,
- * so it's safe to offer the full set for all models.
- *
- * Aspect ratios → pixel sizes (1K tier):
- *   1:1 → 1024x1024, 2:3 → 832x1248, 3:2 → 1248x832, 3:4 → 864x1184,
- *   4:3 → 1184x864, 4:5 → 896x1152, 5:4 → 1152x896, 9:16 → 768x1344,
- *   16:9 → 1344x768, 21:9 → 1536x672
- */
-export const OPENROUTER_SUPPORTED_SIZES = [
-  '1024x1024',
-  '832x1248',
-  '1248x832',
-  '864x1184',
-  '1184x864',
-  '896x1152',
-  '1152x896',
-  '768x1344',
-  '1344x768',
-  '1536x672',
-]
-
 function getFallbackModels(): ImageModelInfo[] {
   return [
     {
       id: 'google/gemini-2.5-flash-image',
       name: 'Gemini 2.5 Flash Image (Nano Banana)',
       description: 'Google Gemini with image generation capabilities',
-      supportsSizes: OPENROUTER_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
     {
       id: 'google/gemini-3.1-flash-image-preview',
       name: 'Gemini 3.1 Flash Image Preview (Nano Banana 2)',
       description: 'Next-gen Gemini image generation with extended aspect ratios',
-      supportsSizes: OPENROUTER_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
     {
       id: 'bytedance-seed/seedream-4.5',
       name: 'Seedream 4.5',
       description: 'ByteDance Seed high-quality image generation',
-      supportsSizes: OPENROUTER_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
     {
       id: 'black-forest-labs/flux.2-pro',
       name: 'FLUX.2 Pro',
       description: 'Professional quality image generation',
-      supportsSizes: OPENROUTER_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
     {
       id: 'openai/gpt-5-image',
       name: 'GPT-5 Image',
       description: 'OpenAI image generation via OpenRouter',
-      supportsSizes: OPENROUTER_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
   ]

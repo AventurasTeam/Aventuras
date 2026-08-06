@@ -10,7 +10,6 @@
   import { RotateCcw, Info, Plus, Copy, Eye, EyeOff, ChevronRight, Check } from '@lucide/svelte'
   import { Textarea } from '$lib/components/ui/textarea'
   import {
-    listImageModels,
     listImageModelsByProvider,
     getProviderSamplerInfo,
     listLoras,
@@ -33,33 +32,14 @@
   import * as Collapsible from '$lib/components/ui/collapsible'
   import { SvelteSet } from 'svelte/reactivity'
   import IconRow from '$lib/components/ui/icon-row.svelte'
+  import ImageResolutionSelector from '$lib/components/settings/ImageResolutionSelector.svelte'
+  import { defaultImageSpec, type ImageSpec } from '$lib/utils/image'
 
   const imageStyles = [
     { value: 'image-style-soft-anime', label: 'Soft Anime' },
     { value: 'image-style-semi-realistic', label: 'Semi-realistic Anime' },
     { value: 'image-style-photorealistic', label: 'Photorealistic' },
   ] as const
-
-  const imageSizes = [
-    { value: '512x512', label: '512x512 (Faster)' },
-    { value: '1024x1024', label: '1024x1024 (Higher Quality)' },
-    { value: '1536x1536', label: '1536x1536 (High Quality)' },
-    { value: '2048x2048', label: '2048x2048 (Highest Quality)' },
-  ] as const
-
-  const backgroundSizes = (() => {
-    const sizes = [
-      { value: '1280x720', label: '1280x720 (Widescreen)' },
-      { value: '720x1280', label: '720x1280 (Portrait)' },
-    ]
-    if (typeof window !== 'undefined') {
-      const screenRes = `${window.screen.width}x${window.screen.height}`
-      if (!sizes.some((s) => s.value === screenRes)) {
-        sizes.unshift({ value: screenRes, label: `${screenRes} (Screen)` })
-      }
-    }
-    return sizes
-  })()
 
   const providerTypes: { value: ImageProviderType; label: string }[] = [
     { value: 'nanogpt', label: 'NanoGPT' },
@@ -216,103 +196,10 @@
 
   onDestroy(() => flushAutoSave())
 
-  // Model info cache for active profiles
-  let activeProfilesModelInfo = $state<Record<string, ImageModelInfo[]>>({})
-  // eslint-disable-next-line svelte/prefer-svelte-reactivity
-  const loadingProfileModelsIds = new Set<string>()
-
-  // Load models for active profiles to get resolution info
-  async function loadModelsForProfile(profileId: string) {
-    if (loadingProfileModelsIds.has(profileId)) return
-    loadingProfileModelsIds.add(profileId)
-    try {
-      activeProfilesModelInfo[profileId] = await listImageModels(profileId)
-    } finally {
-      loadingProfileModelsIds.delete(profileId)
-    }
-  }
-
-  // Effect to load models for all selected profiles
-  $effect(() => {
-    const profilesToLoad = [
-      settings.systemServicesSettings.imageGeneration.profileId,
-      settings.systemServicesSettings.imageGeneration.portraitProfileId,
-      settings.systemServicesSettings.imageGeneration.referenceProfileId,
-      settings.systemServicesSettings.imageGeneration.backgroundProfileId,
-      testProfileId,
-    ].filter(Boolean) as string[]
-
-    // Read profile IDs reactively above, but check cache without tracking
-    // to avoid re-running when loadModelsForProfile writes results back
-    untrack(() => {
-      for (const id of profilesToLoad) {
-        if (!activeProfilesModelInfo[id]) {
-          loadModelsForProfile(id)
-        }
-      }
-    })
-  })
-
-  /**
-   * Get supported sizes for a specific profile type/ID
-   */
-  function getSupportedSizes(
-    type: 'standard' | 'portrait' | 'reference' | 'background' | 'testing',
-  ) {
-    let profileId: string | null = null
-    switch (type) {
-      case 'standard':
-        profileId = settings.systemServicesSettings.imageGeneration.profileId
-        break
-      case 'portrait':
-        profileId = settings.systemServicesSettings.imageGeneration.portraitProfileId
-        break
-      case 'reference':
-        profileId = settings.systemServicesSettings.imageGeneration.referenceProfileId
-        break
-      case 'background':
-        profileId = settings.systemServicesSettings.imageGeneration.backgroundProfileId
-        break
-      case 'testing':
-        profileId = testProfileId
-        break
-    }
-
-    if (!profileId) return type === 'background' ? backgroundSizes : imageSizes
-
-    const profile = settings.getImageProfile(profileId)
-    if (!profile) return type === 'background' ? backgroundSizes : imageSizes
-
-    const models = activeProfilesModelInfo[profileId] || []
-    const modelInfo = models.find((m) => m.id === profile.model)
-
-    if (modelInfo?.supportsSizes?.length) {
-      // Safety: Filter for valid WIDTHxHEIGHT format
-      const validSizes = modelInfo.supportsSizes.filter((size) => /^\d+x\d+$/.test(size))
-
-      if (validSizes.length > 0) {
-        const modelSizeItems = validSizes.map((size) => {
-          // Try to match with existing labels for better UX
-          const existing = [...imageSizes, ...backgroundSizes].find((s) => s.value === size)
-          return { value: size, label: existing?.label || size }
-        })
-        if (type === 'background') {
-          // Merge: generic background sizes + model sizes (deduplicated)
-          const bgValues = new Set(backgroundSizes.map((s) => s.value))
-          const uniqueModelSizes = modelSizeItems.filter((ms) => !bgValues.has(ms.value))
-          return [...backgroundSizes, ...uniqueModelSizes]
-        }
-        return modelSizeItems
-      }
-    }
-
-    return type === 'background' ? backgroundSizes : imageSizes
-  }
-
   // Testing state
   let testProfileId = $state<string | null>(null)
   let testPrompt = $state('')
-  let testSize = $state('1024x1024')
+  let testSize = $state<ImageSpec>(defaultImageSpec())
   let isGeneratingTestImage = $state(false)
   let testImageResult = $state<string | null>(null)
   let testError = $state<string | null>(null)
@@ -323,13 +210,6 @@
     testImageResult = null
     testError = null
   })
-
-  // Derived supported sizes — computed once per reactive change, not twice per Autocomplete render
-  const standardSizes = $derived(getSupportedSizes('standard'))
-  const referenceSizes = $derived(getSupportedSizes('reference'))
-  const portraitSizes = $derived(getSupportedSizes('portrait'))
-  const bgSupportedSizes = $derived(getSupportedSizes('background'))
-  const testingSizes = $derived(getSupportedSizes('testing'))
 
   // Derived LoRA items — avoids re-mapping on every render
   const loraItems = $derived(availableLoras.map((l) => ({ value: l, label: l })))
@@ -978,35 +858,14 @@
                 </div>
 
                 {#if settings.systemServicesSettings.imageGeneration.profileId}
-                  <div class="space-y-2">
-                    <Label>Regular Image Size</Label>
-                    <Autocomplete
-                      items={standardSizes}
-                      selected={standardSizes.find(
-                        (s) => s.value === settings.systemServicesSettings.imageGeneration.size,
-                      ) ||
-                        (settings.systemServicesSettings.imageGeneration.size
-                          ? {
-                              value: settings.systemServicesSettings.imageGeneration.size,
-                              label: settings.systemServicesSettings.imageGeneration.size,
-                            }
-                          : undefined)}
-                      onSelect={(v) => {
-                        settings.systemServicesSettings.imageGeneration.size = (
-                          v as { value: string }
-                        ).value
-                        settings.saveSystemServicesSettings()
-                      }}
-                      allowCustom={true}
-                      onCustomSelect={(v) => {
-                        settings.systemServicesSettings.imageGeneration.size = v
-                        settings.saveSystemServicesSettings()
-                      }}
-                      itemLabel={(s: { label: string }) => s.label}
-                      itemValue={(s: { value: string }) => s.value}
-                      placeholder="Select size"
-                    />
-                  </div>
+                  <ImageResolutionSelector
+                    label="Regular Image Size"
+                    size={settings.systemServicesSettings.imageGeneration.size}
+                    onSizeChange={(v) => {
+                      settings.systemServicesSettings.imageGeneration.size = v
+                      settings.saveSystemServicesSettings()
+                    }}
+                  />
                 {/if}
               </div>
 
@@ -1026,36 +885,14 @@
                 </div>
 
                 {#if settings.systemServicesSettings.imageGeneration.referenceProfileId || settings.systemServicesSettings.imageGeneration.profileId}
-                  <div class="space-y-2">
-                    <Label>Reference Image Size</Label>
-                    <Autocomplete
-                      items={referenceSizes}
-                      selected={referenceSizes.find(
-                        (s) =>
-                          s.value === settings.systemServicesSettings.imageGeneration.referenceSize,
-                      ) ||
-                        (settings.systemServicesSettings.imageGeneration.referenceSize
-                          ? {
-                              value: settings.systemServicesSettings.imageGeneration.referenceSize,
-                              label: settings.systemServicesSettings.imageGeneration.referenceSize,
-                            }
-                          : undefined)}
-                      onSelect={(v) => {
-                        settings.systemServicesSettings.imageGeneration.referenceSize = (
-                          v as { value: string }
-                        ).value
-                        settings.saveSystemServicesSettings()
-                      }}
-                      allowCustom={true}
-                      onCustomSelect={(v) => {
-                        settings.systemServicesSettings.imageGeneration.referenceSize = v
-                        settings.saveSystemServicesSettings()
-                      }}
-                      itemLabel={(s: { label: string }) => s.label}
-                      itemValue={(s: { value: string }) => s.value}
-                      placeholder="Select size"
-                    />
-                  </div>
+                  <ImageResolutionSelector
+                    label="Reference Image Size"
+                    size={settings.systemServicesSettings.imageGeneration.referenceSize}
+                    onSizeChange={(v) => {
+                      settings.systemServicesSettings.imageGeneration.referenceSize = v
+                      settings.saveSystemServicesSettings()
+                    }}
+                  />
                 {/if}
               </div>
             </div>
@@ -1127,35 +964,14 @@
           </div>
 
           {#if settings.systemServicesSettings.imageGeneration.portraitProfileId || settings.systemServicesSettings.imageGeneration.profileId}
-            <div class="space-y-2">
-              <Label>Character Portrait Size</Label>
-              <Autocomplete
-                items={portraitSizes}
-                selected={portraitSizes.find(
-                  (s) => s.value === settings.systemServicesSettings.imageGeneration.portraitSize,
-                ) ||
-                  (settings.systemServicesSettings.imageGeneration.portraitSize
-                    ? {
-                        value: settings.systemServicesSettings.imageGeneration.portraitSize,
-                        label: settings.systemServicesSettings.imageGeneration.portraitSize,
-                      }
-                    : undefined)}
-                onSelect={(v) => {
-                  settings.systemServicesSettings.imageGeneration.portraitSize = (
-                    v as { value: string }
-                  ).value
-                  settings.saveSystemServicesSettings()
-                }}
-                allowCustom={true}
-                onCustomSelect={(v) => {
-                  settings.systemServicesSettings.imageGeneration.portraitSize = v
-                  settings.saveSystemServicesSettings()
-                }}
-                itemLabel={(s: { label: string }) => s.label}
-                itemValue={(s: { value: string }) => s.value}
-                placeholder="Select size"
-              />
-            </div>
+            <ImageResolutionSelector
+              label="Character Portrait Size"
+              size={settings.systemServicesSettings.imageGeneration.portraitSize}
+              onSizeChange={(v) => {
+                settings.systemServicesSettings.imageGeneration.portraitSize = v
+                settings.saveSystemServicesSettings()
+              }}
+            />
           {/if}
 
           <div class="space-y-2">
@@ -1201,35 +1017,14 @@
             </p>
           </div>
 
-          <div class="space-y-2">
-            <Label>Background Size</Label>
-            <Autocomplete
-              items={bgSupportedSizes}
-              selected={bgSupportedSizes.find(
-                (s) => s.value === settings.systemServicesSettings.imageGeneration.backgroundSize,
-              ) ||
-                (settings.systemServicesSettings.imageGeneration.backgroundSize
-                  ? {
-                      value: settings.systemServicesSettings.imageGeneration.backgroundSize,
-                      label: settings.systemServicesSettings.imageGeneration.backgroundSize,
-                    }
-                  : undefined)}
-              onSelect={(v) => {
-                settings.systemServicesSettings.imageGeneration.backgroundSize = (
-                  v as { value: string }
-                ).value
-                settings.saveSystemServicesSettings()
-              }}
-              allowCustom={true}
-              onCustomSelect={(v) => {
-                settings.systemServicesSettings.imageGeneration.backgroundSize = v
-                settings.saveSystemServicesSettings()
-              }}
-              itemLabel={(s: { label: string }) => s.label}
-              itemValue={(s: { value: string }) => s.value}
-              placeholder="Select size"
-            />
-          </div>
+          <ImageResolutionSelector
+            label="Background Size"
+            size={settings.systemServicesSettings.imageGeneration.backgroundSize}
+            onSizeChange={(v) => {
+              settings.systemServicesSettings.imageGeneration.backgroundSize = v
+              settings.saveSystemServicesSettings()
+            }}
+          />
 
           <div class="space-y-2">
             <Label>
@@ -1272,22 +1067,11 @@
               <Textarea bind:value={testPrompt} placeholder="Enter a test prompt..." rows={4} />
             </div>
 
-            <div class="space-y-2">
-              <Label>Size</Label>
-              <Autocomplete
-                items={testingSizes}
-                selected={testingSizes.find((s) => s.value === testSize) || {
-                  value: testSize,
-                  label: testSize,
-                }}
-                onSelect={(v) => (testSize = (v as { value: string }).value)}
-                allowCustom={true}
-                onCustomSelect={(v) => (testSize = v)}
-                itemLabel={(s: { label: string }) => s.label}
-                itemValue={(s: { value: string }) => s.value}
-                placeholder="Select size"
-              />
-            </div>
+            <ImageResolutionSelector
+              label="Size"
+              size={testSize}
+              onSizeChange={(v) => (testSize = v)}
+            />
 
             <Button
               onclick={handleTestGenerate}

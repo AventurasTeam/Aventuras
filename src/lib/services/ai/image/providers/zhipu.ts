@@ -6,6 +6,7 @@
  * - img2img: Not supported
  */
 
+import { specToPixels, formatImageSize } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -25,7 +26,8 @@ export function createZhipuProvider(config: ImageProviderConfig): ImageProvider 
     name: 'Zhipu CogView',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, signal } = options
+      const { model, prompt, spec, signal } = options
+      const size = formatImageSize(specToPixels(spec))
 
       const body = {
         model: model || 'cogview-4-250304',
@@ -73,14 +75,12 @@ export function createZhipuProvider(config: ImageProviderConfig): ImageProvider 
           id: 'cogview-4-250304',
           name: 'CogView 4',
           description: 'Zhipu CogView image generation',
-          supportsSizes: ['512x512', '1024x1024'],
           supportsImg2Img: false,
         },
         {
           id: 'cogview-3-flash',
           name: 'CogView 3 Flash',
           description: 'Fast image generation',
-          supportsSizes: ['512x512', '1024x1024'],
           supportsImg2Img: false,
         },
       ]

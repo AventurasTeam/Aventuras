@@ -20,5 +20,4 @@ export {
   type ProviderServices,
   type ServiceModelDefaults,
   type ProviderCapabilities,
-  type ImageDefaults,
 } from './config'

@@ -8,6 +8,7 @@
 
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
+import { parseImageSpec, describeImageSpec, type ImageSpec } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -88,11 +89,13 @@ export async function generateImage(options: {
   profileId: string
   model: string
   prompt: string
-  size?: string
+  /** A settings value: an `ImageSpec`, or a `WIDTHxHEIGHT` string from an older build. */
+  size?: ImageSpec | string
   referenceImages?: string[]
   signal?: AbortSignal
 }): Promise<ImageGenerateResult> {
-  const { profileId, model, prompt, size = '1024x1024', referenceImages, signal } = options
+  const { profileId, model, prompt, size, referenceImages, signal } = options
+  const spec = parseImageSpec(size)
 
   const profile = settings.getImageProfile(profileId)
   if (!profile) {
@@ -108,6 +111,7 @@ export async function generateImage(options: {
     model,
     providerType: profile.providerType,
     hasReferences: !!referenceImages?.length,
+    size: describeImageSpec(spec),
   })
 
   const config: ImageProviderConfig = {
@@ -119,6 +123,10 @@ export async function generateImage(options: {
 
   const provider = PROVIDER_FACTORIES[profile.providerType](config)
 
+  // The model's own accepted sizes, when it publishes them. Served from the same TTL cache
+  // the settings UI fills, and absent is fine: the adapter falls back to canonical pixels.
+  const modelInfo = (await listImageModels(profileId).catch(() => [])).find((m) => m.id === model)
+
   // Strip data: prefix from reference images if present
   const cleanRefs = referenceImages?.map((img) =>
     img.startsWith('data:') ? img.replace(/^data:image\/[^;]+;base64,/, '') : img,
@@ -127,7 +135,8 @@ export async function generateImage(options: {
   return provider.generate({
     model,
     prompt,
-    size,
+    spec,
+    modelInfo,
     referenceImages: cleanRefs,
     signal,
     providerOptions: profile.providerOptions,

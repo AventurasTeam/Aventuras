@@ -19,7 +19,7 @@ import {
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
-import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
+import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 import { createLogger } from '$lib/log'
@@ -164,7 +164,7 @@ export class InlineImageGenerationService {
     const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
     const fullPrompt = `${tag.prompt}. ${stylePrompt}`
 
-    const { width, height } = parseImageSize(sizeToUse)
+    const { width, height } = expectedPixels(sizeToUse)
 
     // Create pending record in database
     const embeddedImage: Omit<EmbeddedImage, 'createdAt'> = {
@@ -232,7 +232,7 @@ export class InlineImageGenerationService {
     prompt: string,
     profileId: string,
     model: string,
-    size: string,
+    size: ImageSpec,
     entryId: string,
     referenceImageUrls?: string[],
   ): Promise<void> {

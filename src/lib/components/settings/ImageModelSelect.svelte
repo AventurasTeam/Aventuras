@@ -52,10 +52,6 @@
   // Apply filter if provided
   const filteredModels = $derived(filterFunc ? models.filter(filterFunc) : models)
 
-  // Get label for current selection
-  const selectedModel = $derived(models.find((m) => m.id === selectedModelId))
-  const selectedLabel = $derived(selectedModel ? getModelLabel(selectedModel) : placeholder)
-
   // Format cost per image
   function formatCost(model: ImageModelInfo): string {
     if (!model.costPerImage) return ''
@@ -89,11 +85,30 @@
     return label
   }
 
-  // Handle model selection
-  function handleChange(value: string | undefined) {
-    if (value) {
-      onModelChange(value)
+  // A custom id typed by the user is not in the fetched list, so it is prepended: without
+  // it the trigger would show the placeholder for a model that is actually saved.
+  const displayModels = $derived.by(() => {
+    const list = [...filteredModels]
+    if (selectedModelId && !list.some((m) => m.id === selectedModelId)) {
+      list.unshift({
+        id: selectedModelId,
+        name: selectedModelId,
+        supportsImg2Img: false,
+      })
     }
+    return list
+  })
+
+  // Get current selection object
+  const selectedModel = $derived(displayModels.find((m) => m.id === selectedModelId))
+  const selectedLabel = $derived(
+    selectedModel ? getModelLabel(selectedModel) : selectedModelId || placeholder,
+  )
+
+  /** `undefined` is the dropdown giving us nothing; an empty string is a deliberate clear. */
+  function handleChange(value: string | undefined) {
+    if (value === undefined) return
+    onModelChange(value.trim())
   }
 </script>
 
@@ -103,31 +118,15 @@
       <Loader2 class="h-4 w-4 animate-spin" />
       Loading models...
     </div>
-  {:else if errorMessage}
-    <div class="flex items-center justify-between gap-2">
-      <p class="text-destructive text-sm">{errorMessage}</p>
-      {#if showRefreshButton && onRefresh}
-        <Button variant="ghost" size="sm" onclick={onRefresh}>
-          <RefreshCw class="h-4 w-4" />
-        </Button>
-      {/if}
-    </div>
-  {:else if filteredModels.length === 0}
-    <div class="flex items-center justify-between gap-2">
-      <p class="text-muted-foreground text-sm">No models available</p>
-      {#if showRefreshButton && onRefresh}
-        <Button variant="ghost" size="icon" onclick={onRefresh} aria-label="Refresh models">
-          <RefreshCw class="h-4 w-4" />
-        </Button>
-      {/if}
-    </div>
   {:else}
     <div class="flex items-center gap-2">
       <div class="flex-1">
         <Autocomplete
-          items={filteredModels}
+          items={displayModels}
           selected={selectedModel}
           onSelect={(m) => handleChange((m as ImageModelInfo)?.id)}
+          allowCustom={true}
+          onCustomSelect={(val) => handleChange(val)}
           itemLabel={(m) => m.name}
           itemValue={(m) => m.id}
           {placeholder}
@@ -176,11 +175,15 @@
           {/snippet}
         </Autocomplete>
       </div>
+
       {#if showRefreshButton && onRefresh}
         <Button variant="ghost" size="icon" onclick={onRefresh} aria-label="Refresh models">
           <RefreshCw class="h-4 w-4" />
         </Button>
       {/if}
     </div>
+    {#if errorMessage}
+      <p class="text-destructive text-xs">{errorMessage}</p>
+    {/if}
   {/if}
 </div>

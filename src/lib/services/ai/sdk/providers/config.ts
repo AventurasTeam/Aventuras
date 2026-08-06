@@ -5,8 +5,6 @@
  */
 
 import type { ProviderType, ReasoningEffort } from '$lib/types'
-import { POLLINATIONS_SUPPORTED_SIZES } from '../../image/constants'
-import { OPENROUTER_SUPPORTED_SIZES } from '../../image/providers/openrouter'
 
 // ============================================================================
 // Types
@@ -37,12 +35,6 @@ export interface ProviderCapabilities {
   modelCapabilityFetching?: boolean
 }
 
-export interface ImageDefaults {
-  defaultModel: string
-  referenceModel: string
-  supportedSizes: string[]
-}
-
 export interface ProviderServices {
   narrative: ServiceModelDefaults
   classification: ServiceModelDefaults
@@ -59,8 +51,6 @@ export interface ProviderConfig {
   baseUrl: string // Empty string = SDK default
   requiresApiKey: boolean
   capabilities: ProviderCapabilities
-  imageDefaults?: ImageDefaults
-  fallbackModels: string[]
   /** Models to hide by default when a new profile of this type is created. */
   defaultHiddenModels?: string[]
   /** Service model defaults. Only some providers (openrouter, nanogpt) have preconfigured defaults. */
@@ -96,18 +86,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       modelCapabilityFetching: true,
     },
-    imageDefaults: {
-      defaultModel: 'google/gemini-2.5-flash-image',
-      referenceModel: 'google/gemini-2.5-flash-image',
-      supportedSizes: OPENROUTER_SUPPORTED_SIZES,
-    },
-    fallbackModels: [
-      'z-ai/glm-5',
-      'x-ai/grok-4.1-fast',
-      'google/gemini-3-flash-preview',
-      'deepseek/deepseek-v3.2',
-      'minimax/minimax-m2.5:free',
-    ],
     services: {
       narrative: {
         model: 'z-ai/glm-5',
@@ -166,17 +144,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       modelCapabilityFetching: true,
     },
-    imageDefaults: {
-      defaultModel: 'z-image-turbo',
-      referenceModel: 'qwen-image',
-      supportedSizes: ['512x512', '1024x1024', '2048x2048'],
-    },
-    fallbackModels: [
-      'deepseek/deepseek-v3.2',
-      'zai-org/glm-5:thinking',
-      'stepfun-ai/step-3.5-flash-2603',
-      'openai/gpt-oss-120b',
-    ],
     services: {
       narrative: {
         model: 'zai-org/glm-5:thinking',
@@ -234,15 +201,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: false,
       reasoning: true,
     },
-    imageDefaults: {
-      defaultModel: 'z-image-turbo',
-      referenceModel: 'qwen-image-edit-2511',
-      supportedSizes: ['576x576', '1024x1024', '2048x2048'],
-    },
-    fallbackModels: [
-      'deepseek-ai/DeepSeek-V3-0324',
-      'meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -258,12 +216,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       modelCapabilityFetching: true,
     },
-    imageDefaults: {
-      defaultModel: 'flux',
-      referenceModel: 'kontext',
-      supportedSizes: POLLINATIONS_SUPPORTED_SIZES,
-    },
-    fallbackModels: ['openai', 'openai-fast', 'claude-fast', 'mistral', 'gemini'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -279,7 +231,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
-    fallbackModels: ['llama3.2', 'llama3.1', 'mistral', 'codellama', 'qwen2.5', 'phi3', 'gemma2'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -295,7 +246,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
-    fallbackModels: ['loaded-model'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -311,7 +261,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
-    fallbackModels: ['loaded-model'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -327,36 +276,22 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       reasoningExtraction: 'think-tag',
     },
-    fallbackModels: [
-      'nvidia/llama-3.1-nemotron-nano-8b-v2',
-      'meta/llama-3.1-70b-instruct',
-      'meta/llama-3.1-8b-instruct',
-      'nvidia/llama-3.1-nemotron-70b-instruct',
-    ],
     // Models excluded here cannot be identified by the keyword or size patterns in
     // modelFetcher.ts (NIM_EXCLUDE_PATTERNS / nimLargestSizeB) but are not useful
     // for interactive fiction: legacy, deprecated, or narrow-domain models ≥ 24B.
     defaultHiddenModels: [
       '01-ai/yi-large',
-      'abacusai/dracarys-llama-3.1-70b-instruct',
       'ai21labs/jamba-1.5-large-instruct',
-      'ai21labs/jamba-1.5-mini-instruct',
       'databricks/dbrx-instruct',
-      'deepseek-ai/deepseek-r1-distill-qwen-32b',
-      'institute-of-science-tokyo/llama-3.1-swallow-70b-instruct-v0.1',
       'meta/llama-3.1-70b-instruct',
-      'meta/llama-3.1-405b-instruct',
       'meta/llama-3.3-70b-instruct',
       'meta/llama2-70b',
       'microsoft/phi-3.5-moe-instruct',
-      'microsoft/phi-4-mini-instruct',
       'mistralai/mistral-large',
       'nvidia/llama-3.1-nemotron-51b-instruct',
       'nvidia/llama-3.1-nemotron-70b-instruct',
       'nvidia/llama-3.3-nemotron-super-49b-v1',
       'nvidia/nemotron-4-340b-instruct',
-      'sarvamai/sarvam-m',
-      'stockmark/stockmark-2-100b-instruct',
       'writer/palmyra-creative-122b',
     ],
     // No service defaults - user must configure models in Generation Settings
@@ -373,7 +308,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: false,
       reasoning: true,
     },
-    fallbackModels: ['default'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -388,20 +322,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    imageDefaults: {
-      defaultModel: 'dall-e-3',
-      referenceModel: 'dall-e-2',
-      supportedSizes: ['1024x1024', '1024x1792', '1792x1024'],
-    },
-    fallbackModels: [
-      'gpt-4o',
-      'gpt-4o-mini',
-      'gpt-4-turbo',
-      'gpt-4',
-      'gpt-3.5-turbo',
-      'o1',
-      'o1-mini',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -416,14 +336,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    fallbackModels: [
-      'claude-opus-4-5-20251101',
-      'claude-haiku-4-5-20251001',
-      'claude-sonnet-4-5-20250929',
-      'claude-opus-4-1-20250805',
-      'claude-sonnet-4-20250514',
-      'claude-opus-4-20250514',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -439,18 +351,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       reasoning: true,
       modelCapabilityFetching: true,
     },
-    imageDefaults: {
-      defaultModel: 'imagen-3.0-generate-002',
-      referenceModel: 'imagen-3.0-generate-002',
-      supportedSizes: ['512x512', '1024x1024'],
-    },
-    fallbackModels: [
-      'gemini-3-pro-preview',
-      'gemini-3-flash-preview',
-      'gemini-2.5-pro',
-      'gemini-2.5-flash',
-      'gemini-2.5-flash-lite',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -465,7 +365,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    fallbackModels: ['grok-3', 'grok-3-fast', 'grok-2', 'grok-2-vision'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -480,12 +379,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    fallbackModels: [
-      'llama-3.3-70b-versatile',
-      'llama-3.1-8b-instant',
-      'mixtral-8x7b-32768',
-      'gemma2-9b-it',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -500,19 +393,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    imageDefaults: {
-      defaultModel: 'cogview-3-plus',
-      referenceModel: 'cogview-3',
-      supportedSizes: ['512x512', '1024x1024'],
-    },
-    fallbackModels: [
-      'glm-4-plus',
-      'glm-4-flash',
-      'glm-4-air',
-      'glm-4v',
-      'glm-4v-plus',
-      'cogview-3-plus',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -527,7 +407,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: true,
     },
-    fallbackModels: ['deepseek-chat', 'deepseek-reasoner'],
     // No service defaults - user must configure models in Generation Settings
   },
 
@@ -542,14 +421,6 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
       structuredOutput: true,
       reasoning: false,
     },
-    fallbackModels: [
-      'mistral-large-latest',
-      'mistral-small-latest',
-      'codestral-latest',
-      'pixtral-large-latest',
-      'ministral-8b-latest',
-      'ministral-3b-latest',
-    ],
     // No service defaults - user must configure models in Generation Settings
   },
 }

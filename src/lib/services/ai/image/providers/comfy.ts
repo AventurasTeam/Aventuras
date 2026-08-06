@@ -18,7 +18,7 @@ import { ComfyApi, PromptBuilder, CallWrapper, type ImageInfo } from '@saintno/c
 import BasicTxt2ImgWorkflow from './comfyWorkflows/basic-txt2img-workflow.json'
 import LoraTxt2ImgWorkflow from './comfyWorkflows/lora-txt2img-workflow.json'
 import UnetTxt2ImgWorkflow from './comfyWorkflows/unet-txt2img-workflow.json'
-import { parseImageSize } from '$lib/utils/image'
+import { specToPixels } from '$lib/utils/image'
 
 const DEFAULT_BASE_URL = 'http://localhost:8188'
 
@@ -358,7 +358,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
     name: 'Comfy UI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { prompt, size, providerOptions } = options
+      const { prompt, spec, providerOptions } = options
       // Strip the source-namespace prefix added by listModels() to deduplicate entries
       // (e.g. "checkpoint:model.safetensors" → "model.safetensors"). Handles both
       // prefixed IDs (new) and bare filenames (profiles saved before this change).
@@ -431,7 +431,7 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
         throw new Error('No ComfyUI model selected.')
       }
 
-      const sizeToUse = parseImageSize(size)
+      const sizeToUse = specToPixels(spec)
 
       const loraOptions = providerOptions?.lora as
         { name: string; strengthModel?: number; strengthClip?: number } | undefined
@@ -654,7 +654,6 @@ export function createComfyProvider(config: ImageProviderConfig): ImageProvider 
             id: `${prefix}:${m}`,
             name: m,
             description,
-            supportsSizes: [],
             supportsImg2Img: false,
             costPerImage: 0,
           })

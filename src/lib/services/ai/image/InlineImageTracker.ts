@@ -22,7 +22,7 @@ import {
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import { emitImageQueued, emitImageReady } from '$lib/services/events'
-import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
+import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 import { createLogger } from '$lib/log'
 import type { Character, EmbeddedImage } from '$lib/types'
@@ -35,7 +35,7 @@ interface PendingImage {
   prompt: string
   profileId: string
   model: string
-  size: string
+  size: ImageSpec
   referenceImageUrls?: string[]
   /** Promise that resolves to base64 image data or null on failure */
   generationPromise: Promise<{ base64: string | null; error?: string }>
@@ -164,7 +164,7 @@ export class InlineImageTracker {
     profileId: string,
     model: string,
     prompt: string,
-    size: string,
+    size: ImageSpec,
     referenceImageUrls?: string[],
   ): Promise<{ base64: string | null; error?: string }> {
     try {
@@ -221,7 +221,7 @@ export class InlineImageTracker {
 
     for (const pending of this.pendingImages) {
       // Determine dimensions from size setting
-      const { width, height } = parseImageSize(pending.size)
+      const { width, height } = expectedPixels(pending.size)
 
       // Create DB record immediately with 'generating' status
       const embeddedImage: Omit<EmbeddedImage, 'createdAt'> = {

@@ -54,7 +54,7 @@ import type {
   Tense,
   TimeTracker,
 } from '$lib/types'
-import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
+import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core'
 import { serviceFactory } from './core/factory'
 import {
@@ -114,11 +114,11 @@ export interface TimelineFillSettings {
 export interface ImageGenerationServiceSettings {
   // Profile-based image generation (profiles must have supportsImageGeneration capability)
   profileId: string | null // API profile for standard image generation
-  size: string // Regular image size
+  size: ImageSpec // Regular image size
 
   // Reference model settings (for image-to-image with portrait references)
   referenceProfileId: string | null // API profile for image-to-image with portrait references
-  referenceSize: string // Reference image size
+  referenceSize: ImageSpec // Reference image size
 
   // General story image settings
   styleId: string // Selected image style template
@@ -127,7 +127,7 @@ export interface ImageGenerationServiceSettings {
   // Portrait model settings (character reference images)
   portraitProfileId: string | null // API profile for generating character portraits
   portraitStyleId: string // Selected character portrait style template
-  portraitSize: string // Portrait image size
+  portraitSize: ImageSpec // Portrait image size
 
   // Scene analysis model settings (for identifying imageable scenes)
   promptProfileId: string | null // API profile for scene analysis
@@ -139,7 +139,7 @@ export interface ImageGenerationServiceSettings {
 
   // Background image settings
   backgroundProfileId: string | null // API profile for background image generation
-  backgroundSize: string // Background image size (default: '1280x720')
+  backgroundSize: ImageSpec // Background image size
   backgroundBlur: number // Background blur amount in pixels (default: 0)
 }
 
@@ -1027,7 +1027,7 @@ class AIService {
     const stylePrompt = await this.getStylePrompt(styleId)
     const fullPrompt = `${scene.prompt}. ${stylePrompt}`
 
-    const { width, height } = parseImageSize(sizeToUse)
+    const { width, height } = expectedPixels(sizeToUse)
     // Create pending record in database
     const embeddedImage: Omit<EmbeddedImage, 'createdAt'> = {
       id: imageId,
@@ -1079,7 +1079,7 @@ class AIService {
     prompt: string,
     profileId: string,
     model: string,
-    size: string,
+    size: ImageSpec,
     entryId: string,
     scene: ImageableScene,
     presentCharacters: Character[],
