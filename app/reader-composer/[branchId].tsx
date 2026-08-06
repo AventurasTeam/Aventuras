@@ -77,6 +77,7 @@ import {
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
+  type TxState,
   undoRedoStore,
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
@@ -126,15 +127,20 @@ export default function ReaderComposerRoute() {
   // counted here would swap Send for Cancel and raise the streaming placeholder
   // over a branch that isn't streaming. Only the refresh is hard-gate, so
   // `editBlocked` above still covers undo/redo for it.
-  const turnPhase = generationStore.useGeneration(
-    (s) =>
+  // Two selectors over one predicate rather than one returning a pair: a fresh
+  // object per read would re-render the reader on every unrelated store write.
+  const findTurnRun = useCallback(
+    (s: { txState: TxState }) =>
       [...s.txState.runs.values()].find(
         (r) =>
           r.branchId === branchId &&
           r.kind !== SUGGESTION_REFRESH_KIND &&
           !isBackgroundKind(r.kind),
-      )?.currentPhase ?? null,
+      ),
+    [branchId],
   )
+  const turnPhase = generationStore.useGeneration((s) => findTurnRun(s)?.currentPhase ?? null)
+  const turnKind = generationStore.useGeneration((s) => findTurnRun(s)?.kind ?? null)
   const isGenerating = turnPhase !== null
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
@@ -211,7 +217,12 @@ export default function ReaderComposerRoute() {
   const swapPaused =
     storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
 
-  const activePhase = readerPillPhase({ turnPhase, refreshingSuggestions, classifierRunning })
+  const activePhase = readerPillPhase({
+    turnKind,
+    turnPhase,
+    refreshingSuggestions,
+    classifierRunning,
+  })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.

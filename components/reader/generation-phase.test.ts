@@ -2,35 +2,52 @@ import { describe, expect, it } from 'vitest'
 
 import { readerPillPhase } from './generation-phase'
 
-const IDLE = { turnPhase: null, refreshingSuggestions: false, classifierRunning: false }
+const IDLE = {
+  turnKind: null,
+  turnPhase: null,
+  refreshingSuggestions: false,
+  classifierRunning: false,
+}
+const TURN = { ...IDLE, turnKind: 'per-turn' }
 
 describe('readerPillPhase', () => {
   it('gives the blocking retrieval phase its own label instead of the narrative one', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: 'retrieval' })).toBe('recalling-memory')
+    expect(readerPillPhase({ ...TURN, turnPhase: 'retrieval' })).toBe('recalling-memory')
+  })
+
+  // The per-turn phase map does not cover other foreground pipelines, so without
+  // a kind check chapter-close borrows its labels and disagrees with the same
+  // run's label in Story Settings.
+  it('labels a chapter-close run by kind rather than borrowing a per-turn label', () => {
+    expect(
+      readerPillPhase({ ...IDLE, turnKind: 'chapter-close', turnPhase: 'chapter-metadata' }),
+    ).toBe('closing-chapter')
   })
 
   it('labels the narrative phase as narrative generation', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: 'narrative' })).toBe('generating-narrative')
+    expect(readerPillPhase({ ...TURN, turnPhase: 'narrative' })).toBe('generating-narrative')
   })
 
   it('labels the fallback classifier as classifying', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: 'piggyback-fallback-classifier' })).toBe(
+    expect(readerPillPhase({ ...TURN, turnPhase: 'piggyback-fallback-classifier' })).toBe(
       'classifying',
     )
   })
 
   it('keeps the pre-retrieval label over the turn opening translation phase', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: 'user-action-translation' })).toBe(
+    expect(readerPillPhase({ ...TURN, turnPhase: 'user-action-translation' })).toBe(
       'generating-narrative',
     )
   })
 
   it('labels the window before phase 0 names itself', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: '' })).toBe('generating-narrative')
+    expect(readerPillPhase({ ...TURN, turnPhase: '' })).toBe('generating-narrative')
   })
 
   it('falls back rather than blanking the pill on an unmapped phase name', () => {
-    expect(readerPillPhase({ ...IDLE, turnPhase: 'chapter-metadata' })).toBe('generating-narrative')
+    expect(readerPillPhase({ ...TURN, turnPhase: 'some-future-phase' })).toBe(
+      'generating-narrative',
+    )
   })
 
   it('reports a suggestion refresh when no turn is running', () => {
