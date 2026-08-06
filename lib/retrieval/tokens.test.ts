@@ -17,10 +17,16 @@ describe('countTokens', () => {
     expect(countTokens('   ')).toBeGreaterThan(0)
   })
 
+  it('pins the encoding every token budget is calibrated against', () => {
+    // Swapping the rank table silently re-scales every budget-fill decision, and
+    // ASCII counts identically under cl100k/o200k — only non-Latin separates
+    // them, so the pin has to be non-Latin to bite (cl100k counts this 31).
+    expect(countTokens('彼は剣を抜いた。彼女は逃げた。誰も動かなかった。')).toBe(21)
+  })
+
   it('counts a known short string', () => {
-    // Not pinned to an exact number: the encoding table is a dependency detail.
-    // Pinned instead to the invariant that matters for budget-fill — monotonic
-    // and proportional, never zero for non-empty text.
+    // Pinned to the invariant that matters for budget-fill — monotonic and
+    // proportional, never zero for non-empty text.
     const short = countTokens('hello world')
     const long = countTokens('hello world '.repeat(50))
     expect(short).toBeGreaterThan(0)

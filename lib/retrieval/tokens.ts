@@ -1,12 +1,14 @@
 import { Tiktoken } from 'js-tiktoken/lite'
-import cl100kBase from 'js-tiktoken/ranks/cl100k_base'
+import o200kBase from 'js-tiktoken/ranks/o200k_base'
 
-// The BPE map build is ~135ms and two 100k-entry Maps; the 1.1 MB rank table
-// itself is a static import (countTokens must stay sync for the pure ranker).
+// Every provider is an estimate here, so o200k is picked to track the modern
+// field's vocab scale: ASCII matches cl100k exactly, non-Latin runs ~30% lower.
+// The BPE map build is ~285ms and a 200k-entry Map; the 2.2 MB rank table is a
+// static import (countTokens must stay sync for the pure ranker).
 let encoder: Tiktoken | null = null
 
 function getEncoder(): Tiktoken {
-  encoder ??= new Tiktoken(cl100kBase)
+  encoder ??= new Tiktoken(o200kBase)
   return encoder
 }
 

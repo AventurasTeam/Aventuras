@@ -1448,7 +1448,7 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   world-state-block work in [`followups.md`](../followups.md) widens that
   gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
   one that provider uses, while `chapterTokenThreshold` and the
-  token-progress strip measure in cl100k via `countTokens`. A story that
+  token-progress strip measure in o200k via `countTokens`. A story that
   switches providers mid-run would sum two incompatible token scales.
   (4) **AI entries only** — `usage` exists only on a generation call, so
   `user_action` rows carry no count at all, and they are part of the open
@@ -1456,7 +1456,7 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   every user turn. The decision is therefore a **new field, not a
   rename**: `tokens.{prompt, completion, reasoning}` is a coherent
   provider-usage triple worth keeping for cost provenance, and
-  repurposing one leg of it to mean "cl100k count of the stored content"
+  repurposing one leg of it to mean "o200k count of the stored content"
   makes the other two incoherent. Open sub-questions: a real
   `story_entries` column (SUM-able and indexable, which a JSON field is
   not — and M5's trigger reads this per turn) versus another metadata
