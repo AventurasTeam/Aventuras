@@ -3,7 +3,13 @@
   import { story } from '$lib/stores/story.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import { templateEngine } from '$lib/services/templates/engine'
-  import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
+  import {
+    PROMPT_TEMPLATES,
+    LENGTH_INSTRUCTION_VAR,
+    templateUsesLengthInstruction,
+  } from '$lib/services/prompts/templates'
+  import { ContextBuilder } from '$lib/services/context'
+  import { database } from '$lib/services/database'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
@@ -109,6 +115,41 @@
   // ── Derived flags ─────────────────────────────────────────────────────────────
 
   const isActive = $derived(!!savedCustomPrompt)
+
+  /**
+   * Response Length only does anything if the prompt that will actually run renders
+   * `{{ lengthInstruction }}` — a per-story override replaces the pack template outright,
+   * and a pack created before the variable existed keeps its own copy of the body.
+   */
+  let lengthUnavailableReason = $state<string | undefined>(undefined)
+  $effect(() => {
+    const storyId = story.currentStory?.id
+    const override = savedCustomPrompt
+    const templateId =
+      story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'
+    if (!storyId) return
+
+    let cancelled = false
+    const resolve = async () => {
+      if (override) return templateUsesLengthInstruction(override)
+      const packId = (await database.getStoryPackId(storyId)) || 'default-pack'
+      const template = await new ContextBuilder(packId).resolveTemplate(templateId)
+      return templateUsesLengthInstruction(template?.content)
+    }
+
+    resolve().then((supported) => {
+      if (cancelled) return
+      lengthUnavailableReason = supported
+        ? undefined
+        : `The active ${override ? 'custom prompt' : 'prompt pack template'} does not use ` +
+          `{{ ${LENGTH_INSTRUCTION_VAR} }}, so this setting would have no effect. Add it under ` +
+          `# Format${override ? '' : ', or switch the story to a pack that has it'}.`
+    })
+
+    return () => {
+      cancelled = true
+    }
+  })
   const isDirty = $derived(customPromptDraft !== (savedCustomPrompt ?? ''))
   const canSave = $derived(
     isDirty && (customPromptDraft.trim() === '' || (validationResult?.success ?? false)),
@@ -174,6 +215,8 @@
     imageGenerationMode={storySettings.imageGenerationMode ?? 'none'}
     backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
     referenceMode={storySettings.referenceMode ?? false}
+    targetLength={storySettings.targetLength ?? 'dynamic'}
+    mode={story.currentStory?.mode === 'creative-writing' ? 'creative-writing' : 'adventure'}
     onPOVChange={(v) => story.updateStorySettings({ pov: v })}
     onTenseChange={(v) => story.updateStorySettings({ tense: v })}
     onToneChange={(v) => story.updateStorySettings({ tone: v })}
@@ -182,6 +225,8 @@
     onBackgroundImagesEnabledChange={(v) =>
       story.updateStorySettings({ backgroundImagesEnabled: v })}
     onReferenceModeChange={(v) => story.updateStorySettings({ referenceMode: v })}
+    onTargetLengthChange={(v) => story.updateStorySettings({ targetLength: v })}
+    targetLengthDisabledReason={lengthUnavailableReason}
     disabledFields={{ pov: true, tense: true, visualProseMode: true }}
     disabledReason="Cannot be changed mid-story. Set during story creation."
   />

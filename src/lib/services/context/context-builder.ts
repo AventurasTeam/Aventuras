@@ -10,7 +10,7 @@
  */
 
 import { database } from '$lib/services/database'
-import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
+import { PROMPT_TEMPLATES, formatLengthInstruction } from '$lib/services/prompts/templates'
 import { templateEngine } from '$lib/services/templates/engine'
 import { createLogger } from '$lib/log'
 import type { RenderResult } from './types'
@@ -41,9 +41,13 @@ export class ContextBuilder {
     const packId = packIdOverride || (await database.getStoryPackId(storyId)) || 'default-pack'
     const builder = new ContextBuilder(packId)
 
+    const mode = story.mode || 'adventure'
+    const targetLength = story.settings?.targetLength || 'dynamic'
+    const lengthInstruction = formatLengthInstruction(targetLength, mode)
+
     // Load story data into context
     builder.add({
-      mode: story.mode || 'adventure',
+      mode,
       pov: story.settings?.pov || 'second',
       tense: story.settings?.tense || 'present',
       genre: story.genre || '',
@@ -52,6 +56,8 @@ export class ContextBuilder {
       settingDescription: story.description || '',
       visualProseMode: story.settings?.visualProseMode || false,
       inlineImageMode: story.settings?.imageGenerationMode === 'inline',
+      targetLength,
+      lengthInstruction,
     })
 
     // Protagonist
@@ -144,7 +150,7 @@ export class ContextBuilder {
    * that renders as an empty prompt and the caller silently issues a contentless
    * request, which is far worse than using a slightly less customized template.
    */
-  private async resolveTemplate(templateId: string): Promise<{ content: string } | null> {
+  async resolveTemplate(templateId: string): Promise<{ content: string } | null> {
     const own = await database.getPackTemplate(this.packId, templateId)
     if (own) return own
 

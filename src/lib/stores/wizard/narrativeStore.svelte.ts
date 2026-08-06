@@ -7,7 +7,7 @@ import {
 import { aiService } from '$lib/services/ai'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { settings } from '$lib/stores/settings.svelte'
-import type { StoryMode, POV, VaultLorebook } from '$lib/types'
+import type { StoryMode, POV, TargetLength, VaultLorebook } from '$lib/types'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
 import type { GeneratedOpening } from '$lib/services/ai/sdk'
 
@@ -31,6 +31,7 @@ export class NarrativeStore {
   imageGenerationMode = $state<'none' | 'agentic' | 'inline'>('none')
   backgroundImagesEnabled = $state(false)
   referenceMode = $state(false)
+  targetLength = $state<TargetLength>('dynamic')
 
   // Step 9: Opening
   storyTitle = $state('')

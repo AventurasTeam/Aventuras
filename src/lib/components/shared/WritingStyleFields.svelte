@@ -4,8 +4,8 @@
   import { Label } from '$lib/components/ui/label'
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
-  import { BookOpen, User, Eye } from '@lucide/svelte'
-  import type { POV, Tense } from '$lib/types'
+  import { BookOpen, User, Eye, AlignLeft } from '@lucide/svelte'
+  import type { POV, Tense, TargetLength } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
@@ -16,6 +16,11 @@
     imageGenerationMode: 'none' | 'agentic' | 'inline'
     backgroundImagesEnabled: boolean
     referenceMode: boolean
+    targetLength?: TargetLength
+    /** Drives the paragraph counts shown for each length: they differ per mode. */
+    mode?: 'adventure' | 'creative-writing'
+    /** Set to disable the length control, e.g. a custom prompt that never renders it. */
+    targetLengthDisabledReason?: string
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
@@ -23,6 +28,7 @@
     onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
+    onTargetLengthChange?: (v: TargetLength) => void
     disabledFields?: {
       pov?: boolean
       tense?: boolean
@@ -40,6 +46,9 @@
     imageGenerationMode,
     backgroundImagesEnabled,
     referenceMode,
+    targetLength = 'dynamic',
+    mode = 'adventure',
+    targetLengthDisabledReason,
     onPOVChange,
     onTenseChange,
     onToneChange,
@@ -47,9 +56,56 @@
     onImageGenerationModeChange,
     onBackgroundImagesEnabledChange,
     onReferenceModeChange,
+    onTargetLengthChange,
     disabledFields,
     disabledReason,
   }: Props = $props()
+
+  /** Must match the ranges `formatLengthInstruction` asks for, which differ per mode. */
+  const LENGTH_RANGES = {
+    adventure: {
+      dynamic: {
+        short: 'Auto',
+        long: 'Adapts length naturally to scene pacing (1–2 paragraphs for action, up to 5–6 for atmosphere).',
+      },
+      short: { short: '1-3 para', long: 'Crisp and fast-paced narrative (1–3 paragraphs).' },
+      medium: { short: '2-4 para', long: 'Balanced storytelling momentum (2–4 paragraphs).' },
+      long: {
+        short: '3-6 para',
+        long: 'Detailed, expansive prose & environment (3–6 paragraphs).',
+      },
+    },
+    'creative-writing': {
+      dynamic: {
+        short: 'Auto',
+        long: 'Scales with the scene (2–3 paragraphs for rapid exchanges, 4–8 for chapter sections).',
+      },
+      short: {
+        short: '2-4 para',
+        long: 'Focused, economical prose with immediate momentum (2–4 paragraphs).',
+      },
+      medium: {
+        short: '3-6 para',
+        long: 'Balanced momentum, character voice and sensory detail (3–6 paragraphs).',
+      },
+      long: {
+        short: '5-8+ para',
+        long: 'Multi-layered literary prose, subtext and atmosphere (5–8+ paragraphs).',
+      },
+    },
+  } as const
+
+  const lengthRanges = $derived(LENGTH_RANGES[mode] ?? LENGTH_RANGES.adventure)
+  // Both come off disk, where the column is untyped text.
+  const selectedLength = $derived<TargetLength>(
+    targetLength && targetLength in lengthRanges ? targetLength : 'dynamic',
+  )
+  const lengthOptions: { id: TargetLength; label: string }[] = [
+    { id: 'dynamic', label: 'Dynamic' },
+    { id: 'short', label: 'Short' },
+    { id: 'medium', label: 'Medium' },
+    { id: 'long', label: 'Long' },
+  ]
 </script>
 
 <div class="space-y-4">
@@ -74,7 +130,7 @@
         {#each ['first', 'second', 'third'] as pov (pov)}
           <Label
             for={`pov-${pov}`}
-            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center"
+            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
           >
             <RadioGroup.Item
               value={pov}
@@ -86,7 +142,7 @@
           </Label>
         {/each}
       </RadioGroup.Root>
-      <p class="text-muted-foreground h-4 text-xs">
+      <p class="text-muted-foreground min-h-[1.25rem] text-xs">
         {#if selectedPOV === 'first'}
           "I draw my sword..."
         {:else if selectedPOV === 'second'}
@@ -119,7 +175,7 @@
         {#each ['present', 'past'] as tense (tense)}
           <Label
             for={`tense-${tense}`}
-            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center"
+            class="border-muted bg-popover hover:bg-accent hover:text-accent-foreground has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex cursor-pointer flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2"
           >
             <RadioGroup.Item
               value={tense}
@@ -131,7 +187,7 @@
           </Label>
         {/each}
       </RadioGroup.Root>
-      <p class="text-muted-foreground h-4 text-xs">
+      <p class="text-muted-foreground min-h-[1.25rem] text-xs">
         {#if selectedTense === 'present'}
           Action happens now.
         {:else}
@@ -164,6 +220,43 @@
     </div>
   </section>
 
+  <!-- Response Length -->
+  {#if onTargetLengthChange}
+    {@const lengthDisabled = !!targetLengthDisabledReason}
+    <section class="space-y-2 pt-1">
+      <Label class="flex items-center gap-2 text-base font-semibold">
+        <AlignLeft class="h-4 w-4" />
+        Response Length
+      </Label>
+      <RadioGroup.Root
+        value={selectedLength}
+        onValueChange={(v) => onTargetLengthChange?.(v as TargetLength)}
+        disabled={lengthDisabled}
+        class="grid grid-cols-2 gap-2 sm:grid-cols-4 {lengthDisabled ? 'opacity-50' : ''}"
+      >
+        {#each lengthOptions as item (item.id)}
+          <Label
+            for={`length-${item.id}`}
+            class="border-muted bg-popover has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex flex-col items-center justify-center rounded-md border-2 p-3 text-center has-[:focus-visible]:ring-2 {lengthDisabled
+              ? 'cursor-not-allowed'
+              : 'hover:bg-accent hover:text-accent-foreground cursor-pointer'}"
+          >
+            <RadioGroup.Item value={item.id} id={`length-${item.id}`} class="sr-only" />
+            <span class="font-medium">{item.label}</span>
+            <span class="text-muted-foreground text-xs">{lengthRanges[item.id].short}</span>
+          </Label>
+        {/each}
+      </RadioGroup.Root>
+      <p
+        class="min-h-[1.25rem] text-xs {lengthDisabled
+          ? 'text-amber-500'
+          : 'text-muted-foreground'}"
+      >
+        {targetLengthDisabledReason ?? lengthRanges[selectedLength].long}
+      </p>
+    </section>
+  {/if}
+
   <!-- Visuals Configuration -->
   {#if imageGenerationEnabled}
     <section class="space-y-2 pt-1">
@@ -181,7 +274,7 @@
         <div class="relative">
           <Label
             for="img-none"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4"
+            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
           >
             <div class="mb-2 flex w-full items-start justify-between">
               <span class="font-semibold">Text Only</span>
@@ -197,7 +290,7 @@
         <div class="relative">
           <Label
             for="img-auto"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4"
+            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
           >
             <div class="mb-2 flex w-full items-start justify-between">
               <span class="font-semibold">Agent Mode</span>
@@ -213,7 +306,7 @@
         <div class="relative">
           <Label
             for="img-inline"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4"
+            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
           >
             <div class="mb-2 flex w-full items-start justify-between">
               <span class="font-semibold">Inline Mode</span>
