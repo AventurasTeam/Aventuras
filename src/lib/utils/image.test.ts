@@ -96,6 +96,15 @@ describe('parseImageSpec', () => {
     expect(parseImageSpec('0x0')).toEqual(fallback)
   })
 
+  it('falls back on scalars that are not sizes at all', () => {
+    // The signature says `unknown` because the input is settings JSON: nothing writes a
+    // number or a boolean here today, but the load path must not throw if one is there.
+    const fallback = { orientation: 'square', size: 'small' }
+    expect(parseImageSpec(1024)).toEqual(fallback)
+    expect(parseImageSpec(true)).toEqual(fallback)
+    expect(parseImageSpec(['1024x1024'])).toEqual(fallback)
+  })
+
   it('repairs a spec carrying values outside the unions, which disk can hold', () => {
     expect(parseImageSpec({ orientation: 'diagonal', size: 'gigantic' } as never)).toEqual({
       orientation: 'square',

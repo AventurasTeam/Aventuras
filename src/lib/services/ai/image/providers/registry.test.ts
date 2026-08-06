@@ -26,22 +26,27 @@ describe('Image Provider Registry', () => {
   })
 
   describe('supportsImageGeneration', () => {
-    // Exhaustive, so a provider added to the union but never registered fails here.
-    const ALL_PROVIDERS: ImageProviderType[] = [
-      'nanogpt',
-      'openai',
-      'openrouter',
-      'chutes',
-      'pollinations',
-      'google',
-      'zhipu',
-      'comfyui',
-      'a1111',
-    ]
+    // A `Record` over the union, not an array: an array annotated `ImageProviderType[]`
+    // accepts a short list happily, so the exhaustiveness this claims was never checked.
+    // As a record, a provider added to the union and left out here fails `svelte-check`.
+    const ALL_PROVIDERS: Record<ImageProviderType, true> = {
+      nanogpt: true,
+      openai: true,
+      openrouter: true,
+      chutes: true,
+      pollinations: true,
+      google: true,
+      zhipu: true,
+      comfyui: true,
+      a1111: true,
+    }
 
-    it.each(ALL_PROVIDERS)('returns true for %s', (providerType) => {
-      expect(supportsImageGeneration(providerType)).toBe(true)
-    })
+    it.each(Object.keys(ALL_PROVIDERS) as ImageProviderType[])(
+      'returns true for %s',
+      (providerType) => {
+        expect(supportsImageGeneration(providerType)).toBe(true)
+      },
+    )
 
     it('returns false for unknown providers', () => {
       expect(supportsImageGeneration('unknown-provider')).toBe(false)

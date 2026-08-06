@@ -139,19 +139,37 @@ function ratioValue(ratio: string): number {
  * Settings hold an `ImageSpec`; the `WIDTHxHEIGHT` strings written by older builds are
  * still accepted and read as the intent they were approximating, so there is no migration
  * to run before a profile can be used.
+ *
+ * Takes `unknown` rather than the union it wants, because the caller is the settings load
+ * path and what is on disk is whatever JSON happens to hold — a hand-edited file, a value
+ * from a build that stored something else. Anything unrecognised is the default; the one
+ * outcome that is not acceptable here is throwing, since this runs before the app has
+ * settings at all.
  */
-export function parseImageSpec(value: ImageSpec | string | null | undefined): ImageSpec {
+export function parseImageSpec(value: unknown): ImageSpec {
   if (!value) return defaultImageSpec()
 
+  if (typeof value === 'string') {
+    return specFromSizeString(value)
+  }
+
   if (typeof value === 'object') {
+    const { orientation, size } = value as Partial<ImageSpec>
     return {
-      orientation: IMAGE_ORIENTATIONS.includes(value.orientation)
-        ? value.orientation
+      orientation: IMAGE_ORIENTATIONS.includes(orientation as ImageOrientation)
+        ? (orientation as ImageOrientation)
         : DEFAULT_SPEC.orientation,
-      size: IMAGE_SIZE_TIERS.includes(value.size) ? value.size : DEFAULT_SPEC.size,
+      size: IMAGE_SIZE_TIERS.includes(size as ImageSizeTier)
+        ? (size as ImageSizeTier)
+        : DEFAULT_SPEC.size,
     }
   }
 
+  // A number, a boolean, a symbol: nothing that was ever written here on purpose.
+  return defaultImageSpec()
+}
+
+function specFromSizeString(value: string): ImageSpec {
   const text = value.trim().toLowerCase()
 
   // `×` as well as `x`: it is what the old size badge rendered, so it is what a user

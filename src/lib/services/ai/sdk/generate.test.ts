@@ -75,6 +75,27 @@ describe('buildProviderOptions', () => {
     }
   })
 
+  it('sends Zhipu the camelCase key alongside its own thinking switch', () => {
+    // Zhipu is `createOpenAICompatible` too, but has a second, provider-specific key, so
+    // it is the one branch the loop above cannot cover.
+    expect(buildProviderOptions({ ...basePreset, reasoningEffort: 'high' }, 'zhipu')).toEqual({
+      zhipu: {
+        thinking: { type: 'enabled' },
+        reasoningEffort: 'high',
+      },
+    })
+  })
+
+  it('turns Zhipu thinking off for "none" rather than asking for none of it', () => {
+    // The effort key is dropped here on purpose: `thinking: disabled` is what suppresses
+    // it, and sending both says two things about one setting.
+    expect(buildProviderOptions({ ...basePreset, reasoningEffort: 'none' }, 'zhipu')).toEqual({
+      zhipu: {
+        thinking: { type: 'disabled' },
+      },
+    })
+  })
+
   it('carries "none" through rather than omitting it', () => {
     // `none` is what suppresses thinking, so omitting it is not equivalent to sending it.
     const result = buildProviderOptions({ ...basePreset, reasoningEffort: 'none' }, 'llamacpp')

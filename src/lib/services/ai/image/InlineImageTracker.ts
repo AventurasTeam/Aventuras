@@ -93,6 +93,7 @@ export class InlineImageTracker {
     // Determine profile and model
     let profileId = imageSettings.profileId
     let modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+    let sizeToUse = imageSettings.size
     let referenceImageUrls: string[] | undefined
 
     // Check for portrait mode with character references
@@ -109,8 +110,12 @@ export class InlineImageTracker {
       }
 
       if (portraitUrls.length > 0) {
+        // Use reference profile, model and size for img2img. The size travels with the
+        // profile: a reference model is a different model on a different backend, and
+        // handing it the primary profile's size sends a value that backend may not take.
         profileId = imageSettings.referenceProfileId
         modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+        sizeToUse = imageSettings.referenceSize
         referenceImageUrls = portraitUrls
       }
     }
@@ -141,7 +146,7 @@ export class InlineImageTracker {
       profileId,
       modelToUse,
       fullPrompt,
-      imageSettings.size,
+      sizeToUse,
       referenceImageUrls,
     )
 
@@ -151,7 +156,7 @@ export class InlineImageTracker {
       prompt: fullPrompt,
       profileId,
       model: modelToUse,
-      size: imageSettings.size,
+      size: sizeToUse,
       referenceImageUrls,
       generationPromise,
     })
