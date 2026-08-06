@@ -32,16 +32,42 @@ export type SourceRows = {
   chapters: LoadedChapterRow[]
 }
 
-// Every statement here obeys the QueryAll contract (lib/db/runtime/exec.native.ts
-// → queryRows): explicit, uniquely-named, non-numeric columns, because the
-// drivers rebuild positional rows with Object.values and a duplicate or numeric
-// key silently collapses or reorders them.
-const SOURCE_SQL: Record<VecTargetKind, string> = {
-  entity: `SELECT id, kind, status, injection_mode, name, description, embedding_stale FROM ${SOURCE_TABLES.entity} WHERE branch_id = ?`,
-  lore: `SELECT id, title, body, injection_mode, priority, keywords, embedding_stale FROM ${SOURCE_TABLES.lore} WHERE branch_id = ?`,
-  happening: `SELECT id, title, description, common_knowledge, occurred_at_entry_id, embedding_stale FROM ${SOURCE_TABLES.happening} WHERE branch_id = ?`,
-  thread: `SELECT id, status, injection_mode, title, description, embedding_stale FROM ${SOURCE_TABLES.thread} WHERE branch_id = ?`,
-  chapter: `SELECT id, title, summary, theme, keywords, embedding_stale FROM ${SOURCE_TABLES.chapter} WHERE branch_id = ?`,
+// Declared once and read by both the SELECT and the row mapper below, so the two
+// cannot drift: reordering a column here moves it in the statement and in the
+// read together, where two hand-aligned lists would land `name` in `description`
+// with no error. Explicit, uniquely-named, non-numeric columns, because the
+// drivers rebuild positional rows with Object.values (lib/db/runtime/exec.native.ts
+// → queryRows) and a duplicate or numeric key silently collapses or reorders them.
+const SOURCE_COLUMNS = {
+  entity: ['id', 'kind', 'status', 'injection_mode', 'name', 'description', 'embedding_stale'],
+  lore: ['id', 'title', 'body', 'injection_mode', 'priority', 'keywords', 'embedding_stale'],
+  happening: [
+    'id',
+    'title',
+    'description',
+    'common_knowledge',
+    'occurred_at_entry_id',
+    'embedding_stale',
+  ],
+  thread: ['id', 'status', 'injection_mode', 'title', 'description', 'embedding_stale'],
+  chapter: ['id', 'title', 'summary', 'theme', 'keywords', 'embedding_stale'],
+} as const satisfies Record<VecTargetKind, readonly string[]>
+
+type Cells<K extends VecTargetKind> = Record<(typeof SOURCE_COLUMNS)[K][number], unknown>
+
+const SOURCE_SQL = Object.fromEntries(
+  (Object.keys(SOURCE_COLUMNS) as VecTargetKind[]).map((kind) => [
+    kind,
+    `SELECT ${SOURCE_COLUMNS[kind].join(', ')} FROM ${SOURCE_TABLES[kind]} WHERE branch_id = ?`,
+  ]),
+) as Record<VecTargetKind, string>
+
+function cellsOf<K extends VecTargetKind>(kind: K, row: unknown[]): Cells<K> {
+  const out = {} as Cells<K>
+  SOURCE_COLUMNS[kind].forEach((column, index) => {
+    out[column as keyof Cells<K>] = row[index]
+  })
+  return out
 }
 
 // Coerced, not compared: a 0/1 that arrives as a bigint or a string would read
@@ -52,86 +78,64 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
   const read = (kind: VecTargetKind) => queryAll(SOURCE_SQL[kind], [branchId])
 
   const entities = (await read('entity')).map((row) => {
-    const [id, kind, status, injectionMode, name, description, stale] = row as [
-      string,
-      EntityRow['kind'],
-      EntityRow['status'],
-      EntityRow['injectionMode'],
-      string,
-      string | null,
-      unknown,
-    ]
-    return { id, kind, status, injectionMode, name, description, embeddingStale: flagged(stale) }
+    const c = cellsOf('entity', row)
+    return {
+      id: c.id as string,
+      kind: c.kind as EntityRow['kind'],
+      status: c.status as EntityRow['status'],
+      injectionMode: c.injection_mode as EntityRow['injectionMode'],
+      name: c.name as string,
+      description: c.description as string | null,
+      embeddingStale: flagged(c.embedding_stale),
+    }
   })
 
   const lore = (await read('lore')).map((row) => {
-    const [id, title, body, injectionMode, priority, keywords, stale] = row as [
-      string,
-      string,
-      string | null,
-      LoreRow['injectionMode'],
-      number,
-      unknown,
-      unknown,
-    ]
+    const c = cellsOf('lore', row)
     return {
-      id,
-      title,
-      body,
-      injectionMode,
-      priority: Number(priority),
-      keywords: parseKeywords(keywords),
-      embeddingStale: flagged(stale),
+      id: c.id as string,
+      title: c.title as string,
+      body: c.body as string | null,
+      injectionMode: c.injection_mode as LoreRow['injectionMode'],
+      priority: Number(c.priority),
+      keywords: parseKeywords(c.keywords),
+      embeddingStale: flagged(c.embedding_stale),
     }
   })
 
   const happenings = (await read('happening')).map((row) => {
-    const [id, title, description, commonKnowledge, occurredAtEntryId, stale] = row as [
-      string,
-      string,
-      string | null,
-      unknown,
-      string | null,
-      unknown,
-    ]
+    const c = cellsOf('happening', row)
     return {
-      id,
-      title,
-      description,
-      commonKnowledge: flagged(commonKnowledge),
-      occurredAtEntryId,
-      embeddingStale: flagged(stale),
+      id: c.id as string,
+      title: c.title as string,
+      description: c.description as string | null,
+      commonKnowledge: flagged(c.common_knowledge),
+      occurredAtEntryId: c.occurred_at_entry_id as string | null,
+      embeddingStale: flagged(c.embedding_stale),
     }
   })
 
   const threads = (await read('thread')).map((row) => {
-    const [id, status, injectionMode, title, description, stale] = row as [
-      string,
-      ThreadRow['status'],
-      ThreadRow['injectionMode'],
-      string,
-      string | null,
-      unknown,
-    ]
-    return { id, status, injectionMode, title, description, embeddingStale: flagged(stale) }
+    const c = cellsOf('thread', row)
+    return {
+      id: c.id as string,
+      status: c.status as ThreadRow['status'],
+      injectionMode: c.injection_mode as ThreadRow['injectionMode'],
+      title: c.title as string,
+      description: c.description as string | null,
+      embeddingStale: flagged(c.embedding_stale),
+    }
   })
 
   const chapters = (await read('chapter')).map((row) => {
-    const [id, title, summary, theme, keywords, stale] = row as [
-      string,
-      string,
-      string,
-      string,
-      unknown,
-      unknown,
-    ]
+    const c = cellsOf('chapter', row)
     return {
-      id,
-      title,
-      summary,
-      theme,
-      keywords: parseKeywords(keywords),
-      embeddingStale: flagged(stale),
+      id: c.id as string,
+      title: c.title as string,
+      summary: c.summary as string,
+      theme: c.theme as string,
+      keywords: parseKeywords(c.keywords),
+      embeddingStale: flagged(c.embedding_stale),
     }
   })
 
