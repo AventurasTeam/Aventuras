@@ -25,7 +25,8 @@ The pill renders on every in-story top bar (Reader, World, Plot,
 Story Settings, Chapter Timeline). Three concerns travel together
 and must stay in lockstep across consumers:
 
-- **Priority machine** — `active phase > error > hidden`. The
+- **Priority machine** — `blocking phase > error > background phase >
+hidden` (see [Priority resolution](#priority-resolution)). The
   consumer derives both inputs from different sources (pipeline
   orchestrator + memory health observations); the compound owns the
   resolution.
