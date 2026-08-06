@@ -429,9 +429,12 @@ pre-retrieval sync stage. When that stage can't embed a dirty row
 the row stays flagged and the user-facing UX is **identical to a
 failed LLM call**: blocking, must be resolved, no ignore path.
 
-**There is no per-row half-commit.** The sync stage embeds the
-whole dirty batch in one embedder request and applies its ops in
-one transaction, so it writes every row or none. The "5 rows
+**There is no per-row half-commit.** The sync stage hands the whole
+dirty batch to the embedder in one call and applies its ops in one
+transaction, so it writes every row or none. The local backend sends
+that as a single request; a provider one may be split by the SDK at
+`maxEmbeddingsPerCall`, which changes the request count and not the
+all-or-nothing commit. The "5 rows
 emitted, 3 embed and 2 fail — 3 in vec0, 2 stale-flagged" state
 this section once described is unreachable under the no-inline-embed
 contract above, and so is the `Roll back this turn` action it

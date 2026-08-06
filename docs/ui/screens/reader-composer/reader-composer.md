@@ -484,10 +484,13 @@ dismissed by the next turn:
   Pill copy: `Classifier offline — retrieval coverage thinning`.
   Tap → routes to Story Settings · Memory · Classifier panel.
 
-Pill state precedence: active generation (narrative / chapter-
-close / classifier) > error state > hidden. Sticky errors stay
-visible between turns; once resolved, the pill collapses back to
-hidden until the next event.
+Pill state precedence: blocking phase > error state > background
+phase > hidden, per
+[`generation-status-pill.md → Priority resolution`](../../patterns/generation-status-pill.md#priority-resolution).
+The background classifier pass is the one phase that yields, so a
+sticky error survives it rather than being blanked on its cadence.
+Sticky errors stay visible between turns; once resolved, the pill
+collapses back to hidden until the next event.
 
 The error-pill is **not a new vocabulary** — it reuses the existing
 gen-pill chrome with error-tinted styling instead of the active
