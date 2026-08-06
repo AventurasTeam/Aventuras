@@ -46,6 +46,7 @@ type GenerationPhase =
   | 'recalling-memory'
   | 'generating-narrative'
   | 'classifying'
+  | 'updating-memory'
   | 'closing-chapter'
   | 'refreshing-suggestions'
   | 'translating-display'
@@ -98,6 +99,7 @@ The compound owns phase → copy and error → copy:
 | `recalling-memory`       | `recalling memory…`       |
 | `generating-narrative`   | `generating narrative…`   |
 | `classifying`            | `classifying…`            |
+| `updating-memory`        | `updating memory…`        |
 | `closing-chapter`        | `closing chapter…`        |
 | `refreshing-suggestions` | `refreshing suggestions…` |
 | `translating-display`    | `translating…`            |
@@ -134,9 +136,23 @@ Tap opens a `Popover` anchored to the tag. Body is a single button:
   `generating-narrative` / `classifying`.
 - `Cancel chapter close` — for `closing-chapter`.
 - `Cancel suggestion refresh` — for `refreshing-suggestions`.
+- None — for `updating-memory`. The phase is cancel-less, so the tag
+  carries no popover trigger and a passed `onCancel` is ignored.
 
 Clicking the button fires `onCancel()` and closes the popover.
 Esc / outside-tap closes the popover without firing `onCancel`.
+
+### Non-blocking phases
+
+`updating-memory` — the periodic classifier's background pass — drops
+the accent fill for `tone="default"` (the header's own `bg-base` plus a
+border) and a `--fg-muted` spinner. Every other phase holds the turn up;
+this one doesn't, and the user can keep writing through it. Copy alone
+can't carry that, because the phone variant is icon-only.
+
+It is deliberately a separate phase from `classifying`, which is the
+per-turn piggyback fallback: same work, opposite answer to "can I keep
+writing?".
 
 Pill dimensions stay stable — the popover is an overlay, never an
 inline expansion. The active label renders regardless of popover

@@ -3,18 +3,36 @@ import { useRef, type ComponentRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Spinner } from '@/components/ui/spinner'
-import { Tag } from '@/components/ui/tag'
+import { Tag, type TagTone } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
+import type { ThemeColorSlots } from '@/lib/themes'
 
 type GenerationPhase =
   | 'reasoning'
   | 'recalling-memory'
   | 'generating-narrative'
   | 'classifying'
+  | 'updating-memory'
   | 'closing-chapter'
   | 'refreshing-suggestions'
+
+// `updating-memory` is the one phase that doesn't hold the turn up, so it drops
+// the accent fill for the header's own background — the pill still says work is
+// happening without reading as "wait for this".
+const PHASE_APPEARANCE: Record<
+  GenerationPhase,
+  { tone: TagTone; spinnerSlot: keyof ThemeColorSlots }
+> = {
+  reasoning: { tone: 'accent', spinnerSlot: '--accent-fg' },
+  'recalling-memory': { tone: 'accent', spinnerSlot: '--accent-fg' },
+  'generating-narrative': { tone: 'accent', spinnerSlot: '--accent-fg' },
+  classifying: { tone: 'accent', spinnerSlot: '--accent-fg' },
+  'updating-memory': { tone: 'default', spinnerSlot: '--fg-muted' },
+  'closing-chapter': { tone: 'accent', spinnerSlot: '--accent-fg' },
+  'refreshing-suggestions': { tone: 'accent', spinnerSlot: '--accent-fg' },
+}
 
 // `memory-incomplete` names the observable state, not a cause: the pill fires
 // off a non-zero stale-row count, which an available embedder can produce too
@@ -32,8 +50,8 @@ type ErrorState =
 type GenerationStatusPillProps = {
   activePhase?: GenerationPhase
   error?: ErrorState
-  // Absent for phases with no cancel affordance (e.g. a background classifier
-  // pass) — the pill then shows the phase with no popover trigger.
+  // Ignored for phases `cancelCopy` marks cancel-less, so a caller that can't
+  // tell which phase is up may pass it unconditionally.
   onCancel?: () => void
   onErrorTap: (code: ErrorState['code']) => void
 }
@@ -48,6 +66,8 @@ function phaseCopy(phase: GenerationPhase): string {
       return t('chrome.generationStatusPill.phase.generatingNarrative')
     case 'classifying':
       return t('chrome.generationStatusPill.phase.classifying')
+    case 'updating-memory':
+      return t('chrome.generationStatusPill.phase.updatingMemory')
     case 'closing-chapter':
       return t('chrome.generationStatusPill.phase.closingChapter')
     case 'refreshing-suggestions':
@@ -70,13 +90,16 @@ function errorCopy(error: ErrorState): string {
 
 // Exhaustive switch rather than a default-carrying ternary: a new phase must
 // fail the build here instead of silently inheriting "Cancel generation".
-function cancelCopy(phase: GenerationPhase): string {
+// `null` is the cancel-less answer — nothing the user started, nothing to stop.
+function cancelCopy(phase: GenerationPhase): string | null {
   switch (phase) {
     case 'reasoning':
     case 'recalling-memory':
     case 'generating-narrative':
     case 'classifying':
       return t('chrome.generationStatusPill.cancelGeneration')
+    case 'updating-memory':
+      return null
     case 'closing-chapter':
       return t('chrome.generationStatusPill.cancelChapterClose')
     case 'refreshing-suggestions':
@@ -96,12 +119,17 @@ export function GenerationStatusPill({
   // Priority: active generation > error state > hidden.
   if (activePhase != null) {
     const isPhone = tier === 'phone'
+    const appearance = PHASE_APPEARANCE[activePhase]
     const tag = (
-      <Tag tone="accent" leading={<Spinner size="sm" colorSlot="--accent-fg" />}>
+      <Tag
+        tone={appearance.tone}
+        leading={<Spinner size="sm" colorSlot={appearance.spinnerSlot} />}
+      >
         {isPhone ? null : phaseCopy(activePhase)}
       </Tag>
     )
-    if (onCancel == null) return tag
+    const cancelLabel = cancelCopy(activePhase)
+    if (onCancel == null || cancelLabel == null) return tag
     return (
       <Popover>
         <PopoverTrigger ref={triggerRef}>{tag}</PopoverTrigger>
@@ -113,7 +141,7 @@ export function GenerationStatusPill({
               onCancel()
             }}
           >
-            <Text>{cancelCopy(activePhase)}</Text>
+            <Text>{cancelLabel}</Text>
           </Button>
         </PopoverContent>
       </Popover>

@@ -32,5 +32,7 @@ export function readerPillPhase(input: {
   if (input.turnPhase !== null)
     return PILL_PHASE_BY_TURN_PHASE[input.turnPhase] ?? UNMAPPED_TURN_PHASE
   if (input.refreshingSuggestions) return 'refreshing-suggestions'
-  return input.classifierRunning ? 'classifying' : undefined
+  // Not 'classifying': that phase is the per-turn piggyback fallback, which does
+  // hold the turn up. Same work, opposite answer to "can I keep writing?".
+  return input.classifierRunning ? 'updating-memory' : undefined
 }

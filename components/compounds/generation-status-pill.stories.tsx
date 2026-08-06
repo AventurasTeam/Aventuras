@@ -73,6 +73,18 @@ export const ActiveClassifying: Story = {
   ),
 }
 
+// `onCancel` is passed and deliberately has no effect: the background pass is
+// cancel-less, so the tag carries no popover trigger.
+export const ActiveUpdatingMemory: Story = {
+  render: () => (
+    <GenerationStatusPill
+      activePhase="updating-memory"
+      onCancel={onCancel}
+      onErrorTap={onErrorTap}
+    />
+  ),
+}
+
 export const ActiveClosingChapter: Story = {
   render: () => (
     <GenerationStatusPill

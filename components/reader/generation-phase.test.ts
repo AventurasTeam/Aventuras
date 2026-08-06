@@ -40,7 +40,15 @@ describe('readerPillPhase', () => {
   // The periodic classifier is a background run, so it never reaches turnPhase
   // and would otherwise leave the pill empty for the length of the pass.
   it('reports the periodic classifier when no turn or refresh is running', () => {
-    expect(readerPillPhase({ ...IDLE, classifierRunning: true })).toBe('classifying')
+    expect(readerPillPhase({ ...IDLE, classifierRunning: true })).toBe('updating-memory')
+  })
+
+  // Both run the classifier, but only the in-turn one blocks the composer, and
+  // the pill's tone and cancel affordance key off the distinction.
+  it('separates the background pass from the blocking in-turn fallback', () => {
+    expect(readerPillPhase({ ...IDLE, classifierRunning: true })).not.toBe(
+      readerPillPhase({ ...IDLE, turnPhase: 'piggyback-fallback-classifier' }),
+    )
   })
 
   // A turn aborts an in-flight refresh and both runs can sit in txState across
