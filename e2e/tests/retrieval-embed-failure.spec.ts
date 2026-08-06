@@ -212,5 +212,18 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
         { timeout: 15_000 },
       )
       .toBe(0)
+
+    // Everything above is also true of a Retry that generated without
+    // retrieving: the counts prove the NARRATIVE ran, and the drain clears the
+    // stale rows either way. Only the prompt distinguishes a re-run pass from a
+    // skipped one, so a short-circuit — a memoised "branch is synced", an
+    // intermediate carried across the retried run — would generate against a
+    // stale index with an empty bundle and every assertion above would hold.
+    const retried = mock.requests.findLast((r) => r.streamed)
+    expect(retried, 'the retry reached the provider').toBeDefined()
+    expect(
+      JSON.stringify(retried!.body),
+      'the retry composed a memory bundle rather than skipping retrieval',
+    ).toContain('# What has happened')
   })
 })

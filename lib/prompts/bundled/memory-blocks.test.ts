@@ -341,4 +341,20 @@ describe('per-type overhead constants', () => {
       `The ${type} block's wrapper now costs ${measured} tokens. Set ${CONSTANT_PATH}.${type} to ${measured}.`,
     ).toBe(measured)
   })
+
+  // The overhead above is measured with displayName: '', so a block that starts
+  // rendering the title costs nothing on the probe row and everything in
+  // production — ~20 seated rows carrying an uncharged title overrun their
+  // partition, and the snapshot diff reads as an intentional "show lore titles".
+  // renderedText is the only field the ranker charges for; nothing else may vary
+  // the output length.
+  it.each(types)('%s rows render nothing whose length the ranker did not charge', (type) => {
+    const withRow = (displayName: string) =>
+      renderMacro({
+        ...EMPTY,
+        [OVERHEAD_BUCKET[type]]: [{ id: 'c1', displayName, renderedText: 'The body.' }],
+      })
+
+    expect(withRow('x'.repeat(200))).toBe(withRow('x'))
+  })
 })

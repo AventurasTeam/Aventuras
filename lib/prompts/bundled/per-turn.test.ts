@@ -97,6 +97,26 @@ describe('bundled per-turn template — empty-guard contract', () => {
     ).toMatchSnapshot()
   })
 
+  // The ID instructions say "any off-scene character above" and "somewhere not
+  // listed above" — words that point at the memory blocks. Move the include
+  // below them and the prompt asks the model to look at something it has not
+  // been shown yet; scene-entity promotion and location selection degrade with
+  // no parse error, and the snapshot diff is a pure hunk move.
+  it('renders the memory blocks before the instructions that refer back to them', () => {
+    const withMemory = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      locationIds: ['loc_1'],
+      retrievedEntities: [
+        { id: 'char_2', displayName: 'Mira', renderedText: 'Mira (currently elsewhere).' },
+      ],
+    })
+
+    const blocks = withMemory.indexOf('# Elsewhere in the world')
+    expect(blocks).toBeGreaterThan(-1)
+    expect(blocks).toBeLessThan(withMemory.indexOf('off-scene character above'))
+    expect(blocks).toBeLessThan(withMemory.indexOf('not listed above'))
+  })
+
   // The builder hands over an already-composed window (cadence.md → Composition
   // rule), which partialChapterBuffer alone cannot reproduce: a template that
   // re-trims by it sends the model less prose than the caller composed.
