@@ -8,7 +8,7 @@ import type { RankerParams } from './types'
  * lib/prompts/bundled/memory-blocks.test.ts, which fails when the macro moves
  * and the constant does not.
  */
-export const RANKER_DEFAULTS: RankerParams = {
+export const RANKER_DEFAULTS = {
   weights: { action: 0.35, digest: 0.35, prose: 0.3 },
   lambda: { entities: 0.025, lore: 0, happenings: 0.07, threads: 0.025, chapters: 0 },
   lambdaDiv: 0.75,
@@ -18,7 +18,7 @@ export const RANKER_DEFAULTS: RankerParams = {
   chapterBoost: 1.3,
   preFilterTopN: 200,
   typeOverhead: { entities: 11, lore: 4, happenings: 5, threads: 4, chapters: 4 },
-}
+} as const satisfies RankerParams
 
 /** KNN fetch depth per query per type; matches the pre-filter bound. */
 export const KNN_K = 200

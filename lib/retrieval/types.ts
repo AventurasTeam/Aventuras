@@ -98,17 +98,22 @@ export type RankedType = {
 
 export type QueryWeights = { action: number; digest: number; prose: number }
 
-/** Every tunable the ranker reads. Frozen into each probe capture verbatim. */
+/**
+ * Every tunable the ranker reads. Frozen into each probe capture verbatim, and
+ * readonly throughout: RANKER_DEFAULTS is exported from the barrel, so a
+ * writable field would let one importer retune the ranker for every later reader
+ * in the same process (code-conventions.md → Read-view immutability).
+ */
 export type RankerParams = {
-  weights: QueryWeights
-  lambda: Record<RetrievalType, number>
-  lambdaDiv: number
-  kwBoost: number
-  tauRevive: number
-  minScoreThreshold: number
-  chapterBoost: number
-  preFilterTopN: number
-  typeOverhead: Record<RetrievalType, number>
+  readonly weights: Readonly<QueryWeights>
+  readonly lambda: Readonly<Record<RetrievalType, number>>
+  readonly lambdaDiv: number
+  readonly kwBoost: number
+  readonly tauRevive: number
+  readonly minScoreThreshold: number
+  readonly chapterBoost: number
+  readonly preFilterTopN: number
+  readonly typeOverhead: Readonly<Record<RetrievalType, number>>
 }
 
 /** Which of Q1/Q2/Q3 actually produced a vector this turn. */

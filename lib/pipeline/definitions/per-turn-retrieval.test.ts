@@ -490,7 +490,6 @@ describe('retrieval phase — success', () => {
     // params-shaped assertion in this file still green.
     expect(Object.keys(deps).sort()).toEqual([
       'abortSignal',
-      'branchIds',
       'embedRows',
       'embedTexts',
       'loadStaleRows',
@@ -666,12 +665,16 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     })
   })
 
-  it('scopes the sync stage to the branch being read', async () => {
+  // The sync scope is no longer passed alongside the branch — runRetrieval
+  // derives it from this one field, so the pair cannot disagree. Pinning the
+  // field is all that is left to get wrong here.
+  it('names the branch being read exactly once', async () => {
     seedOpenStory()
 
     await runRetrievalPhase()
 
-    expect(runRetrievalMock.mock.calls.at(-1)?.[0]).toMatchObject({ branchIds: ['b1'] })
+    expect(lastParams().branchId).toBe('b1')
+    expect(runRetrievalMock.mock.calls.at(-1)?.[0]).not.toHaveProperty('branchIds')
   })
 
   it("takes the budgets from the story's settings, not the code defaults", async () => {

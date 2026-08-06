@@ -44,7 +44,10 @@ import {
 } from './types'
 import { cosine } from './vector'
 
-export type RetrievalDeps = SyncStageDeps & {
+// branchIds is omitted deliberately: runRetrieval derives the sync scope from
+// params.branchId, so a caller cannot declare one branch and retrieve another —
+// the mismatch that would sync nothing and then KNN an unsynced index.
+export type RetrievalDeps = Omit<SyncStageDeps, 'branchIds'> & {
   queryAll: QueryAll
   embedTexts: (
     texts: string[],
@@ -156,17 +159,11 @@ export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
 ): Promise<RetrievalOutcome> {
-  // runSyncStage reports ok for an empty branch set, so a caller that forgets to
-  // populate branchIds would get a silent pass and then KNN an unsynced index.
-  if (!deps.branchIds.includes(params.branchId)) {
-    throw new Error(`runRetrieval: branch ${params.branchId} is outside the sync scope`)
-  }
-
   const startedAt = performance.now()
 
   // No KNN without a preceding sync (retrieval.md → Compute lifecycle), and
   // every read below depends on the embedding_stale flags this clears.
-  const sync = await runSyncStage(deps)
+  const sync = await runSyncStage({ ...deps, branchIds: [params.branchId] })
   const syncMs = performance.now() - startedAt
   if (!sync.ok) {
     return {

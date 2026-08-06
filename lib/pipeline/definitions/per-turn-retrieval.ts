@@ -74,9 +74,6 @@ export async function* retrievalPhase(
   const bounded = boundedSignal(ctx.abortSignal, EMBED_TIMEOUT_MS)
   const outcome = await runRetrieval(
     {
-      // Retrieval reads one branch, and runRetrieval refuses a params.branchId
-      // outside the sync scope declared here.
-      branchIds: [branchId],
       abortSignal: bounded.signal,
       queryAll: queryRows,
       runInTransaction,

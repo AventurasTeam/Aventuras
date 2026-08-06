@@ -167,7 +167,6 @@ const deps = (over: Partial<RetrievalDeps> = {}): RetrievalDeps => ({
   embedRows: vi.fn(async () => []),
   loadStaleRows: vi.fn(async () => []),
   runInTransaction: vi.fn(async () => undefined),
-  branchIds: ['br_1'],
   ...over,
 })
 
@@ -216,12 +215,14 @@ const knnCalls = (queryAll: Mocked): { sql: string; params: unknown[] }[] =>
     .map(([sql, params]) => ({ sql: String(sql), params: params as unknown[] }))
 
 describe('runRetrieval — sync ordering', () => {
-  it('throws when the branch being retrieved is outside the sync scope', async () => {
-    await expect(runRetrieval(deps({ branchIds: ['br_other'] }), params())).rejects.toThrow(
-      /sync scope/,
-    )
-    // Positive control: the same pass succeeds once the branch is in scope.
-    expect(expectOk(await runRetrieval(deps(), params())).ok).toBe(true)
+  // Replaces a runtime guard against a branchIds/branchId mismatch: RetrievalDeps
+  // no longer carries branchIds, so the sync scope cannot disagree with the
+  // branch being retrieved.
+  it('syncs exactly the branch it retrieves', async () => {
+    const loadStaleRows = vi.fn(async () => [])
+    expectOk(await runRetrieval(deps({ loadStaleRows }), params({ branchId: 'br_9' })))
+
+    expect(loadStaleRows).toHaveBeenCalledWith(['br_9'])
   })
 
   it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
