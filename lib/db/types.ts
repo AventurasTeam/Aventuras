@@ -27,8 +27,16 @@ import type {
 
 export type SqlOp = { sql: string; params: unknown[] }
 
-/** Same shape as `SqlOp`, on the read side: a SELECT plus its bound params. */
-export type RowQuery = { sql: string; params: unknown[] }
+/**
+ * A SELECT plus its bound params. Structurally identical to `SqlOp`, so branded
+ * to keep the direction checked: without it `runInTransaction` accepts a read
+ * and `queryAll` accepts a write, which is a write executed outside the batch.
+ */
+export type RowQuery = { sql: string; params: unknown[]; readonly __brand: 'RowQuery' }
+
+export function rowQuery(sql: string, params: unknown[]): RowQuery {
+  return { sql, params } as RowQuery
+}
 
 export type DbCtx = {
   db: BaseSQLiteDatabase<'async' | 'sync', unknown, typeof dbSchema>

@@ -2,6 +2,7 @@ import type { PipelineAction } from '@/lib/actions/types'
 import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
+import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
 
 export type PipelineError =
@@ -26,7 +27,7 @@ export type PipelineError =
   // (model-management.md → Embed failure is blocking). Distinct from 'provider',
   // whose retry story is the LLM's. `staleCount` is null when there is no
   // magnitude to report — see RetrievalFailure in lib/retrieval.
-  | { kind: 'embedder'; reason: 'init' | 'call'; detail: string; staleCount: number | null }
+  | { kind: 'embedder'; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
 
 export type PhaseResult =
   | { status: 'completed' }

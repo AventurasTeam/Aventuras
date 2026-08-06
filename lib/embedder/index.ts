@@ -23,7 +23,7 @@ export type { EmbedderGateResult } from './gate'
 export { providerHasEmbeddingEndpoint, providerTypeSupportsEmbedding } from './provider-support'
 
 export { EmbedderCallError, EmbedderInitError } from './types'
-export type { EmbedderBackend, EmbedderConfig } from './types'
+export type { EmbedderBackend, EmbedderConfig, EmbedderErrorKind } from './types'
 
 export { embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
 export type { LocalEmbedResult } from './local/runtime'

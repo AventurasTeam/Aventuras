@@ -1,4 +1,4 @@
-import type { RowQuery } from '../types'
+import { rowQuery, type RowQuery } from '../types'
 import { vecTableName, type VecTargetKind } from './vec-tables'
 
 // Not blob.slice(): Buffer#slice returns a VIEW, and a driver is free to hand
@@ -41,9 +41,9 @@ export function knnQuery(kind: VecTargetKind, dim: number, p: KnnParams): RowQue
   if (!Number.isInteger(p.k) || p.k < 1) {
     throw new Error(`Invalid KNN k: ${p.k}`)
   }
-  return {
-    sql: `SELECT id, distance, embedding FROM ${vecTableName(kind, dim)}
+  return rowQuery(
+    `SELECT id, distance, embedding FROM ${vecTableName(kind, dim)}
           WHERE embedding MATCH ? AND k = ? AND branch_id = ? AND model_id = ?`,
-    params: [p.vector, p.k, p.branchId, p.modelId],
-  }
+    [p.vector, p.k, p.branchId, p.modelId],
+  )
 }

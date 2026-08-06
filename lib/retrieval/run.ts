@@ -1,4 +1,5 @@
 import { knnQuery, unpackFloat32, vecTableName, type VecTargetKind } from '@/lib/db'
+import type { EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
@@ -91,7 +92,7 @@ export type RetrievalTimings = {
 
 /** Blocking failure from either embedder call the pass makes — the sync's or the query's. */
 export type RetrievalFailure = {
-  reason: 'init' | 'call'
+  reason: EmbedderErrorKind
   detail: string
   /**
    * Rows the sync stage was trying to embed. Null when there is no magnitude to

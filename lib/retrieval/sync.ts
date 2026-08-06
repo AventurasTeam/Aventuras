@@ -1,5 +1,5 @@
 import type { DbCtx, EmbeddedFieldRow, SqlOp } from '@/lib/db'
-import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
+import { EmbedderCallError, EmbedderInitError, type EmbedderErrorKind } from '@/lib/embedder'
 
 export type SyncStageDeps = {
   branchIds: readonly string[]
@@ -11,7 +11,7 @@ export type SyncStageDeps = {
 
 export type SyncStageResult =
   | { ok: true; embedded: number }
-  | { ok: false; reason: 'init' | 'call'; detail: string; staleCount: number | null }
+  | { ok: false; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
 
 /**
  * Typed embedder errors carry their own kind. Anything else — a failed read or
@@ -20,7 +20,7 @@ export type SyncStageResult =
  * surfaces).
  */
 export function classifyEmbedderFailure(error: unknown): {
-  reason: 'init' | 'call'
+  reason: EmbedderErrorKind
   detail: string
 } {
   return {
