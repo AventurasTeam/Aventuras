@@ -223,6 +223,32 @@ describe('submitTurn', () => {
     expect(pipeline.concurrencyPolicy.blockedBy).toEqual([PER_TURN_KIND, 'chapter-close'])
   })
 
+  // A swap owns the vec tables: the turn's sync stage would embed under the
+  // story's current model and clear embedding_stale on rows phase 2 deletes.
+  it('refuses a turn while a swap is pending, before writing the user action', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const open = currentStoryStore.getCurrentStory()
+    if (open == null) throw new Error('story not open')
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, embedding_swap_target: 'bge-m3' },
+    })
+
+    const result = await submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'Hello there', composerMode: 'say' },
+      ctx,
+    )
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(branchEntries('b1')).toEqual([])
+    const rows = await db.select().from(storyEntries).where(eq(storyEntries.branchId, 'b1'))
+    expect(rows).toEqual([])
+  })
+
   it('completes a turn: persists the user action and the streamed AI reply', async () => {
     const { ctx, db } = await makeHarness()
     await openStory(db, 's1', 'b1')

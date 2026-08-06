@@ -11,6 +11,7 @@ import {
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
+import { isStorySwapPending } from '../embedder-swap/app-deps'
 import type { DbCtx } from '../types'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
@@ -42,6 +43,13 @@ export async function submitTurn(
   ctx: DbCtx,
 ): ReturnType<typeof runPipeline> {
   ensurePerTurnPipelineRegistered()
+
+  // Before the queue and before the user_action write, so a refused turn leaves
+  // nothing behind. A swap owns the vec tables: the turn's blocking sync stage
+  // would embed under the story's CURRENT model and clear embedding_stale on
+  // rows swap phase 2 then deletes, leaving vectors gone and flags clean — the
+  // corruption resolveDrainConfig already stands the drain down to avoid.
+  if (isStorySwapPending(ids.storyId)) return { outcome: 'rejected', blockedBy: 'embedder-swap' }
 
   return withBranchQueue(ids.branchId, async () => {
     // Shared across the user_action's delta and the pipeline run it kicks off,

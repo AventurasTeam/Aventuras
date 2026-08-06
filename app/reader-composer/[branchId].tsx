@@ -216,6 +216,10 @@ export default function ReaderComposerRoute() {
   // A live loop reports through the Memory panel's own progress row instead.
   const swapPaused =
     storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+  // Composing is fine mid-swap; submitting is not. submitTurn refuses either way
+  // (a swap owns the vec tables), so gate here rather than let the user write a
+  // turn and take a failure entry for it.
+  const swapPending = swapRunningHere || swapPaused
 
   const activePhase = readerPillPhase({
     turnKind,
@@ -851,16 +855,18 @@ export default function ReaderComposerRoute() {
                 ref={composerRef}
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
-                disabled={!hydrationSucceeded}
+                disabled={!hydrationSucceeded || swapPending}
                 sendBlocked={editBlocked}
                 disabledReason={
                   hydrationFailed
                     ? t('reader:hydrationFailedBody')
                     : !hydrationSucceeded
                       ? t('reader:hydrationLoading')
-                      : editBlocked
-                        ? t('reader:actions.blockedWhileGenerating')
-                        : undefined
+                      : swapPending
+                        ? t('reader:actions.blockedWhileSwapping')
+                        : editBlocked
+                          ? t('reader:actions.blockedWhileGenerating')
+                          : undefined
                 }
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })

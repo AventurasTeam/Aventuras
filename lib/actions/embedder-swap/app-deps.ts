@@ -107,6 +107,19 @@ const messageOf = (error: unknown): string =>
 // under different targets, orphaning the loser's rows. Reject rather than queue.
 const inFlight = new Map<string, Promise<unknown>>()
 
+/**
+ * Whether a swap owns this story's vec tables right now. Two authorities for the
+ * same reason `resolveDrainConfig` needs both: the marker only reaches the store
+ * once `syncStoresAfterEngine` runs, so a swap started this session is invisible
+ * in `settings` while it matters most, and the in-process lock knows nothing
+ * about a marker left by a previous process.
+ */
+export function isStorySwapPending(storyId: string): boolean {
+  if (inFlight.has(storyId)) return true
+  const open = currentStoryStore.getCurrentStory()
+  return open?.storyId === storyId && open.settings.embedding_swap_target != null
+}
+
 export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
   if (inFlight.has(storyId)) throw new SwapBusyError(storyId)
   const run = fn()

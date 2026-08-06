@@ -79,6 +79,7 @@
     "redo": "Redo",
     "nothingToUndo": "Nothing to undo.",
     "nothingToRedo": "Nothing to redo.",
-    "blockedWhileGenerating": "Unavailable while generating."
+    "blockedWhileGenerating": "Unavailable while generating.",
+    "blockedWhileSwapping": "Unavailable while the embedder switch finishes."
   }
 }
