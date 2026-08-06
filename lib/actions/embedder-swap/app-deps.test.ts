@@ -800,7 +800,13 @@ describe('composeRetrievalEmbedDeps', () => {
     // The whole argument list, because the intent is the load-bearing one: the
     // local model's query prefix is what puts these vectors in the same space as
     // the stored rows, and 'document' would degrade every similarity silently.
-    expect(embedTexts).toHaveBeenCalledWith(LOCAL_CONFIG, ['q1', 'q2'], 'query', undefined)
+    expect(embedTexts).toHaveBeenCalledWith(
+      LOCAL_CONFIG,
+      ['q1', 'q2'],
+      'query',
+      undefined,
+      undefined,
+    )
   })
 
   it('resolves the provider instance a provider-backed config is served by', async () => {
@@ -818,6 +824,7 @@ describe('composeRetrievalEmbedDeps', () => {
       ['q1'],
       'query',
       expect.objectContaining({ id: 'prov1' }),
+      undefined,
     )
   })
 
@@ -832,7 +839,13 @@ describe('composeRetrievalEmbedDeps', () => {
 
     // execRaw, not the ops batch: vec0 CREATE VIRTUAL TABLE cannot run inside the
     // atomic transaction the sync stage then applies these ops in.
-    expect(embedRowsToVecOps).toHaveBeenCalledWith(LOCAL_CONFIG, rows, execRaw, undefined)
+    expect(embedRowsToVecOps).toHaveBeenCalledWith(
+      LOCAL_CONFIG,
+      rows,
+      execRaw,
+      undefined,
+      undefined,
+    )
   })
 
   it('loads the dirty set across every vec family for the branches it is given', async () => {

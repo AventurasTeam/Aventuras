@@ -3,8 +3,9 @@ import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
 
 export type SyncStageDeps = {
   branchIds: readonly string[]
+  abortSignal?: AbortSignal
   loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
-  embedRows: (rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
+  embedRows: (rows: EmbeddedFieldRow[], abortSignal?: AbortSignal) => Promise<SqlOp[]>
   runInTransaction: DbCtx['runInTransaction']
 }
 
@@ -53,7 +54,7 @@ export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult
     const rows = await deps.loadStaleRows(deps.branchIds)
     if (rows.length === 0) return { ok: true, embedded: 0 }
     staleCount = rows.length
-    await deps.runInTransaction(await deps.embedRows(rows))
+    await deps.runInTransaction(await deps.embedRows(rows, deps.abortSignal))
     return { ok: true, embedded: staleCount }
   } catch (error) {
     return { ok: false, ...classifyEmbedderFailure(error), staleCount }

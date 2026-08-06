@@ -46,7 +46,10 @@ import { cosine } from './vector'
 
 export type RetrievalDeps = SyncStageDeps & {
   queryAll: QueryAll
-  embedTexts: (texts: string[]) => Promise<{ vectors: Float32Array[]; dim: number }>
+  embedTexts: (
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ) => Promise<{ vectors: Float32Array[]; dim: number }>
 }
 
 export type RetrievalParams = {
@@ -289,7 +292,7 @@ async function embedQueries(
 
   let embedded: { vectors: Float32Array[]; dim: number }
   try {
-    embedded = await deps.embedTexts(texts)
+    embedded = await deps.embedTexts(texts, deps.abortSignal)
   } catch (error) {
     return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
   }

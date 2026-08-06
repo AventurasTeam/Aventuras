@@ -489,6 +489,7 @@ describe('retrieval phase — success', () => {
     // so dropping it leaves queryAll/runInTransaction in place and every
     // params-shaped assertion in this file still green.
     expect(Object.keys(deps).sort()).toEqual([
+      'abortSignal',
       'branchIds',
       'embedRows',
       'embedTexts',
@@ -509,6 +510,27 @@ describe('retrieval phase — abort', () => {
 
     expect(result).toEqual({ status: 'aborted' })
     expect(runRetrievalMock).not.toHaveBeenCalled()
+  })
+
+  // An expiry aborts the pass the same way a cancel does, so reading the bounded
+  // signal after it would report every stalled provider as a user cancel: draft
+  // restored, no error, no Switch embedder, retrying into the same dead endpoint.
+  it('reports a timed-out embed as a blocking failure, not as a cancel', async () => {
+    seedOpenStory()
+    vi.useFakeTimers()
+    runRetrievalMock.mockImplementation(async (deps: { abortSignal?: AbortSignal }) => {
+      vi.advanceTimersByTime(300_000)
+      if (deps.abortSignal?.aborted !== true) throw new Error('expected the bounded signal to fire')
+      return { ok: false, failure: { reason: 'call', detail: 'aborted', staleCount: null } }
+    })
+
+    const { result } = await runRetrievalPhase()
+    vi.useRealTimers()
+
+    expect(result).toMatchObject({
+      status: 'failed',
+      error: { kind: 'embedder', reason: 'call', detail: 'embed timed out after 300000ms' },
+    })
   })
 
   it('aborts after a pass the cancel landed mid-way through, stashing nothing', async () => {

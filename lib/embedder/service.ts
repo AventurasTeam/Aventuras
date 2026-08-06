@@ -35,8 +35,11 @@ async function embedRaw(
   texts: string[],
   intent: EmbedIntent,
   provider: ProviderInstanceWithStub | undefined,
+  abortSignal?: AbortSignal,
 ): Promise<RawEmbedding> {
   if (config.backend === 'local') {
+    // The local bridge is one IPC call with no cancellation channel, so a signal
+    // cannot interrupt it — see the local-embed cancellation item in triage.md.
     const prefix = localPrefix(config.modelId, intent)
     const prefixed = prefix === '' ? texts : texts.map((text) => prefix + text)
     return embedLocal(config.modelId, prefixed)
@@ -50,7 +53,7 @@ async function embedRaw(
   const { embedViaProvider } = await import('@/lib/ai')
   const dimensions =
     config.truncation?.serverSide === true ? config.truncation.effectiveDim : undefined
-  return embedViaProvider(provider, config.modelId, texts, undefined, dimensions)
+  return embedViaProvider(provider, config.modelId, texts, undefined, dimensions, abortSignal)
 }
 
 /**
@@ -77,10 +80,11 @@ export async function embedTexts(
   texts: string[],
   intent: EmbedIntent = 'document',
   provider?: ProviderInstanceWithStub,
+  abortSignal?: AbortSignal,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
   if (texts.length === 0) return { vectors: [], dim: 0 }
 
-  const raw = await embedRaw(config, texts, intent, provider)
+  const raw = await embedRaw(config, texts, intent, provider, abortSignal)
 
   // A malformed provider response with the wrong vector count would silently
   // misalign vectors onto rows downstream — reject it before that can happen.
@@ -150,11 +154,12 @@ export async function embedRowsToVecOps(
   rows: EmbeddedFieldRow[],
   exec: (sql: string) => Promise<void>,
   provider?: ProviderInstanceWithStub,
+  abortSignal?: AbortSignal,
 ): Promise<{ ops: SqlOp[]; dim: number | null }> {
   if (rows.length === 0) return { ops: [], dim: null }
 
   const composites = rows.map((row) => compositeText(row.fields))
-  const { vectors, dim } = await embedTexts(config, composites, 'document', provider)
+  const { vectors, dim } = await embedTexts(config, composites, 'document', provider, abortSignal)
 
   try {
     await ensureVecTables(dim, exec)

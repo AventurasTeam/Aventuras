@@ -237,18 +237,26 @@ const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
 const makeDrainEmbedRows = (): DrainDeps['embedRows'] => async (config, rows) =>
   (await embedRowsToVecOps(config, rows, execRaw, providerFor(config))).ops
 
-/** The embed surface a retrieval pass needs, resolved off the open story. */
+/**
+ * The embed surface a retrieval pass needs, resolved off the open story. Unlike
+ * the drain's, both calls take a signal: a turn blocks on them, so a stalled
+ * provider has to be interruptible rather than parking the turn indefinitely.
+ */
 export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
-  embedTexts: (texts: string[]) => Promise<{ vectors: Float32Array[]; dim: number }>
-  embedRows: (rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
+  embedTexts: (
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ) => Promise<{ vectors: Float32Array[]; dim: number }>
+  embedRows: (rows: EmbeddedFieldRow[], abortSignal?: AbortSignal) => Promise<SqlOp[]>
   loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
 } {
-  const drainEmbedRows = makeDrainEmbedRows()
   return {
     // 'query' intent, not 'document': the local model's query prefix is what
     // puts the three query vectors in the same space as the stored rows.
-    embedTexts: (texts) => embedTexts(config, texts, 'query', providerFor(config)),
-    embedRows: (rows) => drainEmbedRows(config, rows),
+    embedTexts: (texts, abortSignal) =>
+      embedTexts(config, texts, 'query', providerFor(config), abortSignal),
+    embedRows: async (rows, abortSignal) =>
+      (await embedRowsToVecOps(config, rows, execRaw, providerFor(config), abortSignal)).ops,
     loadStaleRows,
   }
 }

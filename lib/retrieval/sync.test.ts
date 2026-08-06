@@ -121,8 +121,10 @@ const staleFlags = (sqlite: DatabaseSync, table: 'lore' | 'entities'): Record<st
     ).map((r) => [r.id, r.embedding_stale]),
   )
 
-const embeddedIds = (embedRows: { mock: { calls: [EmbeddedFieldRow[]][] } }, call = 0): string[] =>
-  embedRows.mock.calls[call][0].map((r) => r.id).sort()
+const embeddedIds = (
+  embedRows: { mock: { calls: [EmbeddedFieldRow[], (AbortSignal | undefined)?][] } },
+  call = 0,
+): string[] => embedRows.mock.calls[call][0].map((r) => r.id).sort()
 
 describe('runSyncStage', () => {
   it('embeds every stale row in one batch and clears their flags', async () => {

@@ -1,3 +1,4 @@
+import { boundedSignal } from '@/lib/abort'
 import { inheritedEntryMetadata, queryRows, runInTransaction, type StoryEntry } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
@@ -11,6 +12,10 @@ export const RETRIEVAL_PHASE_NAME = 'retrieval'
 export const RETRIEVAL_INTERMEDIATE_KEY = 'retrieval'
 
 const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening'])
+
+// Matches the periodic classifier's call budget: both bound one blocking
+// provider call, and a turn already tolerates a narrative stream of this order.
+const EMBED_TIMEOUT_MS = 300_000
 
 export async function* retrievalPhase(
   ctx: PhaseContext,
@@ -63,11 +68,16 @@ export async function* retrievalPhase(
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
+  // A provider that accepts the connection and stalls would otherwise park the
+  // turn forever holding the hard gate, with the pill still offering a Cancel
+  // that reaches nothing.
+  const bounded = boundedSignal(ctx.abortSignal, EMBED_TIMEOUT_MS)
   const outcome = await runRetrieval(
     {
       // Retrieval reads one branch, and runRetrieval refuses a params.branchId
       // outside the sync scope declared here.
       branchIds: [branchId],
+      abortSignal: bounded.signal,
       queryAll: queryRows,
       runInTransaction,
       ...composeRetrievalEmbedDeps(resolution.config),
@@ -101,17 +111,23 @@ export async function* retrievalPhase(
     },
   )
 
-  // runRetrieval takes no signal, so a cancel raised during the pass is only
-  // observable here — falling through hands narrativePhase an already-aborted
-  // turn to open an LLM call on.
+  bounded.dispose()
+
+  // The OUTER signal, not the bounded one: an expiry aborts the pass the same
+  // way a cancel does, but it is a provider fault. Reading the bounded signal
+  // here would report every timeout as a phantom user-cancel — draft restored,
+  // no error, no Switch embedder, retrying into the same dead provider.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   if (!outcome.ok) {
+    const failure = bounded.expired()
+      ? { ...outcome.failure, detail: `embed timed out after ${EMBED_TIMEOUT_MS}ms` }
+      : outcome.failure
     ctx.log.warn('retrieval.embed_failed', {
-      reason: outcome.failure.reason,
-      staleCount: outcome.failure.staleCount,
+      reason: failure.reason,
+      staleCount: failure.staleCount,
     })
-    return { status: 'failed', error: { kind: 'embedder', ...outcome.failure } }
+    return { status: 'failed', error: { kind: 'embedder', ...failure } }
   }
 
   // AC7 wants the per-turn cost observable against the PoC baseline (~43 ms per
