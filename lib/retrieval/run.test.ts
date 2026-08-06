@@ -130,6 +130,8 @@ type Fixture = {
   awareness?: Row[]
   chapterRanges?: Row[]
   knn?: Row[]
+  /** Omit for the normal case: every dim family exists. `[]` is a cold start. */
+  vecTables?: Row[]
 }
 
 /**
@@ -139,7 +141,8 @@ type Fixture = {
  * loudly.
  */
 function makeQueryAll(rows: Fixture): QueryAll & { mock: { calls: unknown[][] } } {
-  return vi.fn(async (sql: string) => {
+  return vi.fn(async (sql: string, params: unknown[]) => {
+    if (sql.includes('sqlite_master')) return rows.vecTables ?? params.map((name) => [name])
     if (sql.includes('MATCH')) return rows.knn ?? []
     if (sql.includes('JOIN story_entries')) return rows.chapterRanges ?? []
     if (sql.includes('happening_awareness')) return rows.awareness ?? []
@@ -372,6 +375,16 @@ describe('runRetrieval — KNN passes', () => {
 
     expect(out.queries.presence).toEqual([true, true, true])
     expect(knnTables(queryAll)).toEqual(perKind(3))
+  })
+
+  // A story that needs no lead entity embeds nothing at creation, so the dim
+  // family does not exist on turn 1 and vec0 answers a KNN with "no such table".
+  it('skips the KNN entirely when the dim family does not exist yet', async () => {
+    const queryAll = makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')], vecTables: [] })
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    expect(knnTables(queryAll)).toEqual([])
+    expect(out.bundles.entities.selected).toEqual([])
   })
 
   it('collapses to one pass per type when only Q1 has text', async () => {

@@ -1,4 +1,4 @@
-import { knnQuery, unpackFloat32, type VecTargetKind } from '@/lib/db'
+import { knnQuery, unpackFloat32, vecTableName, type VecTargetKind } from '@/lib/db'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
@@ -132,6 +132,23 @@ export type RetrievalSuccess = Extract<RetrievalOutcome, { ok: true }>
 
 const KINDS = Object.keys(TYPE_OF_KIND) as VecTargetKind[]
 
+// A dim family only exists once the sync stage has embedded something into it,
+// so an absent table is a cold start, not a fault: a story that needs no lead
+// entity (creative mode, third person) embeds nothing at creation, and vec0
+// answers the first turn's KNN with an opaque "no such table". Checked rather
+// than caught so a genuine SQL fault still surfaces.
+async function loadExistingVecTables(
+  queryAll: RetrievalDeps['queryAll'],
+  dim: number,
+): Promise<ReadonlySet<string>> {
+  const names = KINDS.map((kind) => vecTableName(kind, dim))
+  const rows = await queryAll(
+    `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${names.map(() => '?').join(', ')})`,
+    names,
+  )
+  return new Set(rows.map((row) => String(row[0])))
+}
+
 export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
@@ -195,6 +212,7 @@ export async function runRetrieval(
   ]
 
   const poolCtx = {
+    existingVecTables: await loadExistingVecTables(deps.queryAll, params.dim),
     queryVectors,
     index,
     floor,
@@ -294,6 +312,7 @@ async function embedQueries(
 
 type PoolCtx = {
   kind: VecTargetKind
+  existingVecTables: ReadonlySet<string>
   queryVectors: readonly (Float32Array | null)[]
   index: NameKeywordIndex
   floor: StructuralFloor
@@ -311,6 +330,9 @@ async function buildPool(
   const vectorById = new Map<string, Float32Array>()
   const perQuery: KnnHit[][] = []
   let knnMs = 0
+
+  if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim)))
+    return { candidates: [], knnMs }
 
   for (const vector of ctx.queryVectors) {
     if (vector === null) {
