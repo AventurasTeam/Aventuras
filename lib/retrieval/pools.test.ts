@@ -306,6 +306,15 @@ describe('filterEntityPool', () => {
     expect(ids(pool)).not.toContain('e')
   })
 
+  // status arrives from an unchecked positional cast, so a value outside the
+  // union (an enum rename, a hand-edited row) must exclude rather than fall
+  // through — admitting it injects content injection_mode was meant to gate.
+  it('excludes a status outside the union rather than admitting it', () => {
+    const rogue = { ...entity({ id: 'x', name: 'Rogue' }), status: 'archived' as never }
+    const pool = filterEntityPool([...rows, rogue], { floorIds: new Set(), recentProse: '' })
+    expect(ids(pool)).not.toContain('x')
+  })
+
   it('excludes retired by default but admits retired + always', () => {
     const pool = filterEntityPool(rows, { floorIds: new Set(), recentProse: '' })
     expect(ids(pool)).not.toContain('c')
@@ -412,6 +421,11 @@ describe('filterThreadPool', () => {
   it('excludes an active thread even when no floor was passed', () => {
     const withActive = [...rows, thread({ id: 'act', status: 'active' })]
     expect(ids(filterThreadPool(withActive, new Set()))).toEqual(['p', 'r', 'f'])
+  })
+
+  it('excludes a status outside the union rather than admitting it', () => {
+    const rogue = { ...thread({ id: 'x' }), status: 'archived' as never }
+    expect(ids(filterThreadPool([...rows, rogue], new Set()))).toEqual(['p', 'r', 'f'])
   })
 
   it('excludes threads already seated in the structural floor', () => {

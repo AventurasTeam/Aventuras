@@ -102,6 +102,13 @@ export type EntityPoolInput = {
   recentProse: string
 }
 
+// Allowlists, not fall-through: status reaches the pool through an unchecked
+// positional cast in source-rows.ts, and an unrecognised value admitted here is
+// wrong content in the prompt — the outcome injection_mode exists to prevent.
+// Retired is decided separately; active threads are floor-seated, not pooled.
+const POOLABLE_ENTITY_STATUS: ReadonlySet<string> = new Set(['staged', 'active'])
+const POOLABLE_THREAD_STATUS: ReadonlySet<string> = new Set(['pending', 'resolved', 'failed'])
+
 /**
  * retrieval.md → Three-sub-pool entity model: active off-scene, staged, and
  * retired only via injection_mode='always'. The retired branch below excludes
@@ -131,6 +138,7 @@ export function filterEntityPool(rows: readonly EntityRow[], input: EntityPoolIn
     if (input.floorIds.has(r.id)) return false
     if (r.injectionMode === 'disabled') return false
     if (r.status === 'retired') return r.injectionMode === 'always'
+    if (!POOLABLE_ENTITY_STATUS.has(r.status)) return false
     if (suppressedIds.has(r.id)) return false
     return true
   })
@@ -155,7 +163,8 @@ export function filterThreadPool(
   floorIds: ReadonlySet<string>,
 ): ThreadRow[] {
   return rows.filter(
-    (r) => !floorIds.has(r.id) && r.status !== 'active' && r.injectionMode !== 'disabled',
+    (r) =>
+      !floorIds.has(r.id) && POOLABLE_THREAD_STATUS.has(r.status) && r.injectionMode !== 'disabled',
   )
 }
 
