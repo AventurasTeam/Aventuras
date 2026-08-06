@@ -219,11 +219,15 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     // skipped one, so a short-circuit — a memoised "branch is synced", an
     // intermediate carried across the retried run — would generate against a
     // stale index with an empty bundle and every assertion above would hold.
+    // The chapters block is the marker because it is the only one with no
+    // structural path: entities, lore and threads all render from the floor too,
+    // so their headers appear whether or not the ranker ran. A chapter is ranked
+    // or absent. (Happenings are equally exclusive but this fixture seats none.)
     const retried = mock.requests.findLast((r) => r.streamed)
     expect(retried, 'the retry reached the provider').toBeDefined()
     expect(
       JSON.stringify(retried!.body),
       'the retry composed a memory bundle rather than skipping retrieval',
-    ).toContain('# What has happened')
+    ).toContain('# Earlier chapters')
   })
 })
