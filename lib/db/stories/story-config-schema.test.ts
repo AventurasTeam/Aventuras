@@ -200,6 +200,25 @@ describe('storySettingsSchema spec-pinned defaults', () => {
     })
     expect(r.success).toBe(false)
   })
+
+  // Budgets are token counts the M7 sliders write straight into. A negative one
+  // makes every candidate read as too large and seats nothing; Infinity puts NaN
+  // in the funnel and leaves the prompt unbounded.
+  it.each([-1, 1.5, Infinity, NaN])('rejects a token budget of %p', (value) => {
+    const r = storySettingsSchema.safeParse({
+      ...VALID_SETTINGS,
+      retrievalBudgets: { ...VALID_SETTINGS.retrievalBudgets, lore: value },
+    })
+    expect(r.success).toBe(false)
+  })
+
+  it.each(['partialChapterBuffer', 'protectedBuffer'] as const)(
+    'rejects a fractional %s rather than flooring it downstream',
+    (key) => {
+      const r = storySettingsSchema.safeParse({ ...VALID_SETTINGS, [key]: 2.5 })
+      expect(r.success).toBe(false)
+    },
+  )
 })
 
 describe('storySettingsPartialSchema', () => {
