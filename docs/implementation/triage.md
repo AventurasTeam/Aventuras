@@ -1434,3 +1434,38 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   range (ids are known, so it is a lookup rather than a second vector
   search). Surfaced by a post-merge design question from the user
   (2026-08-05).
+- **`metadata.tokens.completion` is the wrong measure for the chapter
+  threshold, on four independent counts.** M5 needs
+  `openRegionTokens(branchId)` as a DB read
+  ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)),
+  and `story_entries.metadata.tokens` already looks like the answer.
+  It is not. (1) **Stale on edit** — `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts:45`) sets only `{ content }`,
+  so the count survives a rewrite unchanged. (2) **Wrong text even when
+  fresh** — it is provider `usage.outputTokens`
+  (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
+  model emitted, including the state block stripped before persist; the
+  world-state-block work in [`followups.md`](../followups.md) widens that
+  gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
+  one that provider uses, while `chapterTokenThreshold` and the
+  token-progress strip measure in cl100k via `countTokens`. A story that
+  switches providers mid-run would sum two incompatible token scales.
+  (4) **AI entries only** — `usage` exists only on a generation call, so
+  `user_action` rows carry no count at all, and they are part of the open
+  region (`kind !== 'system'`). A SUM over `completion` undercounts by
+  every user turn. The decision is therefore a **new field, not a
+  rename**: `tokens.{prompt, completion, reasoning}` is a coherent
+  provider-usage triple worth keeping for cost provenance, and
+  repurposing one leg of it to mean "cl100k count of the stored content"
+  makes the other two incoherent. Open sub-questions: a real
+  `story_entries` column (SUM-able and indexable, which a JSON field is
+  not — and M5's trigger reads this per turn) versus another metadata
+  key; which write paths must maintain it (generation, edit, prose
+  reversal, system entries, import/seed); backfill for existing rows;
+  whether a translated story counts the original or the translation
+  (the original feeds the prompt buffer, so presumably that); and which
+  number the entry card shows now that "reply tokens" and "content
+  tokens" diverge
+  ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
+  Sits with the three token-progress-strip entries above, which the same
+  change would resolve. Surfaced by review discussion (2026-08-06).

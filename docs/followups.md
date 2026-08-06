@@ -206,6 +206,47 @@ for the placement rule.
   covers. Surfaced 2026-07-31 reviewing
   [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
 
+- **Q3's Medium-weight signals are English-shaped and fail silently.**
+  [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
+  scores five signals; the two High ones (entity-name, lore-keyword) are
+  language-agnostic by construction — `matchTerms` uses `\p{L}\p{N}`
+  lookarounds specifically so accented and Cyrillic names match. Both
+  Medium ones are not, and neither degrades loudly.
+  - **Action verbs.** `ACTION_VERBS` (`lib/retrieval/prose-extract.ts`)
+    is 13 hardcoded English simple-past verbs matched by exact
+    `Set.has`, no stemming. `stories.settings.definition.narration`
+    offers `first | second | third` with **no tense axis**, so
+    second-person present ("You draw the blade") — a first-class
+    supported register — hits none of them: `drew` scores, `draws` /
+    `draw` / `drawing` do not. There is also no narrative-language
+    setting at all (`translation.targetLanguage` is the translation
+    _target_; entries store the original), so a story written in
+    Spanish or Russian scores zero on this signal permanently. And it
+    false-positives on names: `words` is lowercased before lookup, so
+    "**Drew** nodded." fires the verb weight, and if Drew is an entity
+    the same token also fires the entity weight — one word, two
+    signals, no action. `Said` has the same problem.
+  - **Dialogue spans.** `DIALOGUE_SPAN` covers `"…"`, `“…”` and
+    `‘…’` and misses `«…»` (French, Russian), `„…”` (German, Polish,
+    Czech) and `「…」` (CJK). Same weight, same silent miss, but
+    unlike the verb list this one is a three-alternative regex change
+    with no linguistics in it — worth taking on its own if the wider
+    redesign stalls.
+  - **Brevity** is character-counted (`BREVITY_MAX_CHARS = 90`), so in
+    CJK it fires on nearly every sentence and stops discriminating.
+
+  Failure is silent throughout: when every sentence scores 0,
+  `extractProse` still returns top-K by source-order tie-break, so Q3
+  quietly degrades to "the first 4 sentences" while carrying its full
+  `w_prose = 0.30` share of the blend. One redesign direction worth
+  arguing: drop the hardcoded list for a set derived from the branch's
+  own happening titles, which the classifier writes in the story's
+  language — self-localizing, no linguistics, reuses an index the pass
+  already builds. Mildly circular, hence a discussion rather than a
+  patch. Touches the canon signal table, so it is a spec change, not
+  only a code change. Surfaced 2026-08-06 reviewing
+  [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
+
 ## Tooling
 
 - **`pnpm test:run` over the whole repo cannot be read as a gate.** A
