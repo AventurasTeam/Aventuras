@@ -228,8 +228,9 @@ export async function runRetrieval(
     queryText: queries.embedTexts.join('\n'),
   }
 
-  // A literal, not a built-up Record: a RetrievalType that no VecTargetKind maps
-  // to would otherwise leave an undefined hole here that rankPerType throws on.
+  // A literal, not a built-up Record, so a missing key is a build error here
+  // rather than an undefined pool rankPerType throws on. RetrievalType derives
+  // from TYPE_OF_KIND, so a kind added there fails this until it is seated.
   const pools: Record<RetrievalType, Candidate[]> = {
     entities: [],
     lore: [],

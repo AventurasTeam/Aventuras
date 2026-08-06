@@ -43,6 +43,7 @@ export type { BranchEraFlipWrite } from './stories/era-flip-schema'
 export type {
   ClassifierLifecycleState,
   ClassifierStatus,
+  DropReason,
   ProbeCapturePayload,
 } from './world-json-types'
 export type {

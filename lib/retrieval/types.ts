@@ -1,18 +1,23 @@
-import type { VecTargetKind } from '@/lib/db'
-
-/** Budget/pool key. Plural, matching stories.settings.retrievalBudgets. */
-export type RetrievalType = 'entities' | 'lore' | 'happenings' | 'threads' | 'chapters'
+import type { DropReason, VecTargetKind } from '@/lib/db'
 
 /** Row kind. Singular, matching VecTargetKind and the probe's target_kind. */
 export type CandidateKind = VecTargetKind
 
-export const TYPE_OF_KIND: Record<CandidateKind, RetrievalType> = {
+export const TYPE_OF_KIND = {
   entity: 'entities',
   lore: 'lore',
   happening: 'happenings',
   thread: 'threads',
   chapter: 'chapters',
-}
+} as const satisfies Record<CandidateKind, string>
+
+/**
+ * Budget/pool key. Plural, matching stories.settings.retrievalBudgets. Derived
+ * from the map rather than declared beside it: surjectivity is then structural,
+ * so a type no kind maps to cannot exist to leave an undefined pool hole, and a
+ * duplicated value fails the per-type literals that key on this.
+ */
+export type RetrievalType = (typeof TYPE_OF_KIND)[CandidateKind]
 
 /** Positional value-array query seam, matching lib/db/runtime/exec.ts's queryRows. */
 export type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
@@ -48,12 +53,7 @@ export type Candidate = {
   embeddingStale: boolean
 }
 
-export type DropReason =
-  | 'pre_filtered'
-  | 'below_threshold'
-  | 'over_budget'
-  | 'candidate_too_large'
-  | 'not_dropped'
+export type { DropReason }
 
 /**
  * Per-candidate trace, contract C4. camelCase here; Slice 3.5 maps to the

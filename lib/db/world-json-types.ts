@@ -8,7 +8,12 @@ export type ClassifierStatus = {
   processedThrough: number | null
 }
 
-type DropReason =
+/**
+ * Why a candidate did not reach the prompt. Owned here because the probe capture
+ * persists it; lib/retrieval imports this rather than restating it, so adding a
+ * reason cannot land on one side of the snake_case mapping only.
+ */
+export type DropReason =
   | 'pre_filtered'
   | 'below_threshold'
   | 'over_budget'
