@@ -55,6 +55,7 @@ src-tauri/Cargo.lock.bak
 src-tauri/gen/android/app/src/main/jniLibs/
 src-tauri/gen/android/app/src/main/assets/
 src-tauri/gen/android/app/src/main/java/**/generated/
+src-tauri/gen/android/app/tauri.build.gradle.kts
 
 # Android: secrets (handled by CI secrets)
 src-tauri/gen/android/aventura.keystore
