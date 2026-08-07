@@ -34,6 +34,20 @@ describe('mmrRank', () => {
     expect(out[2].mmrScore).toBeCloseTo(0.35, 6) // 0.75*0.8 − 0.25*1.0 (max sim vs S, not vs last pick)
   })
 
+  it("preserves an anti-correlated candidate's diversity bonus", () => {
+    const out = mmrRank(
+      [
+        { id: 'first', score: 0.9, vector: v(1, 0) },
+        { id: 'anti', score: 0.4, vector: v(-1, 0) },
+        { id: 'orthogonal', score: 0.7, vector: v(0, 1) },
+      ],
+      0.75,
+    )
+
+    expect(out.map((c) => c.id)).toEqual(['first', 'anti', 'orthogonal'])
+    expect(out[1].mmrScore).toBeCloseTo(0.55, 6) // 0.75*0.4 − 0.25*-1.0
+  })
+
   it('returns every candidate exactly once', () => {
     const out = mmrRank(
       [

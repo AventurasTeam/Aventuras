@@ -18,7 +18,7 @@ export function mmrRank<T extends MmrInput>(
   const remaining = [...candidates]
   // Keyed by id: a pool holds one Candidate per id (Q1/Q2/Q3 hits are merged
   // into a single row before ranking), so ids don't collide here.
-  const maxSim = new Map<string, number>(remaining.map((c) => [c.id, 0]))
+  const maxSim = new Map<string, number>()
   const out: MmrRanked<T>[] = []
 
   while (remaining.length > 0) {
@@ -35,7 +35,9 @@ export function mmrRank<T extends MmrInput>(
     const [picked] = remaining.splice(bestIdx, 1)
     out.push({ ...picked, mmrScore: bestScore })
     for (const c of remaining) {
-      maxSim.set(c.id, Math.max(maxSim.get(c.id) ?? 0, cosine(c.vector, picked.vector)))
+      const similarity = cosine(c.vector, picked.vector)
+      const prior = maxSim.get(c.id)
+      maxSim.set(c.id, prior === undefined ? similarity : Math.max(prior, similarity))
     }
   }
   return out
