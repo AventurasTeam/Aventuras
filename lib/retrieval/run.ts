@@ -44,7 +44,7 @@ import {
   type RankedType,
   type RetrievalType,
 } from './types'
-import { cosine } from './vector'
+import { cosine, VectorInvariantError } from './vector'
 
 // branchIds is omitted deliberately: runRetrieval derives the sync scope from
 // params.branchId, so a caller cannot declare one branch and retrieve another —
@@ -164,13 +164,15 @@ export async function runRetrieval(
   try {
     return await runRetrievalPass(deps, params)
   } catch (error) {
-    // cosine's dim and unit-norm guards, unpackFloat32's blob-length check and
-    // the KNN-hit vector invariant all mean the same thing: this branch's stored
-    // vectors do not match the model this pass reads. That is an embedder
-    // problem, so it takes the embedder surface — Switch embedder — rather than
-    // escaping as a generic orchestrator error whose only offer is a Retry that
-    // fails identically every time.
-    return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
+    // Only the vector-invariant family means "this branch's stored vectors do not
+    // match the model this pass reads" — that one takes the embedder surface,
+    // Switch embedder. A SQL fault, a dead IPC bridge or a bug in the ranker
+    // means nothing of the sort, and routing it here would offer a full re-index
+    // as the fix for a locked database.
+    if (error instanceof VectorInvariantError) {
+      return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
+    }
+    throw error
   }
 }
 
@@ -375,7 +377,7 @@ async function buildPool(
         const id = String(row[0])
         // vec0 returns each row's embedding on the match row, so the union below
         // needs no second fetch by id.
-        if (!vectorById.has(id)) vectorById.set(id, unpackFloat32(row[2] as Uint8Array))
+        if (!vectorById.has(id)) vectorById.set(id, decodeVector(row[2]))
         return [id, Number(row[1])] as const
       }),
     )
@@ -383,6 +385,17 @@ async function buildPool(
 
   const ids = poolIdsFromKnn(perQuery)
   return { candidates: ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById), knnMs }
+}
+
+// unpackFloat32 lives in lib/db, so its blob-length throw arrives untyped. It
+// carries the same meaning as cosine's guards, so it is renamed into the family
+// rather than escaping as a generic fault.
+function decodeVector(blob: unknown): Float32Array {
+  try {
+    return unpackFloat32(blob as Uint8Array)
+  } catch (error) {
+    throw new VectorInvariantError(error instanceof Error ? error.message : String(error))
+  }
 }
 
 const fresh = <T extends Stale>(rows: readonly T[]): T[] => rows.filter((r) => !r.embeddingStale)
@@ -436,7 +449,8 @@ function assembleCandidates(
   // carried its own vector.
   const vectorFor = (id: string): Float32Array => {
     const vector = vectorById.get(id)
-    if (vector === undefined) throw new Error(`runRetrieval: KNN hit ${id} carried no vector`)
+    if (vector === undefined)
+      throw new VectorInvariantError(`runRetrieval: KNN hit ${id} carried no vector`)
     return vector
   }
 

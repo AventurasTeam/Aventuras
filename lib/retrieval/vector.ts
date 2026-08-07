@@ -4,6 +4,20 @@
 const NORM_SQ_TOLERANCE = 1e-3
 
 /**
+ * A stored vector that cannot be reconciled with the model this pass reads —
+ * wrong dim, non-unit norm, or an undecodable blob. Carried as its own class so
+ * the pass can route this family to the embedder surface without sending SQL
+ * faults and code bugs there too. Extends RangeError because that is what these
+ * guards threw before the family got a name.
+ */
+export class VectorInvariantError extends RangeError {
+  constructor(message: string) {
+    super(message)
+    this.name = 'VectorInvariantError'
+  }
+}
+
+/**
  * Dot product; equals cosine because every vector in play is unit-norm. That
  * invariant is enforced on write by lib/embedder, and re-checked here because
  * this is where a violation stops being detectable: a non-unit vector yields an
@@ -16,7 +30,7 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   // corrupt, so fail loudly instead of scoring a truncated prefix or a
   // silent NaN.
   if (a.length !== b.length) {
-    throw new RangeError(`cosine: dimension mismatch (${a.length} vs ${b.length})`)
+    throw new VectorInvariantError(`cosine: dimension mismatch (${a.length} vs ${b.length})`)
   }
   let sum = 0
   let aSq = 0
@@ -31,7 +45,7 @@ export function cosine(a: Float32Array, b: Float32Array): number {
   // via Math.max into every remaining candidate, dropping a whole type's pool as
   // below-threshold. Inverting makes the non-finite cases fail the check.
   if (!(Math.abs(aSq - 1) <= NORM_SQ_TOLERANCE) || !(Math.abs(bSq - 1) <= NORM_SQ_TOLERANCE)) {
-    throw new RangeError(
+    throw new VectorInvariantError(
       `cosine: vector is not unit-norm (|a|²=${aSq.toFixed(6)}, |b|²=${bSq.toFixed(6)})`,
     )
   }

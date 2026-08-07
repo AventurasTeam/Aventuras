@@ -375,6 +375,34 @@ describe('runRetrieval — query embed failure', () => {
     expect(failure.reason).toBe('init')
     expect(failure.detail).toMatch(/unit-norm/)
   })
+
+  // Companion to the sync stage's hand-off test. The query embed is the second
+  // place a stalled provider can park the turn, and the bounded signal the phase
+  // builds is worthless if the pass drops it on the floor.
+  it('hands the abort signal to the query embed', async () => {
+    const abortSignal = new AbortController().signal
+    const embedTexts = embedder()
+
+    expect(expectOk(await runRetrieval(deps({ abortSignal, embedTexts }), params())).ok).toBe(true)
+    expect(embedTexts).toHaveBeenCalledWith(expect.anything(), abortSignal)
+  })
+
+  // The counterpart to the test above. A locked DB, a dead IPC bridge or a bug
+  // in the ranker says nothing about the stored vectors, so it must NOT take the
+  // embedder surface — whose fix action re-indexes the whole story.
+  it('lets a SQL fault escape instead of reporting it on the embedder surface', async () => {
+    const locked = new Error('SQLITE_BUSY: database is locked')
+    await expect(
+      runRetrieval(
+        deps({
+          queryAll: vi.fn(async () => {
+            throw locked
+          }),
+        }),
+        params(),
+      ),
+    ).rejects.toThrow(locked)
+  })
 })
 
 describe('runRetrieval — KNN passes', () => {
