@@ -3743,11 +3743,10 @@ class StoryStore {
       }
     }
 
-    // Switch to the new branch (skip restore since we just populated the world state)
-    await this.switchBranch(branch.id, true)
-
-    // Reload the world state from database to get the copied items into memory
-    await this.reloadEntriesForCurrentBranch()
+    // Switch to the new branch. This reloads entries and world state from the database,
+    // pulling the copied items into memory — so subscribers of BranchSwitched (and the
+    // suggested-action restore inside switchBranch) see the new branch's entries.
+    await this.switchBranch(branch.id)
 
     // Restore time tracker from checkpoint
     if (checkpoint.timeTrackerSnapshot) {
@@ -3810,10 +3809,11 @@ class StoryStore {
    * Switch to a different branch.
    * This reloads entries from the database filtered by the target branch.
    * NO data is deleted - branches coexist in the database with different branch_ids.
+   * Entries are always reloaded before BranchSwitched is emitted, so subscribers
+   * never observe the previous branch's entries.
    * @param branchId - The branch to switch to (null for main branch)
-   * @param skipReload - If true, skip reloading entries (used when creating new branch from current state)
    */
-  async switchBranch(branchId: string | null, skipReload: boolean = false): Promise<void> {
+  async switchBranch(branchId: string | null): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
@@ -3826,19 +3826,16 @@ class StoryStore {
     await database.setStoryCurrentBranch(this.currentStory.id, branchId)
     this.currentStory = { ...this.currentStory, currentBranchId: branchId }
 
-    // Reload entries from database if not skipping
-    // When creating a new branch, we skip because we're already at the correct state
-    if (!skipReload) {
-      await this.reloadEntriesForCurrentBranch()
-    }
+    // Reload entries from the database for the target branch
+    await this.reloadEntriesForCurrentBranch()
 
     // Invalidate caches
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
 
-    // Announce as soon as entries are correct (both the reload and skipReload paths).
-    // Emitted before the background/suggestion restores below so a failure in either
-    // can't silently swallow the notification.
+    // Announce once entries and caches are correct. Emitted before the
+    // background/suggestion restores below so a failure in either can't
+    // silently swallow the notification.
     eventBus.emit<BranchSwitchedEvent>({ type: 'BranchSwitched', branchId })
 
     // Reload background from database for the branch
