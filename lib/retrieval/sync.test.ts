@@ -296,25 +296,37 @@ describe('runSyncStage', () => {
       ],
     })
 
-    const result = await runSyncStage(d)
-    expect(result).toMatchObject({ ok: false, reason: 'init', staleCount: 2 })
+    await expect(runSyncStage(d)).rejects.toThrow(/no_such_table/)
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 1, lo_b: 1 })
   })
 
-  it('reports a stale-row load failure with an unknown stale count', async () => {
+  // The commit is database work, so it escapes to the caller rather than
+  // reporting on the embedder surface, whose fix action re-indexes the story.
+  it('lets a commit fault escape instead of blaming the embedder', async () => {
+    const { sqlite } = await setup([{ kind: 'lore', id: 'lo_a' }])
+    const locked = new Error('SQLITE_BUSY: database is locked')
+    const d = depsFor(
+      sqlite,
+      async () => {
+        throw locked
+      },
+      {},
+    )
+
+    await expect(runSyncStage(d)).rejects.toThrow(locked)
+  })
+
+  // The counterpart on the read side: a dirty-set load is the same DB work.
+  it('lets a stale-row load failure escape instead of blaming the embedder', async () => {
     const { sqlite, runInTransaction } = await setup([])
+    const unreachable = new Error('db unreachable')
     const d = depsFor(sqlite, runInTransaction, {
       loadStaleRows: async () => {
-        throw new Error('db unreachable')
+        throw unreachable
       },
     })
 
-    expect(await runSyncStage(d)).toEqual({
-      ok: false,
-      reason: 'init',
-      detail: 'db unreachable',
-      staleCount: null,
-    })
+    await expect(runSyncStage(d)).rejects.toThrow(unreachable)
     expect(d.embedRows).not.toHaveBeenCalled()
   })
 
