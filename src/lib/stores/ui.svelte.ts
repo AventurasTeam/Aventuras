@@ -14,8 +14,10 @@ import type {
   EmbeddedImageMeta,
   PersistentCharacterSnapshot,
 } from '$lib/types'
+import * as z from 'zod'
 import type { ActionChoice } from '$lib/services/ai/sdk/schemas/actionchoices'
 import type { Suggestion } from '$lib/services/ai/sdk/schemas/suggestions'
+import { actionChoiceSchema, suggestionSchema } from '$lib/services/ai/sdk/schemas'
 import type { StyleReviewResult } from '$lib/services/ai/generation/StyleReviewerService'
 import type {
   EntryRetrievalResult,
@@ -1026,18 +1028,32 @@ class UIStore {
         return false
       }
 
+      // Validated, not cast. This blob is written by our own generator, but it also arrives from
+      // an imported `.avt` or a synced device, and nothing between the file and here checks its
+      // shape. `ActionChoices.svelte` looks up its icon by `choice.type` and renders the result
+      // unconditionally, so a single entry missing that field takes down the whole view.
       if (storyMode === 'adventure') {
-        this.actionChoices = parsed as ActionChoice[]
+        const validated = z.array(actionChoiceSchema).safeParse(parsed)
+        if (!validated.success) {
+          console.warn('[UI] Discarding malformed saved action choices:', validated.error)
+          return false
+        }
+        this.actionChoices = validated.data
         // Also persist to settings so they survive app restart
-        const data: PersistedActionChoices = { storyId, choices: parsed as ActionChoice[] }
+        const data: PersistedActionChoices = { storyId, choices: validated.data }
         database
           .setSetting(this.getActionChoicesKey(storyId), JSON.stringify(data))
           .catch((err) => {
             console.warn('[UI] Failed to persist restored action choices:', err)
           })
       } else {
-        this.suggestions = parsed as Suggestion[]
-        const data: PersistedSuggestions = { storyId, suggestions: parsed as Suggestion[] }
+        const validated = z.array(suggestionSchema).safeParse(parsed)
+        if (!validated.success) {
+          console.warn('[UI] Discarding malformed saved suggestions:', validated.error)
+          return false
+        }
+        this.suggestions = validated.data
+        const data: PersistedSuggestions = { storyId, suggestions: validated.data }
         database.setSetting(this.getSuggestionsKey(storyId), JSON.stringify(data)).catch((err) => {
           console.warn('[UI] Failed to persist restored suggestions:', err)
         })
