@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   STORY_SETTINGS_DEFAULTS,
@@ -265,6 +265,13 @@ beforeEach(() => {
   runRetrievalMock.mockReset().mockResolvedValue(OK_OUTCOME)
   refreshEmbeddingStatusMock.mockReset().mockResolvedValue(undefined)
   resetAllStores()
+})
+
+// A hook, not an inline call after the awaited phase: a mock that throws rejects
+// that await, and fake timers left installed turn one failure into a cascade of
+// unrelated ones. No-op when the test never installed them.
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe('per-turn phase order (C6)', () => {
@@ -576,7 +583,6 @@ describe('retrieval phase — abort', () => {
     })
 
     const { result } = await runRetrievalPhase()
-    vi.useRealTimers()
 
     expect(result).toMatchObject({
       status: 'failed',
