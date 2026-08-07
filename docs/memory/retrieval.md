@@ -1183,7 +1183,15 @@ just ranked highly. The boost only fires for chapters whose content
 the prompt will actually carry context about.
 
 **Pipeline impact** — chapter-summary ranking must complete before
-happenings ranking starts so `matched_chapters` is known. Other
+happenings **pool construction** starts, not merely before happenings
+ranking. `matched_chapters` decides which happenings enter the pool at
+all, not only how the ones already in it score: a pool gated purely by
+vector similarity puts the boost out of reach of the scattered rows it
+exists to rescue, because low own-similarity is precisely their
+profile. Happenings inside a matched range are therefore admitted
+regardless of KNN rank — they carry no match row, so their vectors are
+fetched by id — and they still face the POV-awareness filter, the
+stale filter, MMR and budget fill. Admission is not seating. Other
 types (entities, lore, threads) run independently in parallel.
 
 **Why this matters.** Without the boost, happening retrieval is
