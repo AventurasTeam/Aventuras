@@ -96,6 +96,7 @@ function depsFor(
     branchIds?: readonly string[]
     embedRows?: SyncStageDeps['embedRows']
     loadStaleRows?: SyncStageDeps['loadStaleRows']
+    abortSignal?: AbortSignal
   } = {},
 ) {
   const embedRows = vi.fn<SyncStageDeps['embedRows']>(
@@ -108,6 +109,7 @@ function depsFor(
     loadStaleRows: opts.loadStaleRows ?? loaderOf(sqlite),
     embedRows,
     runInTransaction: tx,
+    ...(opts.abortSignal != null ? { abortSignal: opts.abortSignal } : {}),
   }
 }
 
@@ -314,5 +316,17 @@ describe('runSyncStage', () => {
       staleCount: null,
     })
     expect(d.embedRows).not.toHaveBeenCalled()
+  })
+
+  // The sync stage is the turn's hard gate: without the signal reaching the
+  // embedder, Cancel during a blocking embed reaches nothing and the turn holds
+  // the gate for the full timeout. Nothing else in the suite pins the hand-off.
+  it('hands the abort signal to the embedder', async () => {
+    const { sqlite, runInTransaction } = await setup([{ kind: 'lore', id: 'lo_a' }])
+    const abortSignal = new AbortController().signal
+    const d = depsFor(sqlite, runInTransaction, { abortSignal })
+
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1 })
+    expect(d.embedRows).toHaveBeenCalledWith(expect.anything(), abortSignal)
   })
 })

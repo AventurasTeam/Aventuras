@@ -62,6 +62,17 @@ describe(TAG, () => {
     }
   })
 
+  // Everything below applies the migration by filename, so it would stay green
+  // against a migration the app never runs. An unjournalled 0007 leaves every
+  // upgraded story on row-count budgets — below typeOverhead, so budget-fill
+  // seats zero rows of every type for the life of that story — and a fresh DB
+  // never needs the migration, so E2E cannot catch it either.
+  it('is wired into the upgrade path, not just present on disk', () => {
+    expect(migrationTags()).toContain(TAG)
+    const runtime = readFileSync(`${MIGRATIONS_DIR}/migrations.js`, 'utf8')
+    expect(runtime).toContain(`${TAG}.sql`)
+  })
+
   it('rewrites a count-shaped retrievalBudgets to the shipped token budgets', () => {
     insertStory(db, 's1', LEGACY_SETTINGS)
     // Positive control: the fixture really is count-shaped before the migration,
