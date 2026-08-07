@@ -25,12 +25,8 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 })
 
 const THRESHOLD = 24_000
-// Ordinary prose, not one repeated character. tiktoken's split regex leaves
-// 'x'.repeat(4000) as a single word, and the BPE merge over it costs ~600ms
-// against ~0ms for the same length of real text — enough of them here to blow
-// the 5s default on CI while passing locally.
-const LONG = 'the quick brown fox jumps over the lazy dog. '.repeat(90)
-const SHORT = 'the quick brown fox jumps over the lazy dog. '.repeat(9)
+const LONG = 'x'.repeat(4000)
+const SHORT = 'x'.repeat(400)
 
 function entry(
   id: string,
