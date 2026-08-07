@@ -58,21 +58,27 @@ Three knobs per story. Defaults copied from
   the current chapter has fewer entries than `protectedBuffer`,
   fill from the previous chapter to satisfy the `protectedBuffer`
   floor. Total entries =
-  `max(partialChapterBuffer, protectedBuffer)` once the chapter
-  is past `protectedBuffer` entries; before that, total =
-  `protectedBuffer` (with previous-chapter spillover making up
-  the gap).
+  `max(protectedBuffer, min(current_chapter_size, partialChapterBuffer))`.
 - **Full mode** (`fullChapterInBuffer = true`): LLM gets ALL
   entries in the current chapter. If the current chapter has
   fewer entries than `protectedBuffer`, fill from the previous
   chapter to satisfy the `protectedBuffer` floor. Total entries =
   `max(current_chapter_size, protectedBuffer)`.
 
+The current-chapter term is clamped to the chapter's own size in
+both modes: `partialChapterBuffer` is a window over the current
+chapter, never a claim on earlier prose. Only `protectedBuffer`
+pulls entries from before the boundary, so a
+`partialChapterBuffer` wider than the current chapter buys nothing.
+
 **Examples** (both buffers at default 10):
 
 - partial, chapter 3 has 2 entries → 2 current + 8 previous = 10
 - partial, chapter 3 has 10 entries → 10 current
 - partial, chapter 3 has 50 entries → last 10 current (no spillover)
+- partial at `partialChapterBuffer = 20`, chapter 3 has 12 entries →
+  12 current (the window clamps to the chapter; protected floor of
+  10 is already met, so no spillover)
 - full, chapter 3 has 2 entries → 2 current + 8 previous = 10
 - full, chapter 3 has 50 entries → all 50 current (chapter size
   exceeds protected floor; no spillover needed)

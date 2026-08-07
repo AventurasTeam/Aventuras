@@ -2,6 +2,14 @@ import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { buildSuggestionSlots } from '@/lib/piggyback'
+import {
+  composePromptBuffer,
+  type Candidate,
+  type EntityRow,
+  type LoreRow,
+  type RetrievalSuccess,
+  type ThreadRow,
+} from '@/lib/retrieval'
 
 type BuildArgs = {
   // Scopes both collections below. Callers already read per-branch, but no
@@ -10,8 +18,10 @@ type BuildArgs = {
   branchId: string
   // The branch's loaded entries, ascending by position. Every consumer draws
   // from that one set and differs only in how much of it it passes, so this is
-  // a truncation seam, not a per-kind query. Recency windowing is template-side
-  // via the `recent` filter, not done here.
+  // a truncation seam, not a per-kind query. What reaches a template is
+  // composePromptBuffer's window over this list, so a caller handing over a
+  // deliberate short tail can still have it cut — or emptied — by the story's
+  // own buffer knobs, which the caller does not control.
   entries: readonly StoryEntry[]
   entities: readonly Entity[]
   definition: StoryDefinition
@@ -33,7 +43,19 @@ type BuildArgs = {
   // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
   // phase has it; blank everywhere else.
   refreshGuidance?: string
+  // This turn's successful retrieval pass. Absent for the two folds that never
+  // retrieve — the piggyback fallback classifier and suggestion-refresh — which
+  // then render every bucket empty.
+  retrieval?: RetrievalSuccess
 }
+
+/** A ranked bundle row as a template sees it. */
+export type RetrievedRow = { id: string; displayName: string; renderedText: string }
+
+/** A structural-floor row as a template sees it, per source type. */
+export type FloorEntity = Pick<EntityRow, 'id' | 'kind' | 'status' | 'name' | 'description'>
+export type FloorLore = Pick<LoreRow, 'id' | 'title' | 'body'>
+export type FloorThread = Pick<ThreadRow, 'id' | 'status' | 'title' | 'description'>
 
 // Defense-in-depth: emit '' for whitespace-only definitional prose so a header
 // stays guarded regardless of the template's blank-check idiom. The bundled
@@ -70,6 +92,43 @@ function promptEntity(entity: Entity): Record<string, unknown> {
   }
 }
 
+// Only the fields a prompt renders: `renderedText` is the exact string the
+// ranker measured the type budget against, and the Float32Array vector beside
+// it would be walked into a numeric-keyed object by substituteIds.
+function promptRows(selected: readonly Candidate[] | undefined): RetrievedRow[] {
+  return (selected ?? []).map((c) => ({
+    id: c.id,
+    displayName: c.displayName,
+    renderedText: c.renderedText,
+  }))
+}
+
+// Projected for the same reason as promptRows, plus one the types hide: the
+// floor is built over loaded source rows, so every row below still carries
+// `embeddingStale` (and lore's `keywords`) at runtime even though StructuralFloor
+// declares the narrower shape. Only this projection actually drops them.
+const floorEntity = (e: EntityRow): FloorEntity => ({
+  id: e.id,
+  kind: e.kind,
+  status: e.status,
+  name: e.name,
+  description: e.description,
+})
+
+const floorEntities = (rows: readonly EntityRow[] | undefined): FloorEntity[] =>
+  (rows ?? []).map(floorEntity)
+
+const floorLore = (rows: readonly LoreRow[] | undefined): FloorLore[] =>
+  (rows ?? []).map((l) => ({ id: l.id, title: l.title, body: l.body }))
+
+const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
+  (rows ?? []).map((t) => ({
+    id: t.id,
+    status: t.status,
+    title: t.title,
+    description: t.description,
+  }))
+
 // The one context builder for the `generationContext` group: every story
 // agent's phase calls this and its template picks from the same variable set
 // (pinned in templateContextMap; parity-tested here).
@@ -84,11 +143,14 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     piggybackFires = false,
     suggestionsFire = false,
     refreshGuidance = '',
+    retrieval,
   } = args
 
   // Both exclusions are unconditional defense-in-depth: system entries are
   // technical-only rows (removed on generate) that templates must never see,
   // and a foreign-branch row would describe a story this prompt isn't telling.
+  // Not redundant with composePromptBuffer's own system filter — the scene and
+  // location tail reads below depend on this one.
   const narrative = entries.filter((e) => e.kind !== 'system' && e.branchId === branchId)
   const branchEntities = entities.filter((e) => e.branchId === branchId)
 
@@ -107,15 +169,52 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   // false — asking is that call's whole premise, not a per-run condition.
   const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
 
+  const tail = narrative.at(-1)
+  const floor = retrieval?.floor
+
+  // Every place the prompt brackets an id for, in the order the blocks render.
+  // A template that instead named "the ids above" would point <current_location>
+  // at a set that can be all characters: ranked rows reach a template as
+  // RetrievedRow, which carries no EntityKind, so their kinds come off the
+  // retrieval outcome, which still held the source row.
+  const locationIds = [
+    ...(floor?.sceneEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
+    ...(floor?.currentLocation?.kind === 'location' ? [floor.currentLocation.id] : []),
+    ...(floor?.alwaysEntities ?? []).filter((e) => e.kind === 'location').map((e) => e.id),
+    ...(retrieval?.selectedLocationIds ?? []),
+  ]
+
   const context = {
-    entries: narrative.map((e) => ({ content: e.content })),
+    // cadence.md → Composition rule: the two-mode window plus its
+    // protectedBuffer spillover is not expressible as a template `| recent: N`.
+    entries: composePromptBuffer(narrative, settings).map((e) => ({ content: e.content })),
     entities: branchEntities.map(promptEntity),
-    // Writers inherit scene membership forward (submit-turn, per-turn), so the
-    // non-system tail always carries the current scene state.
-    sceneEntities: narrative.at(-1)?.metadata?.sceneEntities ?? [],
+    // Writers inherit scene state forward (submit-turn, per-turn), so the
+    // non-system tail always carries the current scene and location.
+    sceneEntities: tail?.metadata?.sceneEntities ?? [],
+    currentLocationId: tail?.metadata?.currentLocationId ?? null,
     definition: normalizedDefinition,
     calendarVocabulary: calendar ? describeCalendarVocabulary(calendar) : null,
-    userSettings: { partialChapterBuffer: settings.partialChapterBuffer },
+    userSettings: {
+      fullChapterInBuffer: settings.fullChapterInBuffer,
+      partialChapterBuffer: settings.partialChapterBuffer,
+      protectedBuffer: settings.protectedBuffer,
+    },
+    retrievedEntities: promptRows(retrieval?.bundles.entities.selected),
+    retrievedLore: promptRows(retrieval?.bundles.lore.selected),
+    retrievedHappenings: promptRows(retrieval?.bundles.happenings.selected),
+    retrievedThreads: promptRows(retrieval?.bundles.threads.selected),
+    retrievedChapters: promptRows(retrieval?.bundles.chapters.selected),
+    structuralSceneEntities: floorEntities(floor?.sceneEntities),
+    structuralLocation: floor?.currentLocation ? floorEntity(floor.currentLocation) : null,
+    structuralActiveThreads: floorThreads(floor?.activeThreads),
+    // Kept per type rather than concatenated: no field tags a row with its own
+    // type, and an entity's `name` against lore's and threads' `title` leaves
+    // one loop nothing uniform to render.
+    structuralPinnedEntities: floorEntities(floor?.alwaysEntities),
+    structuralPinnedLore: floorLore(floor?.alwaysLore),
+    structuralPinnedThreads: floorThreads(floor?.alwaysThreads),
+    locationIds: [...new Set(locationIds)],
     intermediates: {},
     piggybackFires,
     // Re-gated on the derived slots, not just the caller's flag: a caller

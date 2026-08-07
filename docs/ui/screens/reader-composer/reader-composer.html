@@ -113,6 +113,9 @@
   .gen-status.visible { display: flex; }
   .gen-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: pulse 1.6s infinite; }
   .gen-status.error { border-color: var(--warn); background: var(--warn-bg); color: #642; }
+  /* Background phase: no accent fill, muted dot — nothing is being waited on. */
+  .gen-status.background { color: var(--ink-muted); }
+  .gen-status.background .dot { background: var(--ink-muted); }
   .gen-status.error .dot { background: var(--warn); animation: none; }
   @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(74,168,136,0.5);} 70% { box-shadow: 0 0 0 5px rgba(74,168,136,0);} 100% { box-shadow: 0 0 0 0 rgba(74,168,136,0);} }
 
@@ -566,6 +569,9 @@
     <button class="rb-btn" data-gen="generating">replying</button>
     <button class="rb-btn" data-gen="classifying">classifying</button>
     <button class="rb-btn" data-gen="chapter-close">chapter-close</button>
+    <button class="rb-btn" data-gen="recalling-memory">recalling-memory</button>
+    <button class="rb-btn" data-gen="updating-memory">updating-memory</button>
+    <button class="rb-btn" data-gen="error-swap-paused">error-swap-paused</button>
     <button class="rb-btn" data-gen="error-stale">error-stale</button>
     <button class="rb-btn" data-gen="error-classifier">error-classifier</button>
   </div>
@@ -1366,11 +1372,19 @@
     generating: 'generating narrative…',
     classifying: 'classifying…',
     'chapter-close': 'closing chapter…',
-    'error-stale': 'Embedder offline · 12 rows pending',
-    'error-classifier': 'Classifier offline · retrieval thinning',
+    'recalling-memory': 'recalling memory…',
+    'updating-memory': 'updating memory…',
+    'error-swap-paused': 'Embedder switch paused — waiting on you',
+    'error-stale': 'Memory incomplete — 12 rows pending',
+    'error-classifier': 'Classifier offline — retrieval coverage thinning',
   };
 
-  const errorStates = new Set(['error-stale', 'error-classifier']);
+  const errorStates = new Set(['error-swap-paused', 'error-stale', 'error-classifier']);
+
+  // The one non-blocking phase: it drops the accent fill and YIELDS the slot to
+  // any error, which is why gen-state and error-state are not mutually exclusive
+  // here (patterns/generation-status-pill.md -> Priority resolution).
+  const backgroundPhases = new Set(['updating-memory']);
 
   const streamingBrain = document.getElementById('streaming-brain');
   const streamingToks = document.getElementById('streaming-toks');
@@ -1383,6 +1397,7 @@
     if (label) {
       genStatus.classList.add('visible');
       genStatus.classList.toggle('error', isError);
+      genStatus.classList.toggle('background', backgroundPhases.has(state));
       genLabel.textContent = label;
 
       if (isError) {
@@ -1394,6 +1409,14 @@
         cancelBtn.classList.add('hidden');
         banner.classList.remove('visible');
         cancelAction.textContent = state === 'error-classifier' ? 'Open Memory settings' : 'Open Memory settings';
+      } else if (backgroundPhases.has(state)) {
+        // Background phase: muted pill, no streaming surface, composer stays
+        // usable — nothing is being waited on and there is nothing to cancel.
+        streamingEntry.classList.remove('visible');
+        composer.classList.remove('generating');
+        sendBtn.classList.remove('hidden');
+        cancelBtn.classList.add('hidden');
+        banner.classList.remove('visible');
       } else {
         // Active generation phase — streaming surface + composer-cancel mode.
         streamingEntry.classList.add('visible');
@@ -1582,8 +1605,8 @@
     },
     embed: {
       kind: '⚠ System · embedding error',
-      content: "<b>Embedding failed for 2 rows.</b> The narrative completed and 3 of 5 classifier-emitted rows embedded successfully; 2 rows hit a provider timeout. The next-turn affordance is disabled until you resolve.",
-      actions: '<span class="err-btn primary">Retry</span><span class="err-btn">Switch embedder</span><span class="err-btn">Roll back this turn</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
+      content: "<b>The embedder failed, so memory retrieval couldn't run.</b> call: embedding request failed: 503 (2 rows). The turn was reverse-replayed, so there is nothing to roll back; the composer stays enabled because a resubmit re-runs the same blocking sync stage.",
+      actions: '<span class="err-btn primary">Switch embedder</span><span class="err-btn">Retry</span><span class="err-btn" id="err-dismiss">Dismiss</span>',
     },
   };
   function setErr(state) {

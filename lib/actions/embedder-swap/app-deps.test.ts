@@ -5,13 +5,17 @@ import {
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   buildStorySettings,
+  execRaw,
   setSwapTargetOp,
   storyDefinitionSchema,
+  VEC_FAMILIES,
   type DbCtx,
+  type EmbeddedFieldRow,
   type ProviderInstance,
   type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { embedRowsToVecOps, embedTexts, type EmbedderConfig } from '@/lib/embedder'
 import {
   currentStoryStore,
   embedderSwapStore,
@@ -24,6 +28,7 @@ import {
 
 import {
   cancelStorySwap,
+  composeRetrievalEmbedDeps,
   makeCallbackGuards,
   reindexStoryNow,
   RelabelBlockedError,
@@ -43,6 +48,18 @@ import {
   SwapNotInProgressError,
   type SwapParams,
 } from './engine'
+
+// Wrapped, not replaced: every other test here relies on the real embed surface,
+// so the spies default to the genuine implementations and only the retrieval-dep
+// tests below override them.
+vi.mock('@/lib/embedder', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return {
+    ...actual,
+    embedTexts: vi.fn(actual.embedTexts as typeof embedTexts),
+    embedRowsToVecOps: vi.fn(actual.embedRowsToVecOps as typeof embedRowsToVecOps),
+  }
+})
 
 vi.mock('./engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -428,6 +445,7 @@ describe('relabelStory', () => {
   afterEach(() => {
     storiesStore.__reset()
     currentStoryStore.__reset()
+    embedderSwapStore.__reset()
     vi.restoreAllMocks()
   })
 
@@ -490,6 +508,29 @@ describe('relabelStory', () => {
         ctx,
       ),
     ).rejects.toBeInstanceOf(RelabelBlockedError)
+  })
+
+  // The reader gates its composer on progressFor, not on the in-process lock it
+  // cannot see. Without a progress entry a relabel leaves the composer live, and
+  // the turn the user writes is rejected by submitTurn with no affordance.
+  it('publishes swap progress for its duration', async () => {
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
+
+    expect(embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')).toBeNull()
+
+    let during: unknown = 'never ran'
+    await relabelStory('s1', { modelId: 'e2e/minilm-copy', backend: 'local' }, {
+      ...ctx,
+      runInTransaction: async (ops) => {
+        during = embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')
+        return ctx.runInTransaction(ops)
+      },
+    } as DbCtx)
+
+    // Shape, not non-null: the sentinel is a string, so `not.toBeNull()` would
+    // pass even if the hook never fired.
+    expect(during).toMatchObject({ storyId: 's1', cancelRequested: false })
+    expect(embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')).toBeNull()
   })
 })
 
@@ -755,5 +796,99 @@ describe('crash recovery resolves its target from the marker', () => {
       providerId: 'prov1',
       modelId: PROVIDER_MODEL,
     })
+  })
+})
+
+describe('composeRetrievalEmbedDeps', () => {
+  const LOCAL_CONFIG: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 384 }
+  const PROVIDER_CONFIG: EmbedderConfig = {
+    backend: 'provider',
+    providerId: 'prov1',
+    modelId: PROVIDER_MODEL,
+    dim: 1536,
+    truncation: null,
+  }
+
+  afterEach(() => {
+    storiesStore.__reset()
+    currentStoryStore.__reset()
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  it('embeds the query stack at query intent, never document', async () => {
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 384 })
+
+    await composeRetrievalEmbedDeps(LOCAL_CONFIG).embedTexts(['q1', 'q2'])
+
+    // The whole argument list, because the intent is the load-bearing one: the
+    // local model's query prefix is what puts these vectors in the same space as
+    // the stored rows, and 'document' would degrade every similarity silently.
+    expect(embedTexts).toHaveBeenCalledWith(
+      LOCAL_CONFIG,
+      ['q1', 'q2'],
+      'query',
+      undefined,
+      undefined,
+    )
+  })
+
+  it('resolves the provider instance a provider-backed config is served by', async () => {
+    await seedStores(storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1'), [
+      cachedProvider('prov1', [{ id: PROVIDER_MODEL }]),
+    ])
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536 })
+
+    await composeRetrievalEmbedDeps(PROVIDER_CONFIG).embedTexts(['q1'])
+
+    // Positive control against the `undefined` the local case asserts above: a
+    // dropped providerFor() would send a provider embed with no instance to call.
+    expect(embedTexts).toHaveBeenCalledWith(
+      PROVIDER_CONFIG,
+      ['q1'],
+      'query',
+      expect.objectContaining({ id: 'prov1' }),
+      undefined,
+    )
+  })
+
+  it('unwraps the ops from a row embed and keeps the raw-DDL seam', async () => {
+    const ops = [{ sql: 'INSERT INTO entities_vec VALUES (?)', params: ['x'] }]
+    vi.mocked(embedRowsToVecOps).mockResolvedValue({ ops, dim: 384 })
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'ent_1', branchId: 'b1', fields: ['Kael', 'A knight.'] },
+    ]
+
+    await expect(composeRetrievalEmbedDeps(LOCAL_CONFIG).embedRows(rows)).resolves.toBe(ops)
+
+    // execRaw, not the ops batch: vec0 CREATE VIRTUAL TABLE cannot run inside the
+    // atomic transaction the sync stage then applies these ops in.
+    expect(embedRowsToVecOps).toHaveBeenCalledWith(
+      LOCAL_CONFIG,
+      rows,
+      execRaw,
+      undefined,
+      undefined,
+    )
+  })
+
+  it('loads the dirty set across every vec family for the branches it is given', async () => {
+    const seen: { sql: string; params: unknown[] }[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string, params: unknown[]) => {
+          seen.push({ sql, params })
+          return { rows: [] }
+        },
+      },
+    })
+
+    await expect(composeRetrievalEmbedDeps(LOCAL_CONFIG).loadStaleRows(['b1'])).resolves.toEqual([])
+
+    // One query per family, each scoped to the branch — a stub that answered []
+    // without reading anything would leave `seen` empty.
+    expect(seen).toHaveLength(Object.keys(VEC_FAMILIES).length)
+    expect(seen.every((q) => q.params.includes('b1'))).toBe(true)
+    expect(seen.every((q) => q.sql.includes('embedding_stale'))).toBe(true)
   })
 })

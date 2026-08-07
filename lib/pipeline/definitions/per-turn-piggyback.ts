@@ -20,9 +20,10 @@ import type {
   ResolverInput,
 } from '@/lib/pipeline/types'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import { appSettingsStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
+import { loadPerTurnWorkingSet } from './working-set'
 
 export const PIGGYBACK_FALLBACK_PHASE_NAME = 'piggyback-fallback-classifier'
 
@@ -120,26 +121,19 @@ async function generateClassifierState<T extends { worldTimeDelta: number }>(
 export async function* piggybackFallbackClassifierPhase(
   ctx: PhaseContext,
 ): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  const open = currentStoryStore.getCurrentStory()
-  if (!open)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'piggyback-fallback: no open story' },
-    }
-
+  // Ahead of the working set on purpose: a run whose narrative fold already
+  // produced the block does nothing here, so there is no store state for it to
+  // be out of sync with.
   const outcome = ctx.intermediates.piggybackOutcome as PiggybackOutcome | undefined
   if (!shouldFallbackFire(outcome)) return { status: 'completed' }
 
-  const entries = [...entriesStore.getEntries().values()]
-    .filter((e) => e.branchId === ctx.branchId)
-    .sort((a, b) => a.position - b.position)
+  const working = loadPerTurnWorkingSet(ctx, 'piggyback-fallback')
+  if (!working.ok) return working.result
+  const { open, entries, entities } = working.set
+
   const tail = entries.at(-1)
   if (!tail) return { status: 'completed' }
   const previousEntry = entries.at(-2)
-
-  const entities = [...entitiesStore.getEntities().values()].filter(
-    (e) => e.branchId === ctx.branchId,
-  )
 
   const suggestionEmission = resolveSuggestionEmission(open.settings)
   // Only ask when chips aren't already in hand: a <state>-failed /

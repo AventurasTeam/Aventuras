@@ -1,0 +1,44 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`memory-blocks macro — row content > matches the recorded snapshot with every block populated 1`] = `
+"# Elsewhere in the world
+
+[char_9] Old Sesk: A ferryman long dead.
+
+[char_2] Mira (currently elsewhere): A courier.
+
+# Relevant lore
+
+The Concord
+Signed at the river.
+
+Veilstone
+A shard of the old moon.
+
+# What has happened
+
+The bridge fell
+At dawn.
+Saw it happen
+
+# Active threads
+
+The siege
+Three weeks in.
+
+# Background threads
+
+The debt (pending)
+Unpaid.
+
+The ledger (failed)
+Still missing.
+
+# Earlier chapters
+
+The Long Road
+She left the capital.
+Departure.
+
+"
+`;

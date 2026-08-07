@@ -421,30 +421,41 @@ and action buttons. Rationale: these errors need to be visible,
 actionable, and part of the narrative log as context, not a silent
 chrome blip.
 
-| Failure                                                                                                                                                                          | Action buttons                                      |
-| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| **LLM call failed**                                                                                                                                                              | `Retry` · `View details` · `Dismiss`                |
-| **Embed call failed** mid-turn (the new-turn affordance disables until resolved per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle)) | `Retry` · `Switch embedder` · `Roll back this turn` |
-| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                           | `Fix profile` · `View details` · `Dismiss`          |
-| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                      | `Fix profile` · `View details` · `Dismiss`          |
-| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                 | `Assign profile` · `View details` · `Dismiss`       |
-| **Agent default model's provider missing**                                                                                                                                       | `Fix default` · `View details` · `Dismiss`          |
+| Failure                                                                                                                                                                                                                | Action buttons                                |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **LLM call failed**                                                                                                                                                                                                    | `Retry` · `View details` · `Dismiss`          |
+| **Embed call failed** mid-turn (blocking per [`memory/retrieval.md → Compute lifecycle`](../../../memory/retrieval.md#compute-lifecycle); the composer is not gated — a resubmit re-runs the same blocking sync stage) | `Switch embedder` · `Retry` · `Dismiss`       |
+| **Narrative profile's provider missing** (pre-flight or resolver-time)                                                                                                                                                 | `Fix profile` · `View details` · `Dismiss`    |
+| **Assigned agent profile's provider missing** (pre-flight or resolver-time)                                                                                                                                            | `Fix profile` · `View details` · `Dismiss`    |
+| **Agent has no profile assigned** (`assignments[agentId]` unset)                                                                                                                                                       | `Assign profile` · `View details` · `Dismiss` |
+| **Agent default model's provider missing**                                                                                                                                                                             | `Fix default` · `View details` · `Dismiss`    |
 
 The embed-failure system entry follows the same visual shape as the
 LLM-failure entry — the contract is "transient pipeline failure
 that blocks turn completion until resolved." `Switch embedder`
 routes to Story Settings · Memory · Switch and fires the
-[Model swap UX](../../../memory/retrieval.md#model-swap-ux) dialog.
-`Roll back this turn` reverse-replays the entire turn's deltas
-through the
-[rollback-confirm modal](./rollback-confirm/rollback-confirm.md).
+[Model swap UX](../../../memory/retrieval.md#model-swap-ux) dialog;
+the bubble's failure detail renders as muted text beneath the
+message rather than behind `View details`.
+
+This row carried a `Roll back this turn` action through the
+[rollback-confirm modal](./rollback-confirm/rollback-confirm.md)
+until it was reconciled against
+[`memory/model-management.md → Embed failure is blocking`](../../../memory/model-management.md#embed-failure-is-blocking):
+there is nothing left to roll back. Any phase failure
+[reverse-replays](../../../generation-pipeline.md#reverse-replay) the
+whole run, and the turn's `user_action` entry shares the run's
+action id, so the rollback has already happened when the bubble is
+written. A _failed_ sync stage wrote nothing at all, and vec0 rows a
+_succeeded_ sync wrote sit outside the delta log by design — they
+repaired rows dirtied by earlier turns, so reversing them would
+discard correct work.
 
 The four **broken-reference** variants come from the pipeline's
 [config pre-flight validation](../../../generation-pipeline.md#config-pre-flight-validation)
-(caught before phase 0 fires — no deltas written, so no
-`Roll back this turn` action), or, in the race case, from a
-resolver-time failure mid-turn. The user can't distinguish which
-layer caught it — same vocabulary either way. The
+(caught before phase 0 fires — no deltas written at all), or, in the
+race case, from a resolver-time failure mid-turn. The user can't
+distinguish which layer caught it — same vocabulary either way. The
 [deletion-semantics design](../../../data-model.md#app-settings-storage)
 is what makes these resolver inputs go missing in the first place.
 Action buttons route to the relevant settings surface: profile /
@@ -473,10 +484,13 @@ dismissed by the next turn:
   Pill copy: `Classifier offline — retrieval coverage thinning`.
   Tap → routes to Story Settings · Memory · Classifier panel.
 
-Pill state precedence: active generation (narrative / chapter-
-close / classifier) > error state > hidden. Sticky errors stay
-visible between turns; once resolved, the pill collapses back to
-hidden until the next event.
+Pill state precedence: blocking phase > error state > background
+phase > hidden, per
+[`generation-status-pill.md → Priority resolution`](../../patterns/generation-status-pill.md#priority-resolution).
+The background classifier pass is the one phase that yields, so a
+sticky error survives it rather than being blanked on its cadence.
+Sticky errors stay visible between turns; once resolved, the pill
+collapses back to hidden until the next event.
 
 The error-pill is **not a new vocabulary** — it reuses the existing
 gen-pill chrome with error-tinted styling instead of the active

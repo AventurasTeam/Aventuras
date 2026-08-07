@@ -179,6 +179,7 @@ function phaseContextOf(run: RunState, ctx: RunCtx): PhaseContext {
     intermediates: run.intermediates,
     log: makeLogger(run.actionId),
     db: ctx.db,
+    runInTransaction: ctx.runInTransaction,
     storyId: run.storyId,
     branchId: run.branchId,
   }

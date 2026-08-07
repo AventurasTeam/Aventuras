@@ -12,7 +12,8 @@ import {
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import type { RetrievalSuccess } from '@/lib/retrieval'
+import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
 import {
@@ -21,35 +22,45 @@ import {
   piggybackFallbackClassifierPhase,
   resolvePiggybackFires,
 } from './per-turn-piggyback'
+import {
+  RETRIEVAL_INTERMEDIATE_KEY,
+  RETRIEVAL_PHASE_NAME,
+  retrievalPhase,
+} from './per-turn-retrieval'
+import { loadPerTurnWorkingSet } from './working-set'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
-import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
+import type { PhaseContext, PhaseEmittedEvent, PhaseNode, PhaseResult } from '../types'
 
 export const PER_TURN_KIND = 'per-turn'
 
+// The status pill's phase mapping is exhaustive over this union and the phase
+// list below is typed by it, so a phase added to the turn cannot reach the
+// user unlabelled (generation-status-pill.md → Copy mapping).
+export type PerTurnPhaseName =
+  | 'user-action-translation'
+  | typeof RETRIEVAL_PHASE_NAME
+  | 'narrative'
+  | typeof PIGGYBACK_FALLBACK_PHASE_NAME
+
+// `ctx.intermediates` is Record<string, unknown>, so presence is the discriminant:
+// only ok outcomes are ever stashed, and the phase fails the run before this one
+// otherwise — absence degrades the prompt to empty buckets rather than throwing.
+// The `ok` check is defensive: a future stash of the failure variant must not
+// reach the builder as a bundle.
+function readRetrievalOutcome(
+  intermediates: Record<string, unknown>,
+): RetrievalSuccess | undefined {
+  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
+  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
+  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
+}
+
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
-  const { branchId, storyId } = ctx
-  const open = currentStoryStore.getCurrentStory()
-  if (!open || open.branchId !== branchId || open.storyId !== storyId)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
-    }
-
-  // Defense-in-depth against store desync: currentStoryStore is guarded above,
-  // but the entry buffer + worldTime tail read from entriesStore — a future
-  // multi-branch/background path hydrating it elsewhere would otherwise feed a
-  // silent degenerate prompt.
-  if (entriesStore.getLoadedBranch() !== branchId)
-    return {
-      status: 'failed',
-      error: { kind: 'orchestrator', detail: 'per-turn: entries store loaded for another branch' },
-    }
-
-  const entries = [...entriesStore.getEntries().values()]
-    .filter((e) => e.branchId === branchId)
-    .sort((a, b) => a.position - b.position)
-  const entities = [...entitiesStore.getEntities().values()].filter((e) => e.branchId === branchId)
+  const { branchId } = ctx
+  const working = loadPerTurnWorkingSet(ctx, PER_TURN_KIND)
+  if (!working.ok) return working.result
+  const { open, entries, entities } = working.set
 
   const cfg = appSettingsStore.getAppSettings()
 
@@ -95,6 +106,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     idMap,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
+    retrieval: readRetrievalOutcome(ctx.intermediates),
   })
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
 
@@ -314,17 +326,19 @@ export function ensurePerTurnPipelineRegistered(): void {
   try {
     getPipeline(PER_TURN_KIND)
   } catch {
+    const phases: readonly (PhaseNode & { name: PerTurnPhaseName })[] = [
+      { name: 'user-action-translation', run: userActionTranslationPhase },
+      { name: RETRIEVAL_PHASE_NAME, run: retrievalPhase },
+      { name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] },
+      {
+        name: PIGGYBACK_FALLBACK_PHASE_NAME,
+        run: piggybackFallbackClassifierPhase,
+        resolves: PIGGYBACK_FALLBACK_RESOLVES,
+      },
+    ]
     definePipeline({
       kind: PER_TURN_KIND,
-      phases: [
-        { name: 'user-action-translation', run: userActionTranslationPhase },
-        { name: 'narrative', run: narrativePhase, resolves: [{ target: 'narrative' }] },
-        {
-          name: PIGGYBACK_FALLBACK_PHASE_NAME,
-          run: piggybackFallbackClassifierPhase,
-          resolves: PIGGYBACK_FALLBACK_RESOLVES,
-        },
-      ],
+      phases,
       affordance: 'pill-and-banner',
       gateBehavior: 'hard-gate',
       concurrencyPolicy: { blockedBy: ['per-turn', 'chapter-close'] },

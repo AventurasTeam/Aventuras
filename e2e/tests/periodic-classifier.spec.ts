@@ -24,8 +24,12 @@ test.describe('periodic classifier — graph population', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative('E2E-CLASSIFIER the courier reaches the ford.')
     // A new character with a temp handle keeps the reply independent of the
@@ -96,13 +100,23 @@ test.describe('periodic classifier — graph population', () => {
       )
       .toBe(1)
 
-    // Nothing embeds on the write path.
-    const stale = await queryApp(
-      app.window,
-      `SELECT embedding_stale FROM happenings WHERE branch_id = ? AND title LIKE '%ford%'`,
-      [branchId],
-    )
-    expect(stale[0][0]).toBe(1)
+    // The drain resets embedding_stale moments after the write, so the flag is
+    // not observable from here (lessons-learned/staleness-flags-are-cleared-by-the-drain.md).
+    // plan.test.ts owns the write-path contract; assert the settled state.
+    await expect
+      .poll(
+        async () =>
+          (
+            await queryApp(
+              app.window,
+              `SELECT COUNT(*) FROM happenings
+               WHERE branch_id = ? AND title LIKE '%ford%' AND embedding_stale = 1`,
+              [branchId],
+            )
+          )[0][0],
+        { timeout: 20_000 },
+      )
+      .toBe(0)
 
     // Scoped to the happening this run created — the fixture already seeds
     // unrelated happening_awareness / happening_involvements rows on this branch.
@@ -246,8 +260,12 @@ test.describe('periodic classifier — backlog deeper than the reader window', (
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative('E2E-BACKLOG the road goes on.')
     setProviderEndpoint(seeded.dbPath, mock.url)
@@ -306,8 +324,12 @@ test.describe('periodic classifier — unassigned agent', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply. Cold cache downloads ~24 MB.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative('E2E-NOAGENT the lantern gutters.')
     setProviderEndpoint(seeded.dbPath, mock.url)

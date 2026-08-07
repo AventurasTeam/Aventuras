@@ -116,14 +116,14 @@ Per capture:
     `chapter_boost_applied` (bool), `bypass_triggered` (bool).
   - `final_score`, `mmr_rank` (or null if pre-filtered out).
   - `selected` (bool), `drop_reason` (enum):
-    `pre_filtered | mmr_dedupe | below_threshold | over_budget |`
+    `pre_filtered | below_threshold | over_budget |`
     `candidate_too_large | not_dropped`.
   - `tokens_estimated`.
   - `embedding_stale` flag at capture time
     (per [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)).
 - **Pool funnel summary per type.** `pool_size`,
   `pre_filtered_size` (capped at 200 per
-  [pre-filter rule](./retrieval.md#diversity--mmr)), `mmr_size`,
+  [pre-filter rule](./retrieval.md#diversity--mmr)),
   `selected_count`, `tokens_used`, `type_budget`.
 - **Structural floor.** List of must-inject rows (prompt buffer
   per the mode-dependent rule + protected-buffer spillover,

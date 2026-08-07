@@ -348,10 +348,12 @@ cross-slice routing verifies at integration once both are merged
   entire commit and surfaces the retry surface.
 - **Sync-before-read holds.** A turn following classifier writes
   runs the pre-retrieval sync stage and KNN sees the fresh rows;
-  a forced embed failure at the sync stage blocks the turn with
-  `Retry / Switch embedder / Roll back this turn` and the next-turn
-  affordance disabled; rows still stale at retrieval are excluded
-  from candidates (vitest each).
+  a forced embed failure at the sync stage fails the turn (which the
+  orchestrator reverse-replays) and surfaces
+  `Switch embedder / Retry / Dismiss` — no rollback action and no
+  composer gate, since a resubmit re-runs the same blocking sync
+  stage; rows still stale at retrieval are excluded from candidates
+  (vitest each).
 - **Swap crash-safety.** Kill the app mid-re-index; on next story
   open the resume / cancel prompt appears; resume completes the
   stage-then-flip, cancel deletes staged NEW-model vectors and

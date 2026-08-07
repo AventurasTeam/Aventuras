@@ -398,7 +398,26 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `recentEntries` would fix it but changes what already-merged piggyback
   behavior sends the model, so it needs an owner and a token-cost
   measurement before anyone touches it. Surfaced by M3.7a Task 1
-  (2026-07-25).
+  (2026-07-25). **M3.4 added two more consumers of the same raw
+  column, both in retrieval.** (1) Q3's prose extract runs over
+  `lastNarrative.content`, and the tail survives sentence splitting as
+  a single pseudo-sentence — `splitSentences` needs terminator plus
+  whitespace, which `</summary>` and `</state>` never provide — that
+  scores above real narrative (measured 5 against 0–3 on the shipped
+  scorer, since the `<summary>` line names entities and the XML
+  attribute quotes register as dialogue). One of Q3's four slots is
+  spent on tags, opaque ids, and suggested actions the story did not
+  take, which is what
+  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)
+  exists to avoid. (2) Layer-A same-name suppression scans
+  `composePromptBuffer(...).content`, so a reader clicking a
+  suggestion that names a staged entity suppresses that entity from
+  the pool on the very turn it is introduced — the "who is this
+  person" failure the structural floor exists to prevent, arriving
+  through the mechanism meant to prevent collisions. Stripping at the
+  caller fixes all three consumers at once; the retrieval module
+  cannot do it itself, since it has no way to know which tags a pack
+  emits. Surfaced by the M3.4 review (2026-08-06).
 - **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
   builds, so a story-level model override can't satisfy pre-flight even
   though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
@@ -870,3 +889,647 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+- **`retrieval.md`'s MMR cost model understates measured cost by ~2.5x,
+  and its complexity claim doesn't match the shipped algorithm.**
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  budgets "<5ms per type" for MMR after the top-200 pre-filter, and
+  [`Diversity — MMR`](../memory/retrieval.md#diversity--mmr) calls it
+  "sub-millisecond" for pools in the hundreds. Measured on the M3.4
+  implementation (Node 24 / V8, desktop, `Candidate`-shaped payloads,
+  N=200): **6.55 ms at dim 384 and 12.32 ms at dim 768**. dim 768 is a
+  shipped config — `onnx-community/embeddinggemma-300m-ONNX` in
+  `catalog-data.json` — so five types cost ~61 ms of the doc's ~100 ms
+  total per-turn target before anything else runs. Restructuring is
+  **not** the lever: a `Uint8Array` bitmap variant measured only 10-18%
+  faster, and the irreducible cosine floor alone is 4.34 ms at N=200.
+  Separately the doc states MMR is `O(N × K)`, but C4's per-candidate
+  trace requires a rank for every candidate that entered MMR
+  (`CandidateTrace.mmrRank` is documented as null only for pre-filtered
+  rows), which forces the full `O(N²)` greedy ranking — roughly 5x the
+  work the cost model assumes. The implementation is correct; the
+  budget line was written against a different algorithm. Wants either a
+  corrected budget or an explicit decision that the trace contract is
+  worth the cost. **Open sub-question, unmeasured:** `retrieval.md`'s
+  PoC puts a 384-dim dot at ~24-30 µs on Hermes; if that holds, 19,900
+  dots is ~500 ms per type on mobile, which would dominate the turn.
+  Nobody has run MMR on-device. Surfaced by M3.4 Task 5 review
+  (2026-08-01).
+- **Lore `priority` is inert in the shipped ranker, and a user-facing
+  control promises otherwise.** Two canon statements conflict.
+  [`retrieval.md → Per-type decay rates`](../memory/retrieval.md#per-type-decay-rates)
+  says lore "ranks purely on `sim_blend × (priority/100) + kw_boost`",
+  and [`world.md → Lore detail`](../ui/screens/world/world.md) exposes a
+  0-100 `priority` input whose tooltip repeats that formula. But the
+  authoritative [Pseudocode](../memory/retrieval.md#pseudocode) puts
+  `pin_signal` **only** inside the recency exponent, and λ_lore is 0 —
+  so the exponent is 1 regardless and `priority` cannot move a lore
+  row's score at all. Verified empirically against the M3.4
+  implementation: `pinSignal: 1` and `pinSignal: 0` produce identical
+  `finalScore` for lore. Note the alternative formula is also wrong as
+  literally written — multiplying by `priority/100` would zero every
+  lore row at the default `priority = 0`. This also makes probe.md's
+  simulatable "`pin_signal` overrides" a dead control for lore. M3.4
+  followed the pseudocode (the designated authority) and is not at
+  fault; canon needs a design decision on what `priority` should
+  actually do. Blocks nothing in M3.4; blocks the World panel's lore
+  editor meaning what it says. Surfaced by M3.4 Task 6 review
+  (2026-08-01).
+- **Token estimation costs ~180x its budgeted line, for the same
+  reason MMR does.** [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  budgets "Token estimation — <1ms total". Measured with the production
+  `countTokens` (js-tiktoken `cl100k_base`) on ~69-token rows:
+  **60.5 µs/row, ~181 ms for 3000 rows**. C4's per-candidate trace
+  makes `CandidateTrace.tokensEstimated` non-nullable, so every pool
+  row must be tokenized, not just the ones budget-fill reaches — the
+  same trace-contract-vs-cost-model tension already recorded for MMR
+  above. One concrete mitigation exists with **zero contract loss**:
+  `preFilterTopN` is absent from
+  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters),
+  so a pre-filtered row can never be seated by the simulator at any
+  threshold or budget — meaning the pre-filtered excess need not be
+  tokenized at all. Capping eager tokenization at the kept ≤200/type
+  would cut the worst case from ~3000 rows to ~1000 (~181 ms → ~60 ms).
+  It requires making `tokensEstimated` nullable for pre-filtered rows,
+  which is a C4 trace-shape change and therefore wants a deliberate
+  C4 decision pass. Surfaced by M3.4 Task 6 review (2026-08-01).
+- **The high-similarity bypass is mathematically inert under the
+  default parameter set — it can never change which rows get
+  injected.** [`retrieval.md → High-similarity bypass`](../memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)
+  spends 48 lines specifying revival of decayed memories, and
+  [`probe.md`](../memory/probe.md#what-gets-captured--light-mode-default)
+  captures a `bypass_triggered` column for it — but with v1's defaults
+  it cannot seat a single row. The bypass is a `max`, so it only binds
+  when `sim_blend − τ_revive` beats the normal score, and that floor is
+  capped at `1.0 − 0.85 = 0.15`. Budget-fill then compares the **MMR**
+  score against `min_score_threshold`, and a first pick (empty `S`, no
+  diversity penalty) is `λ_div × score = 0.75 × 0.15 = 0.1125` — below
+  the 0.15 floor. Even at a theoretically perfect `sim_blend` of 1.0
+  _and_ the 1.3 chapter boost the ceiling is `0.75 × 0.195 = 0.14625`,
+  still short. By the MMR monotonicity property every later candidate
+  is lower, so a bypass-bound row is always `below_threshold`.
+  Confirmed empirically against the M3.4 ranker: a happening at
+  `sims [1,1,1]`, `chaptersOld 60`, against a 10,000-token budget for
+  one 30-token row yields `finalScore 0.15`, `dropReason
+"below_threshold"`, `selectedCount 0`.
+  Proximate cause is a units mismatch: `min_score_threshold` is
+  described at [`retrieval.md → Budget-fill termination`](../memory/retrieval.md#budget-fill-termination)
+  as a "cosine baseline", but it is compared against a value already
+  scaled by `λ_div` — so the effective raw-score floor for a first pick
+  is `0.15 / 0.75 = 0.2`, while `τ_revive = 0.85` caps bypass output at
+  0.15. Three knobs could resolve it — lower `τ_revive` (measured
+  boundary is `< 0.80`, not `≤`: at exactly 0.80 the comparison value
+  is `0.14999999999999997`, still under the floor in IEEE754), lower
+  `min_score_threshold`, or threshold against the raw score rather than
+  the MMR score — and choosing among them is a canon decision. M3.4's
+  ranker follows the Pseudocode exactly and is not at fault. Same shape
+  as the inert lore `priority` entry above: a documented feature
+  neutralized by the default parameter set.
+  **The mismatch is broader than the bypass.** 0.2 is only the
+  _first-pick_ floor, where `S` is empty and the diversity penalty is
+  zero. The real floor rises with that penalty: a candidate whose
+  `maxSim` to an already-selected row is 0.5 must reach a raw score of
+  `(0.15 + 0.25 × 0.5) / 0.75 ≈ 0.367` — roughly 2.4x the documented
+  0.15 — to survive. Every pick after the first, in every type, is
+  therefore held to a stricter floor than canon states; the bypass is
+  simply the case where it is provably fatal. Surfaced by M3.4 Task 6
+  (2026-08-01).
+- **`chapters_old` has no home in the capture, but the simulator is
+  specified to recompute from it.**
+  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
+  says the simulator recomputes `recency_factor` from stored
+  `chapters_old` when a user re-tunes per-type `λ`. But neither
+  `CandidateTrace` (`lib/retrieval/types.ts`) nor `CaptureCandidate`
+  (`lib/db/world-json-types.ts`) carries a `chapters_old` field, and
+  [`probe.md → What gets captured`](../memory/probe.md#what-gets-captured--light-mode-default)
+  doesn't list one — it captures the _derived_ `recency_factor` only.
+  From `recency_factor` alone the simulator cannot invert to a new λ
+  without also knowing the age and the pin, so a λ slider is not
+  actually simulatable as specified. Either add `chapters_old` to the
+  capture shape (a C4 trace-contract change, same decision pass as the
+  eager-tokenization item above) or drop λ from the
+  simulatable list. M3.4 is not at fault — it emits exactly the fields
+  C4 pins. Surfaced by M3.4 Task 6 review (2026-08-01).
+- **Q3's dialogue signal mis-pairs across unbalanced quotes.**
+  `lib/retrieval/prose-extract.ts` finds quoted spans over the whole
+  narrative entry (needed, because a quote legitimately opens in one
+  sentence and closes in a later one) and awards
+  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)'s
+  Medium "dialogue" weight to any sentence overlapping a span. On
+  well-formed prose this is correct. On an **unclosed** opener it
+  mis-pairs: that opener binds to the _opening_ quote of the next
+  speech, so the pure narration between them collects a spurious +2,
+  and every subsequent quote in the entry is off by one. Measured:
+  `'"Run, she said. He left the room. "Wait." Done here.'` yields one
+  span covering the first two sentences, flagging `He left the room.`
+  as dialogue. Two things bound the damage — a lone stray `"` with no
+  later quote produces **no** span at all (it does not swallow the rest
+  of the entry), and the multi-paragraph dialogue convention (each
+  paragraph opening a quote, only the last closing it) happens to flag
+  correctly. LLM narrative does emit unbalanced quotes, so this is
+  reachable. A stateful open-quote tracker was considered and rejected
+  during M3.4 as needing its own pairing and nesting logic per quote
+  style; any regex pairing degrades on unbalanced input, and the
+  shipped version is strictly better than the per-sentence one it
+  replaced, which lost the signal entirely whenever a quote spanned a
+  sentence break. Worth revisiting only if probe captures show the
+  dialogue weight firing on obvious narration. Surfaced by M3.4 Task 8
+  review (2026-08-02).
+- **Canon's Q2 template renders four lines unconditionally; the shipped
+  digest omits the empty ones.**
+  [`retrieval.md → Q2`](../memory/retrieval.md#q2-structural-digest)
+  specifies the structural digest as a fixed four-line template. M3.4
+  Task 9 makes every line conditional: the scene line is dropped when it
+  would carry neither entities nor a location, the threads line when
+  there are no threads, and the era and summary lines when those are
+  absent. `presence[1]` is derived from the rendered result rather than
+  hardcoded true, so a digest carrying no content reports itself absent
+  and the ranker re-normalizes the blend across the remaining queries.
+  The driver was measurable: under the literal template, a story with no
+  cast, no location, no threads and no era renders Q2 as punctuation
+  only, and that vector still took a full `w_digest` share — 35% of
+  every candidate's blended similarity — because nothing marks it
+  absent. (Q3 is present even on turn 1:
+  [`retrieval.md → Cold start`](../memory/retrieval.md#cold-start)
+  sources it from the opening entry, which the wizard always commits.)
+  The plan had already
+  made the era line conditional, so the module was internally
+  inconsistent either way. Code and canon now disagree and the project
+  rule is that the doc wins — either amend the Q2 section to describe
+  the conditional template or revert the module. Recommended: amend the
+  doc, since the literal template embeds noise. Surfaced by M3.4 Task 9
+  (2026-08-02).
+- **Canon promises a wizard-derived structural digest that the wizard
+  does not produce.**
+  [`retrieval.md → Cold start`](../memory/retrieval.md#cold-start)
+  specifies turn 1's Q2 as a wizard-derived structural digest, and
+  [`retrieval.md → Q2`](../memory/retrieval.md#q2-structural-digest)
+  calls the four structural fields deterministic, free and always
+  available. Three of the four have no shipped producer.
+  `components/wizard/finish.ts` hardcodes `currentLocationId: null`, and
+  the only writer that sets it is the piggyback block
+  (`lib/piggyback/apply.ts`), which runs after narrative while retrieval
+  runs before — so turn 1 can never carry a location. Threads have
+  exactly one insert site (`lib/actions/threads/register.ts`), reachable
+  only through a `createThread` delta that nothing outside tests
+  dispatches. The default and only shipped calendar sets `eras: null`
+  (`lib/calendar/builtins/earth-gregorian.ts`). Scene entities are empty
+  whenever the wizard produces no lead, which `needsLead`
+  (`components/wizard/step-frame-logic.ts`) reports for the shipped
+  default mode and narration — a case
+  [`wizard.md`](../ui/screens/wizard/wizard.md) calls out explicitly.
+  Retrieval is not broken, since Task 9 marks an empty Q2 absent and the
+  blend re-normalizes, but canon's cold-start guarantee is aspirational
+  and Q2 contributes nothing on turn 1 of a default-wizard story. The
+  dev seed does create threads, which is why this stays invisible in
+  development. Decide whether the wizard should collect an era and
+  opening threads, or whether canon should drop the cold-start Q2
+  guarantee. Surfaced by M3.4 Task 9 (2026-08-02).
+- **The C4 purity guard's transitive claim has an identifier-heuristic
+  hole.** `PURE_FILES` in `lib/retrieval/ranker.test.ts` is documented
+  as covering the whole transitive surface the simulator loads, not just
+  the entry file. M3.4 Task 9 added `queries.ts`, which value-imports
+  `extractProse`, which in turn value-imports `matchTerms` from
+  `name-index.ts` — so `name-index.ts` is now inside the guarded closure
+  but absent from the list, and it cannot be added: the guard's second
+  assertion rejects any file whose source matches `queryAll`, and
+  `buildNameKeywordIndex` takes an injected parameter of that exact
+  name. No live violation exists, because injecting the query function
+  is what keeps the module pure — the heuristic penalizes the very
+  pattern that satisfies C4. A future `@/lib/db` value-import added to
+  `name-index.ts` would go undetected by a guard that claims to cover
+  it. Fix by scoping the second assertion to import statements rather
+  than scanning bare identifiers, or by exempting injected parameter
+  names. Surfaced by M3.4 Task 9 review (2026-08-02).
+- **The buffer composition rule's spillover source is stated two ways
+  that cannot both hold.**
+  [`cadence.md → Composition rule`](../memory/cadence.md#composition-rule)
+  says to "fill from the **previous chapter** to satisfy the
+  `protectedBuffer` floor" — singular — while the same section states
+  the unconditional arithmetic invariant that total entries before the
+  chapter reaches the floor equal `protectedBuffer`, "with
+  previous-chapter spillover making up the gap". Those disagree
+  whenever the previous chapter holds fewer entries than the shortfall:
+  honouring the singular source leaves the total below the floor, and
+  honouring the invariant means walking backwards across as many closed
+  chapters as it takes. M3.4 Task 10 implements the invariant reading
+  and pins it with a test asserting output that spans two closed
+  chapters plus the open region, on the grounds that a floor which
+  silently stops short is not a floor. The case is uncommon in practice
+  — `chapterTokenThreshold` defaults to 24000 tokens, so a chapter
+  normally holds far more than the default `protectedBuffer` of 10 —
+  which is likely why the wording was never stress-tested. Tighten the
+  sentence to say "walking backwards from the chapter boundary", or
+  state the single-chapter cap explicitly and accept a total below the
+  floor. Surfaced by M3.4 Task 10 (2026-08-02).
+- **Structural-floor seating silently bypasses two pool-level rules
+  canon states elsewhere.**
+  [`retrieval.md → Structural floor`](../memory/retrieval.md#structural-floor--always-inject)
+  seats every `injection_mode='always'` row unconditionally, "across
+  entities / lore / threads". Two later sections assume those same rows
+  still pass through pool machinery, which seated rows never reach.
+  First,
+  [`retrieval.md → Three-sub-pool entity model`](../memory/retrieval.md#three-sub-pool-entity-model)
+  makes `injection_mode='always'` the **only** opt-in for retired
+  entities and then states all three sub-pools "compete for the
+  entity-type token budget" — but a retired row that opted in is
+  already seated, so the retired sub-pool is empty in production and
+  cannot compete. M3.4 Task 11 resolves this in favour of the floor, so
+  that "always" means always; `filterEntityPool` still excludes every
+  retired row by default, but the `always` opt-in that would readmit one
+  is unreachable whenever `floorIds` comes from `buildStructuralFloor`,
+  because that floor has already seated it. Second, same-name
+  suppression is defined
+  as removing staged namesakes "from the current pool", so a staged row
+  carrying `always` is injected even when its name appears in recent
+  buffer prose — which is the collision the rule exists to prevent. The
+  shipped behaviour matches canon's literal wording in both cases; what
+  is unclear is whether canon means it. Decide whether `always` should
+  outrank the retired-exclusion and same-name rules (current behaviour,
+  and the simplest to explain to a user who set the flag) or whether
+  seating should be checked against them first. Surfaced by M3.4 Task 11
+  (2026-08-02).
+- **The blocking sync stage bounds neither request token size nor
+  provider fan-out, and sends the whole dirty set in one call on the
+  local backend.** M3.4 Task 12's `runSyncStage` calls `embedRows` once
+  for every `embedding_stale = 1` row, unlike `lib/embedder/drain.ts`,
+  which batches at 16 and isolates poison rows. The **row count** is not
+  the exposure it first appears: `lib/ai/embedding.ts` embeds through
+  the AI SDK's `embedMany`, which splits at `maxEmbeddingsPerCall`, and
+  `@ai-sdk/openai-compatible` defaults that to 2048 — so a 5000-row
+  dirty set becomes three requests, not one. Three real gaps remain.
+  Per-request **token** size is still unbounded, so 2048 long rows can
+  413 anyway; the SDK fires those chunks **in parallel** when the model
+  reports `supportsParallelCalls`, with no concurrency ceiling; and the
+  **local** backend has no equivalent split, so it really does hand the
+  whole set over in one IPC call. Because this stage is **blocking** by
+  design, any of those fails the turn outright rather than degrading.
+  The drain worker mitigates in practice by pre-warming, but only for
+  the open branch, while the sync stage's `branchIds` may be wider.
+  [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
+  says the stage "embeds every dirty row … in one batch", but that
+  sentence contrasts deferred sync against embedding-on-write — it is
+  about collapsing repeated writes into a single pass, not about issuing
+  a single HTTP request. **Chunking would not violate canon**, so this
+  is a deferred robustness decision rather than a constraint. A remedy
+  belongs in the embedder layer rather than in `sync.ts` — but note the
+  provider path already chunks by row count, so the work is a token
+  budget per request, a concurrency cap on the fan-out, and a split on
+  the local backend. Surfaced by M3.4 Task 12 review (2026-08-02).
+- **Nothing implements the window-level accounting that
+  [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
+  describes.** Canon reads "recent buffer + active+in-scene entities +
+  their location + active threads consume tokens unconditionally. Then
+  prompt-overhead reservation. Then the per-type retrieval budgets
+  allocate the remainder", and the UI is meant to show allocations "of
+  remaining ~X tokens after structural inject". Three pieces are absent:
+  no context-window total is tracked anywhere, no prompt-overhead
+  reservation exists, and the story-settings sliders show absolute
+  numbers with no remaining-window figure beside them. `runRetrieval`
+  passing `settings.retrievalBudgets` through to `rankAll` unmodified is
+  **correct** under this reading — the floor is subtracted from the
+  window, not from each type's partition, which is why the prompt
+  buffer, a floor member with no retrieval type, appears in that list at
+  all. Subtracting per type instead would silently redefine the user's
+  sliders every turn and double-count against the UI figure canon asks
+  for. What is missing is the window arithmetic and the surface that
+  reports it, which spans retrieval, the prompt builder and
+  story-settings and so has no single owning slice. Surfaced by M3.4
+  Task 17 review (2026-08-02).
+- **`lib/piggyback/apply.ts` writes `<current_location>` with no kind
+  check.** `block.currentLocation` lands in `metadata.currentLocationId`
+  verbatim; `buildStructuralFloor` then seats whatever it names as the
+  location if that row is `active`, and `apply.ts` writes
+  `state.current_location_id` for every in-scene character. A model that
+  answers with a character or item id corrupts scene state with no
+  diagnostic. M3.4 Task 17 narrowed the prompt-side exposure (the
+  `<current_location>` instruction now fires only when the floor seats a
+  location), but the parser accepts any id regardless of what the prompt
+  asked for. The fix belongs with piggyback parsing, not the prompt.
+  Surfaced by M3.4 Task 17 review (2026-08-02).
+- **`structuralSceneEntities` has no template consumer.**
+  `buildGenerationContext` emits it and `templateContextMap` documents
+  it, but the bundled per-turn and suggestion-refresh templates both
+  render the scene from `entities` filtered by `sceneEntities` so the
+  active+in-scene invariant survives a render with no retrieval behind
+  it. Either the bundle earns a consumer or it is documented as
+  pack-author-only surface. Surfaced by M3.4 Task 17 review
+  (2026-08-02).
+- **The token-progress strip reads a 50-entry window, so it cannot
+  reach its own threshold.** `useOpenRegionTokens` sums the open region
+  out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
+  (50) slice rather than the branch. Measured: 50 entries at realistic
+  length is **37.7%** of the default 24 000 `chapterTokenThreshold`, and
+  reaching 100% would need ~132 entries. Once the open region exceeds 50
+  — the normal state, since nothing closes a chapter before M5 — the
+  strip reports a fraction of the truth and reads "plenty of room" while
+  chapter-close is overdue. `generation-pipeline.md → Chapter close`
+  sketches `openRegionTokens(branchId)` reading from the **DB**, so the
+  two will diverge the moment M5 wires the real trigger. The strip is
+  still better than the hardcoded `0` it replaced; the number is not
+  trustworthy. Surfaced by M3.4 Task 19 (2026-08-02).
+- **The same strip is non-monotonic across a reload.** `entriesStore`
+  grows within a session (`patch` never evicts) but `reload()`
+  re-hydrates to the trailing 50, discarding paged-in older rows.
+  `reload()` fires on turn failure, on submit-with-system-tail, and on
+  system-entry dismissal — so **dismissing a system entry visibly
+  shrinks the progress strip**, as does restarting the app. Same story,
+  same open region, different number. Follows from the entry above and
+  is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
+- **`countEntryTokens` now runs on the reader's first render, adding a
+  synchronous tiktoken encoder build before first paint.** It had zero
+  production callers before M3.4 Task 19 — `countTokens` was reached
+  only through the ranker, inside the async per-turn retrieval phase.
+  The BPE map build measured **116ms** on desktop under Node
+  (`lib/retrieval/tokens.ts` documents ~135ms) and will be worse on
+  Android. If story-open shows a hitch, this is it, and the fix is to
+  warm the encoder during story open rather than to change the hook.
+  **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
+- **A retrieval pass costs more than its whole budget at 60-chapter
+  volumes, and the budget table has no line for most of what the pass
+  does.** Measured against a real migrated SQLite plus sqlite-vec
+  database, median of 7 warm in-process passes on desktop, **excluding**
+  the embedder, the blocking sync stage and all IPC: **60 ms** at 1200
+  happenings / 3000 awareness rows, **137 ms** at 3600 / 9000, **166 ms**
+  at 6000 / 15 000.
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  targets **under 100 ms total including the three query embeds**, so
+  the largest figure already exceeds the entire budget with the
+  embedder subtracted out of it. 6000 / 15 000 is not a worst case:
+  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions) puts
+  60 chapters at 3-6k happenings and 15-60k awareness rows, and its own
+  "5-10× happenings" ratio puts a 6000-happening branch at 30-60k
+  awareness — so the measurement sits at that row's awareness floor,
+  2.5× rather than 5-10×. Supporting numbers, dim 384 and `k = 200`:
+  vec0 KNN costs 0.96 / 4.41 / 22.58 ms at 1k / 10k / 60k rows, and a
+  `WHERE branch_id = ?` source scan costs 0.94 / 9.56 / 33.27 ms at
+  2k / 20k / 60k. The budget table prices only the query embed, a
+  cosine batch, MMR, token estimation and budget fill — it has no line
+  at all for the KNN passes, the five source reads, the awareness read
+  or the chapter-ranges JOIN. It also inherits the "three queries per
+  pass" of
+  [`Performance characteristics`](../memory/retrieval.md#performance-characteristics--poc-findings),
+  which is the PoC baseline M3.4's own AC7 is written against, where
+  the shipped pass issues **fifteen** — three query vectors across five
+  types. Two of the overruns are already filed above (MMR, eager
+  tokenization) and
+  are inside these totals; what is missing is a budget re-derived
+  against the pass that actually ships. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **A retrieval pass makes 27 sequential DB round-trips and
+  parallelises none of them.** `runRetrieval` (`lib/retrieval/run.ts`)
+  awaits, in order: five `loadStaleRows` reads (one per `VEC_FAMILIES`
+  kind — `lib/actions/embedder-swap/app-deps.ts:532`), five
+  `loadSourceRows` reads (`lib/retrieval/source-rows.ts:51`), one
+  awareness read, fifteen KNN passes (three query vectors across five
+  types), and the chapter-ranges JOIN. There is no `Promise.all`
+  anywhere in `lib/retrieval/`, and on desktop every one of those is an
+  IPC round-trip, so the fixed per-call cost is paid 27 times. The five
+  source reads are mutually independent, and so are the fifteen KNN
+  passes: every query vector is in hand before the loop starts, and the
+  per-kind vector map each pass writes into is order-independent. Only
+  two orderings are load-bearing — sync before any source read, floor
+  before the query stack. Surfaced by the M3.4 whole-slice review
+  (2026-08-03).
+- **`loadSourceRows` reads every happening on the branch each turn,
+  purely to filter down to at most 600 KNN ids.** The happenings arm of
+  `lib/retrieval/source-rows.ts:51` is a full
+  `WHERE branch_id = ?` scan, and its only consumers are the pool
+  intersection in `assembleCandidates` (`lib/retrieval/run.ts:465`) and
+  the `staleCounts` tripwire, which wants a count rather than rows. At
+  60 chapters that is ~33 ms of SQL plus ~21 ms of structured-clone
+  across the IPC boundary to discard over 99% of what it read. Entities,
+  lore and threads genuinely need the full scan — `buildStructuralFloor`
+  looks for `injection_mode='always'` across all three,
+  `nameKeywordIndexFrom` indexes every entity name and lore keyword, and
+  Layer-A suppression needs every staged entity. Happenings needs none
+  of that, and it is the one table
+  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions)
+  projects into the thousands. The KNN top-k is supposed to be the
+  scaling mechanism, and this read defeats it. The fix needs no
+  restructuring: nothing before the KNN pass touches
+  `sourceRows.happenings`, so that one read can move after the pool ids
+  are known and fetch by id, bounding it at the pool size. (Chapters has
+  the same shape and does not matter — ~60 rows at 60 chapters.)
+  Surfaced by the M3.4 whole-slice review (2026-08-03).
+- **`poolIdsFromKnn`'s ordering is computed and then discarded.** Its
+  JSDoc (`lib/retrieval/pools.ts:168`) promises a "de-duplicated,
+  first-seen order" union of the per-query KNN id sets, and it builds
+  exactly that — but `assembleCandidates` consumes the result only as
+  `new Set(ids)` membership (`lib/retrieval/run.ts:371`), so the pool's
+  actual order is SQL row order from `loadSourceRows`, not KNN rank.
+  That order is not inert: it decides ties in the ranker's
+  `scored.sort((a, b) => b.score - a.score)`, which is stable, and in
+  MMR's strict-`>` pick, which keeps the first of an equal pair. Two
+  candidates with identical scores are therefore ranked by whatever
+  order SQLite returned them in. Either thread the KNN order through to
+  pool assembly or return a `Set` and drop the array — the current
+  shape documents a guarantee it does not deliver. Surfaced by the M3.4
+  whole-slice review (2026-08-03).
+- **`countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
+  keys an unbounded module-level `Map` on entry id and holds it for the
+  process lifetime, across deletes, rollbacks, branch switches and story
+  switches; `__resetTokenCache` has no production caller. Deleting an
+  entry and later reinstating that id — reverse-replay of a delete
+  re-inserts with the original id — resurrects a memo entry written
+  before the deletion. The content check on read bounds the damage to a
+  stale-content miss rather than a wrong count, so this is a leak rather
+  than a defect today, but it is precisely the shape
+  [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
+  records. Surfaced by the M3.4 whole-slice review (2026-08-03).
+- **`rankPerType` recomputes `tokensEstimated` rather than accepting a
+  captured one, which desynchronises M3.5's simulator from its own
+  capture.** `score` (`lib/retrieval/ranker.ts:101`) always evaluates
+  `input.countTokens(c.renderedText) + params.typeOverhead[type]`; there
+  is no path that takes a stored value. The probe's simulator re-runs
+  budget-fill against `CaptureCandidate.tokens_estimated`
+  ([`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)),
+  so any drift between the js-tiktoken version that produced the capture
+  and the one loaded at replay makes the two disagree row by row, with
+  nothing reporting it. The ranker's purity is not at issue — the
+  function is deterministic given its inputs; the tokenizer is one of
+  its inputs and is not pinned by the capture. Wants either an optional
+  captured-token input on `RankTypeInput` or a recorded encoding
+  identity the simulator can refuse to replay across. Needs deciding
+  before 3.5 builds the simulator. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **The C4 purity guard is an identifier scan, not a purity check.**
+  Distinct from the transitive-closure hole filed above: that entry is
+  about a file the guard claims to cover and cannot list, this one is
+  about what the guard checks at all. Its second assertion
+  (`lib/retrieval/ranker.test.ts:402`) is
+  `expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)` — a
+  scan for three bare identifiers anywhere in the file, including
+  comments and parameter names. It catches an import-shaped violation
+  only because imports happen to mention those words, and it says
+  nothing about the ways replay actually breaks: a clock, an RNG, a
+  locale-sensitive format, or module-level mutable state read across
+  calls. Behavioural purity does currently hold — the whole
+  value-import closure (`ranker`, `mmr`, `vector`, `constants`,
+  `queries`, `prose-extract`, `name-index`; `types` and `@/lib/db` are
+  type-only) was grepped for `Date.`, `Math.random`, `performance.`,
+  `Intl` and `toLocale` with zero hits, and every value import inside it
+  is intra-module. So the guard is not hiding a live violation; it is
+  claiming coverage it does not have. Surfaced by the M3.4 whole-slice
+  review (2026-08-03).
+- **Four hand-built `RetrievalSuccess` fixtures, and a factory home that
+  already exists.** `lib/actions/turns/submit-turn.test.ts:50`,
+  `lib/pipeline/definitions/per-turn-retrieval.test.ts:71`,
+  `lib/pipeline/definitions/generation-context.test.ts:128` and
+  `lib/pipeline/definitions/per-turn.test.ts:774` each construct the
+  full outcome — five `RankedType` bundles, a `StructuralFloor`, a
+  `QueryStack`, `staleCounts`, `timings` — by hand, and every field
+  added to the type has to be added four times.
+  `lib/retrieval/__tests__/` exists (it holds the shared `queryAll`
+  stub) and is the natural home for a factory. Hygiene, not risk:
+  `RetrievalSuccess` is a closed object type, so typecheck fails all
+  four the moment a required field lands. Surfaced by the M3.4
+  whole-slice review (2026-08-03).
+- **`retrieval.md → Token estimation` describes a ranker-side token
+  cache that does not exist.**
+  [The section](../memory/retrieval.md#token-estimation) ends "Ranker
+  passes cache results in memory for reuse within the turn." No such
+  cache exists: `score` calls the injected `countTokens` once per
+  candidate and keeps the result on the `Scored` row, and the only memo
+  in `lib/retrieval/tokens.ts` is `countEntryTokens`, which the ranker
+  never touches. Each candidate is tokenized exactly once per pass, so
+  the intent — do not pay twice for the same row — is satisfied; the
+  sentence describes a mechanism that was never built, and it shares a
+  paragraph with the "per-turn cost is sub-millisecond total" claim the
+  measurements above already contradict. Fix with the same pass that
+  re-derives the cost budget. Surfaced by the M3.4 whole-slice review
+  (2026-08-03).
+- **`KNN_K` borrows canon's post-score pre-filter bound to gate
+  pre-score candidate membership, which puts the chapter-match boost
+  out of reach of the rows it exists to rescue.** _Blocks the M3.4 PR
+  merge — revisit before integration, not on the ordinary triage pass._
+  Two independent 200s are in play and only one is canon.
+  `preFilterTopN: 200` (`lib/retrieval/constants.ts:19`) is specified by
+  [`retrieval.md → Diversity — MMR`](../memory/retrieval.md#diversity--mmr)
+  and applies to the **boosted** score after `score` has run; canon
+  justifies it as "candidates ranking ~200th by raw score are unlikely
+  to make it into the budget anyway." `KNN_K = 200`
+  (`lib/retrieval/constants.ts:24`) appears nowhere in canon — it is an
+  implementation choice whose own comment reads "matches the pre-filter
+  bound." The two cuts act on different signals at different stages, so
+  that justification does not transfer: at KNN time
+  (`lib/retrieval/run.ts:315`) none of recency, `kwBoost`, `pinSignal`
+  or the 1.3× chapter boost exists yet. The consequence is that the
+  boost can reorder the candidate set but cannot change its membership —
+  a happening outside the KNN cut for all three query vectors is never
+  scored, so a row the boost would have carried well into the seated set
+  never gets the chance. Chapter membership never reaches pool
+  construction at all: `chapterRanges` is loaded at
+  `lib/retrieval/run.ts:226` and read only by `boostedEntryIdsFor`
+  (`lib/retrieval/ranker.ts:128`). That inverts the mechanism's purpose —
+  [`retrieval.md → Chapter-match boost on happenings`](../memory/retrieval.md#chapter-match-boost-on-happenings)
+  introduces it because pure-similarity happening retrieval comes out
+  "scattered," yet the set it operates on is gated purely by similarity.
+  Magnitude is unmeasured: the per-type union is at most 3 × 200 ids,
+  but all three query vectors describe the same turn, so heavy overlap
+  is expected and the effective pool is likely nearer 200-350 — against
+  the 3-6k happenings
+  [`retrieval.md → Scale assumptions`](../memory/retrieval.md#scale-assumptions)
+  contemplates at 60 chapters. Two directions worth weighing: size the
+  KNN depth against recall independently of `preFilterTopN`, or let
+  chapter membership feed pool construction via a bounded fetch by
+  range (ids are known, so it is a lookup rather than a second vector
+  search). Surfaced by a post-merge design question from the user
+  (2026-08-05).
+- **`metadata.tokens.completion` is the wrong measure for the chapter
+  threshold, on four independent counts.** M5 needs
+  `openRegionTokens(branchId)` as a DB read
+  ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)),
+  and `story_entries.metadata.tokens` already looks like the answer.
+  It is not. (1) **Stale on edit** — `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts:45`) sets only `{ content }`,
+  so the count survives a rewrite unchanged. (2) **Wrong text even when
+  fresh** — it is provider `usage.outputTokens`
+  (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
+  model emitted, including the state block stripped before persist; the
+  world-state-block work in [`followups.md`](../followups.md) widens that
+  gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
+  one that provider uses, while `chapterTokenThreshold` and the
+  token-progress strip measure in o200k via `countTokens`. A story that
+  switches providers mid-run would sum two incompatible token scales.
+  (4) **AI entries only** — `usage` exists only on a generation call, so
+  `user_action` rows carry no count at all, and they are part of the open
+  region (`kind !== 'system'`). A SUM over `completion` undercounts by
+  every user turn. The decision is therefore a **new field, not a
+  rename**: `tokens.{prompt, completion, reasoning}` is a coherent
+  provider-usage triple worth keeping for cost provenance, and
+  repurposing one leg of it to mean "o200k count of the stored content"
+  makes the other two incoherent. Open sub-questions: a real
+  `story_entries` column (SUM-able and indexable, which a JSON field is
+  not — and M5's trigger reads this per turn) versus another metadata
+  key; which write paths must maintain it (generation, edit, prose
+  reversal, system entries, import/seed); backfill for existing rows;
+  whether a translated story counts the original or the translation
+  (the original feeds the prompt buffer, so presumably that); and which
+  number the entry card shows now that "reply tokens" and "content
+  tokens" diverge
+  ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
+  Sits with the three token-progress-strip entries above, which the same
+  change would resolve. Surfaced by review discussion (2026-08-06).
+- **A local embed cannot be cancelled, so Cancel during
+  `recalling-memory` works on provider backends only.** M3.4 made the
+  blocking embed interruptible by threading a bounded signal from the
+  retrieval phase down to `embedMany`, which closes the case where a
+  provider accepts the connection and stalls. `embedLocal`
+  (`lib/embedder/local/runtime.ts`) is one IPC call into the Electron
+  main process with no cancellation channel, so the signal cannot
+  reach it: a local pass runs to completion and the timeout fires only
+  after it returns. Closing the gap needs a cancellation channel in
+  `electron/` main plus preload plus the bridge, which is why M3.4
+  scoped it out rather than shipping a Cancel that silently no-ops on
+  one backend. Compounding it, the local backend does not chunk, so
+  the whole dirty set is a single call. Surfaced by the M3.4 review
+  (2026-08-06).
+- **Move the `embedding_stale` flip into the action layer.**
+  [`retrieval.md → Storage`](../memory/retrieval.md#storage) resolves
+  the source-hash question by making the flag solely responsible for
+  drift: no retrieval-time hash comparison, because hashing every
+  candidate on every turn re-derives what the flag already carries.
+  That trade only holds if the flag cannot be forgotten, and today it
+  can — `registerEntities`, `registerLore`, `registerThreads` and
+  `registerHappenings` all default `embeddingStale` to `0` and leave
+  the flip to the caller, and only the classifier opts in.
+  `setEntityOperationalFlags` and `setLoreOperationalFlags` have no
+  callers outside their own files. The first M4 or M7 edit surface
+  that writes a description without remembering produces a row that
+  ranks against its old text forever, with nothing to report it. The
+  action layer already knows which fields are embedded (the
+  composite-text builders behind `lib/db/embeddings`), so the flip
+  belongs there. Needs a decision on the seed and import paths, which
+  write rows with precomputed vectors and a deliberately clean flag.
+  Surfaced by the M3.4 review (2026-08-07).
+- **Tighten the unprobed-dim escape hatches once M7 makes probing
+  mandatory.** `validateCustomDim` skips its `above-native` check and
+  `clampEffectiveDim` returns the value untouched whenever the model's
+  native dim is unknown (`components/wizard/memory-cost-logic.ts`),
+  both deliberately — rejecting on a ceiling nobody has measured would
+  block valid picks. The cost is one representable cell: an unprobed
+  provider with `effectiveDim` above native. There the pass reads the
+  dim family named by `effectiveDim` while the embed service clamps
+  the vectors it writes to the native dim, so the sync commits one
+  family and clears the flags before the query embed refuses on the
+  mismatch. The story has no in-app recovery — no post-creation
+  `effectiveDim` editor exists, and a swap reuses the locked dim. M7
+  is slated to force a probe before a model is selectable, which
+  removes the cell; when it lands, both permissive branches should go
+  with it rather than being left as a latent re-opening. Surfaced by
+  the M3.4 review (2026-08-07).
+- **`clearEmbeddingStaleOp` clears unconditionally, so a write racing
+  the sync loses its dirty flag.** `lib/db/embeddings/stale.ts` clears
+  by row and branch with no guard on the row still hashing to what was
+  embedded. A writer that flips `embedding_stale` between
+  `loadStaleRows` reading the dirty set and the sync transaction
+  committing has its flag wiped by that commit, leaving new text, an
+  old vector and a clean flag — permanently, because nothing
+  re-derives the flag outside an embedder swap. This is a lost update
+  rather than writer negligence, so the action-layer rule that every
+  embedded-field writer flips the flag does not reach it. The window
+  is one embed round trip wide, and no M3 writer amends an embedded
+  field (the classifier only creates, piggyback writes non-embedded
+  state, user edits are gated), so it is structural rather than live.
+  The cheap fix is optimistic concurrency on the clear rather than a
+  content hash. Surfaced by the M3.4 review (2026-08-07).

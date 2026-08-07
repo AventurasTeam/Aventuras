@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 
 import { queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
 import { createSeededUserDataDir, removeUserDataDir, setProviderEndpoint } from '../harness/seed'
@@ -20,8 +21,13 @@ test.describe('reader — composer modes', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply (model-management.md → Embed failure is
+    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative('E2E-MODES-REPLY the courier answers.')
     setProviderEndpoint(seeded.dbPath, mock.url)

@@ -1,5 +1,6 @@
 import { MACRO_IDS, TEMPLATE_IDS } from '../ids'
 import type { Pack } from '../types'
+import { MEMORY_BLOCKS } from './memory-blocks'
 import { OUTPUT_FORMAT_NARRATIVE } from './output-format'
 import { PER_TURN_NARRATIVE } from './per-turn'
 import { PERIODIC_CLASSIFIER } from './periodic-classifier'
@@ -30,6 +31,7 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.wizardDescription]: { group: 'wizard', source: WIZARD_DESCRIPTION },
   },
   macros: {
+    [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
     [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: OUTPUT_FORMAT_NARRATIVE },
     [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
     [MACRO_IDS.suggestionEmission]: { group: 'staticContent', source: SUGGESTION_EMISSION },

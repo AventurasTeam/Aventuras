@@ -31,8 +31,7 @@ export const SUGGESTION_REFRESH = `{% if definition.setting != blank -%}
 
 {% endif -%}
 # Story so far
-{%- assign recentEntries = entries | recent: userSettings.partialChapterBuffer %}
-{% for entry in recentEntries %}
+{% for entry in entries %}
 {{ entry.content }}
 {% endfor %}
 {%- comment -%}
