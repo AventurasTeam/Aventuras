@@ -135,6 +135,11 @@ export async function importStructure(
       translatedContent: entry.translatedContent ?? null,
       translationLanguage: entry.translationLanguage ?? null,
       originalInput: entry.originalInput ?? null,
+      // `reasoning` is optional-undefined rather than nullable, unlike the two below;
+      // `addStoryEntry` turns the undefined into a NULL column either way.
+      reasoning: entry.reasoning,
+      suggestedActions: entry.suggestedActions ?? null,
+      worldStateDelta: entry.worldStateDelta ?? null,
     })
   }
 

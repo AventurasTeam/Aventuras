@@ -58,7 +58,18 @@ function sampleExport() {
     version: '1.8.0',
     exportedAt: 1,
     story: { id: 'story-old', title: 'T', settings: {} },
-    entries: [{ id: 'entry-1', type: 'narration', content: 'c', parentId: null, position: 0 }],
+    entries: [
+      {
+        id: 'entry-1',
+        type: 'narration',
+        content: 'c',
+        parentId: null,
+        position: 0,
+        reasoning: 'because the hero hesitated',
+        suggestedActions: '["Fight","Flee"]',
+        worldStateDelta: { mood: 'tense' },
+      },
+    ],
     embeddedImages: [
       { id: 'img-1', entryId: 'entry-1', imageData: 'BASE64', prompt: 'p', status: 'completed' },
       { id: 'img-orphan', entryId: 'gone', imageData: 'BASE64', prompt: 'p', status: 'completed' },
@@ -148,6 +159,71 @@ describe('runImport — rollback', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('the real cause')
+  })
+})
+
+describe('runImport — entry fields', () => {
+  it('carries reasoning, suggestedActions and worldStateDelta through to addStoryEntry', async () => {
+    const result = await runImport(sampleExport())
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].reasoning).toBe('because the hero hesitated')
+    expect(calls.entries[0].suggestedActions).toBe('["Fight","Flee"]')
+    expect(calls.entries[0].worldStateDelta).toEqual({ mood: 'tense' })
+  })
+
+  it('imports an entry lacking all three fields without inventing values', async () => {
+    const data = {
+      ...sampleExport(),
+      entries: [{ id: 'entry-1', type: 'narration', content: 'c', parentId: null, position: 0 }],
+    }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    // `reasoning` is optional-undefined on StoryEntry; the other two are nullable. Either way
+    // `addStoryEntry` writes NULL, and regeneration still fires for a story with no choices.
+    expect(calls.entries[0].reasoning).toBeUndefined()
+    expect(calls.entries[0].suggestedActions).toBeNull()
+    expect(calls.entries[0].worldStateDelta).toBeNull()
+  })
+
+  it('preserves the fields on entries belonging to a non-main branch', async () => {
+    const data = {
+      ...sampleExport(),
+      branches: [
+        {
+          id: 'branch-1',
+          storyId: 'story-old',
+          name: 'side-quest',
+          parentBranchId: null,
+          forkEntryId: null,
+          checkpointId: null,
+          createdAt: 1,
+        },
+      ],
+      entries: [
+        {
+          id: 'entry-1',
+          type: 'narration',
+          content: 'c',
+          parentId: null,
+          position: 0,
+          branchId: 'branch-1',
+          reasoning: 'branch reasoning',
+          suggestedActions: '["Explore"]',
+          worldStateDelta: { location: 'cave' },
+        },
+      ],
+    }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].branchId).not.toBeNull()
+    expect(calls.entries[0].reasoning).toBe('branch reasoning')
+    expect(calls.entries[0].suggestedActions).toBe('["Explore"]')
+    expect(calls.entries[0].worldStateDelta).toEqual({ location: 'cave' })
   })
 })
 
