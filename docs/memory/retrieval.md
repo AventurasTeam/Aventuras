@@ -103,16 +103,35 @@ ungated swap).
 
 **Source-hash tripwire.** `source_hash` stores the content hash of
 the embedded fields at embed time (`xxhash(title + description)` or
-similar) and plays two roles. Per the
-[Compute lifecycle](#compute-lifecycle) contract it is the reference
-for the per-row `embedding_stale` flip: an embedded-field write
-recomputes the row's hash and compares against it to set or clear the
-dirty flag. And at retrieval — after the sync stage has run — it is a
-tripwire: a candidate whose current content hash doesn't match its
-`source_hash` means a write changed content without flipping the flag
-(a bug, an ungated direct DB write). Log the mismatch loudly; treat
-the row's vector as untrusted (exclude or flag, do not silently
-re-embed and continue). Hash is chosen over timestamps because
+similar). Per the [Compute lifecycle](#compute-lifecycle) contract it
+is the reference for the per-row `embedding_stale` flip: an
+embedded-field write recomputes the row's hash and compares against
+it to set or clear the dirty flag.
+
+The two are not redundant, and they differ in cardinality.
+`embedding_stale` is one boolean on the source row, answering "does
+this row need embedding into the current model". `source_hash` is one
+value per stored vector, keyed by row and model, answering "which
+text produced this particular vector". That second question is what
+makes a cancelled cross-model swap resumable: the flag cannot say
+which rows were already staged into the target family, because the
+swap has been flipping it, so recovery compares the source family's
+stored hashes against current content instead.
+
+Drift is the flag's job, not the hash's. The rule is that every
+writer touching an embedded field flips `embedding_stale`, so there
+is deliberately **no** retrieval-time hash comparison — adding one
+would mean hashing every candidate's composite text on every turn to
+re-derive what the flag already carries.
+
+The rule is convention today, not enforcement: the register actions
+default the flag to `0` and leave it to each caller, which makes a
+forgetful writer the one way a stale vector can survive. Moving the
+flip into the action layer, so writing an embedded field sets the
+flag whether or not the caller remembers, is what makes the rule
+load-bearing enough to justify having no tripwire behind it. Tracked
+in [`triage.md`](../implementation/triage.md). Hash is chosen over
+timestamps because
 rollback restores prior `updated_at` along with the rest of the
 row's state — a timestamp-based check would invert post-rollback and
 silently mask the bug it was meant to catch. Content hashes are
@@ -579,10 +598,10 @@ When `stories.settings.effectiveDim = N` is non-null:
    tables of the same family, and `branch_id` partitions rows
    within each. Within one branch, all rows share one dim — the
    same single-model invariant extended to dim.
-4. **Source-hash tripwire.** `source_hash` continues to compare
-   content hashes, not vectors. Truncation is deterministic from
-   the native vector; `source_hash` mismatch still indicates a
-   bypassed embed step.
+4. **Source hash.** `source_hash` continues to hash content, not
+   vectors. Truncation is deterministic from the native vector, so a
+   dim change alone never moves the hash — which is what lets swap
+   recovery tell a re-embedded row from a merely re-truncated one.
 
 Some providers offer **server-side truncation** by passing a
 `dimensions` parameter on the embedding request. Where supported,

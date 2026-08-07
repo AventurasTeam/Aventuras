@@ -34,10 +34,18 @@ Scoring blends three query similarities, decays by chapter age
 scaled by the pin signal, adds keyword boosts, and revives
 deeply-decayed rows on very high similarity; MMR de-dupes within
 each type; hard-partitioned per-type token budgets fill greedily
-and stop at the noise floor. Chapter summaries and the
-chapter-match boost are structurally present but inert until M5
-closes chapters. The ranker must be a pure module — the probe's
-simulator re-runs it bit-for-bit.
+and stop at the noise floor. The ranker must be a pure module —
+the probe's simulator re-runs it bit-for-bit.
+
+Everything chapter-shaped is structurally present but inert until
+M5 closes chapters: chapter summaries, the chapter-match boost, and
+recency decay. Decay is inert because `chaptersOld` has no source
+until chapters exist, so it is assembled as `0` for every candidate
+and `recency_factor` collapses to `1`. That also neutralises the pin
+signal, which only ever appears as a scale on the decay exponent —
+so `decay_resistance` is recorded by the classifier and read by the
+ranker without being able to move a score. See
+[Open questions](#open-questions) for the shape M5 should land.
 
 ## Required reading
 
@@ -208,6 +216,17 @@ criterion 7 met by the timing log — is recorded under
   scan the partition — so the ranker computes cosine over the vectors
   themselves. `distance` is carried for logging and never scored, and
   L2 order is only relied on for which rows vec0 hands back.
+- **How should `chaptersOld` be sourced once M5 closes chapters?** —
+  **deferred to M5, with the shape decided:** store the chapter a row
+  belongs to and subtract at rank time, rather than materialising a
+  `chapters_old` column that every chapter close would have to
+  rewrite across every row. Immutable input, no write amplification,
+  and nothing to drift. Happenings need no schema change — they carry
+  `occurred_at_entry_id`, and the pass already loads the entry-to-
+  chapter map through `loadChapterRanges` for the chapter-match
+  boost. Entities, lore and threads need a created-at-chapter column.
+  Until then `chaptersOld` is `0` and both decay and the pin signal
+  are inert; see [Background](#background).
 
 ## Implementation notes
 

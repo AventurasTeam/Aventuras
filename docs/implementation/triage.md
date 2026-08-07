@@ -1484,3 +1484,52 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   one backend. Compounding it, the local backend does not chunk, so
   the whole dirty set is a single call. Surfaced by the M3.4 review
   (2026-08-06).
+- **Move the `embedding_stale` flip into the action layer.**
+  [`retrieval.md → Storage`](../memory/retrieval.md#storage) resolves
+  the source-hash question by making the flag solely responsible for
+  drift: no retrieval-time hash comparison, because hashing every
+  candidate on every turn re-derives what the flag already carries.
+  That trade only holds if the flag cannot be forgotten, and today it
+  can — `registerEntities`, `registerLore`, `registerThreads` and
+  `registerHappenings` all default `embeddingStale` to `0` and leave
+  the flip to the caller, and only the classifier opts in.
+  `setEntityOperationalFlags` and `setLoreOperationalFlags` have no
+  callers outside their own files. The first M4 or M7 edit surface
+  that writes a description without remembering produces a row that
+  ranks against its old text forever, with nothing to report it. The
+  action layer already knows which fields are embedded (the
+  composite-text builders behind `lib/db/embeddings`), so the flip
+  belongs there. Needs a decision on the seed and import paths, which
+  write rows with precomputed vectors and a deliberately clean flag.
+  Surfaced by the M3.4 review (2026-08-07).
+- **Tighten the unprobed-dim escape hatches once M7 makes probing
+  mandatory.** `validateCustomDim` skips its `above-native` check and
+  `clampEffectiveDim` returns the value untouched whenever the model's
+  native dim is unknown (`components/wizard/memory-cost-logic.ts`),
+  both deliberately — rejecting on a ceiling nobody has measured would
+  block valid picks. The cost is one representable cell: an unprobed
+  provider with `effectiveDim` above native. There the pass reads the
+  dim family named by `effectiveDim` while the embed service clamps
+  the vectors it writes to the native dim, so the sync commits one
+  family and clears the flags before the query embed refuses on the
+  mismatch. The story has no in-app recovery — no post-creation
+  `effectiveDim` editor exists, and a swap reuses the locked dim. M7
+  is slated to force a probe before a model is selectable, which
+  removes the cell; when it lands, both permissive branches should go
+  with it rather than being left as a latent re-opening. Surfaced by
+  the M3.4 review (2026-08-07).
+- **`clearEmbeddingStaleOp` clears unconditionally, so a write racing
+  the sync loses its dirty flag.** `lib/db/embeddings/stale.ts` clears
+  by row and branch with no guard on the row still hashing to what was
+  embedded. A writer that flips `embedding_stale` between
+  `loadStaleRows` reading the dirty set and the sync transaction
+  committing has its flag wiped by that commit, leaving new text, an
+  old vector and a clean flag — permanently, because nothing
+  re-derives the flag outside an embedder swap. This is a lost update
+  rather than writer negligence, so the action-layer rule that every
+  embedded-field writer flips the flag does not reach it. The window
+  is one embed round trip wide, and no M3 writer amends an embedded
+  field (the classifier only creates, piggyback writes non-embedded
+  state, user edits are gated), so it is structural rather than live.
+  The cheap fix is optimistic concurrency on the clear rather than a
+  content hash. Surfaced by the M3.4 review (2026-08-07).
