@@ -905,6 +905,27 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     expect(lastParams().query.lastNarrativeContent).toBe('The hall is cold.')
   })
 
+  // A trailing block survives sentence splitting as one pseudo-sentence
+  // (splitSentences needs a terminator plus whitespace, which `</state>` never
+  // gives) and outscores real narrative, spending a Q3 slot on tags and ids.
+  it('strips a trailing block before Q3 extracts prose', async () => {
+    seedOpenStory({
+      entries: [
+        entry(
+          1,
+          'ai_reply',
+          'The hall is cold.\n<state><summary>Kara waits</summary></state>',
+          meta(),
+        ),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    expect(lastParams().query.lastNarrativeContent).toBe('The hall is cold.')
+  })
+
   // Cold start (retrieval.md → Cold start): turn 1 has no ai_reply, and the
   // opening entry the wizard always commits is what Q3 extracts from. Selecting
   // ai_reply alone passes '' and silently drops Q3 on the first turn of every
@@ -984,5 +1005,28 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     // not suppress a staged namesake forever.
     expect(recentProse).not.toContain('older-prose')
     expect(recentProse).not.toContain('ancient-prose')
+  })
+
+  // The suggestion block names entities the story has not told yet. Left in the
+  // haystack, a staged entity named by a suggestion suppresses itself from the
+  // pool on the turn it is introduced — the collision the rule exists to stop,
+  // arriving through the mechanism meant to stop it.
+  it('keeps a suggestions block out of the Layer-A haystack', async () => {
+    seedOpenStory({
+      entries: [
+        entry(
+          1,
+          'ai_reply',
+          'The hall is cold.\n<suggestions><item category="cat1">Ask Kara Vex for help</item></suggestions>',
+          meta(),
+        ),
+      ],
+    })
+
+    await runRetrievalPhase()
+
+    const { recentProse } = lastParams()
+    expect(recentProse).toContain('The hall is cold.')
+    expect(recentProse).not.toContain('Kara Vex')
   })
 })

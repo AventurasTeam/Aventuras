@@ -1,7 +1,7 @@
 import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
-import { buildSuggestionSlots } from '@/lib/piggyback'
+import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
 import {
   composePromptBuffer,
   type Candidate,
@@ -187,7 +187,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
-    entries: composePromptBuffer(narrative, settings).map((e) => ({ content: e.content })),
+    entries: composePromptBuffer(narrative, settings).map((e) => ({ content: promptProse(e) })),
     entities: branchEntities.map(promptEntity),
     // Writers inherit scene state forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene and location.

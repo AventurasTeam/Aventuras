@@ -1,4 +1,5 @@
 import type { StoryEntry } from '@/lib/db'
+import { promptProse } from '@/lib/piggyback'
 
 export type WindowTurn = { handle: string; entryId: string; position: number; content: string }
 
@@ -30,13 +31,16 @@ export function buildClassifierWindow(args: {
   // System entries are technical rows the model must never see, but they still
   // occupy positions, so the watermark covers them or the pass would loop on
   // a window it cannot advance past.
+  // Prose only: the template asks for facts "the turn whose prose produced it",
+  // and a persisted <suggestions> block offers actions the story never took as
+  // if they were narrated.
   const turns = capped
     .filter((e) => e.kind !== 'system')
     .map((e, i) => ({
       handle: `t${i + 1}`,
       entryId: e.id,
       position: e.position,
-      content: e.content,
+      content: promptProse(e),
     }))
   const coversThrough = capped.at(-1)?.position ?? floor
   const byHandle = new Map(turns.map((t) => [t.handle, t]))

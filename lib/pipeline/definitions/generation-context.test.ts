@@ -351,6 +351,33 @@ describe('buildGenerationContext', () => {
     expect(prompt).not.toContain('second-line')
   })
 
+  // story_entries.content persists the reply verbatim; the reader renders
+  // stripTrailingBlocks(...).prose. Re-injecting the raw column feeds the model
+  // its own markup back as narrative and diverges from what the user sees.
+  it("carries the reader's prose, not the persisted trailing blocks", () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [
+        entry('e1', 1, 'The gate creaks open.\n<state><summary>At the gate</summary></state>'),
+        entry('e2', 2, 'I step through.', 'user_action'),
+      ] as never[],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+
+    expect((ctx.entries as { content: string }[]).map((e) => e.content)).toEqual([
+      'The gate creaks open.',
+      'I step through.',
+    ])
+
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    expect(prompt).toContain('The gate creaks open.')
+    expect(prompt).not.toContain('<state>')
+    expect(prompt).not.toContain('At the gate')
+  })
+
   it('drops entries and entities belonging to another branch', () => {
     const ctx = buildGenerationContext({
       branchId: 'b1',

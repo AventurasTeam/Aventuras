@@ -1,5 +1,7 @@
 import { jsonrepair } from 'jsonrepair'
 
+import type { StoryEntry } from '@/lib/db'
+
 import {
   STATE_ROOT_TAG,
   STATE_TAGS,
@@ -266,4 +268,22 @@ export function stripTrailingBlocks(raw: string): {
     ...(stateRaw !== undefined ? { stateRaw } : {}),
     ...(suggestionsRaw !== undefined ? { suggestionsRaw } : {}),
   }
+}
+
+/** Model-authored kinds — the only rows that can carry a trailing block. */
+export const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening'])
+
+/**
+ * What a prompt consumer should read instead of `story_entries.content`, which
+ * persists the model's reply verbatim with its trailing blocks intact. The
+ * reader already renders `stripTrailingBlocks(...).prose`, so reading the raw
+ * column feeds a model back its own markup as narrative and diverges from what
+ * the user sees.
+ *
+ * Gated on kind because the cut is by tag position anywhere in the string: a
+ * `user_action` that types `<state>` is prose, not markup, and must keep its
+ * tail.
+ */
+export function promptProse(entry: { kind: StoryEntry['kind']; content: string }): string {
+  return NARRATIVE_KINDS.has(entry.kind) ? stripTrailingBlocks(entry.content).prose : entry.content
 }

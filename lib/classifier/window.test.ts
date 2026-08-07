@@ -18,6 +18,36 @@ describe('buildClassifierWindow', () => {
     expect(w.headHandle).toBe('t2')
   })
 
+  // The template labels each turn as the prose that produced a fact, so a
+  // persisted <suggestions> block would offer actions the story never took as
+  // narration, and <state> would hand back opaque ids beside the handle
+  // convention the model is asked to follow.
+  it('carries prose only, not the persisted trailing blocks', () => {
+    const withBlocks = {
+      id: 'e1',
+      position: 1,
+      kind: 'ai_reply',
+      content:
+        'The hall is cold.\n<state><summary>Kara waits</summary></state>\n<suggestions><item category="cat1">Ask Kara Vex</item></suggestions>',
+    } as never
+    const typed = {
+      id: 'e2',
+      position: 2,
+      kind: 'user_action',
+      content: 'I check the <state> of the door.',
+    } as never
+
+    const w = buildClassifierWindow({
+      entries: [withBlocks, typed],
+      processedThrough: null,
+      maxEntries: 20,
+    })
+
+    expect(w.turns[0]?.content).toBe('The hall is cold.')
+    // A user typing the tag is writing prose, not markup — their tail stays.
+    expect(w.turns[1]?.content).toBe('I check the <state> of the door.')
+  })
+
   it('treats a null watermark as "nothing processed yet"', () => {
     const w = buildClassifierWindow({
       entries: [entry(1, 'e1'), entry(2, 'e2')],
