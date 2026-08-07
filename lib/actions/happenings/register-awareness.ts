@@ -22,7 +22,10 @@ declare module '@/lib/actions/action-map' {
   interface PipelineActionMap {
     upsertHappeningAwareness: { source: DeltaSource; payload: AwarenessUpsertPayload }
     deleteHappeningAwareness: { source: DeltaSource; payload: { branchId: string; id: string } }
-    bumpAwarenessRetrieval: { source: DeltaSource; payload: { branchId: string; id: string } }
+    bumpAwarenessRetrieval: {
+      source: DeltaSource
+      payload: { branchId: string; id: string; priorCount: number }
+    }
   }
 }
 
@@ -143,36 +146,34 @@ const deleteHandler: ActionHandler = async (action, branchId, ctx) => {
 
 // chapter-close.md → 3d awareness pin tuning ranks awareness rows by
 // retrieval_count, so a turn the user rolled back must leave nothing counted.
-const bumpRetrievalHandler: ActionHandler = async (action, branchId, ctx) => {
+const bumpRetrievalHandler: ActionHandler = (action, branchId, ctx) => {
   if (action.kind !== 'bumpAwarenessRetrieval')
     throw new Error(`handler/kind mismatch: ${action.kind}`)
-  const { branchId: bid, id } = action.payload
+  const { branchId: bid, id, priorCount } = action.payload
   if (bid !== branchId)
     return { status: 'rejected', reason: `branch mismatch: delta ${branchId} vs target ${bid}` }
-  const [current] = await ctx.db
-    .select()
-    .from(happeningAwareness)
-    .where(and(eq(happeningAwareness.branchId, bid), eq(happeningAwareness.id, id)))
-  // 'noop', not a plain rejection: the periodic classifier and a turn do not
-  // block each other, so a classifier run that aborts after retrieval snapshotted
-  // its awareness rows reverse-replays them away mid-turn. Failing here would
-  // reverse the user's whole turn over a counter that feeds chapter-close
-  // ranking, for a row that no longer exists to be counted.
-  if (!current)
-    return {
-      status: 'rejected',
-      code: 'noop',
-      reason: `bump target awareness ${bid}:${id} not found`,
-    }
 
-  const next = current.retrievalCount + 1
+  // No read of its own: the retrieval pass already selected these rows, so the
+  // prior count rides on the payload. One bump fires per aware in-scene
+  // character per seated happening, all of them ahead of the narrative stream,
+  // and a read each would double the round trips on the device least able to
+  // absorb them.
+  //
+  // The cost is that a row deleted between the pass and this apply is no longer
+  // detectable here — the periodic classifier can reverse-replay its awareness
+  // rows away mid-turn, since it and a turn do not block each other. That now
+  // writes a delta whose UPDATE matches nothing and whose undo no-ops, rather
+  // than the 'noop' rejection this returned while it still read the row. The
+  // turn must survive it either way: failing would reverse the user's whole
+  // turn over a counter that feeds chapter-close ranking.
+  const next = priorCount + 1
   return {
     status: 'ok',
     targetTable: 'happening_awareness',
     targetId: id,
     op: 'update',
     // retrievalCount has no columnSchemas entry, so reverse-replay restores it by assignment.
-    undoPayload: { retrievalCount: current.retrievalCount },
+    undoPayload: { retrievalCount: priorCount },
     ops: [
       ctx.db
         .update(happeningAwareness)

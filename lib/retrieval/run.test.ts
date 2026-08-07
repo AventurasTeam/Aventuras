@@ -111,7 +111,13 @@ const chapterRow = (
 const awarenessRow = (
   id: string,
   happeningId: string,
-  o: { characterId?: string; learnedAt?: string | null; pin?: number | null; source?: string } = {},
+  o: {
+    characterId?: string
+    learnedAt?: string | null
+    pin?: number | null
+    source?: string
+    retrievalCount?: number
+  } = {},
 ): Row => [
   id,
   happeningId,
@@ -119,6 +125,7 @@ const awarenessRow = (
   o.learnedAt ?? null,
   o.pin ?? null,
   o.source ?? 'saw it happen',
+  o.retrievalCount ?? 0,
 ]
 
 type Fixture = {
@@ -902,7 +909,7 @@ describe('runRetrieval — pools', () => {
 
     const ok = expectOk(out)
     expect(ok.bundles.happenings.selected.map((c) => c.id)).toContain('hap_1')
-    expect(ok.injectedAwarenessIds).toEqual(['haw_1'])
+    expect(ok.injectedAwareness).toEqual([{ id: 'haw_1', retrievalCount: 0 }])
     // decay_resistance rides in from the awareness row, not the happening.
     expect(ok.bundles.happenings.traces[0].pinSignal).toBe(0.5)
   })
@@ -938,7 +945,10 @@ describe('runRetrieval — pools', () => {
     )
 
     const ok = expectOk(out)
-    expect(ok.injectedAwarenessIds).toEqual(['haw_a', 'haw_b'])
+    expect(ok.injectedAwareness).toEqual([
+      { id: 'haw_a', retrievalCount: 0 },
+      { id: 'haw_b', retrievalCount: 0 },
+    ])
     const selected = ok.bundles.happenings.selected.find((c) => c.id === 'hap_1')
     // Max over the holders, not min or first-wins: the most pinned holder is
     // what keeps the row alive against decay.

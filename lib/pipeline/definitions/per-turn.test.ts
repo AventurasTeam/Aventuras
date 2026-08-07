@@ -820,7 +820,7 @@ function retrievalIntermediate(
     },
     queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
     staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-    injectedAwarenessIds: [],
+    injectedAwareness: [],
     selectedLocationIds: over.selectedLocationIds ?? [],
     timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
   }

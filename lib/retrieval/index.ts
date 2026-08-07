@@ -13,6 +13,7 @@ export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
 export { ENTITY_FRAMING, runRetrieval } from './run'
 export type {
+  InjectedAwareness,
   RetrievalDeps,
   RetrievalFailure,
   RetrievalOutcome,

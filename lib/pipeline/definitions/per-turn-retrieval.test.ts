@@ -10,6 +10,7 @@ import {
 } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
 import type {
+  InjectedAwareness,
   RankedType,
   RetrievalParams,
   RetrievalSuccess,
@@ -61,12 +62,12 @@ const EMPTY_BUNDLE: RankedType = {
 
 function okOutcome({
   staleCounts = { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-  injectedAwarenessIds = ['haw_1'],
+  injectedAwareness = [{ id: 'haw_1', retrievalCount: 0 }],
   timings = { totalMs: 12, syncMs: 3, embedMs: 4, knnMs: 2, rankMs: 1 },
   bundleOverrides = {},
 }: {
   staleCounts?: Record<RetrievalType, number>
-  injectedAwarenessIds?: string[]
+  injectedAwareness?: InjectedAwareness[]
   timings?: RetrievalTimings
   bundleOverrides?: Partial<Record<RetrievalType, RankedType>>
 } = {}): RetrievalSuccess {
@@ -97,19 +98,19 @@ function okOutcome({
       embedTexts: [],
     },
     staleCounts,
-    injectedAwarenessIds,
+    injectedAwareness,
     selectedLocationIds: [],
     timings,
   }
 }
 
-function bumpEvent(id: string): PhaseEmittedEvent {
+function bumpEvent(id: string, priorCount = 0): PhaseEmittedEvent {
   return {
     type: 'delta_emitted',
     action: {
       kind: 'bumpAwarenessRetrieval',
       source: 'ai_classifier',
-      payload: { branchId: 'b1', id },
+      payload: { branchId: 'b1', id, priorCount },
     },
   }
 }
@@ -462,12 +463,20 @@ describe('retrieval phase — success', () => {
   it('bumps every injected awareness row, one delta each', async () => {
     seedOpenStory()
     runRetrievalMock.mockResolvedValue(
-      okOutcome({ injectedAwarenessIds: ['haw_1', 'haw_2', 'haw_3'] }),
+      okOutcome({
+        injectedAwareness: [
+          { id: 'haw_1', retrievalCount: 0 },
+          { id: 'haw_2', retrievalCount: 3 },
+          { id: 'haw_3', retrievalCount: 0 },
+        ],
+      }),
     )
 
     const { events } = await runRetrievalPhase()
 
-    expect(events).toEqual([bumpEvent('haw_1'), bumpEvent('haw_2'), bumpEvent('haw_3')])
+    // haw_2's prior is 3, not 0: the handler no longer reads the row, so a phase
+    // that dropped the count would bump it from the wrong base.
+    expect(events).toEqual([bumpEvent('haw_1'), bumpEvent('haw_2', 3), bumpEvent('haw_3')])
   })
 
   // outcome.timings measures the pass and is computed before the bumps, so the
@@ -477,7 +486,13 @@ describe('retrieval phase — success', () => {
   it('reports the bump dispatch span apart from the pass timing', async () => {
     seedOpenStory()
     runRetrievalMock.mockResolvedValue(
-      okOutcome({ injectedAwarenessIds: ['haw_1', 'haw_2', 'haw_3'] }),
+      okOutcome({
+        injectedAwareness: [
+          { id: 'haw_1', retrievalCount: 0 },
+          { id: 'haw_2', retrievalCount: 3 },
+          { id: 'haw_3', retrievalCount: 0 },
+        ],
+      }),
     )
 
     const { log } = await runRetrievalPhase()
@@ -493,7 +508,7 @@ describe('retrieval phase — success', () => {
   // report no ids to bump.
   it('emits nothing when the pass injected no awareness rows', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue(okOutcome({ injectedAwarenessIds: [] }))
+    runRetrievalMock.mockResolvedValue(okOutcome({ injectedAwareness: [] }))
 
     const { result, events, log } = await runRetrievalPhase()
 

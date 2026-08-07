@@ -15,6 +15,7 @@ type AwarenessSeed = {
   learnedAtEntryId?: string | null
   decayResistance?: number | null
   source?: string | null
+  retrievalCount?: number
 }
 
 async function setup(rows: AwarenessSeed[]) {
@@ -58,6 +59,9 @@ describe('loadAwarenessForScene', () => {
         learnedAtEntryId: 'entry_9',
         decayResistance: 0.4,
         source: 'Kara saw it',
+        // Non-default, so a mapper that dropped the column or read the wrong
+        // ordinal cannot pass on the schema's own default.
+        retrievalCount: 7,
       },
     ])
     expect(await loadAwarenessForScene(queryAll, 'br_1', ['char_a'])).toEqual([
@@ -68,6 +72,7 @@ describe('loadAwarenessForScene', () => {
         learnedAtEntryId: 'entry_9',
         decayResistance: 0.4,
         source: 'Kara saw it',
+        retrievalCount: 7,
       },
     ])
   })

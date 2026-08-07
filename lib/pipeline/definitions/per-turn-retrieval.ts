@@ -161,13 +161,13 @@ export async function* retrievalPhase(
   // Downstream of the abort poll on purpose: bumping a cancelled turn's counters
   // leaves reverse-replay work for a turn that produced no prose.
   const bumpStartedAt = performance.now()
-  for (const awarenessId of outcome.injectedAwarenessIds) {
+  for (const { id, retrievalCount } of outcome.injectedAwareness) {
     yield {
       type: 'delta_emitted',
       action: {
         kind: 'bumpAwarenessRetrieval',
         source: 'ai_classifier',
-        payload: { branchId, id: awarenessId },
+        payload: { branchId, id, priorCount: retrievalCount },
       },
     }
   }
@@ -176,9 +176,9 @@ export async function* retrievalPhase(
   // happening, each awaited by the orchestrator and each a handler read plus a
   // transaction — so this span is the turn's cost for the counters, and it is
   // spent before the narrative phase streams a word.
-  if (outcome.injectedAwarenessIds.length > 0)
+  if (outcome.injectedAwareness.length > 0)
     ctx.log.debug('retrieval.bump_dispatch', {
-      count: outcome.injectedAwarenessIds.length,
+      count: outcome.injectedAwareness.length,
       ms: Math.round(performance.now() - bumpStartedAt),
     })
   return { status: 'completed' }

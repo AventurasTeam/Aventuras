@@ -103,6 +103,13 @@ export type RetrievalFailure = {
   staleCount: number | null
 }
 
+/**
+ * A bump target and the count it increments. The prior count travels with the
+ * id because the pass has already read the row: the handler would otherwise
+ * re-read one row per bump purely to learn the value it is about to add to.
+ */
+export type InjectedAwareness = { id: string; retrievalCount: number }
+
 export type RetrievalOutcome =
   | {
       ok: true
@@ -121,7 +128,7 @@ export type RetrievalOutcome =
        * buckets, each happening selected once), which is what lets the caller
        * bump one counter per element without de-duplicating first.
        */
-      injectedAwarenessIds: string[]
+      injectedAwareness: InjectedAwareness[]
       /**
        * Which of `bundles.entities.selected` are places. A Candidate's `kind` is
        * the VecTargetKind ('entity'), not the EntityKind, and this pass is the
@@ -280,15 +287,24 @@ async function runRetrievalPass(
     sourceRows.entities.filter((e) => e.kind === 'location').map((e) => e.id),
   )
 
+  const retrievalCounts = new Map(awareness.map((a) => [a.id, a.retrievalCount]))
+
   return {
     ok: true,
     floor,
     bundles,
     queries,
     staleCounts: staleCountsOf(sourceRows),
-    injectedAwarenessIds: bundles.happenings.selected
+    injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)
-      .flatMap((c) => [...c.awarenessIds]),
+      .flatMap((c) => [...c.awarenessIds])
+      .flatMap((id) => {
+        const retrievalCount = retrievalCounts.get(id)
+        // Unreachable: every id here came from a row in `awareness`. Dropping an
+        // unknown one beats bumping from a guessed prior, which would write a
+        // wrong count that no later pass can tell from a real one.
+        return retrievalCount === undefined ? [] : [{ id, retrievalCount }]
+      }),
     selectedLocationIds: bundles.entities.selected
       .filter((c) => placeIds.has(c.id))
       .map((c) => c.id),
