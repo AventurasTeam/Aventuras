@@ -590,10 +590,10 @@ export async function relabelStory(
     // model the catalog has never heard of (a renamed local copy, an id served
     // elsewhere), so an unknown target simply yields an unknown dim and no guard.
     const resolution = resolveStorySwapConfig(storyId, target)
-    // Bracketed like runStagingSwap: relabel takes runExclusive, so
-    // isStorySwapPending refuses turns for its duration, but without a progress
-    // entry the reader's own gate stays blind and lets the user write a turn
-    // that submitTurn then rejects.
+    // Bracketed like runStagingSwap: relabel holds the embedder admission for its
+    // duration (through runUserEmbedderAction), so isStorySwapPending refuses
+    // turns, but without a progress entry the reader's own gate stays blind and
+    // lets the user write a turn that submitTurn then rejects.
     embedderSwapStore.beginProgress(storyId)
     try {
       await relabelModel(composeSwapDeps(storyId, ctx), {
