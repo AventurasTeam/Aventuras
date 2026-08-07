@@ -779,12 +779,11 @@ export default function ReaderComposerRoute() {
           // absent rather than a no-op handler that would still open the popover.
           {...(isGenerating || refreshingSuggestions
             ? {
+                // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a
+                // denylist, so any foreground pipeline added later raises this
+                // Cancel and a hardcoded kind would abort a run that isn't there.
                 onCancel: () =>
-                  void awaitRunTerminal(
-                    isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
-                    branchId,
-                    'cancel',
-                  ),
+                  void awaitRunTerminal(turnKind ?? SUGGESTION_REFRESH_KIND, branchId, 'cancel'),
               }
             : {})}
           onErrorTap={(code) => {
@@ -878,7 +877,9 @@ export default function ReaderComposerRoute() {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel')}
+                onCancel={() =>
+                  void awaitRunTerminal(turnKind ?? PER_TURN_KIND, branchId, 'cancel')
+                }
               />
             </View>
           </View>
