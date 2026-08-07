@@ -128,6 +128,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -181,6 +182,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       })
@@ -210,6 +212,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       })
@@ -234,6 +237,7 @@ describe('per-turn-piggyback', () => {
         },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -260,6 +264,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -296,6 +301,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -355,6 +361,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -439,6 +446,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -520,6 +528,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -585,6 +594,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -650,6 +660,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -725,6 +736,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -803,6 +815,7 @@ describe('per-turn-piggyback', () => {
         },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -886,6 +899,7 @@ describe('per-turn-piggyback', () => {
         },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -939,6 +953,7 @@ describe('per-turn-piggyback', () => {
         },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -980,6 +995,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1052,6 +1068,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1106,6 +1123,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1167,6 +1185,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1231,6 +1250,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: logger,
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1283,6 +1303,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: logger,
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }
@@ -1326,6 +1347,7 @@ describe('per-turn-piggyback', () => {
         intermediates: { idMap: new IdBiMap() },
         log: logger,
         db: {} as never,
+        runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
       }

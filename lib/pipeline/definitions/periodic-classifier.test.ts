@@ -139,6 +139,7 @@ async function ctxWith(opts: {
       abortSignal: new AbortController().signal,
       intermediates: {},
       log: makeLogger('a1'),
+      runInTransaction: async () => undefined,
       db: observed as PhaseContext['db'],
       storyId: 's1',
       branchId: 'b1',

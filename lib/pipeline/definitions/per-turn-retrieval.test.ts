@@ -63,10 +63,12 @@ function okOutcome({
   staleCounts = { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   injectedAwarenessIds = ['haw_1'],
   timings = { totalMs: 12, syncMs: 3, embedMs: 4, knnMs: 2, rankMs: 1 },
+  bundleOverrides = {},
 }: {
   staleCounts?: Record<RetrievalType, number>
   injectedAwarenessIds?: string[]
   timings?: RetrievalTimings
+  bundleOverrides?: Partial<Record<RetrievalType, RankedType>>
 } = {}): RetrievalSuccess {
   return {
     ok: true,
@@ -85,6 +87,7 @@ function okOutcome({
       happenings: EMPTY_BUNDLE,
       threads: EMPTY_BUNDLE,
       chapters: EMPTY_BUNDLE,
+      ...bundleOverrides,
     },
     queries: {
       q1: { text: '', source: 'user_action' },
@@ -223,6 +226,7 @@ async function runRetrievalPhase(abortSignal = new AbortController().signal): Pr
     intermediates,
     log,
     db: {} as never,
+    runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
   })
@@ -612,6 +616,52 @@ describe('retrieval phase — diagnostics', () => {
     const { log } = await runRetrievalPhase()
 
     expect(log.warn).not.toHaveBeenCalled()
+  })
+
+  // A budget below its type's overhead drops every candidate as too large and
+  // seats nothing, which no prompt and no error surface ever shows. Canon wants
+  // it reported (retrieval.md → Budget-fill termination).
+  it('warns when a type ranked candidates and seated none of them', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({
+        bundleOverrides: {
+          happenings: {
+            selected: [],
+            traces: [],
+            funnel: {
+              poolSize: 12,
+              preFilteredSize: 12,
+              selectedCount: 0,
+              tokensUsed: 0,
+              typeBudget: 3,
+            },
+          },
+        },
+      }),
+    )
+
+    const { result, log } = await runRetrievalPhase()
+
+    expect(log.warn).toHaveBeenCalledWith('retrieval.type_seated_nothing', {
+      type: 'happenings',
+      poolSize: 12,
+      typeBudget: 3,
+    })
+    // A signal, not a gate.
+    expect(result).toEqual({ status: 'completed' })
+  })
+
+  // The empty-pool case is a cold start, not a misconfiguration.
+  it('stays quiet when a type had no candidates to seat', async () => {
+    seedOpenStory()
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.warn).not.toHaveBeenCalledWith(
+      'retrieval.type_seated_nothing',
+      expect.anything() as unknown as Record<string, unknown>,
+    )
   })
 
   // AC7: the per-turn cost has to be observable against the PoC baseline, which

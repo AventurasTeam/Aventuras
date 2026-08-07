@@ -1,5 +1,5 @@
 import { boundedSignal } from '@/lib/abort'
-import { inheritedEntryMetadata, queryRows, runInTransaction, type StoryEntry } from '@/lib/db'
+import { inheritedEntryMetadata, queryRows, type StoryEntry } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
 
@@ -72,43 +72,49 @@ export async function* retrievalPhase(
   // turn forever holding the hard gate, with the pill still offering a Cancel
   // that reaches nothing.
   const bounded = boundedSignal(ctx.abortSignal, EMBED_TIMEOUT_MS)
-  const outcome = await runRetrieval(
-    {
-      abortSignal: bounded.signal,
-      queryAll: queryRows,
-      runInTransaction,
-      ...composeRetrievalEmbedDeps(resolution.config),
-    },
-    {
-      branchId,
-      modelId: resolution.config.modelId,
-      dim,
-      budgets: open.settings.retrievalBudgets,
-      query: {
-        // Q1 is THIS turn's action, which submitTurn commits immediately before
-        // the run; anything else at the tail means the turn has none, and an
-        // older action would embed as if it were current.
-        userAction: tail?.kind === 'user_action' ? tail.content : '',
-        // branch_era_flips has no writer wired, so no era can be named yet.
-        eraName: null,
-        piggybackSummary: lastNarrative?.metadata?.summary ?? null,
-        lastNarrativeContent: lastNarrative?.content ?? '',
+  // finally, because runRetrieval rethrows anything outside the vector-invariant
+  // family: without it every non-embedder fault leaks an armed timer and an
+  // abort listener on the run signal.
+  let outcome
+  try {
+    outcome = await runRetrieval(
+      {
+        abortSignal: bounded.signal,
+        queryAll: queryRows,
+        runInTransaction: ctx.runInTransaction,
+        ...composeRetrievalEmbedDeps(resolution.config),
       },
-      sceneCharacterIds,
-      sceneEntityIds: scene.sceneEntities,
-      currentLocationId: scene.currentLocationId,
-      // Layer A scans the recent un-classified buffer prose (edge-cases.md →
-      // Layer A — retrieval-time same-name suppression); the prompt buffer only
-      // approximates that set, over-suppressing while classifierCadence stays
-      // under partialChapterBuffer and under-suppressing past it (cadence.md →
-      // User-tunable knobs).
-      recentProse: composePromptBuffer(entries, open.settings)
-        .map((e) => e.content)
-        .join('\n'),
-    },
-  )
-
-  bounded.dispose()
+      {
+        branchId,
+        modelId: resolution.config.modelId,
+        dim,
+        budgets: open.settings.retrievalBudgets,
+        query: {
+          // Q1 is THIS turn's action, which submitTurn commits immediately before
+          // the run; anything else at the tail means the turn has none, and an
+          // older action would embed as if it were current.
+          userAction: tail?.kind === 'user_action' ? tail.content : '',
+          // branch_era_flips has no writer wired, so no era can be named yet.
+          eraName: null,
+          piggybackSummary: lastNarrative?.metadata?.summary ?? null,
+          lastNarrativeContent: lastNarrative?.content ?? '',
+        },
+        sceneCharacterIds,
+        sceneEntityIds: scene.sceneEntities,
+        currentLocationId: scene.currentLocationId,
+        // Layer A scans the recent un-classified buffer prose (edge-cases.md →
+        // Layer A — retrieval-time same-name suppression); the prompt buffer only
+        // approximates that set, over-suppressing while classifierCadence stays
+        // under partialChapterBuffer and under-suppressing past it (cadence.md →
+        // User-tunable knobs).
+        recentProse: composePromptBuffer(entries, open.settings)
+          .map((e) => e.content)
+          .join('\n'),
+      },
+    )
+  } finally {
+    bounded.dispose()
+  }
 
   // The OUTER signal, not the bounded one: an expiry aborts the pass the same
   // way a cancel does, but it is a provider fault. Reading the bounded signal
@@ -136,6 +142,19 @@ export async function* retrievalPhase(
   // count means its scope or its ops missed rows.
   if (Object.values(outcome.staleCounts).some((count) => count > 0))
     ctx.log.warn('retrieval.stale_after_sync', outcome.staleCounts)
+
+  // retrieval.md → Budget-fill termination wants a budget below its type's
+  // overhead surfaced, not absorbed. Until the Story Settings warning exists,
+  // this is the only signal that a type is seating nothing: candidates were
+  // ranked and every one of them was dropped, which no prompt ever shows.
+  for (const [type, bundle] of Object.entries(outcome.bundles)) {
+    if (bundle.funnel.poolSize > 0 && bundle.funnel.selectedCount === 0)
+      ctx.log.warn('retrieval.type_seated_nothing', {
+        type,
+        poolSize: bundle.funnel.poolSize,
+        typeBudget: bundle.funnel.typeBudget,
+      })
+  }
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
 

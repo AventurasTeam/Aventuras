@@ -77,6 +77,10 @@ export type PhaseContext = {
   // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)
   // against committed rows rather than a possibly-gappy in-memory store.
   db: DbCtx['db']
+  // The run's transaction runner. Only the retrieval phase writes outside the
+  // delta log (its vec0 sync), and it takes the run's handle rather than the
+  // module global so a test's db and its writes cannot diverge.
+  runInTransaction: DbCtx['runInTransaction']
   // Run identity, so a per-turn phase can read the open story / branch stores
   // without the generationStore self-lookup the interim narrative phase used.
   storyId: string | null

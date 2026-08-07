@@ -93,6 +93,7 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
     intermediates: {},
     log: makeLogger('act_1'),
     db: {} as never,
+    runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
   })
@@ -134,6 +135,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates: {},
       log: makeLogger('act_1'),
       db: {} as never,
+      runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
     }
@@ -338,6 +340,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -452,6 +455,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
       } as never,
@@ -537,6 +541,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: logger,
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
       } as never,
@@ -615,6 +620,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -698,6 +704,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -727,6 +734,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       db: {} as never,
+      runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -877,6 +885,7 @@ async function runNarrativeWith(opts: {
     abortSignal: new AbortController().signal,
     intermediates,
     log: opts.log ?? makeLogger('act_1'),
+    runInTransaction: async () => undefined,
     db: {
       select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
     } as never,
