@@ -103,16 +103,35 @@ ungated swap).
 
 **Source-hash tripwire.** `source_hash` stores the content hash of
 the embedded fields at embed time (`xxhash(title + description)` or
-similar) and plays two roles. Per the
-[Compute lifecycle](#compute-lifecycle) contract it is the reference
-for the per-row `embedding_stale` flip: an embedded-field write
-recomputes the row's hash and compares against it to set or clear the
-dirty flag. And at retrieval — after the sync stage has run — it is a
-tripwire: a candidate whose current content hash doesn't match its
-`source_hash` means a write changed content without flipping the flag
-(a bug, an ungated direct DB write). Log the mismatch loudly; treat
-the row's vector as untrusted (exclude or flag, do not silently
-re-embed and continue). Hash is chosen over timestamps because
+similar). Per the [Compute lifecycle](#compute-lifecycle) contract it
+is the reference for the per-row `embedding_stale` flip: an
+embedded-field write recomputes the row's hash and compares against
+it to set or clear the dirty flag.
+
+The two are not redundant, and they differ in cardinality.
+`embedding_stale` is one boolean on the source row, answering "does
+this row need embedding into the current model". `source_hash` is one
+value per stored vector, keyed by row and model, answering "which
+text produced this particular vector". That second question is what
+makes a cancelled cross-model swap resumable: the flag cannot say
+which rows were already staged into the target family, because the
+swap has been flipping it, so recovery compares the source family's
+stored hashes against current content instead.
+
+Drift is the flag's job, not the hash's. The rule is that every
+writer touching an embedded field flips `embedding_stale`, so there
+is deliberately **no** retrieval-time hash comparison — adding one
+would mean hashing every candidate's composite text on every turn to
+re-derive what the flag already carries.
+
+The rule is convention today, not enforcement: the register actions
+default the flag to `0` and leave it to each caller, which makes a
+forgetful writer the one way a stale vector can survive. Moving the
+flip into the action layer, so writing an embedded field sets the
+flag whether or not the caller remembers, is what makes the rule
+load-bearing enough to justify having no tripwire behind it. Tracked
+in [`triage.md`](../implementation/triage.md). Hash is chosen over
+timestamps because
 rollback restores prior `updated_at` along with the rest of the
 row's state — a timestamp-based check would invert post-rollback and
 silently mask the bug it was meant to catch. Content hashes are
@@ -218,9 +237,12 @@ leaves it flagged and absent from vec0. There is no separate
 **Embed failure is blocking, not "queue and continue."** When the
 pre-retrieval sync stage can't embed a dirty row, the turn can't
 reach retrieval. Treated identically to a failed LLM call: surfaced
-as an error, must be resolved, no ignore path. The next-turn
-affordance disables until the user picks Retry / Switch embedder /
-Roll back this turn. See
+as an error, must be resolved, no ignore path. The user picks Switch
+embedder / Retry / Dismiss. There is no rollback action — the
+orchestrator has already reverse-replayed the turn by the time the
+error surfaces — and the composer is not gated, because a resubmit
+re-runs this same blocking sync stage, so a still-broken embedder
+fails the turn again. The block is self-enforcing. See
 [`model-management.md → Embedder failures`](./model-management.md#embedder-failures)
 for the action surface and the wider failure-mode discussion.
 
@@ -576,10 +598,10 @@ When `stories.settings.effectiveDim = N` is non-null:
    tables of the same family, and `branch_id` partitions rows
    within each. Within one branch, all rows share one dim — the
    same single-model invariant extended to dim.
-4. **Source-hash tripwire.** `source_hash` continues to compare
-   content hashes, not vectors. Truncation is deterministic from
-   the native vector; `source_hash` mismatch still indicates a
-   bypassed embed step.
+4. **Source hash.** `source_hash` continues to hash content, not
+   vectors. Truncation is deterministic from the native vector, so a
+   dim change alone never moves the hash — which is what lets swap
+   recovery tell a re-embedded row from a merely re-truncated one.
 
 Some providers offer **server-side truncation** by passing a
 `dimensions` parameter on the embedding request. Where supported,
@@ -764,7 +786,7 @@ The retrieval pool per type after the structural floor is satisfied.
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Prompt buffer                  | Partial mode: last `partialChapterBuffer` entries of current chapter. Full mode: entire current chapter. Both modes: previous-chapter spillover to satisfy `protectedBuffer` floor. See [`cadence.md → User-tunable knobs`](./cadence.md#user-tunable-knobs) |
 | Active + in-scene entities     | `entities.status='active' AND id ∈ sceneEntities` — short-circuits `injection_mode`                                                                                                                                                                          |
-| Current location entity        | `currentLocationId` — same short-circuit                                                                                                                                                                                                                     |
+| Current location entity        | `entities.status='active' AND id = currentLocationId` — same short-circuit. A staged, retired or deleted `currentLocationId` seats nothing, so the location block is guarded on the seated row, never on the id                                              |
 | Active threads                 | `threads.status='active'` — must-inject as structural framing                                                                                                                                                                                                |
 | `injection_mode='always'` rows | Across entities / lore / threads — user-intent override                                                                                                                                                                                                      |
 
@@ -971,9 +993,15 @@ Entities:    [====      ]  1200 tokens
 Lore:        [======    ]  1800 tokens
 Happenings:  [=====     ]  1500 tokens
 Threads:     [==        ]   400 tokens
+Chapters:    [===       ]   600 tokens
                           ─────
-Total:                    4900 tokens
+Total:                    5500 tokens
 ```
+
+These five are the shipped `stories.settings.retrievalBudgets`
+defaults (`STORY_SETTINGS_DEFAULTS`). They are **token** budgets;
+migration `0007_retrieval_budget_tokens` rewrites the row-count
+values stories carried before that.
 
 The user feels the cost directly per type. Tuning is "I want more
 lore in retrieval; drag the slider up" — not "I want lore at 35% of
@@ -1310,10 +1338,54 @@ token_count(c) = tiktoken(c.rendered_field_text) + type_overhead(type_of(c))
 ```
 
 Per-type overhead is a small constant for the Liquid macro / block
-wrapping (entity character_block ≈ 30 tokens, lore block ≈ 10 tokens,
-happening memory block ≈ 20 tokens, thread block ≈ 10 tokens).
-Measured empirically once the macros are concrete; constant in code
-thereafter.
+wrapping — measured empirically against the shipped macro, constant in
+code thereafter:
+
+| Type         | Overhead | What the constant covers                         |
+| ------------ | -------- | ------------------------------------------------ |
+| `entities`   | 11       | `# Elsewhere in the world` plus the bracketed id |
+| `lore`       | 4        | `# Relevant lore`                                |
+| `happenings` | 5        | `# What has happened`                            |
+| `threads`    | 4        | `# Background threads`                           |
+| `chapters`   | 4        | `# Earlier chapters`                             |
+
+Three rules hold those numbers in place:
+
+- **A ranked row renders its `rendered_field_text` and nothing else.**
+  Anything a block puts outside that string — a heading, a label — is
+  length the estimate never charged for, so the type overruns its
+  partition by that length times the row count. A chapter's title
+  therefore lives inside the string rather than on a `##` line above
+  it.
+- **Only the entity block brackets an id.** The `<state>` block
+  references entities and nothing else, so an id on lore / happenings
+  / threads / chapters is spend that invites a reference no parser
+  resolves.
+- **Emission instructions belong to the including template, not the
+  macro.** They cost once per prompt, while anything inside a block is
+  charged once per row: the `<scene_entities>` instruction is 27
+  tokens on its own, and moving it into the entity block would take
+  that type's overhead from 11 to 38.
+
+Measured on a one-row block, so an N-row block is charged its header N
+times and renders it once: the estimate carries `N − 1` headers of
+slack, at least 3 tokens per extra row. That is the safe direction
+against a hard partition, and a marginal-cost measurement would be
+tighter but can overshoot.
+
+The slack is not a guarantee at `N = 1`, where there is none. BPE is
+not additive across the seam between the wrapper and the row's own
+text — a row whose text splits a newline run the empty probe had
+merged renders one token more than it was charged. Probed across the
+five blocks, that boundary case never exceeded **1 token**, so it is
+noise against partitions in the hundreds; the thing that actually
+overruns a partition is a variable-length string rendered outside
+`rendered_field_text`, which is what the first rule above forbids.
+
+The constants live in `RANKER_DEFAULTS.typeOverhead`;
+`lib/prompts/bundled/memory-blocks.test.ts` re-derives them from the
+shipped macro and fails when the macro moves and the constant does
+not.
 
 **No stored column on candidate tables.** Tokenization is fast enough
 (microseconds per row); per-turn cost is sub-millisecond total.

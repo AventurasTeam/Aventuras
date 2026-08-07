@@ -8,9 +8,13 @@ export type ClassifierStatus = {
   processedThrough: number | null
 }
 
-type DropReason =
+/**
+ * Why a candidate did not reach the prompt. Owned here because the probe capture
+ * persists it; lib/retrieval imports this rather than restating it, so adding a
+ * reason cannot land on one side of the snake_case mapping only.
+ */
+export type DropReason =
   | 'pre_filtered'
-  | 'mmr_dedupe'
   | 'below_threshold'
   | 'over_budget'
   | 'candidate_too_large'
@@ -42,7 +46,6 @@ type CaptureCandidate = {
 type PoolFunnelSummary = {
   pool_size: number
   pre_filtered_size: number
-  mmr_size: number
   selected_count: number
   tokens_used: number
   type_budget: number

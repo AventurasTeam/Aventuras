@@ -1,3 +1,4 @@
+import { rowQuery, type RowQuery } from '../types'
 import { SOURCE_TABLES } from './stale'
 import type { EmbeddedFieldRow } from './stale'
 import type { VecTargetKind } from './vec-tables'
@@ -12,14 +13,12 @@ const KIND_FIELDS: Record<VecTargetKind, [string, string]> = {
   chapter: ['summary', 'theme'],
 }
 
-export type RowQuery = { sql: string; params: unknown[] }
-
 // Module-private: a WHERE-less full scan is only a building block for the two
 // filtered queries below; callers should never run it unfiltered against a DB.
 function embeddedRowQuery(kind: VecTargetKind): RowQuery {
   const table = SOURCE_TABLES[kind]
   const [a, b] = KIND_FIELDS[kind]
-  return { sql: `SELECT id, branch_id, ${a}, ${b} FROM ${table}`, params: [] }
+  return rowQuery(`SELECT id, branch_id, ${a}, ${b} FROM ${table}`, [])
 }
 
 export function staleRowsQuery(kind: VecTargetKind, branchIds: readonly string[]): RowQuery {
@@ -27,22 +26,21 @@ export function staleRowsQuery(kind: VecTargetKind, branchIds: readonly string[]
   // `IN ()` is a SQLite syntax error, so an empty branch set falls back to an
   // always-false predicate that still parses and yields zero rows.
   if (branchIds.length === 0) {
-    return { sql: `${base.sql} WHERE 0`, params: [] }
+    return rowQuery(`${base.sql} WHERE 0`, [])
   }
   const placeholders = branchIds.map(() => '?').join(', ')
-  return {
-    sql: `${base.sql} WHERE embedding_stale = 1 AND branch_id IN (${placeholders})`,
-    params: [...branchIds],
-  }
+  return rowQuery(`${base.sql} WHERE embedding_stale = 1 AND branch_id IN (${placeholders})`, [
+    ...branchIds,
+  ])
 }
 
 export function branchRowsQuery(kind: VecTargetKind, branchIds: readonly string[]): RowQuery {
   const base = embeddedRowQuery(kind)
   if (branchIds.length === 0) {
-    return { sql: `${base.sql} WHERE 0`, params: [] }
+    return rowQuery(`${base.sql} WHERE 0`, [])
   }
   const placeholders = branchIds.map(() => '?').join(', ')
-  return { sql: `${base.sql} WHERE branch_id IN (${placeholders})`, params: [...branchIds] }
+  return rowQuery(`${base.sql} WHERE branch_id IN (${placeholders})`, [...branchIds])
 }
 
 /**

@@ -34,7 +34,7 @@ describe('buildStorySettings', () => {
   it('produces a complete settings from an empty app default', () => {
     const s = buildStorySettings('adventure', app())
     expect(s.embedding_model_id).toBe('Xenova/all-MiniLM-L6-v2')
-    expect(s.retrievalBudgets.entities).toBe(8)
+    expect(s.retrievalBudgets.entities).toBe(1200)
   })
   it('lets the app embedding model id win', () => {
     expect(

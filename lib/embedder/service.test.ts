@@ -89,7 +89,14 @@ describe('embedTexts routing + prefixing', () => {
 
     const result = await embedTexts(config, ['x'], 'document', provider)
 
-    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm1', ['x'], undefined, undefined)
+    expect(embedViaProvider).toHaveBeenCalledWith(
+      provider,
+      'm1',
+      ['x'],
+      undefined,
+      undefined,
+      undefined,
+    )
     expect(normOf(result.vectors[0])).toBeCloseTo(1, 6)
     expect(Array.from(result.vectors[0])).toEqual([0.6, 0.8].map((n) => Math.fround(n)))
   })
@@ -233,7 +240,7 @@ describe('matryoshka truncation', () => {
 
     await embedTexts(config, ['x'], 'document', provider)
 
-    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm', ['x'], undefined, 4)
+    expect(embedViaProvider).toHaveBeenCalledWith(provider, 'm', ['x'], undefined, 4, undefined)
   })
 
   it('accepts an already-truncated vector when the server honors dimensions', async () => {

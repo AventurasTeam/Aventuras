@@ -420,28 +420,58 @@ discards wizard state.
 
 ### Embed failure is blocking
 
-When an embed call fails for a row that's already been written to
-its metadata table (turn-time emit, user-edit save, etc.), that
-row gets `embedding_stale = 1` and the user-facing UX is
-**identical to a failed LLM call**: blocking, must be resolved, no
-ignore path.
+**This section defers to
+[`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)
+on when embedding happens.** No embedded-field write embeds inline:
+a turn-time emit or a user-edit save writes its metadata row and
+sets `embedding_stale = 1`, and the embed happens later, in the
+pre-retrieval sync stage. When that stage can't embed a dirty row
+the row stays flagged and the user-facing UX is **identical to a
+failed LLM call**: blocking, must be resolved, no ignore path.
 
-A turn whose classifier emits 5 rows where 3 embed and 2 fail
-lands in a half-committed state — 3 in vec0, 2 stale-flagged in
-metadata. The user sees:
+**There is no per-row half-commit.** The sync stage hands the whole
+dirty batch to the embedder in one call and applies its ops in one
+transaction, so it writes every row or none. The local backend sends
+that as a single request; a provider one may be split by the SDK at
+`maxEmbeddingsPerCall`, which changes the request count and not the
+all-or-nothing commit. The "5 rows
+emitted, 3 embed and 2 fail — 3 in vec0, 2 stale-flagged" state
+this section once described is unreachable under the no-inline-embed
+contract above, and so is the `Roll back this turn` action it
+justified.
 
-> Embedding failed for 2 rows. `[Retry]` `[Switch embedder]` `[Roll back this turn]`
+**The turn is already rolled back when the user sees the error.**
+Any phase failure
+[reverse-replays](../generation-pipeline.md#reverse-replay) every
+delta written under the run's action id, and the turn's `user_action`
+entry shares that id, so the rollback lands before the system entry
+is written.
+Nothing survives that a user would want reverted: a _failed_ sync
+wrote nothing, and a sync that _succeeded_ inside a later-failing
+turn repaired rows dirtied by **earlier** turns — embeddings are
+deliberately outside the delta log
+([`retrieval.md → Storage`](./retrieval.md#storage)), and reversing
+them would discard correct work.
 
-The next-turn affordance is disabled until one is taken:
+The user sees:
 
-- **Retry** re-attempts the failed embeds. On success, stale flags
-  clear, the turn fully commits, user proceeds.
+> The embedder failed, so memory retrieval couldn't run.
+> `[Switch embedder]` `[Retry]` `[Dismiss]`
+
+with the failure detail rendered as muted text under the message
+rather than behind a `View details` button.
+
 - **Switch embedder** routes to Story Settings · Memory · Switch,
   firing the [Model swap UX](./retrieval.md#model-swap-ux) dialog.
   Re-index processes the staleness as part of the swap.
-- **Roll back this turn** reverse-replays the entire turn's
-  deltas, reverting both narrative and emitted rows. Returns to
-  pre-turn state; the user can retry the turn from scratch.
+- **Retry** re-submits the turn, which re-runs the sync stage.
+- **Dismiss** clears the system entry, not the condition. The
+  composer is deliberately **not** gated: a resubmit re-runs this
+  same blocking sync stage, so a still-broken embedder fails the turn
+  again and no reply commits. The no-ignore-path invariant holds by
+  construction rather than by a disabled control — and a genuinely
+  transient failure that has since cleared simply proceeds, which is
+  the correct outcome.
 
 The worker may still drain stale rows opportunistically (if the
 embedder recovers and the next normal embed call succeeds, the

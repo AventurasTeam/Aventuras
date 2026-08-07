@@ -59,12 +59,18 @@ export const storyDefinitionSchema = z
     }
   })
 
+// Token counts, so bounded at the schema rather than downstream: migration 0007
+// had to rewrite these once already because the stored numbers meant rows, and a
+// negative or fractional budget makes rankPerType seat nothing while the trace
+// blames the candidates. The M7 sliders write straight here.
+const tokenBudget = z.number().int().nonnegative()
+
 const retrievalBudgetsSchema = z.object({
-  entities: z.number(),
-  lore: z.number(),
-  happenings: z.number(),
-  threads: z.number(),
-  chapters: z.number(),
+  entities: tokenBudget,
+  lore: tokenBudget,
+  happenings: tokenBudget,
+  threads: tokenBudget,
+  chapters: tokenBudget,
 })
 
 const translationSchema = z.object({
@@ -94,8 +100,8 @@ export const storySettingsSchema = z.object({
   chapterTokenThreshold: z.number().default(24000),
   chapterAutoClose: z.boolean().default(true),
   fullChapterInBuffer: z.boolean().default(false),
-  partialChapterBuffer: z.number().default(10),
-  protectedBuffer: z.number().default(10),
+  partialChapterBuffer: z.number().int().nonnegative().default(10),
+  protectedBuffer: z.number().int().nonnegative().default(10),
   classifierCadence: z.number(),
   piggybackMode: z.enum(['on', 'off']),
   embeddingBackend: z.enum(['provider', 'local']),

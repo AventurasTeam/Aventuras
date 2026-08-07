@@ -20,6 +20,21 @@ function nonEmpty(value: string | null | undefined): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
 
+/**
+ * The dim a config's vectors would be READ at, or null when only an embed could
+ * answer. A local config's dim is the catalog's; a provider config truncating to
+ * the story's locked `effectiveDim` is read at that dim, and an untruncated
+ * provider config is native — unknowable until it responds. Diverges from the
+ * swap engine's `configStorageDim` on the truncating-provider-with-unknown-native
+ * cell, where a staging run defers to the dim the server actually serves.
+ */
+export function embedderReadDim(config: EmbedderConfig): number | null {
+  if (config.backend === 'local' || config.truncation == null) return config.dim
+  return config.dim == null
+    ? config.truncation.effectiveDim
+    : Math.min(config.truncation.effectiveDim, config.dim)
+}
+
 export function resolveEmbedderConfig(
   story: Pick<
     StorySettings,

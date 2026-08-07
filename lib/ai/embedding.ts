@@ -63,6 +63,7 @@ export async function embedViaProvider(
   texts: string[],
   actionId?: string,
   dimensions?: number,
+  abortSignal?: AbortSignal,
 ): Promise<{ vectors: Float32Array[]; dim: number }> {
   const model = buildEmbeddingModel(provider, modelId, actionId)
 
@@ -72,6 +73,7 @@ export async function embedViaProvider(
       await embedMany({
         model,
         values: texts,
+        ...(abortSignal != null ? { abortSignal } : {}),
         // Literal key, not the provider's display name: the SDK resolves its
         // lookup as `provider.split('.')[0].trim()` over `<displayName>.embedding`,
         // so any display name carrying a dot or padding (`api.openai.com`) would

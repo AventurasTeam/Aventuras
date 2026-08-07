@@ -1,0 +1,35 @@
+language: 'en-US'
+early_access: true
+reviews:
+  profile: 'chill'
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: true
+  review_status: true
+  review_details: true
+  auto_review:
+    enabled: true
+    drafts: false
+    # A slice too large for one review ships as stacked PRs whose upper half
+    # targets the lower half's branch. Without these, CodeRabbit skips it.
+    base_branches:
+      - 'slice/.*'
+      - 'milestone/.*'
+  pre_merge_checks:
+    # .claude/rules/code.md mandates the opposite of a coverage floor: comments
+    # only where the *why* is non-obvious, never narration of the what.
+    docstrings:
+      mode: 'off'
+  sequence_diagrams: true
+  path_filters:
+    - '!**/node_modules/**'
+    - '!**/android/**'
+    - '!**/ios/**'
+    - '!**/.expo/**'
+    - '!**/.expo-shared/**'
+    - '!**/dist/**'
+    - '!**/docs/**'
+    - '!**pnpm-lock.json'
+    - '!**/lib/db/migrations/meta/**'
+chat:
+  auto_reply: true
