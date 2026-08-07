@@ -102,10 +102,54 @@ const GENERATION_IN_FLIGHT_REJECTION: StoryEmbedderActionRejection = {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
-// Per-story single-flight lock (engine caller contract): concurrent engine calls
-// for one story would both pass the advisory swap-target guard and stage vectors
-// under different targets, orphaning the loser's rows. Reject rather than queue.
+type StoryAdmission =
+  | { owner: 'turn'; holders: number }
+  | { owner: 'embedder'; release: () => void }
+
+// Turns read/write the served vec family; embedder operations mutate its ownership.
+// Turn holders may overlap because the pipeline gate still chooses the generation,
+// but any holder excludes an embedder mutation before either side writes.
+const storyAdmissions = new Map<string, StoryAdmission>()
+
+// Per-story engine handle retained separately from admission: cancellation awaits
+// the live swap promise, while turn admission only needs to know who owns the gate.
 const inFlight = new Map<string, Promise<unknown>>()
+
+export type TurnAdmissionResult<T> =
+  | { admitted: true; value: T }
+  | { admitted: false; blockedBy: 'embedder-swap' }
+
+export async function withTurnAdmission<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+): Promise<TurnAdmissionResult<T>> {
+  const active = storyAdmissions.get(storyId)
+  if (active?.owner === 'embedder') return { admitted: false, blockedBy: 'embedder-swap' }
+
+  const admission = active ?? { owner: 'turn' as const, holders: 0 }
+  admission.holders += 1
+  storyAdmissions.set(storyId, admission)
+  try {
+    return { admitted: true, value: await fn() }
+  } finally {
+    admission.holders -= 1
+    if (admission.holders === 0 && storyAdmissions.get(storyId) === admission) {
+      storyAdmissions.delete(storyId)
+    }
+  }
+}
+
+function acquireEmbedderAdmission(storyId: string): (() => void) | null {
+  if (storyAdmissions.has(storyId)) return null
+  const admission: StoryAdmission = {
+    owner: 'embedder',
+    release: () => {
+      if (storyAdmissions.get(storyId) === admission) storyAdmissions.delete(storyId)
+    },
+  }
+  storyAdmissions.set(storyId, admission)
+  return admission.release
+}
 
 /**
  * Whether a swap owns this story's vec tables right now. Two authorities for the
@@ -120,15 +164,47 @@ export function isStorySwapPending(storyId: string): boolean {
   return open?.storyId === storyId && open.settings.embedding_swap_target != null
 }
 
-export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
-  if (inFlight.has(storyId)) throw new SwapBusyError(storyId)
-  const run = fn()
+async function runAdmittedEmbedder<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+  releaseAdmission: () => void,
+): Promise<T> {
+  let run: Promise<T>
+  try {
+    run = fn()
+  } catch (error) {
+    releaseAdmission()
+    throw error
+  }
   inFlight.set(storyId, run)
   try {
     return await run
   } finally {
     inFlight.delete(storyId)
+    releaseAdmission()
   }
+}
+
+export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
+  const releaseAdmission = acquireEmbedderAdmission(storyId)
+  if (releaseAdmission == null) throw new SwapBusyError(storyId)
+  return runAdmittedEmbedder(storyId, fn, releaseAdmission)
+}
+
+async function runUserEmbedderAction<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+): Promise<T | StoryEmbedderActionRejection> {
+  if (storyAdmissions.get(storyId)?.owner === 'turn') {
+    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+  }
+  const releaseAdmission = acquireEmbedderAdmission(storyId)
+  if (releaseAdmission == null) throw new SwapBusyError(storyId)
+  if (generationStore.isUserEditBlocked()) {
+    releaseAdmission()
+    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+  }
+  return runAdmittedEmbedder(storyId, fn, releaseAdmission)
 }
 
 // The store/UI callbacks are wrapped so a throwing subscriber can never propagate
@@ -382,8 +458,8 @@ async function runStagingSwap(
   ctx: DbCtx,
   invoke: (deps: SwapDeps, params: SwapParams) => Promise<'completed' | 'cancelled'>,
   resolveTarget: (settings: StorySettings) => EmbeddingTarget,
-): Promise<'completed' | 'cancelled'> {
-  return runExclusive(storyId, async () => {
+): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
+  return runUserEmbedderAction(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
     const target = resolveTarget(settings)
     const resolution = resolveStorySwapConfig(storyId, target)
@@ -414,7 +490,6 @@ export function startStorySwap(
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, startSwap, () => target)
 }
 
@@ -422,7 +497,6 @@ export function resumeStorySwap(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, resumeSwap, (settings) => {
     if (settings.embedding_swap_target == null) throw new SwapNotInProgressError(storyId)
     return markerTarget(settings)
@@ -433,7 +507,6 @@ export function reindexStoryNow(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, reindexStory, (settings) => ({
     modelId: settings.embedding_model_id,
     backend: settings.embeddingBackend,
@@ -503,8 +576,7 @@ export async function relabelStory(
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<void | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return GENERATION_IN_FLIGHT_REJECTION
-  await runExclusive(storyId, async () => {
+  return runUserEmbedderAction(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
     // Relabel's pre-delete is destructive toward target-model rows; a swap in
     // flight would have staged exactly those, so refuse until it settles.

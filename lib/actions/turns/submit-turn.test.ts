@@ -21,6 +21,7 @@ import {
 
 import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
+import { startStorySwap } from '../embedder-swap/app-deps'
 
 // The retrieval phase's own coverage lives in per-turn-retrieval.test.ts; here
 // it only has to let the turn through, and its real pass would reach for a DB
@@ -28,6 +29,11 @@ import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests_
 vi.mock('@/lib/retrieval', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, runRetrieval: vi.fn(async () => OK_RETRIEVAL) }
+})
+
+vi.mock('../embedder-swap/engine', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
 })
 
 const EMPTY_BUNDLE: RankedType = {
@@ -249,6 +255,50 @@ describe('submitTurn', () => {
     expect(rows).toEqual([])
   })
 
+  it('rejects a swap requested while a turn is waiting to commit its user action', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    let writeStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      writeStarted = resolve
+    })
+    let releaseWrite!: () => void
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve
+    })
+    let gateNextTransaction = true
+    const turnCtx = {
+      ...ctx,
+      runInTransaction: async (ops: Parameters<typeof ctx.runInTransaction>[0]) => {
+        if (gateNextTransaction) {
+          gateNextTransaction = false
+          writeStarted()
+          await writeGate
+        }
+        return ctx.runInTransaction(ops)
+      },
+    }
+
+    const turn = submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'Hello there', composerMode: 'say' },
+      turnCtx,
+    )
+    await started
+
+    const swap = startStorySwap(
+      's1',
+      { modelId: STORY_SETTINGS.embedding_model_id, backend: 'local' },
+      ctx,
+    )
+    const swapResult = await swap.finally(releaseWrite)
+    expectRan(await turn)
+    expect(swapResult).toEqual({ status: 'rejected', reason: 'generation in flight' })
+  })
+
   it('completes a turn: persists the user action and the streamed AI reply', async () => {
     const { ctx, db } = await makeHarness()
     await openStory(db, 's1', 'b1')
@@ -419,6 +469,66 @@ describe('submitTurn', () => {
     // MAX(position)+1 read would otherwise collide both turns on the same slot.
     const positions = branchEntries('b1').map((e) => e.position)
     expect(new Set(positions).size).toBe(positions.length)
+  })
+
+  it('refuses a queued turn when a swap marker appears before the queue advances', async () => {
+    const { ctx, db } = await makeHarness()
+    await openStory(db, 's1', 'b1')
+    entriesStore.hydrate('b1', [])
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    let phaseStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      phaseStarted = resolve
+    })
+    let releaseTurn!: () => void
+    const turnGate = new Promise<void>((resolve) => {
+      releaseTurn = resolve
+    })
+    definePipeline({
+      kind: PER_TURN_KIND,
+      phases: [
+        {
+          name: 'p',
+          run: async function* (): AsyncGenerator<never, PhaseResult> {
+            phaseStarted()
+            await turnGate
+            return { status: 'completed' }
+          },
+        },
+      ],
+      concurrencyPolicy: { blockedBy: [PER_TURN_KIND] },
+      affordance: 'pill-only',
+      gateBehavior: 'hard-gate',
+    })
+
+    const first = submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'first', composerMode: 'do' },
+      ctx,
+    )
+    await started
+
+    const second = submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'second', composerMode: 'do' },
+      ctx,
+    )
+
+    const open = currentStoryStore.getCurrentStory()
+    if (open == null) throw new Error('story not open')
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, embedding_swap_target: 'bge-m3' },
+    })
+    releaseTurn()
+    expectRan(await first)
+    await expect(second).resolves.toEqual({ outcome: 'rejected', blockedBy: 'embedder-swap' })
+    expect(
+      branchEntries('b1')
+        .filter((entry) => entry.kind === 'user_action')
+        .map((entry) => entry.content),
+    ).toEqual(['first'])
   })
 
   it('reverses the user_action and leaves no orphan when pipeline admission is rejected', async () => {
