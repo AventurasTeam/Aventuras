@@ -11,13 +11,13 @@ export type SyncStageDeps = {
 
 export type SyncStageResult =
   | { ok: true; embedded: number }
-  | { ok: false; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
+  | { ok: false; reason: EmbedderErrorKind; detail: string; staleCount: number }
 
 /**
- * Typed embedder errors carry their own kind. Anything else — a failed read or
- * write, a bug — has no standing to claim the session is fine, so it takes
- * 'init', which means the session never came up (model-management.md → Failure
- * surfaces).
+ * Typed embedder errors carry their own kind. Anything else the embed call
+ * throws — a dead bridge, a bug — has no standing to claim the session is fine,
+ * so it takes 'init', which means the session never came up
+ * (model-management.md → Failure surfaces).
  */
 export function classifyEmbedderFailure(error: unknown): {
   reason: EmbedderErrorKind
@@ -41,22 +41,26 @@ export function classifyEmbedderFailure(error: unknown): {
  * partial-success path — a half-synced index silently mis-ranks or drops the
  * un-embedded rows instead of reporting anything.
  *
- * `staleCount` is null only when the dirty set itself failed to load, so a caller
- * can drop the magnitude rather than present a confident zero — the same
- * contract `countStoryEmbeddableRows` uses for an uncountable story.
+ * Only the embed call takes the embedder surface. Reading the dirty set and
+ * committing the ops are database work, and model-management.md → Failure
+ * surfaces knows two embedder faults, neither of them a SQL one — so a locked
+ * database escapes here exactly as it does from the KNN stage (run.ts →
+ * runRetrieval) rather than offering a re-index as the fix.
  */
 export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult> {
-  // Captured before embedRows sees the array: re-reading rows.length in the
-  // catch would let a dep that drains its argument report a confident zero,
-  // which is the one value null is supposed to be distinguishable from.
-  let staleCount: number | null = null
+  const rows = await deps.loadStaleRows(deps.branchIds)
+  if (rows.length === 0) return { ok: true, embedded: 0 }
+  // Captured before embedRows sees the array: reading rows.length afterwards
+  // would let a dep that drains its argument report a confident zero.
+  const staleCount = rows.length
+
+  let ops: SqlOp[]
   try {
-    const rows = await deps.loadStaleRows(deps.branchIds)
-    if (rows.length === 0) return { ok: true, embedded: 0 }
-    staleCount = rows.length
-    await deps.runInTransaction(await deps.embedRows(rows, deps.abortSignal))
-    return { ok: true, embedded: staleCount }
+    ops = await deps.embedRows(rows, deps.abortSignal)
   } catch (error) {
     return { ok: false, ...classifyEmbedderFailure(error), staleCount }
   }
+
+  await deps.runInTransaction(ops)
+  return { ok: true, embedded: staleCount }
 }
