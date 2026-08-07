@@ -1,3 +1,4 @@
+export type { InjectionMode } from './enums'
 export {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
@@ -42,6 +43,7 @@ export type { BranchEraFlipWrite } from './stories/era-flip-schema'
 export type {
   ClassifierLifecycleState,
   ClassifierStatus,
+  DropReason,
   ProbeCapturePayload,
 } from './world-json-types'
 export type {
@@ -173,15 +175,9 @@ export type {
 } from './types'
 export { runInTransaction } from './runtime/transaction'
 export { execRaw, listTableNames, queryRows } from './runtime/exec'
-export type { DbCtx, SqlOp } from './types'
+export type { DbCtx, RowQuery, SqlOp } from './types'
 export { useDbMigrations } from './runtime/use-db-migrations'
-export type {
-  EmbeddedFieldRow,
-  RowQuery,
-  StaleTargetRow,
-  VecTargetKind,
-  VecWrite,
-} from './embeddings'
+export type { EmbeddedFieldRow, StaleTargetRow, VecTargetKind, VecWrite } from './embeddings'
 export {
   VEC_FAMILIES,
   branchRowsQuery,
@@ -199,12 +195,14 @@ export {
   familyTablesFor,
   findVecDims,
   flagEmbeddingStaleOps,
+  knnQuery,
   packFloat32,
   recomputeStaleOps,
   SOURCE_TABLES,
   sourceHash,
   staleRowsQuery,
   toEmbeddedFieldRow,
+  unpackFloat32,
   upsertVecOps,
   vecRowPk,
   vecTableName,

@@ -143,7 +143,7 @@ function settings(overrides: Partial<StorySettings> = {}): StorySettings {
     piggybackMode: 'on',
     embeddingBackend: 'local',
     embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
-    retrievalBudgets: { entities: 8, lore: 6, happenings: 6, threads: 4, chapters: 3 },
+    retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
     composerModesEnabled: true,
     composerWrapPov: 'third',
     suggestionsEnabled: true,

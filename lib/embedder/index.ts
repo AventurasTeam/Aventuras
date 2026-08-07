@@ -11,7 +11,7 @@ export type { CatalogModelEntry, EmbedderCatalog } from './catalog'
 export { EMBEDDER_INTEGRATIONS } from './integrations'
 export type { EmbedderIntegration } from './integrations'
 
-export { resolveEmbedderConfig } from './resolve-config'
+export { embedderReadDim, resolveEmbedderConfig } from './resolve-config'
 export type { EmbedderAppDefaults, EmbedderConfigResolution } from './resolve-config'
 
 export { createDrainController } from './drain'
@@ -23,7 +23,7 @@ export type { EmbedderGateResult } from './gate'
 export { providerHasEmbeddingEndpoint, providerTypeSupportsEmbedding } from './provider-support'
 
 export { EmbedderCallError, EmbedderInitError } from './types'
-export type { EmbedderBackend, EmbedderConfig } from './types'
+export type { EmbedderBackend, EmbedderConfig, EmbedderErrorKind } from './types'
 
 export { embedLocal, listInstalledLocal, smokeTestLocal } from './local/runtime'
 export type { LocalEmbedResult } from './local/runtime'
