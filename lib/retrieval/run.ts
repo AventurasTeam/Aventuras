@@ -55,6 +55,8 @@ export type RetrievalDeps = Omit<SyncStageDeps, 'branchIds'> & {
     texts: string[],
     abortSignal?: AbortSignal,
   ) => Promise<{ vectors: Float32Array[]; dim: number }>
+  /** Recount and publish the story-wide stale total after this pass clears rows. */
+  onRowsSynced?: () => Promise<void>
 }
 
 export type RetrievalParams = {
@@ -199,6 +201,7 @@ async function runRetrievalPass(
       failure: { reason: sync.reason, detail: sync.detail, staleCount: sync.staleCount },
     }
   }
+  if (sync.embedded > 0) await deps.onRowsSynced?.()
 
   const sourceRows = await loadSourceRows(deps.queryAll, params.branchId)
   const index = nameKeywordIndexFrom(sourceRows.entities, sourceRows.lore)

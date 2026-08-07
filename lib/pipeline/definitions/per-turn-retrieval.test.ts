@@ -535,6 +535,7 @@ describe('retrieval phase — success', () => {
       'embedRows',
       'embedTexts',
       'loadStaleRows',
+      'onRowsSynced',
       'queryAll',
       'runInTransaction',
     ])
@@ -617,6 +618,10 @@ describe('retrieval phase — abort', () => {
 
     expect(result).toEqual({ status: 'completed' })
     expect(intermediates[RETRIEVAL_INTERMEDIATE_KEY]).toBe(OK_OUTCOME)
+    expect(runRetrievalMock).toHaveBeenCalledWith(
+      expect.objectContaining({ onRowsSynced: expect.any(Function) }),
+      expect.anything(),
+    )
   })
 })
 

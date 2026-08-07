@@ -27,7 +27,8 @@ export async function* retrievalPhase(
 
   // Lazy: lib/actions' barrel reaches submitTurn, which imports lib/pipeline.
   // A module-eval import would close that require cycle and warn under Metro.
-  const { composeRetrievalEmbedDeps, resolveStorySwapConfig } = await import('@/lib/actions')
+  const { composeRetrievalEmbedDeps, refreshEmbeddingStatus, resolveStorySwapConfig } =
+    await import('@/lib/actions')
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const resolution = resolveStorySwapConfig(open.storyId, {
@@ -82,6 +83,11 @@ export async function* retrievalPhase(
         abortSignal: bounded.signal,
         queryAll: queryRows,
         runInTransaction: ctx.runInTransaction,
+        onRowsSynced: () =>
+          refreshEmbeddingStatus(open.storyId, {
+            db: ctx.db,
+            runInTransaction: ctx.runInTransaction,
+          }),
         ...composeRetrievalEmbedDeps(resolution.config),
       },
       {

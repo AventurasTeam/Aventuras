@@ -306,6 +306,35 @@ describe('runRetrieval — sync ordering', () => {
     expect(order[0]).toBe('sync')
     expect(order).toContain('knn')
   })
+
+  it('refreshes stale-row status after a dirty sync commits and before KNN', async () => {
+    const order: string[] = []
+    const inner = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
+    const onRowsSynced = vi.fn(async () => {
+      order.push('status')
+    })
+
+    const out = await runRetrieval(
+      deps({
+        queryAll: async (sql, p) => {
+          if (sql.includes('MATCH')) order.push('knn')
+          return inner(sql, p)
+        },
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+        ],
+        runInTransaction: async () => {
+          order.push('sync')
+        },
+        onRowsSynced,
+      }),
+      params(),
+    )
+
+    expectOk(out)
+    expect(onRowsSynced).toHaveBeenCalledTimes(1)
+    expect(order.slice(0, 3)).toEqual(['sync', 'status', 'knn'])
+  })
 })
 
 describe('runRetrieval — query embed failure', () => {
