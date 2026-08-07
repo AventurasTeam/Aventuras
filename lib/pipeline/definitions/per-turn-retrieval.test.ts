@@ -30,11 +30,19 @@ import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-ret
 import { getPipeline } from '../authoring/registry'
 import type { PhaseEmittedEvent, PhaseResult } from '../types'
 
-const { runRetrievalMock } = vi.hoisted(() => ({ runRetrievalMock: vi.fn() }))
+const { runRetrievalMock, refreshEmbeddingStatusMock } = vi.hoisted(() => ({
+  runRetrievalMock: vi.fn(),
+  refreshEmbeddingStatusMock: vi.fn(),
+}))
 
 vi.mock('@/lib/retrieval', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, runRetrieval: runRetrievalMock }
+})
+
+vi.mock('@/lib/actions', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, refreshEmbeddingStatus: refreshEmbeddingStatusMock }
 })
 
 const definition = {
@@ -255,6 +263,7 @@ function lastParams(): RetrievalParams {
 beforeEach(() => {
   vi.restoreAllMocks()
   runRetrievalMock.mockReset().mockResolvedValue(OK_OUTCOME)
+  refreshEmbeddingStatusMock.mockReset().mockResolvedValue(undefined)
   resetAllStores()
 })
 
@@ -622,6 +631,24 @@ describe('retrieval phase — abort', () => {
       expect.objectContaining({ onRowsSynced: expect.any(Function) }),
       expect.anything(),
     )
+  })
+
+  // The hook runs after the sync stage has committed, so a rejected recount must
+  // not fail a turn that can still complete — and must not vanish either.
+  it('survives a post-sync recount that rejects, warning instead of failing', async () => {
+    seedOpenStory()
+    refreshEmbeddingStatusMock.mockRejectedValue(new Error('recount hit a locked db'))
+    runRetrievalMock.mockImplementation(async (deps: { onRowsSynced?: () => Promise<void> }) => {
+      await deps.onRowsSynced?.()
+      return OK_OUTCOME
+    })
+
+    const { result, log } = await runRetrievalPhase()
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(log.warn).toHaveBeenCalledWith('retrieval.status_refresh_failed', {
+      detail: 'recount hit a locked db',
+    })
   })
 })
 

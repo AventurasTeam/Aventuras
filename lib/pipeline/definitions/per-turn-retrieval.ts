@@ -83,11 +83,21 @@ export async function* retrievalPhase(
         abortSignal: bounded.signal,
         queryAll: queryRows,
         runInTransaction: ctx.runInTransaction,
-        onRowsSynced: () =>
-          refreshEmbeddingStatus(open.storyId, {
-            db: ctx.db,
-            runInTransaction: ctx.runInTransaction,
-          }),
+        // Reporting, not a gate: the sync it follows has already committed, so a
+        // failed recount must not fail a turn that can still complete. The next
+        // pass recounts from the flags rather than from anything stashed here.
+        onRowsSynced: async () => {
+          try {
+            await refreshEmbeddingStatus(open.storyId, {
+              db: ctx.db,
+              runInTransaction: ctx.runInTransaction,
+            })
+          } catch (error) {
+            ctx.log.warn('retrieval.status_refresh_failed', {
+              detail: error instanceof Error ? error.message : String(error),
+            })
+          }
+        },
         ...composeRetrievalEmbedDeps(resolution.config),
       },
       {
