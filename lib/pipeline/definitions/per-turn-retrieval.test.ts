@@ -470,6 +470,24 @@ describe('retrieval phase — success', () => {
     expect(events).toEqual([bumpEvent('haw_1'), bumpEvent('haw_2'), bumpEvent('haw_3')])
   })
 
+  // outcome.timings measures the pass and is computed before the bumps, so the
+  // dispatch cost was invisible to the one log AC7 added for per-turn cost. The
+  // orchestrator suspends this generator while it applies each delta, so the
+  // span covers the handler reads and transactions, not just the yields.
+  it('reports the bump dispatch span apart from the pass timing', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(
+      okOutcome({ injectedAwarenessIds: ['haw_1', 'haw_2', 'haw_3'] }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.debug).toHaveBeenCalledWith('retrieval.bump_dispatch', {
+      count: 3,
+      ms: expect.any(Number) as unknown as number,
+    })
+  })
+
   // Not a degenerate shape: runRetrieval admits a common-knowledge happening
   // with no in-scene awareness row, so a turn can select happenings and still
   // report no ids to bump.
@@ -477,10 +495,15 @@ describe('retrieval phase — success', () => {
     seedOpenStory()
     runRetrievalMock.mockResolvedValue(okOutcome({ injectedAwarenessIds: [] }))
 
-    const { result, events } = await runRetrievalPhase()
+    const { result, events, log } = await runRetrievalPhase()
 
     expect(result).toEqual({ status: 'completed' })
     expect(events).toEqual([])
+    // No bumps, no span — an empty measurement is noise in the log.
+    expect(log.debug).not.toHaveBeenCalledWith(
+      'retrieval.bump_dispatch',
+      expect.anything() as unknown as Record<string, unknown>,
+    )
   })
 
   it('hands the pass the full dep surface, not just the query embedder', async () => {
