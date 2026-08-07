@@ -616,6 +616,15 @@ class StoryStore {
       await ui.loadSuggestions(storyId)
     }
 
+    // The settings-keyed cache above is empty for a story that never generated choices in this
+    // app (e.g. a fresh import): fall back to the last narration entry's own suggestedActions,
+    // same as switchBranch does, so an imported story doesn't open with choices silently missing.
+    const hasPersistedChoices =
+      story.mode === 'adventure' ? ui.actionChoices.length > 0 : ui.suggestions.length > 0
+    if (!hasPersistedChoices) {
+      this.restoreSuggestedActionsAfterDelete()
+    }
+
     // Set mobile-friendly defaults (close sidebar, etc.)
     ui.setMobileDefaults()
 
