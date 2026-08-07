@@ -1533,3 +1533,15 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   state, user edits are gated), so it is structural rather than live.
   The cheap fix is optimistic concurrency on the clear rather than a
   content hash. Surfaced by the M3.4 review (2026-08-07).
+- **`electron/embedder/downloads.test.ts`'s resume test races the first
+  disk flush.** `leaves a .part on mid-stream abort, then resumes with
+Range and completes` sets `behavior.abortAfter = 15000` and then
+  asserts the `.part` file is non-empty. The byte count bounds what the
+  server sends, not what the client has written, so on a loaded runner
+  the abort lands before the first chunk reaches disk and the assertion
+  fails with `expected 0 to be greater than 0`. Observed once on a
+  branch that changes no `electron/` file, green on re-run and green on
+  the sibling PR's identical job, so it is an existing flake rather than
+  a regression. The fix is making the abort point observable — wait on
+  the first flush rather than on a byte count — not a longer timeout.
+  Surfaced by Slice 3.4 CI (2026-08-07).

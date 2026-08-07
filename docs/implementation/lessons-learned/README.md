@@ -135,6 +135,10 @@ slice plans when relevant.
   — a `typeof window` guard around a Node-only `require()` is safe under
   Metro but can crash every Storybook story importing that module; alias
   the specifier to a stub in `viteFinal`, don't touch the guard.
+- [Token-counting fixtures must be prose, not a repeated character](./token-fixtures-need-real-prose.md)
+  — `'x'.repeat(4000)` reaches tiktoken's byte-pair loop as one word and
+  costs ~620 ms against ~0 ms for prose of the same length; the tell is a
+  timeout that only ever fires on CI.
 - [The `unit` Vitest project cannot render RN-Web component chrome](./unit-project-no-rn-web-chrome.md)
   — `@rn-primitives/*`'s un-transpiled `.mjs` JSX and `react-native-svg` /
   `lucide-react-native` / `nativewind`'s externalized `require('react-native')`
