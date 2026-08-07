@@ -11,9 +11,12 @@ import {
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
+import { isStorySwapPending, withTurnAdmission } from '../embedder-swap/app-deps'
 import type { DbCtx } from '../types'
 
 export type SubmitTurnMeta = { content: string; composerMode: string }
+
+const SWAP_REJECTION = { outcome: 'rejected', blockedBy: 'embedder-swap' } as const
 
 // This app is local-first, single-process (no BaaS/backend serving concurrent
 // writers — data-model.md), so an in-process per-branch queue is a complete
@@ -44,87 +47,94 @@ export async function submitTurn(
   ensurePerTurnPipelineRegistered()
 
   return withBranchQueue(ids.branchId, async () => {
-    // Shared across the user_action's delta and the pipeline run it kicks off,
-    // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
-    const turnActionId = generateId('act')
+    const admission = await withTurnAdmission(ids.storyId, async () => {
+      // Checked under the same admission as live swaps. The in-memory gate covers
+      // this process; the marker still covers a swap recovered from an earlier one.
+      if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
 
-    // Tail position from committed rows, not the in-memory store's count: real
-    // branches have position gaps, so a count lands mid-story and collides.
-    // Queued per-branch so a second submit can't read the same MAX before the
-    // first one's insert lands.
-    const [tail] = await ctx.db
-      .select({ position: storyEntries.position })
-      .from(storyEntries)
-      .where(eq(storyEntries.branchId, ids.branchId))
-      .orderBy(desc(storyEntries.position))
-      .limit(1)
-    // Scene state (membership, location, worldTime) inherits from the last
-    // non-system entry: a system tail carries null metadata and would reset
-    // it. M2 has no classifier, so this propagates the opening's values
-    // forward until piggyback/classifier (M3+) emits fresh ones. Position
-    // still comes from the overall tail so numbering never collides.
-    const [sceneTail] = await ctx.db
-      .select({ metadata: storyEntries.metadata })
-      .from(storyEntries)
-      .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
-      .orderBy(desc(storyEntries.position))
-      .limit(1)
-    const position = (tail?.position ?? 0) + 1
-    const entryId = generateId('entry')
-    const createdAt = Date.now()
-    const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
+      // Shared across the user_action's delta and the pipeline run it kicks off,
+      // so CTRL-Z reverses the whole turn as one group (milestone.md C6).
+      const turnActionId = generateId('act')
 
-    const result = await applyDeltaAction(
-      {
-        action: {
-          kind: 'createStoryEntry',
-          source: 'user_edit',
-          payload: {
-            entry: {
-              id: entryId,
-              branchId: ids.branchId,
-              position,
-              kind: 'user_action',
-              content: meta.content,
-              chapterId: null,
-              metadata,
-              createdAt,
+      // Tail position from committed rows, not the in-memory store's count: real
+      // branches have position gaps, so a count lands mid-story and collides.
+      // Queued per-branch so a second submit can't read the same MAX before the
+      // first one's insert lands.
+      const [tail] = await ctx.db
+        .select({ position: storyEntries.position })
+        .from(storyEntries)
+        .where(eq(storyEntries.branchId, ids.branchId))
+        .orderBy(desc(storyEntries.position))
+        .limit(1)
+      // Scene state (membership, location, worldTime) inherits from the last
+      // non-system entry: a system tail carries null metadata and would reset
+      // it. M2 has no classifier, so this propagates the opening's values
+      // forward until piggyback/classifier (M3+) emits fresh ones. Position
+      // still comes from the overall tail so numbering never collides.
+      const [sceneTail] = await ctx.db
+        .select({ metadata: storyEntries.metadata })
+        .from(storyEntries)
+        .where(and(eq(storyEntries.branchId, ids.branchId), ne(storyEntries.kind, 'system')))
+        .orderBy(desc(storyEntries.position))
+        .limit(1)
+      const position = (tail?.position ?? 0) + 1
+      const entryId = generateId('entry')
+      const createdAt = Date.now()
+      const metadata: EntryMetadata = inheritedEntryMetadata(sceneTail?.metadata)
+
+      const result = await applyDeltaAction(
+        {
+          action: {
+            kind: 'createStoryEntry',
+            source: 'user_edit',
+            payload: {
+              entry: {
+                id: entryId,
+                branchId: ids.branchId,
+                position,
+                kind: 'user_action',
+                content: meta.content,
+                chapterId: null,
+                metadata,
+                createdAt,
+              },
             },
           },
+          actionId: turnActionId,
+          branchId: ids.branchId,
+          entryId: null,
         },
-        actionId: turnActionId,
-        branchId: ids.branchId,
-        entryId: null,
-      },
-      ctx,
-    )
-    if (result.status === 'rejected')
-      throw new Error(`submitTurn: user_action write rejected: ${result.reason}`)
+        ctx,
+      )
+      if (result.status === 'rejected')
+        throw new Error(`submitTurn: user_action write rejected: ${result.reason}`)
 
-    const runCtx: RunCtx = {
-      storyId: ids.storyId,
-      branchId: ids.branchId,
-      actionId: turnActionId,
-      db: ctx.db,
-      runInTransaction: ctx.runInTransaction,
-    }
-    // Held for the whole run, not just the user_action insert above:
-    // narrativePhase (pipeline.ts) does its own MAX(position)+1 read for the
-    // ai_reply, which needs the same per-branch exclusion.
-    const runResult = await runPipeline(PER_TURN_KIND, runCtx)
-    if (runResult.outcome === 'rejected') {
-      // A rejected admission never reaches abortRun (orchestrator.ts) — no run
-      // was ever reserved — so the user_action committed above is never
-      // reversed the way a failed/aborted run's is (C6). Reverse it here so no
-      // orphaned entry survives a turn that never actually started.
-      try {
-        await reverseReplayDeltas(turnActionId, ctx)
-      } catch (e) {
-        // Deltas are reversed even if the post-commit store sync failed; the
-        // caller still sees the rejection, same tolerance abortRun applies.
-        if (!(e instanceof DeltaReplayError)) throw e
+      const runCtx: RunCtx = {
+        storyId: ids.storyId,
+        branchId: ids.branchId,
+        actionId: turnActionId,
+        db: ctx.db,
+        runInTransaction: ctx.runInTransaction,
       }
-    }
-    return runResult
+      // Held for the whole run, not just the user_action insert above:
+      // narrativePhase (pipeline.ts) does its own MAX(position)+1 read for the
+      // ai_reply, which needs the same per-branch exclusion.
+      const runResult = await runPipeline(PER_TURN_KIND, runCtx)
+      if (runResult.outcome === 'rejected') {
+        // A rejected admission never reaches abortRun (orchestrator.ts) — no run
+        // was ever reserved — so the user_action committed above is never
+        // reversed the way a failed/aborted run's is (C6). Reverse it here so no
+        // orphaned entry survives a turn that never actually started.
+        try {
+          await reverseReplayDeltas(turnActionId, ctx)
+        } catch (e) {
+          // Deltas are reversed even if the post-commit store sync failed; the
+          // caller still sees the rejection, same tolerance abortRun applies.
+          if (!(e instanceof DeltaReplayError)) throw e
+        }
+      }
+      return runResult
+    })
+    return admission.admitted ? admission.value : SWAP_REJECTION
   })
 }

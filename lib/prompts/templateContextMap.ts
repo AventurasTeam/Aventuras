@@ -5,12 +5,13 @@ import type { ContextGroup } from './types'
 export type VariableDef = {
   name: string
   type: string
+  /** Must name a DISPLAY_GROUPS key; untyped, so a test carries the tie. */
   category: string
   description: string
   required?: boolean
 }
 
-// Pinned M2 variable names per group. buildGenerationContext must emit these
+// Pinned variable names per group. buildGenerationContext must emit these
 // exact names — parity-tested in lib/pipeline/definitions/generation-context.test.ts.
 // Entity fields follow the drizzle row shape (camelCase).
 export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
@@ -20,7 +21,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'Caller-scoped entry window (per-turn: the open partial chapter); system entries excluded. Window with `recent`.',
+        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Render it whole.',
       required: true,
     },
     {
@@ -35,6 +36,13 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string[]',
       category: 'Entities',
       description: 'Entity ids present in the current scene.',
+      required: true,
+    },
+    {
+      name: 'currentLocationId',
+      type: 'string | null',
+      category: 'Entities',
+      description: 'Entity id of the current scene location; null when the scene has none.',
       required: true,
     },
     {
@@ -56,8 +64,105 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       name: 'userSettings',
       type: 'object',
       category: 'Story Config',
-      description: 'Operational knobs exposed to templates (partialChapterBuffer).',
+      description:
+        'Buffer knobs the composed `entries` window was built from (fullChapterInBuffer, partialChapterBuffer, protectedBuffer) — informational, not a re-windowing instruction.',
       required: false,
+    },
+    {
+      name: 'retrievedEntities',
+      type: 'RetrievedRow[]',
+      category: 'Retrieval',
+      description:
+        'Off-scene entities the ranker seated this turn, as { id, displayName, renderedText }. Empty when nothing scored or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'retrievedLore',
+      type: 'RetrievedRow[]',
+      category: 'Retrieval',
+      description:
+        'Lore rows the ranker seated this turn; same row shape as retrievedEntities. Empty when nothing scored or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'retrievedHappenings',
+      type: 'RetrievedRow[]',
+      category: 'Retrieval',
+      description:
+        'Happenings the ranker seated this turn; renderedText carries the awareness sources verbatim. Empty when nothing scored or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'retrievedThreads',
+      type: 'RetrievedRow[]',
+      category: 'Retrieval',
+      description:
+        'Non-active threads the ranker seated this turn; active ones are structural (structuralActiveThreads). Empty when nothing scored or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'retrievedChapters',
+      type: 'RetrievedRow[]',
+      category: 'Retrieval',
+      description:
+        'Closed-chapter summaries the ranker seated this turn. Empty when nothing scored or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralSceneEntities',
+      type: 'FloorEntity[]',
+      category: 'Retrieval',
+      description:
+        'Active in-scene entities as { id, kind, status, name, description }, EXCLUDING the one that is the current location — that row is routed to structuralLocation instead. Injected unconditionally; injection mode is deliberately ignored. Empty when the scene names none, or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralLocation',
+      type: 'FloorEntity | null',
+      category: 'Retrieval',
+      description:
+        'The ACTIVE entity for currentLocationId, same row shape as structuralSceneEntities. Null both when the scene names no location and when it names one that is staged, retired, or absent from the branch — so guard the location block on this variable, never on currentLocationId. Null when no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'locationIds',
+      type: 'string[]',
+      category: 'Retrieval',
+      description:
+        'Every id above that belongs to a place — the legal <current_location> set. Union of the floor scene rows, structuralLocation, the pinned entities and the ranked entities, kind-filtered and de-duplicated, in the order those blocks render. Use this rather than "the IDs above": ranked entity rows arrive as RetrievedRow with no kind, so the bracketed IDs in the memory blocks can be entirely characters. Empty when the prompt shows no place, or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralActiveThreads',
+      type: 'FloorThread[]',
+      category: 'Retrieval',
+      description:
+        'Threads at status `active`, seated by the structural floor rather than ranked, as { id, status, title, description }. Empty when the branch has none, or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralPinnedEntities',
+      type: 'FloorEntity[]',
+      category: 'Retrieval',
+      description:
+        'Entities the user pinned with injection mode `always`, minus any already seated elsewhere in the floor. Empty when nothing is pinned, or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralPinnedLore',
+      type: 'FloorLore[]',
+      category: 'Retrieval',
+      description:
+        'Lore pinned with injection mode `always`, as { id, title, body } — `title` and `body`, not `name` and `description`. Empty when nothing is pinned, or no retrieval ran.',
+      required: true,
+    },
+    {
+      name: 'structuralPinnedThreads',
+      type: 'FloorThread[]',
+      category: 'Retrieval',
+      description:
+        'Threads pinned with injection mode `always`, beyond the active ones. Empty when nothing is pinned, or no retrieval ran.',
+      required: true,
     },
     {
       name: 'intermediates',
@@ -187,8 +292,23 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries'],
-  Entities: ['entities', 'sceneEntities', 'leadName', 'leadEntityId'],
+  Story: ['entries', 'turns'],
+  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId'],
+  Plot: ['happenings'],
+  Retrieval: [
+    'retrievedEntities',
+    'retrievedLore',
+    'retrievedHappenings',
+    'retrievedThreads',
+    'retrievedChapters',
+    'structuralSceneEntities',
+    'structuralLocation',
+    'locationIds',
+    'structuralActiveThreads',
+    'structuralPinnedEntities',
+    'structuralPinnedLore',
+    'structuralPinnedThreads',
+  ],
   'Story Config': [
     'definition',
     'calendarVocabulary',

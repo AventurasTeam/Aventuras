@@ -52,6 +52,10 @@ const BUILD_OUTPUTS = [
       'constants',
       'types',
       'assets',
+      // Bundled, not read at runtime: lib/i18n imports the JSON directly, so a
+      // copy-only edit changes the bundle while touching no source directory
+      // above — the one input class that could go stale reading as fresh.
+      'locales',
       ...ROOT_BUILD_INPUTS,
     ],
     rebuild: 'pnpm build:web',

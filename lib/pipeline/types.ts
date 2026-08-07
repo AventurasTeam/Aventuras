@@ -2,6 +2,7 @@ import type { PipelineAction } from '@/lib/actions/types'
 import type { ResolveFailureKind, ResolveTarget } from '@/lib/ai'
 import type { DbCtx, StorySettings } from '@/lib/db'
 import type { Logger } from '@/lib/diagnostics'
+import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { AppSettingsSnapshot, RunState } from '@/lib/stores'
 
 export type PipelineError =
@@ -22,6 +23,11 @@ export type PipelineError =
       phaseName: string
       detail?: string
     }
+  // The blocking pre-retrieval sync stage and the query embed beside it
+  // (model-management.md → Embed failure is blocking). Distinct from 'provider',
+  // whose retry story is the LLM's. `staleCount` is null when there is no
+  // magnitude to report — see RetrievalFailure in lib/retrieval.
+  | { kind: 'embedder'; reason: EmbedderErrorKind; detail: string; staleCount: number | null }
 
 export type PhaseResult =
   | { status: 'completed' }
@@ -71,6 +77,10 @@ export type PhaseContext = {
   // The run's db handle, so a phase can resolve tail positions (MAX(position)+1)
   // against committed rows rather than a possibly-gappy in-memory store.
   db: DbCtx['db']
+  // The run's transaction runner. Only the retrieval phase writes outside the
+  // delta log (its vec0 sync), and it takes the run's handle rather than the
+  // module global so a test's db and its writes cannot diverge.
+  runInTransaction: DbCtx['runInTransaction']
   // Run identity, so a per-turn phase can read the open story / branch stores
   // without the generationStore self-lookup the interim narrative phase used.
   storyId: string | null

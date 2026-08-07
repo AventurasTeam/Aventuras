@@ -47,6 +47,16 @@ export const ActiveReasoning: Story = {
   ),
 }
 
+export const ActiveRecallingMemory: Story = {
+  render: () => (
+    <GenerationStatusPill
+      activePhase="recalling-memory"
+      onCancel={onCancel}
+      onErrorTap={onErrorTap}
+    />
+  ),
+}
+
 export const ActiveGeneratingNarrative: Story = {
   render: () => (
     <GenerationStatusPill
@@ -60,6 +70,18 @@ export const ActiveGeneratingNarrative: Story = {
 export const ActiveClassifying: Story = {
   render: () => (
     <GenerationStatusPill activePhase="classifying" onCancel={onCancel} onErrorTap={onErrorTap} />
+  ),
+}
+
+// `onCancel` is passed and deliberately has no effect: the background pass is
+// cancel-less, so the tag carries no popover trigger.
+export const ActiveUpdatingMemory: Story = {
+  render: () => (
+    <GenerationStatusPill
+      activePhase="updating-memory"
+      onCancel={onCancel}
+      onErrorTap={onErrorTap}
+    />
   ),
 }
 
@@ -137,8 +159,8 @@ export const ActivePlusError: Story = {
   render: () => (
     <View className="gap-2">
       <Text variant="muted" size="sm">
-        Both inputs set — activePhase wins per principles.md → Affordance loci (active &gt; error
-        &gt; hidden).
+        Both inputs set and the phase is blocking — activePhase wins, since it also carries the only
+        way to cancel the run.
       </Text>
       <GenerationStatusPill
         activePhase="generating-narrative"
@@ -148,6 +170,33 @@ export const ActivePlusError: Story = {
       />
     </View>
   ),
+}
+
+export const BackgroundPhasePlusError: Story = {
+  render: () => {
+    const tap = fn()
+    tapSpy = tap
+    return (
+      <View className="gap-2">
+        <Text variant="muted" size="sm">
+          Both inputs set and the phase is non-blocking — the error wins. `swap-paused` needs a
+          decision, so a cadence-driven pass must not blank it.
+        </Text>
+        <GenerationStatusPill
+          activePhase="updating-memory"
+          error={{ code: 'swap-paused' }}
+          onCancel={onCancel}
+          onErrorTap={tap}
+        />
+      </View>
+    )
+  },
+  play: async () => {
+    const pill = await screen.findByText(t('chrome.generationStatusPill.error.swapPaused'))
+    await userEvent.click(pill)
+    // Still routes: yielding the slot has to yield the affordance with it.
+    expect(tapSpy).toHaveBeenCalledWith('swap-paused')
+  },
 }
 
 export const PhonePopover: Story = {

@@ -19,13 +19,16 @@ import {
   type DbCtx,
   type EmbeddedFieldRow,
   type EmbeddingTarget,
+  type SqlOp,
   type StorySettings,
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   createDrainController,
+  embedderReadDim,
   embedRowsToVecOps,
+  embedTexts,
   type DrainDeps,
   resolveEmbedderConfig,
   type EmbedderAppDefaults,
@@ -99,20 +102,109 @@ const GENERATION_IN_FLIGHT_REJECTION: StoryEmbedderActionRejection = {
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
 
-// Per-story single-flight lock (engine caller contract): concurrent engine calls
-// for one story would both pass the advisory swap-target guard and stage vectors
-// under different targets, orphaning the loser's rows. Reject rather than queue.
+type StoryAdmission =
+  | { owner: 'turn'; holders: number }
+  | { owner: 'embedder'; release: () => void }
+
+// Turns read/write the served vec family; embedder operations mutate its ownership.
+// Turn holders may overlap because the pipeline gate still chooses the generation,
+// but any holder excludes an embedder mutation before either side writes.
+const storyAdmissions = new Map<string, StoryAdmission>()
+
+// Per-story engine handle retained separately from admission: cancellation awaits
+// the live swap promise, while turn admission only needs to know who owns the gate.
 const inFlight = new Map<string, Promise<unknown>>()
 
-export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
-  if (inFlight.has(storyId)) throw new SwapBusyError(storyId)
-  const run = fn()
+export type TurnAdmissionResult<T> =
+  | { admitted: true; value: T }
+  | { admitted: false; blockedBy: 'embedder-swap' }
+
+export async function withTurnAdmission<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+): Promise<TurnAdmissionResult<T>> {
+  const active = storyAdmissions.get(storyId)
+  if (active?.owner === 'embedder') return { admitted: false, blockedBy: 'embedder-swap' }
+
+  const admission = active ?? { owner: 'turn' as const, holders: 0 }
+  admission.holders += 1
+  storyAdmissions.set(storyId, admission)
+  try {
+    return { admitted: true, value: await fn() }
+  } finally {
+    admission.holders -= 1
+    if (admission.holders === 0 && storyAdmissions.get(storyId) === admission) {
+      storyAdmissions.delete(storyId)
+    }
+  }
+}
+
+function acquireEmbedderAdmission(storyId: string): (() => void) | null {
+  if (storyAdmissions.has(storyId)) return null
+  const admission: StoryAdmission = {
+    owner: 'embedder',
+    release: () => {
+      if (storyAdmissions.get(storyId) === admission) storyAdmissions.delete(storyId)
+    },
+  }
+  storyAdmissions.set(storyId, admission)
+  return admission.release
+}
+
+/**
+ * Whether a swap owns this story's vec tables right now. Two authorities for the
+ * same reason `resolveDrainConfig` needs both: the marker only reaches the store
+ * once `syncStoresAfterEngine` runs, so a swap started this session is invisible
+ * in `settings` while it matters most, and the in-process lock knows nothing
+ * about a marker left by a previous process.
+ */
+export function isStorySwapPending(storyId: string): boolean {
+  if (inFlight.has(storyId)) return true
+  const open = currentStoryStore.getCurrentStory()
+  return open?.storyId === storyId && open.settings.embedding_swap_target != null
+}
+
+async function runAdmittedEmbedder<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+  releaseAdmission: () => void,
+): Promise<T> {
+  let run: Promise<T>
+  try {
+    run = fn()
+  } catch (error) {
+    releaseAdmission()
+    throw error
+  }
   inFlight.set(storyId, run)
   try {
     return await run
   } finally {
     inFlight.delete(storyId)
+    releaseAdmission()
   }
+}
+
+export async function runExclusive<T>(storyId: string, fn: () => Promise<T>): Promise<T> {
+  const releaseAdmission = acquireEmbedderAdmission(storyId)
+  if (releaseAdmission == null) throw new SwapBusyError(storyId)
+  return runAdmittedEmbedder(storyId, fn, releaseAdmission)
+}
+
+async function runUserEmbedderAction<T>(
+  storyId: string,
+  fn: () => Promise<T>,
+): Promise<T | StoryEmbedderActionRejection> {
+  if (storyAdmissions.get(storyId)?.owner === 'turn') {
+    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+  }
+  const releaseAdmission = acquireEmbedderAdmission(storyId)
+  if (releaseAdmission == null) throw new SwapBusyError(storyId)
+  if (generationStore.isUserEditBlocked()) {
+    releaseAdmission()
+    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+  }
+  return runAdmittedEmbedder(storyId, fn, releaseAdmission)
 }
 
 // The store/UI callbacks are wrapped so a throwing subscriber can never propagate
@@ -211,14 +303,39 @@ function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefin
     .providers.find((provider) => provider.id === config.providerId)
 }
 
-// Single-sources the engine/drain embed composition: raw DDL through execRaw,
-// provider instance resolved from the config's own providerId. The drain takes the
-// ops alone — only a swap's phase-2 sweep needs the dim its staging landed on.
+// Single-sources the embed composition for the swap engine, the drain worker and
+// the blocking sync stage: raw DDL through execRaw, provider instance resolved
+// from the config's own providerId. Only a swap's phase-2 sweep needs the dim its
+// staging landed on; the other two take the ops alone.
 const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
   embedRowsToVecOps(config, rows, execRaw, providerFor(config))
 
 const makeDrainEmbedRows = (): DrainDeps['embedRows'] => async (config, rows) =>
   (await embedRowsToVecOps(config, rows, execRaw, providerFor(config))).ops
+
+/**
+ * The embed surface a retrieval pass needs, resolved off the open story. Unlike
+ * the drain's, both calls take a signal: a turn blocks on them, so a stalled
+ * provider has to be interruptible rather than parking the turn indefinitely.
+ */
+export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
+  embedTexts: (
+    texts: string[],
+    abortSignal?: AbortSignal,
+  ) => Promise<{ vectors: Float32Array[]; dim: number }>
+  embedRows: (rows: EmbeddedFieldRow[], abortSignal?: AbortSignal) => Promise<SqlOp[]>
+  loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
+} {
+  return {
+    // 'query' intent, not 'document': the local model's query prefix is what
+    // puts the three query vectors in the same space as the stored rows.
+    embedTexts: (texts, abortSignal) =>
+      embedTexts(config, texts, 'query', providerFor(config), abortSignal),
+    embedRows: async (rows, abortSignal) =>
+      (await embedRowsToVecOps(config, rows, execRaw, providerFor(config), abortSignal)).ops,
+    loadStaleRows,
+  }
+}
 
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
   return {
@@ -341,8 +458,8 @@ async function runStagingSwap(
   ctx: DbCtx,
   invoke: (deps: SwapDeps, params: SwapParams) => Promise<'completed' | 'cancelled'>,
   resolveTarget: (settings: StorySettings) => EmbeddingTarget,
-): Promise<'completed' | 'cancelled'> {
-  return runExclusive(storyId, async () => {
+): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
+  return runUserEmbedderAction(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
     const target = resolveTarget(settings)
     const resolution = resolveStorySwapConfig(storyId, target)
@@ -373,7 +490,6 @@ export function startStorySwap(
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, startSwap, () => target)
 }
 
@@ -381,7 +497,6 @@ export function resumeStorySwap(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, resumeSwap, (settings) => {
     if (settings.embedding_swap_target == null) throw new SwapNotInProgressError(storyId)
     return markerTarget(settings)
@@ -392,7 +507,6 @@ export function reindexStoryNow(
   storyId: string,
   ctx: DbCtx = defaultCtx(),
 ): Promise<'completed' | 'cancelled' | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
   return runStagingSwap(storyId, ctx, reindexStory, (settings) => ({
     modelId: settings.embedding_model_id,
     backend: settings.embeddingBackend,
@@ -457,26 +571,12 @@ export async function cancelStorySwap(
   })
 }
 
-/**
- * The dim a target would be READ at, or null when only an embed could answer.
- * A local target's dim is the catalog's; a provider target truncating to the
- * story's locked `effectiveDim` is read at that dim, and an untruncated provider
- * target is native — unknowable until it responds.
- */
-function targetReadDim(config: EmbedderConfig): number | null {
-  if (config.backend === 'local' || config.truncation == null) return config.dim
-  return config.dim == null
-    ? config.truncation.effectiveDim
-    : Math.min(config.truncation.effectiveDim, config.dim)
-}
-
 export async function relabelStory(
   storyId: string,
   target: EmbeddingTarget,
   ctx: DbCtx = defaultCtx(),
 ): Promise<void | StoryEmbedderActionRejection> {
-  if (generationStore.isUserEditBlocked()) return GENERATION_IN_FLIGHT_REJECTION
-  await runExclusive(storyId, async () => {
+  return runUserEmbedderAction(storyId, async () => {
     const { settings, branchIds } = await loadSwapContext(storyId, ctx)
     // Relabel's pre-delete is destructive toward target-model rows; a swap in
     // flight would have staged exactly those, so refuse until it settles.
@@ -490,14 +590,23 @@ export async function relabelStory(
     // model the catalog has never heard of (a renamed local copy, an id served
     // elsewhere), so an unknown target simply yields an unknown dim and no guard.
     const resolution = resolveStorySwapConfig(storyId, target)
-    await relabelModel(composeSwapDeps(storyId, ctx), {
-      storyId,
-      branchIds,
-      oldModelId: settings.embedding_model_id,
-      target,
-      targetReadDim: resolution.ok ? targetReadDim(resolution.config) : null,
-    })
-    await refreshStores(storyId, ctx)
+    // Bracketed like runStagingSwap: relabel holds the embedder admission for its
+    // duration (through runUserEmbedderAction), so isStorySwapPending refuses
+    // turns, but without a progress entry the reader's own gate stays blind and
+    // lets the user write a turn that submitTurn then rejects.
+    embedderSwapStore.beginProgress(storyId)
+    try {
+      await relabelModel(composeSwapDeps(storyId, ctx), {
+        storyId,
+        branchIds,
+        oldModelId: settings.embedding_model_id,
+        target,
+        targetReadDim: resolution.ok ? embedderReadDim(resolution.config) : null,
+      })
+      await refreshStores(storyId, ctx)
+    } finally {
+      embedderSwapStore.clearProgress(storyId)
+    }
   })
 }
 

@@ -119,6 +119,9 @@ function targetOf(config: EmbedderConfig): EmbeddingTarget {
     : { modelId: config.modelId, backend: 'local' }
 }
 
+// Near-identical to embedderReadDim, but deliberately null — not the truncation's
+// effectiveDim — when the native dim is unknown, so phase 1 adopts the dim the
+// server actually served instead of committing to a guess.
 function configStorageDim(config: EmbedderConfig): number | null {
   if (config.backend === 'local') return config.dim
   if (config.dim == null) return null

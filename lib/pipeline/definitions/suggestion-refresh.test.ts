@@ -129,6 +129,7 @@ function phaseCtx(inputs: unknown, abortSignal = new AbortController().signal): 
     inputs,
     log: makeLogger('act_1'),
     db: {} as never,
+    runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
   }

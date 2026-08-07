@@ -64,9 +64,12 @@
     "assignProfile": "Assign profile",
     "fixProfile": "Fix profile",
     "fixDefault": "Fix default",
+    "switchEmbedder": "Switch embedder",
     "failureMessage": "Generation failed. Retry to try again.",
+    "blockedDetail": "blocked by another operation ({{reason}})",
     "failure": {
       "llmCall": "LLM call failed.",
+      "embed": "The embedder failed, so memory retrieval couldn't run.",
       "noProfileAssigned": "The narrative agent has no profile assigned.",
       "profileMissing": "The narrative agent's assigned profile is missing.",
       "providerMissing": "The narrative model's provider is missing."
@@ -77,6 +80,7 @@
     "redo": "Redo",
     "nothingToUndo": "Nothing to undo.",
     "nothingToRedo": "Nothing to redo.",
-    "blockedWhileGenerating": "Unavailable while generating."
+    "blockedWhileGenerating": "Unavailable while generating.",
+    "blockedWhileSwapping": "Unavailable while the embedder switch finishes."
   }
 }

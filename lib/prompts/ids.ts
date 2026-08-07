@@ -15,6 +15,7 @@ export const TEMPLATE_IDS = {
 } as const
 
 export const MACRO_IDS = {
+  memoryBlocks: 'macro_memory_blocks',
   outputFormatNarrative: 'macro_output_format_narrative',
   stateEmission: 'macro_state_emission',
   suggestionEmission: 'macro_suggestion_emission',

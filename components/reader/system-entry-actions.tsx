@@ -4,6 +4,7 @@ import type { ResolveFailureKind } from '@/lib/ai'
 import type { SystemFailureMeta } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import type { PipelineError } from '@/lib/pipeline'
+import { openEmbedderSwapDialog } from '@/lib/stores'
 
 export type SystemEntryFixAction = { label: string; onPress: () => void } | undefined
 
@@ -27,6 +28,18 @@ export function describeTurnFailure(error: PipelineError | undefined): {
           ? 'reader:systemEntry.failure.profileMissing'
           : 'reader:systemEntry.failure.providerMissing'
     return { content: t(contentKey), detail: error.detail }
+  }
+  if (error?.kind === 'embedder') {
+    // One string for every embedder failure: `reason` is lossy — the shared
+    // classifyEmbedderFailure (lib/retrieval/sync.ts) buckets any untyped throw
+    // (a locked DB, a bug) into 'init' on both the sync-stage and query-embed
+    // paths, so copy keyed off it would name a cause we don't have. The real one
+    // rides in `detail`.
+    const magnitude = error.staleCount != null ? ` (${error.staleCount} rows)` : ''
+    return {
+      content: t('reader:systemEntry.failure.embed'),
+      detail: `${error.reason}: ${error.detail}${magnitude}`,
+    }
   }
   return { content: t('reader:systemEntry.failureMessage'), detail: error?.detail }
 }
@@ -63,12 +76,30 @@ export function useConfigFixAction(
   return { label: t(labelKey), onPress: () => router.push('/settings?tab=providers') }
 }
 
+// components/story-settings/memory-panel.tsx is the swap dialog's only mount
+// host, so the action has to route there — opened from the reader alone, the
+// dialog has nowhere to render.
+export function useEmbedderFixAction(storyId: string | null): SystemEntryFixAction {
+  const router = useRouter()
+  if (storyId === null) return undefined
+  return {
+    label: t('reader:systemEntry.switchEmbedder'),
+    onPress: () => {
+      router.navigate(`/story-settings/${storyId}?tab=memory`)
+      openEmbedderSwapDialog(storyId)
+    },
+  }
+}
+
 export function useSystemEntryActions(
   failure: SystemFailureMeta | undefined,
   onRetry: () => void,
+  storyId: string | null,
 ): { onRetry: () => void; fixAction: SystemEntryFixAction } {
-  const fixAction = useConfigFixAction(
+  const configFix = useConfigFixAction(
     failure?.kind === 'config-resolver' ? failure.failure : undefined,
   )
-  return { onRetry, fixAction }
+  const embedderFix = useEmbedderFixAction(failure?.kind === 'embedder' ? storyId : null)
+  // The two gates are kind-exclusive, so the `??` order carries no meaning.
+  return { onRetry, fixAction: embedderFix ?? configFix }
 }

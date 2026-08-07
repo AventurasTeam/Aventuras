@@ -1,8 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 
 import type { StoryEntry } from '@/lib/db'
+import { t } from '@/lib/i18n'
 
 import { ReaderSurface } from './reader-surface'
+import { describeTurnFailure } from './system-entry-actions'
 
 const NOW = 1752900000000
 
@@ -106,6 +108,16 @@ export const Streaming: Story = {
   },
 }
 
+// Composed through describeTurnFailure rather than literals so each bubble shows
+// the copy the pipeline would actually persist, magnitude suffix included.
+const PROVIDER_FAILURE = describeTurnFailure({
+  kind: 'provider',
+  reason: 'auth',
+  detail: 'provider returned 401 — invalid API key',
+})
+
+// No fix action: useSystemEntryActions yields one only for config-resolver and
+// embedder failures, so a provider bubble carries Retry and Dismiss alone.
 export const SystemFailure: Story = {
   args: {
     rows: [
@@ -113,14 +125,39 @@ export const SystemFailure: Story = {
       entry({
         id: 'e6',
         kind: 'system',
-        content: 'The turn could not be completed.',
+        content: PROVIDER_FAILURE.content,
         position: 6,
         metadata: {
           ...BASE_META,
-          systemFailure: { kind: 'provider', detail: 'Provider returned 401 — invalid API key.' },
+          systemFailure: { kind: 'provider', detail: PROVIDER_FAILURE.detail },
         },
       }),
     ],
-    systemFixLabel: 'Fix provider',
+  },
+}
+
+const EMBED_FAILURE = describeTurnFailure({
+  kind: 'embedder',
+  reason: 'call',
+  detail: 'embedding request failed: 503',
+  staleCount: 2,
+})
+
+export const EmbedderFailure: Story = {
+  args: {
+    rows: [
+      ...ROWS,
+      entry({
+        id: 'e6',
+        kind: 'system',
+        content: EMBED_FAILURE.content,
+        position: 6,
+        metadata: {
+          ...BASE_META,
+          systemFailure: { kind: 'embedder', detail: EMBED_FAILURE.detail },
+        },
+      }),
+    ],
+    systemFixLabel: t('reader:systemEntry.switchEmbedder'),
   },
 }

@@ -121,6 +121,47 @@ trustworthy.
   constants (tuning surface parked); the snapshot should read the
   same constants module so the simulator diff is honest. Confirm at
   planning.
+- **The outcome exposes text-presence, not the presence the ranker
+  blended.** `RetrievalOutcome` returns `queries` (whose `presence`
+  means "this query's text was non-empty"), while `runRetrieval`
+  re-derives a second triple from the vectors actually returned and
+  blends on that one — a short embed result nulls a slot the flag
+  still reports present. A replay reconstructing the blend from the
+  captured `queries.presence` therefore reproduces a **different**
+  `simBlend` than the run it is replaying, on exactly the case the
+  derivation exists to handle. Either capture the vector-presence
+  triple, or fold presence into `Candidate.sims` as
+  `readonly [number | null, number | null, number | null]` — `null`
+  meaning "no query vector", which `0` currently cannot be
+  distinguished from — and delete the second type. Surfaced by the
+  M3.4 review (2026-08-06).
+- **`StructuralFloor` declares a narrower shape than it holds.** The
+  floor is built over loaded source rows, so every row still carries
+  `embeddingStale` (and lore's `keywords`) at runtime; only
+  `generation-context.ts`'s projection drops them. A capture that
+  serialises `floor.sceneEntities` whole ships those fields into the
+  payload with no error. Project at construction, or make
+  `buildStructuralFloor` generic over the row types so the wider
+  value is visible rather than silently erased. Surfaced by the M3.4
+  review (2026-08-06).
+- **The barrel exports the ranker functions without their input
+  types.** `rankAll` / `rankPerType` are public; `RankAllInput` and
+  `RankTypeInput` are not, so a replay caller can invoke them but
+  cannot name their argument except as
+  `Parameters<typeof rankAll>[0]`. `QueryWeights` (the type of
+  `RankerParams.weights`) is likewise unexported.
+  [`code-conventions.md → Module structure`](../../../../code-conventions.md#module-structure)
+  makes types part of the public API. Surfaced by the M3.4 review
+  (2026-08-06).
+- **`RankerParams` needs validation at the point a capture feeds
+  it.** The ranker defends `pinSignal` and `chaptersOld` and says why
+  — "pin_signal arrives unvalidated from the probe's per-row
+  override" — while the nine tunables share that source and get
+  nothing. `lambdaDiv` at 0 makes every type select nothing silently;
+  `tauRevive` below 0 bypasses the decay model entirely. The
+  constants are frozen as of M3.4, so code cannot retune them; a
+  stored capture can. Add an `assertRankerParams` at the capture
+  reader. Surfaced by the M3.4 review (2026-08-06).
 
 ## Implementation notes
 

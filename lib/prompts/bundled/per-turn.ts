@@ -1,7 +1,10 @@
 // `entities` use the drizzle row shape (camelCase: id/kind/name/description/
 // status/injectionMode). `sceneEntities` is the id array from entry metadata.
 // The scene loop is intentionally injectionMode-agnostic — that IS the
-// structural-floor invariant (active + in-scene always inject).
+// structural-floor invariant (active + in-scene always inject). It reads
+// `entities` rather than `structuralSceneEntities` so the invariant survives a
+// context built with no retrieval outcome — no retrieval phase ran ahead of the
+// render — where every floor bundle arrives empty.
 export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}
@@ -17,43 +20,48 @@ export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 {{ definition.tone.promptBody }}
 
 {% endif -%}
+{%- comment -%}
+The second half of the condition de-dupes the row the classifier named as both
+in-scene and the location; it is nil-safe, since a null structuralLocation
+makes the comparison "e.id != nil", which is true.
+{%- endcomment -%}
 {%- assign hasScene = false -%}
 {%- for e in entities | active -%}
-{%- if sceneEntities contains e.id -%}{%- assign hasScene = true -%}{%- endif -%}
+{%- if sceneEntities contains e.id and e.id != structuralLocation.id -%}{%- assign hasScene = true -%}{%- endif -%}
 {%- endfor -%}
 {% if hasScene -%}
 # In scene
 {% for e in entities | active -%}
-{%- if sceneEntities contains e.id %}
-## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}
-{{ e.description }}
+{%- if sceneEntities contains e.id and e.id != structuralLocation.id %}
+## {{ e.name }}{% if piggybackFires %} [{{ e.id }}]{% endif %}{% if e.description != blank %}
+{{ e.description }}{% endif %}
 {% endif -%}
 {%- endfor %}
 
 {% endif -%}
-{%- assign stagedList = entities | staged -%}
-{% if stagedList.size > 0 -%}
-# Staged characters (introduce when narratively appropriate)
-{% for e in stagedList %}
-- {% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.name }}: {{ e.description }}
-{%- endfor %}
+{% if structuralLocation -%}
+# Current location
+
+{% if piggybackFires %}[{{ structuralLocation.id }}] {% endif %}{{ structuralLocation.name }}{% if structuralLocation.description != blank %}: {{ structuralLocation.description }}{% endif %}
+
+{% endif -%}
+{% include 'macro_memory_blocks' -%}
 {% if piggybackFires -%}
+{% if structuralPinnedEntities.size > 0 or retrievedEntities.size > 0 -%}
+If any off-scene character above enters the scene, include their ID (without brackets) in the trailing <scene_entities> block.
 
-If you introduce any staged character, include their ID (without brackets) in the trailing <scene_entities> block.
 {% endif -%}
+{%- comment -%}
+The ids are enumerated rather than referred to as "the IDs above": the memory
+blocks are kind-blind (RetrievedRow has no EntityKind), so pointing
+<current_location> at them would offer a set that can be all characters, and
+nothing downstream kind-checks what comes back. locationIds is the kind-filtered
+union the builder assembles for exactly this line.
+{%- endcomment -%}
+{% if locationIds.size > 0 -%}
+Use one of these place IDs (without brackets) for <current_location> when the scene is at that place: {{ locationIds | join: ', ' }}. Leave it out if the scene moves somewhere not listed above.
 
 {% endif -%}
-{%- assign locationList = entities | active | by_kind: 'location' -%}
-{% if locationList.size > 0 -%}
-# Known locations
-{% for e in locationList %}
-- {% if piggybackFires %}[{{ e.id }}] {% endif %}{{ e.name }}{% if e.description != blank %}: {{ e.description }}{% endif %}
-{%- endfor %}
-{% if piggybackFires -%}
-
-Use one of these IDs (without brackets) for <current_location> if the scene is at one of them; leave it out if the scene moves somewhere not listed here.
-{% endif -%}
-
 {% endif -%}
 {% if calendarVocabulary -%}
 # Calendar
@@ -61,8 +69,7 @@ This story tracks time in {{ calendarVocabulary.baseUnitName }}s ({{ calendarVoc
 
 {% endif -%}
 # Story so far
-{%- assign recentEntries = entries | recent: userSettings.partialChapterBuffer %}
-{% for entry in recentEntries %}
+{% for entry in entries %}
 {{ entry.content }}
 {% endfor %}
 {% include 'macro_output_format_narrative' %}

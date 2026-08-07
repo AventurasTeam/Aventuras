@@ -95,8 +95,8 @@ async function* suggestionEmissionPhase(
     .sort((a, b) => a.position - b.position)
   // Same anchor the strip renders from, so the run writes where the reader is
   // looking. Only AI-authored entries qualify, and everything after the anchor
-  // is a user_action or a system row — neither carries chips, and the builder
-  // drops system rows — so the whole entry list is already the prompt window.
+  // is a user_action or a system row — neither carries chips. The whole branch
+  // goes to the builder regardless; composing the prompt window is its job.
   const target = findSuggestionAnchor(entries)
   if (!target) {
     ctx.log.warn('classifier.suggestions_refresh_no_anchor', { branchId: ctx.branchId })

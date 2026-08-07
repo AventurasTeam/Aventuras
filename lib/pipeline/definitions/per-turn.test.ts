@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
+import type { TemplateId } from '@/lib/prompts'
+import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -11,10 +13,12 @@ import {
 } from '@/lib/stores'
 
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
 
-const { streamTextMock } = vi.hoisted(() => ({
+const { streamTextMock, renderTemplateMock } = vi.hoisted(() => ({
   streamTextMock: vi.fn(),
+  renderTemplateMock: vi.fn(),
 }))
 
 vi.mock('@/lib/ai', async (importOriginal) => {
@@ -22,6 +26,21 @@ vi.mock('@/lib/ai', async (importOriginal) => {
   return {
     ...actual,
     streamText: streamTextMock,
+  }
+})
+
+// Records the context each phase hands over, then renders for real — the
+// generation context is the only place a retrieval bundle is observable until
+// the bundled pack renders one.
+vi.mock('@/lib/prompts', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  const render = actual.renderTemplate as (id: TemplateId, ctx: Record<string, unknown>) => string
+  return {
+    ...actual,
+    renderTemplate: (templateId: TemplateId, context: Record<string, unknown>) => {
+      renderTemplateMock(templateId, context)
+      return render(templateId, context)
+    },
   }
 })
 
@@ -66,7 +85,7 @@ function failingStreamCall() {
 
 async function runNarrativePhase(abortSignal = new AbortController().signal) {
   ensurePerTurnPipelineRegistered()
-  const phase = getPipeline(PER_TURN_KIND).phases[1]
+  const phase = getPipeline(PER_TURN_KIND).phases[2]
   if (!phase || !('run' in phase)) throw new Error('expected a single-run narrative phase node')
   const gen = phase.run({
     actionId: 'act_1',
@@ -74,6 +93,7 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
     intermediates: {},
     log: makeLogger('act_1'),
     db: {} as never,
+    runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
   })
@@ -85,15 +105,17 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
 beforeEach(() => {
   vi.restoreAllMocks()
   streamTextMock.mockReset().mockReturnValue(failingStreamCall())
+  renderTemplateMock.mockReset()
   resetAllStores()
 })
 
 describe('per-turn pipeline declaration', () => {
-  it('registers phase 0 user-action-translation then narrative then piggyback-fallback-classifier, aligned to canonical V1', () => {
+  it('registers phase 0 user-action-translation then retrieval then narrative then piggyback-fallback-classifier, aligned to canonical V1', () => {
     ensurePerTurnPipelineRegistered()
     const p = getPipeline(PER_TURN_KIND)
     expect(p.phases.map((n) => n.name)).toEqual([
       'user-action-translation',
+      'retrieval',
       'narrative',
       'piggyback-fallback-classifier',
     ])
@@ -113,6 +135,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates: {},
       log: makeLogger('act_1'),
       db: {} as never,
+      runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
     }
@@ -309,7 +332,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -317,6 +340,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -423,7 +447,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -431,6 +455,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
       } as never,
@@ -508,7 +533,7 @@ describe('per-turn pipeline declaration', () => {
 
     const intermediates: Record<string, unknown> = {}
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const gen = phase.run({
@@ -516,6 +541,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: logger,
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
       } as never,
@@ -585,7 +611,7 @@ describe('per-turn pipeline declaration', () => {
     })
 
     ensurePerTurnPipelineRegistered()
-    const phase = getPipeline(PER_TURN_KIND).phases[1]
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
     if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
 
     const intermediates: Record<string, unknown> = {}
@@ -594,6 +620,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -668,7 +695,7 @@ describe('per-turn pipeline declaration', () => {
     })
 
     ensurePerTurnPipelineRegistered()
-    const narrativeNode = getPipeline(PER_TURN_KIND).phases[1]
+    const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
     if (!narrativeNode || !('run' in narrativeNode)) throw new Error('expected narrative phase')
 
     const intermediates: Record<string, unknown> = {}
@@ -677,6 +704,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
       db: {
         select: () => ({
           from: () => ({
@@ -696,7 +724,7 @@ describe('per-turn pipeline declaration', () => {
     expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
 
     // Verify fallback classifier phase fires when outcome is { attempted: true, succeeded: false }
-    const fallbackNode = getPipeline(PER_TURN_KIND).phases[2]
+    const fallbackNode = getPipeline(PER_TURN_KIND).phases[3]
     if (!fallbackNode || !('run' in fallbackNode)) throw new Error('expected fallback phase')
 
     // Branch has no entries so fallback phase returns completed cleanly without throws
@@ -706,6 +734,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       db: {} as never,
+      runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -727,10 +756,81 @@ const SUGGESTION_CATEGORIES = [
   },
 ]
 
+const RETRIEVED_ENTITY_ID = 'char_00000000-0000-4000-8000-0000000000e9'
+const RETRIEVED_LOCATION_ID = 'loc_00000000-0000-4000-8000-0000000000ea'
+
+function entityCandidate(id: string, displayName: string, renderedText: string): Candidate {
+  return {
+    kind: 'entity',
+    id,
+    displayName,
+    renderedText,
+    sims: [0, 0, 0],
+    vector: new Float32Array([1, 0, 0]),
+    chaptersOld: 0,
+    pinSignal: 0,
+    keywordHits: [],
+    embeddingStale: false,
+  }
+}
+
+function retrievalIntermediate(
+  over: { entities?: Candidate[]; selectedLocationIds?: string[] } = {},
+): RetrievalSuccess {
+  const selected: Candidate[] = over.entities ?? [
+    entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
+  ]
+  const emptyBundle = {
+    selected: [],
+    traces: [],
+    funnel: {
+      poolSize: 0,
+      preFilteredSize: 0,
+      selectedCount: 0,
+      tokensUsed: 0,
+      typeBudget: 0,
+    },
+  }
+  const spec = { text: '', source: 'user_action' as const }
+  return {
+    ok: true,
+    floor: {
+      sceneEntities: [],
+      currentLocation: null,
+      activeThreads: [
+        {
+          id: 'thr_00000000-0000-4000-8000-0000000000f9',
+          status: 'active',
+          injectionMode: 'auto',
+          title: 'Find the heir',
+          description: null,
+        },
+      ],
+      alwaysEntities: [],
+      alwaysLore: [],
+      alwaysThreads: [],
+      seatedIds: new Set<string>(),
+    },
+    bundles: {
+      entities: { ...emptyBundle, selected },
+      lore: emptyBundle,
+      happenings: emptyBundle,
+      threads: emptyBundle,
+      chapters: emptyBundle,
+    },
+    queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
+    staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+    injectedAwareness: [],
+    selectedLocationIds: over.selectedLocationIds ?? [],
+    timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
+  }
+}
+
 async function runNarrativeWith(opts: {
   narrative: string
   settings?: Partial<StorySettings>
   log?: Logger
+  intermediates?: Record<string, unknown>
 }) {
   currentStoryStore.set({
     storyId: 's1',
@@ -777,14 +877,15 @@ async function runNarrativeWith(opts: {
   })
 
   ensurePerTurnPipelineRegistered()
-  const phase = getPipeline(PER_TURN_KIND).phases[1]
+  const phase = getPipeline(PER_TURN_KIND).phases[2]
   if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
-  const intermediates: Record<string, unknown> = {}
+  const intermediates: Record<string, unknown> = { ...opts.intermediates }
   const gen = phase.run({
     actionId: 'act_1',
     abortSignal: new AbortController().signal,
     intermediates,
     log: opts.log ?? makeLogger('act_1'),
+    runInTransaction: async () => undefined,
     db: {
       select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
     } as never,
@@ -809,8 +910,78 @@ async function runNarrativeWith(opts: {
     metadata,
     intermediates,
     prompt: streamTextMock.mock.calls.at(-1)?.[1]?.prompt as string,
+    context: renderTemplateMock.mock.calls.at(-1)?.[1] as Record<string, unknown>,
   }
 }
+
+describe('narrative fold — retrieval handoff', () => {
+  const namesOf = (bucket: unknown) =>
+    (bucket as { displayName: string }[]).map((r) => r.displayName)
+
+  it('passes the stashed retrieval outcome into the generation context', async () => {
+    const { context } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() },
+    })
+    expect(namesOf(context.retrievedEntities)).toEqual(['Corvin'])
+    expect((context.structuralActiveThreads as { title: string }[]).map((t) => t.title)).toEqual([
+      'Find the heir',
+    ])
+  })
+
+  // The negative control for the case above: same fold, no intermediate.
+  it('renders empty buckets when the retrieval phase stashed nothing', async () => {
+    const { context } = await runNarrativeWith({ narrative: 'prose' })
+    expect(context.retrievedEntities).toEqual([])
+    expect(context.structuralActiveThreads).toEqual([])
+  })
+
+  // The whole round trip for a scene that MOVES: the ranked place has to reach
+  // the prompt as a nameable ID, and what the model names has to land on the
+  // entry. Omitting <current_location> means "inherit" (lib/piggyback/apply.ts),
+  // so a prompt that offers no place freezes the location forever.
+  it('lets the model move the scene to a ranked location', async () => {
+    const { prompt, metadata } = await runNarrativeWith({
+      narrative:
+        'They cross to the stalls.\n<state><current_location>l1</current_location></state>',
+      intermediates: {
+        [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate({
+          entities: [
+            entityCandidate(
+              RETRIEVED_LOCATION_ID,
+              'The Market',
+              'The Market (currently elsewhere): stalls under sailcloth.',
+            ),
+          ],
+          selectedLocationIds: [RETRIEVED_LOCATION_ID],
+        }),
+      },
+    })
+    expect(prompt).toContain('for <current_location> when the scene is at that place: l1.')
+    expect(metadata.currentLocationId).toBe(RETRIEVED_LOCATION_ID)
+  })
+
+  // Negative control for the case above: the same fold with a ranked CHARACTER
+  // offers no place, so the instruction stays out of the prompt entirely.
+  it('offers no <current_location> target when the ranked entity is not a place', async () => {
+    const { prompt } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: retrievalIntermediate() },
+    })
+    expect(prompt).toContain('Corvin (currently elsewhere): a smuggler.')
+    expect(prompt).not.toContain('for <current_location> when the scene is at that place')
+  })
+
+  // ctx.intermediates is Record<string, unknown>: a non-outcome value must not
+  // reach the builder as if it were one.
+  it('ignores a value parked under the retrieval key that is not an ok outcome', async () => {
+    const { context } = await runNarrativeWith({
+      narrative: 'prose',
+      intermediates: { [RETRIEVAL_INTERMEDIATE_KEY]: { ok: false, failure: { reason: 'call' } } },
+    })
+    expect(context.retrievedEntities).toEqual([])
+  })
+})
 
 describe('narrative fold — suggestions', () => {
   it('persists parsed chips with source piggyback on the created entry', async () => {

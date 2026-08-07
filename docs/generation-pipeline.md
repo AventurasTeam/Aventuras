@@ -396,8 +396,24 @@ bug, not a runtime case to handle.
   (commit fires a regular `delta_emitted` for the entry's
   `op=create`).
 
-**Never:** SQLite calls, delta-log appends, persisted-store
-mutations, another phase's intermediates.
+**Never:** delta-loggable writes outside `delta_emitted`, delta-log
+appends, persisted-store mutations, another phase's intermediates.
+
+**Reads are fine** — a phase resolves tail positions and working sets
+against `ctx.db`, which is why the handle is on `PhaseContext` at all.
+
+**One carve-out for non-delta-logged writes.** The prohibition
+protects the delta log and the undo contract, so it binds writes that
+belong in that contract. Derived infrastructure state that is
+deterministic from source rows, carries no undo payload and is never
+reverse-replayed sits outside it. The retrieval phase's vec0 sync is
+the only such writer: it embeds `embedding_stale` rows and clears
+their flags in one transaction, per
+[`retrieval.md → Compute lifecycle`](./memory/retrieval.md#compute-lifecycle).
+Routing it through `delta_emitted` would append undo rows for
+embeddings that a CTRL-Z must not remove. Such a phase takes
+`ctx.runInTransaction` rather than the module-global handle, so its
+writes and the run's reads cannot land on different databases.
 
 ### Abort
 
@@ -1328,7 +1344,30 @@ type PipelineError =
       constraintViolated?: string // 'UNIQUE' | 'CHECK' | 'FK' | etc.
     }
   | { kind: 'orchestrator'; detail: string } // abort-path wrap (catches DeltaReplayError, etc.)
+  | {
+      kind: 'config-resolver'
+      failure: ResolveFailureKind // resolver could not produce a usable model config
+      target: ResolveTarget
+      phaseName: string
+      detail?: string
+    }
+  | {
+      kind: 'embedder'
+      reason: EmbedderErrorKind // 'init' | 'call'
+      detail: string
+      staleCount: number | null // rows the blocking sync was embedding; null when unknown
+    }
 ```
+
+**`embedder`** covers the blocking pre-retrieval sync stage and the
+query embed beside it, per
+[`model-management.md → Embed failure is blocking`](./memory/model-management.md).
+Distinct from `provider`, whose retry story is the LLM's: this one
+offers **Switch embedder**, so only a genuine embedder fault may
+carry it. A failure inside the retrieval pass that says nothing about
+the stored vectors — a locked database, a bug — escapes as
+`orchestrator` instead, which surfaces the generic message with no
+misleading fix action.
 
 Categories drive how UI surfaces them — toast for transient,
 banner / dialog for persistent.

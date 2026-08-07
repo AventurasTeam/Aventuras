@@ -3,6 +3,7 @@ import { expect, test, type Page } from '@playwright/test'
 import type { EntryMetadata } from '@/lib/db'
 
 import { queryApp } from '../harness/db'
+import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import { startMockLlm, type MockLlm } from '../harness/mock-llm'
@@ -88,8 +89,13 @@ test.describe('next-turn suggestions — narrative (piggyback) fold', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply (model-management.md → Embed failure is
+    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative(NARRATIVE_WITH_TAGS)
     setProviderEndpoint(seeded.dbPath, mock.url)
@@ -237,8 +243,13 @@ test.describe('next-turn suggestions — classifier fold', () => {
   let userDataDir: string | undefined
 
   test.beforeAll(async () => {
+    // Retrieval blocks ahead of narrative, so a turn without an installed
+    // embedder never reaches the reply (model-management.md → Embed failure is
+    // blocking). Cold cache downloads ~24 MB from Hugging Face before launch.
+    test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
+    await installEmbedderModel(userDataDir)
     mock = await startMockLlm()
     mock.setNarrative(CLASSIFIER_NARRATIVE)
     mock.setStructured('per-turn-classifier-suggestions', {

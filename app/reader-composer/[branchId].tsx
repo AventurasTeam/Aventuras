@@ -6,11 +6,9 @@ import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
-import {
-  GenerationStatusPill,
-  type GenerationPhase,
-} from '@/components/compounds/generation-status-pill'
+import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
+import { readerPillPhase } from '@/components/reader/generation-phase'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
   type EditResult,
@@ -30,6 +28,7 @@ import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { useOpenRegionTokens } from '@/hooks/use-open-region-tokens'
 import { useTier } from '@/hooks/use-tier'
 import {
   clearSystemEntry,
@@ -78,6 +77,7 @@ import {
   isUserEditBlocked,
   rehydrateStories,
   storiesStore,
+  type TxState,
   undoRedoStore,
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
@@ -122,18 +122,26 @@ export default function ReaderComposerRoute() {
   )
 
   const editBlocked = generationStore.useGeneration((s) => isUserEditBlocked(s.txState))
-  // A suggestion refresh is not a turn: counting it here would swap Send for
-  // Cancel and raise the streaming placeholder over a branch that isn't
-  // streaming. Note this is only about the turn-shaped chrome — the refresh
-  // does hold the edit gate, so `editBlocked` above already covers undo/redo.
-  const isGenerating = generationStore.useGeneration((s) =>
-    // Narrative only: a refresh gets its own phase below, and a background kind
-    // (the classifier) must not light the streaming placeholder at all.
-    [...s.txState.runs.values()].some(
-      (r) =>
-        r.branchId === branchId && r.kind !== SUGGESTION_REFRESH_KIND && !isBackgroundKind(r.kind),
-    ),
+  // The phase, not a boolean: one source for whether a turn runs and what it
+  // does. Neither a refresh nor a background classifier pass is a turn — either
+  // counted here would swap Send for Cancel and raise the streaming placeholder
+  // over a branch that isn't streaming. Only the refresh is hard-gate, so
+  // `editBlocked` above still covers undo/redo for it.
+  // Two selectors over one predicate rather than one returning a pair: a fresh
+  // object per read would re-render the reader on every unrelated store write.
+  const findTurnRun = useCallback(
+    (s: { txState: TxState }) =>
+      [...s.txState.runs.values()].find(
+        (r) =>
+          r.branchId === branchId &&
+          r.kind !== SUGGESTION_REFRESH_KIND &&
+          !isBackgroundKind(r.kind),
+      ),
+    [branchId],
   )
+  const turnPhase = generationStore.useGeneration((s) => findTurnRun(s)?.currentPhase ?? null)
+  const turnKind = generationStore.useGeneration((s) => findTurnRun(s)?.kind ?? null)
+  const isGenerating = turnPhase !== null
   const refreshingSuggestions = generationStore.useGeneration((s) =>
     [...s.txState.runs.values()].some(
       (r) => r.branchId === branchId && r.kind === SUGGESTION_REFRESH_KIND,
@@ -208,17 +216,17 @@ export default function ReaderComposerRoute() {
   // A live loop reports through the Memory panel's own progress row instead.
   const swapPaused =
     storyId != null && openForBranch?.settings.embedding_swap_target != null && !swapRunningHere
+  // Composing is fine mid-swap; submitting is not. submitTurn refuses either way
+  // (a swap owns the vec tables), so gate here rather than let the user write a
+  // turn and take a failure entry for it.
+  const swapPending = swapRunningHere || swapPaused
 
-  // A suggestion refresh occupies the pill exactly like a turn does, and the
-  // pill prioritizes activePhase over error — so the two branches must be
-  // derived from one value, or a refresh would leave the warning tone visible.
-  const activePhase: GenerationPhase | undefined = isGenerating
-    ? 'generating-narrative'
-    : refreshingSuggestions
-      ? 'refreshing-suggestions'
-      : classifierRunning
-        ? 'classifying'
-        : undefined
+  const activePhase = readerPillPhase({
+    turnKind,
+    turnPhase,
+    refreshingSuggestions,
+    classifierRunning,
+  })
 
   // Buffer instances live in a ref (mutable, not render state); the safe output
   // they compute on each push drives the re-render via `streaming`.
@@ -448,7 +456,13 @@ export default function ReaderComposerRoute() {
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected')
           await showTurnFailure(
-            { kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` },
+            {
+              kind: 'orchestrator',
+              // The detail line persists on the entry and renders to the user,
+              // so the prose is translated; blockedBy itself is a pipeline kind
+              // and stays verbatim as the diagnostic token.
+              detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
+            },
             submission,
           )
         else if (result.outcome === 'aborted')
@@ -479,10 +493,14 @@ export default function ReaderComposerRoute() {
     [entries],
   )
 
-  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(systemFailure, () => {
-    const submission = lastSubmission ?? systemFailure?.submission
-    if (submission) void runSubmit(submission.content, submission.composerMode)
-  })
+  const { onRetry: retrySystemEntry, fixAction } = useSystemEntryActions(
+    systemFailure,
+    () => {
+      const submission = lastSubmission ?? systemFailure?.submission
+      if (submission) void runSubmit(submission.content, submission.composerMode)
+    },
+    storyId,
+  )
 
   const dismissSystemEntry = useCallback(async () => {
     await clearSystemEntry(branchId, ctx)
@@ -718,6 +736,7 @@ export default function ReaderComposerRoute() {
   )
 
   const jumpButtonEnabled = appSettingsStore.useAppSettings((s) => s.appearance.showJumpToBottom)
+  const openRegionPct = useOpenRegionTokens(openForBranch?.storyId)
   const { theme } = useTheme()
 
   const surfaceProps = {
@@ -740,7 +759,7 @@ export default function ReaderComposerRoute() {
     <ScreenShell
       variant="in-story"
       title={<Text className="font-semibold">{storyTitle ?? t('reader:placeholderTitle')}</Text>}
-      chapterProgress={0}
+      chapterProgress={openRegionPct}
       onBack={() => router.back()}
       onOpenStorySettings={() => {
         if (storyId != null) router.push(`/story-settings/${storyId}`)
@@ -750,24 +769,21 @@ export default function ReaderComposerRoute() {
         <GenerationStatusPill
           activePhase={activePhase}
           error={
-            activePhase != null
-              ? undefined
-              : swapPaused
-                ? { code: 'swap-paused' }
-                : staleTotal > 0
-                  ? { code: 'memory-incomplete', pendingRows: staleTotal }
-                  : undefined
+            swapPaused
+              ? { code: 'swap-paused' }
+              : staleTotal > 0
+                ? { code: 'memory-incomplete', pendingRows: staleTotal }
+                : undefined
           }
           // A background classifier pass has no cancel affordance, so the prop is
           // absent rather than a no-op handler that would still open the popover.
           {...(isGenerating || refreshingSuggestions
             ? {
+                // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a
+                // denylist, so any foreground pipeline added later raises this
+                // Cancel and a hardcoded kind would abort a run that isn't there.
                 onCancel: () =>
-                  void awaitRunTerminal(
-                    isGenerating ? PER_TURN_KIND : SUGGESTION_REFRESH_KIND,
-                    branchId,
-                    'cancel',
-                  ),
+                  void awaitRunTerminal(turnKind ?? SUGGESTION_REFRESH_KIND, branchId, 'cancel'),
               }
             : {})}
           onErrorTap={(code) => {
@@ -844,22 +860,26 @@ export default function ReaderComposerRoute() {
                 ref={composerRef}
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
-                disabled={!hydrationSucceeded}
+                disabled={!hydrationSucceeded || swapPending}
                 sendBlocked={editBlocked}
                 disabledReason={
                   hydrationFailed
                     ? t('reader:hydrationFailedBody')
                     : !hydrationSucceeded
                       ? t('reader:hydrationLoading')
-                      : editBlocked
-                        ? t('reader:actions.blockedWhileGenerating')
-                        : undefined
+                      : swapPending
+                        ? t('reader:actions.blockedWhileSwapping')
+                        : editBlocked
+                          ? t('reader:actions.blockedWhileGenerating')
+                          : undefined
                 }
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
                 }}
-                onCancel={() => void awaitRunTerminal(PER_TURN_KIND, branchId, 'cancel')}
+                onCancel={() =>
+                  void awaitRunTerminal(turnKind ?? PER_TURN_KIND, branchId, 'cancel')
+                }
               />
             </View>
           </View>
