@@ -41,6 +41,7 @@ import {
   emitChapterCreated,
   type CheckpointCreatedEvent,
   type StoryCreatedEvent,
+  type BranchSwitchedEvent,
 } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
@@ -3834,6 +3835,11 @@ class StoryStore {
     // Invalidate caches
     this.invalidateWordCountCache()
     this.invalidateChapterCache()
+
+    // Announce as soon as entries are correct (both the reload and skipReload paths).
+    // Emitted before the background/suggestion restores below so a failure in either
+    // can't silently swallow the notification.
+    eventBus.emit<BranchSwitchedEvent>({ type: 'BranchSwitched', branchId })
 
     // Reload background from database for the branch
     this.currentBgImage = await database.getBackgroundForBranch(this.currentStory.id, branchId)

@@ -11,6 +11,7 @@
   import ActionChoices from './ActionChoices.svelte'
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
+  import { eventBus, type BranchSwitchedEvent } from '$lib/services/events'
 
   const storyMaxWidthStyle = $derived.by(() => {
     const maxWidth =
@@ -185,6 +186,100 @@
     })
   }
 
+  // ===== Branch switch landing (Labs: branchSwitchLanding) =====
+
+  // Entries kept above the fork entry so the checkpoint has a little context
+  const FORK_CONTEXT_BEFORE = 5
+
+  // Landing requested while the story panel was hidden; consumed when it returns
+  let pendingBranchLanding: { branchId: string | null } | null = null
+
+  // Scroll a specific entry to the top of the viewport. Falls back to the container
+  // bottom when the element isn't in the DOM (entry outside the virtual window).
+  function scrollEntryIntoView(entryId: string) {
+    suppressScrollHandler = true
+    requestAnimationFrame(() => {
+      const el = storyContainer?.querySelector(`[data-entry-id="${entryId}"]`)
+      if (el) {
+        el.scrollIntoView({ block: 'start' })
+      } else {
+        performScroll()
+      }
+      // Reset in the frame AFTER the scroll, so its scroll event is still ignored
+      requestAnimationFrame(() => {
+        suppressScrollHandler = false
+        if (storyContainer) {
+          userScrolledDown = !isNearEdge('top')
+          isAtPhysicalBottom = isNearEdge('bottom')
+        }
+      })
+    })
+  }
+
+  async function landOnLastEntry() {
+    const total = story.entries.length
+    // Claim the current count so the auto-scroll effect doesn't see this as "entries added"
+    prevEntryCount = total
+    ui.setScrollBreak(false)
+    anchorToBottom(total)
+    await tick()
+
+    // Land on the last entry itself, not the container bottom — action choices and
+    // padding sit below it, which would otherwise push the entry off the top.
+    const lastEntry = story.entries[story.entries.length - 1]
+    if (!lastEntry) {
+      performScroll()
+      return
+    }
+    scrollEntryIntoView(lastEntry.id)
+  }
+
+  async function landOnForkEntry(branchId: string | null) {
+    const entries = story.entries
+    const forkEntryId = branchId
+      ? (story.branches.find((b) => b.id === branchId)?.forkEntryId ?? null)
+      : null
+    const idx = forkEntryId ? entries.findIndex((e) => e.id === forkEntryId) : -1
+
+    // Main branch, or fork entry not in this branch's entries → land on the last entry
+    if (!forkEntryId || idx === -1) {
+      await landOnLastEntry()
+      return
+    }
+
+    const total = entries.length
+    prevEntryCount = total
+    ui.setScrollBreak(true)
+    windowStart = Math.max(0, idx - FORK_CONTEXT_BEFORE)
+    windowEnd = Math.min(total, idx + DEFAULT_VISIBLE_ENTRIES)
+    await tick()
+
+    scrollEntryIntoView(forkEntryId)
+  }
+
+  function performBranchLanding(branchId: string | null) {
+    if (settings.experimentalFeatures.branchSwitchLandingTarget === 'fork-entry') {
+      void landOnForkEntry(branchId)
+    } else {
+      void landOnLastEntry()
+    }
+  }
+
+  // No reactive reads in the effect body — subscribe once, unsubscribe on teardown
+  $effect(() => {
+    return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', (event) => {
+      if (!settings.experimentalFeatures.branchSwitchLanding) return
+
+      // Panel hidden: defer until the story panel comes back (see panel effect below)
+      if (ui.activePanel !== 'story' || !storyContainer) {
+        pendingBranchLanding = { branchId: event.branchId }
+        return
+      }
+
+      performBranchLanding(event.branchId)
+    })
+  })
+
   // Check if container is scrolled near a specific edge
   function isNearEdge(edge: 'top' | 'bottom'): boolean {
     if (!storyContainer) return true
@@ -288,7 +383,16 @@
   // tracked as a dependency — otherwise this effect would re-fire on every new entry.
   $effect(() => {
     if (ui.activePanel === 'story' && storyContainer) {
-      untrack(() => scrollToBottom())
+      untrack(() => {
+        // A branch switch that happened while the panel was hidden lands now instead
+        const pending = pendingBranchLanding
+        pendingBranchLanding = null
+        if (pending) {
+          performBranchLanding(pending.branchId)
+        } else {
+          scrollToBottom()
+        }
+      })
     }
   })
 
@@ -360,7 +464,10 @@
         {/if}
 
         {#each displayedEntries.entries as entry (entry.id)}
-          <StoryEntry {entry} />
+          <!-- data-entry-id lets branch-switch landing locate a specific entry element -->
+          <div data-entry-id={entry.id}>
+            <StoryEntry {entry} />
+          </div>
         {/each}
 
         <!-- Show streaming entry while generating -->
