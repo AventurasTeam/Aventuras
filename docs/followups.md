@@ -36,14 +36,12 @@ for the placement rule.
   template's story-so-far loop, Q3's prose extract, Layer-A same-name
   suppression, and the periodic classifier's turn window. All four become
   no-ops once rows are prose-only, so this task **supersedes** that
-  mitigation rather than building on it. Landing the two together is what
-  makes the persisted column, the reader, and every prompt agree on one
-  string. Two open pieces: rows written before the change keep their raw
-  content, so either a backfill runs or the readers keep a legacy path;
-  and the piggyback tagged-block path and the per-turn fallback
-  classifier should reach entry metadata by one route, which is the same
-  unification that fixes the fallback's block being structurally
-  invisible above.
+  mitigation rather than building on it. That widens the "echoed state
+  block disappears on its own" consequence recorded below, which was
+  written against the story-so-far loop alone: the other three consumers
+  are M3.4-era and post-date it. The legacy-row question is already
+  settled below in the tolerant-reader's favour, and it now covers
+  `promptProse` as well as `stripTrailingBlocks`.
 
   Decided (2026-07-23):
   - **Edit scope splits by field class, not by position alone.**
