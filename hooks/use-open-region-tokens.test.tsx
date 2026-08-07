@@ -169,6 +169,24 @@ describe('useOpenRegionTokens', () => {
     expect(latest).toBeGreaterThan(0)
   })
 
+  // A branch switch moves the open story before the reader re-hydrates the
+  // working set, so the map can still hold the branch being left.
+  it('ignores entries the working set still holds for another branch', () => {
+    entriesStore.hydrate('b1', [row('e1', LONG), row('e2', SHORT)])
+    openStory()
+    currentStoryStore.set({
+      ...currentStoryStore.getCurrentStory()!,
+      branchId: 'b2',
+    })
+    render(<Probe nonce={0} />)
+    expect(latest).toBe(0)
+    // Positive control: the same rows count once the open branch is theirs again.
+    cleanup()
+    openStory()
+    render(<Probe nonce={0} />)
+    expect(latest).toBeCloseTo(pctOf(LONG, SHORT), 10)
+  })
+
   it('returns 0 for a caller with no story of its own yet', () => {
     entriesStore.hydrate('b1', [row('e2', SHORT)])
     openStory()

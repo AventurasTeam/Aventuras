@@ -44,5 +44,19 @@ export function useOpenRegionTokens(storyId: string | null | undefined): number 
   const threshold = currentStoryStore.useCurrentStory((open) =>
     open != null && open.storyId === storyId ? open.settings.chapterTokenThreshold : 0,
   )
-  return useMemo(() => openRegionProgress([...rows.values()], threshold), [rows, threshold])
+  // Branch-filtered like the reader's own read of this map: the working set holds
+  // one branch, but a branch switch moves the open story before the re-hydrate
+  // lands, and counting the outgoing branch's entries against the incoming
+  // branch's threshold reports a region this branch does not have.
+  const branchId = currentStoryStore.useCurrentStory((open) =>
+    open != null && open.storyId === storyId ? open.branchId : null,
+  )
+  return useMemo(
+    () =>
+      openRegionProgress(
+        [...rows.values()].filter((e) => e.branchId === branchId),
+        threshold,
+      ),
+    [rows, branchId, threshold],
+  )
 }
