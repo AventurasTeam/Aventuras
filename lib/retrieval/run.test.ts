@@ -137,6 +137,8 @@ type Fixture = {
   awareness?: Row[]
   chapterRanges?: Row[]
   knn?: Row[]
+  /** Answers the by-id vector fetch for pool-admitted rows the KNN never returned. */
+  vectorsById?: Row[]
   /** Omit for the normal case: every dim family exists. `[]` is a cold start. */
   vecTables?: Row[]
 }
@@ -151,6 +153,10 @@ function makeQueryAll(rows: Fixture): QueryAll & { mock: { calls: unknown[][] } 
   return vi.fn(async (sql: string, params: unknown[]) => {
     if (sql.includes('sqlite_master')) return rows.vecTables ?? params.map((name) => [name])
     if (sql.includes('MATCH')) return rows.knn ?? []
+    // Must precede the source-table arms: `FROM happenings_vec_2` contains the
+    // literal `FROM happenings`, so a vector fetch would otherwise be answered
+    // with source rows.
+    if (sql.includes('_vec_')) return rows.vectorsById ?? []
     if (sql.includes('JOIN story_entries')) return rows.chapterRanges ?? []
     if (sql.includes('happening_awareness')) return rows.awareness ?? []
     if (sql.includes('FROM chapters')) return rows.chapters ?? []
@@ -499,9 +505,22 @@ describe('runRetrieval — KNN passes', () => {
   const knnTables = (queryAll: Mocked): (string | undefined)[] =>
     knnCalls(queryAll).map((c) => /FROM\s+(\S+)/.exec(c.sql)?.[1])
 
-  const perKind = (times: number): string[] =>
-    ['entities_vec', 'lore_vec', 'happenings_vec', 'threads_vec', 'chapter_summaries_vec'].flatMap(
-      (family) => Array<string>(times).fill(`${family}_${DIM}`),
+  // Counted per family rather than compared as an ordered list: the kinds now
+  // issue concurrently, and happenings deliberately trail the chapter ranking,
+  // so call order is an implementation detail. The one ordering that IS a
+  // contract has its own test below.
+  const knnCountsByFamily = (queryAll: Mocked): Record<string, number> => {
+    const out: Record<string, number> = {}
+    for (const table of knnTables(queryAll))
+      if (table !== undefined) out[table] = (out[table] ?? 0) + 1
+    return out
+  }
+
+  const perKind = (times: number): Record<string, number> =>
+    Object.fromEntries(
+      ['entities_vec', 'lore_vec', 'happenings_vec', 'threads_vec', 'chapter_summaries_vec'].map(
+        (family) => [`${family}_${DIM}`, times],
+      ),
     )
 
   // Every query is present here: Q1 from userAction, Q2 from the seated scene
@@ -513,7 +532,7 @@ describe('runRetrieval — KNN passes', () => {
     const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
 
     expect(out.queries.presence).toEqual([true, true, true])
-    expect(knnTables(queryAll)).toEqual(perKind(3))
+    expect(knnCountsByFamily(queryAll)).toEqual(perKind(3))
   })
 
   // A story that needs no lead entity embeds nothing at creation, so the dim
@@ -540,7 +559,7 @@ describe('runRetrieval — KNN passes', () => {
     )
 
     expect(out.queries.presence).toEqual([true, false, false])
-    expect(knnTables(queryAll)).toEqual(perKind(1))
+    expect(knnCountsByFamily(queryAll)).toEqual(perKind(1))
   })
 
   it('binds the configured k, branch and model on every pass', async () => {
@@ -557,6 +576,102 @@ describe('runRetrieval — KNN passes', () => {
       expect(bound[2]).toBe('br_1')
       expect(bound[3]).toBe('bge-m3')
     }
+  })
+})
+
+/**
+ * retrieval.md → Chapter-match boost on happenings. The boost exists because
+ * pure-similarity happening retrieval comes out scattered, so gating pool
+ * membership on that same similarity puts the boost out of reach of exactly the
+ * rows it is meant to rescue: a happening outside the KNN cut for all three
+ * query vectors is never scored at all.
+ */
+describe('runRetrieval — chapter-range pool admission', () => {
+  const inRange = () =>
+    makeQueryAll({
+      // The KNN never returns hap_far; only its chapter range does.
+      knn: [hit('ch1')],
+      chapters: [chapterRow('ch1', 'The Tin Gate')],
+      chapterRanges: [['ch1', 'entry_7']],
+      happenings: [happeningRow('hap_far', 'Kara traded the amulet', { occurredAt: 'entry_7' })],
+      awareness: [awarenessRow('aw_1', 'hap_far')],
+      vectorsById: [['hap_far', unitBlob(1, 0)]],
+    })
+
+  it('admits a happening inside a seated chapter range that no KNN pass returned', async () => {
+    const queryAll = inRange()
+
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    expect(tracedIds(out.bundles.happenings)).toContain('hap_far')
+    const trace = out.bundles.happenings.traces.find((t) => t.id === 'hap_far')
+    expect(trace?.chapterBoostApplied).toBe(true)
+  })
+
+  it('ranks chapters before the happenings KNN, since seating decides admission', async () => {
+    const queryAll = inRange()
+
+    expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    const families = knnCalls(queryAll).map((c) => /FROM\s+(\S+)/.exec(c.sql)?.[1])
+    const lastChapter = families.lastIndexOf(`chapter_summaries_vec_${DIM}`)
+    const firstHappening = families.indexOf(`happenings_vec_${DIM}`)
+    expect(lastChapter).toBeGreaterThanOrEqual(0)
+    expect(firstHappening).toBeGreaterThan(lastChapter)
+  })
+
+  // Admission widens the pool; it does not bypass the pool's own predicates.
+  it('still applies the POV-awareness filter to an admitted happening', async () => {
+    const queryAll = makeQueryAll({
+      knn: [hit('ch1')],
+      chapters: [chapterRow('ch1', 'The Tin Gate')],
+      chapterRanges: [['ch1', 'entry_7']],
+      happenings: [happeningRow('hap_far', 'Unwitnessed', { occurredAt: 'entry_7' })],
+      // No awareness row and not common knowledge: outside the scene POV union.
+      awareness: [],
+      vectorsById: [['hap_far', unitBlob(1, 0)]],
+    })
+
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    expect(tracedIds(out.bundles.happenings)).not.toContain('hap_far')
+  })
+
+  // A row with no vector in this family was never embedded under this model;
+  // defaulting it to zeros would score it as a real candidate.
+  it('drops an admitted id whose vector the family does not hold', async () => {
+    const queryAll = makeQueryAll({
+      knn: [hit('ch1')],
+      chapters: [chapterRow('ch1', 'The Tin Gate')],
+      chapterRanges: [['ch1', 'entry_7']],
+      happenings: [happeningRow('hap_far', 'Never embedded', { occurredAt: 'entry_7' })],
+      awareness: [awarenessRow('aw_1', 'hap_far')],
+      vectorsById: [],
+    })
+
+    const out = expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    expect(tracedIds(out.bundles.happenings)).not.toContain('hap_far')
+  })
+
+  it('fetches vectors only for admitted ids the KNN did not already return', async () => {
+    const queryAll = makeQueryAll({
+      knn: [hit('ch1')],
+      chapters: [chapterRow('ch1', 'The Tin Gate')],
+      chapterRanges: [['ch1', 'entry_7']],
+      happenings: [happeningRow('hap_far', 'Kara traded', { occurredAt: 'entry_7' })],
+      awareness: [awarenessRow('aw_1', 'hap_far')],
+      vectorsById: [['hap_far', unitBlob(1, 0)]],
+    })
+
+    expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    const fetches = queryAll.mock.calls.filter(
+      ([sql]) => String(sql).includes('_vec_') && !String(sql).includes('MATCH'),
+    )
+    expect(fetches).toHaveLength(1)
+    // knnQuery already carried every hit's embedding on its match row.
+    expect(fetches[0][1]).toEqual(['br_1', 'm', 'hap_far'])
   })
 })
 

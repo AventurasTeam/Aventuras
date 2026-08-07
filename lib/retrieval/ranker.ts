@@ -191,8 +191,22 @@ export function rankPerType(
   }
 }
 
-export function rankAll(input: RankAllInput): Record<RetrievalType, RankedType> {
-  const chapters = rankPerType(input.pools.chapters, 'chapters', input.budgets.chapters, input)
+/**
+ * Chapters rank first, because only the chapters that win budget feed the
+ * happenings boost. `runRetrieval` needs that set *before* it can build the
+ * happenings pool — chapter membership decides admission, not just score — so
+ * it ranks chapters itself and hands the bundle back rather than paying for the
+ * pass twice. A caller with no such need omits it and gets the same ordering.
+ */
+export function rankAll(
+  input: RankAllInput,
+  chapters: RankedType = rankPerType(
+    input.pools.chapters,
+    'chapters',
+    input.budgets.chapters,
+    input,
+  ),
+): Record<RetrievalType, RankedType> {
   const happenings = rankPerType(input.pools.happenings, 'happenings', input.budgets.happenings, {
     ...input,
     matchedChapterIds: new Set(chapters.selected.map((c) => c.id)),

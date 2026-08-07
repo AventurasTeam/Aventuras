@@ -1,4 +1,10 @@
-import { knnQuery, unpackFloat32, vecTableName, type VecTargetKind } from '@/lib/db'
+import {
+  knnQuery,
+  unpackFloat32,
+  vecTableName,
+  vectorsByIdQuery,
+  type VecTargetKind,
+} from '@/lib/db'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
@@ -25,7 +31,7 @@ import {
   type QueryStack,
   type QueryStackInput,
 } from './queries'
-import { rankAll } from './ranker'
+import { rankAll, rankPerType } from './ranker'
 import {
   loadChapterRanges,
   loadSourceRows,
@@ -272,26 +278,64 @@ async function runRetrievalPass(
     threads: [],
     chapters: [],
   }
-  // Wall-clock, not a sum of per-call spans: the five kinds and the three query
+  // Wall-clock, not a sum of per-call spans: the kinds and the three query
   // vectors inside each now overlap, so summing them would exceed the elapsed
-  // time and break RetrievalTimings' disjoint-sub-span contract.
+  // time and break RetrievalTimings' disjoint-sub-span contract. Happenings sit
+  // out this batch — their pool depends on which chapters win budget.
   const knnStartedAt = performance.now()
   const built = await Promise.all(
-    KINDS.map(async (kind) => [kind, await buildPool(deps, params, { ...poolCtx, kind })] as const),
+    KINDS.filter((kind) => kind !== 'happening').map(
+      async (kind) => [kind, await buildPool(deps, params, { ...poolCtx, kind })] as const,
+    ),
   )
-  const knnMs = performance.now() - knnStartedAt
+  let knnMs = performance.now() - knnStartedAt
   for (const [kind, candidates] of built) pools[TYPE_OF_KIND[kind]] = candidates
 
-  const rankStartedAt = performance.now()
-  const bundles = rankAll({
-    pools,
-    budgets: params.budgets,
+  const rankTypeInput = {
     params: RANKER_DEFAULTS,
     presence,
     chapterRanges,
     countTokens,
-  })
-  const rankMs = performance.now() - rankStartedAt
+  }
+
+  let rankStartedAt = performance.now()
+  const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, rankTypeInput)
+  let rankMs = performance.now() - rankStartedAt
+
+  // Chapter membership has to reach pool CONSTRUCTION, not only scoring
+  // (retrieval.md → Chapter-match boost on happenings). A happening outside the
+  // KNN cut for all three query vectors is never scored, so a boost applied
+  // afterwards can reorder the admitted set but never admit the scattered rows
+  // the mechanism exists to rescue — and low own-similarity is exactly their
+  // profile. Seating is still earned: these join the pool, they do not bypass
+  // the POV-awareness filter, the stale filter, or budget fill.
+  const boostedEntryIds = new Set<string>()
+  for (const chapter of chapters.selected) {
+    for (const entryId of chapterRanges.get(chapter.id) ?? []) boostedEntryIds.add(entryId)
+  }
+  const chapterAdmitted = sourceRows.happenings
+    .filter((h) => h.occurredAtEntryId !== null && boostedEntryIds.has(h.occurredAtEntryId))
+    .map((h) => h.id)
+
+  const happeningsStartedAt = performance.now()
+  pools.happenings = await buildPool(
+    deps,
+    params,
+    { ...poolCtx, kind: 'happening' },
+    chapterAdmitted,
+  )
+  knnMs += performance.now() - happeningsStartedAt
+
+  rankStartedAt = performance.now()
+  const bundles = rankAll(
+    {
+      pools,
+      budgets: params.budgets,
+      ...rankTypeInput,
+    },
+    chapters,
+  )
+  rankMs += performance.now() - rankStartedAt
 
   const placeIds = new Set(
     sourceRows.entities.filter((e) => e.kind === 'location').map((e) => e.id),
@@ -372,10 +416,42 @@ type PoolCtx = {
   queryText: string
 }
 
+// Matches lib/db/embeddings' own chunk width: 400 ids plus the branch and model
+// params stays under the 999-variable floor of older SQLite builds.
+const ADMIT_ID_CHUNK = 400
+
+/**
+ * Vectors for admitted ids the KNN passes did not return. Absent ids are dropped
+ * rather than defaulted: a row with no vector in this family was never embedded
+ * under this model, and a zero vector would score as a real candidate.
+ */
+async function loadAdmittedVectors(
+  deps: RetrievalDeps,
+  params: RetrievalParams,
+  kind: VecTargetKind,
+  ids: readonly string[],
+  into: Map<string, Float32Array>,
+): Promise<void> {
+  for (let i = 0; i < ids.length; i += ADMIT_ID_CHUNK) {
+    const chunk = ids.slice(i, i + ADMIT_ID_CHUNK)
+    const query = vectorsByIdQuery(kind, params.dim, {
+      branchId: params.branchId,
+      modelId: params.modelId,
+      ids: chunk,
+    })
+    for (const row of await deps.queryAll(query.sql, query.params)) {
+      const id = String(row[0])
+      if (!into.has(id)) into.set(id, decodeVector(row[1]))
+    }
+  }
+}
+
 async function buildPool(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
+  /** Ids to consider regardless of KNN rank — see the chapter-match note in runRetrievalPass. */
+  admitIds: readonly string[] = [],
 ): Promise<Candidate[]> {
   if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim))) return []
 
@@ -408,7 +484,16 @@ async function buildPool(
         }),
   )
 
-  const ids = poolIdsFromKnn(perQuery)
+  const knnIds = poolIdsFromKnn(perQuery)
+  const knnSet = new Set(knnIds)
+  const needVectors = admitIds.filter((id) => !knnSet.has(id) && !vectorById.has(id))
+  if (needVectors.length > 0)
+    await loadAdmittedVectors(deps, params, ctx.kind, needVectors, vectorById)
+
+  // Appended, not merged by rank: assembleCandidates consumes the array as a
+  // membership set, and the pool predicates decide what survives from here.
+  const admitted = admitIds.filter((id) => !knnSet.has(id) && vectorById.has(id))
+  const ids = admitted.length === 0 ? knnIds : [...knnIds, ...admitted]
   return ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById)
 }
 
