@@ -16,6 +16,10 @@ const calls = {
   entries: [] as any[],
   images: [] as any[],
   deleted: [] as string[],
+  characters: [] as any[],
+  locations: [] as any[],
+  items: [] as any[],
+  storyBeats: [] as any[],
 }
 let failOnCreateStory = false
 
@@ -29,10 +33,10 @@ vi.mock('$lib/services/database', () => ({
     createEmbeddedImage: vi.fn(async (i: any) => void calls.images.push(i)),
     deleteStory: vi.fn(async (id: string) => void calls.deleted.push(id)),
     addBranch: vi.fn(async () => {}),
-    addCharacter: vi.fn(async () => {}),
-    addLocation: vi.fn(async () => {}),
-    addItem: vi.fn(async () => {}),
-    addStoryBeat: vi.fn(async () => {}),
+    addCharacter: vi.fn(async (c: any) => void calls.characters.push(c)),
+    addLocation: vi.fn(async (l: any) => void calls.locations.push(l)),
+    addItem: vi.fn(async (i: any) => void calls.items.push(i)),
+    addStoryBeat: vi.fn(async (b: any) => void calls.storyBeats.push(b)),
     addEntry: vi.fn(async () => {}),
     addChapter: vi.fn(async () => {}),
     createCheckpoint: vi.fn(async () => {}),
@@ -49,6 +53,10 @@ beforeEach(() => {
   calls.entries.length = 0
   calls.images.length = 0
   calls.deleted.length = 0
+  calls.characters.length = 0
+  calls.locations.length = 0
+  calls.items.length = 0
+  calls.storyBeats.length = 0
   failOnCreateStory = false
   invoke.mockReset()
 })
@@ -66,10 +74,35 @@ function sampleExport() {
         parentId: null,
         position: 0,
         reasoning: 'because the hero hesitated',
-        suggestedActions: '["Fight","Flee"]',
-        worldStateDelta: { mood: 'tense' },
+        suggestedActions: '[{"text":"Fight","type":"action"}]',
+        // A realistic delta: almost every field in one is an entity id, and the import mints a
+        // fresh id for every entity, so this is the shape that proves the remap happens.
+        worldStateDelta: {
+          classificationResult: { summary: 'the hero drew a blade' },
+          previousState: {
+            characters: [{ id: 'char-old', name: 'Ren', status: 'active', traits: [] }],
+            locations: [{ id: 'loc-old', name: 'Cave', visited: true, current: true }],
+            items: [{ id: 'item-old', name: 'Blade', quantity: 1, location: 'loc-old' }],
+            storyBeats: [{ id: 'beat-old', title: 'Q', status: 'active' }],
+            currentLocationId: 'loc-old',
+            timeTracker: { years: 0, days: 1, hours: 2, minutes: 0 },
+          },
+          createdEntities: {
+            characterIds: ['char-created'],
+            locationIds: [],
+            itemIds: [],
+            storyBeatIds: [],
+          },
+        },
       },
     ],
+    characters: [
+      { id: 'char-old', name: 'Ren', traits: [] },
+      { id: 'char-created', name: 'Shade', traits: [] },
+    ],
+    locations: [{ id: 'loc-old', name: 'Cave', connections: [] }],
+    items: [{ id: 'item-old', name: 'Blade', location: 'loc-old' }],
+    storyBeats: [{ id: 'beat-old', title: 'Q' }],
     embeddedImages: [
       { id: 'img-1', entryId: 'entry-1', imageData: 'BASE64', prompt: 'p', status: 'completed' },
       { id: 'img-orphan', entryId: 'gone', imageData: 'BASE64', prompt: 'p', status: 'completed' },
@@ -168,8 +201,63 @@ describe('runImport — entry fields', () => {
 
     expect(result.success).toBe(true)
     expect(calls.entries[0].reasoning).toBe('because the hero hesitated')
-    expect(calls.entries[0].suggestedActions).toBe('["Fight","Flee"]')
-    expect(calls.entries[0].worldStateDelta).toEqual({ mood: 'tense' })
+    expect(calls.entries[0].suggestedActions).toBe('[{"text":"Fight","type":"action"}]')
+    expect(calls.entries[0].worldStateDelta).not.toBeNull()
+  })
+
+  it('remaps every entity id inside worldStateDelta', async () => {
+    const result = await runImport(sampleExport())
+    expect(result.success).toBe(true)
+
+    const delta = calls.entries[0].worldStateDelta
+    const [charOld, charCreated] = calls.characters
+    const [locOld] = calls.locations
+    const [itemOld] = calls.items
+    const [beatOld] = calls.storyBeats
+
+    // Every id must be the freshly minted one, never the exporting install's.
+    expect(delta.previousState.characters[0].id).toBe(charOld.id)
+    expect(delta.previousState.locations[0].id).toBe(locOld.id)
+    expect(delta.previousState.items[0].id).toBe(itemOld.id)
+    expect(delta.previousState.storyBeats[0].id).toBe(beatOld.id)
+    expect(delta.createdEntities.characterIds).toEqual([charCreated.id])
+
+    // An item's `location` is a location id too.
+    expect(delta.previousState.items[0].location).toBe(locOld.id)
+
+    // The one that actually corrupts state when missed: `setCurrentLocation` clears `current` on
+    // every location before matching this, so a stale id leaves the story with no location at all.
+    expect(delta.previousState.currentLocationId).toBe(locOld.id)
+
+    expect(JSON.stringify(delta)).not.toContain('-old')
+    expect(JSON.stringify(delta)).not.toContain('char-created')
+
+    // Non-id payload is carried through untouched.
+    expect(delta.classificationResult).toEqual({ summary: 'the hero drew a blade' })
+    expect(delta.previousState.timeTracker).toEqual({ years: 0, days: 1, hours: 2, minutes: 0 })
+  })
+
+  it("keeps the 'inventory' sentinel out of the delta's id remapping", async () => {
+    const data = sampleExport()
+    data.entries[0].worldStateDelta.previousState.items[0].location = 'inventory'
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].worldStateDelta.previousState.items[0].location).toBe('inventory')
+  })
+
+  it('normalises a delta whose sub-objects are missing instead of failing the import', async () => {
+    const data = sampleExport()
+    data.entries[0].worldStateDelta = { classificationResult: { note: 'partial' } }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    const delta = calls.entries[0].worldStateDelta
+    expect(delta.previousState.characters).toEqual([])
+    expect(delta.previousState.currentLocationId).toBeNull()
+    expect(delta.createdEntities.itemIds).toEqual([])
   })
 
   it('imports an entry lacking all three fields without inventing values', async () => {
@@ -211,8 +299,24 @@ describe('runImport — entry fields', () => {
           position: 0,
           branchId: 'branch-1',
           reasoning: 'branch reasoning',
-          suggestedActions: '["Explore"]',
-          worldStateDelta: { location: 'cave' },
+          suggestedActions: '[{"text":"Explore","type":"move"}]',
+          worldStateDelta: {
+            classificationResult: {},
+            previousState: {
+              characters: [],
+              locations: [],
+              items: [],
+              storyBeats: [],
+              currentLocationId: 'loc-old',
+              timeTracker: null,
+            },
+            createdEntities: {
+              characterIds: [],
+              locationIds: [],
+              itemIds: [],
+              storyBeatIds: [],
+            },
+          },
         },
       ],
     }
@@ -222,8 +326,11 @@ describe('runImport — entry fields', () => {
     expect(result.success).toBe(true)
     expect(calls.entries[0].branchId).not.toBeNull()
     expect(calls.entries[0].reasoning).toBe('branch reasoning')
-    expect(calls.entries[0].suggestedActions).toBe('["Explore"]')
-    expect(calls.entries[0].worldStateDelta).toEqual({ location: 'cave' })
+    expect(calls.entries[0].suggestedActions).toBe('[{"text":"Explore","type":"move"}]')
+    // The remap is not skipped just because the entry sits on a branch.
+    expect(calls.entries[0].worldStateDelta.previousState.currentLocationId).toBe(
+      calls.locations[0].id,
+    )
   })
 })
 
