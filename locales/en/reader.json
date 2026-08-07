@@ -66,6 +66,7 @@
     "fixDefault": "Fix default",
     "switchEmbedder": "Switch embedder",
     "failureMessage": "Generation failed. Retry to try again.",
+    "blockedDetail": "blocked by another operation ({{reason}})",
     "failure": {
       "llmCall": "LLM call failed.",
       "embed": "The embedder failed, so memory retrieval couldn't run.",

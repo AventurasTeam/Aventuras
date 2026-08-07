@@ -445,6 +445,7 @@ describe('relabelStory', () => {
   afterEach(() => {
     storiesStore.__reset()
     currentStoryStore.__reset()
+    embedderSwapStore.__reset()
     vi.restoreAllMocks()
   })
 
@@ -507,6 +508,29 @@ describe('relabelStory', () => {
         ctx,
       ),
     ).rejects.toBeInstanceOf(RelabelBlockedError)
+  })
+
+  // The reader gates its composer on progressFor, not on the in-process lock it
+  // cannot see. Without a progress entry a relabel leaves the composer live, and
+  // the turn the user writes is rejected by submitTurn with no affordance.
+  it('publishes swap progress for its duration', async () => {
+    const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
+
+    expect(embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')).toBeNull()
+
+    let during: unknown = 'never ran'
+    await relabelStory('s1', { modelId: 'e2e/minilm-copy', backend: 'local' }, {
+      ...ctx,
+      runInTransaction: async (ops) => {
+        during = embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')
+        return ctx.runInTransaction(ops)
+      },
+    } as DbCtx)
+
+    // Shape, not non-null: the sentinel is a string, so `not.toBeNull()` would
+    // pass even if the hook never fired.
+    expect(during).toMatchObject({ storyId: 's1', cancelRequested: false })
+    expect(embedderSwapStore.progressFor(embedderSwapStore.getState(), 's1')).toBeNull()
   })
 })
 

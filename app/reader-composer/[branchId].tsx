@@ -456,7 +456,13 @@ export default function ReaderComposerRoute() {
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected')
           await showTurnFailure(
-            { kind: 'orchestrator', detail: `blocked by ${result.blockedBy}` },
+            {
+              kind: 'orchestrator',
+              // The detail line persists on the entry and renders to the user,
+              // so the prose is translated; blockedBy itself is a pipeline kind
+              // and stays verbatim as the diagnostic token.
+              detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
+            },
             submission,
           )
         else if (result.outcome === 'aborted')
