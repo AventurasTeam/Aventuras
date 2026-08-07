@@ -77,7 +77,17 @@ const flagged = (value: unknown): boolean => Number(value) === 1
 export async function loadSourceRows(queryAll: QueryAll, branchId: string): Promise<SourceRows> {
   const read = (kind: VecTargetKind) => queryAll(SOURCE_SQL[kind], [branchId])
 
-  const entities = (await read('entity')).map((row) => {
+  // Five independent reads, one IPC round trip each on desktop. Issued together
+  // and destructured in a fixed order so the mapping below stays deterministic.
+  const [entityRows, loreRows, happeningRows, threadRows, chapterRows] = await Promise.all([
+    read('entity'),
+    read('lore'),
+    read('happening'),
+    read('thread'),
+    read('chapter'),
+  ])
+
+  const entities = entityRows.map((row) => {
     const c = cellsOf('entity', row)
     return {
       id: c.id as string,
@@ -90,7 +100,7 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  const lore = (await read('lore')).map((row) => {
+  const lore = loreRows.map((row) => {
     const c = cellsOf('lore', row)
     return {
       id: c.id as string,
@@ -103,7 +113,7 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  const happenings = (await read('happening')).map((row) => {
+  const happenings = happeningRows.map((row) => {
     const c = cellsOf('happening', row)
     return {
       id: c.id as string,
@@ -115,7 +125,7 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  const threads = (await read('thread')).map((row) => {
+  const threads = threadRows.map((row) => {
     const c = cellsOf('thread', row)
     return {
       id: c.id as string,
@@ -127,7 +137,7 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  const chapters = (await read('chapter')).map((row) => {
+  const chapters = chapterRows.map((row) => {
     const c = cellsOf('chapter', row)
     return {
       id: c.id as string,

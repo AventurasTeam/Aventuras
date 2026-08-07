@@ -221,6 +221,59 @@ const knnCalls = (queryAll: Mocked): { sql: string; params: unknown[] }[] =>
     .filter(([sql]) => String(sql).includes('MATCH'))
     .map(([sql, params]) => ({ sql: String(sql), params: params as unknown[] }))
 
+/**
+ * Wraps a fixture to record peak in-flight depth. The assertion is on overlap,
+ * never on elapsed time, so it cannot flake on a loaded runner. The macrotask
+ * hop is load-bearing: without it every stub settles before the next await
+ * runs, and nothing overlaps regardless of the code under test.
+ */
+function instrumented(inner: QueryAll): QueryAll & { peak: { all: number; knn: number } } {
+  const peak = { all: 0, knn: 0 }
+  let inFlight = 0
+  let knnInFlight = 0
+  const wrapped = (async (sql: string, params: unknown[]) => {
+    const isKnn = sql.includes('MATCH')
+    inFlight += 1
+    if (isKnn) knnInFlight += 1
+    peak.all = Math.max(peak.all, inFlight)
+    peak.knn = Math.max(peak.knn, knnInFlight)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    try {
+      return await inner(sql, params)
+    } finally {
+      inFlight -= 1
+      if (isKnn) knnInFlight -= 1
+    }
+  }) as QueryAll & { peak: { all: number; knn: number } }
+  wrapped.peak = peak
+  return wrapped
+}
+
+describe('runRetrieval — round-trip concurrency', () => {
+  const fixture = () =>
+    makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
+
+  it('issues the independent source, awareness and range reads together', async () => {
+    const queryAll = instrumented(fixture())
+
+    expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    // Five source-row reads plus awareness, chapter ranges and the vec-table
+    // probe. Sequential awaits would hold this at 1.
+    expect(queryAll.peak.all).toBeGreaterThanOrEqual(8)
+  })
+
+  it('issues the KNN passes together across kinds and query vectors', async () => {
+    const queryAll = instrumented(fixture())
+
+    expectOk(await runRetrieval(deps({ queryAll }), params()))
+
+    // Three query vectors across five types; every vector is in hand before the
+    // first round trip and the passes share no state.
+    expect(queryAll.peak.knn).toBeGreaterThan(1)
+  })
+})
+
 describe('runRetrieval — sync ordering', () => {
   // Replaces a runtime guard against a branchIds/branchId mismatch: RetrievalDeps
   // no longer carries branchIds, so the sync scope cannot disagree with the

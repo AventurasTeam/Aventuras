@@ -87,7 +87,10 @@ export type RetrievalTimings = {
   syncMs: number
   /** The one embedder call behind the three-vector query stack. */
   embedMs: number
-  /** Every vec0 KNN round trip, summed over the five types and three queries. */
+  /**
+   * Wall-clock span covering every vec0 KNN round trip. Not a sum of the
+   * fifteen calls: they overlap, so summing would exceed the elapsed time.
+   */
   knnMs: number
   /** Scoring, MMR, and the eager token estimate the ranker costs each pool row. */
   rankMs: number
@@ -203,13 +206,16 @@ async function runRetrievalPass(
   }
   if (sync.embedded > 0) await deps.onRowsSynced?.()
 
-  const sourceRows = await loadSourceRows(deps.queryAll, params.branchId)
+  // Independent of one another and of the query embed: only the sync above has
+  // to precede them. Sequential awaits cost a full IPC round trip each on
+  // desktop, where the reads themselves overlap freely.
+  const [sourceRows, awareness, chapterRanges, existingVecTables] = await Promise.all([
+    loadSourceRows(deps.queryAll, params.branchId),
+    loadAwarenessForScene(deps.queryAll, params.branchId, params.sceneCharacterIds),
+    loadChapterRanges(deps.queryAll, params.branchId),
+    loadExistingVecTables(deps.queryAll, params.dim),
+  ])
   const index = nameKeywordIndexFrom(sourceRows.entities, sourceRows.lore)
-  const awareness = await loadAwarenessForScene(
-    deps.queryAll,
-    params.branchId,
-    params.sceneCharacterIds,
-  )
 
   const floor = buildStructuralFloor({
     entities: sourceRows.entities,
@@ -243,7 +249,7 @@ async function runRetrievalPass(
   ]
 
   const poolCtx = {
-    existingVecTables: await loadExistingVecTables(deps.queryAll, params.dim),
+    existingVecTables,
     queryVectors,
     index,
     floor,
@@ -266,14 +272,15 @@ async function runRetrievalPass(
     threads: [],
     chapters: [],
   }
-  let knnMs = 0
-  for (const kind of KINDS) {
-    const pool = await buildPool(deps, params, { ...poolCtx, kind })
-    pools[TYPE_OF_KIND[kind]] = pool.candidates
-    knnMs += pool.knnMs
-  }
-
-  const chapterRanges = await loadChapterRanges(deps.queryAll, params.branchId)
+  // Wall-clock, not a sum of per-call spans: the five kinds and the three query
+  // vectors inside each now overlap, so summing them would exceed the elapsed
+  // time and break RetrievalTimings' disjoint-sub-span contract.
+  const knnStartedAt = performance.now()
+  const built = await Promise.all(
+    KINDS.map(async (kind) => [kind, await buildPool(deps, params, { ...poolCtx, kind })] as const),
+  )
+  const knnMs = performance.now() - knnStartedAt
+  for (const [kind, candidates] of built) pools[TYPE_OF_KIND[kind]] = candidates
 
   const rankStartedAt = performance.now()
   const bundles = rankAll({
@@ -369,41 +376,40 @@ async function buildPool(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
-): Promise<{ candidates: Candidate[]; knnMs: number }> {
+): Promise<Candidate[]> {
+  if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim))) return []
+
+  // Every query vector is in hand before the first round trip and the passes
+  // share no state, so they issue together. Decoding stays out of the parallel
+  // arm: merging in query order keeps first-seen vector ownership deterministic.
+  const rowsPerQuery = await Promise.all(
+    ctx.queryVectors.map(async (vector) => {
+      if (vector === null) return null
+      const query = knnQuery(ctx.kind, params.dim, {
+        branchId: params.branchId,
+        modelId: params.modelId,
+        k: KNN_K,
+        vector: new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength),
+      })
+      return deps.queryAll(query.sql, query.params)
+    }),
+  )
+
   const vectorById = new Map<string, Float32Array>()
-  const perQuery: KnnHit[][] = []
-  let knnMs = 0
-
-  if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim)))
-    return { candidates: [], knnMs }
-
-  for (const vector of ctx.queryVectors) {
-    if (vector === null) {
-      perQuery.push([])
-      continue
-    }
-    const query = knnQuery(ctx.kind, params.dim, {
-      branchId: params.branchId,
-      modelId: params.modelId,
-      k: KNN_K,
-      vector: new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength),
-    })
-    const knnStartedAt = performance.now()
-    const rows = await deps.queryAll(query.sql, query.params)
-    knnMs += performance.now() - knnStartedAt
-    perQuery.push(
-      rows.map((row) => {
-        const id = String(row[0])
-        // vec0 returns each row's embedding on the match row, so the union below
-        // needs no second fetch by id.
-        if (!vectorById.has(id)) vectorById.set(id, decodeVector(row[2]))
-        return [id, Number(row[1])] as const
-      }),
-    )
-  }
+  const perQuery: KnnHit[][] = rowsPerQuery.map((rows) =>
+    rows === null
+      ? []
+      : rows.map((row) => {
+          const id = String(row[0])
+          // vec0 returns each row's embedding on the match row, so the union below
+          // needs no second fetch by id.
+          if (!vectorById.has(id)) vectorById.set(id, decodeVector(row[2]))
+          return [id, Number(row[1])] as const
+        }),
+  )
 
   const ids = poolIdsFromKnn(perQuery)
-  return { candidates: ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById), knnMs }
+  return ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById)
 }
 
 // unpackFloat32 lives in lib/db, so its blob-length throw arrives untyped. It
