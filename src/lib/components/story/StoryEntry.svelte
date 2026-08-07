@@ -282,6 +282,15 @@
   )
   const canBranch = $derived(!!entryCheckpoint)
 
+  // Fork point marker: the entry the ACTIVE branch diverged from its parent at.
+  // Independent of entryCheckpoint above — that checkpoint belongs to the parent
+  // branch, so it is deliberately invisible from in here (see Branch.forkEntryId).
+  const activeBranch = $derived(
+    currentBranchId ? story.branches.find((b) => b.id === currentBranchId) : undefined,
+  )
+  // Main branch has no Branch record, so no divergence point
+  const isForkPoint = $derived(!!activeBranch && activeBranch.forkEntryId === entry.id)
+
   // Handle creating a branch from this entry
   async function handleCreateBranch() {
     if (!branchName.trim()) return
@@ -1184,6 +1193,18 @@
 
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
+
+    <!-- Fork point marker: this branch diverged from its parent here. Passive (not a
+         Button) and outside the toolbar guard below, so it survives on system entries.
+         Matches the toolbar's h-7 w-7 slot so it lines up with "Branch from here". -->
+    {#if isForkPoint}
+      <span
+        class="flex h-7 w-7 shrink-0 items-center justify-center"
+        title="Branch &quot;{activeBranch?.name}&quot; starts here"
+      >
+        <GitBranch class="text-accent-500 h-4 w-4" />
+      </span>
+    {/if}
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
