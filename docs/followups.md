@@ -28,6 +28,23 @@ for the placement rule.
   resolved to entity names, the XML filtered before persist, and a
   bespoke edit surface for the block's fields.
 
+  Scope is **both** trailing blocks, not only `<state>`: `<suggestions>`
+  persists the same way and leaks the same way. Filtering before persist
+  is also what retires the prompt-side mitigation — as of 2026-08-07 four
+  consumers call `promptProse` (`lib/piggyback/parse.ts`) to strip on
+  read, because `story_entries.content` is the raw reply: the per-turn
+  template's story-so-far loop, Q3's prose extract, Layer-A same-name
+  suppression, and the periodic classifier's turn window. All four become
+  no-ops once rows are prose-only, so this task **supersedes** that
+  mitigation rather than building on it. Landing the two together is what
+  makes the persisted column, the reader, and every prompt agree on one
+  string. Two open pieces: rows written before the change keep their raw
+  content, so either a backfill runs or the readers keep a legacy path;
+  and the piggyback tagged-block path and the per-turn fallback
+  classifier should reach entry metadata by one route, which is the same
+  unification that fixes the fallback's block being structurally
+  invisible above.
+
   Decided (2026-07-23):
   - **Edit scope splits by field class, not by position alone.**
     `content` stays as shipped — freely editable on any non-system
