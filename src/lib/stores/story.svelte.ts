@@ -3805,15 +3805,36 @@ class StoryStore {
     return lastEntry?.branchId ?? null
   }
 
+  /** Tail of the branch-switch queue — see switchBranch. */
+  private branchSwitchChain: Promise<unknown> = Promise.resolve()
+
   /**
    * Switch to a different branch.
    * This reloads entries from the database filtered by the target branch.
    * NO data is deleted - branches coexist in the database with different branch_ids.
    * Entries are always reloaded before BranchSwitched is emitted, so subscribers
    * never observe the previous branch's entries.
+   * Calls are serialized, so rapid switches resolve in request order.
    * @param branchId - The branch to switch to (null for main branch)
    */
   async switchBranch(branchId: string | null): Promise<void> {
+    // Overlapping switches would interleave their reloads: reloadEntriesForCurrentBranch
+    // reads currentBranchId when it starts and assigns this.entries when its queries
+    // resolve, so the slower call assigns last and leaves entries out of step with
+    // currentBranchId — with BranchSwitched announcing a branch whose entries aren't
+    // loaded. Queue each switch behind the one before it.
+    const run = this.branchSwitchChain.then(
+      () => this.performBranchSwitch(branchId),
+      // Run regardless of whether the previous switch settled or threw
+      () => this.performBranchSwitch(branchId),
+    )
+    // Keep the chain resolved so one failure can't poison later switches; the
+    // caller still observes the error through `run`.
+    this.branchSwitchChain = run.catch(() => {})
+    return run
+  }
+
+  private async performBranchSwitch(branchId: string | null): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
