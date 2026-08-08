@@ -1043,22 +1043,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   development. Decide whether the wizard should collect an era and
   opening threads, or whether canon should drop the cold-start Q2
   guarantee. Surfaced by M3.4 Task 9 (2026-08-02).
-- **The C4 purity guard's transitive claim has an identifier-heuristic
-  hole.** `PURE_FILES` in `lib/retrieval/ranker.test.ts` is documented
-  as covering the whole transitive surface the simulator loads, not just
-  the entry file. M3.4 Task 9 added `queries.ts`, which value-imports
-  `extractProse`, which in turn value-imports `matchTerms` from
-  `name-index.ts` — so `name-index.ts` is now inside the guarded closure
-  but absent from the list, and it cannot be added: the guard's second
-  assertion rejects any file whose source matches `queryAll`, and
-  `buildNameKeywordIndex` takes an injected parameter of that exact
-  name. No live violation exists, because injecting the query function
-  is what keeps the module pure — the heuristic penalizes the very
-  pattern that satisfies C4. A future `@/lib/db` value-import added to
-  `name-index.ts` would go undetected by a guard that claims to cover
-  it. Fix by scoping the second assertion to import statements rather
-  than scanning bare identifiers, or by exempting injected parameter
-  names. Surfaced by M3.4 Task 9 review (2026-08-02).
 - **The buffer composition rule's spillover source is stated two ways
   that cannot both hold.**
   [`cadence.md → Composition rule`](../memory/cadence.md#composition-rule)
@@ -1154,25 +1138,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   reports it, which spans retrieval, the prompt builder and
   story-settings and so has no single owning slice. Surfaced by M3.4
   Task 17 review (2026-08-02).
-- **`lib/piggyback/apply.ts` writes `<current_location>` with no kind
-  check.** `block.currentLocation` lands in `metadata.currentLocationId`
-  verbatim; `buildStructuralFloor` then seats whatever it names as the
-  location if that row is `active`, and `apply.ts` writes
-  `state.current_location_id` for every in-scene character. A model that
-  answers with a character or item id corrupts scene state with no
-  diagnostic. M3.4 Task 17 narrowed the prompt-side exposure (the
-  `<current_location>` instruction now fires only when the floor seats a
-  location), but the parser accepts any id regardless of what the prompt
-  asked for. The fix belongs with piggyback parsing, not the prompt.
-  Surfaced by M3.4 Task 17 review (2026-08-02).
-- **`structuralSceneEntities` has no template consumer.**
-  `buildGenerationContext` emits it and `templateContextMap` documents
-  it, but the bundled per-turn and suggestion-refresh templates both
-  render the scene from `entities` filtered by `sceneEntities` so the
-  active+in-scene invariant survives a render with no retrieval behind
-  it. Either the bundle earns a consumer or it is documented as
-  pack-author-only surface. Surfaced by M3.4 Task 17 review
-  (2026-08-02).
 - **The token-progress strip reads a 50-entry window, so it cannot
   reach its own threshold.** `useOpenRegionTokens` sums the open region
   out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
@@ -1234,20 +1199,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   are inside these totals; what is missing is a budget re-derived
   against the pass that actually ships. Surfaced by the M3.4 whole-slice
   review (2026-08-03).
-- **`poolIdsFromKnn`'s ordering is computed and then discarded.** Its
-  JSDoc (`lib/retrieval/pools.ts:168`) promises a "de-duplicated,
-  first-seen order" union of the per-query KNN id sets, and it builds
-  exactly that — but `assembleCandidates` consumes the result only as
-  `new Set(ids)` membership (`lib/retrieval/run.ts:371`), so the pool's
-  actual order is SQL row order from `loadSourceRows`, not KNN rank.
-  That order is not inert: it decides ties in the ranker's
-  `scored.sort((a, b) => b.score - a.score)`, which is stable, and in
-  MMR's strict-`>` pick, which keeps the first of an equal pair. Two
-  candidates with identical scores are therefore ranked by whatever
-  order SQLite returned them in. Either thread the KNN order through to
-  pool assembly or return a `Set` and drop the array — the current
-  shape documents a guarantee it does not deliver. Surfaced by the M3.4
-  whole-slice review (2026-08-03).
 - **`countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
   keys an unbounded module-level `Map` on entry id and holds it for the
   process lifetime, across deletes, rollbacks, branch switches and story
@@ -1275,38 +1226,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   identity the simulator can refuse to replay across. Needs deciding
   before 3.5 builds the simulator. Surfaced by the M3.4 whole-slice
   review (2026-08-03).
-- **The C4 purity guard is an identifier scan, not a purity check.**
-  Distinct from the transitive-closure hole filed above: that entry is
-  about a file the guard claims to cover and cannot list, this one is
-  about what the guard checks at all. Its second assertion
-  (`lib/retrieval/ranker.test.ts:402`) is
-  `expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)` — a
-  scan for three bare identifiers anywhere in the file, including
-  comments and parameter names. It catches an import-shaped violation
-  only because imports happen to mention those words, and it says
-  nothing about the ways replay actually breaks: a clock, an RNG, a
-  locale-sensitive format, or module-level mutable state read across
-  calls. Behavioural purity does currently hold — the whole
-  value-import closure (`ranker`, `mmr`, `vector`, `constants`,
-  `queries`, `prose-extract`, `name-index`; `types` and `@/lib/db` are
-  type-only) was grepped for `Date.`, `Math.random`, `performance.`,
-  `Intl` and `toLocale` with zero hits, and every value import inside it
-  is intra-module. So the guard is not hiding a live violation; it is
-  claiming coverage it does not have. Surfaced by the M3.4 whole-slice
-  review (2026-08-03).
-- **Four hand-built `RetrievalSuccess` fixtures, and a factory home that
-  already exists.** `lib/actions/turns/submit-turn.test.ts:50`,
-  `lib/pipeline/definitions/per-turn-retrieval.test.ts:71`,
-  `lib/pipeline/definitions/generation-context.test.ts:128` and
-  `lib/pipeline/definitions/per-turn.test.ts:774` each construct the
-  full outcome — five `RankedType` bundles, a `StructuralFloor`, a
-  `QueryStack`, `staleCounts`, `timings` — by hand, and every field
-  added to the type has to be added four times.
-  `lib/retrieval/__tests__/` exists (it holds the shared `queryAll`
-  stub) and is the natural home for a factory. Hygiene, not risk:
-  `RetrievalSuccess` is a closed object type, so typecheck fails all
-  four the moment a required field lands. Surfaced by the M3.4
-  whole-slice review (2026-08-03).
 - **`retrieval.md → Token estimation` describes a ranker-side token
   cache that does not exist.**
   [The section](../memory/retrieval.md#token-estimation) ends "Ranker
@@ -1404,30 +1323,3 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   removes the cell; when it lands, both permissive branches should go
   with it rather than being left as a latent re-opening. Surfaced by
   the M3.4 review (2026-08-07).
-- **`clearEmbeddingStaleOp` clears unconditionally, so a write racing
-  the sync loses its dirty flag.** `lib/db/embeddings/stale.ts` clears
-  by row and branch with no guard on the row still hashing to what was
-  embedded. A writer that flips `embedding_stale` between
-  `loadStaleRows` reading the dirty set and the sync transaction
-  committing has its flag wiped by that commit, leaving new text, an
-  old vector and a clean flag — permanently, because nothing
-  re-derives the flag outside an embedder swap. This is a lost update
-  rather than writer negligence, so the action-layer rule that every
-  embedded-field writer flips the flag does not reach it. The window
-  is one embed round trip wide, and no M3 writer amends an embedded
-  field (the classifier only creates, piggyback writes non-embedded
-  state, user edits are gated), so it is structural rather than live.
-  The cheap fix is optimistic concurrency on the clear rather than a
-  content hash. Surfaced by the M3.4 review (2026-08-07).
-- **`electron/embedder/downloads.test.ts`'s resume test races the first
-  disk flush.** `leaves a .part on mid-stream abort, then resumes with
-Range and completes` sets `behavior.abortAfter = 15000` and then
-  asserts the `.part` file is non-empty. The byte count bounds what the
-  server sends, not what the client has written, so on a loaded runner
-  the abort lands before the first chunk reaches disk and the assertion
-  fails with `expected 0 to be greater than 0`. Observed once on a
-  branch that changes no `electron/` file, green on re-run and green on
-  the sibling PR's identical job, so it is an existing flake rather than
-  a regression. The fix is making the abort point observable — wait on
-  the first flush rather than on a byte count — not a longer timeout.
-  Surfaced by Slice 3.4 CI (2026-08-07).
