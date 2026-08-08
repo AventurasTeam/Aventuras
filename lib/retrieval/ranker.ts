@@ -16,6 +16,12 @@ export type RankTypeInput = {
   countTokens: (text: string) => number
   /** Chapters that won budget this turn; only they feed the happenings boost. */
   matchedChapterIds?: ReadonlySet<string>
+  /**
+   * Token counts from a probe capture, keyed by candidate id. A replay passes
+   * them so the seated set does not depend on the tokenizer version loaded at
+   * replay time; production omits it and the count is computed.
+   */
+  capturedTokens?: ReadonlyMap<string, number>
 }
 
 type Scored = {
@@ -29,7 +35,6 @@ type Scored = {
   kwBoostValue: number
   chapterBoostApplied: boolean
   bypassTriggered: boolean
-  tokensEstimated: number
 }
 
 function blendSims(
@@ -101,14 +106,28 @@ function score(
     kwBoostValue,
     chapterBoostApplied,
     bypassTriggered,
-    // Costed for every pool row, not just the ones that reach budget fill: the
-    // probe simulator re-runs budget-fill against stored tokens_estimated with
-    // the user's own thresholds (probe.md → Simulatable parameters).
-    tokensEstimated: input.countTokens(c.renderedText) + params.typeOverhead[type],
   }
 }
 
-function trace(s: Scored, mmrRankIndex: number | null, dropReason: DropReason): CandidateTrace {
+type Tokened = Scored & { tokensEstimated: number }
+
+// Charged after the pre-filter slice, not across the whole pool: it is the
+// pass's largest CPU term (retrieval.md → Per-turn cost budget) and a
+// pre-filtered row can never be seated, so its count is never read.
+function tokenize(s: Scored, type: RetrievalType, input: RankTypeInput): Tokened {
+  const captured = input.capturedTokens?.get(s.id)
+  return {
+    ...s,
+    tokensEstimated:
+      captured ?? input.countTokens(s.candidate.renderedText) + input.params.typeOverhead[type],
+  }
+}
+
+function trace(
+  s: Scored & { tokensEstimated: number | null },
+  mmrRankIndex: number | null,
+  dropReason: DropReason,
+): CandidateTrace {
   return {
     kind: s.candidate.kind,
     id: s.id,
@@ -152,7 +171,7 @@ export function rankPerType(
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))
   scored.sort((a, b) => b.score - a.score)
 
-  const kept = scored.slice(0, input.params.preFilterTopN)
+  const kept = scored.slice(0, input.params.preFilterTopN).map((s) => tokenize(s, type, input))
   const ranked = mmrRank(kept, input.params.lambdaDiv)
 
   const selected: Candidate[] = []
@@ -186,7 +205,7 @@ export function rankPerType(
   }
 
   for (const s of scored.slice(input.params.preFilterTopN)) {
-    traces.push(trace(s, null, 'pre_filtered'))
+    traces.push(trace({ ...s, tokensEstimated: null }, null, 'pre_filtered'))
   }
 
   return {

@@ -95,7 +95,8 @@ export type CandidateTrace = {
   mmrRank: number | null
   selected: boolean
   dropReason: DropReason
-  tokensEstimated: number
+  /** null when the candidate was pre-filtered out — it can never be seated. */
+  tokensEstimated: number | null
   embeddingStale: boolean
 }
 

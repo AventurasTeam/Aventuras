@@ -458,6 +458,54 @@ describe('rankAll', () => {
   })
 })
 
+describe('tokenization is deferred past the pre-filter', () => {
+  it('tokenizes only the kept rows and leaves pre-filtered ones null', () => {
+    const pool = Array.from({ length: 5 }, (_, i) => {
+      const sim = 0.9 - i * 0.1
+      return candidate({
+        id: `lo_${i}`,
+        kind: 'lore',
+        sims: [sim, sim, sim],
+        vector: v(sim, 1 - sim),
+      })
+    })
+    let calls = 0
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      params: { ...RANKER_DEFAULTS, preFilterTopN: 2 },
+      countTokens: () => {
+        calls += 1
+        return 7
+      },
+    })
+
+    expect(calls).toBe(2)
+    const kept = out.traces.filter((t) => t.dropReason !== 'pre_filtered')
+    const dropped = out.traces.filter((t) => t.dropReason === 'pre_filtered')
+    expect(kept).toHaveLength(2)
+    expect(dropped).toHaveLength(3)
+    expect(kept.every((t) => t.tokensEstimated === 7 + RANKER_DEFAULTS.typeOverhead.lore)).toBe(
+      true,
+    )
+    expect(dropped.every((t) => t.tokensEstimated === null)).toBe(true)
+  })
+
+  it('takes a captured token count in preference to recomputing', () => {
+    const pool = [candidate({ id: 'lo_a', kind: 'lore', sims: [0.9, 0.9, 0.9] })]
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      countTokens: () => {
+        throw new Error('tokenizer must not be consulted when tokens are captured')
+      },
+      capturedTokens: new Map([['lo_a', 42]]),
+    })
+
+    expect(out.traces[0].tokensEstimated).toBe(42)
+  })
+})
+
 describe('blend with absent query vectors', () => {
   it('renormalizes over present slots and distinguishes a null slot from a zero one', () => {
     const out = rankPerType(
