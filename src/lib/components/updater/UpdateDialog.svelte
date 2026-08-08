@@ -5,15 +5,20 @@
    * Built on `ResponsiveModal`, so it is a centred dialog on desktop and a bottom sheet on
    * Android without a second implementation.
    *
-   * The two platforms end this flow differently and the component says so rather than
-   * hiding it: on desktop it downloads, installs and offers a restart; on Android it can
-   * only hand the APK to the system browser, because `canInstallInApp` is false there.
+   * The flow ends differently depending on what this copy of the app is, and the component
+   * says so rather than hiding it: a packaged desktop build downloads, installs and offers a
+   * restart; Android, a `.deb` install and an unpackaged dev build all hand off to the
+   * browser. `canInstallInApp` is the branch, `manualInstallReason` supplies the wording.
    */
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Progress } from '$lib/components/ui/progress'
   import { Download, RefreshCw, ExternalLink, AlertTriangle, CheckCircle2 } from '@lucide/svelte'
-  import { updaterService, type UpdateProgress } from '$lib/services/updater'
+  import {
+    updaterService,
+    type UpdateProgress,
+    type ManualInstallReason,
+  } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { parseMarkdown } from '$lib/utils/markdown'
 
@@ -35,21 +40,31 @@
   const changelogHtml = $derived(info?.body ? parseMarkdown(info.body) : '')
 
   /**
-   * Why the app is stepping aside, in the user's terms. A `.deb` user is not on an
-   * unsupported platform — their package manager owns the install — and telling them
-   * otherwise would send them looking for a problem that is not there.
+   * Why the app is stepping aside, in the user's terms. The three cases are genuinely
+   * different — a `.deb` user is not on an unsupported platform, and a developer is not
+   * a user at all — and one shared message would be wrong for at least two of them.
    */
-  const manualInstallNote = $derived(
-    info?.manualInstallReason === 'deb-package'
-      ? 'This copy was installed from a .deb package, so your package manager owns it. The releases page will open in your browser — download the new .deb and install it the way you installed this one.'
-      : 'Aventuras cannot install its own updates on Android. The download will open in your browser.',
-  )
+  const MANUAL_INSTALL_NOTES: Record<ManualInstallReason, string> = {
+    'deb-package':
+      'This copy was installed from a .deb package, so your package manager owns it. The releases page will open in your browser — download the new .deb and install it the way you installed this one.',
+    unpackaged:
+      'This is an unpackaged development build, so Aventuras will not install over it — on Linux that would replace the binary you just built. The releases page will open in your browser instead.',
+    'mobile-platform':
+      'Aventuras cannot install its own updates on Android. The download will open in your browser.',
+  }
 
-  const handedOffNote = $derived(
-    info?.manualInstallReason === 'deb-package'
-      ? 'The releases page has opened in your browser. Download the new .deb and install it to finish updating.'
-      : 'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
+  const HANDED_OFF_NOTES: Record<ManualInstallReason, string> = {
+    'deb-package':
+      'The releases page has opened in your browser. Download the new .deb and install it to finish updating.',
+    unpackaged: 'The releases page has opened in your browser.',
+    'mobile-platform':
+      'The download has opened in your browser. Once it finishes, open the file to install the update — Android will ask you to confirm.',
+  }
+
+  const manualInstallNote = $derived(
+    MANUAL_INSTALL_NOTES[info?.manualInstallReason ?? 'mobile-platform'],
   )
+  const handedOffNote = $derived(HANDED_OFF_NOTES[info?.manualInstallReason ?? 'mobile-platform'])
 
   const releasedOn = $derived.by(() => {
     if (!info?.date) return null
@@ -204,7 +219,9 @@
           <Button variant="outline" onclick={() => handleOpenChange(false)}>Not now</Button>
           <Button onclick={handleOpenInBrowser}>
             <ExternalLink class="mr-2 h-4 w-4" />
-            {info.manualInstallReason === 'deb-package' ? 'Open releases page' : 'Download update'}
+            {info.manualInstallReason === 'mobile-platform'
+              ? 'Download update'
+              : 'Open releases page'}
           </Button>
         {/if}
       </ResponsiveModal.Footer>

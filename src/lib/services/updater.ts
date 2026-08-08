@@ -50,7 +50,7 @@ const GITHUB_TIMEOUT_MS = 15_000
  * other about how this particular copy was installed -- so the reason travels with the
  * update rather than being re-derived in the component.
  */
-export type ManualInstallReason = 'mobile-platform' | 'deb-package'
+export type ManualInstallReason = 'mobile-platform' | 'deb-package' | 'unpackaged'
 
 export interface UpdateInfo {
   available: boolean
@@ -176,11 +176,11 @@ class UpdaterService {
   }
 
   /**
-   * How this copy of the app was packaged, or `null` when that cannot be determined.
+   * How this copy of the app was packaged, or `null` when it was not packaged at all.
    *
-   * Tauri types this as `Promise<BundleType>`, but the Rust command returns an `Option` --
-   * an unpackaged build (`tauri dev`) yields `null`. Null is treated as "not a deb", since
-   * the alternative is sending every developer to the releases page.
+   * Tauri types this as `Promise<BundleType>`, but the Rust command returns an `Option`.
+   * The value comes from a placeholder the bundler patches into the binary at bundle time,
+   * so a `tauri dev` build -- never bundled -- yields `null` on Linux and Windows.
    */
   private async bundleType(): Promise<BundleType | null> {
     try {
@@ -202,12 +202,23 @@ class UpdaterService {
 
     this.updateAvailable = update
 
-    // A `.deb` install is sent to the releases page instead of installing in place. The
-    // plugin can technically do it -- `install_deb` shells out to `dpkg -i` through
-    // `pkexec`, falling back to zenity/kdialog and finally to a terminal `sudo` that a
-    // windowed app has no terminal for -- but that chain has too many ways to end in a
-    // half-finished install for something the user started with one click.
-    const deb = (await this.bundleType()) === 'deb'
+    const bundle = await this.bundleType()
+
+    // Two desktop cases hand off to the browser instead of installing in place.
+    //
+    // `null` means the app was never bundled -- a `tauri dev` build. Installing there is
+    // actively destructive: on Linux the plugin's `extract_path` *is* the running
+    // executable, so `install_appimage` moves the freshly built dev binary into a
+    // `TempDir`, writes the release AppImage over it, and then drops the `TempDir`,
+    // deleting the backup. The developer is left with a 100 MB AppImage where their build
+    // was, and the plugin reports success.
+    //
+    // A `.deb` is a decision rather than a hazard: `install_deb` shells out to `dpkg -i`
+    // through `pkexec`, falling back to zenity/kdialog and finally to a terminal `sudo`
+    // that a windowed app has no terminal for. Too many ways to end half-finished, and
+    // the package manager owns that install anyway.
+    const reason: ManualInstallReason | undefined =
+      bundle === null ? 'unpackaged' : bundle === 'deb' ? 'deb-package' : undefined
 
     // Prefer GitHub's release body over `latest.json`'s `notes`. See `releaseNotesFor`.
     const notes = (await this.releaseNotesFor(update.version)) ?? update.body ?? undefined
@@ -218,9 +229,9 @@ class UpdaterService {
       currentVersion: update.currentVersion,
       body: notes,
       date: update.date ?? undefined,
-      canInstallInApp: !deb,
-      manualInstallReason: deb ? 'deb-package' : undefined,
-      downloadUrl: deb ? RELEASES_PAGE : undefined,
+      canInstallInApp: reason === undefined,
+      manualInstallReason: reason,
+      downloadUrl: reason ? RELEASES_PAGE : undefined,
     }
   }
 

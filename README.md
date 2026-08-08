@@ -322,9 +322,18 @@ back to zenity/kdialog and finally to a terminal `sudo` that a windowed app has 
 for — but that chain has too many ways to end half-finished for something the user starts
 with one click, and the package manager is the thing that owns that install anyway. So the
 check reports `canInstallInApp: false` with `manualInstallReason: 'deb-package'` and the
-dialog opens the releases page instead. The install format comes from `getBundleType()`,
-which returns `null` for an unpackaged build — treated as "not a deb", so `tauri dev` still
-exercises the normal path.
+dialog opens the releases page instead.
+
+**An unpackaged build never installs either, and this one is a safety guard.** On Linux the
+plugin's `extract_path` _is_ the running executable, so in `tauri dev` "Download and install"
+moves the dev binary into a `TempDir`, writes the release AppImage over it, then drops the
+`TempDir` — deleting the backup — and reports success. The developer is left with a 100 MB
+AppImage where their build was. `getBundleType()` returns `null` for a build the bundler never
+touched, which is exactly that case, so it is routed to the browser with
+`manualInstallReason: 'unpackaged'`.
+
+Note that on macOS `bundle_type()` falls back to `App` rather than `None`, so this guard does
+not fire there.
 
 `.rpm` currently still installs in place, through the same privileged-helper chain.
 
