@@ -1,5 +1,6 @@
 import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 import type { ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
@@ -38,15 +39,34 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   const { entryId, block, entities, previousMetadata, branchId, source } = args
 
   const sceneEntities = block.sceneEntities ?? previousMetadata.sceneEntities
-  const currentLocationId = block.currentLocation ?? previousMetadata.currentLocationId
   const rawDelta = block.worldTimeDelta ?? 0
   const worldTime = previousMetadata.worldTime + resolvePiggybackWorldTimeDelta(rawDelta, entryId)
 
-  const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
-  if (block.summary !== undefined) metadata.summary = block.summary
-
   const actions: PipelineAction[] = []
   const byId = new Map(entities.map((e) => [e.id, e]))
+
+  // The block is model output, so the id here is whatever it answered with — the
+  // prompt asking for a location does not constrain it. Unchecked, a character
+  // or item id lands in metadata.currentLocationId, gets written as
+  // state.current_location_id on every in-scene character, and seats that row as
+  // the location if buildStructuralFloor finds it active. Inheriting the
+  // previous location is the safe fallback: it is the value the turn would have
+  // carried had the model said nothing. `entities` must therefore be the whole
+  // branch — openStory hydrates entitiesStore unwindowed, unlike entriesStore —
+  // or a legitimate id the prompt just offered would be refused here.
+  const named = block.currentLocation
+  const namedIsLocation = named !== undefined && byId.get(named)?.kind === 'location'
+  if (named !== undefined && !namedIsLocation) {
+    logger.warn('classifier.current_location_rejected', {
+      entryId,
+      currentLocation: named,
+      kind: byId.get(named)?.kind ?? null,
+    })
+  }
+  const currentLocationId = namedIsLocation ? named : previousMetadata.currentLocationId
+
+  const metadata: BuildResult['metadata'] = { sceneEntities, currentLocationId, worldTime }
+  if (block.summary !== undefined) metadata.summary = block.summary
   // visual/inventory/stackables only exist on CharacterState (entity-state-schema.ts) —
   // an id that resolves but belongs to a location/item/faction would otherwise get
   // those fields merged onto its state unvalidated (state-patch-actions.ts never

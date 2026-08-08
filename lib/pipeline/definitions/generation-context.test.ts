@@ -3,16 +3,8 @@ import { describe, expect, it } from 'vitest'
 import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
-import type {
-  Candidate,
-  CandidateKind,
-  EntityRow,
-  LoreRow,
-  RetrievalSuccess,
-  RetrievalType,
-  StructuralFloor,
-  ThreadRow,
-} from '@/lib/retrieval'
+import type { Candidate, CandidateKind, EntityRow, LoreRow, ThreadRow } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
 
@@ -75,30 +67,6 @@ function candidate(kind: CandidateKind, id: string, displayName: string): Candid
   }
 }
 
-function ranked(selected: readonly Candidate[]) {
-  return {
-    selected,
-    traces: [],
-    funnel: {
-      poolSize: selected.length,
-      preFilteredSize: selected.length,
-      selectedCount: selected.length,
-      tokensUsed: 0,
-      typeBudget: 0,
-    },
-  }
-}
-
-const EMPTY_FLOOR: StructuralFloor = {
-  sceneEntities: [],
-  currentLocation: null,
-  activeThreads: [],
-  alwaysEntities: [],
-  alwaysLore: [],
-  alwaysThreads: [],
-  seatedIds: new Set(),
-}
-
 function entityRow(id: string, name: string): EntityRow {
   return { id, kind: 'character', status: 'active', injectionMode: 'auto', name, description: null }
 }
@@ -118,32 +86,6 @@ function threadRow(id: string, title: string): ThreadRow {
 const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'] }
 
 const keysOf = (bucket: unknown) => (bucket as object[]).map((r) => Object.keys(r).sort())
-
-function retrievalOutcome(
-  over: {
-    floor?: Partial<StructuralFloor>
-    selected?: Partial<Record<RetrievalType, Candidate[]>>
-  } = {},
-): RetrievalSuccess {
-  const bundleFor = (type: RetrievalType) => ranked(over.selected?.[type] ?? [])
-  const spec = { text: '', source: 'user_action' as const }
-  return {
-    ok: true,
-    floor: { ...EMPTY_FLOOR, ...over.floor },
-    bundles: {
-      entities: bundleFor('entities'),
-      lore: bundleFor('lore'),
-      happenings: bundleFor('happenings'),
-      threads: bundleFor('threads'),
-      chapters: bundleFor('chapters'),
-    },
-    queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
-    staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-    injectedAwareness: [],
-    selectedLocationIds: [],
-    timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
-  }
-}
 
 describe('buildGenerationContext', () => {
   it('drops system entries outright', () => {
@@ -349,6 +291,33 @@ describe('buildGenerationContext', () => {
     expect(prompt).toContain('fourth-line')
     expect(prompt).not.toContain('first-line') // composed out, three entries back
     expect(prompt).not.toContain('second-line')
+  })
+
+  // story_entries.content persists the reply verbatim; the reader renders
+  // stripTrailingBlocks(...).prose. Re-injecting the raw column feeds the model
+  // its own markup back as narrative and diverges from what the user sees.
+  it("carries the reader's prose, not the persisted trailing blocks", () => {
+    const ctx = buildGenerationContext({
+      branchId: 'b1',
+      entries: [
+        entry('e1', 1, 'The gate creaks open.\n<state><summary>At the gate</summary></state>'),
+        entry('e2', 2, 'I step through.', 'user_action'),
+      ] as never[],
+      entities: [],
+      definition,
+      settings,
+      idMap: new IdBiMap(),
+    })
+
+    expect((ctx.entries as { content: string }[]).map((e) => e.content)).toEqual([
+      'The gate creaks open.',
+      'I step through.',
+    ])
+
+    const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, ctx)
+    expect(prompt).toContain('The gate creaks open.')
+    expect(prompt).not.toContain('<state>')
+    expect(prompt).not.toContain('At the gate')
   })
 
   it('drops entries and entities belonging to another branch', () => {
@@ -717,7 +686,7 @@ describe('buildGenerationContext — retrieval bundles', () => {
   })
 
   const populated = () =>
-    retrievalOutcome({
+    retrievalSuccess({
       selected: {
         entities: [candidate('entity', CHAR_ID, 'Mara')],
         lore: [candidate('lore', LORE_ID, 'The Compact')],
@@ -768,7 +737,7 @@ describe('buildGenerationContext — structural floor', () => {
   })
 
   const populated = () =>
-    retrievalOutcome({
+    retrievalSuccess({
       floor: {
         sceneEntities: [entityRow(CHAR_ID, 'Mara')],
         currentLocation: entityRow(LOC_A, 'The keep'),
@@ -781,7 +750,6 @@ describe('buildGenerationContext — structural floor', () => {
 
   it('emits empty lists and a null location when no retrieval ran', () => {
     const ctx = buildGenerationContext({ ...base(), retrieval: undefined })
-    expect(ctx.structuralSceneEntities).toEqual([])
     expect(ctx.structuralActiveThreads).toEqual([])
     expect(ctx.structuralPinnedEntities).toEqual([])
     expect(ctx.structuralPinnedLore).toEqual([])
@@ -791,7 +759,6 @@ describe('buildGenerationContext — structural floor', () => {
 
   it('carries every floor field to its own bucket', () => {
     const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
-    expect((ctx.structuralSceneEntities as { name: string }[]).map((e) => e.name)).toEqual(['Mara'])
     expect((ctx.structuralLocation as { name: string }).name).toBe('The keep')
     expect((ctx.structuralActiveThreads as { title: string }[]).map((t) => t.title)).toEqual([
       'Find the heir',
@@ -824,7 +791,7 @@ describe('buildGenerationContext — structural floor', () => {
   it('projects floor rows to render fields only, dropping retrieval bookkeeping', () => {
     const ctx = buildGenerationContext({
       ...base(),
-      retrieval: retrievalOutcome({
+      retrieval: retrievalSuccess({
         floor: {
           sceneEntities: [{ ...entityRow(CHAR_ID, 'Mara'), ...LOADED_EXTRAS } as EntityRow],
           currentLocation: { ...entityRow(LOC_A, 'The keep'), ...LOADED_EXTRAS } as EntityRow,
@@ -833,9 +800,6 @@ describe('buildGenerationContext — structural floor', () => {
         },
       }),
     })
-    expect(keysOf(ctx.structuralSceneEntities)).toEqual([
-      ['description', 'id', 'kind', 'name', 'status'],
-    ])
     expect(Object.keys(ctx.structuralLocation as object).sort()).toEqual([
       'description',
       'id',
@@ -883,7 +847,7 @@ describe('buildGenerationContext — locationIds', () => {
     const ctx = buildGenerationContext({
       ...base(),
       retrieval: {
-        ...retrievalOutcome({
+        ...retrievalSuccess({
           floor: {
             sceneEntities: [place(LOC_B, 'The yard')],
             currentLocation: place(LOC_A, 'The keep'),
@@ -901,7 +865,7 @@ describe('buildGenerationContext — locationIds', () => {
     const ctx = buildGenerationContext({
       ...base(),
       retrieval: {
-        ...retrievalOutcome({
+        ...retrievalSuccess({
           floor: {
             sceneEntities: [entityRow(CHAR_ID, 'Mara')],
             currentLocation: place(LOC_A, 'The keep'),
@@ -915,8 +879,8 @@ describe('buildGenerationContext — locationIds', () => {
       },
     })
     expect(ctx.locationIds).toEqual(['l1'])
-    // Positive control: those same rows do render with IDs of their own.
-    expect((ctx.structuralSceneEntities as { id: string }[]).map((e) => e.id)).toEqual(['c1'])
+    // Positive control: the ranked character does reach the template with an ID
+    // of its own, so exclusion here is about kind rather than about absence.
     expect((ctx.retrievedEntities as { id: string }[]).map((e) => e.id)).toEqual(['c2'])
   })
 
@@ -924,7 +888,7 @@ describe('buildGenerationContext — locationIds', () => {
     const ctx = buildGenerationContext({
       ...base(),
       retrieval: {
-        ...retrievalOutcome({
+        ...retrievalSuccess({
           floor: { currentLocation: place(LOC_A, 'The keep') },
           selected: { entities: [candidate('entity', LOC_A, 'The keep')] },
         }),

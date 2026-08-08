@@ -73,7 +73,15 @@ function score(
   const recencyFactor =
     common || lambda <= 0 ? 1 : Math.exp(-lambda * chaptersOld * (1 - pinSignal))
 
-  let finalScore = simBlend * recencyFactor + kwBoostValue
+  // A pin reaches the score through the decay exponent, which needs decay to
+  // resist — so on a type with lambda = 0 it has no channel at all. pinBoost is
+  // that channel, and it is per-type rather than derived from lambda so a
+  // reader sees which types use which path. Multiplicative on purpose: it lifts
+  // a relevant row above its peers without lifting an irrelevant one over the
+  // score threshold, which is what injection_mode='always' is for.
+  const pinBoost = 1 + params.pinBoost[type] * pinSignal
+
+  let finalScore = simBlend * recencyFactor * pinBoost + kwBoostValue
 
   const bypassTriggered = simBlend >= params.tauRevive
   if (bypassTriggered) finalScore = Math.max(finalScore, simBlend - params.tauRevive)
@@ -156,12 +164,17 @@ export function rankPerType(
 
   for (let i = 0; i < ranked.length; i++) {
     const r = ranked[i]
-    // Canon breaks here; the flag instead keeps walking to emit a trace per
-    // row. Equivalent because mmrScore is non-increasing down the ranking.
+    // Canon breaks here; the flag instead keeps walking to emit a trace per row.
+    // No longer merely equivalent — a bypassed row below the floor is seatable,
+    // so the walk has to continue past it rather than stopping.
     if (r.mmrScore < input.params.minScoreThreshold) belowFloor = true
 
     let dropReason: DropReason = 'not_dropped'
-    if (belowFloor) {
+    // retrieval.md → High-similarity bypass: the exemption IS the mechanism.
+    // bypassScore is capped at 1 - tauRevive = 0.15, under the 0.2 first-pick
+    // floor (minScoreThreshold / lambdaDiv), so raising the score alone revives
+    // nothing at any similarity. Budget limits below still bind.
+    if (belowFloor && !r.bypassTriggered) {
       dropReason = 'below_threshold'
     } else if (r.tokensEstimated > budget) {
       dropReason = 'candidate_too_large'
@@ -191,8 +204,22 @@ export function rankPerType(
   }
 }
 
-export function rankAll(input: RankAllInput): Record<RetrievalType, RankedType> {
-  const chapters = rankPerType(input.pools.chapters, 'chapters', input.budgets.chapters, input)
+/**
+ * Chapters rank first, because only the chapters that win budget feed the
+ * happenings boost. `runRetrieval` needs that set *before* it can build the
+ * happenings pool — chapter membership decides admission, not just score — so
+ * it ranks chapters itself and hands the bundle back rather than paying for the
+ * pass twice. A caller with no such need omits it and gets the same ordering.
+ */
+export function rankAll(
+  input: RankAllInput,
+  chapters: RankedType = rankPerType(
+    input.pools.chapters,
+    'chapters',
+    input.budgets.chapters,
+    input,
+  ),
+): Record<RetrievalType, RankedType> {
   const happenings = rankPerType(input.pools.happenings, 'happenings', input.budgets.happenings, {
     ...input,
     matchedChapterIds: new Set(chapters.selected.map((c) => c.id)),

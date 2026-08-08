@@ -1,17 +1,7 @@
 import { rowQuery, type RowQuery } from '../types'
-import { SOURCE_TABLES } from './stale'
+import { KIND_FIELDS, SOURCE_TABLES } from './stale'
 import type { EmbeddedFieldRow } from './stale'
 import type { VecTargetKind } from './vec-tables'
-
-// Canon: retrieval.md → What gets embedded per type. Order inside `fields`
-// is the composite order and part of the source_hash — do not reorder.
-const KIND_FIELDS: Record<VecTargetKind, [string, string]> = {
-  entity: ['name', 'description'],
-  lore: ['title', 'body'],
-  happening: ['title', 'description'],
-  thread: ['title', 'description'],
-  chapter: ['summary', 'theme'],
-}
 
 // Module-private: a WHERE-less full scan is only a building block for the two
 // filtered queries below; callers should never run it unfiltered against a DB.

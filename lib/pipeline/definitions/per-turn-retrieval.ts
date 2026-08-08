@@ -1,6 +1,7 @@
 import { boundedSignal } from '@/lib/abort'
-import { inheritedEntryMetadata, queryRows, type StoryEntry } from '@/lib/db'
+import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
+import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
 
 import { loadPerTurnWorkingSet } from './working-set'
@@ -10,8 +11,6 @@ export const RETRIEVAL_PHASE_NAME = 'retrieval'
 
 /** Where this phase parks its outcome; consumers re-narrow to `RetrievalSuccess`. */
 export const RETRIEVAL_INTERMEDIATE_KEY = 'retrieval'
-
-const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening'])
 
 // Matches the periodic classifier's call budget: both bound one blocking
 // provider call, and a turn already tolerates a narrative stream of this order.
@@ -113,7 +112,7 @@ export async function* retrievalPhase(
           // branch_era_flips has no writer wired, so no era can be named yet.
           eraName: null,
           piggybackSummary: lastNarrative?.metadata?.summary ?? null,
-          lastNarrativeContent: lastNarrative?.content ?? '',
+          lastNarrativeContent: lastNarrative ? promptProse(lastNarrative) : '',
         },
         sceneCharacterIds,
         sceneEntityIds: scene.sceneEntities,
@@ -124,7 +123,7 @@ export async function* retrievalPhase(
         // under partialChapterBuffer and under-suppressing past it (cadence.md →
         // User-tunable knobs).
         recentProse: composePromptBuffer(entries, open.settings)
-          .map((e) => e.content)
+          .map((e) => promptProse(e))
           .join('\n'),
       },
     )

@@ -4,6 +4,7 @@ import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } fr
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import type { TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   appSettingsStore,
   currentStoryStore,
@@ -777,26 +778,8 @@ function entityCandidate(id: string, displayName: string, renderedText: string):
 function retrievalIntermediate(
   over: { entities?: Candidate[]; selectedLocationIds?: string[] } = {},
 ): RetrievalSuccess {
-  const selected: Candidate[] = over.entities ?? [
-    entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
-  ]
-  const emptyBundle = {
-    selected: [],
-    traces: [],
-    funnel: {
-      poolSize: 0,
-      preFilteredSize: 0,
-      selectedCount: 0,
-      tokensUsed: 0,
-      typeBudget: 0,
-    },
-  }
-  const spec = { text: '', source: 'user_action' as const }
-  return {
-    ok: true,
+  return retrievalSuccess({
     floor: {
-      sceneEntities: [],
-      currentLocation: null,
       activeThreads: [
         {
           id: 'thr_00000000-0000-4000-8000-0000000000f9',
@@ -806,24 +789,14 @@ function retrievalIntermediate(
           description: null,
         },
       ],
-      alwaysEntities: [],
-      alwaysLore: [],
-      alwaysThreads: [],
-      seatedIds: new Set<string>(),
     },
-    bundles: {
-      entities: { ...emptyBundle, selected },
-      lore: emptyBundle,
-      happenings: emptyBundle,
-      threads: emptyBundle,
-      chapters: emptyBundle,
+    selected: {
+      entities: over.entities ?? [
+        entityCandidate(RETRIEVED_ENTITY_ID, 'Corvin', 'Corvin (currently elsewhere): a smuggler.'),
+      ],
     },
-    queries: { q1: spec, q2: spec, q3: spec, presence: [false, false, false], embedTexts: [] },
-    staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-    injectedAwareness: [],
-    selectedLocationIds: over.selectedLocationIds ?? [],
-    timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
-  }
+    selectedLocationIds: over.selectedLocationIds,
+  })
 }
 
 async function runNarrativeWith(opts: {
@@ -846,7 +819,21 @@ async function runNarrativeWith(opts: {
     }),
   })
   entriesStore.hydrate('b1', [])
-  entitiesStore.hydrate('b1', [])
+  // The store carries the whole branch in production (openStory hydrates it
+  // unwindowed), and buildPiggybackActions resolves <current_location> against
+  // it — so a ranked location has to exist here, not only in the retrieval
+  // intermediate, or the fold refuses an id the prompt just offered.
+  entitiesStore.hydrate('b1', [
+    {
+      id: RETRIEVED_LOCATION_ID,
+      branchId: 'b1',
+      kind: 'location',
+      name: 'The Market',
+      description: 'stalls under sailcloth.',
+      status: 'active',
+      injectionMode: 'auto',
+    },
+  ] as never)
   vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
     ...APP_SETTINGS_DEFAULTS,
     providers: [

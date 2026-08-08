@@ -27,6 +27,27 @@ whether the prose use is intentional (promote) or fresh (create new).
 
 Reuses the entity-name index. Heuristic (text scan), not LLM.
 
+**`injection_mode='always'` is exempt from this suppression.** The
+structural floor seats `always` rows before pool assembly, so they
+never reach the filter — and that is the behaviour we want, because
+suppression would otherwise block its own resolution. Layer B promotes
+from the entity index and runs on the periodic classifier's cadence,
+but the fast path is piggyback: the model can only name an entity in
+`<scene_entities>` if that entity's id was in the prompt. Suppressing a
+row keeps it out of the prompt, which keeps the model from naming it,
+which keeps piggyback from promoting it — so the suppression sustains
+itself until the next classifier run. Injecting the flagged row instead
+lets the collision resolve on the same turn. Suppression stays the
+default for ordinary staged entities, where no user has asked for the
+row specifically; `always` is the opt-out.
+
+**Layer A's window is an approximation.** The scan reads the prompt
+buffer rather than the genuinely un-classified set, so it
+over-suppresses while `classifierCadence` is under
+`partialChapterBuffer` and under-suppresses past it. Acceptable because
+Layer B is the actual resolution and is unaffected by what Layer A
+shows the model.
+
 ### Layer B — code-side reconciliation at extraction
 
 Per turn the classifier runs, when it extracts a "new character"

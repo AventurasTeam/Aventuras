@@ -10,7 +10,8 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
-import { runRetrieval, type RankedType, type RetrievalSuccess } from '@/lib/retrieval'
+import { runRetrieval } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
   entriesStore,
@@ -36,52 +37,7 @@ vi.mock('../embedder-swap/engine', async (importOriginal) => {
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
 })
 
-const EMPTY_BUNDLE: RankedType = {
-  selected: [],
-  traces: [],
-  funnel: {
-    poolSize: 0,
-    preFilteredSize: 0,
-    selectedCount: 0,
-    tokensUsed: 0,
-    typeBudget: 0,
-  },
-}
-
-// Typed against the real outcome rather than cast: the narrative phase reads
-// this into buildGenerationContext, which projects a dozen template variables
-// off it, so a fabricated shape would render a prompt no production pass can
-// produce.
-const OK_RETRIEVAL: RetrievalSuccess = {
-  ok: true,
-  floor: {
-    sceneEntities: [],
-    currentLocation: null,
-    activeThreads: [],
-    alwaysEntities: [],
-    alwaysLore: [],
-    alwaysThreads: [],
-    seatedIds: new Set<string>(),
-  },
-  bundles: {
-    entities: EMPTY_BUNDLE,
-    lore: EMPTY_BUNDLE,
-    happenings: EMPTY_BUNDLE,
-    threads: EMPTY_BUNDLE,
-    chapters: EMPTY_BUNDLE,
-  },
-  queries: {
-    q1: { text: '', source: 'user_action' },
-    q2: { text: '', source: 'structural_digest' },
-    q3: { text: '', source: 'prose_extract' },
-    presence: [false, false, false],
-    embedTexts: [],
-  },
-  staleCounts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-  injectedAwareness: [],
-  selectedLocationIds: [],
-  timings: { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
-}
+const OK_RETRIEVAL = retrievalSuccess()
 
 // The phase streams via the real openai-compatible provider path; stub global
 // fetch (a call-time seam, unlike a module mock of the AI/provider graph, which

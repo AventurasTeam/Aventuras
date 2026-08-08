@@ -93,6 +93,7 @@ describe('buildPiggybackActions', () => {
   it('updates location tracking for characters entering scene', () => {
     const char1 = mockEntity({ id: 'char_1', kind: 'character' })
     const char2 = mockEntity({ id: 'char_2', kind: 'character' })
+    const loc2 = mockEntity({ id: 'loc_2', kind: 'location' })
 
     const block: ParsedStateBlock = {
       sceneEntities: ['char_1', 'char_2'],
@@ -103,7 +104,7 @@ describe('buildPiggybackActions', () => {
       source: 'ai_classifier',
       entryId: 'entry_2',
       block,
-      entities: [char1, char2],
+      entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
     })
@@ -126,6 +127,7 @@ describe('buildPiggybackActions', () => {
   it('updates location tracking with lastSeenAt for characters leaving scene', () => {
     const char1 = mockEntity({ id: 'char_1', kind: 'character' })
     const char2 = mockEntity({ id: 'char_2', kind: 'character' })
+    const loc2 = mockEntity({ id: 'loc_2', kind: 'location' })
 
     const block: ParsedStateBlock = {
       sceneEntities: ['char_2'],
@@ -136,7 +138,7 @@ describe('buildPiggybackActions', () => {
       source: 'ai_classifier',
       entryId: 'entry_2',
       block,
-      entities: [char1, char2],
+      entities: [char1, char2, loc2],
       previousMetadata,
       branchId: 'main',
     })
@@ -402,8 +404,55 @@ describe('buildPiggybackActions', () => {
       expect(Number.isFinite(result.metadata.worldTime)).toBe(true)
       expect(result.metadata.worldTime).toBe(115)
       expect(result.metadata.sceneEntities).toEqual(['char_1', 'unknown_entity_id'])
-      expect(result.metadata.currentLocationId).toBe('loc_2')
+      // loc_2 resolves to nothing in this fixture's empty entity set, so it is
+      // refused and the previous location carries forward. sceneEntities has no
+      // such guard: an unresolvable id there is inert, while a bad location id
+      // is written onto every in-scene character's state.
+      expect(result.metadata.currentLocationId).toBe('loc_1')
     })
+  })
+
+  // The block is model output: nothing constrains the id it answers with to be a
+  // location, and an accepted character id would be written as
+  // state.current_location_id on every in-scene character.
+  it('refuses a current_location naming an entity that is not a location', () => {
+    const char1 = mockEntity({ id: 'char_1', kind: 'character' })
+    const item = mockEntity({ id: 'item_1', kind: 'item' })
+
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_2',
+      block: { sceneEntities: ['char_1'], currentLocation: 'item_1' },
+      entities: [char1, item],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.currentLocationId).toBe('loc_1')
+    const tracking = result.actions.filter((a) => a.kind === 'updateEntityLocationTracking')
+    expect(tracking).toEqual([
+      {
+        kind: 'updateEntityLocationTracking',
+        source: 'ai_classifier',
+        payload: { branchId: 'main', id: 'char_1', currentLocationId: 'loc_1' },
+      },
+    ])
+  })
+
+  it('accepts a current_location that resolves to a location', () => {
+    const char1 = mockEntity({ id: 'char_1', kind: 'character' })
+    const loc2 = mockEntity({ id: 'loc_2', kind: 'location' })
+
+    const result = buildPiggybackActions({
+      source: 'ai_classifier',
+      entryId: 'entry_2',
+      block: { sceneEntities: ['char_1'], currentLocation: 'loc_2' },
+      entities: [char1, loc2],
+      previousMetadata,
+      branchId: 'main',
+    })
+
+    expect(result.metadata.currentLocationId).toBe('loc_2')
   })
 
   it('promotes staged entity on first emission in scene_entities, and produces no promoteStagedEntity action on second emission when entity is already active', () => {

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SqlOp } from '../types'
 import { upsertVecOps } from './ops'
 import { compositeText, sourceHash } from './source-hash'
-import { flagEmbeddingStaleOps, recomputeStaleOps } from './stale'
+import { clearEmbeddingStaleOp, flagEmbeddingStaleOps, recomputeStaleOps } from './stale'
 import { ensureVecTablesSql } from './vec-tables'
 
 const MIGRATIONS_DIR = 'lib/db/migrations'
@@ -183,6 +183,93 @@ describe('recomputeStaleOps', () => {
     expect(embeddingStaleOf(db, 'e1')).toBe(0)
     expect(embeddingStaleOf(db, 'e2')).toBe(1)
     expect(embeddingStaleOf(db, 'e3')).toBe(1)
+  })
+})
+
+describe('clearEmbeddingStaleOp', () => {
+  let db: DatabaseSync
+  const now = Date.now()
+
+  const insert = (id: string, name: string, description: string | null) =>
+    db
+      .prepare(
+        `insert into entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+         values (?, ?, 'character', ?, ?, 'active', 'always', 1, ?, ?)`,
+      )
+      .run(id, 'b1', name, description, now, now)
+
+  const row = (id: string, fields: (string | null)[]) => ({
+    kind: 'entity' as const,
+    id,
+    branchId: 'b1',
+    fields,
+  })
+
+  beforeEach(() => {
+    db = makeDb()
+    db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
+      's1',
+      'Story',
+      now,
+      now,
+    )
+    db.prepare(`insert into branches (id, story_id, name, created_at) values (?, ?, ?, ?)`).run(
+      'b1',
+      's1',
+      'main',
+      now,
+    )
+  })
+
+  it('clears when the row still holds what was embedded', () => {
+    insert('e1', 'Kara', 'a scout')
+
+    runOps(db, [clearEmbeddingStaleOp(row('e1', ['Kara', 'a scout']))])
+
+    expect(embeddingStaleOf(db, 'e1')).toBe(0)
+  })
+
+  // The lost update: a writer dirties the row between loadStaleRows reading it
+  // and this commit. A blind clear leaves new text, an old vector and a clean
+  // flag — permanently, since nothing re-derives the flag outside a swap.
+  it('leaves the flag set when the row moved on after the embed read it', () => {
+    insert('e1', 'Kara', 'a scout')
+    db.prepare('update entities set description = ? where id = ?').run('a spy', 'e1')
+
+    runOps(db, [clearEmbeddingStaleOp(row('e1', ['Kara', 'a scout']))])
+
+    expect(embeddingStaleOf(db, 'e1')).toBe(1)
+  })
+
+  // `=` would make this comparison NULL rather than true, stranding every row
+  // with an empty description dirty forever.
+  it('clears a row whose embedded field is null', () => {
+    insert('e2', 'Mara', null)
+
+    runOps(db, [clearEmbeddingStaleOp(row('e2', ['Mara', null]))])
+
+    expect(embeddingStaleOf(db, 'e2')).toBe(0)
+  })
+
+  it('does not clear a row on another branch that shares the id', () => {
+    db.prepare(`insert into branches (id, story_id, name, created_at) values (?, ?, ?, ?)`).run(
+      'b2',
+      's1',
+      'other',
+      now,
+    )
+    insert('e1', 'Kara', 'a scout')
+    db.prepare(
+      `insert into entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+       values (?, 'b2', 'character', ?, ?, 'active', 'always', 1, ?, ?)`,
+    ).run('e1', 'Kara', 'a scout', now, now)
+
+    runOps(db, [clearEmbeddingStaleOp(row('e1', ['Kara', 'a scout']))])
+
+    const other = db
+      .prepare('select embedding_stale from entities where id = ? and branch_id = ?')
+      .get('e1', 'b2') as { embedding_stale: number }
+    expect(other.embedding_stale).toBe(1)
   })
 })
 

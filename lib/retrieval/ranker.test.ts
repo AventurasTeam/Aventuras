@@ -90,6 +90,45 @@ describe('rankPerType — scoring', () => {
     expect(r.traces[0].finalScore).toBeCloseTo(0.6, 6)
   })
 
+  // Lore has lambda 0, so its pin signal — priority/100 — has no decay exponent
+  // to act through and reaches the score only via pinBoost.
+  it('lets lore priority lift the score, and leaves priority 0 untouched', () => {
+    const unpinned = rankPerType([candidate({ id: 'a', pinSignal: 0 })], 'lore', 1000, base)
+    const pinned = rankPerType([candidate({ id: 'a', pinSignal: 1 })], 'lore', 1000, base)
+    // Literal, not derived from RANKER_DEFAULTS.pinBoost.lore: an expectation
+    // computed from the constant under test passes at every value including 0.
+    expect(unpinned.traces[0].finalScore).toBeCloseTo(0.5, 6)
+    expect(pinned.traces[0].finalScore).toBeCloseTo(0.625, 6)
+    expect(pinned.traces[0].recencyFactor).toBe(1)
+  })
+
+  // The property that chose a multiplier over an additive boost: max priority
+  // must not carry an irrelevant row over the floor, because that is what
+  // injection_mode='always' is for.
+  it('does not let max lore priority seat a row that is not relevant', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.02, 0.02, 0.02], pinSignal: 1 })],
+      'lore',
+      1000,
+      base,
+    )
+    expect(r.selected).toHaveLength(0)
+    expect(r.traces[0].dropReason).toBe('below_threshold')
+  })
+
+  // decay_resistance already acts through the exponent for happenings; a
+  // non-zero pinBoost there would count the same pin twice.
+  it('gives happenings no pinBoost channel, so the pin acts through decay alone', () => {
+    expect(RANKER_DEFAULTS.pinBoost.happenings).toBe(0)
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: 0, pinSignal: 1 })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(r.traces[0].finalScore).toBeCloseTo(0.6, 6)
+  })
+
   it('adds the keyword boost on a hit and nothing without one', () => {
     const hit = rankPerType(
       [candidate({ id: 'a', keywordHits: ['veilstone'] })],
@@ -153,6 +192,49 @@ describe('rankPerType — scoring', () => {
     )
     expect(r.traces[0].bypassTriggered).toBe(true)
     expect(r.traces[0].finalScore).toBeCloseTo(0.1, 6)
+    // The score alone revives nothing: bypass output is capped at
+    // 1 - tau_revive = 0.15, under the 0.2 first-pick floor. Seating is what
+    // "revives" means, so assert it rather than the score that precedes it.
+    expect(r.selected.map((c) => c.id)).toEqual(['a'])
+    expect(r.traces[0].dropReason).toBe('not_dropped')
+  })
+
+  // Even a perfect sim_blend cannot clear the floor on score alone, so this is
+  // the case that proves the exemption rather than a lucky threshold margin.
+  it('seats a bypassed row at the bypass ceiling, where the score cannot reach', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [1, 1, 1], chaptersOld: 60, renderedText: 'x'.repeat(120) })],
+      'happenings',
+      10_000,
+      base,
+    )
+    expect(r.traces[0].finalScore).toBeCloseTo(0.15, 6)
+    expect(r.selected.map((c) => c.id)).toEqual(['a'])
+  })
+
+  it('does not extend the exemption to rows that never bypassed', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.1, 0.1, 0.1], chaptersOld: 60 })],
+      'happenings',
+      10_000,
+      base,
+    )
+    expect(r.traces[0].bypassTriggered).toBe(false)
+    expect(r.traces[0].dropReason).toBe('below_threshold')
+    expect(r.selected).toEqual([])
+  })
+
+  // retrieval.md → High-similarity bypass: "Revival doesn't bypass the budget."
+  it('still holds a bypassed row to the type budget', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [1, 1, 1], chaptersOld: 60, renderedText: 'x'.repeat(4000) })],
+      'happenings',
+      20,
+      base,
+    )
+    expect(r.traces[0].bypassTriggered).toBe(true)
+    expect(r.traces[0].dropReason).toBe('candidate_too_large')
+    expect(r.selected).toEqual([])
   })
 
   it('does not trigger the bypass below tau_revive', () => {
@@ -380,25 +462,56 @@ describe('rankAll', () => {
   })
 })
 
-// The whole transitive surface the simulator loads, not just the entry file —
-// a DB import one hop down pulls the same graph in.
-const PURE_FILES = [
-  'ranker.ts',
-  'mmr.ts',
-  'vector.ts',
-  'constants.ts',
-  'types.ts',
-  'queries.ts',
-  'prose-extract.ts',
-]
+/** What the M3.5 simulator calls; the guarded surface is their value closure. */
+const PURE_ENTRIES = ['ranker.ts', 'queries.ts']
+
+// `import type` is erased at build, so only value imports pull the graph in.
+const valueSource = (file: string): string =>
+  readFileSync(`lib/retrieval/${file}`, 'utf8').replace(/^import type .*$/gm, '')
+
+/**
+ * Walks relative value imports from the entry points. Derived rather than
+ * listed: a hand-maintained list goes stale silently the moment someone adds an
+ * import, which is exactly how `name-index.ts` ended up inside the closure and
+ * outside the guard.
+ */
+function pureClosure(): string[] {
+  const seen = new Set<string>()
+  const queue = [...PURE_ENTRIES]
+  while (queue.length > 0) {
+    const file = queue.pop()!
+    if (seen.has(file)) continue
+    seen.add(file)
+    for (const [, specifier] of valueSource(file).matchAll(/from '\.\/([\w-]+)'/g)) {
+      queue.push(`${specifier}.ts`)
+    }
+  }
+  return [...seen].sort()
+}
 
 describe('C4 — ranker purity', () => {
-  it.each(PURE_FILES)('%s imports nothing from lib/stores or lib/db', (file) => {
-    // `import type` is erased at build; only value imports pull the graph in.
-    const src = readFileSync(`lib/retrieval/${file}`, 'utf8').replace(/^import type .*$/gm, '')
+  const closure = pureClosure()
+
+  // A walker that silently resolved nothing would make every case below pass
+  // vacuously, so pin the files the closure is known to reach.
+  it('reaches the modules the ranker and query stack actually pull in', () => {
+    expect(closure).toEqual(
+      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts', 'name-index.ts']),
+    )
+  })
+
+  it.each(pureClosure())('%s imports nothing from lib/stores or lib/db', (file) => {
     // Path prefix, not exact specifier — a deep import like
     // '@/lib/db/runtime/exec' pulls in the same graph.
-    expect(src).not.toMatch(/@\/lib\/(db|stores)/)
-    expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)
+    expect(valueSource(file)).not.toMatch(/@\/lib\/(db|stores)/)
+  })
+
+  // The replay contract is determinism, which a DB import is only one way to
+  // break. These are the others, and none is import-shaped: the previous
+  // `queryAll|runInTransaction|drizzle` scan caught none of them, while
+  // rejecting `name-index.ts` for naming its injected query parameter.
+  it.each(pureClosure())('%s reads no ambient nondeterminism', (file) => {
+    expect(valueSource(file)).not.toMatch(/\bDate\.|new Date\(|Math\.random|performance\./)
+    expect(valueSource(file)).not.toMatch(/\bIntl\.|toLocale[A-Z]/)
   })
 })

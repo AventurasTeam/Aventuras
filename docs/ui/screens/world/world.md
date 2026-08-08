@@ -515,12 +515,15 @@ Three fields, top-down:
   - `disabled` — never injected; lore is read-only reference
     material for the user.
 - **`priority`** (integer input, narrow; range `0..100`). Default `0`.
-  Tooltip explains the working model: "Higher priority is preferred
-  when retrieval is token-budget-constrained. Ties break by recency.
-  Semantics firmed up in the memory design pass: priority is 0-100,
-  integrated into the ranker as
-  `sim_blend × (priority/100) + kw_boost`. See
-  [`docs/memory/retrieval.md → The ranker`](../../../memory/retrieval.md#the-ranker).
+  Tooltip: "Higher priority makes this lore more likely to be picked
+  when it's relevant. It won't surface lore the scene isn't about —
+  use Always for that."
+  That is the shipped semantic: priority feeds `pin_signal` as
+  `priority/100`, which scales the row's score by
+  `1 + k_pin × pin_signal` (`k_pin = 0.25` for lore). A no-op at the
+  default `0`, and multiplicative, so it re-orders relevant lore rather
+  than injecting irrelevant lore. See
+  [`docs/memory/retrieval.md → Scoring function`](../../../memory/retrieval.md#scoring-function).
 - **`tags`** (chip row with `+ add`): edit destination for tags
   surfaced read-only on glance / search. Same shape as entity tags.
 
@@ -541,13 +544,10 @@ entity sort philosophy at
 
 Applies to both Browse rail and World list pane.
 
-Priority-as-sort-key inherits the working-model caveat from the
-priority-semantics open question. Until retrieval pins what
-priority _does_, it pins what priority _means visually_ — "this
-lore surfaces first in lists." If retrieval semantics later land
-orthogonal to ranking, the sort still makes intuitive sense
-(higher priority = "more important to the user") and doesn't need
-to change.
+Priority-as-sort-key needs no caveat now that retrieval semantics are
+settled: the sort and the ranker say the same thing — higher priority
+is more important to the user — so the list order previews the ranking
+preference rather than competing with it.
 
 ### List filter — lore
 

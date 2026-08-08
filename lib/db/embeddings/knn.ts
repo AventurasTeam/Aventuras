@@ -48,3 +48,34 @@ export function knnQuery(kind: VecTargetKind, dim: number, p: KnnParams): RowQue
     [p.vector, p.k, p.branchId, p.modelId],
   )
 }
+
+export type VectorsByIdParams = {
+  branchId: string
+  modelId: string
+  ids: readonly string[]
+}
+
+/**
+ * Vectors for an explicit id set — for candidates admitted by something other
+ * than a KNN pass, which carry no match row to ride on.
+ *
+ * Scans the branch partition rather than pushing down, as knnQuery's note says.
+ * Measured at dim 384, best of 5 on a cold table: 6ms over 2k rows, 18ms over
+ * 6k, 60ms over 20k, 179ms over 60k — linear in partition size, and near-flat in
+ * the id count (14ms at 1 id against 20ms at 800, over 6k rows). So issue it ONCE
+ * for the whole set: splitting the ids buys nothing and costs another full scan.
+ * Only ask for ids a KNN pass did not already return.
+ *
+ * `pk` is unusable here despite being the declared primary key: a single
+ * `pk = ?` does push down, but vec0 answers `pk IN (...)` with **zero rows**
+ * rather than an error — a silent wrong answer, not a slow one.
+ */
+export function vectorsByIdQuery(kind: VecTargetKind, dim: number, p: VectorsByIdParams): RowQuery {
+  // model_id is not optional: a swap stages a second model's vectors alongside
+  // the first in this table, so an unfiltered read can return the wrong family.
+  return rowQuery(
+    `SELECT id, embedding FROM ${vecTableName(kind, dim)}
+          WHERE branch_id = ? AND model_id = ? AND id IN (${p.ids.map(() => '?').join(', ')})`,
+    [p.branchId, p.modelId, ...p.ids],
+  )
+}

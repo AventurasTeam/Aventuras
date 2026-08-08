@@ -30,7 +30,6 @@ const m2Context = {
   // comparison that is false for the wrong reason and lets a broken guard pass.
   structuralLocation: null,
   locationIds: [],
-  structuralSceneEntities: [],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
   structuralPinnedLore: [],

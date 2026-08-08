@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -15,11 +15,22 @@ const PAYLOAD_SHA = createHash('sha256').update(PAYLOAD).digest('hex')
 type ServerBehavior = {
   // When set, the first request writes `abortAfter` bytes then destroys the socket.
   abortAfter?: number
+  // Gate for that destroy. The byte count bounds what the server queues, not what
+  // the client has read and flushed, so destroying on a timer makes the resulting
+  // .part size a race the runner's load decides.
+  abortWhen?: () => boolean
   // Records the Range header of the most recent request.
   lastRange?: string
   requestCount: number
   // When true, ignore Range and always send the full body with 200.
   ignoreRange?: boolean
+}
+
+async function waitUntil(ready: () => boolean, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (!ready() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
 }
 
 let server: Server
@@ -36,7 +47,8 @@ beforeEach(async () => {
     if (behavior.abortAfter !== undefined && behavior.requestCount === 1) {
       res.writeHead(200, { 'content-length': String(PAYLOAD.length) })
       res.write(PAYLOAD.subarray(0, behavior.abortAfter))
-      setTimeout(() => req.socket.destroy(), 10)
+      const gate = behavior.abortWhen ?? ((): boolean => true)
+      void waitUntil(gate).then(() => req.socket.destroy())
       return
     }
 
@@ -141,7 +153,9 @@ describe('downloadFile — verification', () => {
 describe('downloadFile — resume', () => {
   it('leaves a .part on mid-stream abort, then resumes with Range and completes', async () => {
     const dir = freshDir()
+    const partPath = join(dir, 'model.onnx.part')
     behavior.abortAfter = 15000
+    behavior.abortWhen = () => existsSync(partPath) && statSync(partPath).size > 0
 
     const first = await downloadFile({
       url: baseUrl,
@@ -151,7 +165,6 @@ describe('downloadFile — resume', () => {
     })
     expect(first.ok).toBe(false)
     if (!first.ok) expect(first.reason).toBe('network')
-    const partPath = join(dir, 'model.onnx.part')
     expect(existsSync(partPath)).toBe(true)
     const partSize = readFileSync(partPath).length
     expect(partSize).toBeGreaterThan(0)

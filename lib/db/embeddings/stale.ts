@@ -17,13 +17,37 @@ export const SOURCE_TABLES: Record<VecTargetKind, string> = {
   chapter: 'chapters',
 }
 
-// After a successful (re)embed the row is fresh by construction, so this clears
-// the flag unconditionally — unlike recomputeStaleOps, which re-derives staleness
-// from a hash comparison for content edits that have no fresh vector yet.
-export function clearEmbeddingStaleOp(kind: VecTargetKind, id: string, branchId: string): SqlOp {
+// Canon: retrieval.md → What gets embedded per type. Order inside `fields`
+// is the composite order and part of the source_hash — do not reorder.
+export const KIND_FIELDS: Record<VecTargetKind, [string, string]> = {
+  entity: ['name', 'description'],
+  lore: ['title', 'body'],
+  happening: ['title', 'description'],
+  thread: ['title', 'description'],
+  chapter: ['summary', 'theme'],
+}
+
+/**
+ * Clears the flag for a row that was just embedded — but only if its embedded
+ * columns still hold what the embed actually read.
+ *
+ * Optimistic concurrency rather than a blind clear: a writer that dirties the
+ * row between loadStaleRows and this commit would otherwise have its flag wiped
+ * by it, leaving new text, an old vector and a clean flag. Nothing re-derives
+ * the flag outside an embedder swap, so that state is permanent, and it is a
+ * lost update rather than writer negligence — the action-layer rule that every
+ * embedded-field writer flips the flag cannot reach it.
+ *
+ * `IS`, not `=`: these columns are nullable and `NULL = NULL` is NULL, which
+ * would fail the guard on every row with an empty description and leave it
+ * dirty forever.
+ */
+export function clearEmbeddingStaleOp(row: EmbeddedFieldRow): SqlOp {
+  const [first, second] = KIND_FIELDS[row.kind]
   return {
-    sql: `UPDATE ${SOURCE_TABLES[kind]} SET embedding_stale = 0 WHERE id = ? AND branch_id = ?`,
-    params: [id, branchId],
+    sql: `UPDATE ${SOURCE_TABLES[row.kind]} SET embedding_stale = 0
+          WHERE id = ? AND branch_id = ? AND ${first} IS ? AND ${second} IS ?`,
+    params: [row.id, row.branchId, row.fields[0] ?? null, row.fields[1] ?? null],
   }
 }
 

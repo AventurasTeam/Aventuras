@@ -31,7 +31,6 @@ const context = {
   // Empty, not absent — buildGenerationContext emits every bucket on every
   // call, and `nil.size > 0` is false for a reason the guard does not own.
   structuralLocation: null,
-  structuralSceneEntities: [],
   structuralActiveThreads: [],
   structuralPinnedEntities: [],
   structuralPinnedLore: [],

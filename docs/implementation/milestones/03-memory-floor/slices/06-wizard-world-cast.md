@@ -150,6 +150,17 @@ internals (C5).
   and who authors the prose bodies; planning decision.
 - **Suggest-cast batch size vs pagination** — canon default is 5
   mixed; confirm the pagination interaction with per-kind steering.
+- **Should the wizard commit a starting location?** `finish.ts`
+  hardcodes `currentLocationId: null`, and the only writer is the
+  piggyback block, which runs _after_ narrative — so turn 1 can never
+  carry a location, and
+  [`retrieval.md → Cold start`](../../../../memory/retrieval.md#cold-start)
+  records Q2 as correspondingly thin. This slice is where locations get
+  authored, so it is the natural place to decide whether one of them is
+  marked as where the story opens. Not a blocker for retrieval, which
+  re-normalizes an absent Q2 away; it is a question about how much
+  structure turn 1 deserves. Routed here by the M3.4 triage pass
+  (2026-08-08).
 
 ## Implementation notes
 

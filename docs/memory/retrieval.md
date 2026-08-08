@@ -325,12 +325,17 @@ wrapper packages were rejected (single-version, no source link,
 handles vec0 operations natively.
 
 - **Per-query KNN against vec0:** ~11 / 43 / 61 / 122 ms at
-  1k / 10k / 50k / 100k candidates. Three queries per pass →
-  total retrieval (incl. embed + merge) is ~478 ms at 100k —
-  ~5-8x faster than JS-side cosine at large pools, comparable at
-  1-10k. Slower than the published 75 ms@100k benchmark — likely a
-  mix of mobile ARM lacking AVX2 SIMD, expo-sqlite bridge overhead,
-  and 3-query vs 1-query workload.
+  1k / 10k / 50k / 100k candidates. Three queries per pass → total
+  retrieval (incl. embed + merge) is ~478 ms at 100k — ~5-8x faster
+  than JS-side cosine at large pools, comparable at 1-10k. Slower than
+  the published 75 ms@100k benchmark — likely a mix of mobile ARM
+  lacking AVX2 SIMD, expo-sqlite bridge overhead, and 3-query vs
+  1-query workload.
+  **Read this as a per-query unit cost only.** "Three queries per pass"
+  is the PoC's single-family shape; the shipped pass issues fifteen —
+  three query vectors across five families — plus a by-id vector fetch
+  for chapter-admitted rows. The pass total lives in
+  [Per-turn cost budget](#per-turn-cost-budget).
 - **Insert cost:** ~600 µs/row → 60 s to populate 100k vectors.
   Bulk-population events (first-story embed, model-swap re-index)
   need progress UI. Per-turn incremental writes are not a concern.
@@ -693,20 +698,33 @@ Short, signal-dense, embeds fast.
 
 ### Q2: Structural digest
 
-Code-template floor + optional piggyback enrichment:
+Code-template floor + optional piggyback enrichment. **Every line is
+conditional** — a line whose fields are all empty is omitted rather
+than rendered as bare punctuation:
 
 ```
-{sceneEntities.names}, {currentLocation.name}.
-Active threads: {activeThreads.titles}.
-Era: {era_name}.
-{summary}    -- optional, from piggyback trailing block
+{sceneEntities.names}, {currentLocation.name}.   -- if either is present
+Active threads: {activeThreads.titles}.          -- if any
+Era: {era_name}.                                 -- if set
+{summary}                                        -- if the trailing block parsed
 ```
 
-Structural fields are computed from existing data; deterministic,
-free, always available. The summary line is **optional enrichment**
-from the piggyback trailing block (one sentence, ~30 tokens). When the
-trailing block parses, summary is included; when it doesn't, the
-structural template stands alone.
+Structural fields are computed from existing data: deterministic and
+free, though not all of them are always populated — see
+[Cold start](#cold-start). The summary line is **optional enrichment**
+from the piggyback trailing block (one sentence, ~30 tokens).
+
+**Why conditional rather than fixed.** Under a fixed four-line
+template, a story with no cast, no location, no threads and no era
+renders Q2 as punctuation only — and that vector still takes a full
+`w_digest` share of every candidate's blended similarity, because
+nothing marks it absent. Q2's presence flag is therefore derived from
+the rendered result rather than hardcoded true, so an empty digest
+reports itself absent and
+[the blend](#blending--weighted-average) re-normalizes across the
+remaining queries. The cost of conditionality is that Q2's text varies
+in shape between turns; the cost of the fixed form is a 35% weight
+spent on commas.
 
 The bet on enrichment-not-dependence: rich digests improve retrieval
 ranking but the structural template is genuinely rich on its own
@@ -768,11 +786,33 @@ Turn 1 has no prior user action AND no prior AI entry to embed
 against. Fall back to:
 
 - Q1: user's first action (available; retrieval runs after Pre).
-- Q2: wizard-derived structural digest. No piggyback summary line yet.
-- Q3: heuristic prose extract from the **opening** entry.
+- Q2: whatever the wizard actually committed. No piggyback summary yet.
+- Q3: heuristic prose extract from the **opening** entry, which the
+  wizard always commits.
 
 When a component is missing, weights re-normalize across the remaining
 queries. No special cold-start logic beyond that.
+
+**Q2 is thin-to-absent on turn 1, by construction.** Its four
+structural fields do not all have producers at wizard-commit time, and
+this is a sequencing fact rather than a defect — Q2's presence flag is
+derived from the rendered digest, so an empty one re-normalizes away
+instead of spending 35% of the blend on nothing:
+
+| Q2 field         | Available at turn 1?                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Scene entities   | Only when the wizard produced a lead                                                      |
+| Current location | No — the wizard commits `null`; piggyback is the only writer, and it runs after narrative |
+| Active threads   | No — thread authoring arrives with the M4.3 plot panel                                    |
+| Era              | No — the shipped calendar sets `eras: null`; flips are manual                             |
+
+So a default-wizard story's first turn ranks on Q1 and Q3. That is
+acceptable — the opening entry Q3 reads is itself wizard-derived, so
+the world context reaches retrieval through prose rather than through
+the digest. Whether the wizard _should_ commit a starting location is
+an open question against
+[Slice 3.6](../implementation/milestones/03-memory-floor/slices/06-wizard-world-cast.md),
+which is where locations are authored.
 
 ---
 
@@ -826,11 +866,20 @@ The retrieval pool for entities splits by status:
 | **Staged**           | "Available to introduce when narratively appropriate"                    |
 | **Retired**          | Default-excluded; opt-in via `injection_mode='always'` for ghosts/echoes |
 
-All three compete for the entity-type token budget. Embedding
-similarity to the current scene digest determines which staged
-entities float up — a wizard-curated character "the queen who rules
-the throne room" auto-surfaces when the scene digest mentions the
+Active off-scene and staged compete for the entity-type token budget.
+Embedding similarity to the current scene digest determines which
+staged entities float up — a wizard-curated character "the queen who
+rules the throne room" auto-surfaces when the scene digest mentions the
 throne room.
+
+**The retired sub-pool is empty in practice, and that is correct.**
+`injection_mode='always'` is its only opt-in, and the
+[structural floor](#structural-floor--always-inject) seats every
+`always` row before pool assembly runs — so a retired entity that
+opted in is already injected and never reaches the pool to compete.
+The sub-pool is a statement about what the ranker would do, not a path
+production takes: a retired row without `always` is excluded, and one
+with it is seated. Nothing is ranked in between.
 
 ### Pool exclusions
 
@@ -844,6 +893,10 @@ throne room.
   recent un-classified buffer prose are suppressed from the current
   pool (see
   [`edge-cases.md → Name collision`](./edge-cases.md#name-collision-and-disambiguation)).
+  A staged entity carrying `injection_mode='always'` is exempt, because
+  the floor seated it before the pool existed. That exemption is
+  intended, not incidental — see
+  [`edge-cases.md → Layer A`](./edge-cases.md#layer-a--retrieval-time-same-name-suppression).
 
 ---
 
@@ -1071,11 +1124,12 @@ deeply-decayed rows:
 
 ```
 score(c) = max(
-    sim_blend(c) × recency_factor(c) + kw_boost(c),
+    sim_blend(c) × recency_factor(c) × pin_boost(c) + kw_boost(c),
     (sim_blend(c) − τ_revive) if sim_blend(c) ≥ τ_revive else 0
 )
 
 recency_factor(c) = exp(−λ_type × chapters_old(c) × (1 − pin_signal(c)))
+pin_boost(c)      = 1 + k_pin(type_of(c)) × pin_signal(c)
 ```
 
 Where:
@@ -1102,6 +1156,30 @@ The multiplicative pin-into-recency integration is the key shape:
   forever).
 - `pin_signal = 0` decays normally.
 - Fractional values for "mostly persistent."
+
+**`k_pin` is the pin's second channel, for types that do not decay.**
+Pin-into-recency needs decay to resist, so on a type with `λ_type = 0`
+the exponent is 1 whatever the pin says and `pin_signal` reaches the
+score through nothing. Lore is that type — timeless by design, and the
+only non-decaying type carrying a pin signal — so its `priority` would
+otherwise be inert. `k_pin` is per-type rather than derived from
+`λ_type` so a reader can see which types use which channel:
+
+| Type         | `k_pin` | Pin reaches the score via |
+| ------------ | ------- | ------------------------- |
+| `lore`       | 0.25    | `pin_boost` (no decay)    |
+| `happenings` | 0       | the decay exponent        |
+| others       | 0       | no pin signal in v1       |
+
+Multiplicative rather than additive, deliberately: at `priority = 100`
+a lore row scores 1.25× what its similarity earned, which wins ties
+among relevant lore but leaves an irrelevant row near zero and still
+under `min_score_threshold`. An additive pin of the same magnitude
+would carry a `sim_blend = 0.02` row to 0.27 and inject it every turn
+regardless of the scene — which is what `injection_mode='always'` is
+for, and what the graded control exists to be an alternative to.
+`k_pin = 0` at the default `priority = 0`, so the knob is a no-op until
+a user reaches for it.
 
 Pinned items naturally float higher in the ranker without a separate
 tier; budget pressure still drops them when oversubscribed (see
@@ -1149,6 +1227,17 @@ generic prose-similarity matches.
   bypass the budget; it only bypasses the score-threshold floor.
   An old row that bypasses can still lose to recent rows that
   out-score it within the budget.
+
+  **The exemption is the mechanism, not a side effect of the score.**
+  `bypass_score` alone cannot deliver it: its output is capped at
+  `1 − τ_revive = 0.15`, and
+  [budget-fill](#budget-fill-termination) compares against `mmr_score`,
+  whose first-pick floor is `min_score_threshold / λ_div = 0.2`. So a
+  row raised only by `bypass_score` is always below the floor, and the
+  bypass would seat nothing at any similarity. Budget fill must skip
+  the threshold check for a bypassed row outright. Everything else —
+  `candidate_too_large`, `over_budget`, MMR ordering — still applies.
+
 - **MMR diversity** still applies. Multiple bypass-revived rows
   that semantically cluster will dedup against each other.
 
@@ -1183,7 +1272,15 @@ just ranked highly. The boost only fires for chapters whose content
 the prompt will actually carry context about.
 
 **Pipeline impact** — chapter-summary ranking must complete before
-happenings ranking starts so `matched_chapters` is known. Other
+happenings **pool construction** starts, not merely before happenings
+ranking. `matched_chapters` decides which happenings enter the pool at
+all, not only how the ones already in it score: a pool gated purely by
+vector similarity puts the boost out of reach of the scattered rows it
+exists to rescue, because low own-similarity is precisely their
+profile. Happenings inside a matched range are therefore admitted
+regardless of KNN rank — they carry no match row, so their vectors are
+fetched by id — and they still face the POV-awareness filter, the
+stale filter, MMR and budget fill. Admission is not seating. Other
 types (entities, lore, threads) run independently in parallel.
 
 **Why this matters.** Without the boost, happening retrieval is
@@ -1191,6 +1288,24 @@ types (entities, lore, threads) run independently in parallel.
 disconnected. With the boost, top-K tends to cluster around the
 chapters most relevant right now: a more narratively coherent slice
 of context for the LLM.
+
+**What it costs.** Admission is the single largest term the boost adds,
+because an admitted row carries no KNN match row and so needs its
+vector fetched by id — and `id` is a vec0 metadata column with no
+push-down, so that fetch scans the branch partition. Measured at dim
+384: seating five of sixty chapters admits ~480 happenings on top of a
+~290-row KNN pool, and the whole mechanism costs ~44ms of a ~140ms pass
+at 6000 happenings, against ~9ms at 1200. Two consequences worth
+holding:
+
+- **Issue the by-id fetch once.** Its cost tracks partition size and is
+  near-flat in the id count, so splitting the admitted set into chunks
+  multiplies the scans rather than dividing the work.
+- **The cost is proportional to happenings on the branch**, which the
+  budget accepts — but the benefit is unquantified. Which rows the
+  boost rescues cannot be shown on synthetic data; it needs a real
+  story's happening distribution. The harness prices the cost and says
+  so.
 
 ### Scale assumptions
 
@@ -1224,13 +1339,13 @@ scattered rather than coherent).
 
 Sensible starting defaults; tunable per story in advanced settings:
 
-| Type                   | `λ`          | `recency_factor = 0.5` at | Rationale                                                                     |
-| ---------------------- | ------------ | ------------------------- | ----------------------------------------------------------------------------- |
-| Happenings (awareness) | 0.07         | ~10 chapters              | Events get stale, but not as fast as a 5-chapter half-life would imply        |
-| Entities (off-scene)   | 0.025        | ~28 chapters              | Cast turnover is slow                                                         |
-| Threads                | 0.025        | ~28 chapters              | Arc presence is slow                                                          |
-| Lore                   | 0 (no decay) | —                         | Effectively timeless; ranks purely on `sim_blend × (priority/100) + kw_boost` |
-| Chapter summaries      | 0 (no decay) | —                         | Mid-level historical record; ranks purely on `sim_blend + kw_boost`           |
+| Type                   | `λ`          | `recency_factor = 0.5` at | Rationale                                                                              |
+| ---------------------- | ------------ | ------------------------- | -------------------------------------------------------------------------------------- |
+| Happenings (awareness) | 0.07         | ~10 chapters              | Events get stale, but not as fast as a 5-chapter half-life would imply                 |
+| Entities (off-scene)   | 0.025        | ~28 chapters              | Cast turnover is slow                                                                  |
+| Threads                | 0.025        | ~28 chapters              | Arc presence is slow                                                                   |
+| Lore                   | 0 (no decay) | —                         | Effectively timeless; pins via `k_pin`, not decay — `sim_blend × pin_boost + kw_boost` |
+| Chapter summaries      | 0 (no decay) | —                         | Mid-level historical record; ranks purely on `sim_blend + kw_boost`                    |
 
 Lore and chapter summaries don't decay — they're inherently long-arc
 content. Lore is timeless reference; chapter summaries are factual
@@ -1287,11 +1402,21 @@ recompute, pick next.
 type. A happening shouldn't dedup against a lore entry; they're
 different shapes carrying orthogonal signal.
 
-**Cost.** O(N × K) per type. For typical pools (hundreds), sub-
-millisecond. For long-running stories with thousands of awareness
-rows, **pre-filter to top-200 by raw score before MMR**. Trade:
-candidates ranking ~200th by raw score are unlikely to make it into
-the budget anyway, so the pre-filter doesn't lose meaningful
+**Cost.** `O(N²)` per type, not `O(N × K)`: C4's per-candidate trace
+records an `mmrRank` for every candidate that entered MMR, which forces
+the full greedy ranking rather than stopping at K. So the pre-filter is
+what bounds it — **top-200 by raw score before MMR**, which caps the
+worst case at ~6.5ms per type at dim 384 and ~12.5ms at dim 768.
+
+In practice only happenings reaches 200; the other four types are
+bounded by how much a person authored. Measured across all five types
+together, scoring plus MMR plus budget fill is ~14ms — see
+[Per-turn cost budget](#per-turn-cost-budget). Restructuring is not the
+lever: a `Uint8Array` bitmap variant measured only 10-18% faster, and
+the irreducible cosine floor alone is 4.34ms at N=200.
+
+The pre-filter's trade stands: candidates ranking ~200th by raw score
+are unlikely to make the budget anyway, so it doesn't lose meaningful
 selections.
 
 ### Budget-fill termination
@@ -1321,10 +1446,28 @@ return selected
 - **Candidate larger than the entire type budget** — skip permanently.
   Surface in Story Settings as a warning ("your happenings budget is
   below the median happening size; consider raising it").
-- **`min_score_threshold = 0.15`** (cosine baseline) — rows below
-  this are essentially semantically unrelated to current scene;
-  including them clutters the prompt with noise. Underutilized budget
-  is fine; we don't backfill with low-relevance content.
+- **`min_score_threshold = 0.15`** — rows below this are essentially
+  semantically unrelated to current scene; including them clutters
+  the prompt with noise. Underutilized budget is fine; we don't
+  backfill with low-relevance content.
+
+  It is **not a cosine baseline.** The loop above compares it against
+  `mmr_score`, which is already scaled by `λ_div` and reduced by the
+  diversity penalty — so the raw score a row must reach is
+  `(min_score_threshold + (1 − λ_div) × max_sim) / λ_div`. At the
+  defaults that is **0.2** for a first pick, where `S` is empty and
+  the penalty is zero, and it rises from there: a candidate whose
+  `max_sim` to an already-selected row is 0.5 must reach ≈0.367.
+  That is deliberate — budget-fill is asking whether a row is worth
+  its tokens _given what is already selected_, and a near-duplicate
+  of a seated row is poor value however relevant it is alone. The
+  floor is on marginal value, not on similarity.
+
+  One consequence is load-bearing enough to state: `τ_revive` caps
+  the [high-similarity bypass](#high-similarity-bypass--revival-of-decayed-memories)'s
+  output at `1 − τ_revive = 0.15`, which is below the 0.2 first-pick
+  floor, so a bypass-bound row could never be seated. Bypassed rows
+  are therefore **exempt from this threshold** — see that section.
 
 No "must-fill-budget" mode. The user's expectation is "good context
 or no context, not bad context."
@@ -1387,28 +1530,83 @@ The constants live in `RANKER_DEFAULTS.typeOverhead`;
 shipped macro and fails when the macro moves and the constant does
 not.
 
-**No stored column on candidate tables.** Tokenization is fast enough
-(microseconds per row); per-turn cost is sub-millisecond total.
-Ranker passes cache results in memory for reuse within the turn.
+**No stored column on candidate tables.** Each candidate is tokenized
+exactly once per pass — the ranker keeps the result on the scored row —
+so nothing pays twice for the same row within a turn.
 
-If real perf testing later shows tokenization is a bottleneck, add a
-`token_count INTEGER` column per candidate table with cache
-invalidation on row update. Don't pre-optimize.
+Per-row cost is small (~45-60 µs with js-tiktoken `cl100k_base`) but
+the row count is the whole pool, not the kept set, which makes this the
+largest CPU term in the pass: see
+[Per-turn cost budget](#per-turn-cost-budget). Real perf testing has
+now happened, and it points at **tokenizing fewer rows** rather than at
+a stored column — a pre-filtered row can never be seated by the probe
+simulator, so its token count is never read. A `token_count INTEGER`
+column per table remains the fallback if that is not enough, with cache
+invalidation on row update.
 
 ### Per-turn cost budget
 
-Dominant terms:
+Measured, not estimated: `bench/retrieval-cost.test.ts` (`pnpm
+bench:retrieval`) prices the shipped pass against the volumes
+[Scale assumptions](#scale-assumptions) projects. Numbers below are
+desktop (Node 24 / V8, file-backed SQLite, `sqlite-vec` 0.1.9),
+median of seven warm passes, **excluding the embedder and IPC**.
 
-| Step                                        | Cost                                               |
-| ------------------------------------------- | -------------------------------------------------- |
-| Embedding three query vectors               | ~20ms local / ~50ms API (parallelized)             |
-| Cosine similarity batch over candidate pool | <10ms for 1000s of candidates with vectorized math |
-| MMR per type (after pre-filter to 200)      | <5ms per type                                      |
-| Token estimation                            | <1ms total                                         |
-| Budget fill                                 | <1ms                                               |
+| Step                                  | dim 384 | dim 768 | Scales with                         |
+| ------------------------------------- | ------- | ------- | ----------------------------------- |
+| Source reads, awareness, chapter JOIN | ~21ms   | ~21ms   | branch entity / lore / thread count |
+| KNN — 3 vectors × 5 types             | ~35ms   | ~75ms   | rows per family, and dim            |
+| Chapter-range admission               | ~21ms   | ~24ms   | happenings on the branch            |
+| Candidate assembly                    | ~6ms    | ~8ms    | pool size                           |
+| Token estimation                      | ~46ms   | ~46ms   | **pool size, not kept size**        |
+| Scoring, cosine, MMR, budget fill     | ~14ms   | ~16ms   | min(pool, `preFilterTopN`) per type |
+| **Total**                             | ~140ms  | ~224ms  |                                     |
 
-Target: <100ms total for typical stories on local embedder. Acceptable
-even for the longest typical pools.
+Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
+the projected range. Lower scales are cheaper roughly in proportion:
+~57ms / ~102ms at 1200 happenings, ~104ms / ~163ms at 3600.
+
+Three things the table makes visible that the previous estimate did
+not:
+
+- **Token estimation is the largest CPU term**, at roughly three times
+  everything MMR does. It is charged per **pool** row, not per kept
+  row, because `CandidateTrace.tokensEstimated` is non-nullable — so a
+  771-row happenings pool is tokenized to seat 22. Capping it at the
+  kept `preFilterTopN` would recover most of it and is a C4 trace-shape
+  decision, filed against Slice 3.5.
+- **MMR is not the problem it looked like.** The measured ~6.5ms per
+  type at N=200 is real, but only happenings reaches 200 in a typical
+  story: entities, lore and threads are human-authored and sit in the
+  low hundreds. Scoring plus MMR plus budget fill together are ~14ms.
+  A story that saturates the pre-filter on all five types pays ~30ms —
+  the honest worst case, not the common one.
+- **The chapter-range admission is a first-class cost**, not a
+  rounding error on the happenings pool. See
+  [Chapter-match boost](#chapter-match-boost-on-happenings).
+
+**Target.** Retrieval is a blocking prelude to the narrative call, so
+its cost is additive to time-to-first-token — but that call is tens of
+seconds, and the previous "<100ms total" target was never derived from
+it. The budget is therefore expressed as a **scaling** obligation
+rather than an absolute:
+
+- One pass stays **under ~250ms at the top of the projected range** on
+  desktop, which is under 1% of a turn.
+- No term may scale with **awareness row count** or with total branch
+  entries. Awareness is projected at 15-60k rows at 60 chapters and is
+  the fastest-growing table in the schema; a term proportional to it
+  is the one that ends a long story.
+- Terms proportional to **happenings on the branch** are accepted but
+  budgeted, because that count is bounded by the chapter threshold.
+
+**Mobile is unmeasured.** Every figure here is desktop. The PoC's
+per-query KNN numbers under
+[Performance characteristics](#performance-characteristics--poc-findings)
+are the only mobile evidence and they predate the shipped pass, which
+issues fifteen KNN passes rather than three. Nothing has run the
+ranker on-device. Treat the mobile budget as open, not as a scaled
+copy of this table.
 
 ### Pseudocode
 
@@ -1424,7 +1622,10 @@ def rank_per_type(candidates, queries, type_budget, λ_type, type_overhead, *, m
         else:
             pin = pin_signal(c)
             rec = exp(-λ_type * c.chapters_old * (1 - pin)) if λ_type > 0 else 1.0
-            score = sim * rec + kw
+            # Second pin channel, for types where λ_type = 0 leaves `rec` at 1.0
+            # regardless of the pin. k_pin is 0 for every decaying type, so a pin
+            # is never counted twice.
+            score = sim * rec * (1 + k_pin(type_of(c)) * pin) + kw
 
         # High-similarity bypass — revival of decayed memories
         if sim >= τ_revive:

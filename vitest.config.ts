@@ -75,6 +75,20 @@ export default defineConfig({
           setupFiles: ['./vitest.setup.ts'],
         },
       },
+      {
+        // Cost harnesses, not tests: they assert nothing and take minutes.
+        // Lives in its own project so `--project unit` never picks it up, and
+        // outside lib/ so no unit include pattern can start matching it.
+        // Run with `pnpm bench:retrieval` when a change moves the pass's cost.
+        extends: true,
+        resolve: { alias: { '@': path.resolve(dirname, '.') } },
+        test: {
+          name: 'bench',
+          environment: 'node',
+          include: ['bench/**/*.test.ts'],
+          setupFiles: ['./vitest.setup.ts'],
+        },
+      },
     ],
   },
 })

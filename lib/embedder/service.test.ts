@@ -358,10 +358,13 @@ describe('embedAndBuildVecOps integration', () => {
       'main',
       now,
     )
+    // description matters: clearEmbeddingStaleOp only clears a row still holding
+    // the fields the embed read, so a fixture that seeds NULL here while passing
+    // 'a scout' below would assert the clear against content that never matched.
     db.prepare(
-      `insert into entities (id, branch_id, kind, name, status, injection_mode, embedding_stale, created_at, updated_at)
-       values (?, ?, 'character', ?, 'active', 'always', 1, ?, ?)`,
-    ).run('e1', 'b1', 'Kara', now, now)
+      `insert into entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+       values (?, ?, 'character', ?, ?, 'active', 'always', 1, ?, ?)`,
+    ).run('e1', 'b1', 'Kara', 'a scout', now, now)
   })
 
   it('ensures vec tables, lands a KNN-visible row, and flips embedding_stale to 0', async () => {
