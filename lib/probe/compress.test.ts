@@ -1,7 +1,12 @@
 import { gzipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
-import { compressPayload, decompressPayload } from './compress'
+import {
+  CaptureDecodeError,
+  CaptureEncodeError,
+  compressPayload,
+  decompressPayload,
+} from './compress'
 
 // Capture-shaped rather than a toy object: gzip's ~18-byte header exceeds the
 // gain on a short string (a 109-byte payload deflates to 111), so a tiny fixture
@@ -43,7 +48,7 @@ describe('compressPayload', () => {
 
     const packed = compressPayload(payload)
 
-    expect(packed.size).toBe(new TextEncoder().encode(JSON.stringify(payload)).length)
+    expect(packed.uncompressedSize).toBe(new TextEncoder().encode(JSON.stringify(payload)).length)
     expect(decompressPayload(packed.bytes)).toEqual(payload)
   })
 
@@ -52,27 +57,32 @@ describe('compressPayload', () => {
 
     // Measured at ~0.035 on this fixture; 0.2 leaves room for fflate to differ
     // from zlib without letting a no-op "compressor" through.
-    expect(packed.bytes.byteLength / packed.size).toBeLessThan(0.2)
+    expect(packed.bytes.byteLength / packed.uncompressedSize).toBeLessThan(0.2)
   })
 
   it('preserves a null distinctly from an absent key', () => {
-    // sim_q* is nullable as of Task 1, and JSON.stringify drops `undefined`
-    // while keeping `null` — the capture's whole null-vs-zero distinction rides
-    // on that surviving the round trip.
+    // sim_q* is nullable, and JSON.stringify drops `undefined` while keeping
+    // `null` — the capture's whole null-vs-zero distinction rides on that
+    // surviving the round trip.
     const packed = compressPayload({ sim_q3: null, sim_q1: 0 })
 
     expect(decompressPayload(packed.bytes)).toEqual({ sim_q3: null, sim_q1: 0 })
   })
 
+  it('throws a named error when the payload cannot be JSON-encoded', () => {
+    // BigInt is not hypothetical: retrieval source rows can arrive as bigints.
+    expect(() => compressPayload({ n: 10n })).toThrow(CaptureEncodeError)
+  })
+
   it('throws a named error on bytes that are not gzip', () => {
-    expect(() => decompressPayload(new Uint8Array([1, 2, 3]))).toThrow(/probe capture/i)
+    expect(() => decompressPayload(new Uint8Array([1, 2, 3]))).toThrow(CaptureDecodeError)
   })
 
   it('throws a named error on valid gzip carrying invalid JSON', () => {
     // The other error test fails at gunzip, so without this one the JSON.parse
-    // catch is unreachable — deleting it leaves the suite green.
+    // catch is unreachable.
     const truncated = gzipSync(new TextEncoder().encode('{"a": '))
 
-    expect(() => decompressPayload(truncated)).toThrow(/probe capture/i)
+    expect(() => decompressPayload(truncated)).toThrow(CaptureDecodeError)
   })
 })
