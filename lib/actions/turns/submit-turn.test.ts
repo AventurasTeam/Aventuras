@@ -595,6 +595,7 @@ describe('submitTurn', () => {
     vi.mocked(runRetrieval).mockResolvedValueOnce({
       ok: false,
       failure: { reason: 'call', detail: 'embedder session died', staleCount: 3 },
+      partial: { queries: null, floor: null, bundles: {} },
     })
 
     const result = expectRan(

@@ -8,6 +8,7 @@ import {
   type RetrievalDeps,
   type RetrievalOutcome,
   type RetrievalParams,
+  type RetrievalPartial,
   type RetrievalSuccess,
 } from './run'
 import { isHappeningCandidate, type QueryAll } from './types'
@@ -221,6 +222,11 @@ function expectFailure(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: f
   return out.failure
 }
 
+function expectPartial(out: RetrievalOutcome): RetrievalPartial {
+  if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
+  return out.partial
+}
+
 const tracedIds = (bundle: { traces: readonly { id: string }[] }): string[] =>
   bundle.traces.map((t) => t.id)
 
@@ -317,6 +323,26 @@ describe('runRetrieval — sync ordering', () => {
     // The sync knew how many rows it was trying to embed, unlike a query-embed failure.
     expect(failure.staleCount).toBe(1)
     expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  // The sync stage runs before the floor or the query stack exist, so a failure
+  // here has nothing to report beyond the failure itself — unlike a query-embed
+  // failure, which reaches both.
+  it('carries no partial state when the sync stage fails', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }),
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+        ],
+        embedRows: async () => {
+          throw new EmbedderInitError('embedder down')
+        },
+      }),
+      params(),
+    )
+
+    expect(expectPartial(out)).toEqual({ queries: null, floor: null, bundles: {} })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -419,6 +445,27 @@ describe('runRetrieval — query embed failure', () => {
     expect(knnCalls(queryAll)).toEqual([])
   })
 
+  // The counterpart to the sync-stage failure above: with nothing dirty, the
+  // pass already built the floor and the query stack before it ever reaches
+  // the embedder, so a capture of this failure has Q1/Q2/Q3 text to show
+  // (probe.md → Failed captures) even though no pool was ever assembled.
+  it('carries the floor and query stack when the query embed fails', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] }),
+        embedTexts: async () => {
+          throw new EmbedderInitError('no local model')
+        },
+      }),
+      params(),
+    )
+
+    const partial = expectPartial(out)
+    expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
+    expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(partial.bundles).toEqual({})
+  })
+
   it('reports a typed call failure when the embed request itself fails', async () => {
     const { failure } = await withQueryEmbed(async () => {
       throw new EmbedderCallError('502 from provider')
@@ -474,6 +521,14 @@ describe('runRetrieval — query embed failure', () => {
     const failure = expectFailure(out)
     expect(failure.reason).toBe('init')
     expect(failure.detail).toMatch(/unit-norm/)
+    // This throw comes from deep inside pool assembly — after the floor and the
+    // query stack exist, but before any bundle is ranked — and it unwinds past
+    // runRetrievalPass entirely, so only the accumulator runRetrieval closed
+    // over can still report what the pass had reached.
+    const partial = expectPartial(out)
+    expect(partial.floor).not.toBeNull()
+    expect(partial.queries).not.toBeNull()
+    expect(partial.bundles).toEqual({})
   })
 
   // Companion to the sync stage's hand-off test. The query embed is the second

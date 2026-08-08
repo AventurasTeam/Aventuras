@@ -126,6 +126,17 @@ export type RetrievalFailure = {
  */
 export type InjectedAwareness = { id: string; retrievalCount: number }
 
+/**
+ * Whatever the pass reached before it failed. The probe captures failed passes
+ * too (probe.md → Failed captures) and a capture with no queries is evidence of
+ * nothing; a sync-stage failure genuinely reached none of it, hence the nulls.
+ */
+export type RetrievalPartial = {
+  queries: QueryStack | null
+  floor: StructuralFloor | null
+  bundles: Partial<Record<RetrievalType, RankedType>>
+}
+
 export type RetrievalOutcome =
   | {
       ok: true
@@ -156,7 +167,7 @@ export type RetrievalOutcome =
       selectedLocationIds: string[]
       timings: RetrievalTimings
     }
-  | { ok: false; failure: RetrievalFailure }
+  | { ok: false; failure: RetrievalFailure; partial: RetrievalPartial }
 
 /** The ok arm alone — what a caller holds once it has checked `ok`. */
 export type RetrievalSuccess = Extract<RetrievalOutcome, { ok: true }>
@@ -184,8 +195,9 @@ export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
 ): Promise<RetrievalOutcome> {
+  const partial: RetrievalPartial = { queries: null, floor: null, bundles: {} }
   try {
-    return await runRetrievalPass(deps, params)
+    return await runRetrievalPass(deps, params, partial)
   } catch (error) {
     // Only the vector-invariant family means "this branch's stored vectors do not
     // match the model this pass reads" — that one takes the embedder surface,
@@ -193,7 +205,11 @@ export async function runRetrieval(
     // means nothing of the sort, and routing it here would offer a full re-index
     // as the fix for a locked database.
     if (error instanceof VectorInvariantError) {
-      return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
+      return {
+        ok: false,
+        failure: { ...classifyEmbedderFailure(error), staleCount: null },
+        partial,
+      }
     }
     throw error
   }
@@ -202,6 +218,7 @@ export async function runRetrieval(
 async function runRetrievalPass(
   deps: RetrievalDeps,
   params: RetrievalParams,
+  partial: RetrievalPartial,
 ): Promise<RetrievalOutcome> {
   const startedAt = performance.now()
 
@@ -213,6 +230,7 @@ async function runRetrievalPass(
     return {
       ok: false,
       failure: { reason: sync.reason, detail: sync.detail, staleCount: sync.staleCount },
+      partial,
     }
   }
   if (sync.embedded > 0) await deps.onRowsSynced?.()
@@ -237,6 +255,7 @@ async function runRetrievalPass(
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
   })
+  partial.floor = floor
 
   const queries = buildQueryStack({
     ...params.query,
@@ -245,11 +264,12 @@ async function runRetrievalPass(
     currentLocationName: floor.currentLocation?.name ?? null,
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
+  partial.queries = queries
 
   const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
   const embedMs = performance.now() - embedStartedAt
-  if (!embed.ok) return embed
+  if (!embed.ok) return { ...embed, partial }
 
   const queryVectors = distributeQueryVectors(embed.vectors, queries.presence)
 
@@ -300,6 +320,7 @@ async function runRetrievalPass(
   let rankStartedAt = performance.now()
   const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, rankTypeInput)
   let rankMs = performance.now() - rankStartedAt
+  partial.bundles.chapters = chapters
 
   // Chapter membership has to reach pool CONSTRUCTION, not only scoring
   // (retrieval.md → Chapter-match boost on happenings). A happening outside the
@@ -331,6 +352,7 @@ async function runRetrievalPass(
     chapters,
   )
   rankMs += performance.now() - rankStartedAt
+  Object.assign(partial.bundles, bundles)
 
   const placeIds = new Set(
     sourceRows.entities.filter((e) => e.kind === 'location').map((e) => e.id),

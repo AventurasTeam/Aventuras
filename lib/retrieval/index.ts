@@ -18,6 +18,7 @@ export type {
   RetrievalFailure,
   RetrievalOutcome,
   RetrievalParams,
+  RetrievalPartial,
   RetrievalSuccess,
   RetrievalTimings,
 } from './run'
