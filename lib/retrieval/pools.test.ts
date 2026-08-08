@@ -446,18 +446,21 @@ describe('poolIdsFromKnn', () => {
           ['c', 0.4],
         ],
       ]),
-    ).toEqual(['a', 'b', 'c'])
+    ).toEqual(new Set(['a', 'b', 'c']))
   })
 
-  it('keeps first-seen order across queries', () => {
-    expect(poolIdsFromKnn([[['b', 0.9]], [['a', 0.1]]])).toEqual(['b', 'a'])
+  // Membership, not sequence: pool assembly intersects source rows against this,
+  // so KNN rank has nowhere to survive and the signature must not imply it does.
+  it('carries no order for the caller to depend on', () => {
+    expect(poolIdsFromKnn([[['b', 0.9]], [['a', 0.1]]])).toEqual(new Set(['b', 'a']))
+    expect(poolIdsFromKnn([[['a', 0.1]], [['b', 0.9]]])).toEqual(new Set(['b', 'a']))
   })
 
   it('is empty when every query returned nothing', () => {
-    expect(poolIdsFromKnn([[], []])).toEqual([])
+    expect(poolIdsFromKnn([[], []]).size).toBe(0)
   })
 
   it('is empty when no query ran at all', () => {
-    expect(poolIdsFromKnn([])).toEqual([])
+    expect(poolIdsFromKnn([]).size).toBe(0)
   })
 })

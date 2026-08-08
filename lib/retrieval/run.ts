@@ -450,7 +450,7 @@ async function loadAdmittedVectors(
   }
 }
 
-type KnnResult = { ids: string[]; vectorById: Map<string, Float32Array> }
+type KnnResult = { ids: Set<string>; vectorById: Map<string, Float32Array> }
 
 /** Null when the dim family does not exist yet — a cold start, not a fault. */
 async function runKnn(
@@ -498,7 +498,7 @@ async function buildPool(
   ctx: PoolCtx,
 ): Promise<Candidate[]> {
   const knn = await runKnn(deps, params, ctx)
-  if (knn === null || knn.ids.length === 0) return []
+  if (knn === null || knn.ids.size === 0) return []
   return assembleCandidates(ctx, knn.ids, knn.vectorById)
 }
 
@@ -520,7 +520,7 @@ async function buildHappeningsPool(
   if (knn === null) return []
 
   const rows = await loadHappeningRows(deps.queryAll, params.branchId, {
-    ids: knn.ids,
+    ids: [...knn.ids],
     entryIds: [...boostedEntryIds],
   })
   if (rows.length === 0) return []
@@ -532,13 +532,11 @@ async function buildHappeningsPool(
   if (admitted.length > 0)
     await loadAdmittedVectors(deps, params, ctx.kind, admitted, knn.vectorById)
 
-  // Appended, not merged by rank: assembleCandidates consumes the array as a
-  // membership set, and the pool predicates decide what survives from here.
-  // An admitted id with no vector was never embedded under this model.
-  const ids = [...knn.ids, ...admitted.filter((id) => knn.vectorById.has(id))]
-  return ids.length === 0
-    ? []
-    : assembleCandidates({ ...ctx, happenings: rows }, ids, knn.vectorById)
+  // An admitted id with no vector was never embedded under this model; keeping
+  // it would break vectorFor's invariant.
+  const ids = new Set(knn.ids)
+  for (const id of admitted) if (knn.vectorById.has(id)) ids.add(id)
+  return ids.size === 0 ? [] : assembleCandidates({ ...ctx, happenings: rows }, ids, knn.vectorById)
 }
 
 // unpackFloat32 lives in lib/db, so its blob-length throw arrives untyped. It
@@ -575,11 +573,10 @@ const lines = (...parts: (string | null)[]): string =>
 /** The one place KNN ids, vectors, source rows and pool predicates meet. */
 function assembleCandidates(
   ctx: PoolCtx,
-  ids: readonly string[],
+  wanted: ReadonlySet<string>,
   vectorById: ReadonlyMap<string, Float32Array>,
 ): Candidate[] {
   const { index, floor, sourceRows, awareness, queryVectors } = ctx
-  const wanted = new Set(ids)
 
   const sim = (vector: Float32Array, query: Float32Array | null): number =>
     query === null ? 0 : cosine(vector, query)

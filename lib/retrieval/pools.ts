@@ -174,16 +174,18 @@ export function filterThreadPool(
  */
 export type KnnHit = readonly [id: string, distance: number]
 
-/** Union of the per-query KNN id sets, de-duplicated, first-seen order. */
-export function poolIdsFromKnn(perQuery: readonly (readonly KnnHit[])[]): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
+/**
+ * Union of the per-query KNN id sets — membership only, deliberately not an
+ * order. Pool assembly intersects source rows against this, so the pool's order
+ * is the source read's, and KNN rank has nowhere to survive; a chapter-range
+ * admitted row (retrieval.md → Chapter-match boost) has no KNN rank at all.
+ * Returning a set rather than an array keeps the signature from promising a
+ * sequence the caller cannot use.
+ */
+export function poolIdsFromKnn(perQuery: readonly (readonly KnnHit[])[]): Set<string> {
+  const out = new Set<string>()
   for (const rows of perQuery) {
-    for (const [id] of rows) {
-      if (seen.has(id)) continue
-      seen.add(id)
-      out.push(id)
-    }
+    for (const [id] of rows) out.add(id)
   }
   return out
 }
