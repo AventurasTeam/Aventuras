@@ -95,3 +95,23 @@ export function migrateImageGeneration<
     backgroundSize: parseImageSpec(merged.backgroundSize),
   }
 }
+
+/**
+ * `llmThreshold` counted world-state *records*; the control that replaced it counts
+ * *words*, the same unit Entry Retrieval already used.
+ *
+ * The stored number is dropped rather than converted: 30 records and 500 words describe the
+ * same boundary only because a record happens to average ~16 words, and someone who raised
+ * the count to 100 was not asking for 1600 words of anything. The new default is calibrated
+ * to do what the old default did, which is a better answer than a guessed conversion.
+ *
+ * Dropping the key matters beyond tidiness: the store merges what is on disk over the
+ * defaults, so an unread key would be written back into every future save.
+ */
+export function migrateWorldStateBudget<T extends { tier3WholesaleWordBudget: number }>(
+  merged: T & { llmThreshold?: number },
+): T {
+  if (!('llmThreshold' in merged)) return merged
+  const { llmThreshold: _dropped, ...rest } = merged
+  return rest as T
+}

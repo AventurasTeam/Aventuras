@@ -56,4 +56,32 @@ describe('recentContent', () => {
     // Callers that need only narration filter before calling; this does not.
     expect(recentContent(entries, 3, AS_HAYSTACK)).toBe('two three four')
   })
+
+  describe('withRoles', () => {
+    const typed = (type: StoryEntry['type']): StoryEntry => ({ ...entry('said', 0), type })
+
+    it('labels who produced each entry', () => {
+      // The fixture alternates by index: 'three' is index 2, so it is the player's.
+      expect(recentContent(entries, 2, AS_PROSE, true)).toBe(
+        '[Player Action]: three\n\n[Narrator]: four',
+      )
+    })
+
+    it('never puts an internal type identifier in the prompt', () => {
+      // Nothing creates these today; they survive in stories saved by older versions.
+      const labelled = recentContent([typed('system'), typed('retry')], 2, AS_PROSE, true)
+
+      expect(labelled).not.toContain('[system]')
+      expect(labelled).not.toContain('[retry]')
+      expect(labelled).toBe('[System Note]: said\n\n[Narrator]: said')
+    })
+
+    it('calls a retry a narration, because that is what the model is being shown', () => {
+      expect(recentContent([typed('retry')], 1, AS_PROSE, true)).toBe('[Narrator]: said')
+    })
+
+    it('leaves the content untouched in the unlabelled form', () => {
+      expect(recentContent(entries, 2, AS_PROSE, false)).toBe('three\n\nfour')
+    })
+  })
 })

@@ -52,5 +52,6 @@ export {
   type WorldStateInjectionResult,
   type WorldStateInjectorConfig,
   type WorldStateInjectorInput,
+  type WorldStateInjectorOptions,
   type WorldStateContextEntry,
 } from './WorldStateInjector'

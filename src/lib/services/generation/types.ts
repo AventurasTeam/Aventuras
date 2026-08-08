@@ -17,6 +17,7 @@ import type {
 import type { ClassificationResult } from '$lib/services/ai/sdk/schemas/classifier'
 import type { TimelineFillResult } from '$lib/services/ai/retrieval'
 import type { EntryRetrievalResult } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type { WorldStateInjectionResult } from '$lib/services/ai/generation/WorldStateInjector'
 
 // Generation Phases
 export type GenerationPhase =
@@ -62,6 +63,8 @@ export interface RetrievalResult {
   chapterContext: string | null
   lorebookContext: string | null
   lorebookRetrievalResult: EntryRetrievalResult | null
+  /** The tiered world state, for the debug panel. The prompt reads `worldStateBlock`. */
+  worldStateRetrievalResult: WorldStateInjectionResult | null
   timelineFillResult: TimelineFillResult | null
   combinedContext: string | null
 }

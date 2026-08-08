@@ -6,12 +6,10 @@ import { settings, type ServiceId } from '$lib/stores/settings.svelte'
  * Implements three tiers of entry injection for lorebook entries:
  * - Tier 1: Always inject (injection.mode === 'always', or state-based like isPresent)
  * - Tier 2: Keyword matching (match name/aliases/keywords against user input & recent story)
- * - Tier 3: LLM selection (see `getLLMSelectedEntries`, shared with `WorldStateInjector`
- *   via `./tier3Selection.ts`) -- on a different trigger, for a reason: here it runs
- *   whenever any candidate is uncovered, because a lorebook entry is long-form authored
- *   prose and including uncovered ones wholesale is not an option. The injector's
- *   candidates are one-line entity records, so below `llmThreshold` it includes them
- *   instead of asking. Neither drops a small leftover on the floor.
+ * - Tier 3: LLM selection (shared with `WorldStateInjector` via `./tier3Selection.ts`),
+ *   on a different trigger: "how much leftover is too much to just include" is a question
+ *   about words here and about record count in the injector, whose candidates are one
+ *   line each. Neither drops a leftover on the floor.
  *
  * Selects from authored Lorebook `Entry[]` records only. The live-tracked
  * `Character`/`Location`/`Item`/`StoryBeat` state is `WorldStateInjector`'s job and is
@@ -30,7 +28,8 @@ import { entityNameMatches } from '$lib/utils/text'
 import type { Entry, EntryType, StoryEntry } from '$lib/types'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
-import { runTier3Selection, resolveTier3Selection } from './tier3Selection'
+import { runTier3Selection, resolveTier3Selection, countWholesaleWords } from './tier3Selection'
+import { secondPassHaystack } from './tier2SecondPass'
 import { resolveStickiness } from './stickiness'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '../core/defaults'
 import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
@@ -50,13 +49,16 @@ const log = createLogger('EntryRetrieval')
  * duration is a hard ceiling on continuous presence, not a sliding one.
  */
 export const STICKINESS_BY_TYPE: Record<EntryType, number> = {
-  concept: 5, // Magic systems, world rules - foundational context
-  faction: 4, // Faction dynamics persist during dealings
-  character: 3, // Recently mentioned NPCs stay in context
-  location: 3, // Nearby/mentioned locations
-  event: 2, // Historical references fade quickly
-  item: 2, // Items are situational
+  concept: 10, // Magic systems, world rules - foundational context
+  faction: 8, // Faction dynamics persist during dealings
+  character: 6, // Recently mentioned NPCs stay in context
+  location: 6, // Nearby/mentioned locations
+  event: 4, // Historical references fade quickly
+  item: 6, // Items are situational, but a carried one stays relevant
 }
+
+/** The longest window any type can have, on either map. Bounds activation pruning. */
+export const MAX_STICKINESS_POSITIONS = 10
 
 /**
  * Section headings for the lorebook context block, in the order they are emitted.
@@ -90,12 +92,49 @@ export interface EntryRetrievalConfig {
   maxTier2Entries: number
   /** Maximum entries to include from Tier 3 (LLM selected) */
   maxTier3Entries: number
+  /** Words of leftover that still go in whole, above which the LLM is asked instead */
+  tier3WholesaleWordBudget: number
   /** Maximum words per lorebook entry (0 = unlimited) */
   maxWordsPerEntry: number
   /** Enable LLM selection for Tier 3 */
   enableLLMSelection: boolean
   /** Number of recent story entries to check for keyword matching */
   recentEntriesCount: number
+  /**
+   * Whether the world state's Tier 1 + Tier 2 seed the second Tier 2 pass here.
+   *
+   * On, lore about something the world state says is in the scene comes in even when
+   * nobody named it. Off, Tier 2 sees only what the player wrote and the recent story.
+   *
+   * Worth a switch because the seed set is not small: the world state's Tier 1 is every
+   * active character, every inventory item, every active quest and the current location,
+   * and on a mature story that is most of the lorebook's subject matter — so a dense
+   * lorebook can spend its whole Tier 2 cap on entries nobody mentioned.
+   */
+  useSceneEntities: boolean
+}
+
+/** Tier 2 priority floors. The author's own `injection.priority` is added on top. */
+const TIER2_PRIORITY_BASE = 70
+const SECOND_PASS_PRIORITY_BASE = 60
+
+/** One entity already in the scene, as the world state names it. */
+export interface SceneEntity {
+  type: string
+  name: string
+}
+
+export interface EntryRetrievalOptions {
+  activationTracker?: ActivationTracker
+  signal?: AbortSignal
+  /** The entry `userInput` came from, so Tier 3 does not see the action twice. */
+  userActionEntryId?: string
+  /**
+   * What the world state put in the scene this turn (its Tier 1 and Tier 2). Widens the
+   * Tier 2 haystack, so lore about something present is found even when the player did not
+   * name it. Never travels the other way: see the haystack comment in `getRelevantEntries`.
+   */
+  sceneEntities?: SceneEntity[]
 }
 
 export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
@@ -104,9 +143,11 @@ export const DEFAULT_ENTRY_RETRIEVAL_CONFIG: EntryRetrievalConfig = {
   // Matching counts would put roughly ten times as much text in the prompt on this side.
   maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
   maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
+  tier3WholesaleWordBudget: ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
   maxWordsPerEntry: 0,
   enableLLMSelection: true,
   recentEntriesCount: 5,
+  useSceneEntities: true,
 }
 
 /**
@@ -121,9 +162,12 @@ export function getEntryRetrievalConfigFromSettings(): EntryRetrievalConfig {
     // Not clamped here: the constructor clamps whatever it is handed, so doing it twice
     // meant two copies of the same bounds that had to agree. Passed through as stored --
     // including a non-number from an old settings blob, which `clampMaxWords` handles.
+    tier3WholesaleWordBudget:
+      entrySettings.tier3WholesaleWordBudget ?? ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
     maxWordsPerEntry: entrySettings.maxWordsPerEntry,
     enableLLMSelection: entrySettings.enableLLMSelection ?? true,
     recentEntriesCount: entrySettings.recentEntriesCount ?? 5,
+    useSceneEntities: entrySettings.useSceneEntities ?? true,
   }
 }
 
@@ -143,6 +187,14 @@ export interface RetrievedEntry {
   tier: 1 | 2 | 3
   priority: number
   matchReason?: string
+  /** Story positions of carry-over left, when Tier 1 carried this over. Two per turn. */
+  stickyPositionsLeft?: number
+  /** The full window for this entry's type, so the panel can show progress, not just a count. */
+  stickyPositionsTotal?: number
+  /** Tier 3 only: the model picked this, rather than it fitting under the budget. */
+  llmSelected?: boolean
+  /** Tier 2 only: matched on the second pass, through something the first pass found. */
+  viaScene?: boolean
 }
 
 export interface EntryRetrievalResult {
@@ -183,9 +235,9 @@ export class EntryRetrievalService extends BaseAIService {
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
+    options: EntryRetrievalOptions = {},
   ): Promise<EntryRetrievalResult> {
+    const { activationTracker, signal, userActionEntryId, sceneEntities } = options
     const currentPosition = activationTracker?.currentPosition ?? recentStoryEntries.length
 
     log('getRelevantEntries called', {
@@ -195,9 +247,20 @@ export class EntryRetrievalService extends BaseAIService {
       currentPosition,
     })
 
-    // Build search content from user input and recent story
-    const searchContent =
-      `${userInput} ${recentContent(recentStoryEntries, this.config.recentEntriesCount, AS_HAYSTACK)}`.toLowerCase()
+    // The haystack the *first* Tier 2 pass matches against: what the scene actually says.
+    //
+    // The world state's scene entities are deliberately not in here. They are a second-pass
+    // seed instead (see `getTier2Entries`): a lore entry that matched only because a
+    // character happens to be standing in the room was not named by anyone, and folding it
+    // into this haystack made it indistinguishable from one the player just typed — same
+    // priority, same `matched: <name>` reason, and `viaScene` false, so the debug panel's
+    // whole point of separating relevance-at-one-remove missed the largest source of it.
+    const searchContent = [
+      userInput,
+      recentContent(recentStoryEntries, this.config.recentEntriesCount, AS_HAYSTACK),
+    ]
+      .join(' ')
+      .toLowerCase()
 
     // Tier 1: Always-inject + sticky entries
     const tier1 = this.getTier1Entries(entries, activationTracker, currentPosition)
@@ -215,8 +278,8 @@ export class EntryRetrievalService extends BaseAIService {
       (e) => !tier1Ids.has(e.id) && e.injection.mode !== 'never',
     )
 
-    // Tier 2: Keyword matching - check name, aliases, keywords against search content
-    const tier2 = this.getTier2Entries(candidateEntries, searchContent)
+    // Tier 2: keyword matching, in two passes. See `getTier2Entries`.
+    const tier2 = this.getTier2Entries(candidateEntries, searchContent, sceneEntities)
     log(
       'Tier 2 entries (keyword matched):',
       tier2.length,
@@ -230,51 +293,71 @@ export class EntryRetrievalService extends BaseAIService {
     const remainingEntries = candidateEntries.filter((e) => !tier1And2Ids.has(e.id))
     log('Remaining entries for Tier 3 LLM:', remainingEntries.length)
 
-    // Tier 3: LLM selection, whenever anything at all is left uncovered.
-    //
-    // No threshold, unlike WorldStateInjector, and the asymmetry is about what the
-    // candidates *are*: these are lorebook entries, paragraphs of authored prose, so
-    // "include the leftovers wholesale" -- the injector's cheap path below its threshold --
-    // would put the entire unmatched lorebook in the prompt. Selection is the only way to
-    // use them, so it runs whenever there is anything to select from. On any story with
-    // more lorebook entries than tiers 1-2 matched, that is one LLM call per turn.
+    // Tier 3, volume question first: a leftover cheap enough to send whole is sent whole,
+    // and only what is too expensive is worth an LLM call. The boundary is a word budget
+    // because a lorebook entry is a paragraph — see `tier3WholesaleWordBudget`.
     let tier3: RetrievedEntry[] = []
 
-    if (this.config.enableLLMSelection && remainingEntries.length > 0) {
+    /** Whether Tier 3 got there by being cheap rather than by being chosen. */
+    let tier3IsWholesale = false
+
+    const wholesaleWords = countWholesaleWords(remainingEntries, this.config.maxWordsPerEntry)
+    const fitsWholesale = wholesaleWords <= this.config.tier3WholesaleWordBudget
+
+    if (remainingEntries.length === 0) {
+      // Nothing uncovered.
+    } else if (fitsWholesale) {
+      tier3IsWholesale = true
+      tier3 = remainingEntries.map((entry) => ({
+        entry,
+        tier: 3,
+        priority: 50 + entry.injection.priority,
+        matchReason: 'Included wholesale (under word budget)',
+        llmSelected: false,
+      }))
+      log('Tier 3 included wholesale', {
+        entries: tier3.length,
+        words: wholesaleWords,
+        budget: this.config.tier3WholesaleWordBudget,
+      })
+    } else if (this.config.enableLLMSelection) {
       log('Tier 3 LLM selection triggered', {
         remainingEntries: remainingEntries.length,
+        words: wholesaleWords,
       })
       tier3 = await this.getLLMSelectedEntries(
         remainingEntries,
         userInput,
         recentStoryEntries,
+        currentPosition,
         signal,
+        userActionEntryId,
       )
       log(
         'Tier 3 entries:',
         tier3.length,
         tier3.map((e) => e.entry.name),
       )
+    } else {
+      // Too much to include, and selection is switched off: there is no third option.
+      log('Tier 3 dropped -- over word budget with LLM selection off', {
+        remaining: remainingEntries.length,
+        words: wholesaleWords,
+      })
     }
 
     // Record activations for stickiness tracking.
     //
-    // Tier 3 counts as much as Tier 2: both mean "this entry is relevant right now", and
-    // the whole point of stickiness is that relevance does not end with the turn that
-    // noticed it. Recording only Tier 2 made an entry the LLM picked *less* durable than
-    // one matched by name -- it dropped out of the prompt the next turn, while the cheaper
-    // signal survived several. Sticky entries are excluded from the candidate pool, so
-    // this also stops the same entry being re-selected (and re-paid for) every turn.
+    // A *selected* Tier 3 counts as much as Tier 2: both mean "relevant right now", and
+    // stickiness exists so that relevance outlives the turn that noticed it. A *wholesale*
+    // Tier 3 does not — it means the leftover was small, which says nothing about
+    // relevance, and recording it would make the whole uncovered lorebook sticky.
+    const activated = tier3IsWholesale ? tier2 : [...tier2, ...tier3]
     if (activationTracker) {
-      for (const retrieved of [...tier2, ...tier3]) {
+      for (const retrieved of activated) {
         activationTracker.recordActivation(retrieved.entry.id, currentPosition)
       }
-      log(
-        'Recorded activations for',
-        tier2.length + tier3.length,
-        'entries at position',
-        currentPosition,
-      )
+      log('Recorded activations for', activated.length, 'entries at position', currentPosition)
     }
 
     // Combine and sort by priority. The context block is built from this same ordered
@@ -293,7 +376,62 @@ export class EntryRetrievalService extends BaseAIService {
    * Tier 2: Keyword matching.
    * Match entry name, aliases, and keywords against user input and recent story content.
    */
-  private getTier2Entries(entries: Entry[], searchContent: string): RetrievedEntry[] {
+  /**
+   * Tier 2, in two passes.
+   *
+   * The first matches against what the scene *says* — the player's action and the recent
+   * story. The second matches whatever is left against *names*: those the first pass found,
+   * plus what the world state put in the scene when `useSceneEntities` is on. Both are the
+   * same kind of signal — an entry nobody named directly, arriving because something that
+   * names it did: the clan entry behind a character who just walked in.
+   *
+   * Second-pass hits rank below first-pass ones (`SECOND_PASS_PRIORITY_BASE`): they are
+   * relevance at one remove, so they are what a cap should drop first.
+   */
+  private getTier2Entries(
+    entries: Entry[],
+    searchContent: string,
+    sceneEntities?: SceneEntity[],
+  ): RetrievedEntry[] {
+    const firstPass = this.matchEntries(entries, searchContent, TIER2_PRIORITY_BASE)
+
+    const matchedIds = new Set(firstPass.map((r) => r.entry.id))
+    const seeds = secondPassHaystack([
+      ...firstPass.flatMap((r) => [r.entry.name, ...(r.entry.aliases ?? [])]),
+      // One-way on purpose: lore names never travel back into "who is present", where
+      // they would read as entities the narrator can act on.
+      ...(this.config.useSceneEntities ? (sceneEntities?.map((e) => e.name) ?? []) : []),
+    ])
+    const secondPass = seeds
+      ? this.matchEntries(
+          entries.filter((e) => !matchedIds.has(e.id)),
+          seeds,
+          SECOND_PASS_PRIORITY_BASE,
+        )
+      : []
+
+    if (secondPass.length > 0) {
+      log(
+        'Tier 2 second pass matched',
+        secondPass.length,
+        secondPass.map((r) => r.entry.name),
+      )
+    }
+
+    // Ranked before capping, by the priority the *author* gave the entry. Unlike the
+    // Tier 3 pool there is a real signal here, so the cap drops what was marked least
+    // important rather than whatever the lorebook happened to list last.
+    return [...firstPass, ...secondPass]
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, this.config.maxTier2Entries)
+  }
+
+  /** One matching pass. `priorityBase` is what separates a first-pass hit from a second. */
+  private matchEntries(
+    entries: Entry[],
+    searchContent: string,
+    priorityBase: number,
+  ): RetrievedEntry[] {
     const result: RetrievedEntry[] = []
 
     for (const entry of entries) {
@@ -323,19 +461,18 @@ export class EntryRetrievalService extends BaseAIService {
       }
 
       if (matchedKeywords.length > 0) {
+        const viaScene = priorityBase === SECOND_PASS_PRIORITY_BASE
         result.push({
           entry,
           tier: 2,
-          priority: 70 + entry.injection.priority,
+          priority: priorityBase + entry.injection.priority,
           matchReason: `matched: ${[...new Set(matchedKeywords)].join(', ')}`,
+          viaScene,
         })
       }
     }
 
-    // Ranked before capping, by the priority the *author* gave the entry. Unlike the
-    // Tier 3 pool there is a real signal here, so the cap drops what was marked least
-    // important rather than whatever the lorebook happened to list last.
-    return result.sort((a, b) => b.priority - a.priority).slice(0, this.config.maxTier2Entries)
+    return result
   }
 
   /**
@@ -358,6 +495,8 @@ export class EntryRetrievalService extends BaseAIService {
       let shouldInclude = false
       let priority = 0
       let reason = ''
+      let stickyPositionsLeft: number | undefined
+      let stickyPositionsTotal: number | undefined
 
       // Check injection mode
       if (entry.injection.mode === 'always') {
@@ -414,7 +553,9 @@ export class EntryRetrievalService extends BaseAIService {
         if (sticky) {
           shouldInclude = true
           priority = Math.max(priority, sticky.priority)
-          reason = `sticky (${entry.type}, ${sticky.turnsLeft} turns left)`
+          reason = `sticky (${entry.type}, ${sticky.positionsLeft} positions left)`
+          stickyPositionsLeft = sticky.positionsLeft
+          stickyPositionsTotal = STICKINESS_BY_TYPE[entry.type]
         }
       }
 
@@ -424,6 +565,8 @@ export class EntryRetrievalService extends BaseAIService {
           tier: 1,
           priority,
           matchReason: reason,
+          stickyPositionsLeft,
+          stickyPositionsTotal,
         })
       }
     }
@@ -439,7 +582,9 @@ export class EntryRetrievalService extends BaseAIService {
     availableEntries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
+    currentPosition: number,
     signal?: AbortSignal,
+    userActionEntryId?: string,
   ): Promise<RetrievedEntry[]> {
     if (availableEntries.length === 0) {
       return []
@@ -459,6 +604,8 @@ export class EntryRetrievalService extends BaseAIService {
       recentEntriesCount: this.config.recentEntriesCount,
       presetId: this.presetId,
       serviceLabel: 'tier3-lorebook-selection',
+      userActionEntryId,
+      currentPosition,
       signal,
     })
     if (!result) {
@@ -471,6 +618,7 @@ export class EntryRetrievalService extends BaseAIService {
         tier: 3,
         priority: 50 + entry.injection.priority,
         matchReason: 'LLM selected',
+        llmSelected: true,
       }),
     )
 
@@ -582,7 +730,7 @@ export class SimpleActivationTracker implements ActivationTracker {
   }
 
   /** Clear old activations that are beyond any stickiness window */
-  pruneOldActivations(maxStickiness: number = 10): void {
+  pruneOldActivations(maxStickiness: number = MAX_STICKINESS_POSITIONS): void {
     for (const [entryId, position] of this.activations) {
       if (this.currentPosition - position > maxStickiness) {
         this.activations.delete(entryId)

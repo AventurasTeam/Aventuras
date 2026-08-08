@@ -43,8 +43,20 @@ function makeMockDependencies(
       }) as any,
     answerChapterQuestion: async () => 'Answer',
     buildWorldStateContext: async () => ({
+      tier1: [],
+      tier2: [],
+      tier3: [],
       contextBlock: '## World State',
-      all: [{ type: 'character', name: 'Aria' }],
+      all: [
+        {
+          type: 'character' as const,
+          id: 'c1',
+          name: 'Aria',
+          description: null,
+          tier: 1,
+          priority: 90,
+        },
+      ],
     }),
     getRelevantLorebookEntries: async () => ({
       tier1: [],
@@ -229,6 +241,69 @@ describe('RetrievalPhase', () => {
     expect(lorebookSpy.mock.calls[0][2]).toBe(context.visibleEntries)
   })
 
+  it('hands the world state scene to the lorebook pass, before Tier 3 runs', async () => {
+    // The whole point of the handover: the lorebook waits for names, not for an LLM call.
+    let tier3Ran = false
+    const lorebookSpy: RetrievalDependencies['getRelevantLorebookEntries'] = vi.fn(async () => ({
+      tier1: [],
+      tier2: [],
+      tier3: [],
+      all: [],
+      contextBlock: '## Lorebook',
+    }))
+
+    const deps = makeMockDependencies({
+      buildWorldStateContext: async (_ws, _input, _recent, options) => {
+        options?.onSceneEntities?.([{ type: 'character', name: 'Aria' }])
+        await Promise.resolve()
+        tier3Ran = true
+        return { tier1: [], tier2: [], tier3: [], contextBlock: '## World State', all: [] }
+      },
+      getRelevantLorebookEntries: lorebookSpy,
+    })
+
+    for await (const _ of phase().execute({
+      context: makeMockContext(),
+      dependencies: deps,
+      memoryRetrievalEnabled: false,
+    })) {
+      // drain
+    }
+
+    expect(vi.mocked(lorebookSpy).mock.calls[0][3]?.sceneEntities).toEqual([
+      { type: 'character', name: 'Aria' },
+    ])
+    expect(tier3Ran).toBe(true)
+  })
+
+  it('still runs the lorebook pass when the world state fails before handing over', async () => {
+    const lorebookSpy: RetrievalDependencies['getRelevantLorebookEntries'] = vi.fn(async () => ({
+      tier1: [],
+      tier2: [],
+      tier3: [],
+      all: [],
+      contextBlock: '## Lorebook',
+    }))
+
+    const deps = makeMockDependencies({
+      buildWorldStateContext: async () => {
+        throw new Error('world state exploded')
+      },
+      getRelevantLorebookEntries: lorebookSpy,
+    })
+
+    for await (const _ of phase().execute({
+      context: makeMockContext(),
+      dependencies: deps,
+      memoryRetrievalEnabled: false,
+    })) {
+      // drain
+    }
+
+    expect(lorebookSpy).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(lorebookSpy).mock.calls[0][3]?.sceneEntities).toEqual([])
+  })
+
   it('runs memory retrieval only after stage A, so the summary is complete', async () => {
     // A partial summary is worse than none: it is read as a statement about the prompt, so
     // naming half of it invites work on the other half under the impression it is missing.
@@ -238,7 +313,7 @@ describe('RetrievalPhase', () => {
       shouldUseAgenticRetrieval: () => true,
       buildWorldStateContext: async () => {
         order.push('worldState')
-        return { contextBlock: '## World State', all: [] }
+        return { tier1: [], tier2: [], tier3: [], contextBlock: '## World State', all: [] }
       },
       getRelevantLorebookEntries: async () => {
         order.push('lorebook')

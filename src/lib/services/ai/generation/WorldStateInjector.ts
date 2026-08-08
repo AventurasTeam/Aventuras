@@ -9,7 +9,7 @@
  *   see `WORLD_STATE_STICKINESS_BY_TYPE`) when an `ActivationTracker` is provided
  * - Tier 2: Name matching (fuzzy match against recent input)
  * - Tier 3: everything tiers 1-2 left uncovered -- included as-is when there is little of
- *   it, narrowed by LLM selection when there is more than `llmThreshold`
+ *   it, narrowed by LLM selection when it is bigger than `tier3WholesaleWordBudget`
  *
  * Counterpart to ClassifierService ("World State Classifier" in Agent Profiles), which extracts
  * WorldState changes from the narrative response after generation; this service injects
@@ -42,6 +42,7 @@ import { entityNameMatches } from '$lib/utils/text'
 import {
   runTier3Selection,
   resolveTier3Selection,
+  countWholesaleWords,
   type Tier3Candidate,
 } from '../retrieval/tier3Selection'
 
@@ -50,6 +51,7 @@ type WorldStateCandidate = Tier3Candidate<WorldStateContextEntry['type']>
 import type { ActivationTracker } from '../retrieval/EntryRetrievalService'
 import { resolveStickiness } from '../retrieval/stickiness'
 import { recentContent, AS_HAYSTACK } from '$lib/utils/recentContent'
+import { secondPassHaystack } from '../retrieval/tier2SecondPass'
 
 const log = createLogger('WorldStateInjector')
 
@@ -60,14 +62,14 @@ const log = createLogger('WorldStateInjector')
  * faction/concept/event instead of storyBeat. The fading priority both maps feed is shared
  * -- see `retrieval/stickiness.ts`.
  *
- * The numbers are deliberately kept identical to the lorebook map rather than doubled;
- * changing the scale is a tuning decision for both at once.
+ * The numbers are deliberately kept identical to the lorebook map; changing the scale is a
+ * tuning decision for both at once.
  */
 const WORLD_STATE_STICKINESS_BY_TYPE: Record<WorldStateContextEntry['type'], number> = {
-  character: 3,
-  location: 3,
-  item: 2,
-  storyBeat: 3,
+  character: 6,
+  location: 6,
+  item: 6,
+  storyBeat: 6,
 }
 
 export interface WorldStateInjectorInput {
@@ -80,7 +82,8 @@ export interface WorldStateInjectorInput {
 
 export interface WorldStateInjectorConfig {
   /** Threshold for triggering LLM selection (Tier 3) */
-  llmThreshold: number
+  /** Words of leftover that still go in whole, above which the LLM is asked instead. */
+  tier3WholesaleWordBudget: number
   /** Maximum entities to include from Tier 2 (name matched) */
   maxTier2Entries: number
   /** Maximum entities to include from Tier 3, when the LLM had to choose */
@@ -91,8 +94,29 @@ export interface WorldStateInjectorConfig {
   recentEntriesCount: number
 }
 
+/** How far a second-pass Tier 2 hit ranks below the same entity found directly. */
+const SECOND_PASS_PRIORITY_PENALTY = 10
+
+/** One entity already in the scene, as handed to the lorebook pass. */
+export interface SceneEntity {
+  type: string
+  name: string
+}
+
+export interface WorldStateInjectorOptions {
+  signal?: AbortSignal
+  activationTracker?: ActivationTracker
+  /** The entry `userInput` came from, so Tier 3 does not see the action twice. */
+  userActionEntryId?: string
+  /**
+   * Called with Tier 1 + Tier 2 as soon as they are known, before Tier 3 runs. Lets the
+   * lorebook pass start from what is in the scene without waiting on an LLM call.
+   */
+  onSceneEntities?: (entities: SceneEntity[]) => void
+}
+
 export const DEFAULT_WORLD_STATE_INJECTOR_CONFIG: WorldStateInjectorConfig = {
-  llmThreshold: WORLD_STATE_INJECTION_DEFAULTS.llmThreshold,
+  tier3WholesaleWordBudget: WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
   maxTier2Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
   maxTier3Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
   enableLLMSelection: true,
@@ -106,7 +130,8 @@ export const DEFAULT_WORLD_STATE_INJECTOR_CONFIG: WorldStateInjectorConfig = {
 export function getWorldStateInjectorConfigFromSettings(): Partial<WorldStateInjectorConfig> {
   const s = settings.systemServicesSettings.worldStateInjection
   return {
-    llmThreshold: s?.llmThreshold ?? WORLD_STATE_INJECTION_DEFAULTS.llmThreshold,
+    tier3WholesaleWordBudget:
+      s?.tier3WholesaleWordBudget ?? WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
     maxTier2Entries: s?.maxTier2Entries ?? WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
     maxTier3Entries: s?.maxTier3Entries ?? WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
     enableLLMSelection: s?.enableLLMSelection ?? true,
@@ -121,6 +146,14 @@ export interface WorldStateContextEntry {
   description: string | null
   tier: 1 | 2 | 3
   priority: number
+  /** Story positions of carry-over left, when Tier 1 carried this over. Two per turn. */
+  stickyPositionsLeft?: number
+  /** The full window for this entity's type, so the panel can show progress, not just a count. */
+  stickyPositionsTotal?: number
+  /** Tier 3 only: the model picked this, rather than it fitting under the budget. */
+  llmSelected?: boolean
+  /** Tier 2 only: matched on the second pass, through something the first pass found. */
+  viaScene?: boolean
   metadata?: Record<string, any>
 }
 
@@ -161,9 +194,9 @@ export class WorldStateInjector extends BaseAIService {
     worldState: WorldStateInjectorInput,
     userInput: string,
     recentEntries: StoryEntry[],
-    signal?: AbortSignal,
-    activationTracker?: ActivationTracker,
+    options: WorldStateInjectorOptions = {},
   ): Promise<WorldStateInjectionResult> {
+    const { signal, activationTracker, userActionEntryId, onSceneEntities } = options
     const currentPosition = activationTracker?.currentPosition ?? recentEntries.length
 
     log('buildContext called', {
@@ -191,58 +224,78 @@ export class WorldStateInjector extends BaseAIService {
     // Get IDs in tier 1 + 2
     const tier12Ids = new Set([...tier1Ids, ...tier2.map((e) => e.id)])
 
+    // Handed over before Tier 3, which is the point: Tier 3 may be an LLM call, and the
+    // lorebook pass waiting on this must not wait on that too.
+    onSceneEntities?.([...tier1, ...tier2].map((e) => ({ type: e.type, name: e.name })))
+
     // Tier 3: what tiers 1 and 2 left uncovered.
     //
-    // `llmThreshold` is an overflow valve, and now actually works like one. It used to gate
-    // *whether Tier 3 ran at all*, with nothing below the threshold: a leftover of 5
-    // entities was dropped outright while a leftover of 40 got an LLM pass and up to
-    // `maxEntriesPerTier` of them injected. That inverted the thing it was meant to protect
-    // -- a bigger pool made any given entity *more* likely to reach the narrator, so a small
-    // story was served worse than a large one -- and it was backwards on cost too, skipping
-    // the cheap calls and paying for the expensive ones.
+    // The volume question first, the relevance question only if it has to be asked:
     //
-    // The volume question and the relevance question are now separate:
-    //   - small leftover  -> include all of it, no LLM call, nothing dropped
-    //   - large leftover  -> too much to include, so ask the model which of it matters
-    // The threshold is the boundary between the two, which is what its name says.
+    //   - leftover small enough to send whole -> send it, no LLM call, nothing dropped
+    //   - leftover too big                    -> ask the model which of it matters
     //
-    // Not capped by `maxEntriesPerTier` in the wholesale branch: "include what is left over"
-    // and "the first N of what is left over" cannot both be true, and there is no ranking
-    // signal here to make a cap non-arbitrary. Same reasoning as Tier 1's always-inject
-    // entries. The threshold is the ceiling in that branch, by construction.
+    // Measured in words rather than records, the same unit `EntryRetrievalService` uses, so
+    // the two budgets mean the same thing at different scales. Not capped by
+    // `maxTier3Entries` in the wholesale branch: "include what is left over" and "the first
+    // N of what is left over" cannot both be true, and there is no ranking signal here to
+    // make a cap non-arbitrary.
     let tier3: WorldStateContextEntry[] = []
+
+    /** Whether Tier 3 got there by being cheap rather than by being chosen. */
+    let tier3IsWholesale = false
+
     const candidates = this.collectRemainingCandidates(worldState, tier12Ids)
+    const wholesaleWords = countWholesaleWords(candidates)
 
     if (candidates.length === 0) {
       // Nothing uncovered.
-    } else if (candidates.length <= this.config.llmThreshold) {
-      tier3 = candidates.map((candidate) => this.asTier3Entry(candidate))
+    } else if (wholesaleWords <= this.config.tier3WholesaleWordBudget) {
+      tier3IsWholesale = true
+      tier3 = candidates.map((candidate) => this.asTier3Entry(candidate, false))
       log('Tier 3 included wholesale', {
         entries: tier3.length,
-        threshold: this.config.llmThreshold,
+        words: wholesaleWords,
+        budget: this.config.tier3WholesaleWordBudget,
       })
     } else if (this.config.enableLLMSelection) {
       log('Tier 3 LLM selection triggered', {
         candidates: candidates.length,
-        threshold: this.config.llmThreshold,
+        words: wholesaleWords,
+        budget: this.config.tier3WholesaleWordBudget,
       })
-      tier3 = await this.selectTier3WithLLM(candidates, userInput, recentEntries, signal)
+      tier3 = await this.selectTier3WithLLM(
+        candidates,
+        userInput,
+        recentEntries,
+        currentPosition,
+        signal,
+        userActionEntryId,
+      )
       log('Tier 3 entries:', tier3.length)
     } else {
-      // Too many to include, and selection is switched off: there is no third option.
-      log('Tier 3 dropped -- over threshold with LLM selection off', {
+      // Too much to include, and selection is switched off: there is no third option.
+      log('Tier 3 dropped -- over budget with LLM selection off', {
         candidates: candidates.length,
-        threshold: this.config.llmThreshold,
+        words: wholesaleWords,
+        budget: this.config.tier3WholesaleWordBudget,
       })
     }
 
     // Record Tier 2 and Tier 3 activations for stickiness (mirrors EntryRetrievalService).
     //
-    // After Tier 3, not between the tiers: an entity the LLM picked is as much "relevant
+    // After Tier 3, not between the tiers: an entity the LLM *picked* is as much "relevant
     // this turn" as one matched by name, and recording only Tier 2 made the expensive
     // signal the shorter-lived one.
+    //
+    // A *wholesale* Tier 3 is excluded, exactly as in `EntryRetrievalService`. It means the
+    // leftover was small, which says nothing about relevance — and since every uncovered
+    // entity is in it, recording it would make the entire world state sticky on every turn
+    // of any story under the budget, i.e. on most stories. Stickiness would then never
+    // expire and Tier 1 would absorb the whole pool.
+    const activated = tier3IsWholesale ? tier2 : [...tier2, ...tier3]
     if (activationTracker) {
-      for (const entry of [...tier2, ...tier3]) {
+      for (const entry of activated) {
         activationTracker.recordActivation(entry.id, currentPosition)
       }
     }
@@ -441,7 +494,9 @@ export class WorldStateInjector extends BaseAIService {
           ...candidate,
           tier: 1,
           priority: carried.priority,
-          metadata: { sticky: true, turnsLeft: carried.turnsLeft },
+          stickyPositionsLeft: carried.positionsLeft,
+          stickyPositionsTotal: WORLD_STATE_STICKINESS_BY_TYPE[candidate.type],
+          metadata: { sticky: true, positionsLeft: carried.positionsLeft },
         })
         includedIds.add(candidate.id)
       }
@@ -458,8 +513,12 @@ export class WorldStateInjector extends BaseAIService {
   }
 
   /**
-   * Tier 2: Name matching against user input and recent entries.
-   * Uses fuzzy matching to find references to characters, locations, items.
+   * Tier 2, in two passes.
+   *
+   * The first matches names against the scene; the second matches what is left against the
+   * names the first pass found, so an entity referred to only through another one still
+   * arrives. Second-pass hits rank a step below their first-pass equivalents, so a cap
+   * drops relevance-at-one-remove first.
    */
   private getTier2Entries(
     worldState: WorldStateInjectorInput,
@@ -467,11 +526,46 @@ export class WorldStateInjector extends BaseAIService {
     recentEntries: StoryEntry[],
     excludeIds: Set<string>,
   ): WorldStateContextEntry[] {
-    const entries: WorldStateContextEntry[] = []
-
-    // Combine user input with recent entry content for matching
     const searchText =
       `${userInput} ${recentContent(recentEntries, this.config.recentEntriesCount, AS_HAYSTACK)}`.toLowerCase()
+
+    const firstPass = this.matchEntities(worldState, searchText, excludeIds, 0)
+
+    const seeds = secondPassHaystack(firstPass.map((e) => e.name))
+    const secondPass = seeds
+      ? this.matchEntities(
+          worldState,
+          seeds,
+          new Set([...excludeIds, ...firstPass.map((e) => e.id)]),
+          SECOND_PASS_PRIORITY_PENALTY,
+        )
+      : []
+
+    if (secondPass.length > 0) {
+      log(
+        'Tier 2 second pass matched',
+        secondPass.length,
+        secondPass.map((e) => e.name),
+      )
+    }
+
+    // Ranked before capping. Built in type order (characters, then locations, then items,
+    // then beats), so slicing that order straight through meant a low cap dropped whole
+    // categories -- with maxEntriesPerTier at its minimum of 3, no story beat could ever
+    // survive Tier 2, whatever the narrative was about.
+    return [...firstPass, ...secondPass]
+      .sort((a, b) => b.priority - a.priority)
+      .slice(0, this.config.maxTier2Entries)
+  }
+
+  /** One matching pass. `priorityPenalty` is what separates a second-pass hit from a first. */
+  private matchEntities(
+    worldState: WorldStateInjectorInput,
+    searchText: string,
+    excludeIds: Set<string>,
+    priorityPenalty: number,
+  ): WorldStateContextEntry[] {
+    const entries: WorldStateContextEntry[] = []
 
     // Match characters not in Tier 1
     for (const char of worldState.characters) {
@@ -483,7 +577,8 @@ export class WorldStateInjector extends BaseAIService {
           name: char.name,
           description: char.description,
           tier: 2,
-          priority: 60,
+          priority: 60 - priorityPenalty,
+          viaScene: priorityPenalty > 0,
           metadata: {
             relationship: char.relationship,
             traits: char.traits,
@@ -503,7 +598,8 @@ export class WorldStateInjector extends BaseAIService {
           name: loc.name,
           description: loc.description,
           tier: 2,
-          priority: 50,
+          priority: 50 - priorityPenalty,
+          viaScene: priorityPenalty > 0,
           metadata: { visited: loc.visited },
         })
       }
@@ -519,7 +615,8 @@ export class WorldStateInjector extends BaseAIService {
           name: item.name,
           description: item.description,
           tier: 2,
-          priority: 40,
+          priority: 40 - priorityPenalty,
+          viaScene: priorityPenalty > 0,
           metadata: { quantity: item.quantity, location: item.location },
         })
       }
@@ -535,17 +632,14 @@ export class WorldStateInjector extends BaseAIService {
           name: beat.title,
           description: beat.description,
           tier: 2,
-          priority: 45,
+          priority: 45 - priorityPenalty,
+          viaScene: priorityPenalty > 0,
           metadata: { type: beat.type, status: beat.status },
         })
       }
     }
 
-    // Ranked before capping. Built in type order (characters, then locations, then items,
-    // then beats), so slicing that order straight through meant a low cap dropped whole
-    // categories -- with maxEntriesPerTier at its minimum of 3, no story beat could ever
-    // survive Tier 2, whatever the narrative was about.
-    return entries.sort((a, b) => b.priority - a.priority).slice(0, this.config.maxTier2Entries)
+    return entries
   }
 
   private candidatesOf<T>(
@@ -600,19 +694,24 @@ export class WorldStateInjector extends BaseAIService {
     ]
   }
 
-  private asTier3Entry(candidate: WorldStateCandidate): WorldStateContextEntry {
-    return { ...candidate, tier: 3, priority: 30 }
+  private asTier3Entry(
+    candidate: WorldStateCandidate,
+    llmSelected: boolean,
+  ): WorldStateContextEntry {
+    return { ...candidate, tier: 3, priority: 30, llmSelected }
   }
 
   /**
-   * Ask the LLM which of the leftovers matter. Only reached when there are more of them
-   * than `llmThreshold` -- below that they are all included and no call is made.
+   * Ask the LLM which of the leftovers matter. Only reached when they run to more words
+   * than `tier3WholesaleWordBudget` -- below that they are all included and no call is made.
    */
   private async selectTier3WithLLM(
     candidates: WorldStateCandidate[],
     userInput: string,
     recentEntries: StoryEntry[],
+    currentPosition: number,
     signal?: AbortSignal,
+    userActionEntryId?: string,
   ): Promise<WorldStateContextEntry[]> {
     const result = await runTier3Selection({
       candidates,
@@ -621,13 +720,15 @@ export class WorldStateInjector extends BaseAIService {
       recentEntriesCount: this.config.recentEntriesCount,
       presetId: this.presetId,
       serviceLabel: 'tier3-world-state-selection',
+      userActionEntryId,
+      currentPosition,
       signal,
     })
     if (!result) {
       return []
     }
 
-    const entries = resolveTier3Selection(candidates, result).map((c) => this.asTier3Entry(c))
+    const entries = resolveTier3Selection(candidates, result).map((c) => this.asTier3Entry(c, true))
 
     log('Tier 3 LLM selection complete', {
       candidates: candidates.length,

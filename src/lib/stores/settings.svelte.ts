@@ -27,6 +27,7 @@ import {
 import {
   migrateEntryRetrieval,
   migrateImageGeneration,
+  migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
 import { ui } from '$lib/stores/ui.svelte'
@@ -566,8 +567,12 @@ export interface EntryRetrievalSettings {
   maxTier2Entries: number
   /** Cap on Tier 3 (LLM selected) */
   maxTier3Entries: number
+  /** Words of leftover that still go in whole, above which the LLM is asked instead */
+  tier3WholesaleWordBudget: number
   maxWordsPerEntry: number // 0 = unlimited
   enableLLMSelection: boolean
+  /** Whether the world state's Tier 1 + Tier 2 seed the second Tier 2 pass here */
+  useSceneEntities: boolean
   /** Recent story entries scanned for Tier 2 name/keyword matching and included in the Tier 3 prompt */
   recentEntriesCount: number
   reasoningEffort: ReasoningEffort
@@ -589,8 +594,10 @@ export function getDefaultEntryRetrievalSettingsForProvider(
     temperature: 0.2,
     maxTier2Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier2Entries,
     maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
+    tier3WholesaleWordBudget: ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
     maxWordsPerEntry: 0,
     enableLLMSelection: true,
+    useSceneEntities: true,
     recentEntriesCount: 5,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
@@ -603,8 +610,8 @@ export function getDefaultEntryRetrievalSettingsForProvider(
 // distinction). Model/temperature/profile are NOT stored here -- they come from
 // the 'worldStateInjection' Agent Profile assignment, same as every other AI task.
 export interface WorldStateInjectionSettings {
-  /** Number of not-yet-selected live entities that triggers Tier 3 LLM selection */
-  llmThreshold: number
+  /** Words of leftover that still go in whole, above which the LLM is asked instead */
+  tier3WholesaleWordBudget: number
   /**
    * Cap on Tier 2 (name matched).
    *
@@ -622,7 +629,7 @@ export interface WorldStateInjectionSettings {
 
 export function getDefaultWorldStateInjectionSettings(): WorldStateInjectionSettings {
   return {
-    llmThreshold: WORLD_STATE_INJECTION_DEFAULTS.llmThreshold,
+    tier3WholesaleWordBudget: WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
     maxTier2Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier2Entries,
     maxTier3Entries: WORLD_STATE_INJECTION_DEFAULTS.maxTier3Entries,
     enableLLMSelection: true,
@@ -1698,10 +1705,12 @@ class SettingsStore {
               ...defaults.entryRetrieval,
               ...loaded.entryRetrieval,
             }),
-            worldStateInjection: migrateWorldStateInjection(loaded.worldStateInjection, {
-              ...defaults.worldStateInjection,
-              ...loaded.worldStateInjection,
-            }),
+            worldStateInjection: migrateWorldStateBudget(
+              migrateWorldStateInjection(loaded.worldStateInjection, {
+                ...defaults.worldStateInjection,
+                ...loaded.worldStateInjection,
+              }),
+            ),
             imageGeneration: migrateImageGeneration({
               ...defaults.imageGeneration,
               ...loaded.imageGeneration,

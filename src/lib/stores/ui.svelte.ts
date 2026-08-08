@@ -22,6 +22,16 @@ import type {
   ActivationTracker,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import type { RetrievalResult } from '$lib/services/generation/types'
+import type { WorldStateInjectionResult } from '$lib/services/ai/generation/WorldStateInjector'
+
+/** What a cached retrieval result was computed for. All four must match to reuse it. */
+export interface RetrievalCacheKey {
+  storyId: string
+  branchId: string | null
+  /** `story.entries.length` when retrieval ran, the user action included. */
+  position: number
+  actionContent: string
+}
 import type { SyncMode } from '$lib/types/sync'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { database } from '$lib/services/database'
@@ -193,11 +203,13 @@ class UIStore {
   private currentStyleReviewStoryId = $state<string | null>(null)
   styleReviewStateWrite = Promise.resolve()
 
-  // Cached retrieval result (for regenerate skip)
+  // Cached retrieval result, reused by retry and regenerate to skip the whole phase.
   lastRetrievalResult = $state<RetrievalResult | null>(null)
+  private lastRetrievalKey: RetrievalCacheKey | null = null
 
   // Lorebook debug state
   lastLorebookRetrieval = $state<EntryRetrievalResult | null>(null)
+  lastWorldStateRetrieval = $state<WorldStateInjectionResult | null>(null)
   lorebookDebugOpen = $state(false)
 
   // Lorebook manager state
@@ -1146,8 +1158,8 @@ class UIStore {
    */
   clearGenerationCaches() {
     this.clearStyleReviewState()
-    this.lastRetrievalResult = null
-    this.lastLorebookRetrieval = null
+    this.setLastRetrievalResult(null)
+    this.setLastLorebookRetrieval(null, null)
   }
 
   /**
@@ -1213,13 +1225,37 @@ class UIStore {
   }
 
   // Retrieval cache methods
-  setLastRetrievalResult(result: RetrievalResult | null) {
+  setLastRetrievalResult(result: RetrievalResult | null, key: RetrievalCacheKey | null = null) {
     this.lastRetrievalResult = result
+    this.lastRetrievalKey = result ? key : null
+  }
+
+  /**
+   * The cached retrieval, but only if it was built for exactly this situation.
+   *
+   * Branch is part of the key because `switchBranch` does not clear this cache and must
+   * not reuse across branches: the same position on another branch is a different story.
+   * Position and action text cover the rest — a retry or a regenerate rewinds to the state
+   * the retrieval was computed in, so an unchanged key means unchanged inputs.
+   */
+  retrievalResultFor(key: RetrievalCacheKey): RetrievalResult | null {
+    const cached = this.lastRetrievalKey
+    if (!cached || !this.lastRetrievalResult) return null
+    const matches =
+      cached.storyId === key.storyId &&
+      cached.branchId === key.branchId &&
+      cached.position === key.position &&
+      cached.actionContent === key.actionContent
+    return matches ? this.lastRetrievalResult : null
   }
 
   // Lorebook debug methods
-  setLastLorebookRetrieval(result: EntryRetrievalResult | null) {
+  setLastLorebookRetrieval(
+    result: EntryRetrievalResult | null,
+    worldState: WorldStateInjectionResult | null = null,
+  ) {
     this.lastLorebookRetrieval = result
+    this.lastWorldStateRetrieval = worldState
   }
 
   openLorebookDebug() {
@@ -1446,6 +1482,18 @@ class UIStore {
     this.activationData = {}
     this.currentStoryPosition = 0
     this.currentActivationStoryId = null
+  }
+
+  /**
+   * Forget one entry's activation, so its carry-over ends now instead of at its countdown.
+   *
+   * Only the in-memory copy: the next retrieval writes the whole map back to the database
+   * through `updateActivationData`, so persisting here would be overwritten a turn later.
+   */
+  clearActivationFor(entryId: string) {
+    if (!(entryId in this.activationData)) return
+    const { [entryId]: _dropped, ...rest } = this.activationData
+    this.activationData = rest
   }
 
   /**

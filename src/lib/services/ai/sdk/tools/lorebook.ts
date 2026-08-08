@@ -573,9 +573,32 @@ export type LoreManagementToolContext = LorebookEntryToolContext & StoryToolCont
  * Includes all entry management and chapter querying tools.
  * Excludes browsing tools (managing the entire vault).
  */
+/**
+ * Drop `injectionMode` from a tool's input schema.
+ *
+ * The field survives in `execute`, which simply never receives it and falls back to
+ * `'keyword'`. Removing it from the schema rather than ignoring it afterwards is the point:
+ * the schema is what the model is shown, so a parameter left in and discarded is a
+ * parameter the model spends tokens choosing.
+ */
+function withoutInjectionMode<T extends { inputSchema: unknown }>(tool: T): T {
+  // `tool()` widens `inputSchema` to the SDK's `FlexibleSchema`, which loses the Zod
+  // methods; these two are built here from `z.object`, so the narrowing is safe.
+  const schema = tool.inputSchema as z.ZodObject<z.ZodRawShape>
+  return { ...tool, inputSchema: schema.omit({ injectionMode: true }) } as T
+}
+
 export function createLoreManagementTools(context: LoreManagementToolContext) {
+  const { create_entry, update_entry, ...entryTools } = createLorebookEntryTools(context)
+
   return {
-    ...createLorebookEntryTools(context),
+    ...entryTools,
+    // Lore management runs unattended, so it does not get to decide that an entry belongs
+    // in every prompt forever: `always` is a budget decision, past every retrieval
+    // threshold, made by an agent that cannot see the budget. The vault assistant keeps it
+    // — there the user reads the change before it lands.
+    create_entry: withoutInjectionMode(create_entry),
+    update_entry: withoutInjectionMode(update_entry),
     ...createStoryTools(context),
   }
 }

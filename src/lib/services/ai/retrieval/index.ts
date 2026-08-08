@@ -18,7 +18,25 @@ export {
   type ActivationTracker,
   type RetrievedEntry,
   type EntryRetrievalConfig,
+  type EntryRetrievalOptions,
+  type SceneEntity,
 } from './EntryRetrievalService'
+
+// What retrieval put in the prompt for a turn, for the debug panel.
+export {
+  toRetrievalSnapshot,
+  snapshotSize,
+  positionsToTurns,
+  splitTier1,
+  splitTier2,
+  splitTier3,
+  type RetrievalSnapshot,
+  type RetrievalSnapshotEntry,
+  type RetrievalSnapshotTokens,
+} from './retrievalSnapshot'
+
+// Tier 3 selection cache, cleared when the story it was about is no longer loaded.
+export { clearTier3SelectionCache } from './tier3Selection'
 
 // Agentic Retrieval
 export {

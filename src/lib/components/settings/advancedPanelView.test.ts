@@ -27,33 +27,24 @@ describe('advancedPanelView — defaults', () => {
 })
 
 describe('advancedPanelView — inactive controls', () => {
-  it('deactivates Max Tier 3 Entries when Entry Retrieval LLM selection is off', () => {
+  it('deactivates Max LLM-Selected Entries when Entry Retrieval selection is off', () => {
     const v = view({ entryRetrieval: { enableLLMSelection: false } })
 
-    expect(v.inactive.maxTier3Entries).toBe('LLM Selection is off, so there is no Tier 3')
-    // The other sections are untouched: they have their own switch.
-    expect(v.inactive.llmThreshold).toBeUndefined()
+    expect(v.inactive.maxTier3Entries).toBe(
+      'LLM Selection is off; the leftover is included whole or not at all',
+    )
+    // The other section is untouched: it has its own switch.
+    expect(v.inactive.worldStateMaxTier3).toBeUndefined()
   })
 
-  it('deactivates the World State Tier 3 cap, but never its threshold', () => {
+  it('deactivates the World State selection cap, but never the budget', () => {
     const v = view({ worldStateInjection: { enableLLMSelection: false } })
 
     // The cap applies only to what the model chose, so with selection off it does nothing.
     expect(v.inactive.worldStateMaxTier3).toBe(
       'LLM Selection is off; the leftover is included whole or not at all',
     )
-    // The threshold, though, is the boundary between "include the whole leftover" and
-    // "ask the model" -- with selection off it is the only thing still deciding how much
-    // world state reaches the narrator. It used to be greyed out as inactive, which was
-    // backwards: it matters more in that configuration, not less.
-    expect(v.inactive.llmThreshold).toBeUndefined()
     expect(v.inactive.maxTier3Entries).toBeUndefined()
-  })
-
-  it('keeps the World State threshold live with LLM selection on, too', () => {
-    expect(
-      view({ worldStateInjection: { enableLLMSelection: true } }).inactive.llmThreshold,
-    ).toBeUndefined()
   })
 
   it('reports the Style Reviewer as off, so its controls can be hidden rather than dimmed', () => {

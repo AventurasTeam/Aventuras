@@ -33,6 +33,7 @@ const retrievalResult: RetrievalResult = {
   chapterContext: '## Chapters',
   lorebookContext: '## Lorebook',
   lorebookRetrievalResult: null,
+  worldStateRetrievalResult: null,
   timelineFillResult: null,
   combinedContext: '## Chapters\n## Lorebook',
 }

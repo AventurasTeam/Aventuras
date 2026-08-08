@@ -7,11 +7,13 @@
 import * as z from 'zod'
 
 /**
- * Result of LLM entity selection.
- * The LLM returns IDs of relevant entities from a candidate list.
+ * Result of LLM entity selection: positions in the numbered candidate list, never ids —
+ * ids are not rendered into the prompt, so the model has never seen one.
  */
 export const entitySelectionSchema = z.object({
-  selectedIds: z.array(z.string()).describe('IDs of the most relevant entities'),
+  selectedIndices: z
+    .array(z.string())
+    .describe('Index numbers of the most relevant entries, e.g. ["0", "3"]'),
   reasoning: z.string().optional().describe('Brief explanation of selection logic'),
 })
 
