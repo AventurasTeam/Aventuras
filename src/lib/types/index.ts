@@ -1,3 +1,4 @@
+import type { RetrievalSnapshot } from '$lib/services/ai/retrieval/retrievalSnapshot'
 // Core entity types for Aventura
 export type StoryMode = 'adventure' | 'creative-writing'
 export type POV = 'first' | 'second' | 'third'
@@ -163,6 +164,8 @@ export interface EntryMetadata {
   timeEnd?: TimeTracker // Story time after classification applied time progression
   // Translation fields (for backwards compatibility, also stored in columns)
   originalInput?: string // For translateInput: original user text before translation to English
+  /** What retrieval put in the prompt for this turn. Diagnostic only — nothing reads it back. */
+  retrievalSnapshot?: RetrievalSnapshot
 }
 
 export interface Character {

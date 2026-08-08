@@ -56,7 +56,6 @@ export interface AdvancedPanelView {
      * World State Injection's threshold. Always live -- see `advancedPanelView` for why
      * switching LLM selection off makes it matter *more*, not less.
      */
-    llmThreshold?: string
     /** World State Injection's Tier 3 cap, which applies only to the LLM-chosen branch. */
     worldStateMaxTier3?: string
   }
@@ -110,14 +109,15 @@ export function advancedPanelView(settings: AdvancedPanelSettings): AdvancedPane
     },
 
     inactive: {
-      maxTier3Entries: entryLLMOn ? undefined : 'LLM Selection is off, so there is no Tier 3',
-      // `llmThreshold` is NOT reported inactive when LLM selection is off, and this is the
-      // second control in this panel to have claimed it was. It is the boundary between
-      // "include the whole leftover" and "ask the model which of it matters", and only the
-      // second branch needs the model -- so with selection off it is the *only* thing
-      // deciding how much world state reaches the narrator, not a dead control.
-      llmThreshold: undefined,
-      // Its companion cap, on the other hand, only applies in the branch that asks.
+      // Not "there is no Tier 3": a leftover under the word budget is still included
+      // whole without asking the model, so turning selection off removes the call.
+      maxTier3Entries: entryLLMOn
+        ? undefined
+        : 'LLM Selection is off; the leftover is included whole or not at all',
+      // The Include-All Budget is never reported inactive: it is the boundary between
+      // "include the whole leftover" and "ask the model", and only the second branch needs
+      // the model. With selection off it is the only thing deciding how much reaches the
+      // narrator. Its companion cap, on the other hand, only applies in the branch that asks.
       worldStateMaxTier3: worldStateLLMOn
         ? undefined
         : 'LLM Selection is off; the leftover is included whole or not at all',

@@ -372,7 +372,47 @@ join Tier 2/3 in the relevance sections.
 Anything in the result's `all` must be renderable somewhere in the block, because `all` is what the
 retrieval agent is told the narrator already has. `WorldStateInjector.test.ts` pins that invariant.
 
-Both services implement a three-tier injection architecture (Tier 1: sticky/always-on, Tier 2: name/keyword fuzzy matching, Tier 3: LLM candidate selection via `src/lib/services/ai/retrieval/tier3Selection.ts`) and are independently configurable in Advanced Settings.
+Both services implement a three-tier injection architecture (Tier 1: sticky/always-on, Tier 2:
+name/keyword fuzzy matching, Tier 3: the leftover) and are independently configurable in Advanced
+Settings.
+
+**Tier 3 is two branches, and the volume question is asked before the relevance one.** A leftover
+small enough to send whole is sent whole, uncapped and with no LLM call; only one too big is worth
+asking a model about, via `src/lib/services/ai/retrieval/tier3Selection.ts`. The boundary is a
+**word budget on the candidate text** (`tier3WholesaleWordBudget`), the same unit on both sides —
+but not the same number: a live world-state record runs ~16 words and a lorebook entry ~69, so the
+budgets are 500 and 1000. A record count could not express that difference, which is why the
+world state's old `llmThreshold` is gone rather than converted. Switching LLM selection off removes
+the call, not the tier: a leftover under the budget still goes in.
+
+**Only a leftover the model _chose_ counts as an activation.** Wholesale inclusion means "there was
+little of it", which says nothing about relevance — and since the branch holds every uncovered
+record, recording it would make the entire pool sticky on every turn of any story under the budget,
+so Tier 1 would absorb it and stickiness would never expire. Both services exclude it; the world
+state side once claimed to and did not.
+
+**Tier 2 runs twice, and the second pass is where indirect relevance lives.** The first pass matches
+what the scene _says_ — the player's action and the recent story. The second matches whatever is
+left against _names_: those the first pass found (`retrieval/tier2SecondPass.ts`), plus what World
+State Injection put in the scene. That second source is a **one-way handover**: `WorldStateInjector`
+publishes its Tier 1 + Tier 2 via `onSceneEntities` before its own Tier 3 runs, so the lorebook pass
+starts from what is present without waiting on an LLM call. It never travels back — lore names read
+as scene state would have the narrator acting on characters who are not there. It is a second-pass
+seed rather than a first-pass one because a lore entry that matched only because someone is standing
+in the room is relevance at one remove, and ranking it with a word the player typed made it
+indistinguishable from one. Governed by **Match Against What Is in the Scene** (on by default): the
+seed set is every active character, item, quest and the current location, which on a mature story is
+most of what a lorebook is about.
+
+`tier3Selection.ts` caches the last selection per caller. The key is complete by content — caller,
+candidate pool in order, player action, and the ids of the recent entries the prompt was built from
+— because two situations sharing a repeated action and an unmoved pool are otherwise the same
+question as far as a cache can see, which is reachable across consecutive turns and across a branch
+switch. It is also cleared on story load and branch switch.
+
+What each tier actually contributed is recorded on the narration entry as
+`metadata.retrievalSnapshot` (`retrieval/retrievalSnapshot.ts`) and shown in the **Active Context**
+panel. Diagnostic only: nothing reads it back into a prompt.
 
 **Agentic Retrieval** (`src/lib/services/ai/retrieval/AgenticRetrievalService.ts`) is an alternative
 to the static chapter memory fill (`TimelineFillService`). Which one runs is decided by
@@ -618,8 +658,16 @@ activated, so context does not vanish the instant its "always include" condition
 The fading priority band is shared (`retrieval/stickiness.ts`); the durations per type are not.
 
 The unit is **story positions, not turns** — positions come from `story.entries.length`, and a
-turn appends both an action and a narration, so a duration of N covers roughly N/2 turns.
+turn appends both an action and a narration, so a duration of N covers roughly N/2 turns. The UI
+converts for display; the services stay in positions because that is what they measure.
 Activations are persisted per story under `lorebook_activation_<storyId>` and restored on load.
+
+What creates an activation is Tier 2 and a _chosen_ Tier 3 — see the Tier 3 note above for why the
+wholesale branch does not. The timer is **not** refreshed while an entry is sticky, and cannot be: a
+sticky entry sits in Tier 1, Tier 1 is excluded from the candidate pool, and only Tier 2/3 record.
+So an entry named every single turn still drops out when its window expires and is re-matched the
+turn after. That is deliberate — it is what stops a once-relevant entry pinning itself in the prompt
+forever — but it makes the duration a hard ceiling on continuous presence, not a sliding one.
 
 ### Generation Pipeline
 

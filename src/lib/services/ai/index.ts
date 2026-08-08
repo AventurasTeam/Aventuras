@@ -72,13 +72,15 @@ import {
 import type {
   ClassificationContext,
   WorldStateInjectorConfig,
+  WorldStateInjectorOptions,
   WorldStateInjectionResult,
   RetrievalContext,
   StyleReviewResult,
   WorldStateContext,
 } from './generation'
 import { EntryRetrievalService, getEntryRetrievalConfigFromSettings } from './retrieval'
-import type { TimelineFillResult, EntryRetrievalResult, ActivationTracker } from './retrieval'
+export { clearTier3SelectionCache } from './retrieval'
+import type { TimelineFillResult, EntryRetrievalResult, EntryRetrievalOptions } from './retrieval'
 import type {
   RetrievalResult as AgenticRetrievalResult,
   RetrievalContext as AgenticRetrievalContext,
@@ -536,13 +538,12 @@ class AIService {
     userInput: string,
     recentEntries: StoryEntry[],
     config?: Partial<WorldStateInjectorConfig>,
-    signal?: AbortSignal,
-    activationTracker?: ActivationTracker,
+    options: WorldStateInjectorOptions = {},
   ): Promise<WorldStateInjectionResult> {
     log('buildWorldStateContext called', {
       userInputLength: userInput.length,
       recentEntriesCount: recentEntries.length,
-      hasActivationTracker: !!activationTracker,
+      hasActivationTracker: !!options.activationTracker,
     })
 
     // Read from settings when the caller does not override, same as
@@ -552,13 +553,7 @@ class AIService {
     const injector = serviceFactory.createWorldStateInjector(
       config ?? getWorldStateInjectorConfigFromSettings(),
     )
-    const result = await injector.buildContext(
-      worldState,
-      userInput,
-      recentEntries,
-      signal,
-      activationTracker,
-    )
+    const result = await injector.buildContext(worldState, userInput, recentEntries, options)
 
     log('buildWorldStateContext complete', {
       tier1: result.tier1.length,
@@ -577,13 +572,12 @@ class AIService {
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
+    options: EntryRetrievalOptions = {},
   ): Promise<EntryRetrievalResult> {
     log('getRelevantLorebookEntries called', {
       totalEntries: entries.length,
       userInputLength: userInput.length,
-      hasActivationTracker: !!activationTracker,
+      hasActivationTracker: !!options.activationTracker,
     })
 
     const config = getEntryRetrievalConfigFromSettings()
@@ -592,8 +586,7 @@ class AIService {
       entries,
       userInput,
       recentStoryEntries,
-      activationTracker,
-      signal,
+      options,
     )
 
     log('getRelevantLorebookEntries complete', {

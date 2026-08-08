@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
+  import { toRetrievalSnapshot, snapshotSize } from '$lib/services/ai/retrieval'
   import { settings } from '$lib/stores/settings.svelte'
   import { exportService, gatherStoryData } from '$lib/services/export'
   import { errMessage } from '$lib/utils/error'
@@ -32,6 +33,15 @@
     MessageSquare,
     AlertTriangle,
   } from '@lucide/svelte'
+
+  // Same source as the Active Context panel: this turn's retrieval, or the snapshot the
+  // last narration carries when the in-memory one is gone.
+  const activeContextCount = $derived(
+    snapshotSize(
+      toRetrievalSnapshot(ui.lastLorebookRetrieval, ui.lastWorldStateRetrieval) ??
+        story.entries.findLast((e) => e.type === 'narration')?.metadata?.retrievalSnapshot,
+    ),
+  )
 
   let showExportMenu = $state(false)
   let showMobileMenu = $state(false)
@@ -325,6 +335,18 @@
           <DropdownMenu.Separator />
           {@render importExportMenuItems()}
           <DropdownMenu.Separator />
+          <!-- The toolbar button beside this menu is desktop-only; on a narrow screen the
+               menu is where it lives instead. -->
+          <DropdownMenu.Item class="sm:hidden" onclick={() => ui.toggleLorebookDebug()}>
+            <Bug class="text-muted-foreground h-4 w-4" />
+            Active Context
+            {#if activeContextCount > 0}
+              <span class="text-muted-foreground ml-auto font-mono text-xs"
+                >{activeContextCount}</span
+              >
+            {/if}
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator class="sm:hidden" />
         {/if}
         <DropdownMenu.Item onclick={() => ui.openSettings()}>
           <Settings class="text-muted-foreground h-4 w-4" />
@@ -336,19 +358,23 @@
       </DropdownMenu.Content>
     </DropdownMenu.Root>
 
-    {#if story.currentStory && story.lorebookEntries.length > 0}
+    <!-- Not gated on the lorebook having entries: the panel covers live world state too,
+         which every story has. -->
+    {#if story.currentStory}
       <Button
         variant="text"
         class="text-muted-foreground hover:text-primary relative hidden min-h-11 min-w-11 sm:flex"
         onclick={() => ui.toggleLorebookDebug()}
-        title="View active lorebook entries"
+        title="View active context"
       >
         <Bug class="h-5 w-5" />
-        {#if ui.lastLorebookRetrieval && ui.lastLorebookRetrieval.all.length > 0}
+        {#if activeContextCount > 0}
+          <!-- `min-w` with padding rather than a fixed circle: this counts lorebook and
+               world state together and reaches three digits on a mature story. -->
           <span
-            class="bg-accent-500 absolute top-1 right-1 flex h-3 w-3 items-center justify-center rounded-full text-[9px] font-medium text-white"
+            class="bg-accent-500 absolute top-1 right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-1 text-[9px] leading-none font-medium text-white"
           >
-            {ui.lastLorebookRetrieval.all.length}
+            {activeContextCount > 99 ? '99+' : activeContextCount}
           </span>
         {/if}
       </Button>

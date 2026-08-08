@@ -15,8 +15,14 @@ import type { TimelineFillResult } from '$lib/services/ai/retrieval/TimelineFill
 import type { RetrievalResult as AgenticRetrievalResult } from '$lib/services/ai/retrieval/AgenticRetrievalService'
 import type {
   EntryRetrievalResult,
+  EntryRetrievalOptions,
   ActivationTracker,
+  SceneEntity,
 } from '$lib/services/ai/retrieval/EntryRetrievalService'
+import type {
+  WorldStateInjectorOptions,
+  WorldStateInjectionResult,
+} from '$lib/services/ai/generation/WorldStateInjector'
 import {
   formatAlreadyInContext,
   type ContextEntity,
@@ -51,15 +57,13 @@ export interface RetrievalDependencies {
     worldState: GenerationContext['worldState'],
     userInput: string,
     recentEntries: GenerationContext['visibleEntries'],
-    signal?: AbortSignal,
-    activationTracker?: ActivationTracker,
-  ) => Promise<{ contextBlock: string; all: { type: string; name: string }[] }>
+    options?: WorldStateInjectorOptions,
+  ) => Promise<WorldStateInjectionResult>
   getRelevantLorebookEntries: (
     entries: GenerationContext['worldState']['lorebookEntries'],
     userInput: string,
     recentStoryEntries: GenerationContext['visibleEntries'],
-    activationTracker?: ActivationTracker,
-    signal?: AbortSignal,
+    options?: EntryRetrievalOptions,
   ) => Promise<EntryRetrievalResult>
 }
 
@@ -83,6 +87,7 @@ export class RetrievalPhase {
     let lorebookRetrievalResult: EntryRetrievalResult | null = null
     let timelineFillResult: TimelineFillResult | null = null
     let worldStateBlock: string | null = null
+    let worldStateResult: WorldStateInjectionResult | null = null
 
     let worldStateEntities: ContextEntity[] = []
     let lorebookEntities: ContextEntity[] = []
@@ -95,23 +100,34 @@ export class RetrievalPhase {
 
     // Stage A: what the narrator gets regardless of memory retrieval.
     //
-    // Both are unconditional and both are mostly free -- tiers 1 and 2 are string matching,
-    // and only tier 3 costs an LLM call, gated on the candidate pool. They run together
-    // because neither reads the other's output, and the activation tracker they share is
-    // safe to touch concurrently: `currentPosition` is fixed for the whole turn at
-    // construction, and they write disjoint id spaces (entity uuids vs lorebook Entry uuids).
+    // The two run together, but not blindly in parallel: the lorebook waits for the world
+    // state's Tier 1 + Tier 2 so it can match lore against what is actually in the scene.
+    // That handover happens before the world state's Tier 3, which may be an LLM call, so
+    // the two Tier 3 passes still overlap rather than queueing.
+    //
+    // One-way on purpose. Lore names must not widen the world state's idea of who is
+    // present: a lorebook entry is reference material, and reading it as scene state is
+    // how a narrator starts acting on characters that are not there.
+    //
+    // The activation tracker they share is safe to touch concurrently: `currentPosition`
+    // is fixed for the whole turn, and they write disjoint id spaces.
+    let releaseSceneEntities: (entities: SceneEntity[]) => void = () => {}
+    const sceneEntities = new Promise<SceneEntity[]>((resolve) => {
+      releaseSceneEntities = resolve
+    })
+
     const stageA: Promise<void>[] = []
 
     stageA.push(
       dependencies
-        .buildWorldStateContext(
-          worldState,
-          userAction.content,
-          visibleEntries,
-          abortSignal,
+        .buildWorldStateContext(worldState, userAction.content, visibleEntries, {
+          signal: abortSignal,
           activationTracker,
-        )
+          userActionEntryId: userAction.entryId,
+          onSceneEntities: releaseSceneEntities,
+        })
         .then((result) => {
+          worldStateResult = result
           worldStateBlock = result.contextBlock
           worldStateEntities = result.all.map((e) => ({ type: e.type, name: e.name }))
         })
@@ -119,7 +135,9 @@ export class RetrievalPhase {
           contextInventoryComplete = false
           if (err instanceof Error && err.name === 'AbortError') return
           console.warn('[RetrievalPhase] World state injection failed (non-fatal):', err)
-        }),
+        })
+        // Unblocks the lorebook pass when the world state never got as far as handing over.
+        .finally(() => releaseSceneEntities([])),
     )
 
     // Lorebook retrieval used to be skipped in agentic mode, on the basis that the agent
@@ -130,16 +148,22 @@ export class RetrievalPhase {
     const hasLoreContent = lorebookEntries.length > 0
     if (hasLoreContent) {
       stageA.push(
-        dependencies
-          .getRelevantLorebookEntries(
-            lorebookEntries,
-            userAction.content,
-            // Not pre-sliced: the service applies its own configured Recent Entries
-            // Window. A fixed slice here silently capped that setting -- the slider goes
-            // to 15, and anything above 10 did nothing.
-            visibleEntries,
-            activationTracker,
-            abortSignal,
+        sceneEntities
+          .then((scene) =>
+            dependencies.getRelevantLorebookEntries(
+              lorebookEntries,
+              userAction.content,
+              // Not pre-sliced: the service applies its own configured Recent Entries
+              // Window. A fixed slice here silently capped that setting -- the slider goes
+              // to 15, and anything above 10 did nothing.
+              visibleEntries,
+              {
+                activationTracker,
+                signal: abortSignal,
+                userActionEntryId: userAction.entryId,
+                sceneEntities: scene,
+              },
+            ),
           )
           .then((result) => {
             lorebookRetrievalResult = result
@@ -166,6 +190,7 @@ export class RetrievalPhase {
         chapterContext: null,
         lorebookContext: null,
         lorebookRetrievalResult: null,
+        worldStateRetrievalResult: null,
         timelineFillResult: null,
         combinedContext: null,
       }
@@ -211,6 +236,7 @@ export class RetrievalPhase {
         chapterContext: null,
         lorebookContext: null,
         lorebookRetrievalResult: null,
+        worldStateRetrievalResult: null,
         timelineFillResult: null,
         combinedContext: null,
       }
@@ -224,6 +250,7 @@ export class RetrievalPhase {
       chapterContext,
       lorebookContext,
       lorebookRetrievalResult,
+      worldStateRetrievalResult: worldStateResult,
       timelineFillResult,
       combinedContext,
     }

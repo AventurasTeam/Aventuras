@@ -21,6 +21,10 @@
   import * as Collapsible from '$lib/components/ui/collapsible'
   import { Separator } from '$lib/components/ui/separator'
   import { advancedPanelView } from './advancedPanelView'
+  import {
+    ENTRY_RETRIEVAL_DEFAULTS,
+    WORLD_STATE_INJECTION_DEFAULTS,
+  } from '$lib/services/ai/core/defaults'
   import { AGENTIC_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
 
   // Open/closed state for every collapsible section, keyed by id so `sectionHeader` can
@@ -287,9 +291,68 @@
               but does not choose which ones reach the narrator — that is decided here, and only here.
             </p>
 
+            {@render sliderRow({
+              label: 'Recent Entries Window',
+              value: system.entryRetrieval?.recentEntriesCount ?? 5,
+              display: `${system.entryRetrieval?.recentEntriesCount ?? 5} entries`,
+              min: 2,
+              max: 15,
+              step: 1,
+              help: view.help.entryRecentEntries,
+              onChange: (v) => {
+                system.entryRetrieval.recentEntriesCount = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Max Matched Entries',
+              value: system.entryRetrieval?.maxTier2Entries ?? 20,
+              display: `${system.entryRetrieval?.maxTier2Entries ?? 20} entries`,
+              min: 5,
+              max: 40,
+              step: 5,
+              help: 'Cap on entries pulled in by name, alias or keyword. Lower than the World State cap on purpose: a lorebook entry is a paragraph, a world-state record is a sentence.',
+              onChange: (v) => {
+                system.entryRetrieval.maxTier2Entries = v
+                saveSystem()
+              },
+            })}
+
             {@render switchRow({
-              label: 'Enable LLM Selection',
-              description: 'Use LLM to intelligently select lorebook entries',
+              label: 'Match Against What Is in the Scene',
+              description:
+                'Also look for lore about whatever World State Injection says is present — the current location, the characters in the scene, your inventory, the active quests — not only what the text names. These arrive as second-pass matches, ranked below anything named directly, so a cap drops them first. Turn it off if a dense lorebook is spending its Max Matched Entries on things nobody mentioned.',
+              checked: system.entryRetrieval?.useSceneEntities ?? true,
+              onChange: (v) => {
+                system.entryRetrieval.useSceneEntities = v
+                saveSystem()
+              },
+            })}
+
+            {@render sliderRow({
+              label: 'Include-All Budget',
+              value:
+                system.entryRetrieval?.tier3WholesaleWordBudget ??
+                ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
+              display: `${
+                system.entryRetrieval?.tier3WholesaleWordBudget ??
+                ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget
+              } words`,
+              min: 100,
+              max: 2500,
+              step: 100,
+              help: 'How much unmatched lore can still go in whole. If the leftover fits this budget, all of it is included and no LLM is called; if it is larger, the LLM picks from it — or, with the switch below off, none of it goes in. Raising this trades a longer prompt for one fewer LLM call per turn.',
+              onChange: (v) => {
+                system.entryRetrieval.tier3WholesaleWordBudget = v
+                saveSystem()
+              },
+            })}
+
+            {@render switchRow({
+              label: 'Use the LLM to Pick Entries Above the Budget',
+              description:
+                'When the leftover is larger than the budget, let the LLM choose which entries matter. With this off, an oversized leftover is dropped instead — a leftover that fits the budget still goes in either way.',
               checked: view.entryLLMOn,
               onChange: (v) => {
                 system.entryRetrieval.enableLLMSelection = v
@@ -298,27 +361,13 @@
             })}
 
             {@render sliderRow({
-              label: 'Max Tier 2 Entries',
-              value: system.entryRetrieval?.maxTier2Entries ?? 20,
-              display: `${system.entryRetrieval?.maxTier2Entries ?? 20} entries`,
-              min: 5,
-              max: 40,
-              step: 5,
-              help: 'Cap on entries pulled in by keyword matching. Lower than the World State caps on purpose: a lorebook entry is a paragraph, a world-state record is a sentence.',
-              onChange: (v) => {
-                system.entryRetrieval.maxTier2Entries = v
-                saveSystem()
-              },
-            })}
-
-            {@render sliderRow({
-              label: 'Max Tier 3 Entries',
+              label: 'Max LLM-Selected Entries',
               value: system.entryRetrieval?.maxTier3Entries ?? 30,
               display: `${system.entryRetrieval?.maxTier3Entries ?? 30} entries`,
               min: 5,
               max: 50,
               step: 5,
-              help: 'Cap on entries the LLM picked.',
+              help: 'Cap on what the LLM picked. Applies only above the budget — below it the whole leftover goes in uncapped.',
               inactiveReason: view.inactive.maxTier3Entries,
               onChange: (v) => {
                 system.entryRetrieval.maxTier3Entries = v
@@ -337,22 +386,9 @@
               max: 500,
               step: 50,
               ends: ['Unlimited', '500 Words'],
+              help: 'Truncates each description when the block is written, whichever tier it came from.',
               onChange: (v) => {
                 system.entryRetrieval.maxWordsPerEntry = v
-                saveSystem()
-              },
-            })}
-
-            {@render sliderRow({
-              label: 'Recent Entries Window',
-              value: system.entryRetrieval?.recentEntriesCount ?? 5,
-              display: `${system.entryRetrieval?.recentEntriesCount ?? 5} entries`,
-              min: 2,
-              max: 15,
-              step: 1,
-              help: view.help.entryRecentEntries,
-              onChange: (v) => {
-                system.entryRetrieval.recentEntriesCount = v
                 saveSystem()
               },
             })}
@@ -388,34 +424,22 @@
               never live World State, so there is nothing here for it to stand in for.
             </p>
 
-            {@render switchRow({
-              label: 'Enable LLM Selection',
-              description:
-                'Above the threshold below, have the LLM pick which leftover characters/locations/items/quests matter. With this off, a leftover that large is left out instead — smaller ones are still included either way.',
-              checked: view.worldStateLLMOn,
+            {@render sliderRow({
+              label: 'Recent Entries Window',
+              value: system.worldStateInjection?.recentEntriesCount ?? 5,
+              display: `${system.worldStateInjection?.recentEntriesCount ?? 5} entries`,
+              min: 2,
+              max: 15,
+              step: 1,
+              help: view.help.worldStateRecentEntries,
               onChange: (v) => {
-                system.worldStateInjection.enableLLMSelection = v
+                system.worldStateInjection.recentEntriesCount = v
                 saveSystem()
               },
             })}
 
             {@render sliderRow({
-              label: 'LLM Selection Threshold',
-              value: system.worldStateInjection?.llmThreshold ?? 30,
-              display: `${system.worldStateInjection?.llmThreshold ?? 30} entities`,
-              min: 10,
-              max: 100,
-              step: 10,
-              help: 'Where "include it all" turns into "pick the relevant ones". At or below this many not-yet-selected entities, all of them go into the prompt as-is; above it, the LLM selects.',
-              inactiveReason: view.inactive.llmThreshold,
-              onChange: (v) => {
-                system.worldStateInjection.llmThreshold = v
-                saveSystem()
-              },
-            })}
-
-            {@render sliderRow({
-              label: 'Max Tier 2 Entities',
+              label: 'Max Matched Entities',
               value: system.worldStateInjection?.maxTier2Entries ?? 40,
               display: `${system.worldStateInjection?.maxTier2Entries ?? 40} entities`,
               min: 5,
@@ -429,30 +453,46 @@
             })}
 
             {@render sliderRow({
-              label: 'Max Tier 3 Entities',
-              value: system.worldStateInjection?.maxTier3Entries ?? 50,
-              display: `${system.worldStateInjection?.maxTier3Entries ?? 50} entities`,
-              min: 5,
-              max: 80,
-              step: 5,
-              help: "Cap on entities the LLM picked. Applies only above the threshold — below it the whole leftover goes in uncapped. Always-included state (where you are, who's present, what you're carrying, active quests) and the recently-mentioned carry-over are never capped.",
-              inactiveReason: view.inactive.worldStateMaxTier3,
+              label: 'Include-All Budget',
+              value:
+                system.worldStateInjection?.tier3WholesaleWordBudget ??
+                WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
+              display: `${
+                system.worldStateInjection?.tier3WholesaleWordBudget ??
+                WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget
+              } words`,
+              min: 100,
+              max: 2500,
+              step: 100,
+              help: 'How much not-yet-selected world state can still go in whole. If the leftover fits this budget, all of it is included and no LLM is called; if it is larger, the LLM picks from it — or, with the switch below off, none of it goes in. A live record runs about 16 words, so 500 is roughly 30 of them.',
               onChange: (v) => {
-                system.worldStateInjection.maxTier3Entries = v
+                system.worldStateInjection.tier3WholesaleWordBudget = v
+                saveSystem()
+              },
+            })}
+
+            {@render switchRow({
+              label: 'Use the LLM to Pick Entities Above the Budget',
+              description:
+                'When the leftover is larger than the budget, let the LLM choose which characters, locations, items and quests matter. With this off, an oversized leftover is dropped instead — a leftover that fits the budget still goes in either way.',
+              checked: view.worldStateLLMOn,
+              onChange: (v) => {
+                system.worldStateInjection.enableLLMSelection = v
                 saveSystem()
               },
             })}
 
             {@render sliderRow({
-              label: 'Recent Entries Window',
-              value: system.worldStateInjection?.recentEntriesCount ?? 5,
-              display: `${system.worldStateInjection?.recentEntriesCount ?? 5} entries`,
-              min: 2,
-              max: 15,
-              step: 1,
-              help: view.help.worldStateRecentEntries,
+              label: 'Max LLM-Selected Entities',
+              value: system.worldStateInjection?.maxTier3Entries ?? 50,
+              display: `${system.worldStateInjection?.maxTier3Entries ?? 50} entities`,
+              min: 5,
+              max: 80,
+              step: 5,
+              help: "Cap on what the LLM picked. Applies only above the budget — below it the whole leftover goes in uncapped. Always-included state (where you are, who's present, what you're carrying, active quests) and the recently-mentioned carry-over are never capped.",
+              inactiveReason: view.inactive.worldStateMaxTier3,
               onChange: (v) => {
-                system.worldStateInjection.recentEntriesCount = v
+                system.worldStateInjection.maxTier3Entries = v
                 saveSystem()
               },
             })}
