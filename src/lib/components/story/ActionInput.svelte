@@ -642,6 +642,17 @@
             messageId: narrationEntry.id,
             result: event.result,
           })
+          // A world update that failed used to be indistinguishable from a turn that
+          // changed nothing: same empty result, no error, no toast. Say it happened —
+          // the alternative is the player noticing a missing location three turns later.
+          if (event.result._error) {
+            console.error('[ActionInput] World update failed:', event.result._error)
+            ui.showToast(
+              'The world update failed for this response. Some or all changes were not ' +
+                'applied — you can regenerate the response to try again.',
+              'warning',
+            )
+          }
           await story.applyClassificationResult(event.result, narrationEntry.id)
           await story.updateEntryTimeEnd(narrationEntry.id)
 

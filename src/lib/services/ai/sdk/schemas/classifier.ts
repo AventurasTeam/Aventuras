@@ -226,4 +226,15 @@ export type Scene = z.infer<typeof sceneSchema>
 export type ClassificationResult = z.infer<typeof classificationResultSchema> & {
   /** Internal metadata: runtime variable definitions for use by applyClassificationResult. Not LLM output. */
   _runtimeVarDefs?: RuntimeVariable[]
+  /**
+   * Internal metadata: why this result is thinner than the model's output, if it is.
+   * Not LLM output.
+   *
+   * An empty classification and a failed one are the same object, and the difference
+   * matters to the user — "nothing happened this turn" and "the world update was thrown
+   * away" look identical in the world panel. Set by ClassifierService when the response
+   * failed validation, so the UI can say so instead of leaving the player to notice a
+   * missing location three turns later.
+   */
+  _error?: string
 }

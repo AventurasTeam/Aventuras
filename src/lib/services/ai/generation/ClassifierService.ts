@@ -31,8 +31,13 @@ import {
   clampNumber,
   type ClassificationResult,
 } from '../sdk/schemas/classifier'
-import { buildExtendedClassificationSchema } from '../sdk/schemas/runtime-variables'
+import {
+  buildExtendedClassificationSchema,
+  salvageClassification,
+} from '../sdk/schemas/runtime-variables'
 import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import { NoObjectGeneratedError } from 'ai'
+import { jsonrepair } from 'jsonrepair'
 
 const log = createLogger('Classifier')
 
@@ -180,25 +185,77 @@ export class ClassifierService extends BaseAIService {
       return result
     } catch (error) {
       log('classify failed', error)
-      // Return empty result on failure
-      return {
-        entryUpdates: {
-          characterUpdates: [],
-          locationUpdates: [],
-          itemUpdates: [],
-          storyBeatUpdates: [],
-          newCharacters: [],
-          newLocations: [],
-          newItems: [],
-          newStoryBeats: [],
-        },
-        scene: {
-          currentLocationName: null,
-          presentCharacterNames: [],
-          timeProgression: 'none',
-        },
-      }
+      return this.recover(error, runtimeVars, runtimeVarsByType)
     }
+  }
+
+  /**
+   * Turn a failed classification into whatever of it is still usable.
+   *
+   * The response is one object holding eight arrays and the scene, and validation is
+   * all-or-nothing: a single malformed entity used to cost the whole turn's world update
+   * — every character, location, item, beat and the time progression with it — silently.
+   * When the SDK rejected the object it kept the text that produced it, so the elements
+   * that were fine are still there to be read back.
+   */
+  private recover(
+    error: unknown,
+    runtimeVars: RuntimeVariable[],
+    runtimeVarsByType: Record<string, RuntimeVariable[]>,
+  ): ClassificationResult {
+    const empty: ClassificationResult = {
+      entryUpdates: {
+        characterUpdates: [],
+        locationUpdates: [],
+        itemUpdates: [],
+        storyBeatUpdates: [],
+        newCharacters: [],
+        newLocations: [],
+        newItems: [],
+        newStoryBeats: [],
+      },
+      scene: {
+        currentLocationName: null,
+        presentCharacterNames: [],
+        timeProgression: 'none',
+      },
+      _error: error instanceof Error ? error.message : String(error),
+    }
+
+    // Only a schema/parse rejection carries the model's text. A transport failure, an
+    // abort or a 401 has nothing to salvage from.
+    if (!NoObjectGeneratedError.isInstance(error) || !error.text) return empty
+
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(jsonrepair(error.text))
+    } catch (parseError) {
+      log('classify salvage: response is not recoverable JSON', parseError)
+      return empty
+    }
+
+    const salvaged = salvageClassification(parsed, runtimeVarsByType)
+    if (!salvaged) return empty
+
+    if (runtimeVars.length > 0) {
+      this.clampRuntimeVarNumbers(salvaged, runtimeVarsByType)
+      salvaged._runtimeVarDefs = runtimeVars
+    }
+    salvaged._error = empty._error
+
+    log('classify salvaged a partial result', {
+      characterUpdates: salvaged.entryUpdates.characterUpdates.length,
+      newCharacters: salvaged.entryUpdates.newCharacters.length,
+      locationUpdates: salvaged.entryUpdates.locationUpdates.length,
+      newLocations: salvaged.entryUpdates.newLocations.length,
+      itemUpdates: salvaged.entryUpdates.itemUpdates.length,
+      newItems: salvaged.entryUpdates.newItems.length,
+      storyBeatUpdates: salvaged.entryUpdates.storyBeatUpdates.length,
+      newStoryBeats: salvaged.entryUpdates.newStoryBeats.length,
+      timeProgression: salvaged.scene.timeProgression,
+    })
+
+    return salvaged
   }
 
   /**
@@ -255,9 +312,11 @@ export class ClassifierService extends BaseAIService {
           parts.push('text')
         }
 
-        // Required vs optional
+        // Nothing here is required by the schema (see buildEntityVarsShape); a variable
+        // with no default is merely the one worth naming, since there is no sensible
+        // value to fall back on when the model leaves it out.
         parts.push(
-          v.defaultValue !== undefined && v.defaultValue !== null ? 'optional' : 'required',
+          v.defaultValue !== undefined && v.defaultValue !== null ? 'optional' : 'set if known',
         )
 
         // Default value
