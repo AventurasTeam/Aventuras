@@ -56,14 +56,24 @@ Three knobs per story. Defaults copied from
 - **Partial mode** (`fullChapterInBuffer = false`): LLM gets the
   last `partialChapterBuffer` entries from the current chapter. If
   the current chapter has fewer entries than `protectedBuffer`,
-  fill from the previous chapter to satisfy the `protectedBuffer`
-  floor. Total entries =
+  fill backwards from the chapter boundary to satisfy the
+  `protectedBuffer` floor. Total entries =
   `max(protectedBuffer, min(current_chapter_size, partialChapterBuffer))`.
 - **Full mode** (`fullChapterInBuffer = true`): LLM gets ALL
   entries in the current chapter. If the current chapter has
-  fewer entries than `protectedBuffer`, fill from the previous
-  chapter to satisfy the `protectedBuffer` floor. Total entries =
-  `max(current_chapter_size, protectedBuffer)`.
+  fewer entries than `protectedBuffer`, fill backwards from the
+  chapter boundary to satisfy the `protectedBuffer` floor. Total
+  entries = `max(current_chapter_size, protectedBuffer)`.
+
+**"Backwards from the boundary", not "from the previous chapter."**
+The arithmetic above is unconditional, so when the previous chapter is
+itself shorter than the remaining shortfall, the walk continues into
+the one before it, and so on until the floor is met or the branch runs
+out. A floor that silently stops one chapter short is not a floor. The
+case is uncommon — `chapterTokenThreshold` defaults to 24000 tokens, so
+a chapter normally holds far more than the default `protectedBuffer` of
+10 — but a run of short chapters after a manual chapter-close makes it
+reachable.
 
 The current-chapter term is clamped to the chapter's own size in
 both modes: `partialChapterBuffer` is a window over the current
@@ -82,6 +92,9 @@ pulls entries from before the boundary, so a
 - full, chapter 3 has 2 entries → 2 current + 8 previous = 10
 - full, chapter 3 has 50 entries → all 50 current (chapter size
   exceeds protected floor; no spillover needed)
+- partial, chapter 3 has 2 entries and chapter 2 has 3 → 2 current +
+  3 from chapter 2 + 5 from chapter 1 = 10 (the walk crosses more than
+  one boundary rather than stopping at 5)
 
 ### Buffer-aware cadence indicator — partial mode only
 

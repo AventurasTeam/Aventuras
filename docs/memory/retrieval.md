@@ -698,20 +698,33 @@ Short, signal-dense, embeds fast.
 
 ### Q2: Structural digest
 
-Code-template floor + optional piggyback enrichment:
+Code-template floor + optional piggyback enrichment. **Every line is
+conditional** — a line whose fields are all empty is omitted rather
+than rendered as bare punctuation:
 
 ```
-{sceneEntities.names}, {currentLocation.name}.
-Active threads: {activeThreads.titles}.
-Era: {era_name}.
-{summary}    -- optional, from piggyback trailing block
+{sceneEntities.names}, {currentLocation.name}.   -- if either is present
+Active threads: {activeThreads.titles}.          -- if any
+Era: {era_name}.                                 -- if set
+{summary}                                        -- if the trailing block parsed
 ```
 
-Structural fields are computed from existing data; deterministic,
-free, always available. The summary line is **optional enrichment**
-from the piggyback trailing block (one sentence, ~30 tokens). When the
-trailing block parses, summary is included; when it doesn't, the
-structural template stands alone.
+Structural fields are computed from existing data: deterministic and
+free, though not all of them are always populated — see
+[Cold start](#cold-start). The summary line is **optional enrichment**
+from the piggyback trailing block (one sentence, ~30 tokens).
+
+**Why conditional rather than fixed.** Under a fixed four-line
+template, a story with no cast, no location, no threads and no era
+renders Q2 as punctuation only — and that vector still takes a full
+`w_digest` share of every candidate's blended similarity, because
+nothing marks it absent. Q2's presence flag is therefore derived from
+the rendered result rather than hardcoded true, so an empty digest
+reports itself absent and
+[the blend](#blending--weighted-average) re-normalizes across the
+remaining queries. The cost of conditionality is that Q2's text varies
+in shape between turns; the cost of the fixed form is a 35% weight
+spent on commas.
 
 The bet on enrichment-not-dependence: rich digests improve retrieval
 ranking but the structural template is genuinely rich on its own
@@ -773,11 +786,33 @@ Turn 1 has no prior user action AND no prior AI entry to embed
 against. Fall back to:
 
 - Q1: user's first action (available; retrieval runs after Pre).
-- Q2: wizard-derived structural digest. No piggyback summary line yet.
-- Q3: heuristic prose extract from the **opening** entry.
+- Q2: whatever the wizard actually committed. No piggyback summary yet.
+- Q3: heuristic prose extract from the **opening** entry, which the
+  wizard always commits.
 
 When a component is missing, weights re-normalize across the remaining
 queries. No special cold-start logic beyond that.
+
+**Q2 is thin-to-absent on turn 1, by construction.** Its four
+structural fields do not all have producers at wizard-commit time, and
+this is a sequencing fact rather than a defect — Q2's presence flag is
+derived from the rendered digest, so an empty one re-normalizes away
+instead of spending 35% of the blend on nothing:
+
+| Q2 field         | Available at turn 1?                                                                      |
+| ---------------- | ----------------------------------------------------------------------------------------- |
+| Scene entities   | Only when the wizard produced a lead                                                      |
+| Current location | No — the wizard commits `null`; piggyback is the only writer, and it runs after narrative |
+| Active threads   | No — thread authoring arrives with the M4.3 plot panel                                    |
+| Era              | No — the shipped calendar sets `eras: null`; flips are manual                             |
+
+So a default-wizard story's first turn ranks on Q1 and Q3. That is
+acceptable — the opening entry Q3 reads is itself wizard-derived, so
+the world context reaches retrieval through prose rather than through
+the digest. Whether the wizard _should_ commit a starting location is
+an open question against
+[Slice 3.6](../implementation/milestones/03-memory-floor/slices/06-wizard-world-cast.md),
+which is where locations are authored.
 
 ---
 
