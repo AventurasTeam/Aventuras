@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CAPTURE_VERSION } from '@/lib/db'
+import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
 import {
   buildQueryStack,
   buildStructuralFloor,
@@ -8,6 +8,7 @@ import {
   rankPerType,
   RANKER_DEFAULTS,
   TOKENIZER_IDENTITY,
+  type RetrievalType,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
@@ -36,20 +37,37 @@ const zeroFunnel = {
   type_budget: 0,
 }
 
-const emptyQuery = { text: '', token_count: 0, source: 'user_action' as const }
+const ALL_TYPES: readonly RetrievalType[] = [
+  'entities',
+  'lore',
+  'happenings',
+  'threads',
+  'chapters',
+]
+
+// TOTAL over RetrievalType: an unreached type is an empty pool and a zeroed
+// funnel, never an absent key. `except` lists types the caller asserts itself.
+const expectEmptyPools = (payload: ProbeCapturePayload, except: readonly RetrievalType[] = []) => {
+  for (const type of ALL_TYPES) {
+    if (except.includes(type)) continue
+    expect(payload.pools[type]).toEqual([])
+    expect(payload.funnels[type]).toEqual(zeroFunnel)
+  }
+}
 
 const loreCandidate = {
   kind: 'lore' as const,
   id: 'lo_1',
   displayName: 'The drowned archive',
   renderedText: 'Ledgers are kept below the waterline, where the tide reads them first.',
-  sims: [0.7, 0.6, 0.5] as const,
-  // Non-trivial so the deep-mode assertion cannot pass on an empty array.
+  // Every scored field distinct: a same-valued pair (0, false, 0.605 == 0.605)
+  // would let a transposed field mapping in candidateOf pass toEqual anyway.
+  sims: [0.95, 0.9, 0.85] as const,
   vector: Float32Array.from([1, 0]),
-  chaptersOld: 0,
-  pinSignal: 0,
-  keywordHits: [],
-  embeddingStale: false,
+  chaptersOld: 3,
+  pinSignal: 0.4,
+  keywordHits: ['tide'],
+  embeddingStale: true,
 }
 
 // Priced with the real tokenizer, not a stand-in: the payload stamps
@@ -105,13 +123,10 @@ const queryEmbedFailureOutcome = () =>
     { queries: queryStack() },
   )
 
-// retrievalFailure defaults `partial` to { queries: null, floor: null,
-// bundles: {} } — the most restrictive real case, matching a sync-stage
-// failure that never reached the query embed at all.
 const syncStageFailureOutcome = () =>
   retrievalFailure({ reason: 'init', detail: 'embedder session never came up', staleCount: 40 })
 
-// run.ts:325 seats chapters.bundles before the rest of the pass runs, because
+// runRetrievalPass seats chapters.bundles before the rest of the pass, because
 // chapters rank first to feed the happenings boost — so a KNN failure after
 // that point genuinely reaches a populated chapters bundle and four empty
 // ones (probe.md -> Failed captures, "KNN error").
@@ -201,6 +216,20 @@ describe('buildCapturePayload', () => {
     expect(payload.stale_counts).not.toBe(outcome.staleCounts)
   })
 
+  it('does not alias the query stack sentence_scores array', () => {
+    const stack = queryStack()
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ bundles: { lore: loreBundle() }, queries: stack }),
+    })
+
+    expect(payload.queries[2].sentence_scores).toEqual(stack.q3.sentenceScores)
+    expect(payload.queries[2].sentence_scores).not.toBe(stack.q3.sentenceScores)
+  })
+
   it('maps a candidate trace field-for-field into the pool, light mode', () => {
     const payload = buildCapturePayload({
       ...identity,
@@ -211,29 +240,28 @@ describe('buildCapturePayload', () => {
     })
 
     // Written out literally rather than re-derived from loreCandidate: that
-    // would make a transposed or dropped field invisible, since most of these
-    // values pass through the ranker unchanged from the candidate.
+    // would make a transposed or dropped field invisible.
     expect(payload.pools.lore[0]).toEqual({
       target_kind: 'lore',
       target_id: 'lo_1',
       display_name: 'The drowned archive',
       display_text: 'Ledgers are kept below the waterline, where the tide reads them first.',
-      sim_q1: 0.7,
-      sim_q2: 0.6,
-      sim_q3: 0.5,
-      sim_blend: 0.605,
+      sim_q1: 0.95,
+      sim_q2: 0.9,
+      sim_q3: 0.85,
+      sim_blend: 0.9025,
       recency_factor: 1,
-      pin_signal: 0,
-      chapters_old: 0,
-      kw_boost_value: 0,
+      pin_signal: 0.4,
+      chapters_old: 3,
+      kw_boost_value: 0.1,
       chapter_boost_applied: false,
-      bypass_triggered: false,
-      final_score: 0.605,
+      bypass_triggered: true,
+      final_score: 1.09275,
       mmr_rank: 0,
       selected: true,
       drop_reason: 'not_dropped',
       tokens_estimated: 20,
-      embedding_stale: false,
+      embedding_stale: true,
     })
   })
 
@@ -346,22 +374,7 @@ describe('buildCapturePayload', () => {
     })
 
     expect(payload.queries[0].text).not.toBe('')
-    // Task 8 made these records TOTAL over RetrievalType, so an unreached type
-    // is an empty pool and a zeroed funnel — not an absent key.
-    expect(payload.pools).toEqual({
-      entities: [],
-      lore: [],
-      happenings: [],
-      threads: [],
-      chapters: [],
-    })
-    expect(payload.funnels).toEqual({
-      entities: zeroFunnel,
-      lore: zeroFunnel,
-      happenings: zeroFunnel,
-      threads: zeroFunnel,
-      chapters: zeroFunnel,
-    })
+    expectEmptyPools(payload)
     expect(payload.stale_counts.lore).toBe(0)
   })
 
@@ -374,21 +387,12 @@ describe('buildCapturePayload', () => {
       outcome: syncStageFailureOutcome(),
     })
 
-    expect(payload.queries).toEqual([emptyQuery, emptyQuery, emptyQuery])
-    expect(payload.pools).toEqual({
-      entities: [],
-      lore: [],
-      happenings: [],
-      threads: [],
-      chapters: [],
-    })
-    expect(payload.funnels).toEqual({
-      entities: zeroFunnel,
-      lore: zeroFunnel,
-      happenings: zeroFunnel,
-      threads: zeroFunnel,
-      chapters: zeroFunnel,
-    })
+    expect(payload.queries).toEqual([
+      { text: '', token_count: 0, source: 'user_action' },
+      { text: '', token_count: 0, source: 'structural_digest' },
+      { text: '', token_count: 0, source: 'prose_extract' },
+    ])
+    expectEmptyPools(payload)
     expect(payload.structural_floor).toEqual([])
   })
 
@@ -404,14 +408,7 @@ describe('buildCapturePayload', () => {
     expect(payload.pools.chapters).toHaveLength(1)
     expect(payload.pools.chapters[0].target_id).toBe('ch_1')
     expect(payload.funnels.chapters.pool_size).toBe(1)
-    expect(payload.pools.entities).toEqual([])
-    expect(payload.pools.lore).toEqual([])
-    expect(payload.pools.happenings).toEqual([])
-    expect(payload.pools.threads).toEqual([])
-    expect(payload.funnels.entities).toEqual(zeroFunnel)
-    expect(payload.funnels.lore).toEqual(zeroFunnel)
-    expect(payload.funnels.happenings).toEqual(zeroFunnel)
-    expect(payload.funnels.threads).toEqual(zeroFunnel)
+    expectEmptyPools(payload, ['chapters'])
   })
 
   it('emits one structural-floor row per seated entity, location, thread and always-row', () => {
@@ -479,32 +476,42 @@ describe('buildCapturePayload', () => {
       outcome: retrievalSuccess({ floor }),
     })
 
-    // Token counts come from the real tokenizer on each row's own text — an
-    // independent oracle from the mapping under test — while target_kind and
-    // target_id are written out literally per branch, which is what catches
-    // a branch reusing the wrong kind (e.g. alwaysLore stamped 'thread').
+    // Each row's expected text mirrors run.ts's own entity/lore/thread
+    // projections (ENTITY_FRAMING + the title/body or title-status/description
+    // join) — the same formula the ranker prices an identical row shape with —
+    // priced here through the real tokenizer as an independent oracle.
     expect(payload.structural_floor).toEqual([
-      { target_kind: 'entity', target_id: 'e_scene', tokens: countTokens('a courier') },
-      { target_kind: 'entity', target_id: 'e_loc', tokens: countTokens('half-flooded stacks') },
+      {
+        target_kind: 'entity',
+        target_id: 'e_scene',
+        tokens: countTokens('Mira (currently elsewhere): a courier'),
+      },
+      {
+        target_kind: 'entity',
+        target_id: 'e_loc',
+        tokens: countTokens('The drowned archive (currently elsewhere): half-flooded stacks'),
+      },
       {
         target_kind: 'thread',
         target_id: 't_active',
-        tokens: countTokens('Mira needs it before the tide returns'),
+        tokens: countTokens(
+          'Find the missing ledger (active)\nMira needs it before the tide returns',
+        ),
       },
       {
         target_kind: 'entity',
         target_id: 'e_always',
-        tokens: countTokens('a ghost who still audits the ledgers'),
+        tokens: countTokens('The Warden: a ghost who still audits the ledgers'),
       },
       {
         target_kind: 'lore',
         target_id: 'l_always',
-        tokens: countTokens('Every archive keeps one drowned shelf.'),
+        tokens: countTokens('The Flood Accord\nEvery archive keeps one drowned shelf.'),
       },
       {
         target_kind: 'thread',
         target_id: 't_always',
-        tokens: countTokens('a debt owed across generations'),
+        tokens: countTokens("The Warden's Contract (pending)\na debt owed across generations"),
       },
     ])
   })

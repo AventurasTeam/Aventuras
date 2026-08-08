@@ -1,8 +1,11 @@
 import { CAPTURE_VERSION, type ProbeCapturePayload, type VecTargetKind } from '@/lib/db'
 import {
   countTokens,
+  ENTITY_FRAMING,
   TOKENIZER_IDENTITY,
   type CandidateTrace,
+  type EntityRow,
+  type LoreRow,
   type QuerySpec,
   type QueryStack,
   type RankedType,
@@ -10,6 +13,7 @@ import {
   type RetrievalOutcome,
   type RetrievalType,
   type StructuralFloor,
+  type ThreadRow,
 } from '@/lib/retrieval'
 
 export type CapturePayloadInput = {
@@ -27,8 +31,8 @@ export type CapturePayloadInput = {
     protectedBuffer: number
   }
   outcome: RetrievalOutcome
-  /** Deep mode only; Q1/Q2/Q3 order, null where a query produced no vector. */
-  queryVectors?: readonly (Float32Array | null)[]
+  /** Deep mode only; Q1/Q2/Q3 order, null where a query produced no vector — matches distributeQueryVectors' return shape. */
+  queryVectors?: readonly [Float32Array | null, Float32Array | null, Float32Array | null]
 }
 
 const candidateOf = (
@@ -60,11 +64,6 @@ const candidateOf = (
   ...(mode === 'deep' && vector ? { vector: [...vector] } : {}),
 })
 
-/**
- * Deep-mode vectors come from `bundle.pool`, not `bundle.selected`: `traces`
- * carries no vector, and MMR replay needs one per pool row, not just the
- * seated ones.
- */
 const poolOf = (
   bundle: RankedType | undefined,
   mode: 'light' | 'deep',
@@ -93,20 +92,21 @@ const queryOf = (
   text: q.text,
   token_count: countTokens(q.text),
   source: q.source,
-  ...(q.sentenceScores ? { sentence_scores: q.sentenceScores } : {}),
+  ...(q.sentenceScores ? { sentence_scores: [...q.sentenceScores] } : {}),
   ...(mode === 'deep' && vector ? { vector: [...vector] } : {}),
 })
-
-const EMPTY_QUERY: QuerySpec = { text: '', source: 'user_action' }
 
 const queriesOf = (
   stack: QueryStack | null,
   mode: 'light' | 'deep',
-  vectors: readonly (Float32Array | null)[] | undefined,
+  vectors: readonly [Float32Array | null, Float32Array | null, Float32Array | null] | undefined,
 ): ProbeCapturePayload['queries'] => {
   if (stack === null) {
-    const empty = queryOf(EMPTY_QUERY, mode, null)
-    return [empty, empty, empty]
+    return [
+      queryOf({ text: '', source: 'user_action' }, mode, null),
+      queryOf({ text: '', source: 'structural_digest' }, mode, null),
+      queryOf({ text: '', source: 'prose_extract' }, mode, null),
+    ]
   }
   return [
     queryOf(stack.q1, mode, vectors?.[0]),
@@ -115,34 +115,49 @@ const queriesOf = (
   ]
 }
 
+// run.ts's lines() isn't exported from lib/retrieval; reimplemented here so a
+// blank field doesn't leave its join separator behind.
+const lines = (...parts: (string | null)[]): string =>
+  parts.filter((p) => p !== null && p !== '').join('\n')
+
+// Mirrors run.ts's entity/lore/thread pool projections exactly (ENTITY_FRAMING
+// + the same head/body join), so a floor row prices the same way the ranker
+// would price the identical row shape in a pool — the number this field
+// exists to report (probe.md -> the floor "surfaces what budget the per-type
+// pools actually competed over").
+const entityFloorText = (e: Pick<EntityRow, 'name' | 'description' | 'status'>): string => {
+  const framing = ENTITY_FRAMING[e.status]
+  const head = framing === undefined ? e.name : `${e.name} (${framing})`
+  return e.description ? `${head}: ${e.description}` : head
+}
+
+const threadFloorText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
+  lines(`${t.title} (${t.status})`, t.description)
+
+const loreFloorText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
+
 const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
   const rows: ProbeCapturePayload['structural_floor'] = []
-  const push = (kind: VecTargetKind, id: string, text: string) =>
-    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
+  const pushEntity = (kind: VecTargetKind, id: string, e: Parameters<typeof entityFloorText>[0]) =>
+    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(entityFloorText(e)) })
+  const pushThread = (id: string, t: Parameters<typeof threadFloorText>[0]) =>
+    rows.push({ target_kind: 'thread', target_id: id, tokens: countTokens(threadFloorText(t)) })
+  const pushLore = (id: string, l: Parameters<typeof loreFloorText>[0]) =>
+    rows.push({ target_kind: 'lore', target_id: id, tokens: countTokens(loreFloorText(l)) })
 
-  for (const e of floor.sceneEntities) push('entity', e.id, e.description ?? e.name)
-  if (floor.currentLocation) {
-    push(
-      'entity',
-      floor.currentLocation.id,
-      floor.currentLocation.description ?? floor.currentLocation.name,
-    )
-  }
-  for (const t of floor.activeThreads) push('thread', t.id, t.description ?? t.title)
-  for (const e of floor.alwaysEntities) push('entity', e.id, e.description ?? e.name)
-  for (const l of floor.alwaysLore) push('lore', l.id, l.body ?? l.title)
-  for (const t of floor.alwaysThreads) push('thread', t.id, t.description ?? t.title)
+  for (const e of floor.sceneEntities) pushEntity('entity', e.id, e)
+  if (floor.currentLocation) pushEntity('entity', floor.currentLocation.id, floor.currentLocation)
+  for (const t of floor.activeThreads) pushThread(t.id, t)
+  for (const e of floor.alwaysEntities) pushEntity('entity', e.id, e)
+  for (const l of floor.alwaysLore) pushLore(l.id, l)
+  for (const t of floor.alwaysThreads) pushThread(t.id, t)
   return rows
 }
 
 export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePayload {
   const { outcome, mode } = input
-  const stack = outcome.ok ? outcome.queries : outcome.partial.queries
-  const floor = outcome.ok ? outcome.floor : outcome.partial.floor
-  const bundles: Partial<Record<RetrievalType, RankedType>> = outcome.ok
-    ? outcome.bundles
-    : outcome.partial.bundles
+  const { queries: stack, floor, bundles } = outcome.ok ? outcome : outcome.partial
 
   return {
     branch_id: input.branchId,
@@ -174,6 +189,9 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       chapters: funnelOf(bundles.chapters),
     },
     structural_floor: floorRowsOf(floor),
+    // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;
+    // there is no per-type split to spread it across, so this stays zero
+    // rather than guessing which type(s) it belonged to.
     stale_counts: outcome.ok
       ? { ...outcome.staleCounts }
       : { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
