@@ -10,6 +10,7 @@
  * Falls back to a hardcoded list if the API call fails.
  */
 
+import { specToPixels, formatImageSize } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -33,7 +34,8 @@ export function createOpenAIProvider(config: ImageProviderConfig): ImageProvider
     name: 'OpenAI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, referenceImages, signal } = options
+      const { model, prompt, spec, referenceImages, signal } = options
+      const size = formatImageSize(specToPixels(spec))
 
       if (referenceImages?.length) {
         return generateWithEdits(
@@ -99,7 +101,6 @@ async function fetchOpenAIImageModels(baseUrl: string, apiKey: string): Promise<
         return {
           id,
           name: id,
-          supportsSizes: ['512x512', '1024x1024'],
           supportsImg2Img: true,
         }
       })
@@ -127,7 +128,6 @@ async function fetchCustomModels(baseUrl: string, apiKey: string): Promise<Image
       .map((m) => ({
         id: m.id || m.name || '',
         name: m.name || m.id || '',
-        supportsSizes: [],
         supportsImg2Img: false,
       }))
   } catch {

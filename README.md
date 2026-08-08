@@ -89,8 +89,10 @@ A cross-story library, separate from any single playthrough:
 - Nine image backends (`src/lib/services/ai/image/providers/`): NanoGPT, OpenAI, OpenRouter,
   Google, Chutes, Zhipu, Pollinations, plus local ComfyUI (workflow-based) and A1111
 - Character portrait support for visual consistency
-- Configurable image size — the available sizes are per provider (Pollinations, for example,
-  offers 512×512, 1024×1024 and 1536×1536)
+- Resolution is chosen as an **intent** — orientation (1:1 / 16:9 / 9:16) plus one of four
+  size steps — and each provider adapter turns it into what that backend accepts: an aspect
+  ratio for Google and OpenRouter, the model's own published resolution list for NanoGPT,
+  real dimensions for ComfyUI/A1111/Pollinations (`src/lib/utils/image.ts`)
 - Images are stored as base64 in SQLite; export/import of a story with images (`.avt`) is handled
   natively in Rust so the payloads never enter the WebView heap
 

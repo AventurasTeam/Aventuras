@@ -24,7 +24,11 @@ import {
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '$lib/services/ai/core/defaults'
-import { migrateEntryRetrieval, migrateWorldStateInjection } from './settingsMigrations'
+import {
+  migrateEntryRetrieval,
+  migrateImageGeneration,
+  migrateWorldStateInjection,
+} from './settingsMigrations'
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
@@ -641,9 +645,11 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     profileId: null, // User must select an image-capable profile
     styleId: 'image-style-soft-anime',
     portraitStyleId: 'image-style-soft-anime',
-    size: '1024x1024',
-    referenceSize: '1024x1024',
-    portraitSize: '512x512',
+    // Same pixels as the `WIDTHxHEIGHT` defaults these replace: 1024x1024, 1024x1024,
+    // 512x512, 1024x576 (was 1280x720, the nearest tier). See `$lib/utils/image`.
+    size: { orientation: 'square', size: 'small' },
+    referenceSize: { orientation: 'square', size: 'small' },
+    portraitSize: { orientation: 'square', size: 'tiny' },
     maxImagesPerMessage: 3,
     portraitProfileId: null,
     referenceProfileId: null,
@@ -654,7 +660,7 @@ export function getDefaultImageGenerationSettings(): ImageGenerationServiceSetti
     reasoningEffort: 'high',
     manualBody: '',
     backgroundProfileId: null,
-    backgroundSize: '1280x720',
+    backgroundSize: { orientation: 'landscape', size: 'small' },
     backgroundBlur: 2, // Default blur for atmosphere
   }
 }
@@ -1696,7 +1702,10 @@ class SettingsStore {
               ...defaults.worldStateInjection,
               ...loaded.worldStateInjection,
             }),
-            imageGeneration: { ...defaults.imageGeneration, ...loaded.imageGeneration },
+            imageGeneration: migrateImageGeneration({
+              ...defaults.imageGeneration,
+              ...loaded.imageGeneration,
+            }),
             tts: { ...defaults.tts, ...loaded.tts },
             characterCardImport: { ...defaults.characterCardImport, ...loaded.characterCardImport },
             interactiveVault: {

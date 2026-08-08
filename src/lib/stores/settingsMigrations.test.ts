@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { migrateEntryRetrieval, migrateWorldStateInjection } from './settingsMigrations'
+import {
+  migrateEntryRetrieval,
+  migrateImageGeneration,
+  migrateWorldStateInjection,
+} from './settingsMigrations'
 import {
   ENTRY_RETRIEVAL_DEFAULTS,
   WORLD_STATE_INJECTION_DEFAULTS,
@@ -147,5 +151,32 @@ describe('migrateEntryRetrieval', () => {
     expect(migrateEntryRetrieval({ maxTier3Entries: -5 }).maxTier3Entries).toBe(
       ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries,
     )
+  })
+})
+
+describe('migrateImageGeneration', () => {
+  const legacy = {
+    size: '1024x1024',
+    referenceSize: '1024x1024',
+    portraitSize: '512x512',
+    backgroundSize: '1280x720',
+  }
+
+  it('turns the WIDTHxHEIGHT strings older builds stored into specs', () => {
+    expect(migrateImageGeneration(legacy)).toEqual({
+      size: { orientation: 'square', size: 'small' },
+      referenceSize: { orientation: 'square', size: 'small' },
+      portraitSize: { orientation: 'square', size: 'tiny' },
+      backgroundSize: { orientation: 'landscape', size: 'small' },
+    })
+  })
+
+  it('is idempotent', () => {
+    const once = migrateImageGeneration(legacy)
+    expect(migrateImageGeneration(once)).toEqual(once)
+  })
+
+  it('preserves the other settings', () => {
+    expect(migrateImageGeneration({ ...legacy, backgroundBlur: 2 }).backgroundBlur).toBe(2)
   })
 })

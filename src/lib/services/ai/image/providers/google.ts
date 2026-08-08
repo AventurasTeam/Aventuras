@@ -6,6 +6,7 @@
  * (gemini-*-image, nano-banana-*) transparently via google.image().
  */
 
+import { specToAspectRatio } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -29,12 +30,12 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
     name: 'Google AI Studio',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, signal } = options
+      const { model, prompt, spec, signal } = options
 
       const result = await generateImage({
         model: googleSDK.image(model),
         prompt,
-        aspectRatio: sizeToAspectRatio(size) as `${number}:${number}`,
+        aspectRatio: specToAspectRatio(spec, GOOGLE_ASPECT_RATIOS) as `${number}:${number}`,
         abortSignal: signal,
       })
 
@@ -51,13 +52,26 @@ export function createGoogleProvider(config: ImageProviderConfig): ImageProvider
   }
 }
 
-function sizeToAspectRatio(size: string): string {
-  const [w, h] = size.split('x').map(Number)
-  if (!w || !h || w === h) return '1:1'
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
-  const d = gcd(w, h)
-  return `${w / d}:${h / d}`
-}
+/**
+ * The aspect ratios the Gemini image models accept. There is no pixel parameter, and this
+ * is a closed enum: an unlisted ratio is rejected, not rounded. Imagen's list is a subset.
+ */
+const GOOGLE_ASPECT_RATIOS = [
+  '1:1',
+  '1:4',
+  '1:8',
+  '2:3',
+  '3:2',
+  '3:4',
+  '4:1',
+  '4:3',
+  '4:5',
+  '5:4',
+  '8:1',
+  '9:16',
+  '16:9',
+  '21:9',
+] as const
 
 async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise<ImageModelInfo[]> {
   if (!apiKey) return getFallbackImageModels()
@@ -84,7 +98,6 @@ async function fetchGoogleImageModels(baseUrl: string, apiKey?: string): Promise
           id,
           name: m.displayName || id,
           description: m.description,
-          supportsSizes: getImagenSizes(id),
           supportsImg2Img: supportsImg2Img(id),
         }
       })
@@ -101,32 +114,24 @@ function supportsImg2Img(id: string): boolean {
   return isGoogleImageModel(id) || id === 'imagen-4.0-generate-001'
 }
 
-function getImagenSizes(id: string): string[] {
-  if (id.includes('fast')) return ['512x512', '1024x1024']
-  return ['512x512', '1024x1024', '2048x2048']
-}
-
 function getFallbackImageModels(): ImageModelInfo[] {
   return [
     {
       id: 'imagen-4.0-generate-001',
       name: 'Imagen 4',
       description: 'Vertex served Imagen 4.0 model',
-      supportsSizes: getImagenSizes('imagen-4.0-generate-001'),
       supportsImg2Img: supportsImg2Img('imagen-4.0-generate-001'),
     },
     {
       id: 'imagen-4.0-ultra-generate-001',
       name: 'Imagen 4 Ultra',
       description: 'Vertex served Imagen 4.0 ultra model',
-      supportsSizes: getImagenSizes('imagen-4.0-ultra-generate-001'),
       supportsImg2Img: supportsImg2Img('imagen-4.0-ultra-generate-001'),
     },
     {
       id: 'imagen-4.0-fast-generate-001',
       name: 'Imagen 4 Fast',
       description: 'Vertex served Imagen 4.0 Fast model',
-      supportsSizes: getImagenSizes('imagen-4.0-fast-generate-001'),
       supportsImg2Img: supportsImg2Img('imagen-4.0-fast-generate-001'),
     },
   ]

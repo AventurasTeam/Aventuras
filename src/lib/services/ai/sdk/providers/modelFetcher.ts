@@ -239,10 +239,8 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
     const response = await fetchFn(modelsUrl, { method: 'GET', headers })
 
     if (!response.ok) {
-      console.warn(
-        `[ModelFetcher] Anthropic API returned ${response.status}, using fallback models`,
-      )
-      return PROVIDERS.anthropic.fallbackModels
+      console.warn(`[ModelFetcher] Anthropic API returned ${response.status}`)
+      return []
     }
 
     const data = await response.json()
@@ -251,10 +249,10 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
       if (models.length > 0) return models
     }
 
-    return PROVIDERS.anthropic.fallbackModels
+    return []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Anthropic models:', error)
-    return PROVIDERS.anthropic.fallbackModels
+    return []
   }
 }
 
@@ -271,22 +269,12 @@ interface GoogleModelEntry {
 
 /**
  * Fetches models from Google AI Studio.
- *
- * Example API response for a reasoning model (Gemini 3.1):
- * {
- *   "name": "models/gemini-3.1-pro-preview",
- *   "version": "3.1-pro-preview-01-2026",
- *   "displayName": "Gemini 3.1 Pro Preview",
- *   "supportedGenerationMethods": ["generateContent", ...],
- *   "thinking": true
- * }
  */
 async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
   const effectiveBaseUrl = baseUrl || 'https://generativelanguage.googleapis.com/v1beta'
 
   if (!apiKey) {
-    console.warn('[ModelFetcher] Google API key required, using fallback models')
-    return getGoogleFallback()
+    return []
   }
 
   const modelsUrl =
@@ -300,8 +288,8 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     const response = await fetchFn(modelsUrl, { method: 'GET' })
 
     if (!response.ok) {
-      console.warn(`[ModelFetcher] Google API returned ${response.status}, using fallback models`)
-      return getGoogleFallback()
+      console.warn(`[ModelFetcher] Google API returned ${response.status}`)
+      return []
     }
 
     const data = await response.json()
@@ -311,8 +299,6 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
         .filter((m) => !isGoogleImageModel(m.name.replace(/^models\//, '')))
         .map((m) => {
           const id = m.name.replace(/^models\//, '')
-          // Gemini 2.5 uses thinkingBudget (token count), Gemini 3.x uses thinkingLevel
-          // Gemini 2.0 has no thinking support (API returns thinking: undefined)
           const isGemini25 = id.includes('gemini-2.5')
           return {
             id,
@@ -324,10 +310,10 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
       if (models.length > 0) return dedupeTextModels(models)
     }
 
-    return getGoogleFallback()
+    return []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Google models:', error)
-    return getGoogleFallback()
+    return []
   }
 }
 
@@ -372,8 +358,8 @@ async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
     const response = await fetchFn(tagsUrl, { method: 'GET' })
 
     if (!response.ok) {
-      console.warn(`[ModelFetcher] Ollama returned ${response.status}, using fallback models`)
-      return PROVIDERS.ollama.fallbackModels
+      console.warn(`[ModelFetcher] Ollama returned ${response.status}`)
+      return []
     }
 
     const data = await response.json()
@@ -384,17 +370,16 @@ async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
       if (models.length > 0) return models
     }
 
-    return PROVIDERS.ollama.fallbackModels
+    return []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Ollama models (is Ollama running?):', error)
-    return PROVIDERS.ollama.fallbackModels
+    return []
   }
 }
 
 async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<string[]> {
   if (!apiKey) {
-    console.warn('[ModelFetcher] Zhipu API key required, using fallback models')
-    return PROVIDERS.zhipu.fallbackModels
+    return []
   }
 
   const effectiveBaseUrl = baseUrl || PROVIDERS.zhipu.baseUrl
@@ -408,8 +393,8 @@ async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<stri
     })
 
     if (!response.ok) {
-      console.warn(`[ModelFetcher] Zhipu API returned ${response.status}, using fallback models`)
-      return PROVIDERS.zhipu.fallbackModels
+      console.warn(`[ModelFetcher] Zhipu API returned ${response.status}`)
+      return []
     }
 
     const data = await response.json()
@@ -418,17 +403,16 @@ async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<stri
       if (models.length > 0) return models
     }
 
-    return PROVIDERS.zhipu.fallbackModels
+    return []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Zhipu models:', error)
-    return PROVIDERS.zhipu.fallbackModels
+    return []
   }
 }
 
 async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<string[]> {
   if (!apiKey) {
-    console.warn('[ModelFetcher] Mistral API key required, using fallback models')
-    return PROVIDERS.mistral.fallbackModels
+    return []
   }
 
   const effectiveBaseUrl = baseUrl || PROVIDERS.mistral.baseUrl
@@ -442,8 +426,8 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
     })
 
     if (!response.ok) {
-      console.warn(`[ModelFetcher] Mistral API returned ${response.status}, using fallback models`)
-      return PROVIDERS.mistral.fallbackModels
+      console.warn(`[ModelFetcher] Mistral API returned ${response.status}`)
+      return []
     }
 
     const data = await response.json()
@@ -452,10 +436,10 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
       if (models.length > 0) return models
     }
 
-    return PROVIDERS.mistral.fallbackModels
+    return []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Mistral models:', error)
-    return PROVIDERS.mistral.fallbackModels
+    return []
   }
 }
 
@@ -472,16 +456,14 @@ async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
 
   try {
-    // The API filters models by tier server-side based on the key, so the list
-    // already reflects what this key can actually generate.
     const response = await fetchFn(url, {
       method: 'GET',
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     })
-    if (!response.ok) return getPollinationsTextFallback()
+    if (!response.ok) return []
 
     const data = await response.json()
-    if (!Array.isArray(data)) return getPollinationsTextFallback()
+    if (!Array.isArray(data)) return []
 
     const models: TextModel[] = (data as PollinationsTextModelResponse[])
       .filter(
@@ -495,17 +477,9 @@ async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]
         reasoning: m.reasoning ?? false,
       }))
 
-    return models.length > 0 ? dedupeTextModels(models) : getPollinationsTextFallback()
+    return models.length > 0 ? dedupeTextModels(models) : []
   } catch (error) {
     console.warn('[ModelFetcher] Failed to fetch Pollinations text models:', error)
-    return getPollinationsTextFallback()
+    return []
   }
-}
-
-function getGoogleFallback(): TextModel[] {
-  return dedupeTextModels(PROVIDERS.google.fallbackModels.map((id) => ({ id })))
-}
-
-function getPollinationsTextFallback(): TextModel[] {
-  return dedupeTextModels(PROVIDERS.pollinations.fallbackModels.map((id) => ({ id })))
 }

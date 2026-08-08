@@ -23,6 +23,7 @@
  *   that is no longer the default.
  */
 
+import { parseImageSpec, type ImageSpec } from '$lib/utils/image'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
 
 /** Default of the removed `maxEntriesPerTier` slider, for telling tuned from untouched. */
@@ -70,4 +71,27 @@ export function migrateWorldStateInjection<
 export function migrateEntryRetrieval<T extends { maxTier3Entries: number }>(merged: T): T {
   if (merged.maxTier3Entries > 0) return merged
   return { ...merged, maxTier3Entries: ENTRY_RETRIEVAL_DEFAULTS.maxTier3Entries }
+}
+
+/**
+ * Image sizes used to be `WIDTHxHEIGHT` strings and are now `ImageSpec` objects.
+ *
+ * `parseImageSpec` reads both, so this only normalises what is already on disk into the
+ * shape the rest of the app expects. Idempotent: a spec parses back to itself.
+ */
+export function migrateImageGeneration<
+  T extends {
+    size: ImageSpec | string
+    referenceSize: ImageSpec | string
+    portraitSize: ImageSpec | string
+    backgroundSize: ImageSpec | string
+  },
+>(merged: T): T {
+  return {
+    ...merged,
+    size: parseImageSpec(merged.size),
+    referenceSize: parseImageSpec(merged.referenceSize),
+    portraitSize: parseImageSpec(merged.portraitSize),
+    backgroundSize: parseImageSpec(merged.backgroundSize),
+  }
 }

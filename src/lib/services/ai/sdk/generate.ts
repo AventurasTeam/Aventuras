@@ -61,7 +61,9 @@ const PROVIDER_OPTIONS_KEY: Record<ProviderType, string> = {
   ollama: 'ollama',
   lmstudio: 'lmstudio',
   llamacpp: 'llamacpp',
-  'nvidia-nim': 'nvidia-nim',
+  // Hyphenated provider names are looked up under their camelCase form; the SDK still
+  // reads the raw one but emits a deprecation warning for it.
+  'nvidia-nim': 'nvidiaNim',
   'openai-compatible': 'openaiCompatible',
   openai: 'openai',
   anthropic: 'anthropic',
@@ -105,8 +107,19 @@ export function buildProviderOptions(
         }
         break
       }
+      // Everything built by `createOpenAICompatible` (see `providers/registry.ts`).
+      //
+      // camelCase, not snake_case: the SDK spreads unknown options into the body and then
+      // assigns `reasoning_effort` from its own parsed `reasoningEffort`, so the later key
+      // wins and a snake_case value is overwritten with `undefined` and dropped.
       case 'nanogpt':
-        options = { reasoning_effort }
+      case 'llamacpp':
+      case 'lmstudio':
+      case 'ollama':
+      case 'chutes':
+      case 'nvidia-nim':
+      case 'openai-compatible':
+        options = { reasoningEffort: reasoning_effort }
         break
       case 'pollinations':
         options = {
@@ -118,10 +131,12 @@ export function buildProviderOptions(
         options = { parallelToolCalls: true } satisfies GroqProviderOptions
         break
       case 'zhipu':
+        // Also `createOpenAICompatible`, so `reasoningEffort` for the reason above.
+        // `thinking` is not a key the SDK knows, so it passes through the spread.
         if (reasoning_effort !== 'none') {
           options = {
             thinking: { type: 'enabled' },
-            reasoning_effort,
+            reasoningEffort: reasoning_effort,
           }
         } else {
           options = {

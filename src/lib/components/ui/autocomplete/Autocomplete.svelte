@@ -181,7 +181,9 @@
       <Command.Input bind:value={inputValue} placeholder={searchPlaceholder} />
       <Command.List class={virtualized ? 'overflow-hidden' : ''}>
         {#if totalItemCount === 0}
-          <Command.Empty>No items found.</Command.Empty>
+          <Command.Empty>
+            {allowCustom ? 'Type custom value to select...' : 'No items found.'}
+          </Command.Empty>
         {:else}
           <Command.Group class={virtualized ? 'p-0' : ''}>
             {#if virtualized}

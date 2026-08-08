@@ -22,7 +22,7 @@ import {
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import { emitImageQueued, emitImageReady } from '$lib/services/events'
-import { normalizeImageDataUrl, parseImageSize } from '$lib/utils/image'
+import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 import { createLogger } from '$lib/log'
 import type { Character, EmbeddedImage } from '$lib/types'
@@ -35,7 +35,7 @@ interface PendingImage {
   prompt: string
   profileId: string
   model: string
-  size: string
+  size: ImageSpec
   referenceImageUrls?: string[]
   /** Promise that resolves to base64 image data or null on failure */
   generationPromise: Promise<{ base64: string | null; error?: string }>
@@ -93,6 +93,7 @@ export class InlineImageTracker {
     // Determine profile and model
     let profileId = imageSettings.profileId
     let modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+    let sizeToUse = imageSettings.size
     let referenceImageUrls: string[] | undefined
 
     // Check for portrait mode with character references
@@ -109,8 +110,12 @@ export class InlineImageTracker {
       }
 
       if (portraitUrls.length > 0) {
+        // Use reference profile, model and size for img2img. The size travels with the
+        // profile: a reference model is a different model on a different backend, and
+        // handing it the primary profile's size sends a value that backend may not take.
         profileId = imageSettings.referenceProfileId
         modelToUse = settings.getImageProfile(profileId ?? '')?.model ?? ''
+        sizeToUse = imageSettings.referenceSize
         referenceImageUrls = portraitUrls
       }
     }
@@ -141,7 +146,7 @@ export class InlineImageTracker {
       profileId,
       modelToUse,
       fullPrompt,
-      imageSettings.size,
+      sizeToUse,
       referenceImageUrls,
     )
 
@@ -151,7 +156,7 @@ export class InlineImageTracker {
       prompt: fullPrompt,
       profileId,
       model: modelToUse,
-      size: imageSettings.size,
+      size: sizeToUse,
       referenceImageUrls,
       generationPromise,
     })
@@ -164,7 +169,7 @@ export class InlineImageTracker {
     profileId: string,
     model: string,
     prompt: string,
-    size: string,
+    size: ImageSpec,
     referenceImageUrls?: string[],
   ): Promise<{ base64: string | null; error?: string }> {
     try {
@@ -221,7 +226,7 @@ export class InlineImageTracker {
 
     for (const pending of this.pendingImages) {
       // Determine dimensions from size setting
-      const { width, height } = parseImageSize(pending.size)
+      const { width, height } = expectedPixels(pending.size)
 
       // Create DB record immediately with 'generating' status
       const embeddedImage: Omit<EmbeddedImage, 'createdAt'> = {

@@ -6,6 +6,7 @@
  * - Models:  GET  /sdapi/v1/sd-models
  */
 
+import { specToPixels } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -26,8 +27,8 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
     name: 'A1111 / SD WebUI',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, signal, providerOptions } = options
-      const [width, height] = (size || '512x512').split('x').map(Number)
+      const { model, prompt, spec, signal, providerOptions } = options
+      const { width, height } = specToPixels(spec)
 
       const opts = providerOptions ?? config.providerOptions ?? {}
       const steps = Number(opts.steps) || 20
@@ -39,8 +40,8 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
       const body: Record<string, unknown> = {
         prompt,
         negative_prompt: negativePrompt,
-        width: width || 512,
-        height: height || 512,
+        width,
+        height,
         steps,
         cfg_scale: cfgScale,
         sampler_name: sampler,
@@ -87,7 +88,6 @@ export function createA1111Provider(config: ImageProviderConfig): ImageProvider 
         return (Array.isArray(data) ? data : []).map((m) => ({
           id: m.title || m.model_name || m.name || '',
           name: m.title || m.model_name || m.name || '',
-          supportsSizes: [],
           supportsImg2Img: false,
         }))
       } catch {

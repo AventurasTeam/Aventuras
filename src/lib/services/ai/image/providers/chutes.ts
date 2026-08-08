@@ -6,6 +6,7 @@
  * - img2img: Not supported
  */
 
+import { specToPixels, formatImageSize } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -26,7 +27,8 @@ export function createChutesProvider(config: ImageProviderConfig): ImageProvider
     name: 'Chutes',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, signal } = options
+      const { model, prompt, spec, signal } = options
+      const size = formatImageSize(specToPixels(spec))
 
       const body = {
         model,
@@ -90,7 +92,6 @@ export function createChutesProvider(config: ImageProviderConfig): ImageProvider
               id: name,
               name: formatName(name),
               description: item.tagline || undefined,
-              supportsSizes: ['576x576', '1024x1024', '2048x2048'],
               supportsImg2Img,
             }
           },
@@ -130,14 +131,12 @@ function getFallbackModels(): ImageModelInfo[] {
       id: 'z-image-turbo',
       name: 'Z Image Turbo',
       description: 'Fast, efficient image generation',
-      supportsSizes: ['576x576', '1024x1024', '2048x2048'],
       supportsImg2Img: false,
     },
     {
       id: 'qwen-image-edit-2511',
       name: 'Qwen Image Edit',
       description: 'Image editing with reference images',
-      supportsSizes: ['512x512', '1024x1024', '2048x2048'],
       supportsImg2Img: true,
     },
   ]

@@ -6,6 +6,7 @@
  * - img2img: ?image= param for kontext model
  */
 
+import { specToPixels } from '$lib/utils/image'
 import type {
   ImageProvider,
   ImageProviderConfig,
@@ -15,11 +16,7 @@ import type {
 } from './types'
 import { imageGetFetch } from './fetchAdapter'
 
-import {
-  POLLINATIONS_DEFAULT_MODEL_ID,
-  POLLINATIONS_REFERENCE_MODEL_ID,
-  POLLINATIONS_SUPPORTED_SIZES,
-} from '../constants'
+import { POLLINATIONS_DEFAULT_MODEL_ID, POLLINATIONS_REFERENCE_MODEL_ID } from '../constants'
 const DEFAULT_MODEL = POLLINATIONS_DEFAULT_MODEL_ID
 const REFERENCE_MODEL = POLLINATIONS_REFERENCE_MODEL_ID
 const MODELS_ENDPOINT = 'https://gen.pollinations.ai/image/models'
@@ -48,8 +45,8 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
     name: 'Pollinations',
 
     async generate(options: ImageGenerateOptions): Promise<ImageGenerateResult> {
-      const { model, prompt, size, referenceImages, signal } = options
-      const [width, height] = size.split('x').map(Number)
+      const { model, prompt, spec, referenceImages, signal } = options
+      const { width, height } = specToPixels(spec)
 
       if (!config.apiKey) {
         throw new Error('Pollinations API key is required to bypass Turnstile protection.')
@@ -57,8 +54,8 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
 
       const params = new URLSearchParams({
         model: model || DEFAULT_MODEL,
-        width: String(width || 1024),
-        height: String(height || 1024),
+        width: String(width),
+        height: String(height),
         nologo: 'true',
         safe: 'false',
       })
@@ -110,7 +107,6 @@ export function createPollinationsProvider(config: ImageProviderConfig): ImagePr
             id: model.name,
             name: model.name,
             description: model.description,
-            supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
             supportsImg2Img: model.input_modalities?.includes('image') ?? false,
             costPerImage: parseOptionalNumber(model.pricing?.completionImageTokens),
             costPerTextToken: parseOptionalNumber(model.pricing?.promptTextTokens),
@@ -131,21 +127,18 @@ function getFallbackModels(): ImageModelInfo[] {
       id: DEFAULT_MODEL,
       name: 'Z Image',
       description: 'Default fast image generation',
-      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: false,
     },
     {
       id: 'flux',
       name: 'Flux',
       description: 'High quality image generation',
-      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: false,
     },
     {
       id: REFERENCE_MODEL,
       name: 'Flux Kontext',
       description: 'In-context editing & generation',
-      supportsSizes: POLLINATIONS_SUPPORTED_SIZES,
       supportsImg2Img: true,
     },
   ]

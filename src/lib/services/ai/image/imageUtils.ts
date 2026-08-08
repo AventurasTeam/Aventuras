@@ -10,7 +10,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import type { StorySettings } from '$lib/types'
 import { emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { createLogger } from '$lib/log'
-import { parseImageSize } from '$lib/utils/image'
+import { expectedPixels, defaultImageSpec } from '$lib/utils/image'
 
 const log = createLogger('ImageUtils')
 
@@ -115,7 +115,7 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
   const profile = settings.getImageProfile(profileId)
   const model = profile?.model ?? ''
   const size = imageSettings.size
-  const { width, height } = parseImageSize(size)
+  const { width, height } = expectedPixels(size)
 
   await database.updateEmbeddedImage(imageId, {
     prompt,
@@ -174,7 +174,7 @@ export async function generatePortrait(prompt: string): Promise<string> {
     throw new Error('No image model configured')
   }
 
-  const size = imageSettings.portraitSize || '1024x1024'
+  const size = imageSettings.portraitSize ?? defaultImageSpec()
 
   log('Generating portrait', { profileId, model, size, promptLength: prompt.length })
 

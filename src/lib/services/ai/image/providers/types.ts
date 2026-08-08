@@ -6,6 +6,7 @@
  */
 
 import type { ImageProviderType } from '$lib/types'
+import type { ImageSpec } from '$lib/utils/image'
 import type { DeepKeys } from '@saintno/comfyui-sdk'
 // Provider specific types
 export type ComfySamplerInfo = {
@@ -33,7 +34,10 @@ export interface ComfyCustomWorkflow {
 export interface ImageGenerateOptions {
   model: string
   prompt: string
-  size: string
+  /** What the user asked for. Each adapter turns it into whatever its backend takes. */
+  spec: ImageSpec
+  /** The selected model's catalogue entry, when the provider publishes one. */
+  modelInfo?: ImageModelInfo
   referenceImages?: string[] // raw base64 (no data: prefix)
   signal?: AbortSignal
   providerOptions?: Record<string, unknown>
@@ -48,8 +52,14 @@ export interface ImageModelInfo {
   id: string
   name: string
   description?: string
-  supportsSizes: string[]
   supportsImg2Img: boolean
+  /**
+   * The exact values this model accepts for its size parameter, verbatim.
+   *
+   * Not normalised: NanoGPT's catalogue mixes `1024x1024` with `square_hd`, `auto` and
+   * `1k`/`2k`/`4k`, and a model offering only the latter has no dimensions to normalise to.
+   */
+  supportedResolutions?: string[]
   costPerImage?: number
   costPerTextToken?: number
   costPerImageToken?: number
