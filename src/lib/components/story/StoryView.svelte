@@ -49,6 +49,21 @@
   let scrollRAF: number | null = null
   let prevEntryCount = 0
   let suppressScrollHandler = false
+  // Identifies the scroll that currently owns suppressScrollHandler. Overlapping
+  // programmatic scrolls would otherwise have the earlier one clear the flag while the
+  // later is still scrolling, and handleScroll would read that as a user scroll and
+  // break auto-scroll. Only the newest owner clears it.
+  let scrollSuppressOwner = 0
+
+  // Suppress handleScroll for a programmatic scroll; returns the release callback.
+  function suppressScrollFor(): () => void {
+    const owner = ++scrollSuppressOwner
+    suppressScrollHandler = true
+    return () => {
+      if (owner !== scrollSuppressOwner) return
+      suppressScrollHandler = false
+    }
+  }
 
   // No reactive reads — runs once on mount, cleanup cancels any in-flight RAF on unmount
   $effect(() => {
@@ -75,6 +90,8 @@
     if (currentStoryId !== lastStoryId) {
       lastStoryId = currentStoryId
       prevEntryCount = story.entries.length
+      // Drop any deferred landing: its branch belongs to the story we just left
+      pendingBranchLanding = null
       anchorToBottom(story.entries.length)
       tick().then(() => performScroll())
     }
@@ -175,14 +192,14 @@
 
   async function scrollToTop() {
     ui.setScrollBreak(true)
-    suppressScrollHandler = true
+    const release = suppressScrollFor()
     anchorToTop(story.entries.length)
     await tick()
     performScroll(0)
     // Reset in the frame AFTER performScroll's RAF fires, so the scroll event
     // triggered by scrollTop=0 is still ignored by handleScroll
     requestAnimationFrame(() => {
-      suppressScrollHandler = false
+      release()
     })
   }
 
@@ -197,7 +214,7 @@
   // Scroll a specific entry to the top of the viewport. Falls back to the container
   // bottom when the element isn't in the DOM (entry outside the virtual window).
   function scrollEntryIntoView(entryId: string) {
-    suppressScrollHandler = true
+    const release = suppressScrollFor()
     requestAnimationFrame(() => {
       const el = storyContainer?.querySelector(`[data-entry-id="${entryId}"]`)
       if (el) {
@@ -207,7 +224,7 @@
       }
       // Reset in the frame AFTER the scroll, so its scroll event is still ignored
       requestAnimationFrame(() => {
-        suppressScrollHandler = false
+        release()
         if (storyContainer) {
           userScrolledDown = !isNearEdge('top')
           isAtPhysicalBottom = isNearEdge('bottom')

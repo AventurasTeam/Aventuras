@@ -3827,10 +3827,14 @@ class StoryStore {
     // currentBranchId — with BranchSwitched announcing a branch whose entries aren't
     // loaded. Queue each switch behind the one before it.
     const seq = ++this.branchSwitchSeq
+    // Bind the request to the story it was made for: by the time it reaches the front
+    // of the queue the user may have opened a different story, and a null branchId
+    // would sail past the branch validation and write onto that story instead.
+    const storyId = this.currentStory?.id ?? null
     const run = this.branchSwitchChain.then(
-      () => this.performBranchSwitch(branchId, seq),
+      () => this.performBranchSwitch(branchId, seq, storyId),
       // Run regardless of whether the previous switch settled or threw
-      () => this.performBranchSwitch(branchId, seq),
+      () => this.performBranchSwitch(branchId, seq, storyId),
     )
     // Keep the chain resolved so one failure can't poison later switches; the
     // caller still observes the error through `run`.
@@ -3838,11 +3842,18 @@ class StoryStore {
     return run
   }
 
-  private async performBranchSwitch(branchId: string | null, seq: number): Promise<void> {
+  private async performBranchSwitch(
+    branchId: string | null,
+    seq: number,
+    storyId: string | null,
+  ): Promise<void> {
     // Last one wins: a newer switch was requested while this one waited in the queue.
     // Skip the database write, the reload and the event — the newer request loads the
     // final target, so doing this one's work first would only be discarded.
     if (seq !== this.branchSwitchSeq) return
+
+    // The story changed under a queued switch; it no longer refers to anything current
+    if (this.currentStory?.id !== storyId) return
 
     if (!this.currentStory) throw new Error('No story loaded')
 
