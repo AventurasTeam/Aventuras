@@ -1,5 +1,7 @@
 import { gunzipSync, gzipSync } from 'fflate'
 
+import type { ProbeCapturePayload } from '@/lib/db'
+
 export type CompressedPayload = { bytes: Uint8Array; uncompressedSize: number }
 
 export class CaptureEncodeError extends Error {
@@ -18,7 +20,7 @@ export class CaptureDecodeError extends Error {
 
 // Sync rather than CompressionStream: Hermes has neither that nor node:zlib, and
 // the write sits on a transaction path that has no await to spend.
-export function compressPayload(payload: unknown): CompressedPayload {
+export function compressPayload(payload: ProbeCapturePayload): CompressedPayload {
   let json: Uint8Array
   try {
     json = new TextEncoder().encode(JSON.stringify(payload))

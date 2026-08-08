@@ -1,3 +1,5 @@
+import type { RankerParams } from '@/lib/retrieval'
+
 export type ClassifierLifecycleState = 'idle' | 'running' | 'retrying' | 'failed-persistent'
 
 export type ClassifierStatus = {
@@ -24,13 +26,22 @@ type CaptureCandidate = {
   target_kind: string
   target_id: string
   display_name: string
-  display_text: string
-  sim_q1: number
-  sim_q2: number
-  sim_q3: number
+  /**
+   * The exact string the ranker measured. Null for a pre-filtered row: it can
+   * never be seated by the simulator, so its text and token cost are never read.
+   */
+  display_text: string | null
+  /** Null where that query produced no vector — which 0 cannot express. */
+  sim_q1: number | null
+  sim_q2: number | null
+  sim_q3: number | null
   sim_blend: number
   recency_factor: number
   pin_signal: number
+  /** Clamped as the decay exponent read it, so a replay cannot diverge. */
+  chapters_old: number
+  /** Happenings only; forces pin_signal 0 and recency_factor 1 in the ranker. */
+  common_knowledge?: boolean
   kw_boost_value: number
   chapter_boost_applied: boolean
   bypass_triggered: boolean
@@ -38,7 +49,7 @@ type CaptureCandidate = {
   mmr_rank: number | null
   selected: boolean
   drop_reason: DropReason
-  tokens_estimated: number
+  tokens_estimated: number | null
   embedding_stale: boolean
   vector?: number[]
 }
@@ -65,21 +76,21 @@ type CaptureQuery = {
   vector?: number[]
 }
 
+/**
+ * The ranker's own tunables verbatim beside the story-settings knobs that shape
+ * the pass. Embedding RankerParams rather than restating it is what makes a new
+ * tunable a type error here instead of a silently absent capture field.
+ */
 type CaptureParamsSnapshot = {
-  lambda: Record<string, number>
-  lambda_div: Record<string, number>
-  kw_boost: Record<string, number>
-  tau_revive: number
-  w_action: number
-  w_digest: number
-  w_prose: number
-  min_score_threshold: number
-  chapter_boost: number
+  ranker: RankerParams
   retrievalBudgets: Record<string, number>
   fullChapterInBuffer: boolean
   partialChapterBuffer: number
   protectedBuffer: number
 }
+
+/** Which vocabulary priced tokens_estimated; a later replay warns across a change. */
+type CaptureTokenizer = { encoding: string; version: string }
 
 export type ProbeCapturePayload = {
   branch_id: string
@@ -88,6 +99,7 @@ export type ProbeCapturePayload = {
   captured_at: number
   capture_mode: 'light' | 'deep'
   embedding_model_id: string
+  tokenizer: CaptureTokenizer
   params: CaptureParamsSnapshot
   queries: [CaptureQuery, CaptureQuery, CaptureQuery]
   pools: Record<string, CaptureCandidate[]>
