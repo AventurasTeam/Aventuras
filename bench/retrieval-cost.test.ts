@@ -342,70 +342,91 @@ describe('retrieval cost', () => {
     for (const scale of SCALES) {
       for (const chapterBudget of ['on', 'off']) {
         it(`dim ${dim} — ${scale.label} — boost ${chapterBudget}`, async () => {
-          const { sqlite, sceneCharacterIds, centroids, dir } = build(scale, dim)
-          const queryAll: QueryAll = async (sql, params) =>
-            (sqlite.prepare(sql).all(...(params as never[])) as Record<string, unknown>[]).map(
-              (r) => Object.values(r),
-            )
-          const rand = seededRandom(7)
-          // Each query sits near a different topic, so the three of them together
-          // reach a realistic slice of the pool rather than all of it or none.
-          const queryVectors = [0, 0, 0].map((t) => topical(centroids, t, rand, 0.9))
-
-          const deps = {
-            queryAll,
-            embedTexts: async (texts: string[]) => ({
-              vectors: texts.map((_, i) => queryVectors[i % 3]!),
-              dim,
-            }),
-            loadStaleRows: async () => [],
-            embedRows: async () => [],
-            runInTransaction: async () => {},
+          // A pass that throws mid-run must still drop its handle and temp dir:
+          // the run is 12 fixtures, each a file-backed db under tmpdir.
+          let sqlite: DatabaseSync | undefined
+          let dir: string | undefined
+          try {
+            const fixture = build(scale, dim)
+            sqlite = fixture.sqlite
+            dir = fixture.dir
+            await measure(fixture, dim, scale, chapterBudget)
+          } finally {
+            try {
+              sqlite?.close()
+            } finally {
+              if (dir !== undefined) rmSync(dir, { recursive: true, force: true })
+            }
           }
-          const params = {
-            branchId: BRANCH,
-            modelId: MODEL_ID,
-            dim,
-            budgets: {
-              ...STORY_SETTINGS_DEFAULTS.retrievalBudgets,
-              // 0 seats no chapter, so boostedEntryIds stays empty and the
-              // chapter-range admission path is switched off entirely.
-              ...(chapterBudget === 'off' ? { chapters: 0 } : {}),
-            },
-            query: {
-              userAction: prose(rand, 20),
-              eraName: null,
-              piggybackSummary: null,
-              lastNarrativeContent: prose(rand, 150),
-            },
-            sceneCharacterIds,
-            sceneEntityIds: sceneCharacterIds,
-            currentLocationId: 'char_000000',
-            recentProse: prose(rand, 200),
-          }
-
-          const samples: Record<string, number>[] = []
-          let funnels = ''
-          for (let i = 0; i < 9; i += 1) {
-            const out = await runRetrieval(deps as never, params)
-            if (!out.ok) throw new Error(`pass failed: ${out.failure.detail}`)
-            if (i >= 2) samples.push(out.timings as unknown as Record<string, number>)
-            funnels = Object.entries(out.bundles)
-              .map(([t, b]) => `${t}:${b.funnel.poolSize}/${b.funnel.selectedCount}`)
-              .join(' ')
-          }
-          const keys = ['totalMs', 'syncMs', 'embedMs', 'knnMs', 'rankMs']
-          const line = keys
-            .map((k) => `${k.replace('Ms', '')}=${median(samples.map((s) => s[k]!)).toFixed(1)}`)
-            .join('  ')
-          process.stdout.write(
-            `  dim=${dim} ${scale.label.padEnd(16)} boost=${chapterBudget.padEnd(3)} ${line}\n` +
-              `    pools ${funnels}\n`,
-          )
-          sqlite.close()
-          rmSync(dir, { recursive: true, force: true })
         }, 300_000)
       }
     }
   }
 })
+
+async function measure(
+  { sqlite, sceneCharacterIds, centroids }: ReturnType<typeof build>,
+  dim: number,
+  scale: Scale,
+  chapterBudget: string,
+): Promise<void> {
+  const queryAll: QueryAll = async (sql, params) =>
+    (sqlite.prepare(sql).all(...(params as never[])) as Record<string, unknown>[]).map((r) =>
+      Object.values(r),
+    )
+  const rand = seededRandom(7)
+  // Each query sits near a different topic, so the three of them together
+  // reach a realistic slice of the pool rather than all of it or none.
+  const queryVectors = [0, 0, 0].map((t) => topical(centroids, t, rand, 0.9))
+
+  const deps = {
+    queryAll,
+    embedTexts: async (texts: string[]) => ({
+      vectors: texts.map((_, i) => queryVectors[i % 3]!),
+      dim,
+    }),
+    loadStaleRows: async () => [],
+    embedRows: async () => [],
+    runInTransaction: async () => {},
+  }
+  const params = {
+    branchId: BRANCH,
+    modelId: MODEL_ID,
+    dim,
+    budgets: {
+      ...STORY_SETTINGS_DEFAULTS.retrievalBudgets,
+      // 0 seats no chapter, so boostedEntryIds stays empty and the
+      // chapter-range admission path is switched off entirely.
+      ...(chapterBudget === 'off' ? { chapters: 0 } : {}),
+    },
+    query: {
+      userAction: prose(rand, 20),
+      eraName: null,
+      piggybackSummary: null,
+      lastNarrativeContent: prose(rand, 150),
+    },
+    sceneCharacterIds,
+    sceneEntityIds: sceneCharacterIds,
+    currentLocationId: 'char_000000',
+    recentProse: prose(rand, 200),
+  }
+
+  const samples: Record<string, number>[] = []
+  let funnels = ''
+  for (let i = 0; i < 9; i += 1) {
+    const out = await runRetrieval(deps as never, params)
+    if (!out.ok) throw new Error(`pass failed: ${out.failure.detail}`)
+    if (i >= 2) samples.push(out.timings as unknown as Record<string, number>)
+    funnels = Object.entries(out.bundles)
+      .map(([t, b]) => `${t}:${b.funnel.poolSize}/${b.funnel.selectedCount}`)
+      .join(' ')
+  }
+  const keys = ['totalMs', 'syncMs', 'embedMs', 'knnMs', 'rankMs']
+  const line = keys
+    .map((k) => `${k.replace('Ms', '')}=${median(samples.map((s) => s[k]!)).toFixed(1)}`)
+    .join('  ')
+  process.stdout.write(
+    `  dim=${dim} ${scale.label.padEnd(16)} boost=${chapterBudget.padEnd(3)} ${line}\n` +
+      `    pools ${funnels}\n`,
+  )
+}
