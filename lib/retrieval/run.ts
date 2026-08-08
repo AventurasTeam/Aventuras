@@ -352,6 +352,9 @@ async function runRetrievalPass(
     chapters,
   )
   rankMs += performance.now() - rankStartedAt
+  // Nothing between here and the success return can throw, so this line is
+  // unreachable from a failure path today; it guards against a future insertion
+  // between the two silently dropping the rest of the bundle from a capture.
   Object.assign(partial.bundles, bundles)
 
   const placeIds = new Set(

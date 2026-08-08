@@ -1,5 +1,12 @@
 import type { StructuralFloor } from '../pools'
-import type { InjectedAwareness, RetrievalSuccess, RetrievalTimings } from '../run'
+import type {
+  InjectedAwareness,
+  RetrievalFailure,
+  RetrievalOutcome,
+  RetrievalPartial,
+  RetrievalSuccess,
+  RetrievalTimings,
+} from '../run'
 import { TYPE_OF_KIND, type Candidate, type RankedType, type RetrievalType } from '../types'
 
 const TYPES = Object.values(TYPE_OF_KIND)
@@ -70,5 +77,21 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     injectedAwareness: over.injectedAwareness ?? [],
     selectedLocationIds: over.selectedLocationIds ?? [],
     timings: over.timings ?? { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
+  }
+}
+
+/**
+ * The `ok: false` counterpart to `retrievalSuccess`. `partial` defaults to the
+ * all-null shape a sync-stage failure carries — the most restrictive real case
+ * — so a fixture that only cares about `failure` doesn't have to fabricate one.
+ */
+export function retrievalFailure(
+  failure: RetrievalFailure,
+  partial: Partial<RetrievalPartial> = {},
+): Extract<RetrievalOutcome, { ok: false }> {
+  return {
+    ok: false,
+    failure,
+    partial: { queries: null, floor: null, bundles: {}, ...partial },
   }
 }

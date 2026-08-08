@@ -12,12 +12,14 @@ import type { Logger } from '@/lib/diagnostics'
 import type {
   InjectedAwareness,
   RankedType,
+  RetrievalDeps,
+  RetrievalOutcome,
   RetrievalParams,
   RetrievalSuccess,
   RetrievalTimings,
   RetrievalType,
 } from '@/lib/retrieval'
-import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
+import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
   entitiesStore,
@@ -31,8 +33,12 @@ import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-ret
 import { getPipeline } from '../authoring/registry'
 import type { PhaseEmittedEvent, PhaseResult } from '../types'
 
+// Typed rather than a bare `vi.fn()` so a mocked resolution missing `partial`
+// fails to compile instead of silently feeding the probe phase `undefined`.
+type RunRetrieval = (deps: RetrievalDeps, params: RetrievalParams) => Promise<RetrievalOutcome>
+
 const { runRetrievalMock, refreshEmbeddingStatusMock } = vi.hoisted(() => ({
-  runRetrievalMock: vi.fn(),
+  runRetrievalMock: vi.fn<RunRetrieval>(),
   refreshEmbeddingStatusMock: vi.fn(),
 }))
 
@@ -371,10 +377,9 @@ describe('retrieval phase — embedder config', () => {
 describe('retrieval phase — blocking failure mapping', () => {
   it('maps an init failure with a stale-row magnitude field by field', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue({
-      ok: false,
-      failure: { reason: 'init', detail: 'no embedder integration', staleCount: 7 },
-    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'init', detail: 'no embedder integration', staleCount: 7 }),
+    )
 
     const { result } = await runRetrievalPhase()
 
@@ -393,10 +398,9 @@ describe('retrieval phase — blocking failure mapping', () => {
   // differ from the case above.
   it('maps a call failure whose magnitude is unknown', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue({
-      ok: false,
-      failure: { reason: 'call', detail: 'query embed served dim 512', staleCount: null },
-    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'call', detail: 'query embed served dim 512', staleCount: null }),
+    )
 
     const { result } = await runRetrievalPhase()
 
@@ -413,10 +417,9 @@ describe('retrieval phase — blocking failure mapping', () => {
 
   it('stashes nothing on the intermediates when the pass fails', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue({
-      ok: false,
-      failure: { reason: 'call', detail: 'boom', staleCount: null },
-    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'call', detail: 'boom', staleCount: null }),
+    )
 
     const { intermediates, events } = await runRetrievalPhase()
 
@@ -541,7 +544,7 @@ describe('retrieval phase — abort', () => {
     runRetrievalMock.mockImplementation(async (deps: { abortSignal?: AbortSignal }) => {
       vi.advanceTimersByTime(300_000)
       if (deps.abortSignal?.aborted !== true) throw new Error('expected the bounded signal to fire')
-      return { ok: false, failure: { reason: 'call', detail: 'aborted', staleCount: null } }
+      return retrievalFailure({ reason: 'call', detail: 'aborted', staleCount: null })
     })
 
     const { result } = await runRetrievalPhase()
@@ -577,7 +580,7 @@ describe('retrieval phase — abort', () => {
     const controller = new AbortController()
     runRetrievalMock.mockImplementation(async () => {
       controller.abort()
-      return { ok: false, failure: { reason: 'call', detail: 'boom', staleCount: null } }
+      return retrievalFailure({ reason: 'call', detail: 'boom', staleCount: null })
     })
 
     const { result, log } = await runRetrievalPhase(controller.signal)
@@ -623,10 +626,9 @@ describe('retrieval phase — abort', () => {
 describe('retrieval phase — diagnostics', () => {
   it('warns with the failure magnitude when the pass fails', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue({
-      ok: false,
-      failure: { reason: 'call', detail: 'embedder session died', staleCount: 4 },
-    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'call', detail: 'embedder session died', staleCount: 4 }),
+    )
 
     const { log } = await runRetrievalPhase()
 
@@ -718,10 +720,9 @@ describe('retrieval phase — diagnostics', () => {
 
   it('logs no timing for a pass that failed before it produced one', async () => {
     seedOpenStory()
-    runRetrievalMock.mockResolvedValue({
-      ok: false,
-      failure: { reason: 'call', detail: 'embedder session died', staleCount: 4 },
-    })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'call', detail: 'embedder session died', staleCount: 4 }),
+    )
 
     const { log } = await runRetrievalPhase()
 

@@ -531,6 +531,33 @@ describe('runRetrieval — query embed failure', () => {
     expect(partial.bundles).toEqual({})
   })
 
+  // The happenings pool builds AFTER the chapters bundle is already ranked and
+  // stashed (run.ts ranks chapters early to feed the happenings boost), so a
+  // corrupt vector that fails happenings specifically is the one place that can
+  // observe the accumulator keeping a bundle the pass never reached the tail of
+  // — a capture with only `chapters` populated, not an empty `{}`.
+  it('keeps only the chapters bundle when a corrupt vector fails the happenings pool', async () => {
+    const notUnit = new Uint8Array(Float32Array.from([2, 2]).buffer)
+    const inner = makeQueryAll({
+      chapters: [chapterRow('ch_1', 'The Tin Gate')],
+      happenings: [happeningRow('hap_1', 'The bell rang', { common: 1 })],
+    })
+    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
+      if (sql.includes('MATCH')) {
+        if (sql.includes('chapter_summaries_vec')) return [hit('ch_1', 0, unitBlob(1, 0))]
+        if (sql.includes('happenings_vec')) return [hit('hap_1', 0, notUnit)]
+        return []
+      }
+      return inner(sql, p)
+    })
+
+    const out = await runRetrieval(deps({ queryAll }), params())
+
+    const partial = expectPartial(out)
+    expect(Object.keys(partial.bundles)).toEqual(['chapters'])
+    expect(partial.bundles.chapters?.selected.map((c) => c.id)).toEqual(['ch_1'])
+  })
+
   // Companion to the sync stage's hand-off test. The query embed is the second
   // place a stalled provider can park the turn, and the bounded signal the phase
   // builds is worthless if the pass drops it on the floor.
