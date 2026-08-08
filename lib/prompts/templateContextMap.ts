@@ -109,19 +109,11 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
-      name: 'structuralSceneEntities',
-      type: 'FloorEntity[]',
-      category: 'Retrieval',
-      description:
-        'Active in-scene entities as { id, kind, status, name, description }, EXCLUDING the one that is the current location — that row is routed to structuralLocation instead. Injected unconditionally; injection mode is deliberately ignored. Empty when the scene names none, or no retrieval ran.',
-      required: true,
-    },
-    {
       name: 'structuralLocation',
       type: 'FloorEntity | null',
       category: 'Retrieval',
       description:
-        'The ACTIVE entity for currentLocationId, same row shape as structuralSceneEntities. Null both when the scene names no location and when it names one that is staged, retired, or absent from the branch — so guard the location block on this variable, never on currentLocationId. Null when no retrieval ran.',
+        'The ACTIVE entity for currentLocationId, shaped { id, kind, status, name, description }. Null both when the scene names no location and when it names one that is staged, retired, or absent from the branch — so guard the location block on this variable, never on currentLocationId. Null when no retrieval ran.',
       required: true,
     },
     {
@@ -301,7 +293,6 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'retrievedHappenings',
     'retrievedThreads',
     'retrievedChapters',
-    'structuralSceneEntities',
     'structuralLocation',
     'locationIds',
     'structuralActiveThreads',

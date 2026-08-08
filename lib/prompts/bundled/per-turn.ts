@@ -1,10 +1,9 @@
 // `entities` use the drizzle row shape (camelCase: id/kind/name/description/
 // status/injectionMode). `sceneEntities` is the id array from entry metadata.
 // The scene loop is intentionally injectionMode-agnostic — that IS the
-// structural-floor invariant (active + in-scene always inject). It reads
-// `entities` rather than `structuralSceneEntities` so the invariant survives a
-// context built with no retrieval outcome — no retrieval phase ran ahead of the
-// render — where every floor bundle arrives empty.
+// structural-floor invariant (active + in-scene always inject). It derives the
+// set from `entities` rather than from the floor so the invariant survives a
+// context built with no retrieval outcome, where every floor bundle is empty.
 export const PER_TURN_NARRATIVE = `{% if definition.setting != blank -%}
 # Setting
 {{ definition.setting }}

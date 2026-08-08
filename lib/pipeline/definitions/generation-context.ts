@@ -205,7 +205,6 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     retrievedHappenings: promptRows(retrieval?.bundles.happenings.selected),
     retrievedThreads: promptRows(retrieval?.bundles.threads.selected),
     retrievedChapters: promptRows(retrieval?.bundles.chapters.selected),
-    structuralSceneEntities: floorEntities(floor?.sceneEntities),
     structuralLocation: floor?.currentLocation ? floorEntity(floor.currentLocation) : null,
     structuralActiveThreads: floorThreads(floor?.activeThreads),
     // Kept per type rather than concatenated: no field tags a row with its own

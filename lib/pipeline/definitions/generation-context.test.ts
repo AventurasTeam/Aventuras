@@ -808,7 +808,6 @@ describe('buildGenerationContext — structural floor', () => {
 
   it('emits empty lists and a null location when no retrieval ran', () => {
     const ctx = buildGenerationContext({ ...base(), retrieval: undefined })
-    expect(ctx.structuralSceneEntities).toEqual([])
     expect(ctx.structuralActiveThreads).toEqual([])
     expect(ctx.structuralPinnedEntities).toEqual([])
     expect(ctx.structuralPinnedLore).toEqual([])
@@ -818,7 +817,6 @@ describe('buildGenerationContext — structural floor', () => {
 
   it('carries every floor field to its own bucket', () => {
     const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
-    expect((ctx.structuralSceneEntities as { name: string }[]).map((e) => e.name)).toEqual(['Mara'])
     expect((ctx.structuralLocation as { name: string }).name).toBe('The keep')
     expect((ctx.structuralActiveThreads as { title: string }[]).map((t) => t.title)).toEqual([
       'Find the heir',
@@ -860,9 +858,6 @@ describe('buildGenerationContext — structural floor', () => {
         },
       }),
     })
-    expect(keysOf(ctx.structuralSceneEntities)).toEqual([
-      ['description', 'id', 'kind', 'name', 'status'],
-    ])
     expect(Object.keys(ctx.structuralLocation as object).sort()).toEqual([
       'description',
       'id',
@@ -942,8 +937,8 @@ describe('buildGenerationContext — locationIds', () => {
       },
     })
     expect(ctx.locationIds).toEqual(['l1'])
-    // Positive control: those same rows do render with IDs of their own.
-    expect((ctx.structuralSceneEntities as { id: string }[]).map((e) => e.id)).toEqual(['c1'])
+    // Positive control: the ranked character does reach the template with an ID
+    // of its own, so exclusion here is about kind rather than about absence.
     expect((ctx.retrievedEntities as { id: string }[]).map((e) => e.id)).toEqual(['c2'])
   })
 
