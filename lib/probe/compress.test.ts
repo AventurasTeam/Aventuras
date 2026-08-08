@@ -40,38 +40,50 @@ const capturePayload = (): ProbeCapturePayload => ({
       sentence_scores: [0.9, 0.6, 0.4],
     },
   ],
+  // Three bands mirror what rankPerType actually emits: a pre-filtered row
+  // never reaches MMR, so it alone gets null display_text/tokens_estimated —
+  // an over-budget row was priced and MMR-ranked to be found over budget, so
+  // pairing that drop_reason with null text/tokens describes a pass the
+  // ranker cannot produce (see lib/retrieval/__tests__/outcome.ts).
   pools: {
-    happenings: Array.from({ length: 40 }, (_, i) => ({
-      target_kind: 'happening',
-      target_id: `hap_${i}`,
-      // Non-ASCII on purpose: `size` must be UTF-8 BYTES, and an all-ASCII
-      // fixture cannot tell `TextEncoder().encode(s).length` from `s.length`.
-      // Paired with a null sim_q3 on the same row so null-preservation rides
-      // on this fixture rather than a separate toy object.
-      display_name: i === 0 ? 'Most přes Vltavu' : `Happening ${i}`,
-      display_text: i < 5 ? 'The bridge fell during the third night of the siege.' : null,
-      sim_q1: 0.5,
-      sim_q2: 0.4,
-      sim_q3: i === 0 ? null : 0.3,
-      sim_blend: 0.45,
-      recency_factor: 1,
-      pin_signal: 0,
-      chapters_old: 0,
-      kw_boost_value: 0,
-      chapter_boost_applied: false,
-      bypass_triggered: false,
-      final_score: 0.45,
-      mmr_rank: i < 5 ? i : null,
-      selected: i < 5,
-      drop_reason: i < 5 ? 'not_dropped' : 'over_budget',
-      tokens_estimated: i < 5 ? 14 : null,
-      embedding_stale: false,
-    })),
+    happenings: Array.from({ length: 40 }, (_, i) => {
+      const isSelected = i < 5
+      const isPreFiltered = i >= 20
+
+      return {
+        target_kind: 'happening',
+        target_id: `hap_${i}`,
+        // Non-ASCII on every row, not just one: `size` must be UTF-8 BYTES,
+        // and a single-row-only non-ASCII fixture leaves only a one-byte gap
+        // against a buggy UTF-16-length substitute.
+        display_name: `Most přes Vltavu ${i}`,
+        display_text: isPreFiltered ? null : 'The bridge fell during the third night of the siege.',
+        sim_q1: 0.5,
+        sim_q2: 0.4,
+        // Row 0 is the top selected row (not_dropped, mmr_rank 0) and
+        // carries a real sim_q3: null — the ranker's own "this query
+        // produced no vector" case, not a pre-filtered stand-in.
+        sim_q3: i === 0 ? null : 0.3,
+        sim_blend: 0.45,
+        recency_factor: 1,
+        pin_signal: 0,
+        chapters_old: 0,
+        kw_boost_value: 0,
+        chapter_boost_applied: false,
+        bypass_triggered: false,
+        final_score: 0.45,
+        mmr_rank: isPreFiltered ? null : i,
+        selected: isSelected,
+        drop_reason: isSelected ? 'not_dropped' : isPreFiltered ? 'pre_filtered' : 'over_budget',
+        tokens_estimated: isPreFiltered ? null : 14,
+        embedding_stale: false,
+      }
+    }),
   },
   funnels: {
     happenings: {
       pool_size: 40,
-      pre_filtered_size: 35,
+      pre_filtered_size: 20,
       selected_count: 5,
       tokens_used: 70,
       type_budget: 600,
@@ -102,16 +114,23 @@ describe('compressPayload', () => {
   it('preserves a null distinctly from an absent key', () => {
     // sim_q* is nullable, and JSON.stringify drops `undefined` while keeping
     // `null` — the capture's whole null-vs-zero distinction rides on that
-    // surviving the round trip. The pre-filtered row (i === 0) carries a real
+    // surviving the round trip. The top selected row (i === 0) carries a real
     // sim_q3: null, so this reads it back off the main fixture rather than a
     // hand-rolled shape.
     const payload = capturePayload()
 
     const decoded = decompressPayload(compressPayload(payload).bytes) as ProbeCapturePayload
-    const preFiltered = decoded.pools.happenings[0]
+    const topSelected = decoded.pools.happenings[0]
+    const preFiltered = decoded.pools.happenings[39]
 
-    expect(preFiltered.sim_q3).toBeNull()
-    expect('common_knowledge' in preFiltered).toBe(false)
+    expect(topSelected.sim_q3).toBeNull()
+    expect('common_knowledge' in topSelected).toBe(false)
+    // A genuinely pre-filtered row (never reached MMR) carries null across
+    // all three fields at once — the combination costTokens never produces.
+    expect(preFiltered.drop_reason).toBe('pre_filtered')
+    expect(preFiltered.display_text).toBeNull()
+    expect(preFiltered.tokens_estimated).toBeNull()
+    expect(preFiltered.mmr_rank).toBeNull()
   })
 
   it('throws a named error when the payload cannot be JSON-encoded', () => {
