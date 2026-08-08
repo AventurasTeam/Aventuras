@@ -90,6 +90,45 @@ describe('rankPerType — scoring', () => {
     expect(r.traces[0].finalScore).toBeCloseTo(0.6, 6)
   })
 
+  // Lore has lambda 0, so its pin signal — priority/100 — has no decay exponent
+  // to act through and reaches the score only via pinBoost.
+  it('lets lore priority lift the score, and leaves priority 0 untouched', () => {
+    const unpinned = rankPerType([candidate({ id: 'a', pinSignal: 0 })], 'lore', 1000, base)
+    const pinned = rankPerType([candidate({ id: 'a', pinSignal: 1 })], 'lore', 1000, base)
+    // Literal, not derived from RANKER_DEFAULTS.pinBoost.lore: an expectation
+    // computed from the constant under test passes at every value including 0.
+    expect(unpinned.traces[0].finalScore).toBeCloseTo(0.5, 6)
+    expect(pinned.traces[0].finalScore).toBeCloseTo(0.625, 6)
+    expect(pinned.traces[0].recencyFactor).toBe(1)
+  })
+
+  // The property that chose a multiplier over an additive boost: max priority
+  // must not carry an irrelevant row over the floor, because that is what
+  // injection_mode='always' is for.
+  it('does not let max lore priority seat a row that is not relevant', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.02, 0.02, 0.02], pinSignal: 1 })],
+      'lore',
+      1000,
+      base,
+    )
+    expect(r.selected).toHaveLength(0)
+    expect(r.traces[0].dropReason).toBe('below_threshold')
+  })
+
+  // decay_resistance already acts through the exponent for happenings; a
+  // non-zero pinBoost there would count the same pin twice.
+  it('gives happenings no pinBoost channel, so the pin acts through decay alone', () => {
+    expect(RANKER_DEFAULTS.pinBoost.happenings).toBe(0)
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.6, 0.6, 0.6], chaptersOld: 0, pinSignal: 1 })],
+      'happenings',
+      1000,
+      base,
+    )
+    expect(r.traces[0].finalScore).toBeCloseTo(0.6, 6)
+  })
+
   it('adds the keyword boost on a hit and nothing without one', () => {
     const hit = rankPerType(
       [candidate({ id: 'a', keywordHits: ['veilstone'] })],

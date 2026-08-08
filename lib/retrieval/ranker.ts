@@ -73,7 +73,15 @@ function score(
   const recencyFactor =
     common || lambda <= 0 ? 1 : Math.exp(-lambda * chaptersOld * (1 - pinSignal))
 
-  let finalScore = simBlend * recencyFactor + kwBoostValue
+  // A pin reaches the score through the decay exponent, which needs decay to
+  // resist — so on a type with lambda = 0 it has no channel at all. pinBoost is
+  // that channel, and it is per-type rather than derived from lambda so a
+  // reader sees which types use which path. Multiplicative on purpose: it lifts
+  // a relevant row above its peers without lifting an irrelevant one over the
+  // score threshold, which is what injection_mode='always' is for.
+  const pinBoost = 1 + params.pinBoost[type] * pinSignal
+
+  let finalScore = simBlend * recencyFactor * pinBoost + kwBoostValue
 
   const bypassTriggered = simBlend >= params.tauRevive
   if (bypassTriggered) finalScore = Math.max(finalScore, simBlend - params.tauRevive)

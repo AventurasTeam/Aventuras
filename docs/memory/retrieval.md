@@ -1076,11 +1076,12 @@ deeply-decayed rows:
 
 ```
 score(c) = max(
-    sim_blend(c) × recency_factor(c) + kw_boost(c),
+    sim_blend(c) × recency_factor(c) × pin_boost(c) + kw_boost(c),
     (sim_blend(c) − τ_revive) if sim_blend(c) ≥ τ_revive else 0
 )
 
 recency_factor(c) = exp(−λ_type × chapters_old(c) × (1 − pin_signal(c)))
+pin_boost(c)      = 1 + k_pin(type_of(c)) × pin_signal(c)
 ```
 
 Where:
@@ -1107,6 +1108,30 @@ The multiplicative pin-into-recency integration is the key shape:
   forever).
 - `pin_signal = 0` decays normally.
 - Fractional values for "mostly persistent."
+
+**`k_pin` is the pin's second channel, for types that do not decay.**
+Pin-into-recency needs decay to resist, so on a type with `λ_type = 0`
+the exponent is 1 whatever the pin says and `pin_signal` reaches the
+score through nothing. Lore is that type — timeless by design, and the
+only non-decaying type carrying a pin signal — so its `priority` would
+otherwise be inert. `k_pin` is per-type rather than derived from
+`λ_type` so a reader can see which types use which channel:
+
+| Type         | `k_pin` | Pin reaches the score via |
+| ------------ | ------- | ------------------------- |
+| `lore`       | 0.25    | `pin_boost` (no decay)    |
+| `happenings` | 0       | the decay exponent        |
+| others       | 0       | no pin signal in v1       |
+
+Multiplicative rather than additive, deliberately: at `priority = 100`
+a lore row scores 1.25× what its similarity earned, which wins ties
+among relevant lore but leaves an irrelevant row near zero and still
+under `min_score_threshold`. An additive pin of the same magnitude
+would carry a `sim_blend = 0.02` row to 0.27 and inject it every turn
+regardless of the scene — which is what `injection_mode='always'` is
+for, and what the graded control exists to be an alternative to.
+`k_pin = 0` at the default `priority = 0`, so the knob is a no-op until
+a user reaches for it.
 
 Pinned items naturally float higher in the ranker without a separate
 tier; budget pressure still drops them when oversubscribed (see
@@ -1266,13 +1291,13 @@ scattered rather than coherent).
 
 Sensible starting defaults; tunable per story in advanced settings:
 
-| Type                   | `λ`          | `recency_factor = 0.5` at | Rationale                                                                     |
-| ---------------------- | ------------ | ------------------------- | ----------------------------------------------------------------------------- |
-| Happenings (awareness) | 0.07         | ~10 chapters              | Events get stale, but not as fast as a 5-chapter half-life would imply        |
-| Entities (off-scene)   | 0.025        | ~28 chapters              | Cast turnover is slow                                                         |
-| Threads                | 0.025        | ~28 chapters              | Arc presence is slow                                                          |
-| Lore                   | 0 (no decay) | —                         | Effectively timeless; ranks purely on `sim_blend × (priority/100) + kw_boost` |
-| Chapter summaries      | 0 (no decay) | —                         | Mid-level historical record; ranks purely on `sim_blend + kw_boost`           |
+| Type                   | `λ`          | `recency_factor = 0.5` at | Rationale                                                                              |
+| ---------------------- | ------------ | ------------------------- | -------------------------------------------------------------------------------------- |
+| Happenings (awareness) | 0.07         | ~10 chapters              | Events get stale, but not as fast as a 5-chapter half-life would imply                 |
+| Entities (off-scene)   | 0.025        | ~28 chapters              | Cast turnover is slow                                                                  |
+| Threads                | 0.025        | ~28 chapters              | Arc presence is slow                                                                   |
+| Lore                   | 0 (no decay) | —                         | Effectively timeless; pins via `k_pin`, not decay — `sim_blend × pin_boost + kw_boost` |
+| Chapter summaries      | 0 (no decay) | —                         | Mid-level historical record; ranks purely on `sim_blend + kw_boost`                    |
 
 Lore and chapter summaries don't decay — they're inherently long-arc
 content. Lore is timeless reference; chapter summaries are factual
@@ -1549,7 +1574,10 @@ def rank_per_type(candidates, queries, type_budget, λ_type, type_overhead, *, m
         else:
             pin = pin_signal(c)
             rec = exp(-λ_type * c.chapters_old * (1 - pin)) if λ_type > 0 else 1.0
-            score = sim * rec + kw
+            # Second pin channel, for types where λ_type = 0 leaves `rec` at 1.0
+            # regardless of the pin. k_pin is 0 for every decaying type, so a pin
+            # is never counted twice.
+            score = sim * rec * (1 + k_pin(type_of(c)) * pin) + kw
 
         # High-similarity bypass — revival of decayed memories
         if sim >= τ_revive:

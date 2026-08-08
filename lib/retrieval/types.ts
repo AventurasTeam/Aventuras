@@ -120,6 +120,8 @@ export type QueryWeights = { action: number; digest: number; prose: number }
 export type RankerParams = {
   readonly weights: Readonly<QueryWeights>
   readonly lambda: Readonly<Record<RetrievalType, number>>
+  /** Pin channel for types whose `lambda` is 0, where the decay exponent carries nothing. */
+  readonly pinBoost: Readonly<Record<RetrievalType, number>>
   readonly lambdaDiv: number
   readonly kwBoost: number
   readonly tauRevive: number
