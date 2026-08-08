@@ -1,7 +1,7 @@
 <script lang="ts">
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import type { POV, Tense } from '$lib/types'
+  import type { POV, Tense, TargetLength } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
@@ -12,6 +12,8 @@
     imageGenerationMode: 'none' | 'agentic' | 'inline'
     backgroundImagesEnabled: boolean
     referenceMode: boolean
+    targetLength?: TargetLength
+    mode?: 'adventure' | 'creative-writing'
     onPOVChange: (v: POV) => void
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
@@ -19,6 +21,7 @@
     onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
+    onTargetLengthChange?: (v: TargetLength) => void
   }
 
   let {
@@ -30,6 +33,8 @@
     imageGenerationMode,
     backgroundImagesEnabled,
     referenceMode,
+    targetLength = 'dynamic',
+    mode = 'adventure',
     onPOVChange,
     onTenseChange,
     onToneChange,
@@ -37,6 +42,7 @@
     onImageGenerationModeChange,
     onBackgroundImagesEnabledChange,
     onReferenceModeChange,
+    onTargetLengthChange,
   }: Props = $props()
 
   // Force "none" mode when image generation is disabled (wizard only)
@@ -67,6 +73,8 @@
       {imageGenerationMode}
       {backgroundImagesEnabled}
       {referenceMode}
+      {targetLength}
+      {mode}
       {onPOVChange}
       {onTenseChange}
       {onToneChange}
@@ -74,6 +82,7 @@
       {onImageGenerationModeChange}
       {onBackgroundImagesEnabledChange}
       {onReferenceModeChange}
+      {onTargetLengthChange}
     />
   </ScrollArea>
 </div>

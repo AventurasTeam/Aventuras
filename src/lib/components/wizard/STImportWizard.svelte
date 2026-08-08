@@ -4,6 +4,9 @@
   import { story } from '$lib/stores/story.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
+  import { releaseOrphanScrollLock, blurFocusedElement } from '$lib/utils/scrollLock'
+  import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
+  import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import { Button } from '$lib/components/ui/button'
   import { ChevronLeft, ChevronRight, Play } from '@lucide/svelte'
 
@@ -24,30 +27,24 @@
 
   let { onClose }: Props = $props()
 
+  const isMobile = createIsMobile()
+
   let isOpen = $state(true)
 
+  /**
+   * A close driven from this side never reaches `vaul`'s restore, and `onClose()` unmounts
+   * the component, so the teardown is done by hand. See `$lib/utils/scrollLock`.
+   */
   function handleClose() {
-    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
+    blurFocusedElement(isMobile.current)
     isOpen = false
     setTimeout(() => {
-      if (typeof document !== 'undefined') {
-        document.body.style.pointerEvents = ''
-        document.body.style.overflow = ''
-        document.body.removeAttribute('data-scroll-locked')
-      }
+      releaseOrphanScrollLock()
       onClose()
-    }, 150)
+    }, MODAL_CLOSE_TRANSITION_MS)
   }
 
-  onDestroy(() => {
-    if (typeof document !== 'undefined') {
-      document.body.style.pointerEvents = ''
-      document.body.style.overflow = ''
-      document.body.removeAttribute('data-scroll-locked')
-    }
-  })
+  onDestroy(() => releaseOrphanScrollLock())
 
   const wizard = new STImportWizardStore(() => handleClose())
 

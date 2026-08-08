@@ -18,11 +18,20 @@
   import SyncModal from '$lib/components/sync/SyncModal.svelte'
   import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
   import { swipe } from '$lib/utils/swipe'
+  import { releaseOrphanScrollLock } from '$lib/utils/scrollLock'
+  import { createLogger } from '$lib/log'
   import { Bug } from '@lucide/svelte'
-  import { MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH, MAX_SIDEBAR_RATIO } from '$lib/constants/layout'
+  import {
+    MIN_SIDEBAR_WIDTH,
+    MAX_SIDEBAR_WIDTH,
+    MAX_SIDEBAR_RATIO,
+    MODAL_CLOSE_TRANSITION_MS,
+  } from '$lib/constants/layout'
   import type { Snippet } from 'svelte'
 
   let { children }: { children?: Snippet } = $props()
+
+  const log = createLogger('AppShell')
 
   // Swipe handlers for mobile sidebar toggle
   function handleSwipeLeft() {
@@ -161,6 +170,35 @@
       document.body.style.userSelect = ''
     }
   })
+
+  /**
+   * The single owner of orphaned-scroll-lock recovery, for the whole app: watches
+   * `document.body` for a lock and, once the close transition has had time to run, releases
+   * it if nothing on screen should be holding it. See `$lib/utils/scrollLock`.
+   */
+  $effect(() => {
+    if (typeof document === 'undefined') return
+
+    let settleTimer: ReturnType<typeof setTimeout> | null = null
+
+    const observer = new MutationObserver(() => {
+      const { pointerEvents, overflow } = document.body.style
+      if (pointerEvents !== 'none' && overflow !== 'hidden') return
+
+      if (settleTimer) clearTimeout(settleTimer)
+      settleTimer = setTimeout(() => {
+        settleTimer = null
+        if (releaseOrphanScrollLock()) log('Released an orphaned body scroll lock')
+      }, MODAL_CLOSE_TRANSITION_MS)
+    })
+
+    observer.observe(document.body, { attributes: true, attributeFilter: ['style'] })
+
+    return () => {
+      if (settleTimer) clearTimeout(settleTimer)
+      observer.disconnect()
+    }
+  })
 </script>
 
 <svelte:window
@@ -256,9 +294,10 @@
   <STChatImportModal />
 
   <!-- Floating Debug Button (when debug mode enabled) - draggable, high z-index -->
-  {#if settings.uiSettings.debugMode && !debug.debugModalOpen}
+  {#if settings.uiSettings.debugMode}
     <button
       class="fixed z-30 flex h-12 w-12 items-center justify-center rounded-full bg-amber-600 text-white shadow-lg transition-shadow hover:bg-amber-500 active:shadow-xl"
+      class:hidden={debug.debugModalOpen}
       class:cursor-grabbing={isDraggingDebug}
       class:cursor-grab={!isDraggingDebug}
       style="{debugBtnX !== null && debugBtnY !== null

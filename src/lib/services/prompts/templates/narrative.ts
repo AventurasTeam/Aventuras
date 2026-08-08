@@ -90,7 +90,7 @@ When [LOREBOOK CONTEXT] is provided, treat it as canonical:
 - Dialogue tag overload: "said" is invisible; use fancy tags sparingly
 
 # Format
-- Length: Around 250 words per response
+- {{ lengthInstruction }}
 - Build each response toward one crystallizing moment—the image or line the player ({{ protagonistName }}) remembers
 - End at a moment of potential action—an NPC awaiting response, a door to open, a sound demanding investigation
 - Create a pregnant pause that naturally invites the player's next move
@@ -264,7 +264,7 @@ When [LOREBOOK CONTEXT] is provided, treat it as canonical:
 - Banned names: Elara, Kael, Lyra, Seraphina, Thorne, Astra, Zephyr, Caelan, Rowan (when male), Kai—use more distinctive names
 
 # Format
-- Length: Up to 500 words per response
+- {{ lengthInstruction }}
 - End at natural narrative beats; preserve tension rather than resolving it artificially
 - Balance action, dialogue, and description
 

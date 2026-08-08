@@ -5,7 +5,7 @@
  */
 
 import { settings } from '$lib/stores/settings.svelte'
-import type { StoryMode, POV, Character, Location, Item } from '$lib/types'
+import type { StoryMode, POV, TargetLength, Character, Location, Item } from '$lib/types'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import {
@@ -47,6 +47,7 @@ export interface WizardData {
     imageGenerationMode?: 'none' | 'agentic' | 'inline'
     backgroundImagesEnabled?: boolean
     referenceMode?: boolean
+    targetLength?: TargetLength
   }
   title: string
   openingGuidance?: string
@@ -784,6 +785,7 @@ class ScenarioService {
       imageGenerationMode?: 'none' | 'agentic' | 'inline'
       backgroundImagesEnabled?: boolean
       referenceMode?: boolean
+      targetLength?: TargetLength
     }
     protagonist: Partial<Character>
     startingLocation: Partial<Location>
@@ -809,6 +811,7 @@ class ScenarioService {
         imageGenerationMode: writingStyle.imageGenerationMode,
         backgroundImagesEnabled: writingStyle.backgroundImagesEnabled,
         referenceMode: writingStyle.referenceMode,
+        targetLength: writingStyle.targetLength,
       },
       protagonist: {
         name: protagonist?.name || (writingStyle.pov === 'second' ? 'You' : 'The Protagonist'),

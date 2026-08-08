@@ -18,3 +18,9 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   ...translationTemplates,
   ...imageTemplates,
 ]
+
+export {
+  LENGTH_INSTRUCTION_VAR,
+  formatLengthInstruction,
+  templateUsesLengthInstruction,
+} from './lengthInstruction'

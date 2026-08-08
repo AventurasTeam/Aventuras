@@ -4,6 +4,7 @@
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import type { Snippet } from 'svelte'
   import { setResponsiveModalContext } from './context'
+  import { blurFocusedElement } from '$lib/utils/scrollLock'
   import type { OnChangeFn } from 'vaul-svelte'
 
   type Props = {
@@ -17,14 +18,19 @@
 
   const isMobile = createIsMobile()
   setResponsiveModalContext({ isMobile })
+
+  function handleOpenChange(newOpen: boolean) {
+    if (!newOpen) blurFocusedElement(isMobile.current)
+    onOpenChange?.(newOpen)
+  }
 </script>
 
 {#if isMobile.current}
-  <Drawer.Root bind:open {onOpenChange} {...props}>
+  <Drawer.Root bind:open onOpenChange={handleOpenChange} {...props}>
     {@render children?.()}
   </Drawer.Root>
 {:else}
-  <Dialog.Root bind:open {onOpenChange} {...props}>
+  <Dialog.Root bind:open onOpenChange={handleOpenChange} {...props}>
     {@render children?.()}
   </Dialog.Root>
 {/if}

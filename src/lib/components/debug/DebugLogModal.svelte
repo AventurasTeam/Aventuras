@@ -5,11 +5,16 @@
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import DebugLogView from './DebugLogView.svelte'
+  import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
 
-  // Throttled snapshot of logs - only updates every 500ms when modal is open
+  /** Throttle window. The snapshot is a whole copy of the log, so this is not free. */
+  const THROTTLE_MS = 1200
+
+  // Throttled snapshot of logs - only refreshed every THROTTLE_MS while the modal is open
   let throttledLogs = $state<DebugLogEntry[]>([])
   let lastUpdateTime = 0
   let pendingUpdate: ReturnType<typeof setTimeout> | null = null
+  let releaseTimer: ReturnType<typeof setTimeout> | null = null
   let showContent = $state(false)
 
   // Single effect to handle both modal opening and log updates
@@ -20,10 +25,24 @@
         clearTimeout(pendingUpdate)
         pendingUpdate = null
       }
-      showContent = false
-      lastUpdateTime = 0 // Reset to force immediate sync on next open
-      throttledLogs = [] // Clear stale snapshot
+      // The DOM has to stay put through the close transition, so the snapshot is dropped
+      // after it rather than here — it is every request and response of the session, and on
+      // Android the WebView heap is a hard cap. Re-checked in case the panel reopened.
+      if (releaseTimer) clearTimeout(releaseTimer)
+      releaseTimer = setTimeout(() => {
+        releaseTimer = null
+        if (debug.debugModalOpen) return
+        throttledLogs = []
+        showContent = false
+      }, MODAL_CLOSE_TRANSITION_MS)
+
+      lastUpdateTime = 0
       return
+    }
+
+    if (releaseTimer) {
+      clearTimeout(releaseTimer)
+      releaseTimer = null
     }
 
     // Track logsVersion to know when logs change
@@ -32,8 +51,8 @@
     const now = Date.now()
     const timeSinceLastUpdate = now - lastUpdateTime
 
-    // Immediate update if: first open (lastUpdateTime === 0) or throttle period elapsed
-    if (lastUpdateTime === 0 || timeSinceLastUpdate >= 500) {
+    // Immediate update if: first open (lastUpdateTime === 0) or the throttle window elapsed
+    if (lastUpdateTime === 0 || timeSinceLastUpdate >= THROTTLE_MS) {
       throttledLogs = debug.getSnapshot()
       lastUpdateTime = now
       if (pendingUpdate) {
@@ -47,10 +66,13 @@
     } else if (!pendingUpdate) {
       // Schedule update for remaining throttle time
       pendingUpdate = setTimeout(() => {
+        // Cleared before the early return: leaving it set wedges the throttle, since the
+        // branch that schedules a refresh is guarded on it being null.
+        pendingUpdate = null
+        if (!debug.debugModalOpen) return
         throttledLogs = debug.getSnapshot()
         lastUpdateTime = Date.now()
-        pendingUpdate = null
-      }, 500 - timeSinceLastUpdate)
+      }, THROTTLE_MS - timeSinceLastUpdate)
     }
   })
 

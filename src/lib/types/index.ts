@@ -109,6 +109,9 @@ export interface MemoryConfig {
   summaryDetail?: SummaryDetail // Detail level for chapter summaries (default: 'auto')
 }
 
+/** Target narration length for a turn. Drives `{{ lengthInstruction }}` in the prompt. */
+export type TargetLength = 'short' | 'medium' | 'long' | 'dynamic'
+
 export interface StorySettings {
   model?: string
   temperature?: number
@@ -121,6 +124,7 @@ export interface StorySettings {
   imageGenerationMode?: 'none' | 'agentic' | 'inline' // Image generation strategy
   backgroundImagesEnabled?: boolean
   referenceMode?: boolean
+  targetLength?: TargetLength
   customSystemPrompt?: string // Per-story Liquid template override; bypasses pack template when set
 }
 
