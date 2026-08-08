@@ -23,10 +23,12 @@ problem that does not exist.
 </HARD-GATE>
 
 <HARD-GATE>
-**Gate the verification chain.** Run typecheck, tests, lint and commit
-as one `&&`-joined chain, never as separate newline-separated commands.
-A newline-separated chain commits regardless of what failed. This has
-already put a red test into history once.
+**Gate the verification chain.** Run typecheck, tests, lint and the
+item's commit as one `&&`-joined chain, never as separate
+newline-separated commands. A newline-separated chain commits
+regardless of what failed. This has already put a red test into history
+once. The chain is defined here and invoked once per item — nothing
+downstream commits a second time.
 </HARD-GATE>
 
 ## Phase 1 — Scope and classify
@@ -112,14 +114,23 @@ compress it.
    actually do" is the user's. When you escalate, lead with the ground
    truth you established, not with the options — and if the user asks a
    question back, **answer it before re-asking anything.**
-4. **Implement, with a test that pins the behaviour.**
-5. **Mutation-check the test.** Break the thing it claims to cover and
-   confirm it fails. See [Test traps](#test-traps) — this is where
-   passes go wrong most reliably.
-6. **Run the gated chain**, then commit. One commit per logically
-   separable item.
-7. **Remove the triage entry** in the same pass. An item fixed but still
-   queued reads as open.
+4. **Implement, with a test that pins the behaviour.** Behaviour-changing
+   outcomes only — `Fixed`, and the code half of a `Canon` item where
+   code is what moved. A doc edit, a relocation or a deletion has no
+   behaviour to pin, and a test written to satisfy this step anyway is a
+   vacuous one. For those, the evidence is the resulting doc and ledger
+   state: read the destination back and confirm it says what you meant.
+5. **Mutation-check the test**, where step 4 produced one. Break the
+   thing it claims to cover and confirm it fails. See
+   [Test traps](#test-traps) — this is where passes go wrong most
+   reliably.
+6. **Run the gated chain.** It ends in the item's commit; do not commit
+   again after it. One commit per logically separable item.
+7. **Remove the triage entry** in the same pass, for every outcome that
+   closes or refiles it — `Fixed`, `Canon`, `Routed`, `Dissolved`, and
+   the answered half of a `Split`. An item fixed but still queued reads
+   as open. `Held` is the exception and stays put; see
+   [Outcomes](#outcomes).
 
 ## Outcomes
 
@@ -127,10 +138,13 @@ Six, and only the first three are the obvious ones:
 
 - **Fixed.** Code changed, test pins it, entry removed.
 - **Canon.** Doc and code disagreed; one moved. Record *why* that one.
-- **Routed.** Moved to its real home verbatim apart from link paths
-  (which shift by a directory level) and positional references
-  ("the entry above" may no longer be above). Preserve the content so
-  the diff reads as a relocation.
+- **Routed.** Moved to its real home verbatim apart from link paths and
+  positional references ("the entry above" may no longer be above).
+  Recompute every relative link from the destination file rather than
+  applying a fixed shift — the legal destinations sit at different
+  depths, and a slice's Open questions is several levels further down
+  than the root ledgers. Preserve the content so the diff reads as a
+  relocation.
 - **Dissolved.** The entry described something that is not a problem, or
   is a duplicate of an existing mechanism. Delete it — with the
   reasoning in the commit, because "we deleted this" needs to survive.
@@ -184,6 +198,13 @@ The mutation check is the only reliable detector. Copy the file aside
 with `cp` — never `git stash`, which strands work if the chain is
 killed — mutate, run the scoped test, restore.
 
+**Restore unconditionally.** A mutation check *expects* its test to
+fail, so the failing path is the normal one, not the edge case. Never
+join the test and the restore with `&&`: the restore then runs only
+when the mutation went undetected, which is precisely the run you want
+to abandon. Restore on its own line, or trap it, and confirm the file
+is back before anything else reads it.
+
 ## Ledger
 
 A working file in `_tmp/` (gitignored, disposable). It is a tracker, not
@@ -204,16 +225,20 @@ change. Keep:
 
 ## Close-out
 
-The pass is done when every in-scope item is fixed, decided, routed,
-dissolved, or explicitly held. Then:
+The pass is done when every in-scope item has landed on one of the six
+[Outcomes](#outcomes) — fixed, canon-decided, routed, dissolved, split,
+or explicitly held. Then:
 
-- Confirm the queue shrank by the number you closed, and that no entry
-  you resolved is still present.
+- Confirm the queue shrank by the number you closed, counting a `Split`
+  as closed only for its answered half, and that no entry you resolved
+  is still present. A `Split`'s refiled half and a `Held` item are both
+  expected to still be there.
 - Run the full gated verification once more across the whole batch.
-- Report totals, the items you held and why, anything you reclassified,
-  and any process failure of your own — an unverified claim you acted
-  on, a commit that landed red. Those are the most useful part of the
-  report and the easiest to omit.
+- Report totals per outcome, the items you held and why, the owner on
+  each `Split`'s refiled half, anything you reclassified, and any
+  process failure of your own — an unverified claim you acted on, a
+  commit that landed red. Those are the most useful part of the report
+  and the easiest to omit.
 
 ## Out of scope
 
