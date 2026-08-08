@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     GitBranch,
@@ -10,6 +11,7 @@
     Edit2,
     Check,
     X,
+    Crosshair,
   } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
@@ -174,6 +176,24 @@
   function isCurrent(branchId: string | null): boolean {
     return story.currentStory?.currentBranchId === branchId
   }
+
+  // Ids the story view can actually scroll to. `story.entries` is the ACTIVE branch's
+  // view — main + ancestors up to their forks + the branch itself — so a branch outside
+  // the current lineage (a sibling's child, say) has its fork entry nowhere in here.
+  const visibleEntryIds = $derived(new Set(story.entries.map((e) => e.id)))
+
+  function canGoToForkPoint(branch: Branch): boolean {
+    return visibleEntryIds.has(branch.forkEntryId)
+  }
+
+  function goToForkPoint(branch: Branch) {
+    // Fork points live in the story, which may not be the panel that's up — and while
+    // it isn't, StoryView is destroyed rather than hidden (see AppShell). So the request
+    // is left on the ui store for it to pick up on mount, not emitted at it.
+    ui.requestEntryScroll(branch.forkEntryId)
+    ui.setActivePanel('story')
+    ui.closeSidebarOnMobile()
+  }
 </script>
 
 <div class="space-y-3">
@@ -298,6 +318,22 @@
           {#if isCurrent(branch.id)}
             <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
           {/if}
+          {@const forkReachable = canGoToForkPoint(branch)}
+          <button
+            class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {forkReachable
+              ? 'hover:text-surface-200 sm:opacity-0 sm:group-hover:opacity-100'
+              : 'cursor-not-allowed opacity-30'}"
+            onclick={(e) => {
+              e.stopPropagation()
+              goToForkPoint(branch)
+            }}
+            disabled={!forkReachable}
+            title={forkReachable
+              ? 'Go to fork point'
+              : "Fork point is not in the current branch's timeline — switch to this branch or its parent first"}
+          >
+            <Crosshair class="h-4 w-4 sm:h-3 sm:w-3" />
+          </button>
           <button
             class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
             onclick={(e) => {
