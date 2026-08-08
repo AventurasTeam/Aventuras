@@ -1275,42 +1275,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   are inside these totals; what is missing is a budget re-derived
   against the pass that actually ships. Surfaced by the M3.4 whole-slice
   review (2026-08-03).
-- **A retrieval pass makes 27 sequential DB round-trips and
-  parallelises none of them.** `runRetrieval` (`lib/retrieval/run.ts`)
-  awaits, in order: five `loadStaleRows` reads (one per `VEC_FAMILIES`
-  kind — `lib/actions/embedder-swap/app-deps.ts:532`), five
-  `loadSourceRows` reads (`lib/retrieval/source-rows.ts:51`), one
-  awareness read, fifteen KNN passes (three query vectors across five
-  types), and the chapter-ranges JOIN. There is no `Promise.all`
-  anywhere in `lib/retrieval/`, and on desktop every one of those is an
-  IPC round-trip, so the fixed per-call cost is paid 27 times. The five
-  source reads are mutually independent, and so are the fifteen KNN
-  passes: every query vector is in hand before the loop starts, and the
-  per-kind vector map each pass writes into is order-independent. Only
-  two orderings are load-bearing — sync before any source read, floor
-  before the query stack. Surfaced by the M3.4 whole-slice review
-  (2026-08-03).
-- **`loadSourceRows` reads every happening on the branch each turn,
-  purely to filter down to at most 600 KNN ids.** The happenings arm of
-  `lib/retrieval/source-rows.ts:51` is a full
-  `WHERE branch_id = ?` scan, and its only consumers are the pool
-  intersection in `assembleCandidates` (`lib/retrieval/run.ts:465`) and
-  the `staleCounts` tripwire, which wants a count rather than rows. At
-  60 chapters that is ~33 ms of SQL plus ~21 ms of structured-clone
-  across the IPC boundary to discard over 99% of what it read. Entities,
-  lore and threads genuinely need the full scan — `buildStructuralFloor`
-  looks for `injection_mode='always'` across all three,
-  `nameKeywordIndexFrom` indexes every entity name and lore keyword, and
-  Layer-A suppression needs every staged entity. Happenings needs none
-  of that, and it is the one table
-  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions)
-  projects into the thousands. The KNN top-k is supposed to be the
-  scaling mechanism, and this read defeats it. The fix needs no
-  restructuring: nothing before the KNN pass touches
-  `sourceRows.happenings`, so that one read can move after the pool ids
-  are known and fetch by id, bounding it at the pool size. (Chapters has
-  the same shape and does not matter — ~60 rows at 60 chapters.)
-  Surfaced by the M3.4 whole-slice review (2026-08-03).
 - **`poolIdsFromKnn`'s ordering is computed and then discarded.** Its
   JSDoc (`lib/retrieval/pools.ts:168`) promises a "de-duplicated,
   first-seen order" union of the per-query KNN id sets, and it builds
