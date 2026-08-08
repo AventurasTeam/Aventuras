@@ -34,6 +34,7 @@ export type EventType =
   | 'StoryLoaded' // Story loaded into state
   | 'StoryCreated' // New story created
   | 'ModeChanged' // Story mode changed
+  | 'BranchSwitched' // Active branch changed (entries already reloaded)
   | 'BackgroundImageAnalysisStarted' // Started analyzing narrative for background image
   | 'BackgroundImageAnalysisComplete' // Finished analyzing narrative for background image
   | 'BackgroundImageAnalysisFailed' // Background image analysis or generation failed
@@ -126,6 +127,12 @@ export interface ModeChangedEvent {
   mode: 'adventure' | 'creative-writing'
 }
 
+export interface BranchSwitchedEvent {
+  type: 'BranchSwitched'
+  /** The branch now active, or null for the main branch */
+  branchId: string | null
+}
+
 export interface SaveCompleteEvent {
   type: 'SaveComplete'
   storyId: string
@@ -209,6 +216,7 @@ export type AventuraEvent =
   | StoryLoadedEvent
   | StoryCreatedEvent
   | ModeChangedEvent
+  | BranchSwitchedEvent
   | SaveCompleteEvent
   | ImageAnalysisStartedEvent
   | ImageAnalysisCompleteEvent
