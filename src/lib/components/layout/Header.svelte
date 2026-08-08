@@ -47,6 +47,10 @@
   let showMobileMenu = $state(false)
 
   function goToLibrary() {
+    // Closed explicitly rather than left to the menu's own close-on-select: this unmounts
+    // the menu in the same tick, and a binding that does not get to run leaves the state
+    // `true`, so the menu would spring open by itself on returning to a story.
+    showMobileMenu = false
     story.closeStory()
     ui.setActivePanel('library')
   }
@@ -307,27 +311,36 @@
       </div>
     {/if}
 
-    <!-- Mobile-only menu: Library, Import/Export, Settings -->
-    <DropdownMenu.Root bind:open={showMobileMenu}>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            variant="text"
-            class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
-            title="Menu"
-            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-          >
-            {#if showMobileMenu}
-              <ChevronUp class="h-5 w-5" />
-            {:else}
-              <ChevronDown class="h-5 w-5" />
-            {/if}
-          </Button>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        {#if story.currentStory}
+    <!--
+      Mobile-only menu: Library, Import/Export, Active Context, Settings.
+
+      Everything above Settings is story-scoped, so in the library the menu would hold a
+      single item — and a disclosure that opens onto one choice is a tap spent on nothing.
+      There it is rendered as the Settings button directly. The condition is the same
+      `story.currentStory` the items are already gated on rather than a count of them, so
+      the two cannot disagree: an item added below without a story to scope it is a second
+      entry, and would make the collapsed menu correct again by construction.
+    -->
+    {#if story.currentStory}
+      <DropdownMenu.Root bind:open={showMobileMenu}>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="text"
+              class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
+              title="Menu"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+            >
+              {#if showMobileMenu}
+                <ChevronUp class="h-5 w-5" />
+              {:else}
+                <ChevronDown class="h-5 w-5" />
+              {/if}
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
           <DropdownMenu.Item onclick={goToLibrary}>
             <Library class="text-muted-foreground h-4 w-4" />
             Library
@@ -347,16 +360,40 @@
             {/if}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="sm:hidden" />
+          <DropdownMenu.Item onclick={() => ui.openSettings()}>
+            <Settings class="text-muted-foreground h-4 w-4" />
+            Settings
+            {#if settings.hasGenerationConfigIssues}
+              <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
+            {/if}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {:else}
+      <!--
+        The desktop Settings button below is `hidden sm:block`; this is its narrow-screen
+        twin, badge included. Behind the menu the warning only appeared once the menu was
+        opened, which is the wrong place for the one control that says something is
+        misconfigured.
+      -->
+      <div class="relative sm:hidden">
+        <Button
+          icon={Settings}
+          label="Settings"
+          variant="text"
+          class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+          onclick={() => ui.openSettings()}
+          title="Settings"
+        />
+        {#if settings.hasGenerationConfigIssues}
+          <span
+            class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
+          >
+            <AlertTriangle class="h-2.5 w-2.5 text-white" />
+          </span>
         {/if}
-        <DropdownMenu.Item onclick={() => ui.openSettings()}>
-          <Settings class="text-muted-foreground h-4 w-4" />
-          Settings
-          {#if settings.hasGenerationConfigIssues}
-            <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
-          {/if}
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+      </div>
+    {/if}
 
     <!-- Not gated on the lorebook having entries: the panel covers live world state too,
          which every story has. -->
