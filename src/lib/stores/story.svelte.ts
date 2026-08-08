@@ -41,6 +41,7 @@ import {
   emitChapterCreated,
   type CheckpointCreatedEvent,
   type StoryCreatedEvent,
+  type BranchSwitchedEvent,
 } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { aiService } from '$lib/services/ai'
@@ -3747,11 +3748,10 @@ class StoryStore {
       }
     }
 
-    // Switch to the new branch (skip restore since we just populated the world state)
-    await this.switchBranch(branch.id, true)
-
-    // Reload the world state from database to get the copied items into memory
-    await this.reloadEntriesForCurrentBranch()
+    // Switch to the new branch. This reloads entries and world state from the database,
+    // pulling the copied items into memory — so subscribers of BranchSwitched (and the
+    // suggested-action restore inside switchBranch) see the new branch's entries.
+    await this.switchBranch(branch.id)
 
     // Restore time tracker from checkpoint
     if (checkpoint.timeTrackerSnapshot) {
@@ -3810,14 +3810,56 @@ class StoryStore {
     return lastEntry?.branchId ?? null
   }
 
+  /** Tail of the branch-switch queue — see switchBranch. */
+  private branchSwitchChain: Promise<unknown> = Promise.resolve()
+  /** Sequence of the most recently requested switch; older queued ones are superseded. */
+  private branchSwitchSeq = 0
+
   /**
    * Switch to a different branch.
    * This reloads entries from the database filtered by the target branch.
    * NO data is deleted - branches coexist in the database with different branch_ids.
+   * Entries are always reloaded before BranchSwitched is emitted, so subscribers
+   * never observe the previous branch's entries.
+   * Calls are serialized and last-one-wins: when switches queue up, only the most
+   * recent target is loaded — superseded requests resolve without doing any work.
    * @param branchId - The branch to switch to (null for main branch)
-   * @param skipReload - If true, skip reloading entries (used when creating new branch from current state)
    */
-  async switchBranch(branchId: string | null, skipReload: boolean = false): Promise<void> {
+  async switchBranch(branchId: string | null): Promise<void> {
+    // Overlapping switches would interleave their reloads: reloadEntriesForCurrentBranch
+    // reads currentBranchId when it starts and assigns this.entries when its queries
+    // resolve, so the slower call assigns last and leaves entries out of step with
+    // currentBranchId — with BranchSwitched announcing a branch whose entries aren't
+    // loaded. Queue each switch behind the one before it.
+    const seq = ++this.branchSwitchSeq
+    // Bind the request to the story it was made for: by the time it reaches the front
+    // of the queue the user may have opened a different story, and a null branchId
+    // would sail past the branch validation and write onto that story instead.
+    const storyId = this.currentStory?.id ?? null
+    const run = this.branchSwitchChain.then(
+      () => this.performBranchSwitch(branchId, seq, storyId),
+      // Run regardless of whether the previous switch settled or threw
+      () => this.performBranchSwitch(branchId, seq, storyId),
+    )
+    // Keep the chain resolved so one failure can't poison later switches; the
+    // caller still observes the error through `run`.
+    this.branchSwitchChain = run.catch(() => {})
+    return run
+  }
+
+  private async performBranchSwitch(
+    branchId: string | null,
+    seq: number,
+    storyId: string | null,
+  ): Promise<void> {
+    // Last one wins: a newer switch was requested while this one waited in the queue.
+    // Skip the database write, the reload and the event — the newer request loads the
+    // final target, so doing this one's work first would only be discarded.
+    if (seq !== this.branchSwitchSeq) return
+
+    // The story changed under a queued switch; it no longer refers to anything current
+    if (this.currentStory?.id !== storyId) return
+
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)
@@ -3830,11 +3872,8 @@ class StoryStore {
     await database.setStoryCurrentBranch(this.currentStory.id, branchId)
     this.currentStory = { ...this.currentStory, currentBranchId: branchId }
 
-    // Reload entries from database if not skipping
-    // When creating a new branch, we skip because we're already at the correct state
-    if (!skipReload) {
-      await this.reloadEntriesForCurrentBranch()
-    }
+    // Reload entries from the database for the target branch
+    await this.reloadEntriesForCurrentBranch()
 
     // Invalidate caches
     this.invalidateWordCountCache()
@@ -3844,6 +3883,11 @@ class StoryStore {
     // verdict. The key covers this on its own now; clearing keeps the cache from
     // depending on that alone, as it already does on story switch.
     clearTier3SelectionCache()
+
+    // Announce once entries and caches are correct. Emitted before the
+    // background/suggestion restores below so a failure in either can't
+    // silently swallow the notification.
+    eventBus.emit<BranchSwitchedEvent>({ type: 'BranchSwitched', branchId })
 
     // Reload background from database for the branch
     this.currentBgImage = await database.getBackgroundForBranch(this.currentStory.id, branchId)
