@@ -1,4 +1,4 @@
-import type { SqlOp } from '@/lib/db'
+import type { DbCtx } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
 import { compressPayload } from './compress'
@@ -7,13 +7,12 @@ import { buildCapturePayload, type CapturePayloadInput } from './payload'
 /** probe.md → Eviction. Fixed in v1, not user-tunable. */
 export const CAPTURE_CAP = 100
 
-export type CaptureWriteDeps = { runInTransaction: (ops: SqlOp[]) => Promise<void> }
+export type CaptureWriteDeps = { runInTransaction: DbCtx['runInTransaction'] }
 
 export type CaptureWriteInput = CapturePayloadInput & {
   id: string
   appGateOn: boolean
   storyGateOn: boolean
-  failureReason: string | null
 }
 
 const INSERT_SQL = `INSERT INTO probe_captures
@@ -50,7 +49,7 @@ export async function writeProbeCapture(
           input.capturedAt,
           input.mode,
           input.embeddingModelId,
-          input.failureReason,
+          input.outcome.ok ? null : input.outcome.failure.reason,
           bytes,
           uncompressedSize,
         ],
@@ -61,7 +60,9 @@ export async function writeProbeCapture(
   } catch (error) {
     // Diagnostic data must never fail a turn (probe.md → Capture write failure).
     logger.warn('memory.probe_capture_write_failed', {
-      detail: error instanceof Error ? error.message : String(error),
+      branchId: input.branchId,
+      id: input.id,
+      error: error instanceof Error ? error.message : String(error),
     })
     return 'failed'
   }

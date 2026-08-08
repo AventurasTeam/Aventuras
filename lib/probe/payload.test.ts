@@ -11,15 +11,14 @@ import {
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
-import { loreBundle, loreCandidate, queryStack, successOutcome } from './__tests__/fixtures'
+import {
+  loreBundle,
+  loreCandidate,
+  queryStack,
+  settings,
+  successOutcome,
+} from './__tests__/fixtures'
 import { buildCapturePayload } from './payload'
-
-const settings = {
-  retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
-  fullChapterInBuffer: false,
-  partialChapterBuffer: 2,
-  protectedBuffer: 1,
-}
 
 const identity = {
   branchId: 'br_1',

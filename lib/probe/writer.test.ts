@@ -1,58 +1,19 @@
-import type { DatabaseSync } from 'node:sqlite'
-
 import { describe, expect, it, vi } from 'vitest'
 
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { RANKER_DEFAULTS } from '@/lib/retrieval'
+import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 
-import { successOutcome } from './__tests__/fixtures'
+import { captureInput, seed } from './__tests__/fixtures'
 import { compressPayload, decompressPayload } from './compress'
 import { buildCapturePayload } from './payload'
 import { writeProbeCapture, type CaptureWriteInput } from './writer'
-
-// Two stories. st_1 gets two branches — the FIFO trim is per story, so it
-// must be exercised across them or a per-branch trim would pass. st_2 exists
-// so the trim's story scoping itself is exercised: without it, evicting
-// st_1's overflow could reach across into st_2's captures.
-function seed(sqlite: DatabaseSync): void {
-  sqlite.exec(`
-    INSERT INTO stories (id, title, created_at, updated_at)
-      VALUES ('st_1', 'Tidewater', 1000, 1000), ('st_2', 'Ashfall', 1000, 1000);
-    INSERT INTO branches (id, story_id, name, created_at)
-      VALUES ('br_a', 'st_1', 'main', 1000), ('br_b', 'st_1', 'fork', 1000),
-             ('br_c', 'st_2', 'main', 1000);
-  `)
-}
-
-// Both gates on, branch A, a successful pass. Every case overrides only what it
-// is about.
-const input = () => ({
-  id: 'pc_1',
-  branchId: 'br_a',
-  targetEntryId: 'ent_1',
-  chapterId: null,
-  capturedAt: 1000,
-  embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
-  mode: 'light' as const,
-  appGateOn: true,
-  storyGateOn: true,
-  failureReason: null,
-  params: RANKER_DEFAULTS,
-  settings: {
-    retrievalBudgets: { entities: 1200, lore: 1800, happenings: 1500, threads: 400, chapters: 600 },
-    fullChapterInBuffer: false,
-    partialChapterBuffer: 2,
-    protectedBuffer: 1,
-  },
-  outcome: successOutcome(),
-})
 
 describe('writeProbeCapture', () => {
   it('writes one row when both gates are on', async () => {
     const { sqlite, runInTransaction } = await createTestDb()
     seed(sqlite)
 
-    const result = await writeProbeCapture({ runInTransaction }, input())
+    const result = await writeProbeCapture({ runInTransaction }, captureInput())
 
     expect(result).toBe('written')
     expect(sqlite.prepare('SELECT count(*) AS n FROM probe_captures').get()).toMatchObject({
@@ -67,7 +28,7 @@ describe('writeProbeCapture', () => {
     const { sqlite, runInTransaction } = await createTestDb()
     seed(sqlite)
 
-    const result = await writeProbeCapture({ runInTransaction }, { ...input(), ...gates })
+    const result = await writeProbeCapture({ runInTransaction }, captureInput(gates))
 
     expect(result).toBe('gated')
     expect(sqlite.prepare('SELECT count(*) AS n FROM probe_captures').get()).toMatchObject({
@@ -78,13 +39,11 @@ describe('writeProbeCapture', () => {
   it('writes the row read back from the db, matching the input identity and true payload size', async () => {
     const { sqlite, runInTransaction } = await createTestDb()
     seed(sqlite)
-    const testInput = input()
+    const testInput = captureInput()
 
     await writeProbeCapture({ runInTransaction }, testInput)
 
-    // Recomputed independently from the same input rather than compared to a
-    // literal: pins payload_size to the pre-compression byte count specifically,
-    // distinguishing it from the compressed length also stored in the row.
+    // Pins payload_size to the pre-compression byte count, not the compressed length.
     const expectedPayload = buildCapturePayload(testInput)
     const expected = compressPayload(expectedPayload)
     const row = sqlite.prepare('SELECT * FROM probe_captures WHERE id = ?').get('pc_1') as Record<
@@ -100,14 +59,27 @@ describe('writeProbeCapture', () => {
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       failure_reason: null,
     })
-    // Not a byte comparison against a separately-gzipped `expected.bytes`: fflate
-    // stamps the current second into the gzip header, so two independently
-    // compressed copies of identical JSON differ whenever a second boundary
-    // falls between them. Decoding proves the stored blob round-trips to the
-    // right payload without depending on gzip being deterministic in time.
+    // fflate stamps the current second into the gzip header, so two independently
+    // compressed copies of identical JSON differ whenever a second boundary falls
+    // between them. Decoding proves the stored blob round-trips without depending
+    // on gzip being deterministic in time.
     expect(decompressPayload(row.payload as Uint8Array)).toEqual(expectedPayload)
     expect(row.payload_size).toBe(expected.uncompressedSize)
-    expect(row.payload_size).not.toBe((expected.bytes as Uint8Array).length)
+  })
+
+  it('derives failure_reason from a failed outcome instead of a caller-supplied field', async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seed(sqlite)
+    const failedOutcome = retrievalFailure({
+      reason: 'call',
+      detail: 'provider unreachable',
+      staleCount: null,
+    })
+
+    await writeProbeCapture({ runInTransaction }, captureInput({ outcome: failedOutcome }))
+
+    const row = sqlite.prepare('SELECT failure_reason FROM probe_captures WHERE id = ?').get('pc_1')
+    expect(row).toMatchObject({ failure_reason: 'call' })
   })
 
   it('evicts the oldest across branches at the 101st capture for the story, without touching another story', async () => {
@@ -120,24 +92,23 @@ describe('writeProbeCapture', () => {
     for (let i = 0; i < 3; i++) {
       await writeProbeCapture(
         { runInTransaction },
-        { ...input(), id: `pc_other_${i}`, branchId: 'br_c', capturedAt: i },
+        captureInput({ id: `pc_other_${i}`, branchId: 'br_c', capturedAt: i }),
       )
     }
 
     for (let i = 0; i < 100; i++) {
       await writeProbeCapture(
         { runInTransaction },
-        {
-          ...input(),
+        captureInput({
           id: `pc_${i}`,
           branchId: i % 2 === 0 ? 'br_a' : 'br_b',
           capturedAt: 1000 + i,
-        },
+        }),
       )
     }
     await writeProbeCapture(
       { runInTransaction },
-      { ...input(), id: 'pc_100', branchId: 'br_b', capturedAt: 2000 },
+      captureInput({ id: 'pc_100', branchId: 'br_b', capturedAt: 2000 }),
     )
 
     const rows = sqlite
@@ -157,7 +128,7 @@ describe('writeProbeCapture', () => {
   it('does not fail the turn when the write fails', async () => {
     const runInTransaction = vi.fn().mockRejectedValue(new Error('UNIQUE constraint failed'))
 
-    const result = await writeProbeCapture({ runInTransaction }, input())
+    const result = await writeProbeCapture({ runInTransaction }, captureInput())
 
     expect(result).toBe('failed')
   })
@@ -169,9 +140,11 @@ describe('writeProbeCapture', () => {
     // errors explicitly, not just DB errors).
     const circular: Record<string, unknown> = {}
     circular.self = circular
-    const badInput = { ...input(), params: circular } as unknown as CaptureWriteInput
 
-    const result = await writeProbeCapture({ runInTransaction }, badInput)
+    const result = await writeProbeCapture(
+      { runInTransaction },
+      captureInput({ params: circular as unknown as CaptureWriteInput['params'] }),
+    )
 
     expect(result).toBe('failed')
   })
