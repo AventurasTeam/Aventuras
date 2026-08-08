@@ -209,11 +209,14 @@ class UpdaterService {
     // half-finished install for something the user started with one click.
     const deb = (await this.bundleType()) === 'deb'
 
+    // Prefer GitHub's release body over `latest.json`'s `notes`. See `releaseNotesFor`.
+    const notes = (await this.releaseNotesFor(update.version)) ?? update.body ?? undefined
+
     return {
       available: true,
       version: update.version,
       currentVersion: update.currentVersion,
-      body: update.body ?? undefined,
+      body: notes,
       date: update.date ?? undefined,
       canInstallInApp: !deb,
       manualInstallReason: deb ? 'deb-package' : undefined,
@@ -221,12 +224,14 @@ class UpdaterService {
     }
   }
 
-  /** Android: read the release list ourselves and compare the tag with the running build. */
-  private async checkViaGitHub(): Promise<UpdateInfo> {
-    this.updateAvailable = null
-
-    const currentVersion = await getVersion()
-
+  /**
+   * Fetches the latest published release from the GitHub API.
+   *
+   * Shared by both paths. Android needs it to find an update at all; desktop needs it only
+   * for the release notes, because `latest.json` carries the workflow's static
+   * `releaseBody` rather than what the maintainer writes on the release afterwards.
+   */
+  private async fetchLatestRelease(): Promise<GitHubRelease> {
     // AbortController rather than `AbortSignal.timeout`, which the older Android System
     // WebViews this app still runs on do not implement. Matches the rest of the codebase.
     const ctrl = new AbortController()
@@ -265,7 +270,40 @@ class UpdaterService {
       )
     }
 
-    const release = (await response.json()) as GitHubRelease
+    return (await response.json()) as GitHubRelease
+  }
+
+  /**
+   * The release notes GitHub holds for `version`, or `undefined`.
+   *
+   * `latest.json` is written by `tauri-action` at build time, so its `notes` are the
+   * workflow's fixed `releaseBody` string -- the real notes are written on the release
+   * afterwards and never reach that file. Reading them here means editing the release on
+   * GitHub updates what every client shows, with no rebuild.
+   *
+   * Only used when the tag matches the update being offered: notes belonging to a
+   * different version are worse than none, and the two files can disagree.
+   *
+   * Never throws. The update is signed and installable whatever happened here.
+   */
+  private async releaseNotesFor(version: string): Promise<string | undefined> {
+    try {
+      const release = await this.fetchLatestRelease()
+      const tag = release.tag_name?.trim().replace(/^v/, '')
+      if (!tag || tag !== version.replace(/^v/, '')) return undefined
+      return release.body?.trim() || undefined
+    } catch (error) {
+      console.error('[Updater] Could not fetch release notes:', error)
+      return undefined
+    }
+  }
+
+  /** Android: read the release list ourselves and compare the tag with the running build. */
+  private async checkViaGitHub(): Promise<UpdateInfo> {
+    this.updateAvailable = null
+
+    const currentVersion = await getVersion()
+    const release = await this.fetchLatestRelease()
     const tag = release.tag_name?.trim()
 
     if (!tag) {

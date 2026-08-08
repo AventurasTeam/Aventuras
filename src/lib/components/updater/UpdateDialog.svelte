@@ -12,7 +12,6 @@
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Progress } from '$lib/components/ui/progress'
-  import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Download, RefreshCw, ExternalLink, AlertTriangle, CheckCircle2 } from '@lucide/svelte'
   import { updaterService, type UpdateProgress } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
@@ -130,13 +129,22 @@
         {#if changelogHtml}
           <div class="flex flex-col gap-2">
             <span class="text-sm font-medium">What's new</span>
-            <ScrollArea class="max-h-56 rounded-md border p-3">
-              <!-- Release notes come from the project's own signed release metadata. -->
+            <!--
+              A plain scroller, deliberately not `ScrollArea`. That component's viewport is
+              `h-full`, and `height: 100%` against a parent sized only by `max-height`
+              resolves to `auto` -- so the viewport grows to the full content height, never
+              overflows itself, and its `overflow-y: scroll` has nothing to act on while the
+              root's `overflow-hidden` silently clips the rest. `max-h` + `overflow-y-auto`
+              on one element scrolls natively, and still collapses for short notes the way a
+              fixed height would not.
+            -->
+            <div class="max-h-72 overflow-y-auto rounded-md border p-3">
+              <!-- Release notes are the project's own release body, fetched from GitHub. -->
               <!-- eslint-disable-next-line svelte/no-at-html-tags -->
               <div class="release-notes text-muted-foreground text-sm">
                 {@html changelogHtml}
               </div>
-            </ScrollArea>
+            </div>
           </div>
         {/if}
 

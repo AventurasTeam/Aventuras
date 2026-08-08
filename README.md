@@ -300,6 +300,22 @@ release is publishing the draft on GitHub. Nothing reaches users before that.
 The desktop check surfaces that state honestly rather than as a generic failure: a 404 becomes
 the `no-release` kind ("it may still be a draft"), distinct from `network` and `unsupported`.
 
+**The release notes users read are the GitHub release body, on both platforms.** They are not
+taken from `latest.json`, whose `notes` field is written by `tauri-action` at build time from
+the fixed `releaseBody` string in `release.yml` — which is a placeholder, not a changelog, and
+cannot be otherwise, since the notes are written after the build. `releaseNotesFor` therefore
+fetches the release from the API and uses its body, falling back to `latest.json` if the call
+fails; the update installs either way. Two consequences:
+
+- Editing a published release's text on GitHub changes what every client shows, with no
+  rebuild and no new version.
+- The notes must be written **before** the draft is published, because publishing is what
+  makes the release visible to the check. A release published with the placeholder still in
+  it will show that placeholder.
+
+The fetched notes are used only when the release tag matches the version being offered —
+notes belonging to a different release are worse than none.
+
 **A `.deb` install is deliberately not updated in place.** The plugin would attempt it —
 `install_deb` writes the package to a temp dir and runs `dpkg -i` through `pkexec`, falling
 back to zenity/kdialog and finally to a terminal `sudo` that a windowed app has no terminal
