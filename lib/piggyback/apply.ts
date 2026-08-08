@@ -51,7 +51,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // state.current_location_id on every in-scene character, and seats that row as
   // the location if buildStructuralFloor finds it active. Inheriting the
   // previous location is the safe fallback: it is the value the turn would have
-  // carried had the model said nothing.
+  // carried had the model said nothing. `entities` must therefore be the whole
+  // branch — openStory hydrates entitiesStore unwindowed, unlike entriesStore —
+  // or a legitimate id the prompt just offered would be refused here.
   const named = block.currentLocation
   const namedIsLocation = named !== undefined && byId.get(named)?.kind === 'location'
   if (named !== undefined && !namedIsLocation) {

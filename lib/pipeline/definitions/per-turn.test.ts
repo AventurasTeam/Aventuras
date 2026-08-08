@@ -846,7 +846,21 @@ async function runNarrativeWith(opts: {
     }),
   })
   entriesStore.hydrate('b1', [])
-  entitiesStore.hydrate('b1', [])
+  // The store carries the whole branch in production (openStory hydrates it
+  // unwindowed), and buildPiggybackActions resolves <current_location> against
+  // it — so a ranked location has to exist here, not only in the retrieval
+  // intermediate, or the fold refuses an id the prompt just offered.
+  entitiesStore.hydrate('b1', [
+    {
+      id: RETRIEVED_LOCATION_ID,
+      branchId: 'b1',
+      kind: 'location',
+      name: 'The Market',
+      description: 'stalls under sailcloth.',
+      status: 'active',
+      injectionMode: 'auto',
+    },
+  ] as never)
   vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
     ...APP_SETTINGS_DEFAULTS,
     providers: [
