@@ -12,6 +12,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    // `scripts/` for the release script's version arithmetic. Plain `.js`: not built.
+    include: ['src/**/*.test.ts', 'scripts/**/*.test.js'],
   },
 })

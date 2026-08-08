@@ -56,10 +56,10 @@ export default [
     },
     settings: {
       'boundaries/elements': [
-        { type: 'service', pattern: 'src/lib/services/*', mode: 'folder' },
-        { type: 'store', pattern: 'src/lib/stores', mode: 'folder' },
-        { type: 'component', pattern: 'src/lib/components', mode: 'folder' },
-        { type: 'route', pattern: 'src/routes', mode: 'folder' },
+        { type: 'service', pattern: 'src/lib/services/*' },
+        { type: 'store', pattern: 'src/lib/stores' },
+        { type: 'component', pattern: 'src/lib/components' },
+        { type: 'route', pattern: 'src/routes' },
       ],
       'import/resolver': {
         typescript: {
@@ -87,11 +87,12 @@ export default [
         'warn',
         {
           default: 'allow',
-          rules: [
+          // v7 renamed `rules` to `policies`; the element type belongs in the `disallow`
+          // target rather than in a second outer `to`.
+          policies: [
             {
-              to: ['service'],
               disallow: {
-                to: { internalPath: '!index.ts' },
+                to: { element: { type: 'service', fileInternalPath: '!index.ts' } },
               },
               message:
                 'Import from the service public API (index.ts), not internal modules. Use relative imports within the same service.',
