@@ -19,7 +19,9 @@ export type RankTypeInput = {
   /**
    * Token counts from a probe capture, keyed by candidate id. A replay passes
    * them so the seated set does not depend on the tokenizer version loaded at
-   * replay time; production omits it and the count is computed.
+   * replay time; production omits it and the count is computed. Each value is
+   * the stored total, tokenizer count plus the type overhead. A kept id absent
+   * from the map falls back to computing it.
    */
   capturedTokens?: ReadonlyMap<string, number>
 }
@@ -109,12 +111,11 @@ function score(
   }
 }
 
-type Tokened = Scored & { tokensEstimated: number }
+type Costed = Scored & { tokensEstimated: number }
 
-// Charged after the pre-filter slice, not across the whole pool: it is the
-// pass's largest CPU term (retrieval.md → Per-turn cost budget) and a
+// The pass's largest CPU term (retrieval.md → Per-turn cost budget), and a
 // pre-filtered row can never be seated, so its count is never read.
-function tokenize(s: Scored, type: RetrievalType, input: RankTypeInput): Tokened {
+function costTokens(s: Scored, type: RetrievalType, input: RankTypeInput): Costed {
   const captured = input.capturedTokens?.get(s.id)
   return {
     ...s,
@@ -124,9 +125,10 @@ function tokenize(s: Scored, type: RetrievalType, input: RankTypeInput): Tokened
 }
 
 function trace(
-  s: Scored & { tokensEstimated: number | null },
+  s: Scored,
   mmrRankIndex: number | null,
   dropReason: DropReason,
+  tokensEstimated: number | null,
 ): CandidateTrace {
   return {
     kind: s.candidate.kind,
@@ -145,7 +147,7 @@ function trace(
     mmrRank: mmrRankIndex,
     selected: dropReason === 'not_dropped',
     dropReason,
-    tokensEstimated: s.tokensEstimated,
+    tokensEstimated,
     embeddingStale: s.candidate.embeddingStale,
   }
 }
@@ -171,7 +173,7 @@ export function rankPerType(
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))
   scored.sort((a, b) => b.score - a.score)
 
-  const kept = scored.slice(0, input.params.preFilterTopN).map((s) => tokenize(s, type, input))
+  const kept = scored.slice(0, input.params.preFilterTopN).map((s) => costTokens(s, type, input))
   const ranked = mmrRank(kept, input.params.lambdaDiv)
 
   const selected: Candidate[] = []
@@ -201,11 +203,11 @@ export function rankPerType(
       selected.push(r.candidate)
       remaining -= r.tokensEstimated
     }
-    traces.push(trace(r, i, dropReason))
+    traces.push(trace(r, i, dropReason, r.tokensEstimated))
   }
 
   for (const s of scored.slice(input.params.preFilterTopN)) {
-    traces.push(trace({ ...s, tokensEstimated: null }, null, 'pre_filtered'))
+    traces.push(trace(s, null, 'pre_filtered', null))
   }
 
   return {

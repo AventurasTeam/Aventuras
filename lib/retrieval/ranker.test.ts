@@ -499,10 +499,23 @@ describe('tokenization is deferred past the pre-filter', () => {
       countTokens: () => {
         throw new Error('tokenizer must not be consulted when tokens are captured')
       },
-      capturedTokens: new Map([['lo_a', 42]]),
+      // 0, not a non-zero stand-in: a `captured || countTokens(...)` mutant
+      // would fall through to the throwing tokenizer on exactly this value.
+      capturedTokens: new Map([['lo_a', 0]]),
     })
 
-    expect(out.traces[0].tokensEstimated).toBe(42)
+    expect(out.traces[0].tokensEstimated).toBe(0)
+  })
+
+  it('lets a captured count that exceeds the budget drop the row, not just report it', () => {
+    const pool = [candidate({ id: 'lo_a', kind: 'lore', sims: [0.9, 0.9, 0.9] })]
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      capturedTokens: new Map([['lo_a', 10_001]]),
+    })
+
+    expect(out.traces[0].dropReason).toBe('candidate_too_large')
   })
 })
 
