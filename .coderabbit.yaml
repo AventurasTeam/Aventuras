@@ -15,6 +15,8 @@ reviews:
     base_branches:
       - 'slice/.*'
       - 'milestone/.*'
+      - 'main'
+      - 'master'
   pre_merge_checks:
     # .claude/rules/code.md mandates the opposite of a coverage floor: comments
     # only where the *why* is non-obvious, never narration of the what.
