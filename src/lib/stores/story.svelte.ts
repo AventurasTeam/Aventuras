@@ -3807,6 +3807,8 @@ class StoryStore {
 
   /** Tail of the branch-switch queue — see switchBranch. */
   private branchSwitchChain: Promise<unknown> = Promise.resolve()
+  /** Sequence of the most recently requested switch; older queued ones are superseded. */
+  private branchSwitchSeq = 0
 
   /**
    * Switch to a different branch.
@@ -3814,7 +3816,8 @@ class StoryStore {
    * NO data is deleted - branches coexist in the database with different branch_ids.
    * Entries are always reloaded before BranchSwitched is emitted, so subscribers
    * never observe the previous branch's entries.
-   * Calls are serialized, so rapid switches resolve in request order.
+   * Calls are serialized and last-one-wins: when switches queue up, only the most
+   * recent target is loaded — superseded requests resolve without doing any work.
    * @param branchId - The branch to switch to (null for main branch)
    */
   async switchBranch(branchId: string | null): Promise<void> {
@@ -3823,10 +3826,11 @@ class StoryStore {
     // resolve, so the slower call assigns last and leaves entries out of step with
     // currentBranchId — with BranchSwitched announcing a branch whose entries aren't
     // loaded. Queue each switch behind the one before it.
+    const seq = ++this.branchSwitchSeq
     const run = this.branchSwitchChain.then(
-      () => this.performBranchSwitch(branchId),
+      () => this.performBranchSwitch(branchId, seq),
       // Run regardless of whether the previous switch settled or threw
-      () => this.performBranchSwitch(branchId),
+      () => this.performBranchSwitch(branchId, seq),
     )
     // Keep the chain resolved so one failure can't poison later switches; the
     // caller still observes the error through `run`.
@@ -3834,7 +3838,12 @@ class StoryStore {
     return run
   }
 
-  private async performBranchSwitch(branchId: string | null): Promise<void> {
+  private async performBranchSwitch(branchId: string | null, seq: number): Promise<void> {
+    // Last one wins: a newer switch was requested while this one waited in the queue.
+    // Skip the database write, the reload and the event — the newer request loads the
+    // final target, so doing this one's work first would only be discarded.
+    if (seq !== this.branchSwitchSeq) return
+
     if (!this.currentStory) throw new Error('No story loaded')
 
     // Validate branch exists (if not null)

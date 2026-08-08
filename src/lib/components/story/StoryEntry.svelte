@@ -1196,13 +1196,16 @@
 
     <!-- Fork point marker: this branch diverged from its parent here. Passive (not a
          Button) and outside the toolbar guard below, so it survives on system entries.
-         Matches the toolbar's h-7 w-7 slot so it lines up with "Branch from here". -->
+         Matches the toolbar's h-7 w-7 slot so it lines up with "Branch from here".
+         Muted rather than accent-coloured: --color-accent-500 is the exact amber of the
+         "Branch from here" button in some themes (fantasy, royal), and both can land on
+         the same entry when a branch's fork entry is still its latest entry. -->
     {#if isForkPoint}
       <span
         class="flex h-7 w-7 shrink-0 items-center justify-center"
         title="Branch &quot;{activeBranch?.name}&quot; starts here"
       >
-        <GitBranch class="text-accent-500 h-4 w-4" />
+        <GitBranch class="text-muted-foreground h-4 w-4" />
       </span>
     {/if}
 
