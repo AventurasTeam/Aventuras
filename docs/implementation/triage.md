@@ -931,6 +931,33 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `(branch_id, occurred_at_entry_id)` — the OR defeats index use even
   once the column is indexed, so both halves are needed. Surfaced by the
   M3.4 cost re-derivation (2026-08-08).
+- **The app chunks SQL bind lists against a variable limit neither
+  runtime has.** Two constants code to SQLite's pre-3.32 999-variable
+  floor: `ADMIT_ID_CHUNK` (990, `lib/retrieval/run.ts`) and
+  `STALE_ID_CHUNK` (400, `lib/db/embeddings/stale.ts`, three call
+  sites). Both runtimes are far past that floor — desktop `node:sqlite`
+  on Node 24.14 ships SQLite 3.51.2 and refuses only above 32766
+  (probed directly), and `expo-sqlite` 55.0.16 vendors 3.50.3
+  (sqlcipher 3.49.1) with the same 32766 default and no override. The
+  cost is not theoretical for the 400: a swap-cancel re-flagging a
+  6000-happening branch emits fifteen `UPDATE` ops inside one
+  transaction where one would serve, and `recomputeStaleOps` issues the
+  same fan-out per family table as awaited round trips. `ADMIT_ID_CHUNK`
+  is inert by comparison, since its input is capped at three times
+  `KNN_K`, but its own comment argues narrowing multiplies cost because
+  each chunk repeats a full partition scan — which is an argument for
+  raising it, not keeping it. Wants one pass that establishes the real
+  floor once, decides whether to chunk at all below it, and covers the
+  unchunked builders too — `awareness.ts`, `engine.ts`'s branch-id
+  lists, `field-rows.ts`, `vec-tables.ts` — so the next reader does not
+  have to re-derive which are bounded by construction. Note the
+  interaction with the `loadHappeningRows` index entry above: that fix
+  splits one OR-ed query into two indexed ones, which changes the bind
+  arithmetic this pass would reason about, so land the index work first.
+  Surfaced by CodeRabbit review of the M3.4 triage PR (2026-08-08),
+  which read the 999 comments as fact and reported a bind-limit defect
+  that does not exist.
+
 - **Tighten the unprobed-dim escape hatches once M7 makes probing
   mandatory.** `validateCustomDim` skips its `above-native` check and
   `clampEffectiveDim` returns the value untouched whenever the model's
