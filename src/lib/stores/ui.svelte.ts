@@ -1005,26 +1005,35 @@ class UIStore {
    * @param storyMode - 'adventure' or 'creative-writing'
    * @param savedActions - JSON string of ActionChoice[] or Suggestion[] from the entry
    * @param storyId - story ID for persistence
-   * @returns true if actions were restored, false if no saved actions existed
+   * @returns true if actions were restored; false if none could be, in which case the mode's
+   *          actions are left empty rather than holding whatever was on screen before
    */
   restoreSuggestedActionsFromEntry(
     storyMode: string,
     savedActions: string | null | undefined,
     storyId: string,
   ): boolean {
-    if (!savedActions) {
-      // No saved actions — clear current ones
+    // One contract for every failure path below: a false return leaves nothing set. Only the
+    // absent-blob case used to clear, so a malformed or unparseable blob returned false with the
+    // previous entry's choices still on screen, where they read as belonging to this entry.
+    // Callers judge by the return value alone, so the two must not disagree.
+    const clearForMode = () => {
       if (storyMode === 'adventure') {
         this.actionChoices = []
       } else {
         this.suggestions = []
       }
+    }
+
+    if (!savedActions) {
+      clearForMode()
       return false
     }
 
     try {
       const parsed = JSON.parse(savedActions)
       if (!Array.isArray(parsed) || parsed.length === 0) {
+        clearForMode()
         return false
       }
 
@@ -1036,6 +1045,7 @@ class UIStore {
         const validated = z.array(actionChoiceSchema).safeParse(parsed)
         if (!validated.success) {
           console.warn('[UI] Discarding malformed saved action choices:', validated.error)
+          clearForMode()
           return false
         }
         this.actionChoices = validated.data
@@ -1050,6 +1060,7 @@ class UIStore {
         const validated = z.array(suggestionSchema).safeParse(parsed)
         if (!validated.success) {
           console.warn('[UI] Discarding malformed saved suggestions:', validated.error)
+          clearForMode()
           return false
         }
         this.suggestions = validated.data
@@ -1063,6 +1074,7 @@ class UIStore {
       return true
     } catch (err) {
       console.warn('[UI] Failed to parse saved suggested actions:', err)
+      clearForMode()
       return false
     }
   }
