@@ -152,8 +152,12 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
     capture_mode: mode,
     embedding_model_id: input.embeddingModelId,
     capture_version: CAPTURE_VERSION,
-    tokenizer: TOKENIZER_IDENTITY,
-    params: { ranker: input.params, ...input.settings },
+    tokenizer: { ...TOKENIZER_IDENTITY },
+    params: {
+      ranker: input.params,
+      ...input.settings,
+      retrievalBudgets: { ...input.settings.retrievalBudgets },
+    },
     queries: queriesOf(stack, mode, input.queryVectors),
     pools: {
       entities: poolOf(bundles.entities, mode),
@@ -171,7 +175,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
     },
     structural_floor: floorRowsOf(floor),
     stale_counts: outcome.ok
-      ? outcome.staleCounts
+      ? { ...outcome.staleCounts }
       : { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   }
 }
