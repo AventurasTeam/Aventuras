@@ -100,8 +100,7 @@ function depsFor(
   } = {},
 ) {
   const embedRows = vi.fn<SyncStageDeps['embedRows']>(
-    opts.embedRows ??
-      (async (rows) => rows.map((r) => clearEmbeddingStaleOp(r.kind, r.id, r.branchId))),
+    opts.embedRows ?? (async (rows) => rows.map((r) => clearEmbeddingStaleOp(r))),
   )
   const tx = vi.fn<DbCtx['runInTransaction']>(runInTransaction)
   return {
@@ -290,9 +289,9 @@ describe('runSyncStage', () => {
     ])
     const d = depsFor(sqlite, runInTransaction, {
       embedRows: async (rows) => [
-        clearEmbeddingStaleOp(rows[0].kind, rows[0].id, rows[0].branchId),
+        clearEmbeddingStaleOp(rows[0]),
         { sql: 'UPDATE no_such_table SET embedding_stale = 0', params: [] } satisfies SqlOp,
-        clearEmbeddingStaleOp(rows[1].kind, rows[1].id, rows[1].branchId),
+        clearEmbeddingStaleOp(rows[1]),
       ],
     })
 

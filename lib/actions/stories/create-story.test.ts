@@ -344,7 +344,7 @@ describe('createStoryWithBranch — embed step', () => {
             sourceHash: sourceHash(text),
             vector: packFloat32(new Float32Array(DIM).fill(0.1)),
           }),
-          clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
+          clearEmbeddingStaleOp(row),
         )
       }
       return ops

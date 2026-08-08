@@ -183,7 +183,7 @@ export async function embedRowsToVecOps(
         sourceHash: sourceHash(composites[i]),
         vector: packFloat32(vectors[i]),
       }),
-      clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
+      clearEmbeddingStaleOp(row),
     )
   }
   return { ops, dim }

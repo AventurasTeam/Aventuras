@@ -73,7 +73,7 @@ function makeEmbedRows(
           sourceHash: sourceHash(composite),
           vector: fakeVec(dim, i),
         }),
-        clearEmbeddingStaleOp(row.kind, row.id, row.branchId),
+        clearEmbeddingStaleOp(row),
       )
     })
     return { ops, dim }
