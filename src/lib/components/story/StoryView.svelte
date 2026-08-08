@@ -88,11 +88,15 @@
     const currentStoryId = story.currentStory?.id ?? null
 
     if (currentStoryId !== lastStoryId) {
+      const isRemount = lastStoryId === null
       lastStoryId = currentStoryId
       prevEntryCount = story.entries.length
       // Drop any deferred landing: its branch or entry belongs to the story we just left
       pendingBranchLanding = null
-      ui.consumeEntryScroll()
+      // Only when we actually left a story. This component is destroyed whenever another
+      // panel is up, so every mount arrives here with lastStoryId still null and would
+      // otherwise discard the very request that brought the panel back.
+      if (!isRemount) ui.consumeEntryScroll()
       anchorToBottom(story.entries.length)
       tick().then(() => performScroll())
     }
@@ -423,8 +427,10 @@
         // panel is up, so it cannot be waiting on an event when the request is made.
         // Read untracked — consuming it must not re-run this effect and undo the
         // landing with the scrollToBottom below.
+        // Consumed either way, so a request that can no longer be honoured — one made
+        // for a story that was closed before the panel came back — doesn't linger.
         const entryId = ui.consumeEntryScroll()
-        if (entryId) {
+        if (entryId && story.entries.some((e) => e.id === entryId)) {
           void landOnEntry(entryId)
           return
         }
