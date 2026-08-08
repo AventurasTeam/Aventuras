@@ -49,7 +49,6 @@ import {
   TYPE_OF_KIND,
   type Candidate,
   type QueryAll,
-  type QueryPresence,
   type RankedType,
   type RetrievalType,
 } from './types'
@@ -253,14 +252,6 @@ async function runRetrievalPass(
   if (!embed.ok) return embed
 
   const queryVectors = distributeQueryVectors(embed.vectors, queries.presence)
-  // Derived from the vectors, not from queries.presence: a short embed result
-  // nulls a slot the flag still reports present, and weighting an all-zero query
-  // drags every candidate uniformly toward the noise floor.
-  const presence: QueryPresence = [
-    queryVectors[0] !== null,
-    queryVectors[1] !== null,
-    queryVectors[2] !== null,
-  ]
 
   const poolCtx = {
     existingVecTables,
@@ -302,7 +293,6 @@ async function runRetrievalPass(
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
-    presence,
     chapterRanges,
     countTokens,
   }
@@ -594,9 +584,11 @@ function assembleCandidates(
 ): Candidate[] {
   const { index, floor, sourceRows, awareness, queryVectors } = ctx
 
-  const sim = (vector: Float32Array, query: Float32Array | null): number =>
-    query === null ? 0 : cosine(vector, query)
-  const simsFor = (vector: Float32Array): readonly [number, number, number] => [
+  const sim = (vector: Float32Array, query: Float32Array | null): number | null =>
+    query === null ? null : cosine(vector, query)
+  const simsFor = (
+    vector: Float32Array,
+  ): readonly [number | null, number | null, number | null] => [
     sim(vector, queryVectors[0]),
     sim(vector, queryVectors[1]),
     sim(vector, queryVectors[2]),

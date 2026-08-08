@@ -3,7 +3,6 @@ import type {
   Candidate,
   CandidateTrace,
   DropReason,
-  QueryPresence,
   QueryWeights,
   RankAllInput,
   RankedType,
@@ -13,7 +12,6 @@ import type {
 
 export type RankTypeInput = {
   params: RankerParams
-  presence: QueryPresence
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   countTokens: (text: string) => number
   /** Chapters that won budget this turn; only they feed the happenings boost. */
@@ -35,16 +33,16 @@ type Scored = {
 }
 
 function blendSims(
-  sims: readonly [number, number, number],
+  sims: readonly [number | null, number | null, number | null],
   weights: QueryWeights,
-  presence: QueryPresence,
 ): number {
   const w = [weights.action, weights.digest, weights.prose]
   let weighted = 0
   let total = 0
   for (let i = 0; i < 3; i++) {
-    if (!presence[i]) continue
-    weighted += w[i] * sims[i]
+    const s = sims[i]
+    if (s === null) continue
+    weighted += w[i] * s
     total += w[i]
   }
   // Renormalizing over the present queries keeps an absent one from dragging
@@ -59,7 +57,7 @@ function score(
   boostedEntryIds: ReadonlySet<string>,
 ): Scored {
   const { params } = input
-  const simBlend = blendSims(c.sims, params.weights, input.presence)
+  const simBlend = blendSims(c.sims, params.weights)
   const kwBoostValue = c.keywordHits.length > 0 ? params.kwBoost : 0
   const common = c.kind === 'happening' && c.commonKnowledge
   const lambda = params.lambda[type]

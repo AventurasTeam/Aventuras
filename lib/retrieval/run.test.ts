@@ -739,9 +739,9 @@ describe('runRetrieval — query stack', () => {
 
     const trace = expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_b')
     expect(trace).toBeDefined()
-    expect(trace?.simQ3).toBe(0)
+    expect(trace?.simQ3).toBeNull()
     // Q3 produced no vector, so the blend renormalizes over Q1 + Q2 only.
-    // Counting the absent slot would give 0.7.
+    // Counting the absent slot as a zero similarity would give 0.7.
     expect(trace?.simBlend).toBe(1)
   })
 })

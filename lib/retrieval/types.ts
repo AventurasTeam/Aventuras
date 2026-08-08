@@ -33,8 +33,14 @@ type CandidateBase = {
   displayName: string
   /** Exactly the text the prompt will carry; token cost is measured on it. */
   renderedText: string
-  /** Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors. */
-  sims: readonly [number, number, number]
+  /**
+   * Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors.
+   * `null` means that query produced no vector this turn — which `0`, a
+   * genuine orthogonal similarity, cannot be distinguished from. The blend
+   * renormalizes over the non-null slots, so this triple is the single source
+   * of truth a probe replay reconstructs it from.
+   */
+  sims: readonly [number | null, number | null, number | null]
   /** Unit-norm, same space as the queries. MMR's pairwise similarity input. */
   vector: Float32Array
   /** Chapters since the row became relevant. 0 for every row until M5 closes one. */
@@ -77,9 +83,9 @@ export type CandidateTrace = {
   kind: CandidateKind
   id: string
   displayName: string
-  simQ1: number
-  simQ2: number
-  simQ3: number
+  simQ1: number | null
+  simQ2: number | null
+  simQ3: number | null
   simBlend: number
   recencyFactor: number
   pinSignal: number
@@ -138,7 +144,6 @@ export type RankAllInput = {
   pools: Record<RetrievalType, readonly Candidate[]>
   budgets: Record<RetrievalType, number>
   params: RankerParams
-  presence: QueryPresence
   /** Entry ids covered by each closed chapter, for the chapter-match boost. */
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   /** Injected so the ranker stays pure — tokens.ts is the production impl. */
