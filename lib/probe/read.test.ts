@@ -112,6 +112,25 @@ describe('decodeCapture', () => {
 
     expect(() => decodeCapture(row)).toThrow(/ranker param/i)
   })
+
+  it("decodes each row's own payload, not a neighboring row's", async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seed(sqlite)
+    await writeProbeCapture(
+      { runInTransaction },
+      captureInput({ id: 'pc_1', branchId: 'br_a', targetEntryId: 'ent_a' }),
+    )
+    await writeProbeCapture(
+      { runInTransaction },
+      captureInput({ id: 'pc_2', branchId: 'br_b', targetEntryId: 'ent_b' }),
+    )
+
+    const q = capturesForStoryQuery('st_1')
+    const rows = rowsOf(sqlite, q.sql, q.params).map((r) => decodeCapture(r))
+
+    expect(rows.find((c) => c.id === 'pc_1')?.payload.target_entry_id).toBe('ent_a')
+    expect(rows.find((c) => c.id === 'pc_2')?.payload.target_entry_id).toBe('ent_b')
+  })
 })
 
 describe('deleteCaptureOp / clearCapturesForStoryOp', () => {
@@ -131,5 +150,21 @@ describe('deleteCaptureOp / clearCapturesForStoryOp', () => {
     }[]
     // The other story survives — a bare DELETE with no story predicate would not.
     expect(left.map((r) => r.branch_id)).toEqual(['br_c'])
+  })
+
+  it('scopes the delete to the given branch, not just the given id', async () => {
+    const { sqlite, runInTransaction } = await createTestDb()
+    seed(sqlite)
+    // The PK is composite (branch_id, id): two branches may legitimately hold
+    // the same capture id.
+    await writeProbeCapture({ runInTransaction }, captureInput({ id: 'pc_dup', branchId: 'br_a' }))
+    await writeProbeCapture({ runInTransaction }, captureInput({ id: 'pc_dup', branchId: 'br_b' }))
+
+    await runInTransaction([deleteCaptureOp('br_a', 'pc_dup')])
+
+    const left = sqlite.prepare('SELECT branch_id FROM probe_captures').all() as {
+      branch_id: string
+    }[]
+    expect(left.map((r) => r.branch_id)).toEqual(['br_b'])
   })
 })

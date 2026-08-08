@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { RANKER_DEFAULTS } from '@/lib/retrieval'
+import { RANKER_DEFAULTS, type RankerParams } from '@/lib/retrieval'
 
 import { assertRankerParams } from './validate'
 
@@ -20,8 +20,25 @@ describe('assertRankerParams', () => {
       'a negative minScoreThreshold lets every candidate clear the floor',
       { minScoreThreshold: -0.1 },
     ],
+    ['chapterBoost below 1 demotes a match instead of lifting it', { chapterBoost: 0.5 }],
+    ['a fractional preFilterTopN silently truncates through slice', { preFilterTopN: 2.5 }],
   ])('rejects %s', (_label, patch) => {
     expect(() => assertRankerParams({ ...RANKER_DEFAULTS, ...patch })).toThrow(/ranker param/i)
+  })
+
+  // Neither comparison in inRange treats these as out-of-bounds: undefined and
+  // NaN fail every `<`/`>` check, and Infinity clears every field whose upper
+  // bound is itself Infinity. isFinite is the only clause that rejects them.
+  it('rejects a missing tauRevive, which relational comparisons alone let through', () => {
+    expect(() =>
+      assertRankerParams({ ...RANKER_DEFAULTS, tauRevive: undefined } as unknown as RankerParams),
+    ).toThrow(/ranker param/i)
+  })
+
+  it('rejects an infinite kwBoost, whose [0, Infinity] range has no finite upper bound to trip', () => {
+    expect(() => assertRankerParams({ ...RANKER_DEFAULTS, kwBoost: Infinity })).toThrow(
+      /ranker param/i,
+    )
   })
 
   it('rejects a negative per-type pinBoost, which inverts the pin', () => {
@@ -59,5 +76,34 @@ describe('assertRankerParams', () => {
         typeOverhead: { ...RANKER_DEFAULTS.typeOverhead, lore: -1 },
       }),
     ).toThrow(/typeOverhead/)
+  })
+
+  // A per-type record missing a key (an older capture predating a tunable)
+  // reaches the ranker's decay exponent as NaN rather than as a caught error.
+  it('rejects a lambda record missing a type, which the ranker would read as NaN', () => {
+    const { chapters, ...rest } = RANKER_DEFAULTS.lambda
+    expect(() =>
+      assertRankerParams({ ...RANKER_DEFAULTS, lambda: rest as unknown as RankerParams['lambda'] }),
+    ).toThrow(/lambda\.chapters/)
+  })
+
+  it('rejects a pinBoost record missing a type', () => {
+    const { entities, ...rest } = RANKER_DEFAULTS.pinBoost
+    expect(() =>
+      assertRankerParams({
+        ...RANKER_DEFAULTS,
+        pinBoost: rest as unknown as RankerParams['pinBoost'],
+      }),
+    ).toThrow(/pinBoost\.entities/)
+  })
+
+  it('rejects a typeOverhead record missing a type', () => {
+    const { threads, ...rest } = RANKER_DEFAULTS.typeOverhead
+    expect(() =>
+      assertRankerParams({
+        ...RANKER_DEFAULTS,
+        typeOverhead: rest as unknown as RankerParams['typeOverhead'],
+      }),
+    ).toThrow(/typeOverhead\.threads/)
   })
 })
