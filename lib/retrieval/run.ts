@@ -420,9 +420,12 @@ type PoolCtx = {
   queryText: string
 }
 
-// Matches lib/db/embeddings' own chunk width: 400 ids plus the branch and model
-// params stays under the 999-variable floor of older SQLite builds.
-const ADMIT_ID_CHUNK = 400
+// As wide as the 999-variable floor of older SQLite builds allows, leaving room
+// for the branch and model params. Deliberately NOT lib/db/embeddings' 400:
+// vectorsByIdQuery scans the whole branch partition and its cost is near-flat in
+// the id count (14ms at 1 id, 20ms at 800, over 6k rows), so every extra chunk
+// is another full scan. Narrowing this multiplies the cost; it does not spread it.
+const ADMIT_ID_CHUNK = 990
 
 /**
  * Vectors for admitted ids the KNN passes did not return. Absent ids are dropped
@@ -436,14 +439,25 @@ async function loadAdmittedVectors(
   ids: readonly string[],
   into: Map<string, Float32Array>,
 ): Promise<void> {
+  const chunks: string[][] = []
   for (let i = 0; i < ids.length; i += ADMIT_ID_CHUNK) {
-    const chunk = ids.slice(i, i + ADMIT_ID_CHUNK)
-    const query = vectorsByIdQuery(kind, params.dim, {
-      branchId: params.branchId,
-      modelId: params.modelId,
-      ids: chunk,
-    })
-    for (const row of await deps.queryAll(query.sql, query.params)) {
+    chunks.push(ids.slice(i, i + ADMIT_ID_CHUNK))
+  }
+  // Concurrent for the same reason the rest of the pass is: each chunk is an
+  // independent partition scan, and serializing them adds a full scan of latency
+  // per chunk on a path that only reaches two chunks at the top of canon's scale.
+  const results = await Promise.all(
+    chunks.map((chunk) => {
+      const query = vectorsByIdQuery(kind, params.dim, {
+        branchId: params.branchId,
+        modelId: params.modelId,
+        ids: chunk,
+      })
+      return deps.queryAll(query.sql, query.params)
+    }),
+  )
+  for (const rows of results) {
+    for (const row of rows) {
       const id = String(row[0])
       if (!into.has(id)) into.set(id, decodeVector(row[1]))
     }

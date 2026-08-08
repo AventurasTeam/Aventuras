@@ -59,10 +59,12 @@ export type VectorsByIdParams = {
  * Vectors for an explicit id set — for candidates admitted by something other
  * than a KNN pass, which carry no match row to ride on.
  *
- * Scans the branch partition rather than pushing down, as knnQuery's note says:
- * measured at dim 384, 5ms over 6k rows and 16ms over 20k, and the cost tracks
- * partition size rather than how many ids are asked for. So issue it once for
- * the whole set, and only for ids a KNN pass did not already return.
+ * Scans the branch partition rather than pushing down, as knnQuery's note says.
+ * Measured at dim 384, best of 5 on a cold table: 6ms over 2k rows, 18ms over
+ * 6k, 60ms over 20k, 179ms over 60k — linear in partition size, and near-flat in
+ * the id count (14ms at 1 id against 20ms at 800, over 6k rows). So issue it ONCE
+ * for the whole set: splitting the ids buys nothing and costs another full scan.
+ * Only ask for ids a KNN pass did not already return.
  *
  * `pk` is unusable here despite being the declared primary key: a single
  * `pk = ?` does push down, but vec0 answers `pk IN (...)` with **zero rows**
