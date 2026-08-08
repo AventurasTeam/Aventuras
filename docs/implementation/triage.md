@@ -889,31 +889,21 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   changes a shared UI contract, so it wants a design pass rather than a
   drive-by. Cross-cutting: every `disabledReason` consumer, present and
   future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
-- **`retrieval.md`'s MMR cost model understates measured cost by ~2.5x,
-  and its complexity claim doesn't match the shipped algorithm.**
+- **The retrieval pass has never been measured on mobile.** Every
+  figure in
   [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  budgets "<5ms per type" for MMR after the top-200 pre-filter, and
-  [`Diversity — MMR`](../memory/retrieval.md#diversity--mmr) calls it
-  "sub-millisecond" for pools in the hundreds. Measured on the M3.4
-  implementation (Node 24 / V8, desktop, `Candidate`-shaped payloads,
-  N=200): **6.55 ms at dim 384 and 12.32 ms at dim 768**. dim 768 is a
-  shipped config — `onnx-community/embeddinggemma-300m-ONNX` in
-  `catalog-data.json` — so five types cost ~61 ms of the doc's ~100 ms
-  total per-turn target before anything else runs. Restructuring is
-  **not** the lever: a `Uint8Array` bitmap variant measured only 10-18%
-  faster, and the irreducible cosine floor alone is 4.34 ms at N=200.
-  Separately the doc states MMR is `O(N × K)`, but C4's per-candidate
-  trace requires a rank for every candidate that entered MMR
-  (`CandidateTrace.mmrRank` is documented as null only for pre-filtered
-  rows), which forces the full `O(N²)` greedy ranking — roughly 5x the
-  work the cost model assumes. The implementation is correct; the
-  budget line was written against a different algorithm. Wants either a
-  corrected budget or an explicit decision that the trace contract is
-  worth the cost. **Open sub-question, unmeasured:** `retrieval.md`'s
-  PoC puts a 384-dim dot at ~24-30 µs on Hermes; if that holds, 19,900
-  dots is ~500 ms per type on mobile, which would dominate the turn.
-  Nobody has run MMR on-device. Surfaced by M3.4 Task 5 review
-  (2026-08-01).
+  is desktop. The only mobile evidence is the PoC's per-query KNN
+  numbers, which predate the shipped pass — that PoC issued three KNN
+  queries against one family, where the pass issues fifteen across five
+  plus a by-id vector fetch. The ranker has never run on-device at all,
+  and `retrieval.md`'s own PoC section puts a 384-dim Hermes dot at
+  ~24-30 µs, which would make MMR's 19,900 dots ~500 ms per type if it
+  holds. That is not turn-dominating against a narrative call measured
+  in tens of seconds, but it is unknown rather than small, and it
+  cannot be settled from a desktop runner. `bench/retrieval-cost.test.ts`
+  is the harness to port. Owner is whoever does Android bring-up;
+  desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
+  (2026-08-08), whose desktop half is now canon.
 - **Lore `priority` is inert in the shipped ranker, and a user-facing
   control promises otherwise.** Two canon statements conflict.
   [`retrieval.md → Per-type decay rates`](../memory/retrieval.md#per-type-decay-rates)
@@ -934,24 +924,22 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   actually do. Blocks nothing in M3.4; blocks the World panel's lore
   editor meaning what it says. Surfaced by M3.4 Task 6 review
   (2026-08-01).
-- **Token estimation costs ~180x its budgeted line, for the same
-  reason MMR does.** [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  budgets "Token estimation — <1ms total". Measured with the production
-  `countTokens` (js-tiktoken `cl100k_base`) on ~69-token rows:
-  **60.5 µs/row, ~181 ms for 3000 rows**. C4's per-candidate trace
-  makes `CandidateTrace.tokensEstimated` non-nullable, so every pool
-  row must be tokenized, not just the ones budget-fill reaches — the
-  same trace-contract-vs-cost-model tension already recorded for MMR
-  above. One concrete mitigation exists with **zero contract loss**:
-  `preFilterTopN` is absent from
+- **Eager tokenization is the pass's largest CPU term, and the fix is a
+  C4 trace decision.** Now measured rather than estimated:
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  prices it at ~46 ms of a ~140 ms pass, roughly three times everything
+  MMR does. The cause is that `CandidateTrace.tokensEstimated` is
+  non-nullable, so every **pool** row is tokenized to seat a fraction of
+  them — a 771-row happenings pool for 22 seated rows. `preFilterTopN`
+  is absent from
   [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters),
   so a pre-filtered row can never be seated by the simulator at any
-  threshold or budget — meaning the pre-filtered excess need not be
-  tokenized at all. Capping eager tokenization at the kept ≤200/type
-  would cut the worst case from ~3000 rows to ~1000 (~181 ms → ~60 ms).
-  It requires making `tokensEstimated` nullable for pre-filtered rows,
-  which is a C4 trace-shape change and therefore wants a deliberate
-  C4 decision pass. Surfaced by M3.4 Task 6 review (2026-08-01).
+  threshold or budget, which means its token count is never read and
+  need never be computed. Capping eager tokenization at the kept
+  ≤200/type is therefore free of contract loss, but it requires making
+  `tokensEstimated` nullable — a C4 trace-shape change. Decide it in the
+  same pass as the other C4 trace questions against Slice 3.5. Cost half
+  re-measured 2026-08-08; the decision is what remains.
 - **`chapters_old` has no home in the capture, but the simulator is
   specified to recompute from it.**
   [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
@@ -1168,37 +1156,21 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   Android. If story-open shows a hitch, this is it, and the fix is to
   warm the encoder during story open rather than to change the hook.
   **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
-- **A retrieval pass costs more than its whole budget at 60-chapter
-  volumes, and the budget table has no line for most of what the pass
-  does.** Measured against a real migrated SQLite plus sqlite-vec
-  database, median of 7 warm in-process passes on desktop, **excluding**
-  the embedder, the blocking sync stage and all IPC: **60 ms** at 1200
-  happenings / 3000 awareness rows, **137 ms** at 3600 / 9000, **166 ms**
-  at 6000 / 15 000.
-  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  targets **under 100 ms total including the three query embeds**, so
-  the largest figure already exceeds the entire budget with the
-  embedder subtracted out of it. 6000 / 15 000 is not a worst case:
-  [`Scale assumptions`](../memory/retrieval.md#scale-assumptions) puts
-  60 chapters at 3-6k happenings and 15-60k awareness rows, and its own
-  "5-10× happenings" ratio puts a 6000-happening branch at 30-60k
-  awareness — so the measurement sits at that row's awareness floor,
-  2.5× rather than 5-10×. Supporting numbers, dim 384 and `k = 200`:
-  vec0 KNN costs 0.96 / 4.41 / 22.58 ms at 1k / 10k / 60k rows, and a
-  `WHERE branch_id = ?` source scan costs 0.94 / 9.56 / 33.27 ms at
-  2k / 20k / 60k. The budget table prices only the query embed, a
-  cosine batch, MMR, token estimation and budget fill — it has no line
-  at all for the KNN passes, the five source reads, the awareness read
-  or the chapter-ranges JOIN. It also inherits the "three queries per
-  pass" of
-  [`Performance characteristics`](../memory/retrieval.md#performance-characteristics--poc-findings),
-  which is the PoC baseline M3.4's own AC7 is written against, where
-  the shipped pass issues **fifteen** — three query vectors across five
-  types. Two of the overruns are already filed above (MMR, eager
-  tokenization) and
-  are inside these totals; what is missing is a budget re-derived
-  against the pass that actually ships. Surfaced by the M3.4 whole-slice
-  review (2026-08-03).
+- **`loadHappeningRows`' OR-ed predicate cannot use an index.**
+  `lib/retrieval/source-rows.ts` filters happenings with
+  `branch_id = ? AND (id IN (...) OR occurred_at_entry_id IN (...))`.
+  `EXPLAIN QUERY PLAN` degrades that to
+  `SEARCH happenings USING INDEX sqlite_autoindex_happenings_1 (branch_id=?)`
+  — a scan of every happening on the branch — where the `id IN (...)`
+  half alone uses the composite PK as a **covering index** seek. The
+  `occurred_at_entry_id` half has no index to use in either form. Only
+  ~3 ms at canon's 6k-happening ceiling, so it is not urgent, but it
+  partly reintroduces the branch-wide scan the M3.4 `loadSourceRows`
+  cleanup removed, and it grows with the table. Fix is two indexed
+  queries unioned in memory plus an index on
+  `(branch_id, occurred_at_entry_id)` — the OR defeats index use even
+  once the column is indexed, so both halves are needed. Surfaced by the
+  M3.4 cost re-derivation (2026-08-08).
 - **`countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
   keys an unbounded module-level `Map` on entry id and holds it for the
   process lifetime, across deletes, rollbacks, branch switches and story
@@ -1226,20 +1198,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   identity the simulator can refuse to replay across. Needs deciding
   before 3.5 builds the simulator. Surfaced by the M3.4 whole-slice
   review (2026-08-03).
-- **`retrieval.md → Token estimation` describes a ranker-side token
-  cache that does not exist.**
-  [The section](../memory/retrieval.md#token-estimation) ends "Ranker
-  passes cache results in memory for reuse within the turn." No such
-  cache exists: `score` calls the injected `countTokens` once per
-  candidate and keeps the result on the `Scored` row, and the only memo
-  in `lib/retrieval/tokens.ts` is `countEntryTokens`, which the ranker
-  never touches. Each candidate is tokenized exactly once per pass, so
-  the intent — do not pay twice for the same row — is satisfied; the
-  sentence describes a mechanism that was never built, and it shares a
-  paragraph with the "per-turn cost is sub-millisecond total" claim the
-  measurements above already contradict. Fix with the same pass that
-  re-derives the cost budget. Surfaced by the M3.4 whole-slice review
-  (2026-08-03).
 - **`metadata.tokens.completion` is the wrong measure for the chapter
   threshold, on four independent counts.** M5 needs
   `openRegionTokens(branchId)` as a DB read

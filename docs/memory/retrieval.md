@@ -325,12 +325,17 @@ wrapper packages were rejected (single-version, no source link,
 handles vec0 operations natively.
 
 - **Per-query KNN against vec0:** ~11 / 43 / 61 / 122 ms at
-  1k / 10k / 50k / 100k candidates. Three queries per pass →
-  total retrieval (incl. embed + merge) is ~478 ms at 100k —
-  ~5-8x faster than JS-side cosine at large pools, comparable at
-  1-10k. Slower than the published 75 ms@100k benchmark — likely a
-  mix of mobile ARM lacking AVX2 SIMD, expo-sqlite bridge overhead,
-  and 3-query vs 1-query workload.
+  1k / 10k / 50k / 100k candidates. Three queries per pass → total
+  retrieval (incl. embed + merge) is ~478 ms at 100k — ~5-8x faster
+  than JS-side cosine at large pools, comparable at 1-10k. Slower than
+  the published 75 ms@100k benchmark — likely a mix of mobile ARM
+  lacking AVX2 SIMD, expo-sqlite bridge overhead, and 3-query vs
+  1-query workload.
+  **Read this as a per-query unit cost only.** "Three queries per pass"
+  is the PoC's single-family shape; the shipped pass issues fifteen —
+  three query vectors across five families — plus a by-id vector fetch
+  for chapter-admitted rows. The pass total lives in
+  [Per-turn cost budget](#per-turn-cost-budget).
 - **Insert cost:** ~600 µs/row → 60 s to populate 100k vectors.
   Bulk-population events (first-story embed, model-swap re-index)
   need progress UI. Per-turn incremental writes are not a concern.
@@ -1211,6 +1216,24 @@ disconnected. With the boost, top-K tends to cluster around the
 chapters most relevant right now: a more narratively coherent slice
 of context for the LLM.
 
+**What it costs.** Admission is the single largest term the boost adds,
+because an admitted row carries no KNN match row and so needs its
+vector fetched by id — and `id` is a vec0 metadata column with no
+push-down, so that fetch scans the branch partition. Measured at dim
+384: seating five of sixty chapters admits ~480 happenings on top of a
+~290-row KNN pool, and the whole mechanism costs ~44ms of a ~140ms pass
+at 6000 happenings, against ~9ms at 1200. Two consequences worth
+holding:
+
+- **Issue the by-id fetch once.** Its cost tracks partition size and is
+  near-flat in the id count, so splitting the admitted set into chunks
+  multiplies the scans rather than dividing the work.
+- **The cost is proportional to happenings on the branch**, which the
+  budget accepts — but the benefit is unquantified. Which rows the
+  boost rescues cannot be shown on synthetic data; it needs a real
+  story's happening distribution. The harness prices the cost and says
+  so.
+
 ### Scale assumptions
 
 Pool sizes grow substantially with story length. Realistic projection
@@ -1306,11 +1329,21 @@ recompute, pick next.
 type. A happening shouldn't dedup against a lore entry; they're
 different shapes carrying orthogonal signal.
 
-**Cost.** O(N × K) per type. For typical pools (hundreds), sub-
-millisecond. For long-running stories with thousands of awareness
-rows, **pre-filter to top-200 by raw score before MMR**. Trade:
-candidates ranking ~200th by raw score are unlikely to make it into
-the budget anyway, so the pre-filter doesn't lose meaningful
+**Cost.** `O(N²)` per type, not `O(N × K)`: C4's per-candidate trace
+records an `mmrRank` for every candidate that entered MMR, which forces
+the full greedy ranking rather than stopping at K. So the pre-filter is
+what bounds it — **top-200 by raw score before MMR**, which caps the
+worst case at ~6.5ms per type at dim 384 and ~12.5ms at dim 768.
+
+In practice only happenings reaches 200; the other four types are
+bounded by how much a person authored. Measured across all five types
+together, scoring plus MMR plus budget fill is ~14ms — see
+[Per-turn cost budget](#per-turn-cost-budget). Restructuring is not the
+lever: a `Uint8Array` bitmap variant measured only 10-18% faster, and
+the irreducible cosine floor alone is 4.34ms at N=200.
+
+The pre-filter's trade stands: candidates ranking ~200th by raw score
+are unlikely to make the budget anyway, so it doesn't lose meaningful
 selections.
 
 ### Budget-fill termination
@@ -1424,28 +1457,83 @@ The constants live in `RANKER_DEFAULTS.typeOverhead`;
 shipped macro and fails when the macro moves and the constant does
 not.
 
-**No stored column on candidate tables.** Tokenization is fast enough
-(microseconds per row); per-turn cost is sub-millisecond total.
-Ranker passes cache results in memory for reuse within the turn.
+**No stored column on candidate tables.** Each candidate is tokenized
+exactly once per pass — the ranker keeps the result on the scored row —
+so nothing pays twice for the same row within a turn.
 
-If real perf testing later shows tokenization is a bottleneck, add a
-`token_count INTEGER` column per candidate table with cache
-invalidation on row update. Don't pre-optimize.
+Per-row cost is small (~45-60 µs with js-tiktoken `cl100k_base`) but
+the row count is the whole pool, not the kept set, which makes this the
+largest CPU term in the pass: see
+[Per-turn cost budget](#per-turn-cost-budget). Real perf testing has
+now happened, and it points at **tokenizing fewer rows** rather than at
+a stored column — a pre-filtered row can never be seated by the probe
+simulator, so its token count is never read. A `token_count INTEGER`
+column per table remains the fallback if that is not enough, with cache
+invalidation on row update.
 
 ### Per-turn cost budget
 
-Dominant terms:
+Measured, not estimated: `bench/retrieval-cost.test.ts` (`pnpm
+bench:retrieval`) prices the shipped pass against the volumes
+[Scale assumptions](#scale-assumptions) projects. Numbers below are
+desktop (Node 24 / V8, file-backed SQLite, `sqlite-vec` 0.1.9),
+median of seven warm passes, **excluding the embedder and IPC**.
 
-| Step                                        | Cost                                               |
-| ------------------------------------------- | -------------------------------------------------- |
-| Embedding three query vectors               | ~20ms local / ~50ms API (parallelized)             |
-| Cosine similarity batch over candidate pool | <10ms for 1000s of candidates with vectorized math |
-| MMR per type (after pre-filter to 200)      | <5ms per type                                      |
-| Token estimation                            | <1ms total                                         |
-| Budget fill                                 | <1ms                                               |
+| Step                                  | dim 384 | dim 768 | Scales with                         |
+| ------------------------------------- | ------- | ------- | ----------------------------------- |
+| Source reads, awareness, chapter JOIN | ~21ms   | ~21ms   | branch entity / lore / thread count |
+| KNN — 3 vectors × 5 types             | ~35ms   | ~75ms   | rows per family, and dim            |
+| Chapter-range admission               | ~21ms   | ~24ms   | happenings on the branch            |
+| Candidate assembly                    | ~6ms    | ~8ms    | pool size                           |
+| Token estimation                      | ~46ms   | ~46ms   | **pool size, not kept size**        |
+| Scoring, cosine, MMR, budget fill     | ~14ms   | ~16ms   | min(pool, `preFilterTopN`) per type |
+| **Total**                             | ~140ms  | ~224ms  |                                     |
 
-Target: <100ms total for typical stories on local embedder. Acceptable
-even for the longest typical pools.
+Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
+the projected range. Lower scales are cheaper roughly in proportion:
+~57ms / ~102ms at 1200 happenings, ~104ms / ~163ms at 3600.
+
+Three things the table makes visible that the previous estimate did
+not:
+
+- **Token estimation is the largest CPU term**, at roughly three times
+  everything MMR does. It is charged per **pool** row, not per kept
+  row, because `CandidateTrace.tokensEstimated` is non-nullable — so a
+  771-row happenings pool is tokenized to seat 22. Capping it at the
+  kept `preFilterTopN` would recover most of it and is a C4 trace-shape
+  decision, filed against Slice 3.5.
+- **MMR is not the problem it looked like.** The measured ~6.5ms per
+  type at N=200 is real, but only happenings reaches 200 in a typical
+  story: entities, lore and threads are human-authored and sit in the
+  low hundreds. Scoring plus MMR plus budget fill together are ~14ms.
+  A story that saturates the pre-filter on all five types pays ~30ms —
+  the honest worst case, not the common one.
+- **The chapter-range admission is a first-class cost**, not a
+  rounding error on the happenings pool. See
+  [Chapter-match boost](#chapter-match-boost-on-happenings).
+
+**Target.** Retrieval is a blocking prelude to the narrative call, so
+its cost is additive to time-to-first-token — but that call is tens of
+seconds, and the previous "<100ms total" target was never derived from
+it. The budget is therefore expressed as a **scaling** obligation
+rather than an absolute:
+
+- One pass stays **under ~250ms at the top of the projected range** on
+  desktop, which is under 1% of a turn.
+- No term may scale with **awareness row count** or with total branch
+  entries. Awareness is projected at 15-60k rows at 60 chapters and is
+  the fastest-growing table in the schema; a term proportional to it
+  is the one that ends a long story.
+- Terms proportional to **happenings on the branch** are accepted but
+  budgeted, because that count is bounded by the chapter threshold.
+
+**Mobile is unmeasured.** Every figure here is desktop. The PoC's
+per-query KNN numbers under
+[Performance characteristics](#performance-characteristics--poc-findings)
+are the only mobile evidence and they predate the shipped pass, which
+issues fifteen KNN passes rather than three. Nothing has run the
+ranker on-device. Treat the mobile budget as open, not as a scaled
+copy of this table.
 
 ### Pseudocode
 
