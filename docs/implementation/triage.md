@@ -952,47 +952,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   It requires making `tokensEstimated` nullable for pre-filtered rows,
   which is a C4 trace-shape change and therefore wants a deliberate
   C4 decision pass. Surfaced by M3.4 Task 6 review (2026-08-01).
-- **The high-similarity bypass is mathematically inert under the
-  default parameter set — it can never change which rows get
-  injected.** [`retrieval.md → High-similarity bypass`](../memory/retrieval.md#high-similarity-bypass--revival-of-decayed-memories)
-  spends 48 lines specifying revival of decayed memories, and
-  [`probe.md`](../memory/probe.md#what-gets-captured--light-mode-default)
-  captures a `bypass_triggered` column for it — but with v1's defaults
-  it cannot seat a single row. The bypass is a `max`, so it only binds
-  when `sim_blend − τ_revive` beats the normal score, and that floor is
-  capped at `1.0 − 0.85 = 0.15`. Budget-fill then compares the **MMR**
-  score against `min_score_threshold`, and a first pick (empty `S`, no
-  diversity penalty) is `λ_div × score = 0.75 × 0.15 = 0.1125` — below
-  the 0.15 floor. Even at a theoretically perfect `sim_blend` of 1.0
-  _and_ the 1.3 chapter boost the ceiling is `0.75 × 0.195 = 0.14625`,
-  still short. By the MMR monotonicity property every later candidate
-  is lower, so a bypass-bound row is always `below_threshold`.
-  Confirmed empirically against the M3.4 ranker: a happening at
-  `sims [1,1,1]`, `chaptersOld 60`, against a 10,000-token budget for
-  one 30-token row yields `finalScore 0.15`, `dropReason
-"below_threshold"`, `selectedCount 0`.
-  Proximate cause is a units mismatch: `min_score_threshold` is
-  described at [`retrieval.md → Budget-fill termination`](../memory/retrieval.md#budget-fill-termination)
-  as a "cosine baseline", but it is compared against a value already
-  scaled by `λ_div` — so the effective raw-score floor for a first pick
-  is `0.15 / 0.75 = 0.2`, while `τ_revive = 0.85` caps bypass output at
-  0.15. Three knobs could resolve it — lower `τ_revive` (measured
-  boundary is `< 0.80`, not `≤`: at exactly 0.80 the comparison value
-  is `0.14999999999999997`, still under the floor in IEEE754), lower
-  `min_score_threshold`, or threshold against the raw score rather than
-  the MMR score — and choosing among them is a canon decision. M3.4's
-  ranker follows the Pseudocode exactly and is not at fault. Same shape
-  as the inert lore `priority` entry above: a documented feature
-  neutralized by the default parameter set.
-  **The mismatch is broader than the bypass.** 0.2 is only the
-  _first-pick_ floor, where `S` is empty and the diversity penalty is
-  zero. The real floor rises with that penalty: a candidate whose
-  `maxSim` to an already-selected row is 0.5 must reach a raw score of
-  `(0.15 + 0.25 × 0.5) / 0.75 ≈ 0.367` — roughly 2.4x the documented
-  0.15 — to survive. Every pick after the first, in every type, is
-  therefore held to a stricter floor than canon states; the bypass is
-  simply the case where it is provably fatal. Surfaced by M3.4 Task 6
-  (2026-08-01).
 - **`chapters_old` has no home in the capture, but the simulator is
   specified to recompute from it.**
   [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
