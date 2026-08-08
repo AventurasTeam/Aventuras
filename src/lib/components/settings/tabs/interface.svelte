@@ -15,7 +15,8 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Separator } from '$lib/components/ui/separator'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
-  import { updaterService } from '$lib/services/updater'
+  import { updaterService, UpdateError } from '$lib/services/updater'
+  import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from '@lucide/svelte'
 
   const storyWidthIndex = $derived(
@@ -129,13 +130,18 @@
     updateMessage = null
     try {
       const info = await updaterService.checkForUpdates()
+      await settings.setLastChecked(Date.now())
       if (info.available) {
-        updateMessage = `Update available: v${info.version}`
+        // Hand off to the dialog, which is the only place that can actually act on it.
+        updateNotifier.show(info)
+        updateMessage = null
       } else {
         updateMessage = "You're up to date!"
       }
     } catch (error) {
-      updateMessage = 'Failed to check for updates'
+      // Report the reason rather than a flat "failed": "no published release" and
+      // "cannot reach the server" call for completely different responses from the user.
+      updateMessage = error instanceof UpdateError ? error.message : 'Failed to check for updates.'
       console.error('[Interface] Update check failed:', error)
     } finally {
       isCheckingUpdates = false
@@ -532,26 +538,12 @@
       <div>
         <Label>Check on Startup</Label>
         <p class="text-muted-foreground text-xs">
-          Automatically check for updates when the app starts
+          Look for a new version when the app starts, and offer it if one is found
         </p>
       </div>
       <Switch
         checked={settings.updateSettings.autoCheck}
         onCheckedChange={(v) => settings.setAutoCheck(v)}
-      />
-    </div>
-
-    <!-- Auto-download Updates Toggle -->
-    <div class="flex items-center justify-between">
-      <div>
-        <Label>Auto-download Updates</Label>
-        <p class="text-muted-foreground text-xs">
-          Automatically download updates in the background
-        </p>
-      </div>
-      <Switch
-        checked={settings.updateSettings.autoDownload}
-        onCheckedChange={(v) => settings.setAutoDownload(v)}
       />
     </div>
   </div>

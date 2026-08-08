@@ -127,6 +127,17 @@ A cross-story library, separate from any single playthrough:
 - Adjustable text size (small, medium, large)
 - Word count display toggle
 
+### Updates
+
+- Optional check on startup (Settings -> Interface -> Updates), rate-limited by
+  `checkInterval`, plus a manual **Check for Updates** button
+- An available update opens a dialog with the version, release date and rendered release
+  notes — a dialog on desktop, a bottom sheet on Android
+- Desktop downloads and installs in place, with a progress bar and a restart prompt
+- **Android cannot self-update** and the dialog says so: it opens the release APK in the
+  browser and lets Android's package installer take over. See
+  [The Updater](#the-updater) for why
+
 ### Cross-Platform
 
 - Desktop (Windows, macOS, Linux)
@@ -255,6 +266,54 @@ GitHub Actions workflows in `.github/workflows/`:
 
 Both release workflows expect `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)` and the `ANDROID_KEYSTORE_*` /
 `ANDROID_KEY_*` secrets to be configured on the repository.
+
+### The Updater
+
+`src/lib/services/updater.ts` answers one question on two platforms that share no machinery
+for it. `UpdateInfo.canInstallInApp` is the flag that tells them apart, and the dialog
+(`src/lib/components/updater/UpdateDialog.svelte`) branches on it rather than on the platform.
+
+**Desktop** uses `@tauri-apps/plugin-updater`: it fetches the `latest.json` named by the
+`updater.endpoints` entry in `tauri.conf.json`, verifies its signature against the `pubkey`
+there, and installs the new build itself.
+
+**Android has no updater at all, and this is not a configuration problem.**
+`tauri-plugin-updater` declares Android support level `none`, and its `updater_os()` has
+branches for linux/macos/windows only — on Android `target_os` is `"android"`, so `check()`
+returns `UnsupportedOs` before a single request is sent. There is no install path either: an
+APK is installed by the system package installer, not by the app it replaces. The Android
+path therefore calls the GitHub Releases API directly, compares the tag against `getVersion()`
+using `src/lib/utils/version.ts`, and opens the `.apk` asset in the browser. String comparison
+is not adequate for that — `'0.10.0' > '0.9.0'` is false lexically — which is why the
+comparison is a tested module of its own.
+
+Two things must stay in step, or the platforms will offer different versions to their users:
+the `RELEASE_REPO` constant in `updater.ts` and the `updater.endpoints` URL in
+`tauri.conf.json`.
+
+**A draft release is invisible to the updater.** `release.yml` publishes with
+`releaseDraft: true`, and both paths resolve `/releases/latest`, which GitHub defines as the
+latest **published, non-pre-release** release. Until the draft is published by hand, the
+desktop endpoint 404s and the API returns the previous release — so the last step of every
+release is publishing the draft on GitHub. Nothing reaches users before that.
+
+The desktop check surfaces that state honestly rather than as a generic failure: a 404 becomes
+the `no-release` kind ("it may still be a draft"), distinct from `network` and `unsupported`.
+
+**A `.deb` install is deliberately not updated in place.** The plugin would attempt it —
+`install_deb` writes the package to a temp dir and runs `dpkg -i` through `pkexec`, falling
+back to zenity/kdialog and finally to a terminal `sudo` that a windowed app has no terminal
+for — but that chain has too many ways to end half-finished for something the user starts
+with one click, and the package manager is the thing that owns that install anyway. So the
+check reports `canInstallInApp: false` with `manualInstallReason: 'deb-package'` and the
+dialog opens the releases page instead. The install format comes from `getBundleType()`,
+which returns `null` for an unpackaged build — treated as "not a deb", so `tauri dev` still
+exercises the normal path.
+
+`.rpm` currently still installs in place, through the same privileged-helper chain.
+
+One more limit: **the Android check is unauthenticated**, so it shares GitHub's per-IP rate
+limit. A 403 is reported as a network-kind error.
 
 ### Environment Variables
 
@@ -691,6 +750,11 @@ neither workflow trigger, so they would tag and build nothing.
 
 Pushing a stable tag (`vX.Y.Z`) triggers `release.yml`; pushing a pre-release tag (`vX.Y.Z-pre.N`, via the
 `prerelease` bump type) triggers `ci.yml`. See [Continuous Integration](#continuous-integration) above.
+
+**The script does not finish the release.** `release.yml` publishes a **draft**, and a draft is
+invisible to `/releases/latest` — which is where both the desktop updater and the Android check
+look. Publishing the draft on GitHub is the step that actually ships it; until then no existing
+install will see the new version. See [The Updater](#the-updater).
 
 `scripts/version.js` holds the version arithmetic and `scripts/version.test.js` covers it
 (`vitest.config.ts` includes `scripts/**/*.test.js` for this).

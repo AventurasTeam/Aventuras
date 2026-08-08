@@ -634,7 +634,6 @@ export function getDefaultWorldStateInjectionSettings(): WorldStateInjectionSett
 export function getDefaultUpdateSettings(): UpdateSettings {
   return {
     autoCheck: true,
-    autoDownload: false,
     checkInterval: 24, // Check every 24 hours
     lastChecked: null,
   }
@@ -2916,11 +2915,6 @@ class SettingsStore {
 
   async setAutoCheck(enabled: boolean) {
     this.updateSettings.autoCheck = enabled
-    await this.saveUpdateSettings()
-  }
-
-  async setAutoDownload(enabled: boolean) {
-    this.updateSettings.autoDownload = enabled
     await this.saveUpdateSettings()
   }
 

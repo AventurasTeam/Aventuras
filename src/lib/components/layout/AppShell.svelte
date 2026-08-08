@@ -17,6 +17,7 @@
   import DebugLogModal from '$lib/components/debug/DebugLogModal.svelte'
   import SyncModal from '$lib/components/sync/SyncModal.svelte'
   import STChatImportModal from '$lib/components/modals/STChatImportModal.svelte'
+  import UpdateDialog from '$lib/components/updater/UpdateDialog.svelte'
   import { swipe } from '$lib/utils/swipe'
   import { releaseOrphanScrollLock } from '$lib/utils/scrollLock'
   import { createLogger } from '$lib/log'
@@ -292,6 +293,9 @@
 
   <!-- SillyTavern Chat Import Modal -->
   <STChatImportModal />
+
+  <!-- Update Dialog (raised by the startup check and by the Settings button alike) -->
+  <UpdateDialog />
 
   <!-- Floating Debug Button (when debug mode enabled) - draggable, high z-index -->
   {#if settings.uiSettings.debugMode}
