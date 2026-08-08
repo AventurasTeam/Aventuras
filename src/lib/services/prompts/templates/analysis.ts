@@ -268,15 +268,22 @@ Only include entries that have a clear connection to the current scene or user's
   // nothing to take, though, and the question stays where a question belongs -- at the end,
   // after what it is about.
   userContent: `# Available Entries
+The following candidate entries are available for selection. Each entry is formatted as:
+<index>. [<type>] <name>: <description preview>
+
 {{ entrySummaries }}
 
-# Current Scene
+---
+
+# Current Scene (Preceding Context)
 {{ recentContent }}
 
-# User's Input
+---
+
+# User's Action
 "{{ userInput }}"
 
-Which entries (by number) are relevant to the current scene and user input?`,
+Which entries (by index number 0, 1, 2...) are relevant to the current scene and user's action?`,
 }
 
 export const analysisTemplates: PromptTemplate[] = [

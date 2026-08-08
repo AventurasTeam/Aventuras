@@ -14,10 +14,11 @@
 /** Selection limits for `WorldStateInjector`. All exposed as Advanced Settings sliders. */
 export const WORLD_STATE_INJECTION_DEFAULTS = {
   /**
-   * Where "include the whole leftover" turns into "ask the model which of it matters".
-   * See `WorldStateInjector.buildContext`.
+   * Where "include the whole leftover" turns into "ask the model which of it matters",
+   * in words of candidate text. Measured on a 101-record world state: a live record runs
+   * ~16 words, so 500 is about the 30 records this replaced.
    */
-  llmThreshold: 30,
+  tier3WholesaleWordBudget: 500,
   /** Cap on Tier 2 (name matched). */
   maxTier2Entries: 40,
   /** Cap on Tier 3, in the branch where the LLM had to choose. */
@@ -37,7 +38,27 @@ export const ENTRY_RETRIEVAL_DEFAULTS = {
   maxTier2Entries: 20,
   /** Cap on Tier 3 (LLM selected). */
   maxTier3Entries: 30,
+  /**
+   * Where "include the whole leftover" turns into "ask the model which of it matters",
+   * in words of entry text.
+   *
+   * Higher than the world state's because a lorebook entry is a paragraph, not a line:
+   * measured at ~69 words against ~16. At 1000 a leftover of roughly fifteen entries still
+   * goes in whole, which is cheaper in latency than the call it replaces.
+   */
+  tier3WholesaleWordBudget: 1000,
 } as const
+
+/**
+ * How far the story may move before a cached Tier 3 selection is asked again, in story
+ * positions. Exclusive: a distance of exactly this many misses.
+ *
+ * The cache key already pins the caller, the candidate pool and the player's action, so a
+ * hit is the same question being asked twice — a retry, or a second pass in one turn. This
+ * only bounds how long that stays true, and a turn is exactly two positions, so 2-exclusive
+ * is "within the turn the answer was given for" and nothing beyond it.
+ */
+export const TIER3_SELECTION_CACHE_POSITIONS = 2
 
 /** Limits for the agentic retrieval loop. Exposed as an Advanced Settings slider. */
 export const AGENTIC_RETRIEVAL_DEFAULTS = {

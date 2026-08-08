@@ -22,7 +22,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
     getServicePresetId: () => 'context',
     systemServicesSettings: {
       worldStateInjection: {
-        llmThreshold: 10,
+        tier3WholesaleWordBudget: 500,
         maxEntriesPerTier: 5,
         enableLLMSelection: false,
         recentEntriesCount: 5,
@@ -140,10 +140,13 @@ describe('WorldStateInjector', () => {
 
     beforeEach(() => runTier3Selection.mockReset())
 
-    it('includes everything left over when it fits under the threshold', async () => {
+    it('includes everything left over when it fits under the budget', async () => {
       // The whole point of the fix: a small leftover used to be dropped outright, so a
       // small story was served *worse* than a large one.
-      const small = new WorldStateInjector({ llmThreshold: 30, enableLLMSelection: true })
+      const small = new WorldStateInjector({
+        tier3WholesaleWordBudget: 1000,
+        enableLLMSelection: true,
+      })
 
       const result = await small.buildContext(worldState, '', [])
 
@@ -153,7 +156,10 @@ describe('WorldStateInjector', () => {
 
     it('does so without an LLM call even when LLM selection is switched off', async () => {
       // Including what is already in hand is not a selection, so the switch does not gate it.
-      const off = new WorldStateInjector({ llmThreshold: 30, enableLLMSelection: false })
+      const off = new WorldStateInjector({
+        tier3WholesaleWordBudget: 1000,
+        enableLLMSelection: false,
+      })
 
       const result = await off.buildContext(worldState, '', [])
 
@@ -161,11 +167,41 @@ describe('WorldStateInjector', () => {
       expect(runTier3Selection).not.toHaveBeenCalled()
     })
 
-    it('asks the model which of the leftovers matter once there are too many to include', async () => {
-      runTier3Selection.mockResolvedValue({ selectedIds: new Set(['c2']) })
-      const over = new WorldStateInjector({ llmThreshold: 2, enableLLMSelection: true })
+    const worldStateLarge = {
+      ...worldState,
+      items: [
+        ...items,
+        {
+          id: 'i3',
+          name: 'Ring of Power',
+          location: 'ground',
+          equipped: false,
+          description: 'Gold ring',
+        },
+        {
+          id: 'i4',
+          name: 'Magic Wand',
+          location: 'ground',
+          equipped: false,
+          description: 'Wood wand',
+        },
+        {
+          id: 'i5',
+          name: 'Iron Helmet',
+          location: 'ground',
+          equipped: false,
+          description: 'Steel cap',
+        },
+      ] as Item[],
+    }
 
-      const result = await over.buildContext(worldState, '', [])
+    it('asks the model which of the leftovers matter once there are too many to include', async () => {
+      // '0' is an index into the candidate list, which `collectRemainingCandidates`
+      // groups by type: [Borin, Iron Mountain, Shield of Dawn, Ring, Wand, Helmet].
+      runTier3Selection.mockResolvedValue({ selectedIndices: new Set(['0']) })
+      const over = new WorldStateInjector({ tier3WholesaleWordBudget: 5, enableLLMSelection: true })
+
+      const result = await over.buildContext(worldStateLarge, '', [])
 
       expect(runTier3Selection).toHaveBeenCalledTimes(1)
       expect(result.tier3.map((e) => e.name)).toEqual(['Borin'])
@@ -174,17 +210,20 @@ describe('WorldStateInjector', () => {
     it('labels its debug entries distinctly from the lorebook selection', async () => {
       // Both selections used to log under one name, so the API Debug Logs could not tell
       // them apart -- and the view filters by that name, so neither could be read alone.
-      runTier3Selection.mockResolvedValue({ selectedIds: new Set() })
-      const over = new WorldStateInjector({ llmThreshold: 2, enableLLMSelection: true })
+      runTier3Selection.mockResolvedValue({ selectedIndices: new Set() })
+      const over = new WorldStateInjector({ tier3WholesaleWordBudget: 5, enableLLMSelection: true })
 
-      await over.buildContext(worldState, '', [])
+      await over.buildContext(worldStateLarge, '', [])
 
       expect(runTier3Selection.mock.calls[0][0].serviceLabel).toBe('tier3-world-state-selection')
     })
 
     it('drops the leftovers when there are too many and selection is off', async () => {
       // No third option: too much to include, and no permission to choose.
-      const over = new WorldStateInjector({ llmThreshold: 2, enableLLMSelection: false })
+      const over = new WorldStateInjector({
+        tier3WholesaleWordBudget: 5,
+        enableLLMSelection: false,
+      })
 
       const result = await over.buildContext(worldState, '', [])
 
@@ -194,7 +233,10 @@ describe('WorldStateInjector', () => {
 
     it('leaves Tier 3 empty when tiers 1 and 2 covered everything', async () => {
       const covered = { characters: [], locations: [], items: [], storyBeats: [] }
-      const injector3 = new WorldStateInjector({ llmThreshold: 30, enableLLMSelection: true })
+      const injector3 = new WorldStateInjector({
+        tier3WholesaleWordBudget: 1000,
+        enableLLMSelection: true,
+      })
 
       const result = await injector3.buildContext(covered, '', [])
 
@@ -236,7 +278,7 @@ describe('WorldStateInjector', () => {
       // Below the threshold the leftover goes in as-is: "include what is left over" and
       // "the first N of it" cannot both be true.
       const injector2 = new WorldStateInjector({
-        llmThreshold: 30,
+        tier3WholesaleWordBudget: 1000,
         maxTier3Entries: 5,
         enableLLMSelection: true,
       })
@@ -260,8 +302,8 @@ describe('WorldStateInjector', () => {
       const injector2 = new WorldStateInjector({ maxTier2Entries: 40, maxTier3Entries: 50 })
 
       // Turn 1 activates all 20 through Tier 2; turn 2 mentions none of them.
-      await injector2.buildContext(pool, mentions, [], undefined, tracker)
-      const result = await injector2.buildContext(pool, '', [], undefined, tracker)
+      await injector2.buildContext(pool, mentions, [], { activationTracker: tracker })
+      const result = await injector2.buildContext(pool, '', [], { activationTracker: tracker })
 
       expect(result.tier1.filter((e) => e.metadata?.sticky)).toHaveLength(20)
     })
@@ -316,6 +358,11 @@ describe('WorldStateInjector', () => {
   })
 
   describe('sticky entries are relevance, not state', () => {
+    /** Left uncovered by tiers 1 and 2 in this fixture. */
+    const uncoveredNames = ['Borin', 'Iron Mountain', 'Shield of Dawn']
+
+    beforeEach(() => runTier3Selection.mockReset())
+
     /** Activate `names` on one turn, then run a turn mentioning nothing. */
     async function afterStickyTurn(state: typeof worldState, names: string) {
       const positions = new Map<string, number>()
@@ -324,9 +371,12 @@ describe('WorldStateInjector', () => {
         recordActivation: (id: string, p: number) => positions.set(id, p),
         currentPosition: 0,
       }
-      const local = new WorldStateInjector({ enableLLMSelection: false, llmThreshold: 0 })
-      await local.buildContext(state, names, [], undefined, tracker)
-      return local.buildContext(state, '', [], undefined, tracker)
+      const local = new WorldStateInjector({
+        enableLLMSelection: false,
+        tier3WholesaleWordBudget: 0,
+      })
+      await local.buildContext(state, names, [], { activationTracker: tracker })
+      return local.buildContext(state, '', [], { activationTracker: tracker })
     }
 
     it('never lists a sticky item as carried', async () => {
@@ -369,6 +419,90 @@ describe('WorldStateInjector', () => {
       expect(result.contextBlock).toContain('[INVENTORY]\nSunblade')
       expect(result.contextBlock).toContain('[ACTIVE THREADS]')
       expect(result.contextBlock).toContain('Save the village')
+    })
+
+    // The helper above pins `tier3WholesaleWordBudget: 0`, so it can never reach the
+    // wholesale branch — which is where the whole leftover lands on any story under the
+    // budget, i.e. on most of them.
+    it('does not make a wholesale Tier 3 sticky', async () => {
+      // Wholesale means "the leftover was small", which says nothing about relevance.
+      // Recording it would activate every uncovered entity on every turn, so Tier 1 would
+      // swallow the pool and stickiness would never expire. `EntryRetrievalService` has
+      // always excluded it; this side used to say it mirrored that, and did not.
+      const positions = new Map<string, number>()
+      const tracker = {
+        getLastActivation: (id: string) => positions.get(id) ?? null,
+        recordActivation: (id: string, p: number) => positions.set(id, p),
+        currentPosition: 4,
+      }
+      const generous = new WorldStateInjector({
+        tier3WholesaleWordBudget: 1000,
+        enableLLMSelection: true,
+      })
+
+      const first = await generous.buildContext(worldState, '', [], {
+        activationTracker: tracker,
+      })
+
+      expect(first.tier3.map((e) => e.name).sort()).toEqual([...uncoveredNames].sort())
+      expect(runTier3Selection).not.toHaveBeenCalled()
+      for (const entry of first.tier3) {
+        expect(positions.has(entry.id)).toBe(false)
+      }
+
+      // And so nothing carries into the next turn as Tier 1 sticky.
+      const next = await generous.buildContext(worldState, '', [], { activationTracker: tracker })
+      expect(next.tier1.filter((e) => e.metadata?.sticky)).toHaveLength(0)
+    })
+
+    // The wholesale branch is the only place the Tier 2 list is used on its own, so a
+    // regression that recorded *nothing* there would satisfy the test above and go unseen.
+    it('still records Tier 2 in the wholesale branch', async () => {
+      const positions = new Map<string, number>()
+      const tracker = {
+        getLastActivation: (id: string) => positions.get(id) ?? null,
+        recordActivation: (id: string, p: number) => positions.set(id, p),
+        currentPosition: 4,
+      }
+      const generous = new WorldStateInjector({
+        tier3WholesaleWordBudget: 1000,
+        enableLLMSelection: true,
+      })
+
+      // Naming Borin pulls him into Tier 2; the rest of the leftover goes in wholesale.
+      const result = await generous.buildContext(worldState, 'Borin, are you ready?', [], {
+        activationTracker: tracker,
+      })
+
+      expect(result.tier2.map((e) => e.name)).toContain('Borin')
+      expect(result.tier3.length).toBeGreaterThan(0)
+      for (const entry of result.tier2) {
+        expect(positions.get(entry.id)).toBe(4)
+      }
+      for (const entry of result.tier3) {
+        expect(positions.has(entry.id)).toBe(false)
+      }
+    })
+
+    it('still makes an LLM-selected Tier 3 sticky', async () => {
+      // The other half of the rule: a model was paid to call this relevant, and stickiness
+      // is what makes relevance outlive the turn that noticed it.
+      const positions = new Map<string, number>()
+      const tracker = {
+        getLastActivation: (id: string) => positions.get(id) ?? null,
+        recordActivation: (id: string, p: number) => positions.set(id, p),
+        currentPosition: 4,
+      }
+      runTier3Selection.mockResolvedValue({ selectedIndices: new Set(['0']) })
+      const tight = new WorldStateInjector({
+        tier3WholesaleWordBudget: 0,
+        enableLLMSelection: true,
+      })
+
+      const result = await tight.buildContext(worldState, '', [], { activationTracker: tracker })
+
+      expect(result.tier3).toHaveLength(1)
+      expect(positions.get(result.tier3[0].id)).toBe(4)
     })
   })
 })

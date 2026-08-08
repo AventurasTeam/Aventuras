@@ -30,8 +30,8 @@ const MAX_PRIORITY = 80
 export interface Stickiness {
   /** Fading priority inside the shared band. */
   priority: number
-  /** Positions left before it drops out, for the human-readable reason string. */
-  turnsLeft: number
+  /** Story positions left before it drops out. Two per turn — see the module note. */
+  positionsLeft: number
 }
 
 /**
@@ -59,6 +59,6 @@ export function resolveStickiness(
 
   return {
     priority: Math.round(MIN_PRIORITY + fade * (MAX_PRIORITY - MIN_PRIORITY)),
-    turnsLeft: duration - elapsed,
+    positionsLeft: duration - elapsed,
   }
 }

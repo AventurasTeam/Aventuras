@@ -1,19 +1,14 @@
 /**
  * Tier 3 Selection
  *
- * Shared LLM-based candidate selection step used by both `EntryRetrievalService`
- * (lorebook `Entry[]` candidates) and `WorldStateInjector` (live `Character`/
- * `Location`/`Item`/`StoryBeat` candidates). Only the LLM call itself -- prompt
- * rendering, the `generateStructured` call, and mapping the result back onto the
- * candidate list -- is identical between the two callers. How candidates are
- * built, and what priority/cap is applied to the result, differs per caller and
- * intentionally stays there.
+ * The LLM selection step shared by `EntryRetrievalService` (lorebook entries) and
+ * `WorldStateInjector` (live world state). Only the call itself is shared: how candidates
+ * are built, and what cap and priority the result gets, stays with each caller.
  *
- * *Whether it runs at all* also differs, though the two now agree on the principle: nothing
- * uncovered is ever silently dropped. `EntryRetrievalService` asks the model about any
- * leftover at all; `WorldStateInjector` includes a small leftover wholesale and only asks
- * once there is more of it than `llmThreshold` (default 30) -- for it the call is an
- * alternative to including everything, not a precondition for including anything.
+ * Both agree that nothing uncovered is silently dropped — each has a "small leftover"
+ * branch that includes it without asking, and calls the model only for what is too big to
+ * include. Both measure "too big" in words of candidate text, against their own
+ * `tier3WholesaleWordBudget`; the budgets differ because their candidates do.
  */
 
 import type { StoryEntry } from '$lib/types'
@@ -22,6 +17,7 @@ import { createLogger } from '$lib/log'
 import { entitySelectionSchema } from '../sdk/schemas/context'
 import { generateStructured } from '../sdk/generate'
 import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
+import { TIER3_SELECTION_CACHE_POSITIONS } from '../core/defaults'
 
 const log = createLogger('Tier3Selection')
 
@@ -38,7 +34,7 @@ export interface Tier3Candidate<TType extends string = string> {
 }
 
 export interface Tier3SelectionResult {
-  selectedIds: Set<string>
+  selectedIndices: Set<string>
   reasoning?: string
 }
 
@@ -57,15 +53,95 @@ export interface Tier3SelectionRequest {
    * profile is used; that is `presetId`.
    */
   serviceLabel: string
+  /**
+   * The entry `userInput` was read from, so the prompt does not render the same action
+   * twice. Matched by id rather than by text: translation rewrites the stored content, so
+   * a text comparison stops recognising it exactly when the two diverge.
+   */
+  userActionEntryId?: string
+  /**
+   * Current story position, used to age the selection cache. Omit to bypass the cache — a
+   * caller that cannot say "when" cannot say whether a hit is still fresh.
+   */
+  currentPosition?: number
   signal?: AbortSignal
+}
+
+interface CachedSelection {
+  /** What this answer is an answer to. Compared, not looked up — see below. */
+  key: string
+  position: number
+  result: Tier3SelectionResult
+}
+
+/**
+ * The last selection per caller. Module-level because the services are constructed once by
+ * `ServiceFactory`, and the cache has to outlive a turn to be worth anything.
+ *
+ * Keyed by caller and holding one entry each, rather than keyed by the question: only the
+ * most recent answer is ever reusable — the window is `TIER3_SELECTION_CACHE_POSITIONS`
+ * positions wide — so keeping the others is growth with no hit rate behind it. Each key is
+ * every candidate id concatenated, several KB on a large lorebook, retained for the whole
+ * session on a WebView heap that is a hard cap on Android.
+ *
+ * Reset on story switch: entry ids are UUIDs and cannot collide, but a stale entry left
+ * behind would still be answering about the wrong story if the same pool came back.
+ */
+const selectionCache = new Map<string, CachedSelection>()
+
+/**
+ * What a cached answer is an answer *to*: this caller, this pool, in this order, for this
+ * player action.
+ *
+ * Order matters because the answer is in index space — `"3"` means "the fourth candidate
+ * in the list the prompt numbered". An order-independent key would resolve those indices
+ * against a different ordering and name entirely different entries, which is reachable:
+ * `WorldStateInjector` builds candidates from world state the classifier rewrites.
+ *
+ * The input matters because the answer is a judgement about a scene, not about the pool.
+ * Keying on it means a reused answer is only ever reused for the same question — which is
+ * what a retry or a second pass in the same turn asks — instead of answering a new action
+ * with the previous one's verdict.
+ *
+ * The recent entries matter for exactly the same reason, and were missing. The prompt is
+ * built from both, so keyed on the action alone two situations sharing a repeated action
+ * ("continue", "wait") and an unmoved pool asked the same question as far as the cache
+ * could see. Reachable across consecutive turns, and more easily still across a branch
+ * switch, where two branches sit at the same position with the same lorebook and only
+ * their history differs. Ids, not text: a slice of UUIDs is what distinguishes one history
+ * from another, and translation rewrites the stored content without changing which entries
+ * these are.
+ *
+ * With those in, the key is complete by content — the position window and the `clear` calls
+ * are belt-and-braces rather than the thing standing between the cache and a wrong answer.
+ */
+function cacheKeyFor(
+  serviceLabel: string,
+  candidates: Tier3Candidate[],
+  userInput: string,
+  recentEntries: StoryEntry[],
+  recentEntriesCount: number,
+): string {
+  return [
+    serviceLabel,
+    userInput,
+    // The same slice the prompt is built from, so the key moves exactly when the prompt does.
+    ...recentEntries.slice(-recentEntriesCount).map((e) => e.id),
+    // Separator: without it a trailing history id and a leading candidate id could
+    // rearrange into the same string across two different splits.
+    '',
+    ...candidates.map((c) => c.id),
+  ].join('\u0000')
+}
+
+/** Exported for tests, and called when the story or the branch changes. */
+export function clearTier3SelectionCache(): void {
+  selectionCache.clear()
 }
 
 /**
  * Ask the LLM to select the most relevant candidates for this turn.
- * Returns `null` on failure -- both current callers treat that as "no Tier 3 entries".
- *
- * Takes an object: it had six positional parameters before this one, and a seventh would
- * have made the call sites unreadable.
+ * Returns `null` on failure — both callers treat that as "no Tier 3 entries".
  */
 export async function runTier3Selection({
   candidates,
@@ -74,11 +150,45 @@ export async function runTier3Selection({
   recentEntriesCount,
   presetId,
   serviceLabel,
+  userActionEntryId,
+  currentPosition,
   signal,
 }: Tier3SelectionRequest): Promise<Tier3SelectionResult | null> {
   if (candidates.length === 0) {
-    return { selectedIds: new Set() }
+    return { selectedIndices: new Set() }
   }
+
+  const cacheKey = cacheKeyFor(
+    serviceLabel,
+    candidates,
+    userInput,
+    recentEntries,
+    recentEntriesCount,
+  )
+  const cached = currentPosition === undefined ? undefined : selectionCache.get(serviceLabel)
+  if (
+    cached &&
+    currentPosition !== undefined &&
+    cached.key === cacheKey &&
+    // Strictly inside the window, not on its edge. A turn is exactly two positions, so
+    // `<=` let a hit land on the *next* turn: same action text ("continue", "wait"), an
+    // unchanged candidate pool, and last turn's verdict answering this turn's scene.
+    // Either direction, because a retry moves the position back and is the same question.
+    Math.abs(currentPosition - cached.position) < TIER3_SELECTION_CACHE_POSITIONS
+  ) {
+    log('Tier 3 selection reused from cache', {
+      serviceLabel,
+      candidates: candidates.length,
+      selected: cached.result.selectedIndices.size,
+    })
+    return cached.result
+  }
+
+  // `recentEntries` ends with the action in `userInput`, and the prompt renders both.
+  // Sending it twice reads as emphasis the player never gave.
+  const filteredRecent = userActionEntryId
+    ? recentEntries.filter((e) => e.id !== userActionEntryId)
+    : recentEntries
 
   const entrySummaries = candidates
     .map(
@@ -89,7 +199,7 @@ export async function runTier3Selection({
 
   const ctx = new ContextBuilder()
   ctx.add({
-    recentContent: recentContent(recentEntries, recentEntriesCount, AS_PROSE),
+    recentContent: recentContent(filteredRecent, recentEntriesCount, AS_PROSE, true),
     userInput,
     entrySummaries,
   })
@@ -100,37 +210,87 @@ export async function runTier3Selection({
       { presetId, schema: entitySelectionSchema, system, prompt, signal },
       serviceLabel,
     )
-    return { selectedIds: new Set(result.selectedIds), reasoning: result.reasoning }
+    const selection = {
+      selectedIndices: new Set(result.selectedIndices),
+      reasoning: result.reasoning,
+    }
+    if (currentPosition !== undefined) {
+      selectionCache.set(serviceLabel, {
+        key: cacheKey,
+        position: currentPosition,
+        result: selection,
+      })
+    }
+    return selection
   } catch (error) {
+    // Not cached: a failure says nothing about which candidates matter, and storing it
+    // would suppress the retry that might succeed.
     log('Tier 3 LLM selection failed', error)
     return null
   }
 }
 
 /**
- * Map an LLM selection result back onto the original candidate list, matching by
- * id (preferred) or by numeric index (some models return indices instead of ids).
- * `candidates` must be in the same order used to build the prompt in `runTier3Selection`.
+ * Words the wholesale branch would put in the prompt for `entries`.
  *
- * Returned in the order the model listed them, not in candidate order. Both callers cap
- * the result, and candidate order is an artifact of how the prompt was assembled -- for
- * `WorldStateInjector` it is grouped by type, so a cap applied to it drops whole
- * categories (every story beat, always) regardless of what the model thought mattered.
- * A model's own ordering is at least a claim about relevance. `Set` preserves insertion
- * order, so this is information already in hand rather than a new contract.
+ * Prices what the context block emits — `- <name>: <description>` per entry, with the
+ * description truncated to `maxWordsPerEntry` — so the name counts too and nothing past
+ * the truncation point does.
+ */
+export function countWholesaleWords(
+  entries: { name?: string | null; description?: string | null }[],
+  maxWordsPerEntry = 0,
+): number {
+  const wordsIn = (text: string | null | undefined) =>
+    text?.trim() ? text.trim().split(/\s+/).length : 0
+
+  let total = 0
+  for (const entry of entries) {
+    const description = wordsIn(entry.description)
+    total +=
+      wordsIn(entry.name) +
+      (maxWordsPerEntry > 0 ? Math.min(description, maxWordsPerEntry) : description)
+  }
+  return total
+}
+
+/**
+ * The prompt numbers the candidates and never renders an id, so the answer is an index.
+ * The listing format (`0. [type] Name`) invites `"1."`, `"#1"` and `"[1]"` back, and each
+ * is unambiguous once the only question is which digits.
+ */
+function extractIndex(raw: string): number | null {
+  const match = /\d+/.exec(String(raw))
+  if (!match) return null
+  const index = Number.parseInt(match[0], 10)
+  return Number.isSafeInteger(index) ? index : null
+}
+
+/**
+ * Map a selection result back onto the candidate list by index. `candidates` must be in the
+ * order `runTier3Selection` built the prompt from.
+ *
+ * Returned in the model's order, not candidate order: both callers cap the result, and
+ * candidate order is an artifact of assembly — `WorldStateInjector` groups by type, so a
+ * cap applied to it drops whole categories regardless of relevance.
  */
 export function resolveTier3Selection<T extends { id: string }>(
   candidates: T[],
   result: Tier3SelectionResult,
 ): T[] {
-  const rank = new Map([...result.selectedIds].map((id, order) => [id, order]))
+  const selected: T[] = []
+  const seen = new Set<number>()
 
-  const selected: { candidate: T; rank: number }[] = []
-  for (let i = 0; i < candidates.length; i++) {
-    const candidate = candidates[i]
-    const matched = rank.get(candidate.id) ?? rank.get(i.toString())
-    if (matched !== undefined) selected.push({ candidate, rank: matched })
+  for (const raw of result.selectedIndices) {
+    const index = extractIndex(raw)
+    if (index === null) {
+      log('Tier 3 selection dropped an unparseable entry', { raw })
+      continue
+    }
+    if (index < 0 || index >= candidates.length || seen.has(index)) continue
+    seen.add(index)
+    selected.push(candidates[index])
   }
 
-  return selected.sort((a, b) => a.rank - b.rank).map((s) => s.candidate)
+  return selected
 }

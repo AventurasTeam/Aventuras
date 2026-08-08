@@ -35,8 +35,8 @@ describe('resolveStickiness', () => {
   })
 
   it('reports how much of the window is left', () => {
-    expect(resolveStickiness(trackerAt(5), 'x', 5, 3)?.turnsLeft).toBe(3)
-    expect(resolveStickiness(trackerAt(5), 'x', 8, 3)?.turnsLeft).toBe(0)
+    expect(resolveStickiness(trackerAt(5), 'x', 5, 3)?.positionsLeft).toBe(3)
+    expect(resolveStickiness(trackerAt(5), 'x', 8, 3)?.positionsLeft).toBe(0)
   })
 
   it('keeps a longer duration alive longer, at the same freshness', () => {

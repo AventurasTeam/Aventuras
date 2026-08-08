@@ -1,6 +1,8 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { ui } from '$lib/stores/ui.svelte'
+  import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
+  import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
+  import { countTokens } from '$lib/services/tokenizer'
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import type { EntryMetadata } from '$lib/types'
@@ -248,15 +250,8 @@
           story.getChapterEntries.bind(story),
           story.chapterReadBudget,
         ),
-      buildWorldStateContext: (worldState, userInput, recentEntries, signal, activationTracker) =>
-        aiService.buildWorldStateContext(
-          worldState,
-          userInput,
-          recentEntries,
-          undefined,
-          signal,
-          activationTracker,
-        ),
+      buildWorldStateContext: (worldState, userInput, recentEntries, options) =>
+        aiService.buildWorldStateContext(worldState, userInput, recentEntries, undefined, options),
       getRelevantLorebookEntries: aiService.getRelevantLorebookEntries.bind(aiService),
       streamNarrative: aiService.streamNarrative.bind(aiService),
       classifyResponse: aiService.classifyResponse.bind(aiService),
@@ -423,6 +418,26 @@
       settings.experimentalFeatures.generationNotifications
     ) {
       await sendGenerationNotification('', false)
+    }
+  }
+
+  /**
+   * The key a retrieval result would be stored under right now.
+   *
+   * Call it once the entries are in the state generation will run from, which always means
+   * *after* the user action row exists: the write site captures `story.entries.length`
+   * inside `generateResponse`, by which point `addEntry` (fresh turn) or the restore
+   * (retry, regenerate) has already put it there. Called any earlier it computes a position
+   * one lower than the stored key and can never match.
+   */
+  function retrievalKeyFor(actionContent: string): RetrievalCacheKey | null {
+    const current = story.currentStory
+    if (!current) return null
+    return {
+      storyId: current.id,
+      branchId: current.currentBranchId ?? null,
+      position: story.entries.length,
+      actionContent,
     }
   }
 
@@ -608,8 +623,23 @@
 
         if (event.type === 'phase_complete' && event.phase === 'retrieval') {
           const retrievalResult = event.result as RetrievalResult | undefined
-          ui.setLastLorebookRetrieval(retrievalResult?.lorebookRetrievalResult ?? null)
-          ui.setLastRetrievalResult(retrievalResult ?? null)
+          ui.setLastLorebookRetrieval(
+            retrievalResult?.lorebookRetrievalResult ?? null,
+            retrievalResult?.worldStateRetrievalResult ?? null,
+          )
+          // Kept for the narration entry below: the in-memory copy dies with the session.
+          generationMeta.retrievalSnapshot =
+            toRetrievalSnapshot(
+              retrievalResult?.lorebookRetrievalResult,
+              retrievalResult?.worldStateRetrievalResult,
+              countTokens,
+            ) ?? undefined
+          ui.setLastRetrievalResult(retrievalResult ?? null, {
+            storyId: currentStoryRef.id,
+            branchId: currentStoryRef.currentBranchId ?? null,
+            position: storyPosition,
+            actionContent: userActionContent,
+          })
         }
 
         if (event.type === 'narrative_chunk') {
@@ -964,7 +994,11 @@
     emitUserInput(content, isCreativeMode ? 'direction' : forceFreeMode ? 'free' : actionType)
     await tick()
 
-    await generateResponse(userActionEntry.id, content)
+    // `promptContent`, not the raw `content`: with translation on the two differ, and the
+    // entry the narrator reads holds `promptContent`. Passing the raw text here left
+    // retrieval and classification working from a different wording than the narration —
+    // and the retry path already passes `promptContent`, so the two disagreed.
+    await generateResponse(userActionEntry.id, promptContent)
   }
 
   async function handleStopGeneration() {
@@ -1081,9 +1115,14 @@
       )
     }
 
+    // The rewind above put the story back exactly where the previous turn's retrieval was
+    // computed, so that result is still the right one — same branch, same position, same
+    // action. Read after the undo, since the key is position-sensitive.
+    const cachedRetrieval = retrievalKeyFor(userActionEntry.content)
     await generateResponse(userActionEntry.id, userActionEntry.content, {
       countStyleReview: false,
       styleReviewSource: 'regenerate',
+      cachedRetrievalResult: cachedRetrieval ? ui.retrievalResultFor(cachedRetrieval) : null,
     })
   }
 
@@ -1101,18 +1140,9 @@
 
     const storyId = story.currentStory.id
 
-    // Captured before the clear below, which is what makes the reuse at the bottom of this
-    // function possible at all: `ui.lastRetrievalResult` is read there, and nothing between
-    // here and there ever writes it back (retryService is handed setLastLorebookRetrieval,
-    // not setLastRetrievalResult). Reading the store at the call site returned the null set
-    // on the next line, so every retry silently re-ran retrieval from scratch -- an entire
-    // agentic loop, now that agentic is the default mode.
-    const cachedRetrieval = ui.lastRetrievalResult
-
     ui.clearGenerationError()
     ui.clearSuggestions(storyId)
     ui.clearActionChoices(storyId)
-    ui.setLastRetrievalResult(null)
 
     const result = await retryService.handleRetryLastMessage(
       backup,
@@ -1153,12 +1183,16 @@
     emitUserInput(backup.userActionContent, isCreativeMode ? 'direction' : backup.actionType)
     await tick()
 
+    // Read here rather than before the rewind: the key carries the position, so it only
+    // matches once the restore has put the story back where retrieval ran.
+    const cacheKey = retrievalKeyFor(promptContent)
+
     ui.setRetryingLastMessage(true)
     try {
       await generateResponse(userActionEntry.id, promptContent, {
         countStyleReview: false,
         styleReviewSource: 'retry-last-message',
-        cachedRetrievalResult: cachedRetrieval,
+        cachedRetrievalResult: cacheKey ? ui.retrievalResultFor(cacheKey) : null,
       })
     } finally {
       ui.setRetryingLastMessage(false)

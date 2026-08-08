@@ -122,7 +122,7 @@ const loreManagementPromptTemplate: PromptTemplate = {
 Your tasks:
 1. Identify important characters, locations, items, factions, and concepts that appear in the story but have no entry
 2. Find entries that are outdated or incomplete based on story events
-3. Identify redundant entries that should be merged
+3. **Scan for and clean up duplicate or redundant entries**: Look for entries with overlapping scope, variations of names, or titles referring to the same subject
 4. Update relationship statuses and character states
 
 Guidelines:
@@ -130,7 +130,7 @@ Guidelines:
 - Ask specific questions when querying chapters (e.g., "What did [character] reveal?" not "Give me the full content")
 - Be conservative - only create entries for elements that are genuinely important to the story
 - Use exact names from the story text
-- When merging, combine all relevant information
+- **Deduplication & Merging Rule**: When two entries refer to the same subject (e.g. name variations, titles, or duplicate concepts), consolidate all descriptions, aliases, and keywords into the primary entry using \`update_entry\`, then call \`delete_entry\` on the duplicate entry.
 - Focus on facts that would help maintain story consistency
 - Prefer targeted updates (e.g., search/replace) instead of rewriting long descriptions
 
@@ -143,7 +143,7 @@ Use your tools to review the story and make necessary changes. When finished, ca
 Please review the story content and identify:
 1. Important elements that should have entries but don't
 2. Entries that need updating based on story events
-3. Redundant or duplicate entries that should be merged
+3. **Duplicate or redundant entries that should be merged/deleted**: Consolidate information into the main entry with \`update_entry\` and remove the duplicate with \`delete_entry\`.
 
 Use the available tools to make necessary changes, then call finish_lore_management when done.`,
 }

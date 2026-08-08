@@ -20,6 +20,7 @@ export function recentContent(
   entries: StoryEntry[],
   count: number,
   separator: ' ' | '\n\n',
+  withRoles = false,
 ): string {
   // `slice(-0)` is `slice(0)` -- the whole array, not none of it. Every caller today is
   // bounded by a slider with a minimum of 2, or passes `entries.length`, so this never
@@ -27,10 +28,35 @@ export function recentContent(
   // which is the worst possible direction for an off-by-nothing to go.
   if (count <= 0) return ''
 
-  return entries
-    .slice(-count)
-    .map((e) => e.content)
-    .join(separator)
+  const sliced = entries.slice(-count)
+  if (!withRoles) {
+    return sliced.map((e) => e.content).join(separator)
+  }
+
+  return sliced.map((e) => `${roleLabel(e.type)}: ${e.content}`).join(separator)
+}
+
+/**
+ * What each entry type is called when the text is labelled for a model to read.
+ *
+ * A `Record` over the union, so a new entry type is a compile error here rather than an
+ * internal identifier appearing in a prompt. `retry` is an alternative narration and is
+ * labelled as one: a model told it was a retry treats the re-roll as an event.
+ */
+const ROLE_LABELS: Record<StoryEntry['type'], string> = {
+  user_action: '[Player Action]',
+  narration: '[Narrator]',
+  retry: '[Narrator]',
+  system: '[System Note]',
+}
+
+/**
+ * The fallback is not dead code: these rows come out of SQLite, where the column is a bare
+ * `TEXT` and an older save can hold a type the union says is impossible. `[Narrator]` is
+ * the safe guess — `[Player Action]` would assert the player said something.
+ */
+function roleLabel(type: StoryEntry['type']): string {
+  return ROLE_LABELS[type] ?? ROLE_LABELS.narration
 }
 
 /** Separator for text that will be pattern-matched, not read. */
