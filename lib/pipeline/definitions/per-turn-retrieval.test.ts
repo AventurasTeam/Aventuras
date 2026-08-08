@@ -674,6 +674,7 @@ describe('retrieval phase — diagnostics', () => {
               tokensUsed: 0,
               typeBudget: 3,
             },
+            pool: [],
           },
         },
       }),

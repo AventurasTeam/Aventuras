@@ -23,6 +23,7 @@ function rankedBundle(selected: readonly Candidate[]): RankedType {
       tokensUsed: 0,
       typeBudget: 0,
     },
+    pool: selected,
   }
 }
 

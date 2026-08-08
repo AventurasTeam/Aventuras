@@ -87,6 +87,18 @@ export type CandidateTrace = {
   simBlend: number
   recencyFactor: number
   pinSignal: number
+  /** Clamped at the same point the decay exponent reads it, so a replay
+   *  recomputing recency_factor cannot diverge on a negative input. */
+  chaptersOld: number
+  /**
+   * The exact string the token estimate was measured on. Null for a
+   * pre-filtered row, which carries no token estimate either — it can never be
+   * seated, so neither is ever read.
+   */
+  renderedText: string | null
+  /** Happenings only. score() forces pinSignal 0 and recencyFactor 1 on these,
+   *  which a captured pin_signal of 0 cannot be distinguished from. */
+  commonKnowledge?: boolean
   kwBoostValue: number
   chapterBoostApplied: boolean
   bypassTriggered: boolean
@@ -112,6 +124,12 @@ export type RankedType = {
   selected: readonly Candidate[]
   traces: readonly CandidateTrace[]
   funnel: PoolFunnel
+  /**
+   * Every row that entered the pool, in input order. `selected` holds only the
+   * seated ones, so a deep probe capture — which stores a vector per pool row —
+   * has nowhere else to read them from.
+   */
+  pool: readonly Candidate[]
 }
 
 export type QueryWeights = { action: number; digest: number; prose: number }

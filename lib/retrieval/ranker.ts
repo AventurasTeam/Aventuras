@@ -34,6 +34,7 @@ type Scored = {
   simBlend: number
   recencyFactor: number
   pinSignal: number
+  chaptersOld: number
   kwBoostValue: number
   chapterBoostApplied: boolean
   bypassTriggered: boolean
@@ -105,6 +106,7 @@ function score(
     simBlend,
     recencyFactor,
     pinSignal,
+    chaptersOld,
     kwBoostValue,
     chapterBoostApplied,
     bypassTriggered,
@@ -140,6 +142,9 @@ function trace(
     simBlend: s.simBlend,
     recencyFactor: s.recencyFactor,
     pinSignal: s.pinSignal,
+    chaptersOld: s.chaptersOld,
+    renderedText: tokensEstimated === null ? null : s.candidate.renderedText,
+    ...(s.candidate.kind === 'happening' ? { commonKnowledge: s.candidate.commonKnowledge } : {}),
     kwBoostValue: s.kwBoostValue,
     chapterBoostApplied: s.chapterBoostApplied,
     bypassTriggered: s.bypassTriggered,
@@ -220,6 +225,7 @@ export function rankPerType(
       tokensUsed: budget - remaining,
       typeBudget: budget,
     },
+    pool,
   }
 }
 

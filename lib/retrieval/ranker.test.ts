@@ -594,3 +594,60 @@ describe('C4 — ranker purity', () => {
     expect(valueSource(file)).not.toMatch(/\bIntl\.|toLocale[A-Z]/)
   })
 })
+
+describe('replay-facing trace fields', () => {
+  it('traces the clamped chaptersOld the decay exponent read', () => {
+    const out = rankPerType(
+      [candidate({ id: 'hap_1', chaptersOld: -3 })],
+      'happenings',
+      10_000,
+      base,
+    )
+
+    // Clamped — a raw -3 would have flipped decay into growth, and a replay
+    // recomputing from -3 would not reproduce this row's recency_factor.
+    expect(out.traces[0].chaptersOld).toBe(0)
+  })
+
+  it('traces commonKnowledge, which pin_signal 0 cannot be distinguished from', () => {
+    const out = rankPerType(
+      [
+        candidate({ id: 'hap_common', chaptersOld: 2, commonKnowledge: true }),
+        candidate({ id: 'hap_plain', chaptersOld: 2, commonKnowledge: false }),
+      ],
+      'happenings',
+      10_000,
+      base,
+    )
+
+    const byId = new Map(out.traces.map((t) => [t.id, t]))
+    expect(byId.get('hap_common')?.commonKnowledge).toBe(true)
+    expect(byId.get('hap_plain')?.commonKnowledge).toBe(false)
+    // Both carry pin_signal 0, which is exactly why the flag has to be captured.
+    expect(byId.get('hap_common')?.pinSignal).toBe(0)
+    expect(byId.get('hap_plain')?.pinSignal).toBe(0)
+    expect(byId.get('hap_common')?.recencyFactor).toBe(1)
+    expect(byId.get('hap_plain')?.recencyFactor).toBeLessThan(1)
+  })
+
+  it('traces renderedText for kept rows only, and exposes the whole pool', () => {
+    const pool = [
+      candidate({
+        id: 'hap_a',
+        renderedText: 'The bridge fell during the third night of the siege.',
+      }),
+      candidate({ id: 'hap_b', vector: v(0, 1, 0) }),
+    ]
+
+    const out = rankPerType(pool, 'happenings', 10_000, {
+      ...base,
+      params: { ...RANKER_DEFAULTS, preFilterTopN: 1 },
+    })
+
+    const kept = out.traces.filter((t) => t.dropReason !== 'pre_filtered')
+    const dropped = out.traces.filter((t) => t.dropReason === 'pre_filtered')
+    expect(kept[0].renderedText).toBe('The bridge fell during the third night of the siege.')
+    expect(dropped[0].renderedText).toBeNull()
+    expect(out.pool.map((c) => c.id)).toEqual(['hap_a', 'hap_b'])
+  })
+})
