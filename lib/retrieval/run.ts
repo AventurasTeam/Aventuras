@@ -87,8 +87,9 @@ export type RetrievalParams = {
 
 /**
  * Wall-clock cost of one pass, in ms, for the AC7 timing log. The four stages
- * are disjoint sub-spans of `totalMs`; what is left over is the source-row,
- * awareness and chapter-range reads plus floor and query-stack assembly.
+ * are disjoint sub-spans of `totalMs`; what is left over is the branch-wide
+ * source-row, awareness and chapter-range reads plus floor and query-stack
+ * assembly. The happenings source-row read is not among them — see `knnMs`.
  */
 export type RetrievalTimings = {
   totalMs: number
@@ -97,8 +98,10 @@ export type RetrievalTimings = {
   /** The one embedder call behind the three-vector query stack. */
   embedMs: number
   /**
-   * Wall-clock span covering every vec0 KNN round trip. Not a sum of the
-   * fifteen calls: they overlap, so summing would exceed the elapsed time.
+   * Wall-clock span covering every vec0 KNN round trip, plus the happenings
+   * pool's own reads — its source rows and admitted vectors sit inside the
+   * same span because chapter seating has to precede them. Not a sum of the
+   * calls: they overlap, so summing would exceed the elapsed time.
    */
   knnMs: number
   /** Scoring, MMR, and the eager token estimate the ranker costs each pool row. */
@@ -541,8 +544,7 @@ async function buildHappeningsPool(
 
   // The query returned the union, so admission falls out of it rather than
   // needing its own membership pass.
-  const knnSet = new Set(knn.ids)
-  const admitted = rows.filter((r) => !knnSet.has(r.id)).map((r) => r.id)
+  const admitted = rows.filter((r) => !knn.ids.has(r.id)).map((r) => r.id)
   if (admitted.length > 0)
     await loadAdmittedVectors(deps, params, ctx.kind, admitted, knn.vectorById)
 
