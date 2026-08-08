@@ -20,6 +20,7 @@ const calls = {
   locations: [] as any[],
   items: [] as any[],
   storyBeats: [] as any[],
+  checkpoints: [] as any[],
 }
 let failOnCreateStory = false
 
@@ -39,7 +40,7 @@ vi.mock('$lib/services/database', () => ({
     addStoryBeat: vi.fn(async (b: any) => void calls.storyBeats.push(b)),
     addEntry: vi.fn(async () => {}),
     addChapter: vi.fn(async () => {}),
-    createCheckpoint: vi.fn(async () => {}),
+    createCheckpoint: vi.fn(async (c: any) => void calls.checkpoints.push(c)),
     updateBranch: vi.fn(async () => {}),
     setStoryCurrentBranch: vi.fn(async () => {}),
   },
@@ -57,6 +58,7 @@ beforeEach(() => {
   calls.locations.length = 0
   calls.items.length = 0
   calls.storyBeats.length = 0
+  calls.checkpoints.length = 0
   failOnCreateStory = false
   invoke.mockReset()
 })
@@ -331,6 +333,45 @@ describe('runImport — entry fields', () => {
     expect(calls.entries[0].worldStateDelta.previousState.currentLocationId).toBe(
       calls.locations[0].id,
     )
+  })
+
+  it('remaps the delta inside a checkpoint entriesSnapshot too', async () => {
+    // A checkpoint snapshot carries whole entry rows, deltas included. Restoring one writes those
+    // rows back, so a stale-id delta surviving in a snapshot puts the bug back after the live
+    // rows have already shed it — and it would keep returning every time that checkpoint is used.
+    const data = sampleExport()
+    data.checkpoints = [
+      {
+        id: 'cp-1',
+        storyId: 'story-old',
+        name: 'before the cave',
+        lastEntryId: 'entry-1',
+        lastEntryPreview: 'c',
+        entryCount: 1,
+        entriesSnapshot: [data.entries[0]],
+        charactersSnapshot: [],
+        locationsSnapshot: [],
+        itemsSnapshot: [],
+        storyBeatsSnapshot: [],
+        chaptersSnapshot: [],
+        timeTrackerSnapshot: null,
+        createdAt: 1,
+      },
+    ]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.checkpoints).toHaveLength(1)
+
+    const snapshotDelta = calls.checkpoints[0].entriesSnapshot[0].worldStateDelta
+    expect(snapshotDelta.previousState.currentLocationId).toBe(calls.locations[0].id)
+    expect(snapshotDelta.previousState.characters[0].id).toBe(calls.characters[0].id)
+    expect(snapshotDelta.createdEntities.characterIds).toEqual([calls.characters[1].id])
+    expect(JSON.stringify(snapshotDelta)).not.toContain('-old')
+
+    // The snapshot's own entry id is remapped as well, or it points at no live row.
+    expect(calls.checkpoints[0].entriesSnapshot[0].id).toBe(calls.entries[0].id)
   })
 })
 
