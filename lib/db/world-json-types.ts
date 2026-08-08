@@ -1,4 +1,6 @@
-import type { RankerParams } from '@/lib/retrieval'
+import type { QuerySpec, RankerParams, RetrievalType, TOKENIZER_IDENTITY } from '@/lib/retrieval'
+
+import type { VecTargetKind } from './embeddings/vec-tables'
 
 export type ClassifierLifecycleState = 'idle' | 'running' | 'retrying' | 'failed-persistent'
 
@@ -23,7 +25,7 @@ export type DropReason =
   | 'not_dropped'
 
 type CaptureCandidate = {
-  target_kind: string
+  target_kind: VecTargetKind
   target_id: string
   display_name: string
   /**
@@ -63,7 +65,7 @@ type PoolFunnelSummary = {
 }
 
 type StructuralFloorRow = {
-  target_kind: string
+  target_kind: VecTargetKind
   target_id: string
   tokens: number
 }
@@ -71,28 +73,31 @@ type StructuralFloorRow = {
 type CaptureQuery = {
   text: string
   token_count: number
-  source: string
+  source: QuerySpec['source']
   sentence_scores?: number[]
   vector?: number[]
 }
 
-/**
- * The ranker's own tunables verbatim beside the story-settings knobs that shape
- * the pass. Embedding RankerParams rather than restating it is what makes a new
- * tunable a type error here instead of a silently absent capture field.
- */
+/** A new ranker tunable must be a type error here, not a silently absent capture field. */
 type CaptureParamsSnapshot = {
   ranker: RankerParams
-  retrievalBudgets: Record<string, number>
+  retrievalBudgets: Record<RetrievalType, number>
   fullChapterInBuffer: boolean
   partialChapterBuffer: number
   protectedBuffer: number
 }
 
 /** Which vocabulary priced tokens_estimated; a later replay warns across a change. */
-type CaptureTokenizer = { encoding: string; version: string }
+type CaptureTokenizer = { encoding: (typeof TOKENIZER_IDENTITY)['encoding']; version: string }
+
+/**
+ * Bumped when a captured field's shape or meaning changes, so a decode can
+ * warn instead of silently misreading an older payload as the current type.
+ */
+export const CAPTURE_VERSION = 1 as const
 
 export type ProbeCapturePayload = {
+  capture_version: number
   branch_id: string
   target_entry_id: string
   chapter_id: string | null
@@ -102,8 +107,8 @@ export type ProbeCapturePayload = {
   tokenizer: CaptureTokenizer
   params: CaptureParamsSnapshot
   queries: [CaptureQuery, CaptureQuery, CaptureQuery]
-  pools: Record<string, CaptureCandidate[]>
-  funnels: Record<string, PoolFunnelSummary>
+  pools: Record<RetrievalType, CaptureCandidate[]>
+  funnels: Record<RetrievalType, PoolFunnelSummary>
   structural_floor: StructuralFloorRow[]
-  stale_counts: Record<string, number>
+  stale_counts: Record<RetrievalType, number>
 }

@@ -89,12 +89,7 @@ export type CandidateTrace = {
   recencyFactor: number
   pinSignal: number
   chaptersOld: number
-  /**
-   * Exactly the text the prompt will carry, and the tokenizer's input whenever
-   * the cost is computed rather than replayed from a capture. Null for a
-   * pre-filtered row, which carries no token estimate either — it can never be
-   * seated, so neither is ever read.
-   */
+  /** Exactly the text the prompt will carry, and the tokenizer's input when the cost is computed rather than replayed from a capture. */
   renderedText: string | null
   /**
    * Happenings only. score() forces pinSignal 0 and recencyFactor 1 on these,
