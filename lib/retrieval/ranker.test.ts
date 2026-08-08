@@ -628,15 +628,22 @@ describe('replay-facing trace fields', () => {
     expect(byId.get('hap_plain')?.pinSignal).toBe(0)
     expect(byId.get('hap_common')?.recencyFactor).toBe(1)
     expect(byId.get('hap_plain')?.recencyFactor).toBeLessThan(1)
+    expect(byId.get('hap_plain')?.chaptersOld).toBe(2)
+  })
+
+  it('omits commonKnowledge entirely on a kind that has no such field', () => {
+    const out = rankPerType([candidate({ id: 'ent_1', kind: 'entity' })], 'entities', 10_000, base)
+    expect('commonKnowledge' in out.traces[0]).toBe(false)
   })
 
   it('traces renderedText for kept rows only, and exposes the whole pool', () => {
     const pool = [
+      candidate({ id: 'hap_b', vector: v(0, 1, 0), sims: [0.4, 0.4, 0.4] }),
       candidate({
         id: 'hap_a',
+        sims: [0.9, 0.9, 0.9],
         renderedText: 'The bridge fell during the third night of the siege.',
       }),
-      candidate({ id: 'hap_b', vector: v(0, 1, 0) }),
     ]
 
     const out = rankPerType(pool, 'happenings', 10_000, {
@@ -648,6 +655,6 @@ describe('replay-facing trace fields', () => {
     const dropped = out.traces.filter((t) => t.dropReason === 'pre_filtered')
     expect(kept[0].renderedText).toBe('The bridge fell during the third night of the siege.')
     expect(dropped[0].renderedText).toBeNull()
-    expect(out.pool.map((c) => c.id)).toEqual(['hap_a', 'hap_b'])
+    expect(out.pool.map((c) => c.id)).toEqual(['hap_b', 'hap_a'])
   })
 })

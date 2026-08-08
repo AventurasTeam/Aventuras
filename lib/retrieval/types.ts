@@ -75,7 +75,8 @@ export type { DropReason }
 /**
  * Per-candidate trace, contract C4. camelCase here; Slice 3.5 maps to the
  * snake_case CaptureCandidate in lib/db/world-json-types.ts. Adding a field is
- * a contract change.
+ * a contract change. Every scoring field is the value the scorer read,
+ * post-clamp.
  */
 export type CandidateTrace = {
   kind: CandidateKind
@@ -87,17 +88,18 @@ export type CandidateTrace = {
   simBlend: number
   recencyFactor: number
   pinSignal: number
-  /** Clamped at the same point the decay exponent reads it, so a replay
-   *  recomputing recency_factor cannot diverge on a negative input. */
   chaptersOld: number
   /**
-   * The exact string the token estimate was measured on. Null for a
+   * Exactly the text the prompt will carry, and the tokenizer's input whenever
+   * the cost is computed rather than replayed from a capture. Null for a
    * pre-filtered row, which carries no token estimate either — it can never be
    * seated, so neither is ever read.
    */
   renderedText: string | null
-  /** Happenings only. score() forces pinSignal 0 and recencyFactor 1 on these,
-   *  which a captured pin_signal of 0 cannot be distinguished from. */
+  /**
+   * Happenings only. score() forces pinSignal 0 and recencyFactor 1 on these,
+   * which a captured pin_signal of 0 cannot be distinguished from.
+   */
   commonKnowledge?: boolean
   kwBoostValue: number
   chapterBoostApplied: boolean
