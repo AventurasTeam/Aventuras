@@ -733,9 +733,15 @@ export interface UISettings {
   storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
 }
 
+/**
+ * Note: an `autoDownload` flag lived here and is gone. It installed the update
+ * unattended, which on Windows launches the NSIS installer mid-session, and it could
+ * never do anything at all on Android, where the app cannot install its own APK. The
+ * dialog covers the same ground in one click, with the user present. A stored value for
+ * it is simply ignored, as with any other legacy settings key.
+ */
 export interface UpdateSettings {
   autoCheck: boolean // Check for updates on startup
-  autoDownload: boolean // Automatically download updates
   checkInterval: number // Hours between update checks (0 = only on startup)
   lastChecked: number | null // Timestamp of last check
 }

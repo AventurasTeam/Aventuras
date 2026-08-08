@@ -4,6 +4,7 @@
   import { settings } from '$lib/stores/settings.svelte'
   import { grammarService } from '$lib/services/grammar'
   import { updaterService } from '$lib/services/updater'
+  import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { packService } from '$lib/services/packs/pack-service'
   import { warmupAllProfiles } from '$lib/services/modelHealthOrchestrator'
   import AppShell from '$lib/components/layout/AppShell.svelte'
@@ -39,7 +40,7 @@
 
       // Check for updates on startup if enabled (don't await, run in background)
       if (settings.updateSettings.autoCheck) {
-        const { checkInterval, lastChecked, autoDownload } = settings.updateSettings
+        const { checkInterval, lastChecked } = settings.updateSettings
         const now = Date.now()
         const shouldCheck =
           checkInterval <= 0
@@ -51,17 +52,14 @@
             .checkForUpdates()
             .then(async (updateInfo) => {
               await settings.setLastChecked(Date.now())
-              if (updateInfo.available) {
-                console.log(`[Updater] Update available: v${updateInfo.version}`)
-
-                // Auto-download if enabled
-                if (autoDownload) {
-                  console.log('[Updater] Auto-downloading update...')
-                  updaterService.downloadAndInstall().catch(console.error)
-                }
-              }
+              // Offer the update in a dialog rather than logging it: a console message
+              // reaches nobody outside a dev build.
+              updateNotifier.show(updateInfo)
             })
-            .catch(console.error)
+            // A failed startup check stays silent. The user did not ask for it, so an
+            // error toast about it would interrupt them over something they cannot act on;
+            // the manual button in Settings reports failures properly.
+            .catch((err) => console.error('[Updater] Startup check failed:', err))
         }
       }
 
