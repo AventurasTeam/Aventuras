@@ -48,7 +48,7 @@ export type StructuralFloorInput = {
 
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
 // lore's `keywords`) that StructuralFloor does not declare. Projecting here
-// rather than at each consumer is what lets the probe serialize the floor whole.
+// makes the type equal the value, so no consumer has to know what to strip.
 const narrowEntity = (e: EntityRow): EntityRow => ({
   id: e.id,
   kind: e.kind,

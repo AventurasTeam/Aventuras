@@ -10,7 +10,7 @@ import {
   type LoreRow,
   type ThreadRow,
 } from './pools'
-import type { LoadedEntityRow, LoadedLoreRow } from './source-rows'
+import type { LoadedEntityRow, LoadedLoreRow, LoadedThreadRow } from './source-rows'
 
 const entity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): EntityRow => ({
   kind: 'character',
@@ -148,11 +148,18 @@ describe('buildStructuralFloor', () => {
     for (const id of floor.seatedIds) expect(ids(pool)).not.toContain(id)
   })
 
-  it('projects loaded rows down to the declared shape', () => {
-    // Typed as the real loadSourceRows output, not EntityRow/LoreRow directly:
-    // assigning a wider-than-declared literal straight into buildStructuralFloor's
-    // params would trip excess-property checking, which would force the fixture
-    // narrow and prove nothing about the runtime widening this test exists to catch.
+  it('projects loaded rows down to the declared shape, on all six seated lists', () => {
+    // Typed as the real loadSourceRows output, not EntityRow/LoreRow/ThreadRow
+    // directly: assigning a wider-than-declared literal straight into
+    // buildStructuralFloor's params would trip excess-property checking, which
+    // would force the fixture narrow and prove nothing about the runtime
+    // widening this test exists to catch.
+    //
+    // One row per destination, not one row wearing every hat: an active+always
+    // thread seats only as active (its id lands in seatedIds before alwaysThreads
+    // filters), so activeThreads and alwaysThreads need separate rows to both be
+    // observed — see the 'active|always' -> ['active'] case in the thread
+    // placement sweep below.
     const loadedEntities: LoadedEntityRow[] = [
       {
         id: 'char_1',
@@ -163,11 +170,29 @@ describe('buildStructuralFloor', () => {
         description: 'A lantern-keeper who reads ledgers for a living.',
         embeddingStale: true,
       },
+      {
+        id: 'loc_1',
+        kind: 'location',
+        status: 'active',
+        injectionMode: 'auto',
+        name: 'The drowned archive',
+        description: 'Stone steps descend below the waterline.',
+        embeddingStale: true,
+      },
+      {
+        id: 'char_2',
+        kind: 'character',
+        status: 'active',
+        injectionMode: 'always',
+        name: 'Kestrel',
+        description: 'A ghost the story keeps referencing off-scene.',
+        embeddingStale: false,
+      },
     ]
     const loadedLore: LoadedLoreRow[] = [
       {
         id: 'lo_1',
-        title: 'The drowned archive',
+        title: 'The drowned archive, in full',
         body: 'Ledgers are kept below the waterline.',
         injectionMode: 'always',
         priority: 50,
@@ -175,28 +200,46 @@ describe('buildStructuralFloor', () => {
         embeddingStale: false,
       },
     ]
+    const loadedThreads: LoadedThreadRow[] = [
+      {
+        id: 'thr_1',
+        status: 'active',
+        injectionMode: 'auto',
+        title: 'Find the archive key',
+        description: 'Mira needs the key before the tide turns.',
+        embeddingStale: true,
+      },
+      {
+        id: 'thr_2',
+        status: 'pending',
+        injectionMode: 'always',
+        title: "Kestrel's debt",
+        description: 'Owed and unresolved.',
+        embeddingStale: false,
+      },
+    ]
 
     const floor = buildStructuralFloor({
       entities: loadedEntities,
       lore: loadedLore,
-      threads: [],
+      threads: loadedThreads,
       sceneEntityIds: ['char_1'],
-      currentLocationId: null,
+      currentLocationId: 'loc_1',
     })
 
-    // Asserted on the runtime value, not the type: the input is deliberately
-    // wider than StructuralFloor declares, and only the projection drops it.
-    expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual([
-      'description',
-      'id',
-      'injectionMode',
-      'kind',
-      'name',
-      'status',
-    ])
-    expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(
-      ['body', 'injectionMode', 'priority', 'title', 'id'].sort(),
-    )
+    // Asserted on the runtime value, not the type: every input row is
+    // deliberately wider than its declared row type, and only the projection
+    // drops the excess fields — Object.keys sees exactly what survived.
+    const entityKeys = ['description', 'id', 'injectionMode', 'kind', 'name', 'status'].sort()
+    const threadKeys = ['description', 'id', 'injectionMode', 'status', 'title'].sort()
+    const loreKeys = ['body', 'id', 'injectionMode', 'priority', 'title'].sort()
+
+    expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.currentLocation ?? {}).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.alwaysEntities[0]).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.activeThreads[0]).sort()).toEqual(threadKeys)
+    expect(Object.keys(floor.alwaysThreads[0]).sort()).toEqual(threadKeys)
+    expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(loreKeys)
   })
 })
 
