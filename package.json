@@ -16,7 +16,7 @@
     "format:check": "prettier --check .",
     "lint:docs": "remark . --quiet --frail",
     "typecheck": "tsc --noEmit",
-    "test": "vitest",
+    "test": "vitest --project unit --project storybook",
     "test:run": "vitest run --project unit --project storybook",
     "bench:retrieval": "vitest run --project bench",
     "test:e2e": "tsx scripts/e2e.ts --project=dev",
