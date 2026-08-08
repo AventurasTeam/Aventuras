@@ -423,25 +423,56 @@ describe('rankAll', () => {
   })
 })
 
-// The whole transitive surface the simulator loads, not just the entry file —
-// a DB import one hop down pulls the same graph in.
-const PURE_FILES = [
-  'ranker.ts',
-  'mmr.ts',
-  'vector.ts',
-  'constants.ts',
-  'types.ts',
-  'queries.ts',
-  'prose-extract.ts',
-]
+/** What the M3.5 simulator calls; the guarded surface is their value closure. */
+const PURE_ENTRIES = ['ranker.ts', 'queries.ts']
+
+// `import type` is erased at build, so only value imports pull the graph in.
+const valueSource = (file: string): string =>
+  readFileSync(`lib/retrieval/${file}`, 'utf8').replace(/^import type .*$/gm, '')
+
+/**
+ * Walks relative value imports from the entry points. Derived rather than
+ * listed: a hand-maintained list goes stale silently the moment someone adds an
+ * import, which is exactly how `name-index.ts` ended up inside the closure and
+ * outside the guard.
+ */
+function pureClosure(): string[] {
+  const seen = new Set<string>()
+  const queue = [...PURE_ENTRIES]
+  while (queue.length > 0) {
+    const file = queue.pop()!
+    if (seen.has(file)) continue
+    seen.add(file)
+    for (const [, specifier] of valueSource(file).matchAll(/from '\.\/([\w-]+)'/g)) {
+      queue.push(`${specifier}.ts`)
+    }
+  }
+  return [...seen].sort()
+}
 
 describe('C4 — ranker purity', () => {
-  it.each(PURE_FILES)('%s imports nothing from lib/stores or lib/db', (file) => {
-    // `import type` is erased at build; only value imports pull the graph in.
-    const src = readFileSync(`lib/retrieval/${file}`, 'utf8').replace(/^import type .*$/gm, '')
+  const closure = pureClosure()
+
+  // A walker that silently resolved nothing would make every case below pass
+  // vacuously, so pin the files the closure is known to reach.
+  it('reaches the modules the ranker and query stack actually pull in', () => {
+    expect(closure).toEqual(
+      expect.arrayContaining(['ranker.ts', 'mmr.ts', 'vector.ts', 'queries.ts', 'name-index.ts']),
+    )
+  })
+
+  it.each(pureClosure())('%s imports nothing from lib/stores or lib/db', (file) => {
     // Path prefix, not exact specifier — a deep import like
     // '@/lib/db/runtime/exec' pulls in the same graph.
-    expect(src).not.toMatch(/@\/lib\/(db|stores)/)
-    expect(src).not.toMatch(/queryAll|runInTransaction|drizzle/)
+    expect(valueSource(file)).not.toMatch(/@\/lib\/(db|stores)/)
+  })
+
+  // The replay contract is determinism, which a DB import is only one way to
+  // break. These are the others, and none is import-shaped: the previous
+  // `queryAll|runInTransaction|drizzle` scan caught none of them, while
+  // rejecting `name-index.ts` for naming its injected query parameter.
+  it.each(pureClosure())('%s reads no ambient nondeterminism', (file) => {
+    expect(valueSource(file)).not.toMatch(/\bDate\.|new Date\(|Math\.random|performance\./)
+    expect(valueSource(file)).not.toMatch(/\bIntl\.|toLocale[A-Z]/)
   })
 })
