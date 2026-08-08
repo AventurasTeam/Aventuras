@@ -650,19 +650,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   story-wide drain scope lands. Surfaced by M3.1b final review
   (2026-07-25).
 
-- **The drain still embeds unconditionally instead of revalidating.**
-  [`retrieval.md → Compute lifecycle`](../memory/retrieval.md#compute-lifecycle)
-  specifies that an edit or rollback returning content to its embedded
-  value "revalidates to 0 with no re-embed, since the existing vector is
-  still correct". `recomputeStaleOps` implements exactly that hash
-  comparison, and the cross-model cancel now uses it — but the drain still
-  loads `WHERE embedding_stale = 1` and hands every row to
-  `embedAndBuildVecOps`, so a rollback to previously-embedded content
-  re-embeds rather than revalidating. Wire the same helper into the drain's
-  row load, or narrow canon to say revalidation happens only where a caller
-  already knows the row set. Surfaced by M3.1b manual smoke (2026-07-27);
-  the cancel half resolved in M3.1b review (2026-07-28).
-
 - **`buildGenerationContext` should own the store reads, not receive a
   finished dataset.** The planned shape is a unified **data source**: call
   sites hand the builder identity and it reads `entriesStore` /
@@ -944,24 +931,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `(branch_id, occurred_at_entry_id)` — the OR defeats index use even
   once the column is indexed, so both halves are needed. Surfaced by the
   M3.4 cost re-derivation (2026-08-08).
-- **Move the `embedding_stale` flip into the action layer.**
-  [`retrieval.md → Storage`](../memory/retrieval.md#storage) resolves
-  the source-hash question by making the flag solely responsible for
-  drift: no retrieval-time hash comparison, because hashing every
-  candidate on every turn re-derives what the flag already carries.
-  That trade only holds if the flag cannot be forgotten, and today it
-  can — `registerEntities`, `registerLore`, `registerThreads` and
-  `registerHappenings` all default `embeddingStale` to `0` and leave
-  the flip to the caller, and only the classifier opts in.
-  `setEntityOperationalFlags` and `setLoreOperationalFlags` have no
-  callers outside their own files. The first M4 or M7 edit surface
-  that writes a description without remembering produces a row that
-  ranks against its old text forever, with nothing to report it. The
-  action layer already knows which fields are embedded (the
-  composite-text builders behind `lib/db/embeddings`), so the flip
-  belongs there. Needs a decision on the seed and import paths, which
-  write rows with precomputed vectors and a deliberately clean flag.
-  Surfaced by the M3.4 review (2026-08-07).
 - **Tighten the unprobed-dim escape hatches once M7 makes probing
   mandatory.** `validateCustomDim` skips its `above-native` check and
   `clampEffectiveDim` returns the value untouched whenever the model's

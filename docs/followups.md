@@ -423,6 +423,77 @@ predates the routing.
   budget per request, a concurrency cap on the fan-out, and a split on
   the local backend. Surfaced by M3.4 Task 12 review (2026-08-02).
 
+- **The `embedding_stale` flip belongs in the action layer, and the
+  drain should revalidate before spending on a re-embed.** Two halves of
+  one split, and they land together.
+  [`retrieval.md → Storage`](./memory/retrieval.md#storage) makes the
+  flag solely responsible for drift — no retrieval-time hash comparison,
+  because hashing every candidate every turn re-derives what the flag
+  already carries. That trade only holds if the flag cannot be
+  forgotten, and today it can: `registerEntities`, `registerLore`,
+  `registerThreads` and `registerHappenings` all default
+  `embeddingStale` to `0` and leave the flip to the caller, and only
+  `lib/classifier/plan.ts` opts in. The first M4 or M7 edit surface that
+  writes a description without remembering produces a row ranking
+  against its old text forever, with nothing to report it — which is why
+  this has to precede M4 rather than follow it.
+
+  Design settled 2026-08-07; what it needs is a slot, not a decision.
+  It is two questions, not one polarity:
+  - **On create — the actual polarity change.** `register.ts` reads
+    `embeddingStale: entry.embeddingStale ?? 0`; a new row has no vector
+    by definition, so default it to `1`. The empty-composite worry is
+    not live: chapters exist only closed with `summary` / `theme` both
+    `notNull`, and every kind's first embedded field is a required
+    name / title, so a `compositeText(...).trim() !== ''` guard would be
+    insurance rather than a fix.
+  - **On update — derived, not defaulted.** Flip only when an embedded
+    column's value actually changed:
+    `KIND_FIELDS[kind].includes(col) && set[col] !== current[col]`.
+    `KIND_FIELDS` (`lib/db/embeddings/stale.ts`) already declares the
+    embedded columns per kind, and the update handler's existing loop
+    holds both `set[col]` and `current[col]`, so the comparison is free.
+    This is what dissolves the UI risk — a save-session form
+    resubmitting an unchanged `name` compares equal and does not flip,
+    so no "told clean" escape hatch is needed.
+  - **Exactness belongs in the drain, not the handler.** Canon says an
+    edit or rollback returning content to its embedded value
+    "revalidates to 0 with no re-embed, since the existing vector is
+    still correct". `recomputeStaleOps` implements exactly that hash
+    comparison against the vector's stored `source_hash`, and the
+    cross-model cancel already uses it — but the drain still loads
+    `WHERE embedding_stale = 1` and hands every row to
+    `embedAndBuildVecOps`, so a rollback to previously-embedded content
+    re-embeds instead of revalidating. Wire the helper into the drain's
+    row load. The split is deliberate: the write path asks "did content
+    change?" cheaply, the embed path asks "is the vector stale?" exactly,
+    before spending money. Pulling the exact check into the register
+    handler would drag `resolveDrainConfig` and a vec-table read into a
+    delta handler that touches only its own table. Not a canon conflict
+    either — canon rejects hash comparison at _retrieval_ time, which is
+    a different cost profile from once per drain batch.
+
+  Two notes for the implementer. The flipping column set is narrower
+  than readers expect — for entities only `name` / `description`;
+  `status`, `injectionMode`, `tags`, `state` and `retiredReason` do not
+  flip it. That is correct, since none are embedded, but it reads as a
+  bug and wants a comment at the site. And `compositeText` maps null to
+  `''` before joining, so `null` and `''` are identical content while
+  `!==` flips anyway — erring toward dirty, at a cost of one wasted
+  embed, which is not worth special-casing.
+
+  Open: the seed and import paths, which write rows with precomputed
+  vectors and a deliberately clean flag, need an audit — though seeded
+  rows currently defaulting to `0` with no vector are already wrong, so
+  the inversion fixes them rather than breaking them. Not reached
+  either way: the raw `ctx.db.run(sql...)` writers in
+  `lib/actions/classifier/deps.ts` bypass `defineAction`, and only
+  SQLite triggers scoped `OF <embedded cols>` would catch those — held
+  in reserve pending the `lib/actions/` extraction pass. Create-half
+  surfaced by the M3.4 review (2026-08-07); drain half by M3.1b manual
+  smoke (2026-07-27), its cancel half resolved in M3.1b review
+  (2026-07-28).
+
 ## Tooling
 
 - **`pnpm test:run` over the whole repo cannot be read as a gate.** A
