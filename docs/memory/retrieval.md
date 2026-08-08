@@ -1149,6 +1149,17 @@ generic prose-similarity matches.
   bypass the budget; it only bypasses the score-threshold floor.
   An old row that bypasses can still lose to recent rows that
   out-score it within the budget.
+
+  **The exemption is the mechanism, not a side effect of the score.**
+  `bypass_score` alone cannot deliver it: its output is capped at
+  `1 − τ_revive = 0.15`, and
+  [budget-fill](#budget-fill-termination) compares against `mmr_score`,
+  whose first-pick floor is `min_score_threshold / λ_div = 0.2`. So a
+  row raised only by `bypass_score` is always below the floor, and the
+  bypass would seat nothing at any similarity. Budget fill must skip
+  the threshold check for a bypassed row outright. Everything else —
+  `candidate_too_large`, `over_budget`, MMR ordering — still applies.
+
 - **MMR diversity** still applies. Multiple bypass-revived rows
   that semantically cluster will dedup against each other.
 
@@ -1329,10 +1340,28 @@ return selected
 - **Candidate larger than the entire type budget** — skip permanently.
   Surface in Story Settings as a warning ("your happenings budget is
   below the median happening size; consider raising it").
-- **`min_score_threshold = 0.15`** (cosine baseline) — rows below
-  this are essentially semantically unrelated to current scene;
-  including them clutters the prompt with noise. Underutilized budget
-  is fine; we don't backfill with low-relevance content.
+- **`min_score_threshold = 0.15`** — rows below this are essentially
+  semantically unrelated to current scene; including them clutters
+  the prompt with noise. Underutilized budget is fine; we don't
+  backfill with low-relevance content.
+
+  It is **not a cosine baseline.** The loop above compares it against
+  `mmr_score`, which is already scaled by `λ_div` and reduced by the
+  diversity penalty — so the raw score a row must reach is
+  `(min_score_threshold + (1 − λ_div) × max_sim) / λ_div`. At the
+  defaults that is **0.2** for a first pick, where `S` is empty and
+  the penalty is zero, and it rises from there: a candidate whose
+  `max_sim` to an already-selected row is 0.5 must reach ≈0.367.
+  That is deliberate — budget-fill is asking whether a row is worth
+  its tokens _given what is already selected_, and a near-duplicate
+  of a seated row is poor value however relevant it is alone. The
+  floor is on marginal value, not on similarity.
+
+  One consequence is load-bearing enough to state: `τ_revive` caps
+  the [high-similarity bypass](#high-similarity-bypass--revival-of-decayed-memories)'s
+  output at `1 − τ_revive = 0.15`, which is below the 0.2 first-pick
+  floor, so a bypass-bound row could never be seated. Bypassed rows
+  are therefore **exempt from this threshold** — see that section.
 
 No "must-fill-budget" mode. The user's expectation is "good context
 or no context, not bad context."
