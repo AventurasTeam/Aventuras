@@ -904,38 +904,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   is the harness to port. Owner is whoever does Android bring-up;
   desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
   (2026-08-08), whose desktop half is now canon.
-- **Eager tokenization is the pass's largest CPU term, and the fix is a
-  C4 trace decision.** Now measured rather than estimated:
-  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  prices it at ~46 ms of a ~140 ms pass, roughly three times everything
-  MMR does. The cause is that `CandidateTrace.tokensEstimated` is
-  non-nullable, so every **pool** row is tokenized to seat a fraction of
-  them — a 771-row happenings pool for 22 seated rows. `preFilterTopN`
-  is absent from
-  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters),
-  so a pre-filtered row can never be seated by the simulator at any
-  threshold or budget, which means its token count is never read and
-  need never be computed. Capping eager tokenization at the kept
-  ≤200/type is therefore free of contract loss, but it requires making
-  `tokensEstimated` nullable — a C4 trace-shape change. Decide it in the
-  same pass as the other C4 trace questions against Slice 3.5. Cost half
-  re-measured 2026-08-08; the decision is what remains.
-- **`chapters_old` has no home in the capture, but the simulator is
-  specified to recompute from it.**
-  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
-  says the simulator recomputes `recency_factor` from stored
-  `chapters_old` when a user re-tunes per-type `λ`. But neither
-  `CandidateTrace` (`lib/retrieval/types.ts`) nor `CaptureCandidate`
-  (`lib/db/world-json-types.ts`) carries a `chapters_old` field, and
-  [`probe.md → What gets captured`](../memory/probe.md#what-gets-captured--light-mode-default)
-  doesn't list one — it captures the _derived_ `recency_factor` only.
-  From `recency_factor` alone the simulator cannot invert to a new λ
-  without also knowing the age and the pin, so a λ slider is not
-  actually simulatable as specified. Either add `chapters_old` to the
-  capture shape (a C4 trace-contract change, same decision pass as the
-  eager-tokenization item above) or drop λ from the
-  simulatable list. M3.4 is not at fault — it emits exactly the fields
-  C4 pins. Surfaced by M3.4 Task 6 review (2026-08-01).
 - **Q3's dialogue signal mis-pairs across unbalanced quotes.**
   `lib/retrieval/prose-extract.ts` finds quoted spans over the whole
   narrative entry (needed, because a quote legitimately opens in one
@@ -1064,22 +1032,6 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   than a defect today, but it is precisely the shape
   [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
   records. Surfaced by the M3.4 whole-slice review (2026-08-03).
-- **`rankPerType` recomputes `tokensEstimated` rather than accepting a
-  captured one, which desynchronises M3.5's simulator from its own
-  capture.** `score` (`lib/retrieval/ranker.ts:101`) always evaluates
-  `input.countTokens(c.renderedText) + params.typeOverhead[type]`; there
-  is no path that takes a stored value. The probe's simulator re-runs
-  budget-fill against `CaptureCandidate.tokens_estimated`
-  ([`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)),
-  so any drift between the js-tiktoken version that produced the capture
-  and the one loaded at replay makes the two disagree row by row, with
-  nothing reporting it. The ranker's purity is not at issue — the
-  function is deterministic given its inputs; the tokenizer is one of
-  its inputs and is not pinned by the capture. Wants either an optional
-  captured-token input on `RankTypeInput` or a recorded encoding
-  identity the simulator can refuse to replay across. Needs deciding
-  before 3.5 builds the simulator. Surfaced by the M3.4 whole-slice
-  review (2026-08-03).
 - **`metadata.tokens.completion` is the wrong measure for the chapter
   threshold, on four independent counts.** M5 needs
   `openRegionTokens(branchId)` as a DB read

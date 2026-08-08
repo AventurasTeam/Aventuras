@@ -245,7 +245,11 @@ From a light capture:
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
   sims into a new `sim_blend`.
 - Per-type `λ` decay rates — re-compute `recency_factor` from
-  stored `chapters_old`.
+  stored `chapters_old`. **The capture does not carry that field
+  yet** — neither `CandidateTrace` nor `CaptureCandidate` has it, only
+  the derived `recency_factor` — so this is aspirational until Slice
+  3.5 settles
+  [the capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
 - `kw_boost` magnitude — re-scale stored `kw_boost_value`.
 - `τ_revive` — re-evaluate the bypass branch against stored
   `sim_blend`.
@@ -254,8 +258,16 @@ From a light capture:
 - `min_score_threshold` — re-run budget-fill termination.
 - Per-type budgets — re-run greedy budget-fill against stored
   `tokens_estimated`.
+- `k_pin` per-type — re-scale the pin multiplier against stored
+  `sim_blend`, `recency_factor` and `pin_signal`. Needs no field the
+  capture does not already carry.
 - `pin_signal` overrides — let the user simulate "what if I pin /
-  unpin this row?" by overriding `pin_signal` per-row.
+  unpin this row?" by overriding `pin_signal` per-row. **Blocked on the
+  same gap as `λ`:** an override has to recompute `recency_factor`, and
+  the captured `(recency_factor, pin_signal)` pair determines the
+  underlying age only while `pin_signal < 1` — at exactly 1 the factor
+  is 1 regardless of age. See
+  [Slice 3.5 → The capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
 
 Adds in a deep capture:
 

@@ -114,6 +114,8 @@ trustworthy.
 
 ## Open questions
 
+### Planning
+
 - **Dev affordance shape** — JSON viewer route vs logger-only; pick
   the cheapest thing that lets implementation debugging read
   captures (it is disposable once M7.5 lands).
@@ -121,6 +123,17 @@ trustworthy.
   constants (tuning surface parked); the snapshot should read the
   same constants module so the simulator diff is honest. Confirm at
   planning.
+
+### The capture contract — decide these together
+
+Five questions about what a capture must carry for the simulator to be
+honest. **Decide them as one pass**, not one at a time: each proposes a
+change to `CandidateTrace` or the capture payload, and settling them
+independently risks a shape that satisfies each answer and no coherent
+whole. All five were surfaced by the M3.4 review (2026-08-03 to
+2026-08-08) against a `CandidateTrace` that is already shipped, so every
+answer that adds a field is also a change to M3.4's ranker output.
+
 - **The outcome exposes text-presence, not the presence the ranker
   blended.** `RetrievalOutcome` returns `queries` (whose `presence`
   means "this query's text was non-empty"), while `runRetrieval`
@@ -133,8 +146,49 @@ trustworthy.
   triple, or fold presence into `Candidate.sims` as
   `readonly [number | null, number | null, number | null]` — `null`
   meaning "no query vector", which `0` currently cannot be
-  distinguished from — and delete the second type. Surfaced by the
-  M3.4 review (2026-08-06).
+  distinguished from — and delete the second type.
+- **`chapters_old` is not captured, and two already-promised
+  simulations need it.**
+  [`probe.md → Simulatable parameters`](../../../../memory/probe.md#simulatable-parameters)
+  promises per-type `λ` re-tuning "re-compute `recency_factor` from
+  stored `chapters_old`", but neither `CandidateTrace` nor
+  `CaptureCandidate` carries the field — only the derived
+  `recency_factor`. The same list promises `pin_signal` overrides, and
+  those need it too: from a captured `(recency_factor, pin_signal)`
+  pair the simulator can solve back to `λ × chapters_old` and
+  recompute, **except at `pin_signal = 1`**, where `recency_factor` is
+  1 regardless of age and the pair carries no information about it —
+  which is exactly the "what if I unpin this pinned row?" question.
+  So this is not only the λ slider. Either add `chapters_old` to the
+  capture shape, or drop both λ and pin overrides from the simulatable
+  list.
+- **`rankPerType` recomputes `tokensEstimated` rather than accepting a
+  captured one.** `score` (`lib/retrieval/ranker.ts`) always evaluates
+  `input.countTokens(c.renderedText) + params.typeOverhead[type]`;
+  there is no path that takes a stored value. The simulator re-runs
+  budget-fill against `CaptureCandidate.tokens_estimated`, so any drift
+  between the js-tiktoken version that produced the capture and the one
+  loaded at replay makes the two disagree row by row with nothing
+  reporting it. The ranker's purity is not at issue — it is
+  deterministic given its inputs; the tokenizer is one of those inputs
+  and the capture does not pin it. Wants either an optional
+  captured-token input on `RankTypeInput`, or a recorded encoding
+  identity the simulator refuses to replay across.
+- **Should `tokensEstimated` become nullable for pre-filtered rows?**
+  Eager tokenization is the pass's largest CPU term — ~46 ms of a
+  ~140 ms pass, see
+  [`retrieval.md → Per-turn cost budget`](../../../../memory/retrieval.md#per-turn-cost-budget)
+  — because the non-nullable field forces every **pool** row to be
+  tokenized to seat a fraction of them. Capping it at the kept
+  `preFilterTopN` would recover most of that. The argument that it
+  costs no contract is that a pre-filtered row can never be seated by
+  the simulator, so its token count is never read — but that rests on
+  `preFilterTopN` being **absent** from probe.md's simulatable list,
+  and absent is not the same as decided: the non-simulatable section
+  covers pool composition and says nothing about the pre-filter. Making
+  the field nullable forecloses ever making `preFilterTopN` simulatable
+  without a capture-format change. Decide the pre-filter's
+  simulatability first; the nullability follows from it.
 - **`StructuralFloor` declares a narrower shape than it holds.** The
   floor is built over loaded source rows, so every row still carries
   `embeddingStale` (and lore's `keywords`) at runtime; only
@@ -142,8 +196,10 @@ trustworthy.
   serialises `floor.sceneEntities` whole ships those fields into the
   payload with no error. Project at construction, or make
   `buildStructuralFloor` generic over the row types so the wider
-  value is visible rather than silently erased. Surfaced by the M3.4
-  review (2026-08-06).
+  value is visible rather than silently erased.
+
+### Other
+
 - **The barrel exports the ranker functions without their input
   types.** `rankAll` / `rankPerType` are public; `RankAllInput` and
   `RankTypeInput` are not, so a replay caller can invoke them but
@@ -156,9 +212,10 @@ trustworthy.
 - **`RankerParams` needs validation at the point a capture feeds
   it.** The ranker defends `pinSignal` and `chaptersOld` and says why
   — "pin_signal arrives unvalidated from the probe's per-row
-  override" — while the nine tunables share that source and get
+  override" — while the ten tunables share that source and get
   nothing. `lambdaDiv` at 0 makes every type select nothing silently;
-  `tauRevive` below 0 bypasses the decay model entirely. The
+  `tauRevive` below 0 bypasses the decay model entirely; a negative
+  `pinBoost` inverts the pin, so pinning a row demotes it. The
   constants are frozen as of M3.4, so code cannot retune them; a
   stored capture can. Add an `assertRankerParams` at the capture
   reader. Surfaced by the M3.4 review (2026-08-06).
