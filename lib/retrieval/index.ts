@@ -11,6 +11,7 @@ export { extractProse, splitSentences } from './prose-extract'
 export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
+export type { RankTypeInput } from './ranker'
 export { ENTITY_FRAMING, runRetrieval } from './run'
 export type {
   InjectedAwareness,
@@ -33,6 +34,8 @@ export type {
   PoolFunnel,
   QueryAll,
   QueryTextPresence,
+  QueryWeights,
+  RankAllInput,
   RankedType,
   RankerParams,
   RetrievalType,
