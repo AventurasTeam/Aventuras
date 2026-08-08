@@ -460,42 +460,21 @@ describe('rankAll', () => {
 
 describe('blend with absent query vectors', () => {
   it('renormalizes over present slots and distinguishes a null slot from a zero one', () => {
-    const base = {
-      kind: 'lore' as const,
-      vector: Float32Array.from([1, 0]),
-      chaptersOld: 0,
-      pinSignal: 0,
-      keywordHits: [],
-      embeddingStale: false,
-    }
-    const pool = [
-      {
-        ...base,
-        id: 'absent',
-        displayName: 'absent',
-        renderedText: 'The lantern guild keeps its ledgers in the drowned archive.',
-        sims: [0.8, null, null] as const,
-      },
-      {
-        ...base,
-        id: 'zero',
-        displayName: 'zero',
-        renderedText: 'A zero-similarity row that shares the pool for contrast.',
-        sims: [0.8, 0, 0] as const,
-      },
-    ]
-
-    const out = rankPerType(pool, 'lore', 10_000, {
-      params: RANKER_DEFAULTS,
-      chapterRanges: new Map(),
-      countTokens: () => 1,
-    })
+    const out = rankPerType(
+      [
+        candidate({ id: 'absent', sims: [0.8, null, null] }),
+        candidate({ id: 'zero', sims: [0.8, 0, 0], vector: v(0, 1, 0) }),
+      ],
+      'happenings',
+      10_000,
+      base,
+    )
 
     const byId = new Map(out.traces.map((t) => [t.id, t]))
     // Only Q1 is present, so the blend renormalizes to sim_q1 itself.
     expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
     // All three present: 0.8*0.35 renormalized over the full weight total.
-    expect(byId.get('zero')?.simBlend).toBeCloseTo(0.8 * 0.35, 10)
+    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.35) / (0.35 + 0.35 + 0.3), 10)
     expect(byId.get('absent')?.simQ2).toBeNull()
     expect(byId.get('zero')?.simQ2).toBe(0)
   })

@@ -36,9 +36,7 @@ type CandidateBase = {
   /**
    * Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors.
    * `null` means that query produced no vector this turn — which `0`, a
-   * genuine orthogonal similarity, cannot be distinguished from. The blend
-   * renormalizes over the non-null slots, so this triple is the single source
-   * of truth a probe replay reconstructs it from.
+   * genuine orthogonal similarity, cannot be distinguished from.
    */
   sims: readonly [number | null, number | null, number | null]
   /** Unit-norm, same space as the queries. MMR's pairwise similarity input. */
@@ -137,8 +135,8 @@ export type RankerParams = {
   readonly typeOverhead: Readonly<Record<RetrievalType, number>>
 }
 
-/** Which of Q1/Q2/Q3 actually produced a vector this turn. */
-export type QueryPresence = readonly [boolean, boolean, boolean]
+/** Which of Q1/Q2/Q3 had non-empty text and was submitted to the embedder. */
+export type QueryTextPresence = readonly [boolean, boolean, boolean]
 
 export type RankAllInput = {
   pools: Record<RetrievalType, readonly Candidate[]>

@@ -31,7 +31,7 @@ export type {
   DropReason,
   PoolFunnel,
   QueryAll,
-  QueryPresence,
+  QueryTextPresence,
   RankedType,
   RankerParams,
   RetrievalType,
