@@ -37,6 +37,22 @@ const thread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): ThreadRow => 
   ...over,
 })
 
+const loadedEntity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): LoadedEntityRow => ({
+  ...entity(over),
+  embeddingStale: true,
+})
+
+const loadedLore = (over: Partial<LoreRow> & Pick<LoreRow, 'id'>): LoadedLoreRow => ({
+  ...lore(over),
+  keywords: [],
+  embeddingStale: true,
+})
+
+const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedThreadRow => ({
+  ...thread(over),
+  embeddingStale: true,
+})
+
 const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {}) =>
   buildStructuralFloor({
     entities: [],
@@ -149,87 +165,36 @@ describe('buildStructuralFloor', () => {
   })
 
   it('projects loaded rows down to the declared shape, on all six seated lists', () => {
-    // Typed as the real loadSourceRows output, not EntityRow/LoreRow/ThreadRow
-    // directly: assigning a wider-than-declared literal straight into
-    // buildStructuralFloor's params would trip excess-property checking, which
-    // would force the fixture narrow and prove nothing about the runtime
-    // widening this test exists to catch.
-    //
-    // One row per destination, not one row wearing every hat: an active+always
-    // thread seats only as active (its id lands in seatedIds before alwaysThreads
-    // filters), so activeThreads and alwaysThreads need separate rows to both be
-    // observed — see the 'active|always' -> ['active'] case in the thread
-    // placement sweep below.
-    const loadedEntities: LoadedEntityRow[] = [
-      {
-        id: 'char_1',
-        kind: 'character',
-        status: 'active',
-        injectionMode: 'auto',
-        name: 'Mira',
-        description: 'A lantern-keeper who reads ledgers for a living.',
-        embeddingStale: true,
-      },
-      {
-        id: 'loc_1',
-        kind: 'location',
-        status: 'active',
-        injectionMode: 'auto',
-        name: 'The drowned archive',
-        description: 'Stone steps descend below the waterline.',
-        embeddingStale: true,
-      },
-      {
-        id: 'char_2',
-        kind: 'character',
-        status: 'active',
-        injectionMode: 'always',
-        name: 'Kestrel',
-        description: 'A ghost the story keeps referencing off-scene.',
-        embeddingStale: false,
-      },
-    ]
-    const loadedLore: LoadedLoreRow[] = [
-      {
-        id: 'lo_1',
-        title: 'The drowned archive, in full',
-        body: 'Ledgers are kept below the waterline.',
-        injectionMode: 'always',
-        priority: 50,
-        keywords: ['archive', 'ledger'],
-        embeddingStale: false,
-      },
-    ]
-    const loadedThreads: LoadedThreadRow[] = [
-      {
-        id: 'thr_1',
-        status: 'active',
-        injectionMode: 'auto',
-        title: 'Find the archive key',
-        description: 'Mira needs the key before the tide turns.',
-        embeddingStale: true,
-      },
-      {
-        id: 'thr_2',
-        status: 'pending',
-        injectionMode: 'always',
-        title: "Kestrel's debt",
-        description: 'Owed and unresolved.',
-        embeddingStale: false,
-      },
-    ]
-
+    // Typed as Loaded*Row via the factories above, not EntityRow/LoreRow/ThreadRow:
+    // annotating the fixture as the narrower type would trip excess-property
+    // checking and force it narrow, proving nothing about the runtime widening.
+    // One row per destination: an active+always thread seats only as active, so
+    // activeThreads and alwaysThreads each need their own row to be observed.
     const floor = buildStructuralFloor({
-      entities: loadedEntities,
-      lore: loadedLore,
-      threads: loadedThreads,
+      entities: [
+        loadedEntity({ id: 'char_1' }),
+        loadedEntity({ id: 'loc_1', kind: 'location' }),
+        loadedEntity({ id: 'char_2', injectionMode: 'always' }),
+      ],
+      lore: [loadedLore({ id: 'lo_1', injectionMode: 'always' })],
+      threads: [
+        loadedThread({ id: 'thr_1', status: 'active' }),
+        loadedThread({ id: 'thr_2', injectionMode: 'always' }),
+      ],
       sceneEntityIds: ['char_1'],
       currentLocationId: 'loc_1',
     })
 
-    // Asserted on the runtime value, not the type: every input row is
-    // deliberately wider than its declared row type, and only the projection
-    // drops the excess fields — Object.keys sees exactly what survived.
+    expect(
+      [
+        floor.sceneEntities,
+        floor.alwaysEntities,
+        floor.activeThreads,
+        floor.alwaysThreads,
+        floor.alwaysLore,
+      ].map((l) => l.length),
+    ).toEqual([1, 1, 1, 1, 1])
+
     const entityKeys = ['description', 'id', 'injectionMode', 'kind', 'name', 'status'].sort()
     const threadKeys = ['description', 'id', 'injectionMode', 'status', 'title'].sort()
     const loreKeys = ['body', 'id', 'injectionMode', 'priority', 'title'].sort()

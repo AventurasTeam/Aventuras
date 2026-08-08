@@ -49,7 +49,7 @@ export type StructuralFloorInput = {
 // The floor is built over loaded source rows, which carry `embeddingStale` (and
 // lore's `keywords`) that StructuralFloor does not declare. Projecting here
 // makes the type equal the value, so no consumer has to know what to strip.
-const narrowEntity = (e: EntityRow): EntityRow => ({
+const narrowEntity = (e: EntityRow): Required<EntityRow> => ({
   id: e.id,
   kind: e.kind,
   status: e.status,
@@ -58,7 +58,7 @@ const narrowEntity = (e: EntityRow): EntityRow => ({
   description: e.description,
 })
 
-const narrowLore = (l: LoreRow): LoreRow => ({
+const narrowLore = (l: LoreRow): Required<LoreRow> => ({
   id: l.id,
   title: l.title,
   body: l.body,
@@ -66,7 +66,7 @@ const narrowLore = (l: LoreRow): LoreRow => ({
   priority: l.priority,
 })
 
-const narrowThread = (t: ThreadRow): ThreadRow => ({
+const narrowThread = (t: ThreadRow): Required<ThreadRow> => ({
   id: t.id,
   status: t.status,
   injectionMode: t.injectionMode,
