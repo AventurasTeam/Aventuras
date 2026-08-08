@@ -5,6 +5,7 @@ export {
   decompressPayload,
 } from './compress'
 export type { CompressedPayload } from './compress'
+export { armDeepCapture, takeNextCaptureMode } from './mode'
 export { buildCapturePayload } from './payload'
 export type { CapturePayloadInput } from './payload'
 export {

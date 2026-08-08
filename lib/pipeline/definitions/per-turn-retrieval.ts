@@ -1,8 +1,16 @@
 import { boundedSignal } from '@/lib/abort'
 import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
+import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
-import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
+import { takeNextCaptureMode, writeProbeCapture } from '@/lib/probe'
+import {
+  composePromptBuffer,
+  RANKER_DEFAULTS,
+  runRetrieval,
+  type RetrievalOutcome,
+} from '@/lib/retrieval'
+import { appSettingsStore } from '@/lib/stores'
 
 import { loadPerTurnWorkingSet } from './working-set'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -67,6 +75,34 @@ export async function* retrievalPhase(
   const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
+
+  const captureProbe = (outcome: RetrievalOutcome) =>
+    writeProbeCapture(
+      { runInTransaction: ctx.runInTransaction },
+      {
+        id: generateId('pc'),
+        branchId,
+        // The pass ran for the user action submitTurn committed ahead of it.
+        targetEntryId: tail?.id ?? '',
+        chapterId: tail?.chapterId ?? null,
+        capturedAt: Date.now(),
+        embeddingModelId: resolution.config.modelId,
+        mode: takeNextCaptureMode(),
+        // getAppSettings() hands back a fresh object per call, so the gate has
+        // to be read at capture time or it sits at its boot value
+        // (observability.md → Store ownership).
+        appGateOn: appSettingsStore.getAppSettings().diagnostics.enabled,
+        storyGateOn: open.settings.probe_mode_active,
+        params: RANKER_DEFAULTS,
+        settings: {
+          retrievalBudgets: open.settings.retrievalBudgets,
+          fullChapterInBuffer: open.settings.fullChapterInBuffer,
+          partialChapterBuffer: open.settings.partialChapterBuffer,
+          protectedBuffer: open.settings.protectedBuffer,
+        },
+        outcome,
+      },
+    )
 
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
@@ -145,12 +181,30 @@ export async function* retrievalPhase(
       reason: failure.reason,
       staleCount: failure.staleCount,
     })
+    await captureProbe(outcome)
     return { status: 'failed', error: { kind: 'embedder', ...failure } }
   }
 
   // AC7 wants the per-turn cost observable against the PoC baseline (~43 ms per
   // KNN query at 10k rows), so the KNN span is reported apart from the total.
   ctx.log.debug('retrieval.timing', outcome.timings)
+
+  ctx.log.debug('retrieval.scores', {
+    perType: Object.fromEntries(
+      Object.entries(outcome.bundles).map(([type, bundle]) => [
+        type,
+        {
+          pool: bundle.funnel.poolSize,
+          kept: bundle.funnel.preFilteredSize,
+          selected: bundle.funnel.selectedCount,
+          tokens: bundle.funnel.tokensUsed,
+          // MMR's first pick maximizes lambdaDiv * score with nothing selected
+          // yet, so trace 0 carries the pass's highest final score.
+          topScore: bundle.traces[0]?.finalScore ?? null,
+        },
+      ]),
+    ),
+  })
 
   // staleCounts is a tripwire, not a report (lib/retrieval → RetrievalOutcome):
   // the sync stage is blocking and clears every flag it embeds, so a non-zero
@@ -172,6 +226,7 @@ export async function* retrievalPhase(
   }
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
+  await captureProbe(outcome)
 
   // Downstream of the abort poll on purpose: bumping a cancelled turn's counters
   // leaves reverse-replay work for a turn that produced no prose.

@@ -1,28 +1,42 @@
+import type { DatabaseSync } from 'node:sqlite'
+
+import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  APP_SETTINGS_DEFAULTS,
+  APP_SETTINGS_SINGLETON_ID,
+  appSettings,
   STORY_SETTINGS_DEFAULTS,
+  type DbCtx,
   type Entity,
   type EntryMetadata,
+  type ProbeCapturePayload,
   type Story,
   type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
-import type {
-  InjectedAwareness,
-  RankedType,
-  RetrievalParams,
-  RetrievalSuccess,
-  RetrievalTimings,
-  RetrievalType,
-  runRetrieval,
+import { armDeepCapture, decompressPayload } from '@/lib/probe'
+import {
+  RANKER_DEFAULTS,
+  type CandidateTrace,
+  type InjectedAwareness,
+  type QueryStack,
+  type RankedType,
+  type RetrievalParams,
+  type RetrievalSuccess,
+  type RetrievalTimings,
+  type RetrievalType,
+  type runRetrieval,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  rehydrateAppSettings,
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
@@ -181,7 +195,10 @@ function openOnBranch(branchId: string): void {
   currentStoryStore.set({ ...open, branchId })
 }
 
-async function runRetrievalPhase(abortSignal = new AbortController().signal): Promise<{
+async function runRetrievalPhase(
+  abortSignal = new AbortController().signal,
+  runInTransaction: DbCtx['runInTransaction'] = async () => undefined,
+): Promise<{
   result: PhaseResult
   events: PhaseEmittedEvent[]
   intermediates: Record<string, unknown>
@@ -200,7 +217,7 @@ async function runRetrievalPhase(abortSignal = new AbortController().signal): Pr
     intermediates,
     log,
     db: {} as never,
-    runInTransaction: async () => undefined,
+    runInTransaction,
     storyId: 's1',
     branchId: 'b1',
   })
@@ -217,6 +234,95 @@ function abortedSignal(): AbortSignal {
   const controller = new AbortController()
   controller.abort()
   return controller.signal
+}
+
+const EMPTY_SUMMARY = { pool: 0, kept: 0, selected: 0, tokens: 0, topScore: null }
+
+function trace(id: string, finalScore: number, mmrRank: number): CandidateTrace {
+  return {
+    kind: 'lore',
+    id,
+    displayName: 'The drowned archive',
+    simQ1: 0.71,
+    simQ2: 0.62,
+    simQ3: 0.53,
+    simBlend: 0.64,
+    recencyFactor: 0.98,
+    pinSignal: 0.41,
+    chaptersOld: 2,
+    renderedText: 'Ledgers are kept below the waterline, where the tide reads them first.',
+    kwBoostValue: 0.06,
+    chapterBoostApplied: false,
+    bypassTriggered: false,
+    finalScore,
+    mmrRank,
+    selected: true,
+    dropReason: 'not_dropped',
+    tokensEstimated: 12,
+    embeddingStale: false,
+  }
+}
+
+function scoredBundle(): RankedType {
+  return {
+    selected: [],
+    traces: [trace('lo_1', 0.87, 0), trace('lo_2', 0.12, 1)],
+    funnel: { poolSize: 9, preFilteredSize: 7, selectedCount: 3, tokensUsed: 145, typeBudget: 600 },
+    pool: [],
+  }
+}
+
+const QUERY_TEXTS = [
+  'Mira opens the ledger and reads the tide marks aloud.',
+  'Scene: the drowned archive. Present: Mira. Threads: the missing courier.',
+  'A courier arrived at dusk carrying nothing but an empty seal case.',
+] as const
+
+const queryStack = (): QueryStack => ({
+  q1: { text: QUERY_TEXTS[0], source: 'user_action' },
+  q2: { text: QUERY_TEXTS[1], source: 'structural_digest' },
+  q3: { text: QUERY_TEXTS[2], source: 'prose_extract' },
+  presence: [true, true, true],
+  embedTexts: [...QUERY_TEXTS],
+})
+
+type CaptureRow = {
+  branch_id: string
+  target_entry_id: string
+  capture_mode: string
+  embedding_model_id: string | null
+  failure_reason: string | null
+  payload: Uint8Array
+}
+
+const captureRows = (sqlite: DatabaseSync): CaptureRow[] =>
+  sqlite.prepare('SELECT * FROM probe_captures ORDER BY rowid').all() as CaptureRow[]
+
+const payloadOf = (row: CaptureRow): ProbeCapturePayload =>
+  decompressPayload(row.payload) as ProbeCapturePayload
+
+// Captures commit through the run's own transaction handle, so a test that
+// reads them back needs a real db behind that handle.
+async function probeDb() {
+  const testDb = await createTestDb()
+  testDb.sqlite.exec(`
+    INSERT INTO stories (id, title, created_at, updated_at) VALUES ('s1', 'A story', 1, 1);
+    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b1', 's1', 'main', 1);
+  `)
+  await testDb.db
+    .insert(appSettings)
+    .values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
+  return testDb
+}
+
+// Persist-then-rehydrate: the store applies a fresh diagnostics object, which
+// is what a gate read once would keep pointing past.
+async function setAppGate(db: Awaited<ReturnType<typeof probeDb>>['db'], enabled: boolean) {
+  await db
+    .update(appSettings)
+    .set({ diagnostics: { enabled, debug_level_enabled: false } })
+    .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
+  await rehydrateAppSettings(db)
 }
 
 function lastParams(): RetrievalParams {
@@ -725,6 +831,37 @@ describe('retrieval phase — diagnostics', () => {
 
     expect(log.debug).not.toHaveBeenCalledWith('retrieval.timing', expect.anything())
   })
+
+  it("summarizes every type's funnel and its top score", async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(okOutcome({ bundleOverrides: { lore: scoredBundle() } }))
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.debug).toHaveBeenCalledWith('retrieval.scores', {
+      perType: {
+        entities: EMPTY_SUMMARY,
+        // Every number distinct, and the second trace scores lower than the
+        // first: a summary reading the wrong funnel field or the wrong end of
+        // the MMR order cannot agree with this by coincidence.
+        lore: { pool: 9, kept: 7, selected: 3, tokens: 145, topScore: 0.87 },
+        happenings: EMPTY_SUMMARY,
+        threads: EMPTY_SUMMARY,
+        chapters: EMPTY_SUMMARY,
+      },
+    })
+  })
+
+  it('logs no score summary for a pass that ranked nothing', async () => {
+    seedOpenStory()
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure({ reason: 'call', detail: 'embedder session died', staleCount: 4 }),
+    )
+
+    const { log } = await runRetrievalPhase()
+
+    expect(log.debug).not.toHaveBeenCalledWith('retrieval.scores', expect.anything())
+  })
 })
 
 describe('retrieval phase — RetrievalParams assembly', () => {
@@ -990,5 +1127,137 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     const { recentProse } = lastParams()
     expect(recentProse).toContain('The hall is cold.')
     expect(recentProse).not.toContain('Kara Vex')
+  })
+})
+
+describe('retrieval phase — probe capture', () => {
+  it('captures the pass the turn ran, keyed to the entry that drove it', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({
+      settings: {
+        probe_mode_active: true,
+        retrievalBudgets: { entities: 11, lore: 22, happenings: 33, threads: 44, chapters: 55 },
+      },
+      entries: [
+        entry(1, 'opening', 'The keep stands.', meta()),
+        entry(2, 'user_action', 'I draw the blade.', meta()),
+      ],
+    })
+    runRetrievalMock.mockResolvedValue(retrievalSuccess({ queries: queryStack() }))
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    const rows = captureRows(sqlite)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      branch_id: 'b1',
+      // The tail, not the head: the entry the pass was run for is this turn's
+      // user action, which submitTurn commits before the run starts.
+      target_entry_id: 'entry_2',
+      capture_mode: 'light',
+      embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
+      failure_reason: null,
+    })
+    const payload = payloadOf(rows[0])
+    expect(payload.queries.map((q) => q.text)).toEqual([...QUERY_TEXTS])
+    expect(payload.params.ranker).toEqual(RANKER_DEFAULTS)
+    // Distinct per type, so a snapshot sourced from the code defaults cannot
+    // agree with this.
+    expect(payload.params.retrievalBudgets).toEqual({
+      entities: 11,
+      lore: 22,
+      happenings: 33,
+      threads: 44,
+      chapters: 55,
+    })
+  })
+
+  it('points the capture at the chapter the driving entry sits in', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({
+      settings: { probe_mode_active: true },
+      entries: [{ ...entry(1, 'user_action', 'I draw the blade.', meta()), chapterId: 'chap_1' }],
+    })
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(payloadOf(captureRows(sqlite)[0]).chapter_id).toBe('chap_1')
+  })
+
+  it('captures a failed pass with its reason and the queries it reached', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({ settings: { probe_mode_active: true } })
+    runRetrievalMock.mockResolvedValue(
+      retrievalFailure(
+        { reason: 'call', detail: 'provider unreachable', staleCount: null },
+        { queries: queryStack() },
+      ),
+    )
+
+    const { result } = await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(result).toMatchObject({ status: 'failed' })
+    const rows = captureRows(sqlite)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].failure_reason).toBe('call')
+    // probe.md → Failed captures: the reached query text is the evidence a
+    // failed capture exists to carry.
+    expect(payloadOf(rows[0]).queries.map((q) => q.text)).toEqual([...QUERY_TEXTS])
+  })
+
+  it('writes nothing when the story gate is off', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({ settings: { probe_mode_active: false } })
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(captureRows(sqlite)).toEqual([])
+  })
+
+  // Flipped BETWEEN two passes on purpose: a gate read once and cached agrees
+  // with any single-pass assertion, whichever value the test picked.
+  it('reads the app gate at capture time, not once', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    seedOpenStory({ settings: { probe_mode_active: true } })
+
+    await runRetrievalPhase(undefined, runInTransaction)
+    expect(captureRows(sqlite)).toEqual([])
+
+    await setAppGate(db, true)
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(captureRows(sqlite)).toHaveLength(1)
+  })
+
+  it('spends an armed deep capture on one pass and reverts to light', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({ settings: { probe_mode_active: true } })
+    armDeepCapture()
+
+    await runRetrievalPhase(undefined, runInTransaction)
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(captureRows(sqlite).map((r) => r.capture_mode)).toEqual(['deep', 'light'])
+  })
+
+  it('captures nothing for a turn a cancel reached before the outcome landed', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({ settings: { probe_mode_active: true } })
+    const controller = new AbortController()
+    runRetrievalMock.mockImplementation(async () => {
+      controller.abort()
+      return OK_OUTCOME
+    })
+
+    const { result } = await runRetrievalPhase(controller.signal, runInTransaction)
+
+    expect(result).toEqual({ status: 'aborted' })
+    expect(captureRows(sqlite)).toEqual([])
   })
 })
