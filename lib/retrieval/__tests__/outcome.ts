@@ -1,4 +1,5 @@
 import type { StructuralFloor } from '../pools'
+import type { QueryStack } from '../queries'
 import type {
   InjectedAwareness,
   RetrievalFailure,
@@ -40,6 +41,7 @@ export type RetrievalSuccessOverrides = {
   selected?: Partial<Record<RetrievalType, readonly Candidate[]>>
   /** Whole-bundle replacement, for traces or a funnel that must not be derived. */
   bundles?: Partial<Record<RetrievalType, RankedType>>
+  queries?: QueryStack
   staleCounts?: Partial<Record<RetrievalType, number>>
   injectedAwareness?: InjectedAwareness[]
   selectedLocationIds?: string[]
@@ -66,7 +68,7 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
       ...over.floor,
     },
     bundles: perType((type) => over.bundles?.[type] ?? rankedBundle(over.selected?.[type] ?? [])),
-    queries: {
+    queries: over.queries ?? {
       q1: { text: '', source: 'user_action' },
       q2: { text: '', source: 'structural_digest' },
       q3: { text: '', source: 'prose_extract' },
