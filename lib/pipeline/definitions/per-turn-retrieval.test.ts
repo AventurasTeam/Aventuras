@@ -17,6 +17,7 @@ import type {
   RetrievalTimings,
   RetrievalType,
 } from '@/lib/retrieval'
+import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
   entitiesStore,
@@ -56,60 +57,21 @@ const definition = {
   worldTimeOrigin: { year: 0 },
 }
 
-const EMPTY_BUNDLE: RankedType = {
-  selected: [],
-  traces: [],
-  funnel: {
-    poolSize: 0,
-    preFilteredSize: 0,
-    selectedCount: 0,
-    tokensUsed: 0,
-    typeBudget: 0,
-  },
-}
-
+// Non-zero defaults for the three fields this phase forwards, so a test that
+// asserts on them fails on a dropped value rather than agreeing with the
+// factory's zeros by coincidence.
 function okOutcome({
-  staleCounts = { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
   injectedAwareness = [{ id: 'haw_1', retrievalCount: 0 }],
   timings = { totalMs: 12, syncMs: 3, embedMs: 4, knnMs: 2, rankMs: 1 },
-  bundleOverrides = {},
+  bundleOverrides,
+  ...over
 }: {
   staleCounts?: Record<RetrievalType, number>
   injectedAwareness?: InjectedAwareness[]
   timings?: RetrievalTimings
   bundleOverrides?: Partial<Record<RetrievalType, RankedType>>
 } = {}): RetrievalSuccess {
-  return {
-    ok: true,
-    floor: {
-      sceneEntities: [],
-      currentLocation: null,
-      activeThreads: [],
-      alwaysEntities: [],
-      alwaysLore: [],
-      alwaysThreads: [],
-      seatedIds: new Set<string>(),
-    },
-    bundles: {
-      entities: EMPTY_BUNDLE,
-      lore: EMPTY_BUNDLE,
-      happenings: EMPTY_BUNDLE,
-      threads: EMPTY_BUNDLE,
-      chapters: EMPTY_BUNDLE,
-      ...bundleOverrides,
-    },
-    queries: {
-      q1: { text: '', source: 'user_action' },
-      q2: { text: '', source: 'structural_digest' },
-      q3: { text: '', source: 'prose_extract' },
-      presence: [false, false, false],
-      embedTexts: [],
-    },
-    staleCounts,
-    injectedAwareness,
-    selectedLocationIds: [],
-    timings,
-  }
+  return retrievalSuccess({ ...over, injectedAwareness, timings, bundles: bundleOverrides })
 }
 
 function bumpEvent(id: string, priorCount = 0): PhaseEmittedEvent {
