@@ -172,6 +172,9 @@ importers:
       expo-web-browser:
         specifier: ~55.0.14
         version: 55.0.14(expo@55.0.17)(react-native@0.83.6(@babel/core@7.29.0)(@react-native/metro-config@0.85.2(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.0))
+      fflate:
+        specifier: ^0.8.3
+        version: 0.8.3
       harper.js:
         specifier: ^2.4.0
         version: 2.4.0
