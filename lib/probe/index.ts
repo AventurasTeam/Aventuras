@@ -11,9 +11,10 @@ export {
   capturesForStoryQuery,
   clearCapturesForStoryOp,
   decodeCapture,
+  decodeCaptures,
   deleteCaptureOp,
 } from './read'
 export type { StoredCapture } from './read'
-export { assertRankerParams, RankerParamsError } from './validate'
+export { RankerParamsError } from './validate'
 export { CAPTURE_CAP, writeProbeCapture } from './writer'
 export type { CaptureWriteDeps, CaptureWriteInput } from './writer'

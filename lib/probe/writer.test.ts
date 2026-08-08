@@ -3,15 +3,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 
-import { captureInput, seed } from './__tests__/fixtures'
+import { captureInput, seededDb } from './__tests__/fixtures'
 import { compressPayload, decompressPayload } from './compress'
 import { buildCapturePayload } from './payload'
 import { writeProbeCapture, type CaptureWriteInput } from './writer'
 
 describe('writeProbeCapture', () => {
   it('writes one row when both gates are on', async () => {
-    const { sqlite, runInTransaction } = await createTestDb()
-    seed(sqlite)
+    const { sqlite, runInTransaction } = await seededDb()
 
     const result = await writeProbeCapture({ runInTransaction }, captureInput())
 
@@ -25,8 +24,7 @@ describe('writeProbeCapture', () => {
     ['app gate off', { appGateOn: false, storyGateOn: true }],
     ['story gate off', { appGateOn: true, storyGateOn: false }],
   ])('writes nothing when the %s', async (_label, gates) => {
-    const { sqlite, runInTransaction } = await createTestDb()
-    seed(sqlite)
+    const { sqlite, runInTransaction } = await seededDb()
 
     const result = await writeProbeCapture({ runInTransaction }, captureInput(gates))
 
@@ -37,8 +35,7 @@ describe('writeProbeCapture', () => {
   })
 
   it('writes the row read back from the db, matching the input identity and true payload size', async () => {
-    const { sqlite, runInTransaction } = await createTestDb()
-    seed(sqlite)
+    const { sqlite, runInTransaction } = await seededDb()
     const testInput = captureInput()
 
     await writeProbeCapture({ runInTransaction }, testInput)
@@ -68,8 +65,7 @@ describe('writeProbeCapture', () => {
   })
 
   it('derives failure_reason from a failed outcome instead of a caller-supplied field', async () => {
-    const { sqlite, runInTransaction } = await createTestDb()
-    seed(sqlite)
+    const { sqlite, runInTransaction } = await seededDb()
     const failedOutcome = retrievalFailure({
       reason: 'call',
       detail: 'provider unreachable',
@@ -83,8 +79,7 @@ describe('writeProbeCapture', () => {
   })
 
   it('evicts the oldest across branches at the 101st capture for the story, without touching another story', async () => {
-    const { sqlite, runInTransaction } = await createTestDb()
-    seed(sqlite)
+    const { sqlite, runInTransaction } = await seededDb()
 
     // st_2's captures predate every st_1 capture below — the rows a story-
     // unscoped evict would reach for first, since it would sort globally

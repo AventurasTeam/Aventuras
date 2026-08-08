@@ -19,6 +19,9 @@ export const TYPE_OF_KIND = {
  */
 export type RetrievalType = (typeof TYPE_OF_KIND)[CandidateKind]
 
+/** The five values of RetrievalType, for a caller that needs to enumerate them. */
+export const RETRIEVAL_TYPES = Object.values(TYPE_OF_KIND) as readonly RetrievalType[]
+
 /** Positional value-array query seam, matching lib/db/runtime/exec.ts's queryRows. */
 export type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
 

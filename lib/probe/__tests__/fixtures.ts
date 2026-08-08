@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite'
 
+import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { buildQueryStack, countTokens, rankPerType, RANKER_DEFAULTS } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
@@ -64,6 +65,13 @@ export function seed(sqlite: DatabaseSync): void {
       VALUES ('br_a', 'st_1', 'main', 1000), ('br_b', 'st_1', 'fork', 1000),
              ('br_c', 'st_2', 'main', 1000);
   `)
+}
+
+/** A fresh test db with `seed` already applied — every probe test wants both. */
+export async function seededDb() {
+  const db = await createTestDb()
+  seed(db.sqlite)
+  return db
 }
 
 // Callers override only what they're testing.

@@ -26,7 +26,7 @@ export type {
 export { runSyncStage } from './sync'
 export type { SyncStageDeps, SyncStageResult } from './sync'
 export { countEntryTokens, countTokens, TOKENIZER_IDENTITY } from './tokens'
-export { TYPE_OF_KIND } from './types'
+export { RETRIEVAL_TYPES } from './types'
 export type {
   Candidate,
   CandidateKind,

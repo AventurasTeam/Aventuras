@@ -8,12 +8,10 @@ import type {
   RetrievalSuccess,
   RetrievalTimings,
 } from '../run'
-import { TYPE_OF_KIND, type Candidate, type RankedType, type RetrievalType } from '../types'
-
-const TYPES = Object.values(TYPE_OF_KIND)
+import { RETRIEVAL_TYPES, type Candidate, type RankedType, type RetrievalType } from '../types'
 
 const perType = <T>(value: (type: RetrievalType) => T): Record<RetrievalType, T> =>
-  Object.fromEntries(TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
+  Object.fromEntries(RETRIEVAL_TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
 
 /**
  * A bundle whose funnel agrees with its `selected` list. Ranking is what
