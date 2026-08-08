@@ -351,11 +351,18 @@ class UpdaterService {
   }
 
   /**
-   * Downloads and installs the available update. Desktop only -- returns `false` when
-   * there is nothing staged, a download is already running, or the platform cannot install.
+   * Downloads and installs the available update. Returns `false` when there is nothing
+   * staged, a download is already running, or this build must not install over itself.
+   *
+   * That last condition is enforced here rather than only in the dialog. Android happens to
+   * be covered already -- `checkViaGitHub` leaves `updateAvailable` null -- but a `.deb`
+   * install and an unpackaged dev build both reach this with a real `Update` staged, and
+   * for the dev build installing is destructive (see `checkViaTauri`). Leaving that to the
+   * caller makes a UI branch the only thing standing between a second caller and a deleted
+   * binary.
    */
   async downloadAndInstall(onProgress?: (progress: UpdateProgress) => void): Promise<boolean> {
-    if (!this.updateAvailable || this.downloading) {
+    if (!this.updateAvailable || this.downloading || !this.lastInfo?.canInstallInApp) {
       return false
     }
 
