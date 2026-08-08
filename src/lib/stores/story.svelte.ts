@@ -616,6 +616,25 @@ class StoryStore {
       await ui.loadSuggestions(storyId)
     }
 
+    // The settings-keyed cache above is empty for a story that never generated choices in this
+    // app (e.g. a fresh import): fall back to the last narration entry's own suggestedActions,
+    // same as switchBranch does, so an imported story doesn't open with choices silently missing.
+    //
+    // Restore only. Opening a story must never trigger generation: the delete-path variant would
+    // also arm `suggestionsRegenerationNeeded`, which costs a model call on every open of a story
+    // that legitimately has no choices — and on a story with no entries yet the flag would simply
+    // stay armed until the first turn ends, firing a second, redundant round of choices on top of
+    // the one the pipeline had just produced.
+    //
+    // Requiring the last entry to be a narration is what keeps the restore honest: with a
+    // trailing user_action (an app closed mid-turn) the last narration's choices are the ones the
+    // player already spent, and showing them again would also write them back to the cache.
+    const hasPersistedChoices =
+      story.mode === 'adventure' ? ui.actionChoices.length > 0 : ui.suggestions.length > 0
+    if (!hasPersistedChoices && this.entries[this.entries.length - 1]?.type === 'narration') {
+      this.restoreSuggestedActionsFromLastNarration()
+    }
+
     // Set mobile-friendly defaults (close sidebar, etc.)
     ui.setMobileDefaults()
 
@@ -820,28 +839,43 @@ class StoryStore {
   }
 
   /**
+   * Restore suggested actions from the last narration entry's own `suggestedActions`.
+   *
+   * Pure restore: it does not clear anything and does not request regeneration, so a caller that
+   * merely opened a story cannot end up spending a model call. `restoreSuggestedActionsAfterDelete`
+   * is the variant that adds those two effects, and it is the only one that should be used after
+   * time-travel. Returns true if saved actions were found.
+   */
+  private restoreSuggestedActionsFromLastNarration(): boolean {
+    if (!this.currentStory) return false
+
+    // Actions attach to narration entries
+    const lastNarration = [...this.entries].reverse().find((e) => e.type === 'narration')
+    if (!lastNarration) return false
+
+    const restored = ui.restoreSuggestedActionsFromEntry(
+      this.storyMode,
+      lastNarration.suggestedActions,
+      this.currentStory.id,
+    )
+    if (restored) {
+      log('Restored suggested actions from entry at position', lastNarration.position)
+    }
+    return restored
+  }
+
+  /**
    * Restore suggested actions from the new last narration entry after time-travel (delete).
    * Returns true if saved actions were found and restored, false if regeneration is needed.
    */
   private restoreSuggestedActionsAfterDelete(): boolean {
     if (!this.currentStory) return false
 
-    // Find the new last narration entry (actions attach to narration entries)
-    const lastNarration = [...this.entries].reverse().find((e) => e.type === 'narration')
-
     const storyMode = this.storyMode
     const storyId = this.currentStory.id
 
-    if (lastNarration) {
-      const restored = ui.restoreSuggestedActionsFromEntry(
-        storyMode,
-        lastNarration.suggestedActions,
-        storyId,
-      )
-      if (restored) {
-        log('Restored suggested actions from entry at position', lastNarration.position)
-        return true
-      }
+    if (this.restoreSuggestedActionsFromLastNarration()) {
+      return true
     }
 
     // No saved actions found — clear current ones so stale actions don't persist
