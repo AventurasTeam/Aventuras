@@ -12,12 +12,11 @@ import type { Logger } from '@/lib/diagnostics'
 import type {
   InjectedAwareness,
   RankedType,
-  RetrievalDeps,
-  RetrievalOutcome,
   RetrievalParams,
   RetrievalSuccess,
   RetrievalTimings,
   RetrievalType,
+  runRetrieval,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
@@ -34,11 +33,9 @@ import { getPipeline } from '../authoring/registry'
 import type { PhaseEmittedEvent, PhaseResult } from '../types'
 
 // Typed rather than a bare `vi.fn()` so a mocked resolution missing `partial`
-// fails to compile instead of silently feeding the probe phase `undefined`.
-type RunRetrieval = (deps: RetrievalDeps, params: RetrievalParams) => Promise<RetrievalOutcome>
-
+// fails to compile instead of silently feeding the phase `undefined`.
 const { runRetrievalMock, refreshEmbeddingStatusMock } = vi.hoisted(() => ({
-  runRetrievalMock: vi.fn<RunRetrieval>(),
+  runRetrievalMock: vi.fn<typeof runRetrieval>(),
   refreshEmbeddingStatusMock: vi.fn(),
 }))
 

@@ -195,6 +195,8 @@ export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
 ): Promise<RetrievalOutcome> {
+  // Threaded rather than returned: the catch below reports progress from a throw at
+  // any depth of the pass, which no return value can reach.
   const partial: RetrievalPartial = { queries: null, floor: null, bundles: {} }
   try {
     return await runRetrievalPass(deps, params, partial)
@@ -352,9 +354,7 @@ async function runRetrievalPass(
     chapters,
   )
   rankMs += performance.now() - rankStartedAt
-  // Nothing between here and the success return can throw, so this line is
-  // unreachable from a failure path today; it guards against a future insertion
-  // between the two silently dropping the rest of the bundle from a capture.
+  // partial.bundles must never lag the bundles the pass has produced.
   Object.assign(partial.bundles, bundles)
 
   const placeIds = new Set(

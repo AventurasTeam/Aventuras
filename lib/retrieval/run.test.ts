@@ -8,7 +8,6 @@ import {
   type RetrievalDeps,
   type RetrievalOutcome,
   type RetrievalParams,
-  type RetrievalPartial,
   type RetrievalSuccess,
 } from './run'
 import { isHappeningCandidate, type QueryAll } from './types'
@@ -217,14 +216,9 @@ function expectOk(out: RetrievalOutcome): RetrievalSuccess {
   return out
 }
 
-function expectFailure(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }>['failure'] {
+function expectBlocking(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }> {
   if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
-  return out.failure
-}
-
-function expectPartial(out: RetrievalOutcome): RetrievalPartial {
-  if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
-  return out.partial
+  return out
 }
 
 const tracedIds = (bundle: { traces: readonly { id: string }[] }): string[] =>
@@ -302,7 +296,10 @@ describe('runRetrieval — sync ordering', () => {
     expect(loadStaleRows).toHaveBeenCalledWith(['br_9'])
   })
 
-  it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
+  // loadStaleRows must return a dirty row: an empty set short-circuits the sync
+  // before it ever reaches embedRows, so this is what actually exercises the
+  // sync's own failure path rather than the query embed's.
+  const withSyncFailure = async () => {
     const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
     const out = await runRetrieval(
       deps({
@@ -316,8 +313,12 @@ describe('runRetrieval — sync ordering', () => {
       }),
       params(),
     )
+    return { ...expectBlocking(out), queryAll }
+  }
 
-    const failure = expectFailure(out)
+  it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
+    const { failure, queryAll } = await withSyncFailure()
+
     expect(failure.reason).toBe('init')
     expect(failure.detail).toBe('embedder down')
     // The sync knew how many rows it was trying to embed, unlike a query-embed failure.
@@ -329,20 +330,9 @@ describe('runRetrieval — sync ordering', () => {
   // here has nothing to report beyond the failure itself — unlike a query-embed
   // failure, which reaches both.
   it('carries no partial state when the sync stage fails', async () => {
-    const out = await runRetrieval(
-      deps({
-        queryAll: makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }),
-        loadStaleRows: async () => [
-          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
-        ],
-        embedRows: async () => {
-          throw new EmbedderInitError('embedder down')
-        },
-      }),
-      params(),
-    )
+    const { partial } = await withSyncFailure()
 
-    expect(expectPartial(out)).toEqual({ queries: null, floor: null, bundles: {} })
+    expect(partial).toEqual({ queries: null, floor: null, bundles: {} })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -434,7 +424,7 @@ describe('runRetrieval — query embed failure', () => {
   const withQueryEmbed = async (embedTexts: RetrievalDeps['embedTexts']) => {
     const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
     const out = await runRetrieval(deps({ queryAll, embedTexts }), params())
-    return { failure: expectFailure(out), queryAll }
+    return { ...expectBlocking(out), queryAll }
   }
 
   it('reports a typed init failure when the embedder session never comes up', async () => {
@@ -460,7 +450,7 @@ describe('runRetrieval — query embed failure', () => {
       params(),
     )
 
-    const partial = expectPartial(out)
+    const { partial } = expectBlocking(out)
     expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
     expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
     expect(partial.bundles).toEqual({})
@@ -518,24 +508,21 @@ describe('runRetrieval — query embed failure', () => {
       params(),
     )
 
-    const failure = expectFailure(out)
+    const { failure, partial } = expectBlocking(out)
     expect(failure.reason).toBe('init')
     expect(failure.detail).toMatch(/unit-norm/)
     // This throw comes from deep inside pool assembly — after the floor and the
     // query stack exist, but before any bundle is ranked — and it unwinds past
-    // runRetrievalPass entirely, so only the accumulator runRetrieval closed
-    // over can still report what the pass had reached.
-    const partial = expectPartial(out)
+    // runRetrievalPass entirely, so only the accumulator runRetrieval owns can
+    // still report what the pass had reached.
     expect(partial.floor).not.toBeNull()
     expect(partial.queries).not.toBeNull()
     expect(partial.bundles).toEqual({})
   })
 
-  // The happenings pool builds AFTER the chapters bundle is already ranked and
-  // stashed (run.ts ranks chapters early to feed the happenings boost), so a
-  // corrupt vector that fails happenings specifically is the one place that can
-  // observe the accumulator keeping a bundle the pass never reached the tail of
-  // — a capture with only `chapters` populated, not an empty `{}`.
+  // Chapters ranks before the happenings pool builds, so a corrupt vector that
+  // fails happenings specifically is the only failure that can observe a
+  // non-empty partial.bundles.
   it('keeps only the chapters bundle when a corrupt vector fails the happenings pool', async () => {
     const notUnit = new Uint8Array(Float32Array.from([2, 2]).buffer)
     const inner = makeQueryAll({
@@ -553,7 +540,7 @@ describe('runRetrieval — query embed failure', () => {
 
     const out = await runRetrieval(deps({ queryAll }), params())
 
-    const partial = expectPartial(out)
+    const { partial } = expectBlocking(out)
     expect(Object.keys(partial.bundles)).toEqual(['chapters'])
     expect(partial.bundles.chapters?.selected.map((c) => c.id)).toEqual(['ch_1'])
   })
