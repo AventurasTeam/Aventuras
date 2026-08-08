@@ -75,7 +75,12 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
     ...activeThreads.map((t) => t.id),
   ])
 
-  // 'always' is a user-intent override across entities / lore / threads.
+  // 'always' is a user-intent override across entities / lore / threads, and
+  // deliberately status-blind: seating here is what exempts an `always` row from
+  // the retired exclusion and from Layer-A same-name suppression, both of which
+  // live in filterEntityPool and only ever see rows the floor did not take
+  // (edge-cases.md → Layer A). Adding a status predicate here would make
+  // `always` unreachable for retired rows, which is its only opt-in.
   const alwaysEntities = input.entities.filter(
     (e) => e.injectionMode === 'always' && !seatedIds.has(e.id),
   )

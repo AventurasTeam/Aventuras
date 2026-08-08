@@ -335,6 +335,29 @@ describe('filterEntityPool', () => {
     expect(ids(pool)).toContain('a')
   })
 
+  // edge-cases.md → Layer A: the exemption is the point, not an accident of
+  // ordering. Suppressing an `always` row keeps its id out of the prompt, which
+  // stops the model naming it in <scene_entities>, which stops piggyback
+  // promoting it — the suppression would sustain itself until the next
+  // classifier run.
+  it('exempts a staged always row from suppression, seating it instead', () => {
+    const named = 'Mira stepped out of the rain.'
+    const flagged = entity({ id: 'mira', status: 'staged', injectionMode: 'always', name: 'Mira' })
+    const floor = floorOf({ entities: [flagged] })
+    expect(ids(floor.alwaysEntities)).toEqual(['mira'])
+    expect(
+      ids(filterEntityPool([flagged], { floorIds: floor.seatedIds, recentProse: named })),
+    ).toEqual([])
+
+    // Same row, same prose, without the flag: suppressed and unseated.
+    const ordinary = entity({ id: 'mira', status: 'staged', name: 'Mira' })
+    const plainFloor = floorOf({ entities: [ordinary] })
+    expect(ids(plainFloor.alwaysEntities)).toEqual([])
+    expect(
+      ids(filterEntityPool([ordinary], { floorIds: plainFloor.seatedIds, recentProse: named })),
+    ).toEqual([])
+  })
+
   it('does not suppress an ACTIVE entity that shares a suppressed staged name', () => {
     const namesakes = [
       entity({ id: 'active_mira', name: 'Mira' }),

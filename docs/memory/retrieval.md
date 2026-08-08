@@ -831,11 +831,20 @@ The retrieval pool for entities splits by status:
 | **Staged**           | "Available to introduce when narratively appropriate"                    |
 | **Retired**          | Default-excluded; opt-in via `injection_mode='always'` for ghosts/echoes |
 
-All three compete for the entity-type token budget. Embedding
-similarity to the current scene digest determines which staged
-entities float up — a wizard-curated character "the queen who rules
-the throne room" auto-surfaces when the scene digest mentions the
+Active off-scene and staged compete for the entity-type token budget.
+Embedding similarity to the current scene digest determines which
+staged entities float up — a wizard-curated character "the queen who
+rules the throne room" auto-surfaces when the scene digest mentions the
 throne room.
+
+**The retired sub-pool is empty in practice, and that is correct.**
+`injection_mode='always'` is its only opt-in, and the
+[structural floor](#structural-floor--always-inject) seats every
+`always` row before pool assembly runs — so a retired entity that
+opted in is already injected and never reaches the pool to compete.
+The sub-pool is a statement about what the ranker would do, not a path
+production takes: a retired row without `always` is excluded, and one
+with it is seated. Nothing is ranked in between.
 
 ### Pool exclusions
 
@@ -849,6 +858,10 @@ throne room.
   recent un-classified buffer prose are suppressed from the current
   pool (see
   [`edge-cases.md → Name collision`](./edge-cases.md#name-collision-and-disambiguation)).
+  A staged entity carrying `injection_mode='always'` is exempt, because
+  the floor seated it before the pool existed. That exemption is
+  intended, not incidental — see
+  [`edge-cases.md → Layer A`](./edge-cases.md#layer-a--retrieval-time-same-name-suppression).
 
 ---
 
