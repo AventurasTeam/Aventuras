@@ -1,3 +1,4 @@
+import { gzipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 
 import { compressPayload, decompressPayload } from './compress'
@@ -12,7 +13,9 @@ const capturePayload = () => ({
     happenings: Array.from({ length: 40 }, (_, i) => ({
       target_kind: 'happening',
       target_id: `hap_${i}`,
-      display_name: 'The bridge fell',
+      // Non-ASCII on purpose: `size` must be UTF-8 BYTES, and an all-ASCII
+      // fixture cannot tell `TextEncoder().encode(s).length` from `s.length`.
+      display_name: 'Most přes Vltavu',
       display_text: 'The bridge fell during the third night of the siege.',
       sim_q1: 0.5,
       sim_q2: 0.4,
@@ -63,5 +66,13 @@ describe('compressPayload', () => {
 
   it('throws a named error on bytes that are not gzip', () => {
     expect(() => decompressPayload(new Uint8Array([1, 2, 3]))).toThrow(/probe capture/i)
+  })
+
+  it('throws a named error on valid gzip carrying invalid JSON', () => {
+    // The other error test fails at gunzip, so without this one the JSON.parse
+    // catch is unreachable — deleting it leaves the suite green.
+    const truncated = gzipSync(new TextEncoder().encode('{"a": '))
+
+    expect(() => decompressPayload(truncated)).toThrow(/probe capture/i)
   })
 })
