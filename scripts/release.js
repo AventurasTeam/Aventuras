@@ -16,9 +16,9 @@ import fs from 'fs'
 import { execFileSync } from 'child_process'
 import path from 'path'
 import { bumpVersion, isValidVersion, compareVersions } from './version.js'
+import { pickReleaseRemote } from './remote.js'
 
 const rootDir = process.cwd()
-const REMOTE = 'https://github.com/AventurasTeam/Aventuras.git'
 
 const KNOWN_FLAGS = ['--dry-run', '--no-merge-back']
 
@@ -70,6 +70,14 @@ function fail(message, hint) {
   if (hint) console.error(`  ${hint}`)
   process.exit(1)
 }
+
+/**
+ * Where the release is pushed. A configured remote pointing at the release repository when
+ * there is one, so the push uses the transport and credentials that remote already has --
+ * otherwise the canonical HTTPS URL. See `remote.js` for why this is not simply `origin`,
+ * and not a hardcoded URL either.
+ */
+const { ref: REMOTE, label: REMOTE_LABEL } = pickReleaseRemote(tryGit('remote', '-v').out)
 
 // ---------------------------------------------------------------------------
 // Pre-flight. Nothing below this block writes anything.
@@ -152,10 +160,15 @@ if (tryGit('rev-parse', '--verify', `refs/heads/${releaseBranch}`).ok) {
 
 // The network checks are here, with the cheap ones, because the whole point is that
 // nothing is written until every answer is in.
-console.log(`Checking ${REMOTE} for ${tag}...`)
+console.log(`Checking ${REMOTE_LABEL} for ${tag}...`)
 const remoteRefs = tryGit('ls-remote', REMOTE, `refs/tags/${tag}`, `refs/heads/${releaseBranch}`)
 if (!remoteRefs.ok) {
-  fail('Could not reach the release remote.', `${REMOTE} — check the network and your credentials.`)
+  fail(
+    'Could not reach the release remote.',
+    `${REMOTE_LABEL} — check the network and your credentials. If no configured remote ` +
+      'points at the release repository, this falls back to an HTTPS URL, which GitHub no ' +
+      'longer accepts a password for.',
+  )
 }
 if (remoteRefs.out.includes(`refs/tags/${tag}`)) {
   fail(`Tag ${tag} already exists on the remote.`, 'That version has already been released.')
@@ -167,7 +180,7 @@ if (remoteRefs.out.includes(`refs/heads/${releaseBranch}`)) {
 console.log(`\n${currentVersion} → ${newVersion}`)
 console.log(`  branch:      ${releaseBranch}`)
 console.log(`  tag:         ${tag}`)
-console.log(`  remote:      ${REMOTE}`)
+console.log(`  remote:      ${REMOTE_LABEL}`)
 console.log(`  merge back:  ${mergeBack ? startBranch : 'no (--no-merge-back)'}`)
 
 if (dryRun) {
