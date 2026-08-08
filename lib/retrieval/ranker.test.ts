@@ -153,6 +153,49 @@ describe('rankPerType — scoring', () => {
     )
     expect(r.traces[0].bypassTriggered).toBe(true)
     expect(r.traces[0].finalScore).toBeCloseTo(0.1, 6)
+    // The score alone revives nothing: bypass output is capped at
+    // 1 - tau_revive = 0.15, under the 0.2 first-pick floor. Seating is what
+    // "revives" means, so assert it rather than the score that precedes it.
+    expect(r.selected.map((c) => c.id)).toEqual(['a'])
+    expect(r.traces[0].dropReason).toBe('not_dropped')
+  })
+
+  // Even a perfect sim_blend cannot clear the floor on score alone, so this is
+  // the case that proves the exemption rather than a lucky threshold margin.
+  it('seats a bypassed row at the bypass ceiling, where the score cannot reach', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [1, 1, 1], chaptersOld: 60, renderedText: 'x'.repeat(120) })],
+      'happenings',
+      10_000,
+      base,
+    )
+    expect(r.traces[0].finalScore).toBeCloseTo(0.15, 6)
+    expect(r.selected.map((c) => c.id)).toEqual(['a'])
+  })
+
+  it('does not extend the exemption to rows that never bypassed', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [0.1, 0.1, 0.1], chaptersOld: 60 })],
+      'happenings',
+      10_000,
+      base,
+    )
+    expect(r.traces[0].bypassTriggered).toBe(false)
+    expect(r.traces[0].dropReason).toBe('below_threshold')
+    expect(r.selected).toEqual([])
+  })
+
+  // retrieval.md → High-similarity bypass: "Revival doesn't bypass the budget."
+  it('still holds a bypassed row to the type budget', () => {
+    const r = rankPerType(
+      [candidate({ id: 'a', sims: [1, 1, 1], chaptersOld: 60, renderedText: 'x'.repeat(4000) })],
+      'happenings',
+      20,
+      base,
+    )
+    expect(r.traces[0].bypassTriggered).toBe(true)
+    expect(r.traces[0].dropReason).toBe('candidate_too_large')
+    expect(r.selected).toEqual([])
   })
 
   it('does not trigger the bypass below tau_revive', () => {

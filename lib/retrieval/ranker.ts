@@ -156,12 +156,17 @@ export function rankPerType(
 
   for (let i = 0; i < ranked.length; i++) {
     const r = ranked[i]
-    // Canon breaks here; the flag instead keeps walking to emit a trace per
-    // row. Equivalent because mmrScore is non-increasing down the ranking.
+    // Canon breaks here; the flag instead keeps walking to emit a trace per row.
+    // No longer merely equivalent — a bypassed row below the floor is seatable,
+    // so the walk has to continue past it rather than stopping.
     if (r.mmrScore < input.params.minScoreThreshold) belowFloor = true
 
     let dropReason: DropReason = 'not_dropped'
-    if (belowFloor) {
+    // retrieval.md → High-similarity bypass: the exemption IS the mechanism.
+    // bypassScore is capped at 1 - tauRevive = 0.15, under the 0.2 first-pick
+    // floor (minScoreThreshold / lambdaDiv), so raising the score alone revives
+    // nothing at any similarity. Budget limits below still bind.
+    if (belowFloor && !r.bypassTriggered) {
       dropReason = 'below_threshold'
     } else if (r.tokensEstimated > budget) {
       dropReason = 'candidate_too_large'
