@@ -120,38 +120,50 @@ const queriesOf = (
 const lines = (...parts: (string | null)[]): string =>
   parts.filter((p) => p !== null && p !== '').join('\n')
 
-// Mirrors run.ts's entity/lore/thread pool projections exactly (ENTITY_FRAMING
-// + the same head/body join), so a floor row prices the same way the ranker
-// would price the identical row shape in a pool — the number this field
-// exists to report (probe.md -> the floor "surfaces what budget the per-type
-// pools actually competed over").
-const entityFloorText = (e: Pick<EntityRow, 'name' | 'description' | 'status'>): string => {
+const nameWithDescription = (name: string, description: string | null): string =>
+  description ? `${name}: ${description}` : name
+
+// Six floor branches render through two template families and none of them
+// share a formula. per-turn.ts's in-scene/current-location rows and
+// memory-blocks.ts's active-threads row carry no framing or status — a
+// floor-seated row is present, so it never reads as "elsewhere" or
+// "introducible" the way a pooled row can. Only the memory-blocks.ts "always"
+// rows (structuralPinnedEntities/Lore/Threads) reuse the ranker's own
+// entity/lore/thread projections, ENTITY_FRAMING included.
+const sceneEntityText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
+  lines(`## ${e.name}`, e.description)
+
+const currentLocationText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
+  nameWithDescription(e.name, e.description)
+
+const activeThreadText = (t: Pick<ThreadRow, 'title' | 'description'>): string =>
+  lines(t.title, t.description)
+
+const alwaysEntityText = (e: Pick<EntityRow, 'name' | 'description' | 'status'>): string => {
   const framing = ENTITY_FRAMING[e.status]
   const head = framing === undefined ? e.name : `${e.name} (${framing})`
-  return e.description ? `${head}: ${e.description}` : head
+  return nameWithDescription(head, e.description)
 }
 
-const threadFloorText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
+const alwaysThreadText = (t: Pick<ThreadRow, 'title' | 'description' | 'status'>): string =>
   lines(`${t.title} (${t.status})`, t.description)
 
-const loreFloorText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
+const alwaysLoreText = (l: Pick<LoreRow, 'title' | 'body'>): string => lines(l.title, l.body)
 
 const floorRowsOf = (floor: StructuralFloor | null): ProbeCapturePayload['structural_floor'] => {
   if (floor === null) return []
   const rows: ProbeCapturePayload['structural_floor'] = []
-  const pushEntity = (kind: VecTargetKind, id: string, e: Parameters<typeof entityFloorText>[0]) =>
-    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(entityFloorText(e)) })
-  const pushThread = (id: string, t: Parameters<typeof threadFloorText>[0]) =>
-    rows.push({ target_kind: 'thread', target_id: id, tokens: countTokens(threadFloorText(t)) })
-  const pushLore = (id: string, l: Parameters<typeof loreFloorText>[0]) =>
-    rows.push({ target_kind: 'lore', target_id: id, tokens: countTokens(loreFloorText(l)) })
+  const push = (kind: VecTargetKind, id: string, text: string) =>
+    rows.push({ target_kind: kind, target_id: id, tokens: countTokens(text) })
 
-  for (const e of floor.sceneEntities) pushEntity('entity', e.id, e)
-  if (floor.currentLocation) pushEntity('entity', floor.currentLocation.id, floor.currentLocation)
-  for (const t of floor.activeThreads) pushThread(t.id, t)
-  for (const e of floor.alwaysEntities) pushEntity('entity', e.id, e)
-  for (const l of floor.alwaysLore) pushLore(l.id, l)
-  for (const t of floor.alwaysThreads) pushThread(t.id, t)
+  for (const e of floor.sceneEntities) push('entity', e.id, sceneEntityText(e))
+  if (floor.currentLocation) {
+    push('entity', floor.currentLocation.id, currentLocationText(floor.currentLocation))
+  }
+  for (const t of floor.activeThreads) push('thread', t.id, activeThreadText(t))
+  for (const e of floor.alwaysEntities) push('entity', e.id, alwaysEntityText(e))
+  for (const l of floor.alwaysLore) push('lore', l.id, alwaysLoreText(l))
+  for (const t of floor.alwaysThreads) push('thread', t.id, alwaysThreadText(t))
   return rows
 }
 

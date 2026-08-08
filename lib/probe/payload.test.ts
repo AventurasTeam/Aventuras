@@ -461,7 +461,10 @@ describe('buildCapturePayload', () => {
           status: 'pending',
           injectionMode: 'always',
           title: "The Warden's Contract",
-          description: 'a debt owed across generations',
+          // Long enough to land on a token count distinct from every other
+          // branch below — active_thread and the original wording both priced
+          // to 13, which would have let the two branches' formulas swap unnoticed.
+          description: 'a debt owed across three generations',
         },
       ],
       sceneEntityIds: ['e_scene'],
@@ -476,27 +479,25 @@ describe('buildCapturePayload', () => {
       outcome: retrievalSuccess({ floor }),
     })
 
-    // Each row's expected text mirrors run.ts's own entity/lore/thread
-    // projections (ENTITY_FRAMING + the title/body or title-status/description
-    // join) — the same formula the ranker prices an identical row shape with —
-    // priced here through the real tokenizer as an independent oracle.
+    // Each row's expected text mirrors the template that actually renders it —
+    // per-turn.ts for the in-scene/current-location rows (no framing, no
+    // status: a floor-seated row is present, never "elsewhere"), memory-blocks.ts
+    // for active threads (title/description, no status) and for the three
+    // "always" rows (which do reuse the ranker's own entity/lore/thread
+    // projections). Priced through the real tokenizer as an independent oracle,
+    // and each branch's token count is distinct from every other's — a shared
+    // value would hide one branch's formula silently taking another's.
     expect(payload.structural_floor).toEqual([
-      {
-        target_kind: 'entity',
-        target_id: 'e_scene',
-        tokens: countTokens('Mira (currently elsewhere): a courier'),
-      },
+      { target_kind: 'entity', target_id: 'e_scene', tokens: countTokens('## Mira\na courier') },
       {
         target_kind: 'entity',
         target_id: 'e_loc',
-        tokens: countTokens('The drowned archive (currently elsewhere): half-flooded stacks'),
+        tokens: countTokens('The drowned archive: half-flooded stacks'),
       },
       {
         target_kind: 'thread',
         target_id: 't_active',
-        tokens: countTokens(
-          'Find the missing ledger (active)\nMira needs it before the tide returns',
-        ),
+        tokens: countTokens('Find the missing ledger\nMira needs it before the tide returns'),
       },
       {
         target_kind: 'entity',
@@ -511,8 +512,13 @@ describe('buildCapturePayload', () => {
       {
         target_kind: 'thread',
         target_id: 't_always',
-        tokens: countTokens("The Warden's Contract (pending)\na debt owed across generations"),
+        tokens: countTokens(
+          "The Warden's Contract (pending)\na debt owed across three generations",
+        ),
       },
     ])
+
+    const tokenCounts = payload.structural_floor.map((r) => r.tokens)
+    expect(new Set(tokenCounts).size).toBe(tokenCounts.length)
   })
 })
