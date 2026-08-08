@@ -10,6 +10,7 @@ import {
   type LoreRow,
   type ThreadRow,
 } from './pools'
+import type { LoadedEntityRow, LoadedLoreRow } from './source-rows'
 
 const entity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): EntityRow => ({
   kind: 'character',
@@ -145,6 +146,57 @@ describe('buildStructuralFloor', () => {
     const floor = floorOf({ entities, sceneEntityIds: ['char_a'], currentLocationId: 'loc_a' })
     const pool = filterEntityPool(entities, { floorIds: floor.seatedIds, recentProse: '' })
     for (const id of floor.seatedIds) expect(ids(pool)).not.toContain(id)
+  })
+
+  it('projects loaded rows down to the declared shape', () => {
+    // Typed as the real loadSourceRows output, not EntityRow/LoreRow directly:
+    // assigning a wider-than-declared literal straight into buildStructuralFloor's
+    // params would trip excess-property checking, which would force the fixture
+    // narrow and prove nothing about the runtime widening this test exists to catch.
+    const loadedEntities: LoadedEntityRow[] = [
+      {
+        id: 'char_1',
+        kind: 'character',
+        status: 'active',
+        injectionMode: 'auto',
+        name: 'Mira',
+        description: 'A lantern-keeper who reads ledgers for a living.',
+        embeddingStale: true,
+      },
+    ]
+    const loadedLore: LoadedLoreRow[] = [
+      {
+        id: 'lo_1',
+        title: 'The drowned archive',
+        body: 'Ledgers are kept below the waterline.',
+        injectionMode: 'always',
+        priority: 50,
+        keywords: ['archive', 'ledger'],
+        embeddingStale: false,
+      },
+    ]
+
+    const floor = buildStructuralFloor({
+      entities: loadedEntities,
+      lore: loadedLore,
+      threads: [],
+      sceneEntityIds: ['char_1'],
+      currentLocationId: null,
+    })
+
+    // Asserted on the runtime value, not the type: the input is deliberately
+    // wider than StructuralFloor declares, and only the projection drops it.
+    expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual([
+      'description',
+      'id',
+      'injectionMode',
+      'kind',
+      'name',
+      'status',
+    ])
+    expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(
+      ['body', 'injectionMode', 'priority', 'title', 'id'].sort(),
+    )
   })
 })
 

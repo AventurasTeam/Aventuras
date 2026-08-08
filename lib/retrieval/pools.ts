@@ -46,6 +46,34 @@ export type StructuralFloorInput = {
   currentLocationId: string | null
 }
 
+// The floor is built over loaded source rows, which carry `embeddingStale` (and
+// lore's `keywords`) that StructuralFloor does not declare. Projecting here
+// rather than at each consumer is what lets the probe serialize the floor whole.
+const narrowEntity = (e: EntityRow): EntityRow => ({
+  id: e.id,
+  kind: e.kind,
+  status: e.status,
+  injectionMode: e.injectionMode,
+  name: e.name,
+  description: e.description,
+})
+
+const narrowLore = (l: LoreRow): LoreRow => ({
+  id: l.id,
+  title: l.title,
+  body: l.body,
+  injectionMode: l.injectionMode,
+  priority: l.priority,
+})
+
+const narrowThread = (t: ThreadRow): ThreadRow => ({
+  id: t.id,
+  status: t.status,
+  injectionMode: t.injectionMode,
+  title: t.title,
+  description: t.description,
+})
+
 /**
  * retrieval.md → Structural floor. These bypass the ranker and consume budget
  * unconditionally. The scene and location rows are deliberately
@@ -57,17 +85,18 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   const scene = new Set(input.sceneEntityIds)
 
   // No entity id is null, so a null currentLocationId matches nothing.
-  const currentLocation =
+  const currentLocationRow =
     input.entities.find((e) => e.id === input.currentLocationId && e.status === 'active') ?? null
+  const currentLocation = currentLocationRow ? narrowEntity(currentLocationRow) : null
 
   // Scene presence is kind-aware (data-model.md → Entry metadata shape):
   // sceneEntities carries characters and items, so a location should never
   // arrive here. If a classifier emits one anyway, the singleton location slot
   // is the seat that carries "we are here".
-  const sceneEntities = input.entities.filter(
-    (e) => e.status === 'active' && scene.has(e.id) && e.id !== currentLocation?.id,
-  )
-  const activeThreads = input.threads.filter((t) => t.status === 'active')
+  const sceneEntities = input.entities
+    .filter((e) => e.status === 'active' && scene.has(e.id) && e.id !== currentLocation?.id)
+    .map(narrowEntity)
+  const activeThreads = input.threads.filter((t) => t.status === 'active').map(narrowThread)
 
   const seatedIds = new Set<string>([
     ...sceneEntities.map((e) => e.id),
@@ -81,13 +110,15 @@ export function buildStructuralFloor(input: StructuralFloorInput): StructuralFlo
   // live in filterEntityPool and only ever see rows the floor did not take
   // (edge-cases.md → Layer A). Adding a status predicate here would make
   // `always` unreachable for retired rows, which is its only opt-in.
-  const alwaysEntities = input.entities.filter(
-    (e) => e.injectionMode === 'always' && !seatedIds.has(e.id),
-  )
-  const alwaysLore = input.lore.filter((l) => l.injectionMode === 'always' && !seatedIds.has(l.id))
-  const alwaysThreads = input.threads.filter(
-    (t) => t.injectionMode === 'always' && !seatedIds.has(t.id),
-  )
+  const alwaysEntities = input.entities
+    .filter((e) => e.injectionMode === 'always' && !seatedIds.has(e.id))
+    .map(narrowEntity)
+  const alwaysLore = input.lore
+    .filter((l) => l.injectionMode === 'always' && !seatedIds.has(l.id))
+    .map(narrowLore)
+  const alwaysThreads = input.threads
+    .filter((t) => t.injectionMode === 'always' && !seatedIds.has(t.id))
+    .map(narrowThread)
   for (const row of [...alwaysEntities, ...alwaysLore, ...alwaysThreads]) seatedIds.add(row.id)
 
   return {
