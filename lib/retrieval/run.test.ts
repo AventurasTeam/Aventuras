@@ -139,6 +139,8 @@ type Fixture = {
   knn?: Row[]
   /** Answers the by-id vector fetch for pool-admitted rows the KNN never returned. */
   vectorsById?: Row[]
+  /** Branch-wide stale-happening total; the pass counts rather than loading them. */
+  happeningsStale?: number
   /** Omit for the normal case: every dim family exists. `[]` is a cold start. */
   vecTables?: Row[]
 }
@@ -157,6 +159,9 @@ function makeQueryAll(rows: Fixture): QueryAll & { mock: { calls: unknown[][] } 
     // literal `FROM happenings`, so a vector fetch would otherwise be answered
     // with source rows.
     if (sql.includes('_vec_')) return rows.vectorsById ?? []
+    // Before the source-table arms: the tripwire counts branch-wide rather than
+    // reading the pool subset, so it must not be answered with rows.
+    if (sql.includes('COUNT(*)')) return [[rows.happeningsStale ?? 0]]
     if (sql.includes('JOIN story_entries')) return rows.chapterRanges ?? []
     if (sql.includes('happening_awareness')) return rows.awareness ?? []
     if (sql.includes('FROM chapters')) return rows.chapters ?? []
@@ -821,11 +826,7 @@ describe('runRetrieval — pools', () => {
         queryAll: makeQueryAll({
           entities: [entityRow('en_1', 'Kara Vex', { stale: 1 })],
           lore: [loreRow('lo_1', 'A', { stale: 1 }), loreRow('lo_2', 'B', { stale: 1 })],
-          happenings: [
-            happeningRow('hp_1', 'A', { stale: 1 }),
-            happeningRow('hp_2', 'B', { stale: 1 }),
-            happeningRow('hp_3', 'C', { stale: 1 }),
-          ],
+          happeningsStale: 3,
           threads: [threadRow('th_1', 'A')],
           chapters: [
             chapterRow('ch_1', 'A', { stale: 1 }),

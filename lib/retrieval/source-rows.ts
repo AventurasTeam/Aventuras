@@ -24,10 +24,17 @@ export type LoadedChapterRow = Stale & {
   keywords: string[]
 }
 
+/**
+ * Happenings are deliberately absent. Entities, lore and threads need the whole
+ * branch — the structural floor scans all three for `injection_mode='always'`,
+ * the name index reads every entity name and lore keyword, and Layer-A
+ * suppression needs every staged entity. Happenings need none of that, and
+ * `retrieval.md → Scale assumptions` puts them in the thousands, so they load
+ * by id once the pool is known (`loadHappeningRows`).
+ */
 export type SourceRows = {
   entities: LoadedEntityRow[]
   lore: LoadedLoreRow[]
-  happenings: LoadedHappeningRow[]
   threads: LoadedThreadRow[]
   chapters: LoadedChapterRow[]
 }
@@ -77,12 +84,11 @@ const flagged = (value: unknown): boolean => Number(value) === 1
 export async function loadSourceRows(queryAll: QueryAll, branchId: string): Promise<SourceRows> {
   const read = (kind: VecTargetKind) => queryAll(SOURCE_SQL[kind], [branchId])
 
-  // Five independent reads, one IPC round trip each on desktop. Issued together
-  // and destructured in a fixed order so the mapping below stays deterministic.
-  const [entityRows, loreRows, happeningRows, threadRows, chapterRows] = await Promise.all([
+  // Independent reads, one IPC round trip each on desktop. Issued together and
+  // destructured in a fixed order so the mapping below stays deterministic.
+  const [entityRows, loreRows, threadRows, chapterRows] = await Promise.all([
     read('entity'),
     read('lore'),
-    read('happening'),
     read('thread'),
     read('chapter'),
   ])
@@ -113,18 +119,6 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  const happenings = happeningRows.map((row) => {
-    const c = cellsOf('happening', row)
-    return {
-      id: c.id as string,
-      title: c.title as string,
-      description: c.description as string | null,
-      commonKnowledge: flagged(c.common_knowledge),
-      occurredAtEntryId: c.occurred_at_entry_id as string | null,
-      embeddingStale: flagged(c.embedding_stale),
-    }
-  })
-
   const threads = threadRows.map((row) => {
     const c = cellsOf('thread', row)
     return {
@@ -149,18 +143,84 @@ export async function loadSourceRows(queryAll: QueryAll, branchId: string): Prom
     }
   })
 
-  return { entities, lore, happenings, threads, chapters }
+  return { entities, lore, threads, chapters }
 }
 
-export function staleCountsOf(sourceRows: SourceRows): Record<RetrievalType, number> {
+/**
+ * `happenings` arrives as a count rather than being derived from rows: the pass
+ * never loads the whole happenings table, and this is a tripwire on the SYNC's
+ * scope, so it has to see every row on the branch rather than the pool subset.
+ */
+export function staleCountsOf(
+  sourceRows: SourceRows,
+  happeningsStale: number,
+): Record<RetrievalType, number> {
   const count = (rows: readonly Stale[]): number => rows.filter((r) => r.embeddingStale).length
   return {
     entities: count(sourceRows.entities),
     lore: count(sourceRows.lore),
-    happenings: count(sourceRows.happenings),
+    happenings: happeningsStale,
     threads: count(sourceRows.threads),
     chapters: count(sourceRows.chapters),
   }
+}
+
+/** Counted, not fetched: the tripwire wants a magnitude, not thousands of rows. */
+export async function countStaleHappenings(queryAll: QueryAll, branchId: string): Promise<number> {
+  const rows = await queryAll(
+    `SELECT COUNT(*) FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND embedding_stale = 1`,
+    [branchId],
+  )
+  return Number(rows[0]?.[0] ?? 0)
+}
+
+export type HappeningScope = {
+  /** Ids the KNN passes returned. */
+  ids: readonly string[]
+  /** Entry ids covered by the chapters that won budget — the chapter-match admission set. */
+  entryIds: readonly string[]
+}
+
+/**
+ * The happenings a single pass can actually use: its KNN hits plus everything
+ * inside a seated chapter's range. Bounded by the pool rather than the branch,
+ * which is the whole point — a `WHERE branch_id = ?` scan reads thousands of
+ * rows across the IPC boundary to discard over 99% of them.
+ */
+export async function loadHappeningRows(
+  queryAll: QueryAll,
+  branchId: string,
+  scope: HappeningScope,
+): Promise<LoadedHappeningRow[]> {
+  if (scope.ids.length === 0 && scope.entryIds.length === 0) return []
+
+  const columns = SOURCE_COLUMNS.happening.join(', ')
+  const clauses: string[] = []
+  const bound: unknown[] = [branchId]
+  if (scope.ids.length > 0) {
+    clauses.push(`id IN (${scope.ids.map(() => '?').join(', ')})`)
+    bound.push(...scope.ids)
+  }
+  if (scope.entryIds.length > 0) {
+    clauses.push(`occurred_at_entry_id IN (${scope.entryIds.map(() => '?').join(', ')})`)
+    bound.push(...scope.entryIds)
+  }
+
+  const rows = await queryAll(
+    `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND (${clauses.join(' OR ')})`,
+    bound,
+  )
+  return rows.map((row) => {
+    const c = cellsOf('happening', row)
+    return {
+      id: c.id as string,
+      title: c.title as string,
+      description: c.description as string | null,
+      commonKnowledge: flagged(c.common_knowledge),
+      occurredAtEntryId: c.occurred_at_entry_id as string | null,
+      embeddingStale: flagged(c.embedding_stale),
+    }
+  })
 }
 
 /** Entry ids each closed chapter covers, for the chapter-match boost. */

@@ -33,9 +33,12 @@ import {
 } from './queries'
 import { rankAll, rankPerType } from './ranker'
 import {
+  countStaleHappenings,
   loadChapterRanges,
+  loadHappeningRows,
   loadSourceRows,
   staleCountsOf,
+  type LoadedHappeningRow,
   type SourceRows,
   type Stale,
 } from './source-rows'
@@ -215,12 +218,14 @@ async function runRetrievalPass(
   // Independent of one another and of the query embed: only the sync above has
   // to precede them. Sequential awaits cost a full IPC round trip each on
   // desktop, where the reads themselves overlap freely.
-  const [sourceRows, awareness, chapterRanges, existingVecTables] = await Promise.all([
-    loadSourceRows(deps.queryAll, params.branchId),
-    loadAwarenessForScene(deps.queryAll, params.branchId, params.sceneCharacterIds),
-    loadChapterRanges(deps.queryAll, params.branchId),
-    loadExistingVecTables(deps.queryAll, params.dim),
-  ])
+  const [sourceRows, awareness, chapterRanges, existingVecTables, happeningsStale] =
+    await Promise.all([
+      loadSourceRows(deps.queryAll, params.branchId),
+      loadAwarenessForScene(deps.queryAll, params.branchId, params.sceneCharacterIds),
+      loadChapterRanges(deps.queryAll, params.branchId),
+      loadExistingVecTables(deps.queryAll, params.dim),
+      countStaleHappenings(deps.queryAll, params.branchId),
+    ])
   const index = nameKeywordIndexFrom(sourceRows.entities, sourceRows.lore)
 
   const floor = buildStructuralFloor({
@@ -260,6 +265,7 @@ async function runRetrievalPass(
     index,
     floor,
     sourceRows,
+    happenings: [] as readonly LoadedHappeningRow[],
     awareness,
     recentProse: params.recentProse,
     // kw_boost is keyword_boost(c, queries) (retrieval.md → Pseudocode): the
@@ -313,16 +319,12 @@ async function runRetrievalPass(
   for (const chapter of chapters.selected) {
     for (const entryId of chapterRanges.get(chapter.id) ?? []) boostedEntryIds.add(entryId)
   }
-  const chapterAdmitted = sourceRows.happenings
-    .filter((h) => h.occurredAtEntryId !== null && boostedEntryIds.has(h.occurredAtEntryId))
-    .map((h) => h.id)
-
   const happeningsStartedAt = performance.now()
-  pools.happenings = await buildPool(
+  pools.happenings = await buildHappeningsPool(
     deps,
     params,
     { ...poolCtx, kind: 'happening' },
-    chapterAdmitted,
+    boostedEntryIds,
   )
   knnMs += performance.now() - happeningsStartedAt
 
@@ -348,7 +350,7 @@ async function runRetrievalPass(
     floor,
     bundles,
     queries,
-    staleCounts: staleCountsOf(sourceRows),
+    staleCounts: staleCountsOf(sourceRows, happeningsStale),
     injectedAwareness: bundles.happenings.selected
       .filter(isHappeningCandidate)
       .flatMap((c) => [...c.awarenessIds])
@@ -411,6 +413,8 @@ type PoolCtx = {
   index: NameKeywordIndex
   floor: StructuralFloor
   sourceRows: SourceRows
+  /** Pool-scoped, unlike sourceRows: see loadHappeningRows. Empty for other kinds. */
+  happenings: readonly LoadedHappeningRow[]
   awareness: readonly AwarenessRow[]
   recentProse: string
   queryText: string
@@ -446,14 +450,15 @@ async function loadAdmittedVectors(
   }
 }
 
-async function buildPool(
+type KnnResult = { ids: string[]; vectorById: Map<string, Float32Array> }
+
+/** Null when the dim family does not exist yet — a cold start, not a fault. */
+async function runKnn(
   deps: RetrievalDeps,
   params: RetrievalParams,
   ctx: PoolCtx,
-  /** Ids to consider regardless of KNN rank — see the chapter-match note in runRetrievalPass. */
-  admitIds: readonly string[] = [],
-): Promise<Candidate[]> {
-  if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim))) return []
+): Promise<KnnResult | null> {
+  if (!ctx.existingVecTables.has(vecTableName(ctx.kind, params.dim))) return null
 
   // Every query vector is in hand before the first round trip and the passes
   // share no state, so they issue together. Decoding stays out of the parallel
@@ -484,17 +489,56 @@ async function buildPool(
         }),
   )
 
-  const knnIds = poolIdsFromKnn(perQuery)
-  const knnSet = new Set(knnIds)
-  const needVectors = admitIds.filter((id) => !knnSet.has(id) && !vectorById.has(id))
-  if (needVectors.length > 0)
-    await loadAdmittedVectors(deps, params, ctx.kind, needVectors, vectorById)
+  return { ids: poolIdsFromKnn(perQuery), vectorById }
+}
+
+async function buildPool(
+  deps: RetrievalDeps,
+  params: RetrievalParams,
+  ctx: PoolCtx,
+): Promise<Candidate[]> {
+  const knn = await runKnn(deps, params, ctx)
+  if (knn === null || knn.ids.length === 0) return []
+  return assembleCandidates(ctx, knn.ids, knn.vectorById)
+}
+
+/**
+ * Happenings take their own path for two reasons that share one query: their
+ * source rows load by pool rather than by branch (thousands of rows otherwise
+ * cross IPC to be discarded), and chapter-range membership admits rows the KNN
+ * never ranked (retrieval.md → Chapter-match boost on happenings).
+ */
+async function buildHappeningsPool(
+  deps: RetrievalDeps,
+  params: RetrievalParams,
+  ctx: PoolCtx,
+  boostedEntryIds: ReadonlySet<string>,
+): Promise<Candidate[]> {
+  const knn = await runKnn(deps, params, ctx)
+  // No dim family means nothing was ever embedded here, so a chapter range has
+  // no vectors to offer either.
+  if (knn === null) return []
+
+  const rows = await loadHappeningRows(deps.queryAll, params.branchId, {
+    ids: knn.ids,
+    entryIds: [...boostedEntryIds],
+  })
+  if (rows.length === 0) return []
+
+  // The query returned the union, so admission falls out of it rather than
+  // needing its own membership pass.
+  const knnSet = new Set(knn.ids)
+  const admitted = rows.filter((r) => !knnSet.has(r.id)).map((r) => r.id)
+  if (admitted.length > 0)
+    await loadAdmittedVectors(deps, params, ctx.kind, admitted, knn.vectorById)
 
   // Appended, not merged by rank: assembleCandidates consumes the array as a
   // membership set, and the pool predicates decide what survives from here.
-  const admitted = admitIds.filter((id) => !knnSet.has(id) && vectorById.has(id))
-  const ids = admitted.length === 0 ? knnIds : [...knnIds, ...admitted]
-  return ids.length === 0 ? [] : assembleCandidates(ctx, ids, vectorById)
+  // An admitted id with no vector was never embedded under this model.
+  const ids = [...knn.ids, ...admitted.filter((id) => knn.vectorById.has(id))]
+  return ids.length === 0
+    ? []
+    : assembleCandidates({ ...ctx, happenings: rows }, ids, knn.vectorById)
 }
 
 // unpackFloat32 lives in lib/db, so its blob-length throw arrives untyped. It
@@ -627,9 +671,7 @@ function assembleCandidates(
       // `awareness` is already the in-scene POV union (retrieval.md →
       // POV-awareness scope), so membership here IS the POV filter; common
       // knowledge bypasses the graph outright.
-      const pool = fresh(sourceRows.happenings).filter(
-        (r) => r.commonKnowledge || byHappening.has(r.id),
-      )
+      const pool = fresh(ctx.happenings).filter((r) => r.commonKnowledge || byHappening.has(r.id))
       return inPool(pool).map((r) => {
         const vector = vectorFor(r.id)
         const rows = byHappening.get(r.id) ?? []

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   branches,
@@ -13,7 +13,13 @@ import {
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { queryAllOf } from './__tests__/query-all'
-import { loadChapterRanges, loadSourceRows, staleCountsOf } from './source-rows'
+import {
+  countStaleHappenings,
+  loadChapterRanges,
+  loadHappeningRows,
+  loadSourceRows,
+  staleCountsOf,
+} from './source-rows'
 import type { QueryAll } from './types'
 
 const TS = { createdAt: 1, updatedAt: 1 }
@@ -219,16 +225,6 @@ describe('loadSourceRows against a real DB', () => {
         embeddingStale: false,
       },
     ])
-    expect(rows.happenings).toEqual([
-      {
-        id: 'hap_1',
-        title: 'The bell rang',
-        description: 'It rang twice.',
-        commonKnowledge: true,
-        occurredAtEntryId: 'ent_a',
-        embeddingStale: false,
-      },
-    ])
     expect(rows.threads).toEqual([
       {
         id: 'th_1',
@@ -266,25 +262,78 @@ describe('loadSourceRows against a real DB', () => {
 
     expect(mine.entities.map((r) => r.id)).toEqual(['ent_1'])
     expect(mine.lore.map((r) => r.id)).toEqual(['lore_1'])
-    expect(mine.happenings.map((r) => r.id)).toEqual(['hap_1'])
     expect(mine.threads.map((r) => r.id)).toEqual(['th_1'])
     expect(mine.chapters.map((r) => r.id)).toEqual(['chap_1', 'chap_empty'])
     // Positive control: the excluded rows do exist, on the other branch.
     expect(theirs.entities.map((r) => r.id)).toEqual(['ent_other'])
     expect(theirs.lore.map((r) => r.id)).toEqual(['lore_other'])
-    expect(theirs.happenings.map((r) => r.id)).toEqual(['hap_other'])
     expect(theirs.threads.map((r) => r.id)).toEqual(['th_other'])
     expect(theirs.chapters.map((r) => r.id)).toEqual(['chap_other'])
   })
 
   it('counts the flagged rows the driver actually returns', async () => {
-    expect(staleCountsOf(await loadSourceRows(await setup(), 'br_1'))).toEqual({
+    const queryAll = await setup()
+    expect(
+      staleCountsOf(
+        await loadSourceRows(queryAll, 'br_1'),
+        await countStaleHappenings(queryAll, 'br_1'),
+      ),
+    ).toEqual({
       entities: 1,
       lore: 0,
       happenings: 0,
       threads: 0,
       chapters: 0,
     })
+  })
+})
+
+describe('loadHappeningRows', () => {
+  it('reads the column contract off the real schema', async () => {
+    const rows = await loadHappeningRows(await setup(), 'br_1', { ids: ['hap_1'], entryIds: [] })
+
+    expect(rows).toEqual([
+      {
+        id: 'hap_1',
+        title: 'The bell rang',
+        description: 'It rang twice.',
+        commonKnowledge: true,
+        occurredAtEntryId: 'ent_a',
+        embeddingStale: false,
+      },
+    ])
+  })
+
+  it('scopes to the branch even when an id from another one is asked for', async () => {
+    const queryAll = await setup()
+
+    const rows = await loadHappeningRows(queryAll, 'br_1', {
+      ids: ['hap_1', 'hap_other'],
+      entryIds: [],
+    })
+
+    expect(rows.map((r) => r.id)).toEqual(['hap_1'])
+  })
+
+  it('unions ids with the chapter-range entry ids rather than intersecting them', async () => {
+    const queryAll = await setup()
+
+    // hap_1 matches only by entry id; asking for an id that matches nothing must
+    // not suppress it.
+    const rows = await loadHappeningRows(queryAll, 'br_1', {
+      ids: ['hap_absent'],
+      entryIds: ['ent_a'],
+    })
+
+    expect(rows.map((r) => r.id)).toEqual(['hap_1'])
+  })
+
+  // `id IN ()` is a SQLite syntax error, so an empty scope must not build one.
+  it('issues no query at all for an empty scope', async () => {
+    const queryAll = vi.fn(async (): Promise<unknown[][]> => [])
+
+    expect(await loadHappeningRows(queryAll, 'br_1', { ids: [], entryIds: [] })).toEqual([])
+    expect(queryAll).not.toHaveBeenCalled()
   })
 })
 
