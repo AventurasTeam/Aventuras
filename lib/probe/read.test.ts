@@ -171,6 +171,22 @@ describe('decodeCapture', () => {
     expect(decoded.payload.failure_reason).toBe(rowReason)
   })
 
+  // The one input that separates the backfill's `=== undefined` from a `??`:
+  // a v2 payload saying "this pass succeeded" must win over a stale column
+  // rather than be collapsed into it, or the two sources silently disagree.
+  it('keeps a v2 payload null over a non-null column', () => {
+    const { bytes } = compressPayload({
+      ...buildCapturePayload(captureInput()),
+      failure_reason: null,
+    })
+
+    const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', 'call', 100, bytes])
+
+    expect(decoded.payload.failure_reason).toBeNull()
+    // The row keeps its own value; only the payload is authoritative for replay.
+    expect(decoded.failureReason).toBe('call')
+  })
+
   it('warns on neither when the capture matches the current format', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     const { bytes } = compressPayload(buildCapturePayload(captureInput()))

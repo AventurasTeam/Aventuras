@@ -15,9 +15,8 @@ export function peekCaptureMode(): CaptureMode {
 /**
  * One-shot: a deep capture costs ~30x a light one to write and 40-80x to store
  * (probe.md → Capture cost), so a flag that stayed armed would quietly fill the
- * per-story cap with them. Spent only by a capture that actually landed — a
- * gated turn or a failed write leaves the arm loaded, because "I armed deep and
- * got a light capture" is the symptom either one would otherwise produce.
+ * per-story cap with them. Split from the peek so only a capture that actually
+ * landed spends the arm.
  */
 export function spendCaptureMode(): void {
   armed = 'light'

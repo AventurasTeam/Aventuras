@@ -56,6 +56,27 @@ function warnOnCaptureDrift(id: string, payload: ProbeCapturePayload): void {
   }
 }
 
+/** Pre-v2 payloads carried the failure marker only on the row's column. */
+type PreV2Payload = Omit<ProbeCapturePayload, 'failure_reason'> & {
+  failure_reason?: EmbedderErrorKind | null
+}
+
+/**
+ * replayType never sees the row and reads an absent marker as a failure, so
+ * without this every pre-v2 capture becomes unsimulatable. Not `??`: null is a
+ * valid v2 value meaning "this pass succeeded", and collapsing it into the
+ * column's value would re-introduce the dual source.
+ */
+function backfillFailureReason(
+  payload: PreV2Payload,
+  rowReason: EmbedderErrorKind | null,
+): ProbeCapturePayload {
+  return {
+    ...payload,
+    failure_reason: payload.failure_reason === undefined ? rowReason : payload.failure_reason,
+  }
+}
+
 /**
  * `row` must be a positional value-array matching capturesForStoryQuery's
  * column order: id, branch_id, captured_at, capture_mode, failure_reason,
@@ -78,19 +99,7 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
     throw new RankerParamsError('params', 'capture payload has no params snapshot')
   assertRankerParams(decoded.params.ranker)
   warnOnCaptureDrift(id, decoded)
-  // v1 payloads carry no in-payload failure marker, only the column. Backfilling
-  // it here is what keeps replayType — which never sees the row — from reading
-  // an absent field as a failure and refusing every pre-v2 capture. Typed as
-  // optional because that is what a pre-v2 payload actually is.
-  const preV2 = decoded as Omit<ProbeCapturePayload, 'failure_reason'> & {
-    failure_reason?: EmbedderErrorKind | null
-  }
-  // Not `??`: null is a valid v2 value meaning "this pass succeeded", and
-  // collapsing it into the column's value would re-introduce the dual source.
-  const payload: ProbeCapturePayload = {
-    ...preV2,
-    failure_reason: preV2.failure_reason === undefined ? failureReason : preV2.failure_reason,
-  }
+  const payload = backfillFailureReason(decoded, failureReason)
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload }
 }
 
