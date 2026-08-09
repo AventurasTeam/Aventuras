@@ -107,7 +107,9 @@ const capturePayload = (): ProbeCapturePayload => ({
     chapters: emptyFunnel(200),
   },
   structural_floor: [{ target_kind: 'chapter', target_id: 'chap_1', tokens: 120 }],
+  prompt_buffer_tokens: 1840,
   stale_counts: { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+  failure_reason: null,
 })
 
 describe('compressPayload', () => {

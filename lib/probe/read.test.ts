@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProbeCapturePayload } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import type { EmbedderErrorKind } from '@/lib/embedder'
 import { RANKER_DEFAULTS } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
@@ -152,6 +153,22 @@ describe('decodeCapture', () => {
 
     expect(decoded.id).toBe('pc_1')
     expect(warn).toHaveBeenCalledWith(event, expect.objectContaining({ id: 'pc_1' }))
+  })
+
+  // A pre-v2 payload has the marker only on the column. replayType never sees
+  // the row, and reads an absent field as "failed" — so without the backfill
+  // every capture written before the bump becomes unsimulatable.
+  it.each<[string, EmbedderErrorKind | null]>([
+    ['a successful pre-v2 capture', null],
+    ['a failed pre-v2 capture', 'call'],
+  ])('backfills %s failure reason from the column', (_label, rowReason) => {
+    const legacy = { ...buildCapturePayload(captureInput()) } as Record<string, unknown>
+    delete legacy.failure_reason
+    const { bytes } = compressPayload(legacy as unknown as ProbeCapturePayload)
+
+    const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', rowReason, 100, bytes])
+
+    expect(decoded.payload.failure_reason).toBe(rowReason)
   })
 
   it('warns on neither when the capture matches the current format', () => {

@@ -7,14 +7,20 @@ export function armDeepCapture(): void {
   armed = 'deep'
 }
 
+/** What the next capture would write. Reading does not spend the arm. */
+export function peekCaptureMode(): CaptureMode {
+  return armed
+}
+
 /**
- * One-shot: a deep capture runs ~100x the size of a light one, so a flag that
- * stayed armed would quietly fill the per-story cap with them. Reading disarms.
+ * One-shot: a deep capture costs ~30x a light one to write and 40-80x to store
+ * (probe.md → Capture cost), so a flag that stayed armed would quietly fill the
+ * per-story cap with them. Spent only by a capture that actually landed — a
+ * gated turn or a failed write leaves the arm loaded, because "I armed deep and
+ * got a light capture" is the symptom either one would otherwise produce.
  */
-export function takeNextCaptureMode(): CaptureMode {
-  const mode = armed
+export function spendCaptureMode(): void {
   armed = 'light'
-  return mode
 }
 
 // Test seam: the flag lives outside lib/stores, so resetAllStores cannot reach

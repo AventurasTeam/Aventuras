@@ -38,6 +38,12 @@ export function replayType(
   if (payload.capture_mode !== 'deep') {
     throw new Error(`replayType needs a deep capture, got ${payload.capture_mode}`)
   }
+  // A failed pass captured whatever it reached, so its pools are truncated at
+  // the failure point rather than empty. Re-ranking them returns a selection the
+  // pass never made, which reads as a result (probe.md → Failed captures).
+  if (payload.failure_reason !== null) {
+    throw new Error(`replayType cannot simulate a failed capture (${payload.failure_reason})`)
+  }
   // A simulator retunes the snapshot after decodeCapture validated it, so the
   // guard has to run here too, not only at the read boundary.
   assertRankerParams(payload.params.ranker)

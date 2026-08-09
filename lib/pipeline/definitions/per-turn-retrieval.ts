@@ -3,9 +3,10 @@ import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
-import { takeNextCaptureMode, writeProbeCapture } from '@/lib/probe'
+import { peekCaptureMode, spendCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
   composePromptBuffer,
+  countTokens,
   RANKER_DEFAULTS,
   runRetrieval,
   type RetrievalOutcome,
@@ -76,6 +77,15 @@ export async function* retrievalPhase(
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
+  // The same window generation-context composes for the prompt, so the capture
+  // prices what the pools actually competed against rather than re-deriving the
+  // mode rule. Priced on the prose alone: the per-turn template wraps entries in
+  // bare newlines, so this reads as a lower bound the way the floor's own rows
+  // do (probe.md → Structural floor).
+  const promptBuffer = composePromptBuffer(entries, open.settings)
+    .map((e) => promptProse(e))
+    .join('\n')
+
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
   // that reaches nothing.
@@ -130,9 +140,7 @@ export async function* retrievalPhase(
         // approximates that set, over-suppressing while classifierCadence stays
         // under partialChapterBuffer and under-suppressing past it (cadence.md →
         // User-tunable knobs).
-        recentProse: composePromptBuffer(entries, open.settings)
-          .map((e) => promptProse(e))
-          .join('\n'),
+        recentProse: promptBuffer,
       },
     )
   } finally {
@@ -151,7 +159,7 @@ export async function* retrievalPhase(
     // gate wiring). The story gate is the pass-start snapshot.
     const appGateOn = appSettingsStore.getAppSettings().diagnostics.enabled
     const storyGateOn = open.settings.probe_mode_active
-    // Returning before the arm is taken is what keeps a gated turn from
+    // Returning before the arm is spent is what keeps a gated turn from
     // spending a deep capture on a write that never happens.
     if (!appGateOn || !storyGateOn) return
     // target_entry_id is NOT NULL and carries no sentinel, so a capture with
@@ -161,7 +169,7 @@ export async function* retrievalPhase(
       return
     }
 
-    await writeProbeCapture(
+    const status = await writeProbeCapture(
       { runInTransaction: ctx.runInTransaction },
       {
         id: generateId('pc'),
@@ -174,7 +182,7 @@ export async function* retrievalPhase(
         chapterId: tail.chapterId,
         capturedAt: Date.now(),
         embeddingModelId: resolution.config.modelId,
-        mode: takeNextCaptureMode(),
+        mode: peekCaptureMode(),
         appGateOn,
         storyGateOn,
         params: RANKER_DEFAULTS,
@@ -184,9 +192,14 @@ export async function* retrievalPhase(
           partialChapterBuffer: open.settings.partialChapterBuffer,
           protectedBuffer: open.settings.protectedBuffer,
         },
+        promptBufferTokens: countTokens(promptBuffer),
         outcome: probed,
       },
     )
+    // A failed write leaves the arm loaded: the deep capture the user asked for
+    // has not happened yet, and silently downgrading the next turn to light is
+    // indistinguishable from the arm never firing.
+    if (status === 'written') spendCaptureMode()
   }
 
   if (!outcome.ok) {

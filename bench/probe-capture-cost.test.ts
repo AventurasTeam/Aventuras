@@ -60,6 +60,9 @@ function captureInputFor(outcome: RetrievalOutcome, mode: 'light' | 'deep'): Cap
       partialChapterBuffer: STORY_SETTINGS_DEFAULTS.partialChapterBuffer,
       protectedBuffer: STORY_SETTINGS_DEFAULTS.protectedBuffer,
     },
+    // One scalar, so it moves neither the payload size nor the assemble cost
+    // this harness reports; a representative value keeps the shape honest.
+    promptBufferTokens: 2_400,
     outcome,
   }
 }

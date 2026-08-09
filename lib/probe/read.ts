@@ -73,11 +73,24 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
     number | null,
     Uint8Array,
   ]
-  const payload = decompressPayload(payloadBytes) as ProbeCapturePayload
-  if (payload.params === undefined || payload.params === null)
+  const decoded = decompressPayload(payloadBytes) as ProbeCapturePayload
+  if (decoded.params === undefined || decoded.params === null)
     throw new RankerParamsError('params', 'capture payload has no params snapshot')
-  assertRankerParams(payload.params.ranker)
-  warnOnCaptureDrift(id, payload)
+  assertRankerParams(decoded.params.ranker)
+  warnOnCaptureDrift(id, decoded)
+  // v1 payloads carry no in-payload failure marker, only the column. Backfilling
+  // it here is what keeps replayType — which never sees the row — from reading
+  // an absent field as a failure and refusing every pre-v2 capture. Typed as
+  // optional because that is what a pre-v2 payload actually is.
+  const preV2 = decoded as Omit<ProbeCapturePayload, 'failure_reason'> & {
+    failure_reason?: EmbedderErrorKind | null
+  }
+  // Not `??`: null is a valid v2 value meaning "this pass succeeded", and
+  // collapsing it into the column's value would re-introduce the dual source.
+  const payload: ProbeCapturePayload = {
+    ...preV2,
+    failure_reason: preV2.failure_reason === undefined ? failureReason : preV2.failure_reason,
+  }
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload }
 }
 

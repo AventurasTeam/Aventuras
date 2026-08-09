@@ -87,6 +87,7 @@ export const captureInput = (overrides: Partial<CaptureWriteInput> = {}): Captur
   storyGateOn: true,
   params: RANKER_DEFAULTS,
   settings,
+  promptBufferTokens: 0,
   outcome: successOutcome(),
   ...overrides,
 })

@@ -1,3 +1,4 @@
+import type { EmbedderErrorKind } from '@/lib/embedder'
 import type { QuerySpec, RankerParams, RetrievalType } from '@/lib/retrieval'
 
 import type { VecTargetKind } from './embeddings/vec-tables'
@@ -97,7 +98,7 @@ type CaptureTokenizer = { encoding: string; version: string }
  * Bumped when a captured field's shape or meaning changes, so a decode can
  * warn instead of silently misreading an older payload as the current type.
  */
-export const CAPTURE_VERSION = 1 as const
+export const CAPTURE_VERSION = 2 as const
 
 export type ProbeCapturePayload = {
   capture_version: number
@@ -113,5 +114,18 @@ export type ProbeCapturePayload = {
   pools: Record<RetrievalType, CaptureCandidate[]>
   funnels: Record<RetrievalType, PoolFunnelSummary>
   structural_floor: StructuralFloorRow[]
+  /**
+   * Prompt-buffer cost as one number, not floor rows: the floor is a token
+   * ledger and buffered entries carry no retrieval identity, so N rows would
+   * add bulk without adding a tunable. Normally the largest floor term, so a
+   * capture without it under-reports what the pools competed over
+   * (probe.md → Structural floor).
+   */
+  prompt_buffer_tokens: number
   stale_counts: Record<RetrievalType, number>
+  /**
+   * Mirrors the row's `failure_reason` so a payload alone can refuse
+   * simulation — replayType never sees the row (probe.md → Failed captures).
+   */
+  failure_reason: EmbedderErrorKind | null
 }

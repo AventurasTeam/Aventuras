@@ -35,6 +35,7 @@ const identity = {
   chapterId: null,
   capturedAt: 1_700_000_000_000,
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
+  promptBufferTokens: 0,
 }
 
 const zeroFunnel = {
@@ -200,9 +201,11 @@ describe('buildCapturePayload', () => {
       'captured_at',
       'chapter_id',
       'embedding_model_id',
+      'failure_reason',
       'funnels',
       'params',
       'pools',
+      'prompt_buffer_tokens',
       'queries',
       'stale_counts',
       'structural_floor',
@@ -224,6 +227,7 @@ describe('buildCapturePayload', () => {
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
+      promptBufferTokens: 0,
       outcome: successOutcome(),
     })
 
@@ -428,6 +432,69 @@ describe('buildCapturePayload', () => {
     expect(payload.pools.chapters[0].target_id).toBe('ch_1')
     expect(payload.funnels.chapters.pool_size).toBe(1)
     expectEmptyPools(payload, ['chapters'])
+  })
+
+  it('carries the prompt buffer cost the phase priced, and no failure reason on a good pass', () => {
+    // 1840 shares no digits with any budget or floor row in the fixtures, so a
+    // field sourced from settings or summed off structural_floor reads wrong.
+    const payload = buildCapturePayload({
+      ...identity,
+      promptBufferTokens: 1840,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ floor: floorFixture() }),
+    })
+
+    expect(payload.prompt_buffer_tokens).toBe(1840)
+    // The floor rows price only the must-inject set; the buffer is the term
+    // they cannot express (probe.md → Structural floor).
+    expect(payload.structural_floor.some((r) => r.tokens === 1840)).toBe(false)
+    expect(payload.failure_reason).toBeNull()
+  })
+
+  it('carries the failure reason so a payload alone can refuse simulation', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'deep',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: queryEmbedFailureOutcome(),
+    })
+
+    expect(payload.failure_reason).toBe('call')
+  })
+
+  it('maps each funnel field to its own slot', () => {
+    // Five values that share no pair: the funnel is the probe's headline
+    // diagnostic, and any fixture whose counts coincide lets a transposed
+    // field (tokens_used for type_budget, pool_size for pre_filtered_size)
+    // read as correct.
+    const funnel = {
+      poolSize: 9,
+      preFilteredSize: 7,
+      selectedCount: 3,
+      tokensUsed: 145,
+      typeBudget: 600,
+    }
+
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({
+        bundles: { chapters: { selected: [], traces: [], funnel, pool: [] } },
+      }),
+    })
+
+    expect(payload.funnels.chapters).toEqual({
+      pool_size: 9,
+      pre_filtered_size: 7,
+      selected_count: 3,
+      tokens_used: 145,
+      type_budget: 600,
+    })
   })
 
   it('emits one structural-floor row per seated entity, location, thread and always-row', () => {

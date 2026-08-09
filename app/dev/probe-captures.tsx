@@ -12,6 +12,7 @@ import {
   clearCapturesForStoryOp,
   decodeCaptures,
   deleteCaptureOp,
+  peekCaptureMode,
   type CorruptCapture,
   type StoredCapture,
 } from '@/lib/probe'
@@ -35,6 +36,9 @@ export default function ProbeCapturesDevRoute() {
       setCaptures(decoded.ok)
       setCorrupt(decoded.corrupt)
       setLoaded(true)
+      // Resynced here rather than tracked: the arm is spent by a turn this
+      // screen never sees, so local state alone goes stale the moment one runs.
+      setArmed(peekCaptureMode() === 'deep')
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {

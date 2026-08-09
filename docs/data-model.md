@@ -249,8 +249,8 @@ erDiagram
         integer captured_at
         text capture_mode "light | deep; light stores per-row sims + score components, deep adds candidate vectors. See docs/memory/probe.md → Capture model"
         text embedding_model_id "model active at capture; bound to deep-mode vectors for vector-space validity. Light captures are model-agnostic post-capture (sims are pre-computed cosines)."
-        text failure_reason "nullable; set when retrieval failed at capture time (embedder unavailable, empty pool, KNN error). Banner-rendered in inspect UI; simulate disabled."
-        blob payload "gzipped JSON of full capture record per docs/memory/probe.md → Capture format (queries + per-type pool + funnel summary + structural floor + stale counts + params snapshot)"
+        text failure_reason "nullable EmbedderErrorKind; set when retrieval failed in the embedder family (init | call). An empty pool is a success, not a failure; a non-embedder fault aborts the turn with no capture. Mirrored inside payload so replay can refuse without the row. Banner-rendered in inspect UI; simulate disabled."
+        blob payload "gzipped JSON of full capture record per docs/memory/probe.md → Capture format (queries + per-type pool + funnel summary + structural floor + prompt-buffer cost + stale counts + params snapshot + failure reason)"
         integer payload_size "pre-compression byte count; surfaces as storage-usage indicator in capture-list UI"
     }
     %% Not delta-logged — captures are diagnostic, not story state. Rollback must NOT unwind probe data. See docs/memory/probe.md → Capture format

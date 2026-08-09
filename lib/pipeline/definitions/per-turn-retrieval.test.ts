@@ -1292,6 +1292,24 @@ describe('retrieval phase — probe capture', () => {
     expect(captureRows(sqlite).map((r) => r.capture_mode)).toEqual(['deep'])
   })
 
+  // Same symptom as the gated turn above, from the other direction: the write is
+  // attempted and fails, so the arm must survive rather than downgrade the next
+  // turn to light.
+  it('keeps an armed deep capture over a write that failed', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedProbeStory({ probe_mode_active: true })
+    armDeepCapture()
+
+    const failing = vi.fn().mockRejectedValue(new Error('disk full'))
+    await runRetrievalPhase(undefined, failing)
+    expect(captureRows(sqlite)).toHaveLength(0)
+
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(captureRows(sqlite).map((r) => r.capture_mode)).toEqual(['deep'])
+  })
+
   it('captures nothing for a turn a cancel reached before the outcome landed', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)

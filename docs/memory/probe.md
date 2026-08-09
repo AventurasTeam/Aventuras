@@ -46,8 +46,11 @@ Off by default, opt-in via a two-level gate:
 
 Both must be on for new captures to write. Existing captures stay
 inspectable when either toggle flips off; only new-capture writes
-stop. Removing captures is always explicit (per-capture delete or
-"clear all").
+stop. Flipping a toggle never removes a capture: user-initiated
+removal is always explicit (per-capture delete or "clear all"), and
+the only implicit removal is
+[FIFO eviction](#eviction--fifo-at-100-captures-per-story) once a
+story is at the cap.
 
 **Build-mode gating is intentionally NOT in scope.** The probe
 code ships in production bundles; the two runtime gates above
@@ -65,24 +68,39 @@ storage-cost help text in
 ### When a capture is written
 
 A capture is written immediately after the per-turn ranker emits its
-selection, before prompt assembly. The capture lives in the same
-transaction as the ranker output:
+selection, before prompt assembly. It is an independent, best-effort
+write — there is no ranker transaction to join, because the ranker is
+pure, and a failed turn does not roll a capture back:
 
 1. Pre phase commits the user-action delta.
 2. Retrieval pass runs: queries embed, candidates score, MMR ranks,
    budget-fill selects.
 3. **Capture writer** assembles a record from in-flight ranker state
-   and writes a `probe_captures` row in the same transaction.
+   and writes a `probe_captures` row in its own transaction.
 4. If the per-story FIFO cap is hit, the oldest capture for the
    **story** — across all its branches, per
    [Eviction](#eviction--fifo-at-100-captures-per-story) — is dropped
-   in the same transaction.
+   in that same transaction, so write-and-evict is atomic.
 5. Turn proceeds to generation.
 
-A failed retrieval pass (embedder unavailable, empty pool, vec0
-KNN error) still captures, with an explicit `failure_reason` field —
-debugging failures is a primary use case, and a missing capture for
-the failed turn would be the worst possible UX.
+A retrieval pass that fails in the embedder family — init or call,
+including the vector-invariant faults that classify into it — still
+captures, with an explicit `failure_reason` field. Debugging failures
+is a primary use case, and a missing capture for the failed turn
+would be the worst possible UX.
+
+Two cases the sentence above does **not** cover:
+
+- **An empty pool is not a failure.** A pass over an empty pool
+  succeeds; the capture writes with `failure_reason` null and
+  zero-size funnels. Turn 1 of a fresh story reads this way.
+- **A non-embedder fault writes no capture at all.** A vec0/SQLite
+  error, a dead IPC bridge or a ranker bug propagates out of
+  `runRetrieval` and aborts the turn before the capture site is
+  reached. `failure_reason` is an `EmbedderErrorKind`, so there is no
+  legal value for such a fault to carry. Closing that gap needs a
+  capture-failure taxonomy separate from the embedder's — filed in
+  [`triage.md`](../implementation/triage.md).
 
 ### What gets captured — light mode (default)
 
@@ -152,15 +170,22 @@ Per capture:
   `pre_filtered_size` (capped at 200 per
   [pre-filter rule](./retrieval.md#diversity--mmr)),
   `selected_count`, `tokens_used`, `type_budget`.
-- **Structural floor.** List of must-inject rows (prompt buffer
-  per the mode-dependent rule + protected-buffer spillover,
-  active+in-scene entities, their location, active threads,
-  `injection_mode='always'` rows) and their token cost. Surfaces
-  what budget the per-type pools actually competed over. The token
-  cost **excludes the `[id]` affix** the templates add to the three
-  entity rows on a piggyback turn — whether piggyback fires is decided
-  after retrieval, so a capture cannot know it. On those turns the
-  floor's cost reads as a lower bound.
+- **Structural floor.** List of must-inject rows (active+in-scene
+  entities, their location, active threads, `injection_mode='always'`
+  rows) and their token cost. The token cost **excludes the `[id]`
+  affix** the templates add to the three entity rows on a piggyback
+  turn — whether piggyback fires is decided after retrieval, so a
+  capture cannot know it. On those turns the floor's cost reads as a
+  lower bound.
+- **Prompt buffer cost.** `prompt_buffer_tokens` — the buffer window
+  (mode-dependent rule plus protected-buffer spillover) priced as one
+  scalar, not as floor rows: buffered entries carry no retrieval
+  identity, so a row each would add bulk without adding a tunable.
+  Normally the largest floor term, and the one per-type budget tuning
+  is measured against — a capture without it under-reports what the
+  pools competed over. Priced on the prose alone; the per-turn
+  template wraps entries in bare newlines, so it reads as a lower
+  bound the way the floor's own rows do.
 - **Stale-row count per type** — rows still `embedding_stale` at
   retrieval, excluded from the pool because the pre-retrieval sync
   stage couldn't embed them (their vec0 entry was missing at
@@ -465,16 +490,24 @@ no-ops on those rows.
 
 ### Failed captures
 
-If retrieval failed at capture time (embedder down, empty pool,
-KNN error), the capture's `failure_reason` is set and the body
-contains whatever partial state was reached:
+If retrieval failed in the embedder family at capture time, the
+capture's `failure_reason` is set — on the row **and** in the payload,
+so `replayType` can refuse a failed capture without the row — and the
+body contains whatever partial state was reached:
 
 - Embedder failure during query embed — captures Q1/Q2/Q3 text
   but no sims; pool data may be empty.
-- Empty pool (e.g., turn 1 of a fresh story before classifier has
-  written anything) — captures the queries and the empty funnel.
-- KNN error — captures queries and partial pool data up to the
-  failure point.
+- Vector-invariant fault mid-pass — captures queries and partial
+  pool data up to the failure point.
+
+Not in this list: an empty pool (a success, `failure_reason` null)
+and a non-embedder fault (no capture written at all). See
+[When a capture is written](#when-a-capture-is-written) above.
+
+Stale counts read zero on a failure arm. The failure carries one
+un-split scalar with no per-type breakdown, so spreading it across
+five types would be a guess — read `failure_reason` and the pipeline
+log instead.
 
 The probe surface renders failure captures with a prominent banner
 explaining what failed. Simulation is disabled (no scores to

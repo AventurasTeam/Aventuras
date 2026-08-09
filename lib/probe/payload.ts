@@ -30,6 +30,9 @@ export type CapturePayloadInput = {
     partialChapterBuffer: number
     protectedBuffer: number
   }
+  /** Priced on the composed buffer, not re-derived: the mode-dependent rule and
+   * protected-buffer spillover are the phase's to resolve, not the capture's. */
+  promptBufferTokens: number
   outcome: RetrievalOutcome
 }
 
@@ -192,11 +195,13 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       chapters: funnelOf(bundles.chapters),
     },
     structural_floor: floorRowsOf(floor),
+    prompt_buffer_tokens: input.promptBufferTokens,
     // outcome.failure.staleCount (a failure's dirty-row count) is one scalar;
     // there is no per-type split to spread it across, so this stays zero
     // rather than guessing which type(s) it belonged to.
     stale_counts: outcome.ok
       ? { ...outcome.staleCounts }
       : { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
+    failure_reason: outcome.ok ? null : outcome.failure.reason,
   }
 }

@@ -500,6 +500,18 @@ describe('replay recomputes rather than echoing', () => {
 })
 
 describe('replayType', () => {
+  it('refuses a failed capture even though its pools would rank', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const failed = { ...payload, failure_reason: 'call' as const }
+
+    // The same pools rank fine on the ok arm, so the refusal is the marker's
+    // doing: a failed pass's pools are truncated at the failure point, and
+    // re-ranking them returns a selection the pass never made.
+    expect(replayType(payload, 'happenings').selected.length).toBeGreaterThan(0)
+    expect(() => replayType(failed, 'happenings')).toThrow(/failed capture/)
+  })
+
   it('refuses a happening row whose common_knowledge flag is absent', async () => {
     const state = STATES.normal
     const payload = await storedPayload(state, rankProd(state))
