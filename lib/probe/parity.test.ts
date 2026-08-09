@@ -14,6 +14,7 @@ import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
 
 import { captureInput, queryStack, seededDb, settings } from './__tests__/fixtures'
+import { buildCapturePayload } from './payload'
 import { capturesForStoryQuery, decodeCapture } from './read'
 import { replayType } from './replay'
 import { writeProbeCapture } from './writer'
@@ -423,6 +424,69 @@ describe.each(Object.entries(STATES))('parity — %s', (_name, state) => {
 })
 
 describe('replay recomputes rather than echoing', () => {
+  it('preserves pool-order tie breaks when retuning under a one-token budget', () => {
+    const pool = [
+      lore(0, {
+        renderedText: 'A',
+        sims: [0, 0, 1],
+        chaptersOld: 0,
+        pinSignal: 0,
+        keywordHits: [],
+        embeddingStale: false,
+      }),
+      lore(1, {
+        renderedText: 'B',
+        sims: [1, 0, 0],
+        chaptersOld: 0,
+        pinSignal: 0,
+        keywordHits: [],
+        embeddingStale: false,
+      }),
+    ]
+    const capturedParams: RankerParams = {
+      ...RANKER_DEFAULTS,
+      typeOverhead: { ...RANKER_DEFAULTS.typeOverhead, lore: 0 },
+    }
+    const captured = rankPerType(pool, 'lore', 1, {
+      params: capturedParams,
+      chapterRanges: new Map(),
+      countTokens: () => 1,
+    })
+    const payload = buildCapturePayload(
+      captureInput({
+        mode: 'deep',
+        params: capturedParams,
+        settings: {
+          ...settings,
+          retrievalBudgets: { ...settings.retrievalBudgets, lore: 1 },
+        },
+        outcome: retrievalSuccess({ bundles: { lore: captured }, queries: queryStack() }),
+      }),
+    )
+    const retunedParams: RankerParams = {
+      ...capturedParams,
+      weights: { action: 0.5, digest: 0, prose: 0.5 },
+    }
+    const production = rankPerType(pool, 'lore', 1, {
+      params: retunedParams,
+      chapterRanges: new Map(),
+      countTokens: () => 1,
+    })
+    const replayed = replayType(
+      {
+        ...payload,
+        params: { ...payload.params, ranker: retunedParams },
+      },
+      'lore',
+    )
+
+    expect(captured.traces.map((trace) => trace.id)).toEqual(['lo_1', 'lo_0'])
+    expect(production.selected.map((candidate) => candidate.id)).toEqual(['lo_0'])
+    expect(replayed.selected.map((candidate) => candidate.id)).toEqual(
+      production.selected.map((candidate) => candidate.id),
+    )
+  })
+
   it('reprices keyword hits when the captured ranker params change', async () => {
     const state = STATES.normal
     const payload = await storedPayload(state, rankProd(state))

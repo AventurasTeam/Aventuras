@@ -70,8 +70,12 @@ const poolOf = (
   mode: 'light' | 'deep',
 ): ProbeCapturePayload['pools'][RetrievalType] => {
   if (bundle === undefined) return []
-  const vectorById = new Map(bundle.pool.map((c) => [c.id, c.vector]))
-  return bundle.traces.map((t) => candidateOf(t, mode, vectorById.get(t.id)))
+  const traceById = new Map(bundle.traces.map((trace) => [trace.id, trace]))
+  return bundle.pool.map((candidate) => {
+    const trace = traceById.get(candidate.id)
+    if (trace === undefined) throw new Error(`ranked candidate ${candidate.id} has no trace`)
+    return candidateOf(trace, mode, candidate.vector)
+  })
 }
 
 const funnelOf = (bundle: RankedType | undefined): ProbeCapturePayload['funnels'][RetrievalType] =>
