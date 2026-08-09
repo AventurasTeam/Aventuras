@@ -29,12 +29,55 @@ export interface TTSSettings {
   volume: number
   volumeOverride: boolean
   providerVoices: Record<string, string>
+  dialogueVoiceEnabled: boolean
+  dialogueVoice: string
+  providerDialogueVoices: Record<string, string>
 }
 
 export interface TTSVoice {
   name: string
   id: string
   lang: string
+}
+
+/**
+ * A run of text and the voice that speaks it.
+ *
+ * Playback is expressed as a list of these rather than as (text, voice) so that the
+ * narrator and dialogue voices share one streaming pipeline. Playing them as
+ * separate `streamAndPlay` calls would restart the producer/consumer queue at every
+ * quote — an audible gap on each line — and would leave `stopAudio` able to stop
+ * only the segment currently sounding.
+ */
+export interface TTSSegment {
+  text: string
+  voice: string
+}
+
+/** One generation unit: a segment split down to what the provider accepts. */
+interface TTSChunk {
+  text: string
+  voice: string
+}
+
+/**
+ * Split each segment to the provider's chunk limit, keeping its voice.
+ * Chunking never crosses a segment, which costs nothing: `splitTextForTTS` already
+ * prefers to break on sentence boundaries, and a quote is one.
+ */
+function buildChunks(segments: TTSSegment[], maxChunkLength: number): TTSChunk[] {
+  const chunks: TTSChunk[] = []
+  for (const segment of segments) {
+    for (const text of splitTextForTTS(segment.text, maxChunkLength)) {
+      chunks.push({ text, voice: segment.voice })
+    }
+  }
+  return chunks
+}
+
+/** Total spoken text, for the "nothing to say" guard. */
+function segmentsText(segments: TTSSegment[]): string {
+  return segments.map((s) => s.text).join(' ')
 }
 
 /**
@@ -93,15 +136,15 @@ export abstract class TTSProvider {
   /**
    * Generate TTS audio, splitting long text into chunks.
    */
-  async generateSpeech(text: string, voice: string): Promise<Blob[]> {
-    if (!text || text.trim().length === 0) {
+  async generateSpeech(segments: TTSSegment[]): Promise<Blob[]> {
+    if (segmentsText(segments).trim().length === 0) {
       throw new Error('TTS: Cannot generate speech for empty text')
     }
 
-    const chunks = splitTextForTTS(text, this.maxChunkLength)
+    const chunks = buildChunks(segments, this.maxChunkLength)
     const blobs: Blob[] = []
     for (const chunk of chunks) {
-      blobs.push(await this.generateChunk(chunk, voice))
+      blobs.push(await this.generateChunk(chunk.text, chunk.voice))
     }
     return blobs
   }
@@ -195,21 +238,20 @@ export abstract class TTSProvider {
    * are generated in the background.
    */
   async streamAndPlay(
-    text: string,
-    voice: string,
+    segments: TTSSegment[],
     onProgress?: (progress: number) => void,
     playbackRate = 1.0,
     volume = 1.0,
     volumeOverride = false,
   ): Promise<void> {
-    if (!text || text.trim().length === 0) {
+    if (segmentsText(segments).trim().length === 0) {
       throw new Error('TTS: Cannot generate speech for empty text')
     }
 
     this.stopAudio()
     this.stopped = false
 
-    const textChunks = splitTextForTTS(text, this.maxChunkLength)
+    const textChunks = buildChunks(segments, this.maxChunkLength)
     const totalChunks = textChunks.length
 
     // Queue: generated blobs ready for playback
@@ -238,7 +280,7 @@ export abstract class TTSProvider {
           let lastErr: Error | null = null
           for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
             try {
-              const blob = await this.generateChunk(chunk, voice)
+              const blob = await this.generateChunk(chunk.text, chunk.voice)
               ready.push(blob)
               signalChunk()
               lastErr = null
@@ -556,9 +598,17 @@ export class MicrosoftSpeechProvider extends TTSProvider {
    * Override streamAndPlay to use Web Speech API directly
    * Since we can't capture audio, we play directly instead of streaming blobs
    */
+  /** Resolve a voice name against the system list, once per distinct name. */
+  private requireSystemVoice(voice: string): SpeechSynthesisVoice {
+    const selected = this.systemVoices.find((v) => v.name === voice)
+    if (!selected) {
+      throw new Error(`Voice not found: ${voice}`)
+    }
+    return selected
+  }
+
   override async streamAndPlay(
-    text: string,
-    voice: string,
+    segments: TTSSegment[],
     onProgress?: (progress: number) => void,
     playbackRate = 1.0,
     volume = 1.0,
@@ -570,25 +620,26 @@ export class MicrosoftSpeechProvider extends TTSProvider {
       throw new Error('Speech Synthesis API not available')
     }
 
-    // Find the voice
-    const selectedVoice = this.systemVoices.find((v) => v.name === voice)
-    if (!selectedVoice) {
-      throw new Error(`Voice not found: ${voice}`)
-    }
-
     // Reset stopped flag
     this.stopped = false
 
-    // Split text into chunks
-    const chunks = splitTextForTTS(text, this.maxChunkLength)
+    // Split into chunks, each carrying the voice of the segment it came from
+    const chunks = buildChunks(segments, this.maxChunkLength)
+
+    // Resolve every voice up front: a missing one should fail before any audio
+    // plays, not halfway through the entry.
+    const voices = new Map<string, SpeechSynthesisVoice>()
+    for (const chunk of chunks) {
+      if (!voices.has(chunk.voice)) voices.set(chunk.voice, this.requireSystemVoice(chunk.voice))
+    }
 
     // Speak each chunk sequentially
     for (let i = 0; i < chunks.length; i++) {
       if (this.stopped) break
 
       await new Promise<void>((resolve, reject) => {
-        const utterance = new SpeechSynthesisUtterance(chunks[i])
-        utterance.voice = selectedVoice
+        const utterance = new SpeechSynthesisUtterance(chunks[i].text)
+        utterance.voice = voices.get(chunks[i].voice)!
         utterance.rate = playbackRate
         utterance.pitch = DEFAULT_PITCH
         utterance.volume = volumeOverride ? volume : DEFAULT_VOLUME
@@ -617,7 +668,8 @@ export class MicrosoftSpeechProvider extends TTSProvider {
         utterance.onboundary = (event) => {
           if (hasErrored) return
           if (onProgress && event.charIndex !== undefined) {
-            const chunkProgress = (event.charIndex / chunks[i].length) * (1 / chunks.length) * 100
+            const chunkProgress =
+              (event.charIndex / chunks[i].text.length) * (1 / chunks.length) * 100
             const overallProgress = (i / chunks.length) * 100 + chunkProgress
             onProgress(overallProgress)
           }
@@ -859,8 +911,14 @@ export class AITTSService {
   /**
    * Generate and play TTS audio
    */
+  /**
+   * Play plain text in one voice, or pre-built segments in several.
+   *
+   * An explicit `voice` (the settings preview) always means a single voice: only
+   * callers that pass segments opt into the narrator/dialogue split.
+   */
   async generateAndPlay(
-    text: string,
+    input: string | TTSSegment[],
     voice?: string,
     onProgress?: (progress: number) => void,
   ): Promise<void> {
@@ -868,7 +926,9 @@ export class AITTSService {
       throw new Error('TTS service not ready')
     }
 
-    const voiceToUse = voice || this.settings.voice
+    const segments: TTSSegment[] =
+      typeof input === 'string' ? [{ text: input, voice: voice || this.settings.voice }] : input
+
     // Speed is always applied client-side via playbackRate since not all
     // OpenAI-compatible servers (e.g. Kokoro) honor the speed parameter
     const playbackRate = this.settings.speed
@@ -877,14 +937,7 @@ export class AITTSService {
 
     try {
       this.isPlaying = true
-      await this.provider.streamAndPlay(
-        text,
-        voiceToUse,
-        onProgress,
-        playbackRate,
-        volume,
-        volumeOverride,
-      )
+      await this.provider.streamAndPlay(segments, onProgress, playbackRate, volume, volumeOverride)
     } finally {
       this.isPlaying = false
     }
@@ -893,13 +946,15 @@ export class AITTSService {
   /**
    * Generate TTS audio without playing
    */
-  async generateSpeech(text: string, voice?: string): Promise<Blob[]> {
+  async generateSpeech(input: string | TTSSegment[], voice?: string): Promise<Blob[]> {
     if (!this.provider || !this.settings) {
       throw new Error('TTS service not ready')
     }
 
-    const voiceToUse = voice || this.settings.voice
-    return this.provider.generateSpeech(text, voiceToUse)
+    const segments: TTSSegment[] =
+      typeof input === 'string' ? [{ text: input, voice: voice || this.settings.voice }] : input
+
+    return this.provider.generateSpeech(segments)
   }
 
   /**

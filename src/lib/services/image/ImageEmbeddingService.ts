@@ -13,7 +13,7 @@
  */
 
 import type { EmbeddedImage } from '$lib/types'
-import { parseMarkdown } from '$lib/utils/markdown'
+import { parseStoryMarkdown } from '$lib/utils/markdown'
 import { sanitizeVisualProse } from '$lib/utils/htmlSanitize'
 import {
   picTagRegex,
@@ -191,13 +191,18 @@ export function getPlacedImageIds(content: string, images: EmbeddedImage[]): Set
 /**
  * Process story content with all embedded images (agnostic to mode).
  * Handles both agentic markers and inline <pic> tags in a single pass.
+ *
+ * Renders through `parseStoryMarkdown`, which additionally marks up dialogue. The
+ * Visual Prose path below deliberately does not: that content is authored HTML and
+ * goes through `sanitizeVisualProse` instead, which is what keeps the dialogue
+ * feature off for those stories without a mode check anywhere.
  */
 export function processStoryContent(
   content: string,
   images: EmbeddedImage[],
   regeneratingIds: Set<string> = new Set(),
 ): string {
-  return processUnified(content, images, regeneratingIds, parseMarkdown)
+  return processUnified(content, images, regeneratingIds, parseStoryMarkdown)
 }
 
 /**

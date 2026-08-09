@@ -2,7 +2,7 @@
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { BookOpen, Volume2, Pencil, Trash2 } from '@lucide/svelte'
-  import { parseMarkdown } from '$lib/utils/markdown'
+  import { parseStoryMarkdown } from '$lib/utils/markdown'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { replacePicTagsWithPlaceholders } from '$lib/utils/inlineImageParser'
@@ -19,7 +19,7 @@
   // For Visual Prose, content is already wrapped HTML; for regular, parse as markdown
   // Also process <pic> tags to show generating placeholders when inline mode is enabled
   let renderedContent = $derived.by(() => {
-    let processed = isVisualProse ? content : parseMarkdown(content)
+    let processed = isVisualProse ? content : parseStoryMarkdown(content)
     // Replace <pic> tags with generating placeholders during streaming
     if (inlineImageMode && content.includes('<pic')) {
       processed = replacePicTagsWithPlaceholders(processed)
@@ -117,7 +117,10 @@
 
     <!-- Story Content -->
     {#if content.length > 0}
-      <div class="story-text prose-content streaming-content animate-fade-in">
+      <div
+        class="story-text prose-content streaming-content animate-fade-in"
+        class:dialogue-highlight={!isVisualProse}
+      >
         {@html renderedContent}<span class="streaming-cursor"></span>
       </div>
     {:else if isReasoningPhase || isThinking}

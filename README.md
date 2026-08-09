@@ -126,6 +126,8 @@ A cross-story library, separate from any single playthrough:
   catppuccin flavours
 - Adjustable text size (small, medium, large)
 - Word count display toggle
+- Dialogue highlighting: quoted speech coloured in the story text, in a custom colour
+  or the theme's accent (Settings -> Interface). Off for Visual Prose stories
 
 ### Updates
 
@@ -750,6 +752,53 @@ Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
 `sqlite:aventura.db` under Tauri's **app config dir** — see the migrations section for why that is
 not the app data dir. `sync/` never touches the database directly; it moves stories over the
 `tauri-plugin-sql` connection on the JS side.
+
+### Dialogue Detection
+
+`src/lib/utils/dialogue.ts` is the only definition of "this text is a spoken line",
+and two unrelated-looking features read it: the story renderer colours dialogue, and
+the TTS pipeline can speak it in a second voice. Written as two regexes they would
+drift apart at the first edge case, so both go through `matchDialogueAt`.
+
+It recognises `"…"`, `“…”` and `«…»` — the guillemets are not decoration, translated
+narration comes back with them. Single quotes are excluded (`don't`, `l'uomo`), as is
+an unterminated quote, which is also what keeps a streaming line neutral until its
+closing quote arrives instead of flickering.
+
+**A dialogue span never crosses a blank line.** On the renderer side that is free —
+marked's inline lexer works per block — but the TTS path segments the whole entry at
+once, where one unterminated quote would otherwise swallow half a scene into the
+character's voice. The rule lives in the shared core so the two paths agree by
+construction rather than by coincidence.
+
+Colouring is emitted unconditionally as `<span class="dialogue-line">` and gated
+entirely in CSS (`data-dialogue-highlight` plus `--dialogue-color` on the root), so
+flipping the toggle or dragging the colour picker repaints without re-rendering a
+single story entry. The per-entry `.dialogue-highlight` class carries the story's
+`visualProseMode`, which is what keeps the feature off there — including for player
+actions, which are plain markdown even in a Visual Prose story.
+
+For TTS the voice is a property of each **chunk**, not of the call
+(`TTSSegment` in `TTSService.ts`). Playing narrator and dialogue as separate
+`streamAndPlay` calls would restart the producer/consumer queue at every quote — an
+audible gap per line — and would leave `stopAudio` able to stop only the segment
+currently sounding. As chunks, the existing pipeline, retry and progress are unchanged.
+
+Two order-dependent rules, both silent when broken and both covered by
+`ttsText.test.ts`:
+
+- **Sanitize, then split, then drop excluded characters.** Adding `"` to
+  `excludedCharacters` is a legitimate way to silence the quote marks; run that filter
+  before the split and it erases the very marks the split reads, collapsing playback
+  to one voice with no error anywhere.
+- **Visual Prose forces tag removal**, whatever `removeHtmlTags` says. That content is
+  generated HTML with a `<style>` block, and the toggle defaults to false — so the
+  reader otherwise hears markup, and quotes inside `class="…"` get spoken as dialogue.
+
+The Google Translate provider is excluded: its "voice" is a language code, so a second
+one would read the dialogue in another language. `supportsDialogueVoice` is a single
+predicate shared by the settings UI that hides the control and the playback path that
+ignores the setting.
 
 ### Settings Migrations
 

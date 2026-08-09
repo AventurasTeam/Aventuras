@@ -303,6 +303,23 @@
   }
 }
 
+/* =============================================
+   DIALOGUE HIGHLIGHTING
+   =============================================
+   `.dialogue-line` spans are emitted by parseStoryMarkdown on every story entry,
+   unstyled. Both the on/off switch and the colour live here so that toggling either
+   one repaints via CSS instead of re-rendering the story.
+
+   `.dialogue-highlight` is set per entry from the story's own visualProseMode, which
+   is what keeps the feature off for Visual Prose stories — including their player
+   actions, which are plain markdown and would otherwise still be coloured. */
+
+:root[data-dialogue-highlight='on'] .story-text.dialogue-highlight .dialogue-line {
+  /* Unset --dialogue-color means "follow the theme", so the 26 themes stay coherent
+     without this file knowing anything about them. */
+  color: var(--dialogue-color, var(--text-accent));
+}
+
 /* Chat markdown overrides - compact spacing for chat bubbles */
 .chat-markdown.prose-content {
   p {
