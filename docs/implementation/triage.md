@@ -974,3 +974,70 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   removes the cell; when it lands, both permissive branches should go
   with it rather than being left as a latent re-opening. Surfaced by
   the M3.4 review (2026-08-07).
+
+- **`probe.md`'s light-mode simulatable list is mostly unreachable.**
+  Seven of the nine parameters it lists feed `score`, which drives
+  `mmrRank`'s greedy pick order, which needs the per-row vectors light
+  mode does not store.
+  [`probe.md → Simulatable parameters`](../memory/probe.md#simulatable-parameters)
+  reads as though `λ_div` were the only parameter needing
+  candidate-vs-candidate cosines; the cosines are needed for any MMR
+  recomputation at all. The two that apply after MMR do not both
+  survive either: the per-type budgets do — budget-fill can be re-walked
+  in captured `mmr_rank` order against `tokens_estimated` and the
+  captured `drop_reason` flags — but `min_score_threshold` compares
+  against `mmrScore`, and the capture stores only `final_score`, which
+  is the **pre-MMR** raw score (`trace()` in `lib/retrieval/ranker.ts`
+  sets `finalScore: s.score`; `mmrScore` is dropped). So the honest
+  light-simulatable list may be the per-type budgets alone. Decide light
+  mode's real offer — accept the narrower list, capture `mmr_score` per
+  row (one float, recovers the threshold), or store the kept-set
+  pairwise cosine matrix (~80 KB per type at a saturated pool, recovers
+  everything) — before M7.5 builds the simulator. Slice 3.5 left the
+  list unchanged and ran its parity test on deep captures, the only mode
+  that can reach `mmrRank`. Surfaced during Slice 3.5 planning
+  (2026-08-08), sharpened during Task 15 (2026-08-09).
+- **`distributeQueryVectors` assumes a short embed result dropped its
+  trailing texts.** It fills present slots positionally
+  (`out[i] = vectors[next++] ?? null`, `lib/retrieval/queries.ts`), so a
+  provider returning all-but-the-middle would record Q3's vector as
+  Q2's. `sims` would still be truthful about _which slots hold a
+  vector_, and blend replay stays exact because it reconstructs from
+  `sims` itself — so this does not threaten probe parity. But it is
+  undetectable today and bounds how far the "one source of truth"
+  property actually reaches. Surfaced by the Slice 3.5 Task 1 review
+  (2026-08-08).
+- **`RankAllInput` carries no `capturedTokens`, so a whole-bundle probe
+  replay is impossible.** `rankPerType` takes it; `rankAll` does not,
+  and object-literal excess-property checking rejects passing it
+  through. Slice 3.5's parity test replays per type, so nothing is
+  blocked today — but this is deliberate-by-omission rather than
+  designed, and an M7.5 simulator that wants to re-run a whole captured
+  pass at once will need `RankAllInput` widened. Surfaced by the Slice
+  3.5 Task 2 review (2026-08-08).
+- **`lib/db/world-json-types.ts` has outgrown its name.** It now holds
+  ~85 lines of probe-capture cluster (`CaptureCandidate`,
+  `CaptureQuery`, `CaptureParamsSnapshot`, `CaptureTokenizer`,
+  `ProbeCapturePayload`, `CAPTURE_VERSION`) beside `ClassifierStatus` —
+  a genuine JSON column — and `DropReason`, which is neither. The
+  capture payload is not a JSON column at all; it is a gzipped BLOB.
+  Splitting the cluster into `lib/db/probe-capture-types.ts` restores
+  the name's meaning and keeps the `@/lib/retrieval` import off the file
+  `stories.table.ts` imports. Deferred out of Slice 3.5 deliberately: a
+  `git mv`-shaped change with inbound references, not worth reshuffling
+  files mid-slice. Surfaced by the Slice 3.5 Task 8 review (2026-08-08).
+- **The fork-exclusion guard is structural and goes stale the moment
+  fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
+  not test the real behavior: `lib/probe/fork.test.ts` instead
+  source-scans `lib/**` for `probe_captures` references outside an
+  audited list, plus a direct query assertion that a sibling branch
+  stays empty. Neither catches the regression most likely to actually
+  happen — if M6.1 copies branches **generically** (iterating a manifest
+  or introspecting branch-scoped tables from the schema), the fork code
+  will never contain the literal `probe_captures`, the scan stays green,
+  and captures copy anyway. The manifest row now exists in
+  [`data-model.md → Branch model`](../data-model.md#branch-model), so
+  a generic copier has a canonical exclusion to read. **When M6.1 lands
+  branch fork, replace the structural scan with the both-sides
+  behavioral test** the slice AC originally described. Surfaced by the
+  Slice 3.5 Task 14 review (2026-08-09).
