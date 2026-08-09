@@ -336,12 +336,13 @@ each answer constrains the next.
   transaction path with no `await` to spend; identical on Hermes,
   Node and Chromium, where `CompressionStream` and `node:zlib` are
   both unavailable on Hermes.
-- **The inspection affordance is `app/dev/probe-captures.tsx`**, an
-  unlinked harness route following the `app/dev/db-check.tsx`
-  precedent — no `t()`, no Storybook, no shell. Deleting it when
-  M7.5 ships the real surface touches nothing else. It cannot be unit
-  tested (the `unit` project cannot render RN-Web chrome), so it is
-  covered by manual smoke only.
+- **The inspection affordance is `app/dev/probe-captures.tsx`**, a
+  harness route unlinked from the product shell and reachable from
+  `/dev`, following the `app/dev/db-check.tsx` precedent — no `t()`,
+  no Storybook, no shell. Deleting it when M7.5 ships the real surface
+  touches only its `ROUTES` entry in `app/dev/index.tsx`. It cannot be
+  unit tested (the `unit` project cannot render RN-Web chrome), so it
+  is covered by manual smoke only.
 
 ### Findings a later slice inherits
 

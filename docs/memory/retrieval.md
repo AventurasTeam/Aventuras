@@ -1545,7 +1545,7 @@ costs nothing and carries `tokensEstimated: null` in its trace. That is
 sound because a pre-filtered row can never be seated — not by the pass
 and not by the probe simulator, which cannot un-drop it without the
 per-row vectors that would let it re-run MMR. Per-row cost is ~45-60 µs
-with js-tiktoken `cl100k_base`; capping the row count is what took the
+with js-tiktoken `o200k_base`; capping the row count is what took the
 pass from ~140ms to ~108ms at dim 384 (see
 [Per-turn cost budget](#per-turn-cost-budget)). A `token_count INTEGER`
 column per table remains the fallback if that is not enough, with cache

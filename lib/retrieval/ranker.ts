@@ -115,8 +115,8 @@ function score(
 
 type Costed = Scored & { tokensEstimated: number }
 
-// The pass's largest CPU term (retrieval.md → Per-turn cost budget), and a
-// pre-filtered row can never be seated, so its count is never read.
+// Deferred past the pre-filter: a pre-filtered row can never be seated, so its
+// count is never read (retrieval.md → Token estimation).
 function costTokens(s: Scored, type: RetrievalType, input: RankTypeInput): Costed {
   const captured = input.capturedTokens?.get(s.id)
   return {

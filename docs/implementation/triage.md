@@ -1047,3 +1047,31 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   branch fork, replace the structural scan with the both-sides
   behavioral test** the slice AC originally described. Surfaced by the
   Slice 3.5 Task 14 review (2026-08-09).
+- **A non-embedder retrieval fault writes no capture, which is the
+  case the probe most wants.** `runRetrieval` converts only
+  `VectorInvariantError` into a captured failure and rethrows
+  everything else — correctly, since routing a SQL fault to the
+  "Switch embedder" surface would offer a re-index as the fix for a
+  locked database. But the rethrow escapes `retrievalPhase` before the
+  capture site, so a vec0/SQLite error, a dead IPC bridge or a ranker
+  bug produces no capture at all. `failure_reason` is an
+  `EmbedderErrorKind`, and `lib/embedder/types.ts` deliberately ties
+  that union to the IPC envelope's own tag, so a third tier cannot be
+  added to one side only — closing this needs a **capture-failure
+  taxonomy separate from the embedder's**, threaded through
+  `RetrievalPartial`, plus a capture-then-rethrow in the phase.
+  `probe.md` was narrowed to state the gap rather than promise the
+  behavior. Surfaced by the Slice 3.5 review (2026-08-09).
+- **The probe browse route decodes every payload in the story to
+  render a list that shows none of them.** `capturesForStoryQuery`
+  selects `pc.payload`, `decodeCaptures` gunzips and `JSON.parse`s all
+  of them, and `app/dev/probe-captures.tsx` retains the lot — while the
+  list rows render only column data (`id`, `branch_id`, `capture_mode`,
+  `payload_size`, `failure_reason`). Harmless at light-capture scale
+  (~3-6 kB each, measured on a real dev story), but a deep capture runs
+  ~18 MB uncompressed at dim 768 on a scale-assumption pool, and the
+  slice's own manual AC asks for deep captures to be browsed. Failure
+  is self-trapping: Delete is unreachable without loading first. Fix is
+  a payload-free list query plus decode-on-View, which also moves
+  corruption detection onto the specific row. Deferred as latent.
+  Surfaced by the Slice 3.5 review (2026-08-09).
