@@ -11,6 +11,7 @@ export { extractProse, splitSentences } from './prose-extract'
 export { buildQueryStack, distributeQueryVectors } from './queries'
 export type { QuerySpec, QueryStack, QueryStackInput } from './queries'
 export { rankAll, rankPerType } from './ranker'
+export type { RankTypeInput } from './ranker'
 export { ENTITY_FRAMING, runRetrieval } from './run'
 export type {
   InjectedAwareness,
@@ -18,12 +19,14 @@ export type {
   RetrievalFailure,
   RetrievalOutcome,
   RetrievalParams,
+  RetrievalPartial,
   RetrievalSuccess,
   RetrievalTimings,
 } from './run'
 export { runSyncStage } from './sync'
 export type { SyncStageDeps, SyncStageResult } from './sync'
-export { countEntryTokens, countTokens } from './tokens'
+export { countEntryTokens, countTokens, TOKENIZER_IDENTITY } from './tokens'
+export { RETRIEVAL_TYPES } from './types'
 export type {
   Candidate,
   CandidateKind,
@@ -31,7 +34,9 @@ export type {
   DropReason,
   PoolFunnel,
   QueryAll,
-  QueryPresence,
+  QueryTextPresence,
+  QueryWeights,
+  RankAllInput,
   RankedType,
   RankerParams,
   RetrievalType,

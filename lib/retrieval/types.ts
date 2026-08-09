@@ -19,6 +19,9 @@ export const TYPE_OF_KIND = {
  */
 export type RetrievalType = (typeof TYPE_OF_KIND)[CandidateKind]
 
+/** The five values of RetrievalType, for a caller that needs to enumerate them. */
+export const RETRIEVAL_TYPES = Object.values(TYPE_OF_KIND) as readonly RetrievalType[]
+
 /** Positional value-array query seam, matching lib/db/runtime/exec.ts's queryRows. */
 export type QueryAll = (sql: string, params: unknown[]) => Promise<unknown[][]>
 
@@ -33,8 +36,12 @@ type CandidateBase = {
   displayName: string
   /** Exactly the text the prompt will carry; token cost is measured on it. */
   renderedText: string
-  /** Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors. */
-  sims: readonly [number, number, number]
+  /**
+   * Cosine similarity to Q1/Q2/Q3, computed in JS over the stored vectors.
+   * `null` means that query produced no vector this turn — which `0`, a
+   * genuine orthogonal similarity, cannot be distinguished from.
+   */
+  sims: readonly [number | null, number | null, number | null]
   /** Unit-norm, same space as the queries. MMR's pairwise similarity input. */
   vector: Float32Array
   /** Chapters since the row became relevant. 0 for every row until M5 closes one. */
@@ -71,18 +78,27 @@ export type { DropReason }
 /**
  * Per-candidate trace, contract C4. camelCase here; Slice 3.5 maps to the
  * snake_case CaptureCandidate in lib/db/world-json-types.ts. Adding a field is
- * a contract change.
+ * a contract change. Every scoring field is the value the scorer read,
+ * post-clamp.
  */
 export type CandidateTrace = {
   kind: CandidateKind
   id: string
   displayName: string
-  simQ1: number
-  simQ2: number
-  simQ3: number
+  simQ1: number | null
+  simQ2: number | null
+  simQ3: number | null
   simBlend: number
   recencyFactor: number
   pinSignal: number
+  chaptersOld: number
+  /** Exactly the text the prompt will carry, and the tokenizer's input when the cost is computed rather than replayed from a capture. */
+  renderedText: string | null
+  /**
+   * Happenings only. score() forces pinSignal 0 and recencyFactor 1 on these,
+   * which a captured pin_signal of 0 cannot be distinguished from.
+   */
+  commonKnowledge?: boolean
   kwBoostValue: number
   chapterBoostApplied: boolean
   bypassTriggered: boolean
@@ -91,7 +107,8 @@ export type CandidateTrace = {
   mmrRank: number | null
   selected: boolean
   dropReason: DropReason
-  tokensEstimated: number
+  /** null when the candidate was pre-filtered out — it can never be seated. */
+  tokensEstimated: number | null
   embeddingStale: boolean
 }
 
@@ -107,6 +124,12 @@ export type RankedType = {
   selected: readonly Candidate[]
   traces: readonly CandidateTrace[]
   funnel: PoolFunnel
+  /**
+   * Every row that entered the pool, in input order. `selected` holds only the
+   * seated ones, so a deep probe capture — which stores a vector per pool row —
+   * has nowhere else to read them from.
+   */
+  pool: readonly Candidate[]
 }
 
 export type QueryWeights = { action: number; digest: number; prose: number }
@@ -131,14 +154,13 @@ export type RankerParams = {
   readonly typeOverhead: Readonly<Record<RetrievalType, number>>
 }
 
-/** Which of Q1/Q2/Q3 actually produced a vector this turn. */
-export type QueryPresence = readonly [boolean, boolean, boolean]
+/** Which of Q1/Q2/Q3 had non-empty text and was submitted to the embedder. */
+export type QueryTextPresence = readonly [boolean, boolean, boolean]
 
 export type RankAllInput = {
   pools: Record<RetrievalType, readonly Candidate[]>
   budgets: Record<RetrievalType, number>
   params: RankerParams
-  presence: QueryPresence
   /** Entry ids covered by each closed chapter, for the chapter-match boost. */
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   /** Injected so the ranker stays pure — tokens.ts is the production impl. */

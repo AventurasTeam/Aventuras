@@ -11,7 +11,7 @@ import {
 } from '@/lib/db'
 import { definePipeline, getPipeline, PER_TURN_KIND, type PhaseResult } from '@/lib/pipeline'
 import { runRetrieval } from '@/lib/retrieval'
-import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
+import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import {
   currentStoryStore,
   entriesStore,
@@ -592,10 +592,9 @@ describe('submitTurn', () => {
     await openStory(db, 's1', 'b1')
     entriesStore.hydrate('b1', [])
     await hydrateAppSettings(async () => WORKING_CONFIG)
-    vi.mocked(runRetrieval).mockResolvedValueOnce({
-      ok: false,
-      failure: { reason: 'call', detail: 'embedder session died', staleCount: 3 },
-    })
+    vi.mocked(runRetrieval).mockResolvedValueOnce(
+      retrievalFailure({ reason: 'call', detail: 'embedder session died', staleCount: 3 }),
+    )
 
     const result = expectRan(
       await submitTurn(

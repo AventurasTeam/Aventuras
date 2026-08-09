@@ -216,9 +216,9 @@ function expectOk(out: RetrievalOutcome): RetrievalSuccess {
   return out
 }
 
-function expectFailure(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }>['failure'] {
+function expectBlocking(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }> {
   if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
-  return out.failure
+  return out
 }
 
 const tracedIds = (bundle: { traces: readonly { id: string }[] }): string[] =>
@@ -296,7 +296,10 @@ describe('runRetrieval — sync ordering', () => {
     expect(loadStaleRows).toHaveBeenCalledWith(['br_9'])
   })
 
-  it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
+  // loadStaleRows must return a dirty row: an empty set short-circuits the sync
+  // before it ever reaches embedRows, so this is what actually exercises the
+  // sync's own failure path rather than the query embed's.
+  const withSyncFailure = async () => {
     const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
     const out = await runRetrieval(
       deps({
@@ -310,13 +313,26 @@ describe('runRetrieval — sync ordering', () => {
       }),
       params(),
     )
+    return { ...expectBlocking(out), queryAll }
+  }
 
-    const failure = expectFailure(out)
+  it('returns a blocking outcome when the sync stage fails, before any KNN', async () => {
+    const { failure, queryAll } = await withSyncFailure()
+
     expect(failure.reason).toBe('init')
     expect(failure.detail).toBe('embedder down')
     // The sync knew how many rows it was trying to embed, unlike a query-embed failure.
     expect(failure.staleCount).toBe(1)
     expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  // The sync stage runs before the floor or the query stack exist, so a failure
+  // here has nothing to report beyond the failure itself — unlike a query-embed
+  // failure, which reaches both.
+  it('carries no partial state when the sync stage fails', async () => {
+    const { partial } = await withSyncFailure()
+
+    expect(partial).toEqual({ queries: null, floor: null, bundles: {} })
   })
 
   it('reads the source rows AFTER the sync commits, not before', async () => {
@@ -408,7 +424,7 @@ describe('runRetrieval — query embed failure', () => {
   const withQueryEmbed = async (embedTexts: RetrievalDeps['embedTexts']) => {
     const queryAll = makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] })
     const out = await runRetrieval(deps({ queryAll, embedTexts }), params())
-    return { failure: expectFailure(out), queryAll }
+    return { ...expectBlocking(out), queryAll }
   }
 
   it('reports a typed init failure when the embedder session never comes up', async () => {
@@ -417,6 +433,27 @@ describe('runRetrieval — query embed failure', () => {
     })
     expect(failure).toEqual({ reason: 'init', detail: 'no local model', staleCount: null })
     expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  // The counterpart to the sync-stage failure above: with nothing dirty, the
+  // pass already built the floor and the query stack before it ever reaches
+  // the embedder, so a capture of this failure has Q1/Q2/Q3 text to show
+  // (probe.md → Failed captures) even though no pool was ever assembled.
+  it('carries the floor and query stack when the query embed fails', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] }),
+        embedTexts: async () => {
+          throw new EmbedderInitError('no local model')
+        },
+      }),
+      params(),
+    )
+
+    const { partial } = expectBlocking(out)
+    expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
+    expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
+    expect(partial.bundles).toEqual({})
   })
 
   it('reports a typed call failure when the embed request itself fails', async () => {
@@ -471,9 +508,41 @@ describe('runRetrieval — query embed failure', () => {
       params(),
     )
 
-    const failure = expectFailure(out)
+    const { failure, partial } = expectBlocking(out)
     expect(failure.reason).toBe('init')
     expect(failure.detail).toMatch(/unit-norm/)
+    // This throw comes from deep inside pool assembly — after the floor and the
+    // query stack exist, but before any bundle is ranked — and it unwinds past
+    // runRetrievalPass entirely, so only the accumulator runRetrieval owns can
+    // still report what the pass had reached.
+    expect(partial.floor).not.toBeNull()
+    expect(partial.queries).not.toBeNull()
+    expect(partial.bundles).toEqual({})
+  })
+
+  // Chapters ranks before the happenings pool builds, so a corrupt vector that
+  // fails happenings specifically is the only failure that can observe a
+  // non-empty partial.bundles.
+  it('keeps only the chapters bundle when a corrupt vector fails the happenings pool', async () => {
+    const notUnit = new Uint8Array(Float32Array.from([2, 2]).buffer)
+    const inner = makeQueryAll({
+      chapters: [chapterRow('ch_1', 'The Tin Gate')],
+      happenings: [happeningRow('hap_1', 'The bell rang', { common: 1 })],
+    })
+    const queryAll = vi.fn(async (sql: string, p: unknown[]) => {
+      if (sql.includes('MATCH')) {
+        if (sql.includes('chapter_summaries_vec')) return [hit('ch_1', 0, unitBlob(1, 0))]
+        if (sql.includes('happenings_vec')) return [hit('hap_1', 0, notUnit)]
+        return []
+      }
+      return inner(sql, p)
+    })
+
+    const out = await runRetrieval(deps({ queryAll }), params())
+
+    const { partial } = expectBlocking(out)
+    expect(Object.keys(partial.bundles)).toEqual(['chapters'])
+    expect(partial.bundles.chapters?.selected.map((c) => c.id)).toEqual(['ch_1'])
   })
 
   // Companion to the sync stage's hand-off test. The query embed is the second
@@ -739,9 +808,9 @@ describe('runRetrieval — query stack', () => {
 
     const trace = expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_b')
     expect(trace).toBeDefined()
-    expect(trace?.simQ3).toBe(0)
+    expect(trace?.simQ3).toBeNull()
     // Q3 produced no vector, so the blend renormalizes over Q1 + Q2 only.
-    // Counting the absent slot would give 0.7.
+    // Counting the absent slot as a zero similarity would give 0.7.
     expect(trace?.simBlend).toBe(1)
   })
 })

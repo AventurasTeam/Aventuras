@@ -1294,9 +1294,10 @@ because an admitted row carries no KNN match row and so needs its
 vector fetched by id — and `id` is a vec0 metadata column with no
 push-down, so that fetch scans the branch partition. Measured at dim
 384: seating five of sixty chapters admits ~480 happenings on top of a
-~290-row KNN pool, and the whole mechanism costs ~44ms of a ~140ms pass
-at 6000 happenings, against ~9ms at 1200. Two consequences worth
-holding:
+~290-row KNN pool, and the whole mechanism costs ~24ms of a ~108ms pass
+at 6000 happenings, against ~5ms at 1200. It cost ~44ms before
+tokenization moved past the pre-filter: the admitted rows land beyond
+rank 200 and are no longer priced. Two consequences worth holding:
 
 - **Issue the by-id fetch once.** Its cost tracks partition size and is
   near-flat in the id count, so splitting the admitted set into chunks
@@ -1410,10 +1411,13 @@ worst case at ~6.5ms per type at dim 384 and ~12.5ms at dim 768.
 
 In practice only happenings reaches 200; the other four types are
 bounded by how much a person authored. Measured across all five types
-together, scoring plus MMR plus budget fill is ~14ms — see
-[Per-turn cost budget](#per-turn-cost-budget). Restructuring is not the
-lever: a `Uint8Array` bitmap variant measured only 10-18% faster, and
-the irreducible cosine floor alone is 4.34ms at N=200.
+together, scoring plus tokenization plus MMR plus budget fill is ~29ms
+at dim 384 — see [Per-turn cost budget](#per-turn-cost-budget). The
+bench no longer separates MMR from the tokenization the same map does,
+so the ~6.5ms figure above predates that merge and is not re-derivable
+from it. Restructuring is not the lever: a `Uint8Array` bitmap variant
+measured only 10-18% faster, and the irreducible cosine floor alone is
+4.34ms at N=200.
 
 The pre-filter's trade stands: candidates ranking ~200th by raw score
 are unlikely to make the budget anyway, so it doesn't lose meaningful
@@ -1531,16 +1535,19 @@ shipped macro and fails when the macro moves and the constant does
 not.
 
 **No stored column on candidate tables.** Each candidate is tokenized
-exactly once per pass — the ranker keeps the result on the scored row —
+at most once per pass — the ranker keeps the result on the scored row —
 so nothing pays twice for the same row within a turn.
 
-Per-row cost is small (~45-60 µs with js-tiktoken `cl100k_base`) but
-the row count is the whole pool, not the kept set, which makes this the
-largest CPU term in the pass: see
-[Per-turn cost budget](#per-turn-cost-budget). Real perf testing has
-now happened, and it points at **tokenizing fewer rows** rather than at
-a stored column — a pre-filtered row can never be seated by the probe
-simulator, so its token count is never read. A `token_count INTEGER`
+**Only the rows that survive the pre-filter are tokenized.**
+`rankPerType` scores and sorts the whole pool but defers the token
+estimate to the `preFilterTopN` slice, so a row that MMR will never see
+costs nothing and carries `tokensEstimated: null` in its trace. That is
+sound because a pre-filtered row can never be seated — not by the pass
+and not by the probe simulator, which cannot un-drop it without the
+per-row vectors that would let it re-run MMR. Per-row cost is ~45-60 µs
+with js-tiktoken `o200k_base`; capping the row count is what took the
+pass from ~140ms to ~108ms at dim 384 (see
+[Per-turn cost budget](#per-turn-cost-budget)). A `token_count INTEGER`
 column per table remains the fallback if that is not enough, with cache
 invalidation on row update.
 
@@ -1552,35 +1559,52 @@ bench:retrieval`) prices the shipped pass against the volumes
 desktop (Node 24 / V8, file-backed SQLite, `sqlite-vec` 0.1.9),
 median of seven warm passes, **excluding the embedder and IPC**.
 
-| Step                                  | dim 384 | dim 768 | Scales with                         |
-| ------------------------------------- | ------- | ------- | ----------------------------------- |
-| Source reads, awareness, chapter JOIN | ~21ms   | ~21ms   | branch entity / lore / thread count |
-| KNN — 3 vectors × 5 types             | ~35ms   | ~75ms   | rows per family, and dim            |
-| Chapter-range admission               | ~21ms   | ~24ms   | happenings on the branch            |
-| Candidate assembly                    | ~6ms    | ~8ms    | pool size                           |
-| Token estimation                      | ~46ms   | ~46ms   | **pool size, not kept size**        |
-| Scoring, cosine, MMR, budget fill     | ~14ms   | ~16ms   | min(pool, `preFilterTopN`) per type |
-| **Total**                             | ~140ms  | ~224ms  |                                     |
+| Step                                    | dim 384 | dim 768 | Scales with                         |
+| --------------------------------------- | ------- | ------- | ----------------------------------- |
+| Source reads, awareness, chapter JOIN   | ~21ms   | ~21ms   | branch entity / lore / thread count |
+| KNN — 3 vectors × 5 types               | ~35ms   | ~75ms   | rows per family, and dim            |
+| Chapter-range admission                 | ~21ms   | ~24ms   | happenings on the branch            |
+| Candidate assembly                      | ~6ms    | ~8ms    | pool size                           |
+| Scoring, tokenization, MMR, budget fill | ~29ms   | ~44ms   | min(pool, `preFilterTopN`) per type |
+| **Total**                               | ~108ms  | ~175ms  |                                     |
 
 Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
 the projected range. Lower scales are cheaper roughly in proportion:
-~57ms / ~102ms at 1200 happenings, ~104ms / ~163ms at 3600.
+~51ms / ~91ms at 1200 happenings, ~87ms / ~134ms at 3600.
+
+**Which rows a re-run reproduces.** The bench emits five spans:
+`totalMs`, `syncMs`, `embedMs`, `knnMs`, `rankMs`. Only two table rows
+map onto one of them — **Total** is `totalMs`, and **Scoring,
+tokenization, MMR, budget fill** is `rankMs`. The four rows above it
+are an ad-hoc M3.4 sub-split of `knnMs` and of the unnamed span before
+it (source loading has no `RetrievalTimings` member), hand-measured
+once and not instrumented since. Read them as proportions of the
+whole, not as figures `pnpm bench:retrieval` re-derives.
 
 Three things the table makes visible that the previous estimate did
 not:
 
-- **Token estimation is the largest CPU term**, at roughly three times
-  everything MMR does. It is charged per **pool** row, not per kept
-  row, because `CandidateTrace.tokensEstimated` is non-nullable — so a
-  771-row happenings pool is tokenized to seat 22. Capping it at the
-  kept `preFilterTopN` would recover most of it and is a C4 trace-shape
-  decision, filed against Slice 3.5.
+- **Tokenization is bounded by `preFilterTopN`, not by pool size.**
+  It used to be the pass's largest single term, charged per pool row
+  to fill a non-nullable trace field — a 771-row happenings pool
+  tokenized to seat 22. `rankPerType` now defers it past the
+  pre-filter slice and leaves `tokensEstimated` null on dropped rows,
+  which is what took the total from ~140ms to ~108ms at dim 384. The
+  saving is not separately quotable: tokenization runs inside the same
+  kept-row map that feeds MMR, so the two rows this table used to
+  carry are one row and one `rankMs` span. Scoring and the sort do
+  still walk the whole pool — the bench's 477-row swing between boost
+  on and off moves `rankMs` by ~1ms, which is what "scales with pool
+  size" is now worth here.
 - **MMR is not the problem it looked like.** The measured ~6.5ms per
   type at N=200 is real, but only happenings reaches 200 in a typical
   story: entities, lore and threads are human-authored and sit in the
-  low hundreds. Scoring plus MMR plus budget fill together are ~14ms.
-  A story that saturates the pre-filter on all five types pays ~30ms —
-  the honest worst case, not the common one.
+  low hundreds. Scoring, tokenization, MMR and budget fill together
+  are ~29ms at dim 384 against a 1067-row pool of which 496 survive
+  the pre-filter. A story that saturates the pre-filter on all five
+  types tokenizes and ranks 1000 rows rather than 496 — the honest
+  worst case, not the common one, and the one term in this table that
+  the bench fixture does not reach.
 - **The chapter-range admission is a first-class cost**, not a
   rounding error on the happenings pool. See
   [Chapter-match boost](#chapter-match-boost-on-happenings).

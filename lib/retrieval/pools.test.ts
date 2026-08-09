@@ -10,6 +10,7 @@ import {
   type LoreRow,
   type ThreadRow,
 } from './pools'
+import type { LoadedEntityRow, LoadedLoreRow, LoadedThreadRow } from './source-rows'
 
 const entity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): EntityRow => ({
   kind: 'character',
@@ -34,6 +35,22 @@ const thread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): ThreadRow => 
   title: over.id,
   description: null,
   ...over,
+})
+
+const loadedEntity = (over: Partial<EntityRow> & Pick<EntityRow, 'id'>): LoadedEntityRow => ({
+  ...entity(over),
+  embeddingStale: true,
+})
+
+const loadedLore = (over: Partial<LoreRow> & Pick<LoreRow, 'id'>): LoadedLoreRow => ({
+  ...lore(over),
+  keywords: [],
+  embeddingStale: true,
+})
+
+const loadedThread = (over: Partial<ThreadRow> & Pick<ThreadRow, 'id'>): LoadedThreadRow => ({
+  ...thread(over),
+  embeddingStale: true,
 })
 
 const floorOf = (over: Partial<Parameters<typeof buildStructuralFloor>[0]> = {}) =>
@@ -145,6 +162,49 @@ describe('buildStructuralFloor', () => {
     const floor = floorOf({ entities, sceneEntityIds: ['char_a'], currentLocationId: 'loc_a' })
     const pool = filterEntityPool(entities, { floorIds: floor.seatedIds, recentProse: '' })
     for (const id of floor.seatedIds) expect(ids(pool)).not.toContain(id)
+  })
+
+  it('projects loaded rows down to the declared shape, on all six seated lists', () => {
+    // Typed as Loaded*Row via the factories above, not EntityRow/LoreRow/ThreadRow:
+    // annotating the fixture as the narrower type would trip excess-property
+    // checking and force it narrow, proving nothing about the runtime widening.
+    // One row per destination: an active+always thread seats only as active, so
+    // activeThreads and alwaysThreads each need their own row to be observed.
+    const floor = buildStructuralFloor({
+      entities: [
+        loadedEntity({ id: 'char_1' }),
+        loadedEntity({ id: 'loc_1', kind: 'location' }),
+        loadedEntity({ id: 'char_2', injectionMode: 'always' }),
+      ],
+      lore: [loadedLore({ id: 'lo_1', injectionMode: 'always' })],
+      threads: [
+        loadedThread({ id: 'thr_1', status: 'active' }),
+        loadedThread({ id: 'thr_2', injectionMode: 'always' }),
+      ],
+      sceneEntityIds: ['char_1'],
+      currentLocationId: 'loc_1',
+    })
+
+    expect(
+      [
+        floor.sceneEntities,
+        floor.alwaysEntities,
+        floor.activeThreads,
+        floor.alwaysThreads,
+        floor.alwaysLore,
+      ].map((l) => l.length),
+    ).toEqual([1, 1, 1, 1, 1])
+
+    const entityKeys = ['description', 'id', 'injectionMode', 'kind', 'name', 'status'].sort()
+    const threadKeys = ['description', 'id', 'injectionMode', 'status', 'title'].sort()
+    const loreKeys = ['body', 'id', 'injectionMode', 'priority', 'title'].sort()
+
+    expect(Object.keys(floor.sceneEntities[0]).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.currentLocation ?? {}).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.alwaysEntities[0]).sort()).toEqual(entityKeys)
+    expect(Object.keys(floor.activeThreads[0]).sort()).toEqual(threadKeys)
+    expect(Object.keys(floor.alwaysThreads[0]).sort()).toEqual(threadKeys)
+    expect(Object.keys(floor.alwaysLore[0]).sort()).toEqual(loreKeys)
   })
 })
 

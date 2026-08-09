@@ -3,7 +3,6 @@ import type {
   Candidate,
   CandidateTrace,
   DropReason,
-  QueryPresence,
   QueryWeights,
   RankAllInput,
   RankedType,
@@ -13,11 +12,18 @@ import type {
 
 export type RankTypeInput = {
   params: RankerParams
-  presence: QueryPresence
   chapterRanges: ReadonlyMap<string, ReadonlySet<string>>
   countTokens: (text: string) => number
   /** Chapters that won budget this turn; only they feed the happenings boost. */
   matchedChapterIds?: ReadonlySet<string>
+  /**
+   * Token counts from a probe capture, keyed by candidate id. A replay passes
+   * them so the seated set does not depend on the tokenizer version loaded at
+   * replay time; production omits it and the count is computed. Each value is
+   * the stored total, tokenizer count plus the type overhead. A kept id absent
+   * from the map falls back to computing it.
+   */
+  capturedTokens?: ReadonlyMap<string, number>
 }
 
 type Scored = {
@@ -28,23 +34,23 @@ type Scored = {
   simBlend: number
   recencyFactor: number
   pinSignal: number
+  chaptersOld: number
   kwBoostValue: number
   chapterBoostApplied: boolean
   bypassTriggered: boolean
-  tokensEstimated: number
 }
 
 function blendSims(
-  sims: readonly [number, number, number],
+  sims: readonly [number | null, number | null, number | null],
   weights: QueryWeights,
-  presence: QueryPresence,
 ): number {
   const w = [weights.action, weights.digest, weights.prose]
   let weighted = 0
   let total = 0
   for (let i = 0; i < 3; i++) {
-    if (!presence[i]) continue
-    weighted += w[i] * sims[i]
+    const s = sims[i]
+    if (s === null) continue
+    weighted += w[i] * s
     total += w[i]
   }
   // Renormalizing over the present queries keeps an absent one from dragging
@@ -59,7 +65,7 @@ function score(
   boostedEntryIds: ReadonlySet<string>,
 ): Scored {
   const { params } = input
-  const simBlend = blendSims(c.sims, params.weights, input.presence)
+  const simBlend = blendSims(c.sims, params.weights)
   const kwBoostValue = c.keywordHits.length > 0 ? params.kwBoost : 0
   const common = c.kind === 'happening' && c.commonKnowledge
   const lambda = params.lambda[type]
@@ -100,17 +106,32 @@ function score(
     simBlend,
     recencyFactor,
     pinSignal,
+    chaptersOld,
     kwBoostValue,
     chapterBoostApplied,
     bypassTriggered,
-    // Costed for every pool row, not just the ones that reach budget fill: the
-    // probe simulator re-runs budget-fill against stored tokens_estimated with
-    // the user's own thresholds (probe.md → Simulatable parameters).
-    tokensEstimated: input.countTokens(c.renderedText) + params.typeOverhead[type],
   }
 }
 
-function trace(s: Scored, mmrRankIndex: number | null, dropReason: DropReason): CandidateTrace {
+type Costed = Scored & { tokensEstimated: number }
+
+// Deferred past the pre-filter: a pre-filtered row can never be seated, so its
+// count is never read (retrieval.md → Token estimation).
+function costTokens(s: Scored, type: RetrievalType, input: RankTypeInput): Costed {
+  const captured = input.capturedTokens?.get(s.id)
+  return {
+    ...s,
+    tokensEstimated:
+      captured ?? input.countTokens(s.candidate.renderedText) + input.params.typeOverhead[type],
+  }
+}
+
+function trace(
+  s: Scored,
+  mmrRankIndex: number | null,
+  dropReason: DropReason,
+  tokensEstimated: number | null,
+): CandidateTrace {
   return {
     kind: s.candidate.kind,
     id: s.id,
@@ -121,6 +142,9 @@ function trace(s: Scored, mmrRankIndex: number | null, dropReason: DropReason): 
     simBlend: s.simBlend,
     recencyFactor: s.recencyFactor,
     pinSignal: s.pinSignal,
+    chaptersOld: s.chaptersOld,
+    renderedText: dropReason === 'pre_filtered' ? null : s.candidate.renderedText,
+    ...(s.candidate.kind === 'happening' ? { commonKnowledge: s.candidate.commonKnowledge } : {}),
     kwBoostValue: s.kwBoostValue,
     chapterBoostApplied: s.chapterBoostApplied,
     bypassTriggered: s.bypassTriggered,
@@ -128,7 +152,7 @@ function trace(s: Scored, mmrRankIndex: number | null, dropReason: DropReason): 
     mmrRank: mmrRankIndex,
     selected: dropReason === 'not_dropped',
     dropReason,
-    tokensEstimated: s.tokensEstimated,
+    tokensEstimated,
     embeddingStale: s.candidate.embeddingStale,
   }
 }
@@ -154,7 +178,7 @@ export function rankPerType(
   const scored = pool.map((c) => score(c, type, input, boostedEntryIds))
   scored.sort((a, b) => b.score - a.score)
 
-  const kept = scored.slice(0, input.params.preFilterTopN)
+  const kept = scored.slice(0, input.params.preFilterTopN).map((s) => costTokens(s, type, input))
   const ranked = mmrRank(kept, input.params.lambdaDiv)
 
   const selected: Candidate[] = []
@@ -184,11 +208,11 @@ export function rankPerType(
       selected.push(r.candidate)
       remaining -= r.tokensEstimated
     }
-    traces.push(trace(r, i, dropReason))
+    traces.push(trace(r, i, dropReason, r.tokensEstimated))
   }
 
   for (const s of scored.slice(input.params.preFilterTopN)) {
-    traces.push(trace(s, null, 'pre_filtered'))
+    traces.push(trace(s, null, 'pre_filtered', null))
   }
 
   return {
@@ -201,6 +225,7 @@ export function rankPerType(
       tokensUsed: budget - remaining,
       typeBudget: budget,
     },
+    pool,
   }
 }
 

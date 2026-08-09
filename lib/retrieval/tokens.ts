@@ -7,6 +7,9 @@ import o200kBase from 'js-tiktoken/ranks/o200k_base'
 // static import (countTokens must stay sync for the pure ranker).
 let encoder: Tiktoken | null = null
 
+/** The tokenizer vocabulary behind countTokens, frozen for the probe capture (lib/db → CaptureTokenizer). */
+export const TOKENIZER_IDENTITY = { encoding: 'o200k_base', version: '1' } as const
+
 function getEncoder(): Tiktoken {
   encoder ??= new Tiktoken(o200kBase)
   return encoder

@@ -49,7 +49,6 @@ const HAPPENING_COST = 10 + RANKER_DEFAULTS.typeOverhead.happenings
 
 const base = {
   params: RANKER_DEFAULTS,
-  presence: [true, true, true] as const,
   chapterRanges: new Map<string, ReadonlySet<string>>(),
   countTokens,
 }
@@ -61,11 +60,8 @@ describe('rankPerType — scoring', () => {
   })
 
   it('re-normalizes weights across the present queries when one is missing', () => {
-    // Q3 absent: 0.35/0.35 renormalize to 0.5/0.5, so sims [1, 0, x] blend to 0.5.
-    const r = rankPerType([candidate({ id: 'a', sims: [1, 0, 0.9] })], 'happenings', 1000, {
-      ...base,
-      presence: [true, true, false],
-    })
+    // Q3 absent: 0.35/0.35 renormalize to 0.5/0.5, so sims [1, 0, null] blend to 0.5.
+    const r = rankPerType([candidate({ id: 'a', sims: [1, 0, null] })], 'happenings', 1000, base)
     expect(r.traces[0].simBlend).toBeCloseTo(0.5, 6)
   })
 
@@ -462,6 +458,89 @@ describe('rankAll', () => {
   })
 })
 
+describe('tokenization is deferred past the pre-filter', () => {
+  it('tokenizes only the kept rows and leaves pre-filtered ones null', () => {
+    const pool = Array.from({ length: 5 }, (_, i) => {
+      const sim = 0.9 - i * 0.1
+      return candidate({
+        id: `lo_${i}`,
+        kind: 'lore',
+        sims: [sim, sim, sim],
+        vector: v(sim, 1 - sim),
+      })
+    })
+    let calls = 0
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      params: { ...RANKER_DEFAULTS, preFilterTopN: 2 },
+      countTokens: () => {
+        calls += 1
+        return 7
+      },
+    })
+
+    expect(calls).toBe(2)
+    const kept = out.traces.filter((t) => t.dropReason !== 'pre_filtered')
+    const dropped = out.traces.filter((t) => t.dropReason === 'pre_filtered')
+    expect(kept).toHaveLength(2)
+    expect(dropped).toHaveLength(3)
+    expect(kept.every((t) => t.tokensEstimated === 7 + RANKER_DEFAULTS.typeOverhead.lore)).toBe(
+      true,
+    )
+    expect(dropped.every((t) => t.tokensEstimated === null)).toBe(true)
+  })
+
+  it('takes a captured token count in preference to recomputing', () => {
+    const pool = [candidate({ id: 'lo_a', kind: 'lore', sims: [0.9, 0.9, 0.9] })]
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      countTokens: () => {
+        throw new Error('tokenizer must not be consulted when tokens are captured')
+      },
+      // 0, not a non-zero stand-in: a `captured || countTokens(...)` mutant
+      // would fall through to the throwing tokenizer on exactly this value.
+      capturedTokens: new Map([['lo_a', 0]]),
+    })
+
+    expect(out.traces[0].tokensEstimated).toBe(0)
+  })
+
+  it('lets a captured count that exceeds the budget drop the row, not just report it', () => {
+    const pool = [candidate({ id: 'lo_a', kind: 'lore', sims: [0.9, 0.9, 0.9] })]
+
+    const out = rankPerType(pool, 'lore', 10_000, {
+      ...base,
+      capturedTokens: new Map([['lo_a', 10_001]]),
+    })
+
+    expect(out.traces[0].dropReason).toBe('candidate_too_large')
+  })
+})
+
+describe('blend with absent query vectors', () => {
+  it('renormalizes over present slots and distinguishes a null slot from a zero one', () => {
+    const out = rankPerType(
+      [
+        candidate({ id: 'absent', sims: [0.8, null, null] }),
+        candidate({ id: 'zero', sims: [0.8, 0, 0], vector: v(0, 1, 0) }),
+      ],
+      'happenings',
+      10_000,
+      base,
+    )
+
+    const byId = new Map(out.traces.map((t) => [t.id, t]))
+    // Only Q1 is present, so the blend renormalizes to sim_q1 itself.
+    expect(byId.get('absent')?.simBlend).toBeCloseTo(0.8, 10)
+    // All three present: 0.8*0.35 renormalized over the full weight total.
+    expect(byId.get('zero')?.simBlend).toBeCloseTo((0.8 * 0.35) / (0.35 + 0.35 + 0.3), 10)
+    expect(byId.get('absent')?.simQ2).toBeNull()
+    expect(byId.get('zero')?.simQ2).toBe(0)
+  })
+})
+
 /** What the M3.5 simulator calls; the guarded surface is their value closure. */
 const PURE_ENTRIES = ['ranker.ts', 'queries.ts']
 
@@ -513,5 +592,69 @@ describe('C4 — ranker purity', () => {
   it.each(pureClosure())('%s reads no ambient nondeterminism', (file) => {
     expect(valueSource(file)).not.toMatch(/\bDate\.|new Date\(|Math\.random|performance\./)
     expect(valueSource(file)).not.toMatch(/\bIntl\.|toLocale[A-Z]/)
+  })
+})
+
+describe('replay-facing trace fields', () => {
+  it('traces the clamped chaptersOld the decay exponent read', () => {
+    const out = rankPerType(
+      [candidate({ id: 'hap_1', chaptersOld: -3 })],
+      'happenings',
+      10_000,
+      base,
+    )
+
+    // Clamped — a raw -3 would have flipped decay into growth, and a replay
+    // recomputing from -3 would not reproduce this row's recency_factor.
+    expect(out.traces[0].chaptersOld).toBe(0)
+  })
+
+  it('traces commonKnowledge, which pin_signal 0 cannot be distinguished from', () => {
+    const out = rankPerType(
+      [
+        candidate({ id: 'hap_common', chaptersOld: 2, commonKnowledge: true }),
+        candidate({ id: 'hap_plain', chaptersOld: 2, commonKnowledge: false }),
+      ],
+      'happenings',
+      10_000,
+      base,
+    )
+
+    const byId = new Map(out.traces.map((t) => [t.id, t]))
+    expect(byId.get('hap_common')?.commonKnowledge).toBe(true)
+    expect(byId.get('hap_plain')?.commonKnowledge).toBe(false)
+    // Both carry pin_signal 0, which is exactly why the flag has to be captured.
+    expect(byId.get('hap_common')?.pinSignal).toBe(0)
+    expect(byId.get('hap_plain')?.pinSignal).toBe(0)
+    expect(byId.get('hap_common')?.recencyFactor).toBe(1)
+    expect(byId.get('hap_plain')?.recencyFactor).toBeLessThan(1)
+    expect(byId.get('hap_plain')?.chaptersOld).toBe(2)
+  })
+
+  it('omits commonKnowledge entirely on a kind that has no such field', () => {
+    const out = rankPerType([candidate({ id: 'ent_1', kind: 'entity' })], 'entities', 10_000, base)
+    expect('commonKnowledge' in out.traces[0]).toBe(false)
+  })
+
+  it('traces renderedText for kept rows only, and exposes the whole pool', () => {
+    const pool = [
+      candidate({ id: 'hap_b', vector: v(0, 1, 0), sims: [0.4, 0.4, 0.4] }),
+      candidate({
+        id: 'hap_a',
+        sims: [0.9, 0.9, 0.9],
+        renderedText: 'The bridge fell during the third night of the siege.',
+      }),
+    ]
+
+    const out = rankPerType(pool, 'happenings', 10_000, {
+      ...base,
+      params: { ...RANKER_DEFAULTS, preFilterTopN: 1 },
+    })
+
+    const kept = out.traces.filter((t) => t.dropReason !== 'pre_filtered')
+    const dropped = out.traces.filter((t) => t.dropReason === 'pre_filtered')
+    expect(kept[0].renderedText).toBe('The bridge fell during the third night of the siege.')
+    expect(dropped[0].renderedText).toBeNull()
+    expect(out.pool.map((c) => c.id)).toEqual(['hap_b', 'hap_a'])
   })
 })

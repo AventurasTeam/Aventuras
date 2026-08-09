@@ -46,8 +46,11 @@ Off by default, opt-in via a two-level gate:
 
 Both must be on for new captures to write. Existing captures stay
 inspectable when either toggle flips off; only new-capture writes
-stop. Removing captures is always explicit (per-capture delete or
-"clear all").
+stop. Flipping a toggle never removes a capture: user-initiated
+removal is always explicit (per-capture delete or "clear all"), and
+the only implicit removal is
+[FIFO eviction](#eviction--fifo-at-100-captures-per-story) once a
+story is at the cap.
 
 **Build-mode gating is intentionally NOT in scope.** The probe
 code ships in production bundles; the two runtime gates above
@@ -65,71 +68,124 @@ storage-cost help text in
 ### When a capture is written
 
 A capture is written immediately after the per-turn ranker emits its
-selection, before prompt assembly. The capture lives in the same
-transaction as the ranker output:
+selection, before prompt assembly. It is an independent, best-effort
+write — there is no ranker transaction to join, because the ranker is
+pure, and a failed turn does not roll a capture back:
 
 1. Pre phase commits the user-action delta.
 2. Retrieval pass runs: queries embed, candidates score, MMR ranks,
    budget-fill selects.
 3. **Capture writer** assembles a record from in-flight ranker state
-   and writes a `probe_captures` row in the same transaction.
-4. If the per-story FIFO cap is hit, oldest capture for the branch
-   is dropped in the same transaction.
+   and writes a `probe_captures` row in its own transaction.
+4. If the per-story FIFO cap is hit, the oldest capture for the
+   **story** — across all its branches, per
+   [Eviction](#eviction--fifo-at-100-captures-per-story) — is dropped
+   in that same transaction, so write-and-evict is atomic.
 5. Turn proceeds to generation.
 
-A failed retrieval pass (embedder unavailable, empty pool, vec0
-KNN error) still captures, with an explicit `failure_reason` field —
-debugging failures is a primary use case, and a missing capture for
-the failed turn would be the worst possible UX.
+A retrieval pass that fails in the embedder family — init or call,
+including the vector-invariant faults that classify into it — still
+captures, with an explicit `failure_reason` field. Debugging failures
+is a primary use case, and a missing capture for the failed turn
+would be the worst possible UX.
+
+Two cases the sentence above does **not** cover:
+
+- **An empty pool is not a failure.** A pass over an empty pool
+  succeeds; the capture writes with `failure_reason` null and
+  zero-size funnels. Turn 1 of a fresh story reads this way.
+- **A non-embedder fault writes no capture at all.** A vec0/SQLite
+  error, a dead IPC bridge or a ranker bug propagates out of
+  `runRetrieval` and aborts the turn before the capture site is
+  reached. `failure_reason` is an `EmbedderErrorKind`, so there is no
+  legal value for such a fault to carry. Closing that gap needs a
+  capture-failure taxonomy separate from the embedder's — filed in
+  [`triage.md`](../implementation/triage.md).
 
 ### What gets captured — light mode (default)
 
 Per capture:
 
-- **Identity.** `branch_id`, `target_entry_id` (the entry whose
-  retrieval this drove), chapter pointer, `captured_at`,
-  `capture_mode = 'light' | 'deep'`, `embedding_model_id` active at
-  capture.
-- **Params snapshot.** Full block of every retrieval-tunable knob
-  (per-type `λ`, `λ_div`, `kw_boost`, `τ_revive`, `w_action`,
-  `w_digest`, `w_prose`, `min_score_threshold`, `chapter_boost`
-  magnitude, per-type budgets, `fullChapterInBuffer`,
-  `partialChapterBuffer`, `protectedBuffer`). Frozen to
-  capture-time values; the
-  simulator diffs against current story params at inspect time.
+- **Identity.** `capture_version`, `branch_id`, `target_entry_id`
+  (the entry whose retrieval this drove), `chapter_id`,
+  `captured_at`, `capture_mode = 'light' | 'deep'`,
+  `embedding_model_id` active at capture. The version is bumped
+  whenever a captured field's shape or meaning changes, so a decode
+  warns rather than silently misreading an older payload as the
+  current type.
+- **Tokenizer identity.** `tokenizer: { encoding, version }` — which
+  vocabulary priced `tokens_estimated`. A replay under a different
+  tokenizer can then warn instead of diverging quietly.
+- **Params snapshot.** `params.ranker` embeds the ranker's own
+  `RankerParams` **verbatim**, in its declared camelCase: `weights`,
+  per-type `lambda`, per-type `pinBoost`, `lambdaDiv`, `kwBoost`,
+  `tauRevive`, `minScoreThreshold`, `chapterBoost`, `preFilterTopN`,
+  `typeOverhead`. Beside it sit the story-settings knobs the ranker
+  does not own — `retrievalBudgets`, `fullChapterInBuffer`,
+  `partialChapterBuffer`, `protectedBuffer`. Embedding the type
+  rather than restating its fields is what makes a newly added
+  tunable a type error here instead of a silently absent capture
+  field. Frozen to capture-time values; the simulator diffs against
+  current story params at inspect time.
 - **Three queries.** Q1 / Q2 / Q3 text content, plus per-query
   metadata: token count, source pointer (which entry / structural
   fields produced it), and for Q3 the per-sentence selection scores
   from the
   [heuristic prose extract](./retrieval.md#q3-heuristic-prose-extract).
-  Vectors **NOT** stored in light mode.
+  Query **vectors are never stored**, in either mode — see
+  [Deep mode](#deep-mode-per-capture-opt-in).
 - **Per-type candidate pool.** For each type
   (entities / lore / happenings / threads / chapters), one row per
   candidate that entered the type's ranker pool:
   - Candidate id (`target_kind`, `target_id`).
-  - Display snapshot — denormalized name / title / brief text at
-    capture time. Survives row deletion / edit so the probe stays
-    readable indefinitely.
-  - `sim_q1`, `sim_q2`, `sim_q3` — per-query cosine similarities.
+  - `display_name` — denormalized name / title at capture time.
+    Survives row deletion / edit so the probe stays readable
+    indefinitely.
+  - `display_text` — the exact string the ranker priced. **Null on a
+    pre-filtered row**, which the simulator can never seat.
+  - `sim_q1`, `sim_q2`, `sim_q3` — per-query cosine similarities,
+    each **null where that query produced no vector**, a state a `0`
+    cannot express. Presence is read off these three and nowhere
+    else.
   - `sim_blend` — weighted-avg blend at capture-time weights.
-  - `recency_factor`, `pin_signal`, `kw_boost_value`,
+  - `recency_factor`, `pin_signal`, `chapters_old`, `kw_boost_value`,
     `chapter_boost_applied` (bool), `bypass_triggered` (bool).
+    `chapters_old` is stored clamped exactly as the decay exponent
+    read it, so a `λ` or `pin_signal` replay recomputes the factor
+    instead of trying to invert it.
+  - `common_knowledge` (bool) — happenings only, absent on the other
+    four types. The ranker forces `pin_signal = 0` and
+    `recency_factor = 1` on those rows, which the captured pair alone
+    cannot tell apart from an unpinned recent one.
   - `final_score`, `mmr_rank` (or null if pre-filtered out).
   - `selected` (bool), `drop_reason` (enum):
     `pre_filtered | below_threshold | over_budget |`
     `candidate_too_large | not_dropped`.
-  - `tokens_estimated`.
+  - `tokens_estimated` — **null on a pre-filtered row**, because
+    tokenization is deferred past the pre-filter cut (see
+    [`retrieval.md → Token estimation`](./retrieval.md#token-estimation)).
   - `embedding_stale` flag at capture time
     (per [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)).
 - **Pool funnel summary per type.** `pool_size`,
   `pre_filtered_size` (capped at 200 per
   [pre-filter rule](./retrieval.md#diversity--mmr)),
   `selected_count`, `tokens_used`, `type_budget`.
-- **Structural floor.** List of must-inject rows (prompt buffer
-  per the mode-dependent rule + protected-buffer spillover,
-  active+in-scene entities, their location, active threads,
-  `injection_mode='always'` rows) and their token cost. Surfaces
-  what budget the per-type pools actually competed over.
+- **Structural floor.** List of must-inject rows (active+in-scene
+  entities, their location, active threads, `injection_mode='always'`
+  rows) and their token cost. The token cost **excludes the `[id]`
+  affix** the templates add to the three entity rows on a piggyback
+  turn — whether piggyback fires is decided after retrieval, so a
+  capture cannot know it. On those turns the floor's cost reads as a
+  lower bound.
+- **Prompt buffer cost.** `prompt_buffer_tokens` — the buffer window
+  (mode-dependent rule plus protected-buffer spillover) priced as one
+  scalar, not as floor rows: buffered entries carry no retrieval
+  identity, so a row each would add bulk without adding a tunable.
+  Normally the largest floor term, and the one per-type budget tuning
+  is measured against — a capture without it under-reports what the
+  pools competed over. Priced on the prose alone; the per-turn
+  template wraps entries in bare newlines, so it reads as a lower
+  bound the way the floor's own rows do.
 - **Stale-row count per type** — rows still `embedding_stale` at
   retrieval, excluded from the pool because the pre-retrieval sync
   stage couldn't embed them (their vec0 entry was missing at
@@ -138,13 +194,18 @@ Per capture:
 
 ### Deep mode (per-capture opt-in)
 
-Adds two things to a light capture:
+Adds one thing to a light capture: the per-row vector for every
+candidate in the pool.
 
-- The three query vectors.
-- The per-row vector for every candidate in the pool.
+Candidate vectors alone are sufficient. `λ_div` — the one thing deep
+mode exists for — needs candidate-vs-candidate cosines, and every
+other simulation re-blends the per-row `sim_q1..3` the capture
+already stores, so a query vector would never be read.
 
-Storage cost is roughly 100x light-mode at typical pool sizes. Lets
-the simulator re-tune `λ_div` (MMR diversity) — see
+Storage cost is 40-80x light mode gzipped — measured at dim 384 and
+dim 768 respectively on the fixture under
+[Capture cost](#capture-cost), whose write cost is the sharper
+constraint. Lets the simulator re-tune `λ_div` (MMR diversity) — see
 [Simulatable parameters](#simulatable-parameters). Toggled on a
 per-capture basis from the reader's per-turn probe affordance
 **before turn-fire**; can't be retrofitted onto a light capture.
@@ -155,7 +216,7 @@ Stored in a new `probe_captures` table:
 
 ```sql
 probe_captures {
-  branch_id TEXT, id TEXT,                    -- composite PK; forks with branch
+  branch_id TEXT, id TEXT,                    -- composite PK; branch-scoped, NOT copied on fork
   target_entry_id TEXT,                       -- FK-less story_entries.id (branch-scoped, resolved via (branch_id, id)); the entry whose retrieval this drove
   captured_at INTEGER,
   capture_mode TEXT,                          -- 'light' | 'deep'
@@ -170,7 +231,9 @@ probe_captures {
 }
 ```
 
-Branch-scoped, branched (forks branch-scoped data normally).
+Branch-scoped, but the only branch-scoped table a fork skips — see
+the branch-copy manifest under
+[`data-model.md` → Branch model](../data-model.md#branch-model).
 **Captures are NOT delta-logged** — they're diagnostic, not story
 state. A delta-logged capture would mean rollback unwinds probe
 data, which is the opposite of what a tuner wants.
@@ -195,22 +258,54 @@ let captures balloon.
 
 Cap is fixed at 100 in v1, not user-tunable. If real signal shows
 tuning sessions need more headroom, a setting follows. Storage
-overhead at 100 captures is on the order of tens of MB at scale-
-assumption volumes (light mode); deep-mode captures push that to
-hundreds of MB and are expected to be used sparingly.
+overhead at 100 light captures is ~10 MB at scale-assumption
+volumes, at the ~97 KB gzipped each measured under
+[Capture cost](#capture-cost). A hundred deep ones would be ~400 MB
+at dim 384 and ~780 MB at dim 768, which is why they are expected to
+be used sparingly.
 
 ### Capture cost
 
 Capture write is in-transaction with the ranker output, so it adds
-to per-turn latency. Light mode adds:
+to per-turn latency. Measured, not estimated:
+`bench/probe-capture-cost.test.ts` (`pnpm bench:probe`) builds and
+compresses a capture over the same
+[cost-budget](./retrieval.md#per-turn-cost-budget) fixture the
+retrieval bench uses — a ~1070-row pool at 6000 happenings / 60
+chapters, desktop Node 24, median of seven warm builds after two
+discarded:
 
-- Serialization of in-flight ranker state to JSON: <5 ms typical.
-- Gzip compression: <5 ms typical.
-- One row insert, plus (potentially) one row delete on FIFO eviction.
+| Stage                              | light  | deep, dim 384 | deep, dim 768 |
+| ---------------------------------- | ------ | ------------- | ------------- |
+| Payload assembly                   | ~1ms   | ~8ms          | ~16ms         |
+| `JSON.stringify` + UTF-8 encode    | ~1ms   | ~32ms         | ~67ms         |
+| Gzip                               | ~9ms   | ~303ms        | ~604ms        |
+| **Build and compress, end to end** | ~11ms  | ~341ms        | ~673ms        |
+| Payload, uncompressed              | ~675KB | ~9.2MB        | ~18MB         |
+| Payload, gzipped                   | ~97KB  | ~3.9MB        | ~7.8MB        |
 
-Deep mode adds vector serialization — for typical pool sizes
-(~hundreds of candidates) this is still <20 ms. Negligible relative
-to the surrounding generation latency.
+Plus one row insert, and one row delete when FIFO eviction fires.
+Neither is in the table: one statement against a PK-only table, the
+same statement in both modes.
+
+**Light mode is cheap; deep mode is not.** ~11 ms against a ~108 ms
+retrieval pass is the price of the default path, and assembly stays
+there because the only tokenization a capture pays for is the three
+query texts and the structural-floor rows — pool rows reuse
+`tokens_estimated` off the trace. The fixture's floor is 4 rows, so
+that stage is not stressed by these numbers; at
+[`retrieval.md`'s measured ~45-60 µs per row](./retrieval.md#token-estimation)
+a floor in the dozens still leaves assembly under 5 ms.
+
+Deep mode costs **~340 ms at dim 384 and ~670 ms at dim 768** on the
+same fixture, three to four times the entire retrieval pass, because
+it serializes a vector for every pool row — not just the seated ones —
+as JSON number arrays. It is synchronous, on the JS thread, inside
+the write transaction. Deep mode is per-capture opt-in and reachable
+only from a developer affordance today, so this bounds the
+simulator's design rather than any shipped path: the levers, if it
+ever needs to be cheaper, are storing vectors only for rows that
+survive the pre-filter, or a binary encoding instead of JSON floats.
 
 The capture is best-effort: if the write fails (disk full,
 constraint error), the turn proceeds without a capture and the
@@ -240,16 +335,33 @@ not a UX one — but it determines whether the probe is trustworthy.
 
 ### Simulatable parameters
 
+**The light-mode list below is under review.** Slice 3.5's parity
+work found most of it unreachable from a light capture. Every
+parameter that feeds `score` changes MMR's greedy pick order, and
+recomputing that order needs the candidate-vs-candidate cosines only
+a deep capture's per-row vectors carry.
+`min_score_threshold` is further out of reach: it compares against
+the post-MMR `mmr_score`, and no capture stores one — `final_score`
+is the **pre-MMR** raw score.
+
+**Per-type budgets are the confirmed-surviving case.** The
+below-threshold latch is monotone over the MMR order, so the first
+captured `below_threshold` row pins the partition and no budget
+change can move it; re-walking `mmr_rank` order against
+`tokens_estimated` then reproduces the fill exactly.
+
+What light mode should actually offer — accept the narrower list,
+capture an `mmr_score` per row (one float, recovers the threshold),
+or store the kept-set pairwise cosines (recovers everything) — is an
+open product call, to settle before the simulator is built. Until
+then read the list as design intent, not as shipped capability.
+
 From a light capture:
 
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
   sims into a new `sim_blend`.
-- Per-type `λ` decay rates — re-compute `recency_factor` from
-  stored `chapters_old`. **The capture does not carry that field
-  yet** — neither `CandidateTrace` nor `CaptureCandidate` has it, only
-  the derived `recency_factor` — so this is aspirational until Slice
-  3.5 settles
-  [the capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
+- Per-type `λ` decay rates — re-compute `recency_factor` from stored
+  `chapters_old`, which every captured candidate carries.
 - `kw_boost` magnitude — re-scale stored `kw_boost_value`.
 - `τ_revive` — re-evaluate the bypass branch against stored
   `sim_blend`.
@@ -262,12 +374,11 @@ From a light capture:
   `sim_blend`, `recency_factor` and `pin_signal`. Needs no field the
   capture does not already carry.
 - `pin_signal` overrides — let the user simulate "what if I pin /
-  unpin this row?" by overriding `pin_signal` per-row. **Blocked on the
-  same gap as `λ`:** an override has to recompute `recency_factor`, and
-  the captured `(recency_factor, pin_signal)` pair determines the
+  unpin this row?" by overriding `pin_signal` per-row. Rests on the
+  same field `λ` does: an override has to recompute `recency_factor`,
+  and the captured `(recency_factor, pin_signal)` pair pins down the
   underlying age only while `pin_signal < 1` — at exactly 1 the factor
-  is 1 regardless of age. See
-  [Slice 3.5 → The capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
+  is 1 regardless of age. `chapters_old` is what closes that.
 
 Adds in a deep capture:
 
@@ -277,13 +388,19 @@ Adds in a deep capture:
 ### Non-simulatable parameters
 
 Even in deep mode, the simulator can't re-derive the candidate pool
-itself. The pool composition depends on:
+itself, nor the cut that decides which of it reaches MMR:
 
 - The structural floor (computed from current scene at capture).
 - Pool exclusions (common-knowledge happenings,
   pending / resolved / failed thread mode, same-name suppression
   per [edge-cases](./edge-cases.md#name-collision-and-disambiguation)).
 - Awareness-graph filter (POV characters in scene at capture).
+- `preFilterTopN` — re-slicing the top-N by raw score changes which
+  rows reach MMR and so its greedy pick order, which needs the
+  per-row vectors a light capture does not store. Raising it is out
+  of reach even in deep mode: a pre-filtered row carries
+  `display_text` and `tokens_estimated` as null, so an admitted row
+  has neither a text to re-price nor a cost to seat against a budget.
 
 These are captured-state, not parameter-state. The simulator
 operates on the pool that **was** there. Tuning that affects pool
@@ -373,16 +490,24 @@ no-ops on those rows.
 
 ### Failed captures
 
-If retrieval failed at capture time (embedder down, empty pool,
-KNN error), the capture's `failure_reason` is set and the body
-contains whatever partial state was reached:
+If retrieval failed in the embedder family at capture time, the
+capture's `failure_reason` is set — on the row **and** in the payload,
+so `replayType` can refuse a failed capture without the row — and the
+body contains whatever partial state was reached:
 
 - Embedder failure during query embed — captures Q1/Q2/Q3 text
   but no sims; pool data may be empty.
-- Empty pool (e.g., turn 1 of a fresh story before classifier has
-  written anything) — captures the queries and the empty funnel.
-- KNN error — captures queries and partial pool data up to the
-  failure point.
+- Vector-invariant fault mid-pass — captures queries and partial
+  pool data up to the failure point.
+
+Not in this list: an empty pool (a success, `failure_reason` null)
+and a non-embedder fault (no capture written at all). See
+[When a capture is written](#when-a-capture-is-written) above.
+
+Stale counts read zero on a failure arm. The failure carries one
+un-split scalar with no per-type breakdown, so spreading it across
+five types would be a guess — read `failure_reason` and the pipeline
+log instead.
 
 The probe surface renders failure captures with a prominent banner
 explaining what failed. Simulation is disabled (no scores to

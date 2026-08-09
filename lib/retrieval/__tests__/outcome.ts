@@ -1,21 +1,61 @@
 import type { StructuralFloor } from '../pools'
-import type { InjectedAwareness, RetrievalSuccess, RetrievalTimings } from '../run'
-import { TYPE_OF_KIND, type Candidate, type RankedType, type RetrievalType } from '../types'
-
-const TYPES = Object.values(TYPE_OF_KIND)
+import type { QueryStack } from '../queries'
+import type {
+  InjectedAwareness,
+  RetrievalFailure,
+  RetrievalOutcome,
+  RetrievalPartial,
+  RetrievalSuccess,
+  RetrievalTimings,
+} from '../run'
+import {
+  RETRIEVAL_TYPES,
+  type Candidate,
+  type CandidateTrace,
+  type RankedType,
+  type RetrievalType,
+} from '../types'
 
 const perType = <T>(value: (type: RetrievalType) => T): Record<RetrievalType, T> =>
-  Object.fromEntries(TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
+  Object.fromEntries(RETRIEVAL_TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
+
+// A seated row's trace, carrying only what the candidate already fixes; the
+// scoring fields are placeholders, the one-per-pool-row pairing is not — a pool
+// row without a trace is a bundle the ranker cannot produce, and lib/probe's
+// capture builder refuses it outright.
+const traceOf = (c: Candidate, mmrRank: number): CandidateTrace => ({
+  kind: c.kind,
+  id: c.id,
+  displayName: c.displayName,
+  simQ1: c.sims[0],
+  simQ2: c.sims[1],
+  simQ3: c.sims[2],
+  simBlend: 0,
+  recencyFactor: 1,
+  pinSignal: c.pinSignal,
+  chaptersOld: c.chaptersOld,
+  renderedText: c.renderedText,
+  ...(c.kind === 'happening' ? { commonKnowledge: c.commonKnowledge } : {}),
+  kwBoostValue: 0,
+  chapterBoostApplied: false,
+  bypassTriggered: false,
+  finalScore: 0,
+  mmrRank,
+  selected: true,
+  dropReason: 'not_dropped',
+  tokensEstimated: 0,
+  embeddingStale: c.embeddingStale,
+})
 
 /**
- * A bundle whose funnel agrees with its `selected` list. Ranking is what
- * normally keeps the two consistent, so a fixture pairing zeroed counts with a
- * non-empty list describes a pass the ranker cannot produce.
+ * A bundle whose funnel and traces agree with its `selected` list. Ranking is
+ * what normally keeps the three consistent, so a fixture pairing zeroed counts
+ * with a non-empty list describes a pass the ranker cannot produce.
  */
 function rankedBundle(selected: readonly Candidate[]): RankedType {
   return {
     selected,
-    traces: [],
+    traces: selected.map(traceOf),
     funnel: {
       poolSize: selected.length,
       preFilteredSize: selected.length,
@@ -23,6 +63,7 @@ function rankedBundle(selected: readonly Candidate[]): RankedType {
       tokensUsed: 0,
       typeBudget: 0,
     },
+    pool: selected,
   }
 }
 
@@ -32,6 +73,7 @@ export type RetrievalSuccessOverrides = {
   selected?: Partial<Record<RetrievalType, readonly Candidate[]>>
   /** Whole-bundle replacement, for traces or a funnel that must not be derived. */
   bundles?: Partial<Record<RetrievalType, RankedType>>
+  queries?: QueryStack
   staleCounts?: Partial<Record<RetrievalType, number>>
   injectedAwareness?: InjectedAwareness[]
   selectedLocationIds?: string[]
@@ -58,7 +100,7 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
       ...over.floor,
     },
     bundles: perType((type) => over.bundles?.[type] ?? rankedBundle(over.selected?.[type] ?? [])),
-    queries: {
+    queries: over.queries ?? {
       q1: { text: '', source: 'user_action' },
       q2: { text: '', source: 'structural_digest' },
       q3: { text: '', source: 'prose_extract' },
@@ -69,5 +111,21 @@ export function retrievalSuccess(over: RetrievalSuccessOverrides = {}): Retrieva
     injectedAwareness: over.injectedAwareness ?? [],
     selectedLocationIds: over.selectedLocationIds ?? [],
     timings: over.timings ?? { totalMs: 0, syncMs: 0, embedMs: 0, knnMs: 0, rankMs: 0 },
+  }
+}
+
+/**
+ * The `ok: false` counterpart to `retrievalSuccess`. `partial` defaults to the
+ * all-null shape a sync-stage failure carries — the most restrictive real case
+ * — so a fixture that only cares about `failure` doesn't have to fabricate one.
+ */
+export function retrievalFailure(
+  failure: RetrievalFailure,
+  partial: Partial<RetrievalPartial> = {},
+): Extract<RetrievalOutcome, { ok: false }> {
+  return {
+    ok: false,
+    failure,
+    partial: { queries: null, floor: null, bundles: {}, ...partial },
   }
 }

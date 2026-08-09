@@ -1,7 +1,7 @@
 import { PROSE_EXTRACT_TOP_K } from './constants'
 import type { NameKeywordIndex } from './name-index'
 import { extractProse } from './prose-extract'
-import type { QueryPresence } from './types'
+import type { QueryTextPresence } from './types'
 
 export type QueryStackInput = {
   userAction: string
@@ -30,7 +30,7 @@ export type QueryStack = {
   q1: QuerySpec
   q2: QuerySpec
   q3: QuerySpec
-  presence: QueryPresence
+  presence: QueryTextPresence
   /** Present queries only, in Q1/Q2/Q3 order — the batched embed input. */
   embedTexts: string[]
 }
@@ -68,7 +68,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
   // An empty query is marked absent rather than embedded: the ranker
   // re-normalizes the blend weights over the present queries, so carrying one
   // would instead spend a weighted similarity term on noise.
-  const presence: QueryPresence = [nonEmpty(q1.text), nonEmpty(q2.text), nonEmpty(q3.text)]
+  const presence: QueryTextPresence = [nonEmpty(q1.text), nonEmpty(q2.text), nonEmpty(q3.text)]
 
   const embedTexts = [q1, q2, q3].filter((_, i) => presence[i]).map((q) => q.text)
 
@@ -78,7 +78,7 @@ export function buildQueryStack(input: QueryStackInput): QueryStack {
 /** Re-expand a batched embed result back onto the Q1/Q2/Q3 slots. */
 export function distributeQueryVectors(
   vectors: readonly Float32Array[],
-  presence: QueryPresence,
+  presence: QueryTextPresence,
 ): [Float32Array | null, Float32Array | null, Float32Array | null] {
   const out: [Float32Array | null, Float32Array | null, Float32Array | null] = [null, null, null]
   let next = 0

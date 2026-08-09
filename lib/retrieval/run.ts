@@ -49,7 +49,6 @@ import {
   TYPE_OF_KIND,
   type Candidate,
   type QueryAll,
-  type QueryPresence,
   type RankedType,
   type RetrievalType,
 } from './types'
@@ -104,7 +103,12 @@ export type RetrievalTimings = {
    * calls: they overlap, so summing would exceed the elapsed time.
    */
   knnMs: number
-  /** Scoring, MMR, and the eager token estimate the ranker costs each pool row. */
+  /**
+   * Scoring and the sort over the whole pool, then MMR and the token estimate
+   * over the rows that survive the pre-filter — one span, because tokenization
+   * runs inside the same kept-row map that feeds MMR and splitting it would
+   * break the disjoint-sub-span contract above.
+   */
   rankMs: number
 }
 
@@ -126,6 +130,17 @@ export type RetrievalFailure = {
  * re-read one row per bump purely to learn the value it is about to add to.
  */
 export type InjectedAwareness = { id: string; retrievalCount: number }
+
+/**
+ * Whatever the pass reached before it failed. The probe captures failed passes
+ * too (probe.md → Failed captures) and a capture with no queries is evidence of
+ * nothing; a sync-stage failure genuinely reached none of it, hence the nulls.
+ */
+export type RetrievalPartial = {
+  queries: QueryStack | null
+  floor: StructuralFloor | null
+  bundles: Partial<Record<RetrievalType, RankedType>>
+}
 
 export type RetrievalOutcome =
   | {
@@ -157,7 +172,7 @@ export type RetrievalOutcome =
       selectedLocationIds: string[]
       timings: RetrievalTimings
     }
-  | { ok: false; failure: RetrievalFailure }
+  | { ok: false; failure: RetrievalFailure; partial: RetrievalPartial }
 
 /** The ok arm alone — what a caller holds once it has checked `ok`. */
 export type RetrievalSuccess = Extract<RetrievalOutcome, { ok: true }>
@@ -185,8 +200,11 @@ export async function runRetrieval(
   deps: RetrievalDeps,
   params: RetrievalParams,
 ): Promise<RetrievalOutcome> {
+  // Threaded rather than returned: the catch below reports progress from a throw at
+  // any depth of the pass, which no return value can reach.
+  const partial: RetrievalPartial = { queries: null, floor: null, bundles: {} }
   try {
-    return await runRetrievalPass(deps, params)
+    return await runRetrievalPass(deps, params, partial)
   } catch (error) {
     // Only the vector-invariant family means "this branch's stored vectors do not
     // match the model this pass reads" — that one takes the embedder surface,
@@ -194,7 +212,11 @@ export async function runRetrieval(
     // means nothing of the sort, and routing it here would offer a full re-index
     // as the fix for a locked database.
     if (error instanceof VectorInvariantError) {
-      return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
+      return {
+        ok: false,
+        failure: { ...classifyEmbedderFailure(error), staleCount: null },
+        partial,
+      }
     }
     throw error
   }
@@ -203,6 +225,7 @@ export async function runRetrieval(
 async function runRetrievalPass(
   deps: RetrievalDeps,
   params: RetrievalParams,
+  partial: RetrievalPartial,
 ): Promise<RetrievalOutcome> {
   const startedAt = performance.now()
 
@@ -214,6 +237,7 @@ async function runRetrievalPass(
     return {
       ok: false,
       failure: { reason: sync.reason, detail: sync.detail, staleCount: sync.staleCount },
+      partial,
     }
   }
   if (sync.embedded > 0) await deps.onRowsSynced?.()
@@ -238,6 +262,7 @@ async function runRetrievalPass(
     sceneEntityIds: params.sceneEntityIds,
     currentLocationId: params.currentLocationId,
   })
+  partial.floor = floor
 
   const queries = buildQueryStack({
     ...params.query,
@@ -246,21 +271,14 @@ async function runRetrievalPass(
     currentLocationName: floor.currentLocation?.name ?? null,
     activeThreadTitles: floor.activeThreads.map((t) => t.title),
   })
+  partial.queries = queries
 
   const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
   const embedMs = performance.now() - embedStartedAt
-  if (!embed.ok) return embed
+  if (!embed.ok) return { ...embed, partial }
 
   const queryVectors = distributeQueryVectors(embed.vectors, queries.presence)
-  // Derived from the vectors, not from queries.presence: a short embed result
-  // nulls a slot the flag still reports present, and weighting an all-zero query
-  // drags every candidate uniformly toward the noise floor.
-  const presence: QueryPresence = [
-    queryVectors[0] !== null,
-    queryVectors[1] !== null,
-    queryVectors[2] !== null,
-  ]
 
   const poolCtx = {
     existingVecTables,
@@ -302,7 +320,6 @@ async function runRetrievalPass(
 
   const rankTypeInput = {
     params: RANKER_DEFAULTS,
-    presence,
     chapterRanges,
     countTokens,
   }
@@ -310,6 +327,7 @@ async function runRetrievalPass(
   let rankStartedAt = performance.now()
   const chapters = rankPerType(pools.chapters, 'chapters', params.budgets.chapters, rankTypeInput)
   let rankMs = performance.now() - rankStartedAt
+  partial.bundles.chapters = chapters
 
   // Chapter membership has to reach pool CONSTRUCTION, not only scoring
   // (retrieval.md → Chapter-match boost on happenings). A happening outside the
@@ -341,6 +359,8 @@ async function runRetrievalPass(
     chapters,
   )
   rankMs += performance.now() - rankStartedAt
+  // partial.bundles must never lag the bundles the pass has produced.
+  Object.assign(partial.bundles, bundles)
 
   const placeIds = new Set(
     sourceRows.entities.filter((e) => e.kind === 'location').map((e) => e.id),
@@ -594,9 +614,11 @@ function assembleCandidates(
 ): Candidate[] {
   const { index, floor, sourceRows, awareness, queryVectors } = ctx
 
-  const sim = (vector: Float32Array, query: Float32Array | null): number =>
-    query === null ? 0 : cosine(vector, query)
-  const simsFor = (vector: Float32Array): readonly [number, number, number] => [
+  const sim = (vector: Float32Array, query: Float32Array | null): number | null =>
+    query === null ? null : cosine(vector, query)
+  const simsFor = (
+    vector: Float32Array,
+  ): readonly [number | null, number | null, number | null] => [
     sim(vector, queryVectors[0]),
     sim(vector, queryVectors[1]),
     sim(vector, queryVectors[2]),

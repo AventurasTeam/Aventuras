@@ -103,10 +103,9 @@ function promptRows(selected: readonly Candidate[] | undefined): RetrievedRow[] 
   }))
 }
 
-// Projected for the same reason as promptRows, plus one the types hide: the
-// floor is built over loaded source rows, so every row below still carries
-// `embeddingStale` (and lore's `keywords`) at runtime even though StructuralFloor
-// declares the narrower shape. Only this projection actually drops them.
+// Projected to exactly the fields a template renders — the floor's own rows are
+// already narrowed, but a prompt surface is a user-authored contract and pins
+// its own field set.
 const floorEntity = (e: EntityRow): FloorEntity => ({
   id: e.id,
   kind: e.kind,

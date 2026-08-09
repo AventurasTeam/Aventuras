@@ -1,8 +1,17 @@
 import { boundedSignal } from '@/lib/abort'
 import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
+import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
-import { composePromptBuffer, runRetrieval } from '@/lib/retrieval'
+import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
+import {
+  composePromptBuffer,
+  countTokens,
+  RANKER_DEFAULTS,
+  runRetrieval,
+  type RetrievalOutcome,
+} from '@/lib/retrieval'
+import { appSettingsStore } from '@/lib/stores'
 
 import { loadPerTurnWorkingSet } from './working-set'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
@@ -68,6 +77,15 @@ export async function* retrievalPhase(
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
+  // The same window generation-context composes for the prompt, so the capture
+  // prices what the pools actually competed against rather than re-deriving the
+  // mode rule. Priced on the prose alone: the per-turn template wraps entries in
+  // bare newlines, so this reads as a lower bound the way the floor's own rows
+  // do (probe.md → Structural floor).
+  const promptBuffer = composePromptBuffer(entries, open.settings)
+    .map((e) => promptProse(e))
+    .join('\n')
+
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
   // that reaches nothing.
@@ -122,9 +140,7 @@ export async function* retrievalPhase(
         // approximates that set, over-suppressing while classifierCadence stays
         // under partialChapterBuffer and under-suppressing past it (cadence.md →
         // User-tunable knobs).
-        recentProse: composePromptBuffer(entries, open.settings)
-          .map((e) => promptProse(e))
-          .join('\n'),
+        recentProse: promptBuffer,
       },
     )
   } finally {
@@ -137,6 +153,56 @@ export async function* retrievalPhase(
   // no error, no Switch embedder, retrying into the same dead provider.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
+  const captureProbe = async (probed: RetrievalOutcome): Promise<void> => {
+    // The app gate is live: getAppSettings() rebuilds from store state per call,
+    // so a mid-pass toggle is honored (observability.md → Store ownership and
+    // gate wiring). The story gate is the pass-start snapshot.
+    const appGateOn = appSettingsStore.getAppSettings().diagnostics.enabled
+    const storyGateOn = open.settings.probe_mode_active
+    // Returning before the arm is spent is what keeps a gated turn from
+    // spending a deep capture on a write that never happens.
+    if (!appGateOn || !storyGateOn) return
+    // target_entry_id is NOT NULL and carries no sentinel, so a capture with
+    // nothing to attribute itself to would be unreadable in the probe surface.
+    if (tail === undefined) {
+      ctx.log.debug('retrieval.capture_skipped', { reason: 'branch has no entries' })
+      return
+    }
+
+    const reservation = reserveCaptureMode()
+    const status = await writeProbeCapture(
+      { runInTransaction: ctx.runInTransaction },
+      {
+        id: generateId('pc'),
+        branchId,
+        // Keyed to the branch tail: the row this pass ran against, whatever kind it is.
+        targetEntryId: tail.id,
+        // Null in practice: the driving entry is an open-region row, and a
+        // chapter id is stamped on at chapter-create time (data-model.md →
+        // story_entries).
+        chapterId: tail.chapterId,
+        capturedAt: Date.now(),
+        embeddingModelId: resolution.config.modelId,
+        mode: reservation.mode,
+        appGateOn,
+        storyGateOn,
+        params: RANKER_DEFAULTS,
+        settings: {
+          retrievalBudgets: open.settings.retrievalBudgets,
+          fullChapterInBuffer: open.settings.fullChapterInBuffer,
+          partialChapterBuffer: open.settings.partialChapterBuffer,
+          protectedBuffer: open.settings.protectedBuffer,
+        },
+        promptBufferTokens: countTokens(promptBuffer),
+        outcome: probed,
+      },
+    )
+    // A failed write leaves the arm loaded: the deep capture the user asked for
+    // has not happened yet, and silently downgrading the next turn to light is
+    // indistinguishable from the arm never firing.
+    if (status === 'written') commitCaptureMode(reservation)
+  }
+
   if (!outcome.ok) {
     const failure = bounded.expired()
       ? { ...outcome.failure, detail: `embed timed out after ${EMBED_TIMEOUT_MS}ms` }
@@ -145,12 +211,30 @@ export async function* retrievalPhase(
       reason: failure.reason,
       staleCount: failure.staleCount,
     })
+    await captureProbe(outcome)
     return { status: 'failed', error: { kind: 'embedder', ...failure } }
   }
 
   // AC7 wants the per-turn cost observable against the PoC baseline (~43 ms per
   // KNN query at 10k rows), so the KNN span is reported apart from the total.
   ctx.log.debug('retrieval.timing', outcome.timings)
+
+  ctx.log.debug('retrieval.scores', {
+    perType: Object.fromEntries(
+      Object.entries(outcome.bundles).map(([type, bundle]) => [
+        type,
+        {
+          pool: bundle.funnel.poolSize,
+          kept: bundle.funnel.preFilteredSize,
+          selected: bundle.funnel.selectedCount,
+          tokens: bundle.funnel.tokensUsed,
+          // MMR's first pick maximizes lambdaDiv * score with nothing selected
+          // yet, so trace 0 carries the pass's highest final score.
+          topScore: bundle.traces[0]?.finalScore ?? null,
+        },
+      ]),
+    ),
+  })
 
   // staleCounts is a tripwire, not a report (lib/retrieval → RetrievalOutcome):
   // the sync stage is blocking and clears every flag it embeds, so a non-zero
@@ -172,6 +256,8 @@ export async function* retrievalPhase(
   }
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
+  await captureProbe(outcome)
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   // Downstream of the abort poll on purpose: bumping a cancelled turn's counters
   // leaves reverse-replay work for a turn that produced no prose.
