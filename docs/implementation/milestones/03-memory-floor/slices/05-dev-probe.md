@@ -114,6 +114,14 @@ trustworthy.
 
 ## Open questions
 
+All nine were resolved in slice planning (2026-08-08); the resolutions
+are in [Implementation notes](#implementation-notes) below and in the
+canonical docs they updated. The questions are kept as written — the
+cost figures they quote are the pre-slice ones, and the five under
+_The capture contract_ only read correctly as a set. One finding the
+slice did not settle, the reach of `probe.md`'s light-mode simulatable
+list, outlived it and moved to [`triage.md`](../../../triage.md).
+
 ### Planning
 
 - **Dev affordance shape** — JSON viewer route vs logger-only; pick
@@ -222,4 +230,138 @@ answer that adds a field is also a change to M3.4's ranker output.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### The capture contract
+
+The capture-contract questions above were settled as one set, because
+each answer constrains the next.
+
+- **A captured candidate carries `display_text` — the exact string
+  the ranker priced — for rows that survive the pre-filter, and
+  `null` for pre-filtered ones.** `tokens_estimated` takes the same
+  nullability. The simulator can therefore re-tokenize any row it
+  could ever seat, which makes tokenizer drift detectable, and pays
+  nothing for rows it cannot. The cost is that `preFilterTopN`
+  becomes non-simulatable — it already was, since re-slicing changes
+  MMR's pick order and that needs the per-row vectors, but it is now
+  written down under
+  [`probe.md → Non-simulatable parameters`](../../../../memory/probe.md#non-simulatable-parameters)
+  rather than merely absent.
+- **`rankPerType` defers tokenization until after the pre-filter
+  slice.** This is the answer to the nullability question and the
+  pass's largest single saving: ~140ms → ~108ms at dim 384, and the
+  chapter-match boost's own cost from ~44ms to ~24ms, since the rows
+  it admits land beyond rank 200. A future executor should not read
+  the merged `Scoring, tokenization, MMR, budget fill` row in
+  [`retrieval.md → Per-turn cost budget`](../../../../memory/retrieval.md#per-turn-cost-budget)
+  as a lost measurement: tokenization now runs inside the same
+  kept-row map that feeds MMR, so the split is not separable even in
+  principle, and a fifth `RetrievalTimings` span would break that
+  type's stated disjoint-sub-span contract.
+- **Query presence folded into `Candidate.sims` as
+  `[number | null, number | null, number | null]`.** Two triples
+  existed — `queries.presence` ("this query's text was non-empty")
+  and a second re-derived from the vectors actually returned — and
+  they could disagree. One triple makes the divergence structurally
+  impossible, and `null` expresses "no query vector", which `0`
+  cannot. `QueryTextPresence` survives: `buildQueryStack` still needs
+  text-presence to assemble `embedTexts` and `distributeQueryVectors`
+  to re-expand the batch. It left the **ranker's** input surface
+  only.
+- **Replay token counts arrive as an optional `capturedTokens` map on
+  `RankTypeInput`, beside a recorded `tokenizer: { encoding, version }`
+  in the payload.** Production omits the map. This is what makes the
+  parity test prove the capture is _sufficient_ to reproduce the run
+  rather than merely that the ranker is deterministic in-process —
+  which a recompute-based test would have passed tautologically. The
+  lookup lives in the deferred tokenization step, not inside
+  `score()`.
+- **`chapters_old` and `common_knowledge` are captured per row.**
+  Both are inert today — `chaptersOld` is hardcoded 0 until M5 closes
+  a chapter, so `recencyFactor` is always 1 in production — and both
+  become load-bearing the moment M5 lands, which is before M7.5 builds
+  the simulator. `chapters_old` unblocks per-type `λ` re-tuning and
+  `pin_signal` overrides, the latter unrecoverable from the captured
+  `(recency_factor, pin_signal)` pair at `pin_signal = 1`.
+  `common_knowledge` is what tells a common-knowledge happening apart
+  from a non-common one whose `pin_signal` happens to be 0.
+- **`CaptureParamsSnapshot` embeds `RankerParams` verbatim**, in the
+  ranker's camelCase, beside the story-settings knobs. Restating the
+  fields was the alternative and it had already drifted:
+  `lambda_div` / `kw_boost` were typed `Record<string, number>` but
+  ship as scalars, and `pinBoost` / `preFilterTopN` / `typeOverhead`
+  were absent entirely. Embedding the type makes a newly added
+  tunable a compile error rather than a silently missing capture
+  field.
+- **`buildStructuralFloor` projects its rows down to the declared
+  shape at construction.** The floor was built over loaded source
+  rows and carried `embeddingStale` (and lore's `keywords`) at
+  runtime with nothing to stop a serializer shipping them. Type now
+  equals runtime value, so no consumer has to know what to strip —
+  and the capture writer was the consumer most likely to forget.
+  `generation-context.ts` keeps its own narrower projection.
+
+### Other resolved decisions
+
+- **The failure arm is widened with a `partial` bag** rather than the
+  writer reaching into the pass. `runRetrieval` accumulates into a
+  shared state object and the `VectorInvariantError` catch relocated
+  so it can read it. `lib/retrieval` keeps returning data and stays
+  free of probe concerns, and the failure paths stay unit-testable on
+  a returned value rather than on a spy.
+- **`assertRankerParams` sits at the capture-read boundary**
+  (`lib/probe/read.ts`), not in the ranker. The constants are frozen
+  in code; a stored capture is not, and the read boundary is the only
+  place an untrusted param set enters.
+- **Write-and-evict is one `runInTransaction` batch**, with eviction
+  as a single `DELETE ... LIMIT -1 OFFSET 100` issued after the
+  INSERT. There is no ranker transaction to join — the ranker is pure —
+  so "same transaction" means atomicity of write-and-evict, not
+  enlistment in a wider one. No read-then-write race, and a table
+  somehow over cap self-heals on the next write.
+- **The writer takes `appGateOn` / `storyGateOn` booleans and owns the
+  AND**; the phase supplies them. Keeps `lib/probe` free of a
+  `lib/stores` import while leaving "either gate off ⇒ no write" unit
+  testable inside `lib/probe`.
+- **Compression is `fflate`.** Pure JS, so no dev-client rebuild;
+  `gzipSync` / `gunzipSync` are synchronous, which matters on a
+  transaction path with no `await` to spend; identical on Hermes,
+  Node and Chromium, where `CompressionStream` and `node:zlib` are
+  both unavailable on Hermes.
+- **The inspection affordance is `app/dev/probe-captures.tsx`**, an
+  unlinked harness route following the `app/dev/db-check.tsx`
+  precedent — no `t()`, no Storybook, no shell. Deleting it when
+  M7.5 ships the real surface touches nothing else. It cannot be unit
+  tested (the `unit` project cannot render RN-Web chrome), so it is
+  covered by manual smoke only.
+
+### Findings a later slice inherits
+
+- **Deep captures are far more expensive than canon estimated.**
+  Measured at the cost-budget fixture's 1067-row pool: ~340 ms at
+  dim 384 and ~700 ms at dim 768 to build and gzip, against the
+  "<20 ms" `probe.md` had carried and a ~108 ms retrieval pass. It is
+  synchronous, on the JS thread, inside the write transaction, and it
+  is that expensive because deep mode serializes a vector for every
+  **pool** row as JSON numbers. Light mode is ~11 ms and unaffected.
+  Deep mode is per-capture opt-in from a dev route, so this bounds
+  M7.5's design rather than any shipped path; the measured figures
+  and the two levers now live in
+  [`probe.md → Capture cost`](../../../../memory/probe.md#capture-cost).
+- **`probe.md`'s light-mode simulatable list is wider than light mode
+  can deliver.** Seven of its nine parameters feed `score`, which drives
+  MMR's greedy pick order, which needs vectors light mode does not
+  store. Of the two that apply after MMR, only the per-type budgets
+  genuinely survive: `min_score_threshold` compares against `mmrScore`,
+  and the capture stores `final_score`, which is the pre-MMR raw score.
+  The slice kept its scope and ran the parity test on **deep** captures
+  — the only mode that reaches `mmrRank` at all — and filed the list's
+  correction to [`triage.md`](../../../triage.md). It is a product call
+  about what the probe offers, not an implementation choice.
+- **The fork-exclusion test is structural, not behavioral.** Branch
+  fork is unimplemented (M6.1), so `lib/probe/fork.test.ts`
+  source-scans for `probe_captures` references outside an audited list
+  instead of forking a branch. It will not catch a generic M6.1
+  copier that never names the table. The canonical exclusion now has a
+  row in
+  [`data-model.md → Branch model`](../../../../data-model.md#branch-model);
+  replacing the scan is filed to triage against M6.1.
