@@ -273,6 +273,21 @@ describe('buildCapturePayload', () => {
     expect(payload.queries[2].sentence_scores).not.toBe(stack.q3.sentenceScores)
   })
 
+  // The shared outcome fixture's `selected` shorthand derives its own traces;
+  // poolOf refuses a pool row without one, so a fixture that seated candidates
+  // and left traces empty would describe a bundle no capture can carry.
+  it('captures a bundle built from the shared fixture shorthand', () => {
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ selected: { lore: [loreCandidate] }, queries: queryStack() }),
+    })
+
+    expect(payload.pools.lore.map((row) => row.target_id)).toEqual(['lo_1'])
+  })
+
   it('maps a candidate trace field-for-field into the pool, light mode', () => {
     const payload = buildCapturePayload({
       ...identity,

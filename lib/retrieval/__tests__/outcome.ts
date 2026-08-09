@@ -8,20 +8,54 @@ import type {
   RetrievalSuccess,
   RetrievalTimings,
 } from '../run'
-import { RETRIEVAL_TYPES, type Candidate, type RankedType, type RetrievalType } from '../types'
+import {
+  RETRIEVAL_TYPES,
+  type Candidate,
+  type CandidateTrace,
+  type RankedType,
+  type RetrievalType,
+} from '../types'
 
 const perType = <T>(value: (type: RetrievalType) => T): Record<RetrievalType, T> =>
   Object.fromEntries(RETRIEVAL_TYPES.map((t) => [t, value(t)])) as Record<RetrievalType, T>
 
+// A seated row's trace, carrying only what the candidate already fixes; the
+// scoring fields are placeholders, the one-per-pool-row pairing is not — a pool
+// row without a trace is a bundle the ranker cannot produce, and lib/probe's
+// capture builder refuses it outright.
+const traceOf = (c: Candidate, mmrRank: number): CandidateTrace => ({
+  kind: c.kind,
+  id: c.id,
+  displayName: c.displayName,
+  simQ1: c.sims[0],
+  simQ2: c.sims[1],
+  simQ3: c.sims[2],
+  simBlend: 0,
+  recencyFactor: 1,
+  pinSignal: c.pinSignal,
+  chaptersOld: c.chaptersOld,
+  renderedText: c.renderedText,
+  ...(c.kind === 'happening' ? { commonKnowledge: c.commonKnowledge } : {}),
+  kwBoostValue: 0,
+  chapterBoostApplied: false,
+  bypassTriggered: false,
+  finalScore: 0,
+  mmrRank,
+  selected: true,
+  dropReason: 'not_dropped',
+  tokensEstimated: 0,
+  embeddingStale: c.embeddingStale,
+})
+
 /**
- * A bundle whose funnel agrees with its `selected` list. Ranking is what
- * normally keeps the two consistent, so a fixture pairing zeroed counts with a
- * non-empty list describes a pass the ranker cannot produce.
+ * A bundle whose funnel and traces agree with its `selected` list. Ranking is
+ * what normally keeps the three consistent, so a fixture pairing zeroed counts
+ * with a non-empty list describes a pass the ranker cannot produce.
  */
 function rankedBundle(selected: readonly Candidate[]): RankedType {
   return {
     selected,
-    traces: [],
+    traces: selected.map(traceOf),
     funnel: {
       poolSize: selected.length,
       preFilteredSize: selected.length,
