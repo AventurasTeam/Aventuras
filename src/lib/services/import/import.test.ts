@@ -348,7 +348,7 @@ describe('runImport — entry fields', () => {
         lastEntryId: 'entry-1',
         lastEntryPreview: 'c',
         entryCount: 1,
-        entriesSnapshot: [data.entries[0]],
+        entriesSnapshot: [structuredClone(data.entries[0])],
         charactersSnapshot: [],
         locationsSnapshot: [],
         itemsSnapshot: [],
