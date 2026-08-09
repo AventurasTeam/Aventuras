@@ -418,18 +418,20 @@
         // A branch switch that happened while the panel was hidden lands now instead
         const pending = pendingBranchLanding
         pendingBranchLanding = null
-        if (pending) {
-          performBranchLanding(pending.branchId)
-          return
-        }
         // …as does a jump-to-entry request made from another panel, which is why the
         // request lives on the ui store: this component is destroyed while another
         // panel is up, so it cannot be waiting on an event when the request is made.
         // Read untracked — consuming it must not re-run this effect and undo the
         // landing with the scrollToBottom below.
-        // Consumed either way, so a request that can no longer be honoured — one made
-        // for a story that was closed before the panel came back — doesn't linger.
+        // Consumed before the branch-landing return, so a request that can no longer be
+        // honoured — one made for a story that was closed before the panel came back, or
+        // one a branch landing takes precedence over — doesn't linger and get picked up
+        // by the trailing effect as a second landing competing with this one.
         const entryId = ui.consumeEntryScroll()
+        if (pending) {
+          performBranchLanding(pending.branchId)
+          return
+        }
         if (entryId && story.entries.some((e) => e.id === entryId)) {
           void landOnEntry(entryId)
           return
