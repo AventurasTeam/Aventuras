@@ -34,7 +34,7 @@ describe('captures do not cross branches', () => {
 
   it('no unaudited code anywhere in lib/ references probe_captures', async () => {
     const paths = await fg(['lib/**/*.{ts,tsx}'], {
-      ignore: ['**/node_modules/**', 'lib/probe/**', '**/*.test.ts'],
+      ignore: ['**/node_modules/**', 'lib/probe/**', '**/*.test.{ts,tsx}'],
       cwd: process.cwd(),
     })
     // Guards the scan itself, not just the detector: a wrong cwd or a glob
