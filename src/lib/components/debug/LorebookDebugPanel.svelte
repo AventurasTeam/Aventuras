@@ -25,7 +25,9 @@
     PinOff,
     X,
     ChevronDown,
+    Loader2,
   } from '@lucide/svelte'
+  import { runManualLoreManagement } from '$lib/services/generation'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
@@ -420,6 +422,59 @@
               {/each}
             </div>
           {/each}
+
+          <!--
+            Lore management otherwise only runs behind chapter creation, and this panel is
+            where its cost is visible: the entry pinned into every prompt, the duplicate
+            listed twice. Asking for a pass from here is the shortest path from noticing to
+            fixing. Same icon as its section in Settings -> Advanced, since it is the same
+            agent.
+          -->
+          <Separator class="my-6" />
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-muted-foreground/80 text-xs leading-snug">
+                {#if ui.loreManagementActive}
+                  {ui.loreManagementProgress || 'Working...'}
+                {:else}
+                  Consolidates duplicates, updates entries from the story so far, and adds what is
+                  missing.
+                {/if}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                disabled={ui.loreManagementActive || !story.currentStory}
+                onclick={() => void runManualLoreManagement()}
+              >
+                {#if ui.loreManagementActive}
+                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                  Running
+                {:else}
+                  <BookOpen class="h-3.5 w-3.5 text-purple-500" />
+                  Run lore management
+                {/if}
+              </Button>
+            </div>
+
+            <!--
+              The agent's own account of what it changed. It used to live inside the progress
+              line and be wiped two seconds later — long enough to see that something happened,
+              not long enough to read what.
+            -->
+            {#if !ui.loreManagementActive && ui.lastLoreManagementSummary}
+              <div class="bg-muted/40 space-y-1 rounded-lg border p-3">
+                <p class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                  Last run · {ui.lastLoreManagementChanges}
+                  {ui.lastLoreManagementChanges === 1 ? 'change' : 'changes'}
+                </p>
+                <p class="text-foreground/90 text-xs leading-relaxed">
+                  {ui.lastLoreManagementSummary}
+                </p>
+              </div>
+            {/if}
+          </div>
 
           {#if ui.lastWorldStateRetrieval?.contextBlock || ui.lastLorebookRetrieval?.contextBlock}
             <Separator class="my-6" />

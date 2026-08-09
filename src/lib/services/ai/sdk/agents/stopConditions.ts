@@ -42,6 +42,38 @@ export function stopOnTerminalTool<TTools extends ToolSet = ToolSet>(
 }
 
 /**
+ * Stop when a terminal tool returns `completed: true`, rather than when it is called.
+ *
+ * A terminal tool that can refuse — "you have not dealt with these duplicates yet" — needs
+ * the loop to survive the call it refused, and `stopOnTerminalTool` reads the call, not the
+ * answer. The step limit still applies, so a tool that never accepts cannot hang the run.
+ *
+ * @param toolName - The name of the terminal tool
+ * @param maxSteps - Maximum steps before forced stop (default: 10)
+ */
+export function stopOnCompletedTerminalTool<TTools extends ToolSet = ToolSet>(
+  toolName: string,
+  maxSteps: number = 10,
+): StopCondition<TTools> {
+  return ({ steps }) => {
+    if (steps.length >= maxSteps) {
+      return true
+    }
+
+    const lastStep = steps[steps.length - 1]
+    if (!lastStep?.toolResults) {
+      return false
+    }
+
+    return lastStep.toolResults.some((result) => {
+      if (result.toolName !== toolName) return false
+      const output = 'output' in result ? (result.output as { completed?: boolean }) : undefined
+      return output?.completed === true
+    })
+  }
+}
+
+/**
  * Stop when any of the specified tools is called.
  * Useful for agents that can terminate via multiple paths.
  *

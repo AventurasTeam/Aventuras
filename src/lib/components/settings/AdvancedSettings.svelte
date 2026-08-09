@@ -747,7 +747,7 @@
         {@render sectionHeader({
           id: 'loreManagement',
           title: 'Lore Management',
-          subtitle: 'Autonomous agent iteration limits',
+          subtitle: 'Autonomous agent limits and consolidation',
           icon: BookOpen,
           iconWrap: 'bg-purple-500/10 group-hover/trigger:bg-purple-500/20',
           iconColor: 'text-purple-500',
@@ -766,6 +766,17 @@
               onChange: (v) => {
                 system.loreManagement.maxIterations = v
                 saveSystem()
+              },
+            })}
+
+            {@render switchRow({
+              label: 'Require duplicate consolidation',
+              description:
+                'Entries with matching or near-identical names are listed for the agent either way. With this on, it cannot end the session until it has merged each group or declared it two separate things — which is what stops a lorebook growing duplicates, at the cost of a longer run.',
+              checked: service.loreManagement?.requireDuplicateResolution ?? false,
+              onChange: (v) => {
+                service.loreManagement.requireDuplicateResolution = v
+                saveService()
               },
             })}
           </div>

@@ -43,6 +43,7 @@
     WorldStateTranslationService,
     handleEvent,
     SuggestionsRefreshService,
+    buildLoreManagementCallbacks,
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
@@ -339,33 +340,16 @@
         currentBranchId: story.currentStory?.currentBranchId ?? null,
         lorebookEntries: story.lorebookEntries,
         chapters: story.currentBranchChapters,
+        recentEntries: story.getUnchapterizedEntries(),
         mode,
         pov: story.pov,
         tense: story.tense,
       },
-      loreCallbacks: {
-        onCreateEntry: async (entry) => {
-          await story.addLorebookEntry(entry)
-        },
-        onUpdateEntry: story.updateLorebookEntry.bind(story),
-        onDeleteEntry: story.deleteLorebookEntry.bind(story),
-        onMergeEntries: async (entryIds, mergedEntry) => {
-          await story.deleteLorebookEntries(entryIds)
-          await story.addLorebookEntry(mergedEntry)
-        },
-        onQueryChapter: async (chapterNumber, question) => {
-          return aiService.answerChapterQuestion(
-            chapterNumber,
-            question,
-            story.currentBranchChapters,
-            story.getChapterEntries.bind(story),
-            story.chapterReadBudget,
-          )
-        },
-      },
+      loreCallbacks: buildLoreManagementCallbacks(),
       loreUICallbacks: {
         onStart: ui.startLoreManagement.bind(ui),
         onProgress: ui.updateLoreManagementProgress.bind(ui),
+        onSummary: ui.setLoreManagementSummary.bind(ui),
         onComplete: ui.finishLoreManagement.bind(ui),
       },
     }

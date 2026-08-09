@@ -15,6 +15,7 @@ export {
 
 export {
   stopOnTerminalTool,
+  stopOnCompletedTerminalTool,
   stopOnAnyToolCall,
   stopOnAny,
   stopOnCostExceeded,

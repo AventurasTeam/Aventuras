@@ -796,8 +796,18 @@ export interface ActionChoicesSpecificSettings {}
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface StyleReviewerSpecificSettings {}
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface LoreManagementSpecificSettings {}
+export interface LoreManagementSpecificSettings {
+  /**
+   * Refuse to let the agent finish while a flagged duplicate group is still untouched.
+   *
+   * Off by default because it changes what the run *costs*: a lorebook with twenty
+   * near-duplicate names turns one pass into several, and a model that judges them all
+   * distinct still has to say so one group at a time. The duplicate list and the
+   * refusal to create an entry that already exists are not gated on this — they cost
+   * nothing and are always on. This is only the obligation to close every group.
+   */
+  requireDuplicateResolution: boolean
+}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface InteractiveVaultSpecificSettings {}
@@ -919,7 +929,7 @@ export function getDefaultStyleReviewerSpecificSettings(): StyleReviewerSpecific
 }
 
 export function getDefaultLoreManagementSpecificSettings(): LoreManagementSpecificSettings {
-  return {}
+  return { requireDuplicateResolution: false }
 }
 
 export function getDefaultInteractiveVaultSpecificSettings(): InteractiveVaultSpecificSettings {
@@ -1652,7 +1662,12 @@ class SettingsStore {
             suggestions: getDefaultSuggestionsSpecificSettings(),
             actionChoices: getDefaultActionChoicesSpecificSettings(),
             styleReviewer: getDefaultStyleReviewerSpecificSettings(),
-            loreManagement: getDefaultLoreManagementSpecificSettings(),
+            // Merged, not replaced: this block holds a real setting now, and rebuilding it
+            // from defaults would drop the user's choice on every load.
+            loreManagement: {
+              ...getDefaultLoreManagementSpecificSettings(),
+              ...loaded.loreManagement,
+            },
             interactiveVault: getDefaultInteractiveVaultSpecificSettings(),
             timelineFill: getDefaultTimelineFillSpecificSettings(),
             chapterQuery: getDefaultChapterQuerySpecificSettings(),
@@ -2877,7 +2892,11 @@ class SettingsStore {
     this.systemServicesSettings.loreManagement = getDefaultLoreManagementSettingsForProvider(
       this.providerPreset,
     )
+    // The section's other control lives in the service-specific block, and a reset button
+    // that leaves half the panel where it was is worse than none.
+    this.serviceSpecificSettings.loreManagement = getDefaultLoreManagementSpecificSettings()
     await this.saveSystemServicesSettings()
+    await this.saveServiceSpecificSettings()
   }
 
   async resetInteractiveVaultSettings() {

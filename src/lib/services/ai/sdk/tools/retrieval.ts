@@ -223,7 +223,8 @@ function createSearchEntriesTool({ entries, onEvent, describeProgress }: Retriev
   return tool({
     description:
       'Search available lorebook entries by keyword, name, or type. ' +
-      'Returns matching entry summaries with their IDs, names, types, and brief excerpts. ' +
+      'Returns matching entries with their IDs, names, types and descriptions; ' +
+      'get_entry adds an entry’s tracked state. ' +
       'Reference material for your own reasoning: reading an entry does not put it in ' +
       "the narrator's prompt, which is decided separately.",
     inputSchema: z.object({
@@ -291,13 +292,18 @@ function createSearchEntriesTool({ entries, onEvent, describeProgress }: Retriev
         availableTotal,
         returnedCount: sliced.length,
         hasMore: availableTotal > sliced.length,
+        // The description, once. It used to be sent in full *and* as a 150-character
+        // `excerpt` of the same text — a prefix of a string already in the same object,
+        // for twenty entries, on every turn that searches. Which of the two to keep is a
+        // real trade-off (an excerpt is cheaper but sends the agent to `get_entry` for
+        // anything longer); the full text is what `retrieval.test.ts` pins deliberately,
+        // so the duplicate is what goes.
         entries: sliced.map((e) => ({
           id: e.id,
           name: e.name,
           type: e.type,
           aliases: e.aliases ?? [],
           description: e.description,
-          excerpt: e.description.length > 150 ? `${e.description.slice(0, 150)}...` : e.description,
           injectionMode: e.injection?.mode ?? 'keyword',
           priority: e.injection?.priority ?? 50,
         })),

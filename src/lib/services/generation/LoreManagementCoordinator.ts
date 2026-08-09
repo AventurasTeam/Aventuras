@@ -3,7 +3,15 @@
  * Coordinates AI lore management with CRUD callbacks for entry operations.
  */
 
-import type { Entry, Chapter, LoreManagementResult, StoryMode, POV, Tense } from '$lib/types'
+import type {
+  Entry,
+  Chapter,
+  LoreManagementResult,
+  StoryEntry,
+  StoryMode,
+  POV,
+  Tense,
+} from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('LoreManagementCoordinator')
@@ -19,6 +27,13 @@ export interface LoreManagementCallbacks {
 export interface LoreManagementUICallbacks {
   onStart: () => void
   onProgress: (message: string, changeCount: number) => void
+  /**
+   * The agent's own account of what it changed, handed over once and kept by the caller.
+   *
+   * Separate from `onProgress` because progress is transient by design — it is wiped by
+   * `onComplete` two seconds later — and this is the only record of what a run did.
+   */
+  onSummary?: (summary: string, changeCount: number) => void
   onComplete: () => void
 }
 
@@ -27,6 +42,14 @@ export interface LoreSessionInput {
   currentBranchId: string | null
   lorebookEntries: Entry[]
   chapters: Chapter[]
+  /**
+   * The story after the last chapter — everything the summaries do not cover yet.
+   *
+   * Was hardcoded to `[]` on every path, which is defensible right after a chapter is
+   * written and wrong everywhere else: on a story with no chapters at all it left the
+   * agent maintaining a lorebook for a story it could not read.
+   */
+  recentEntries: StoryEntry[]
   mode: StoryMode
   pov: POV
   tense: Tense
@@ -37,7 +60,7 @@ export interface LoreManagementDependencies {
     storyId: string,
     branchId: string | null,
     entries: Entry[],
-    recentMessages: [], // Empty array - lore management runs without current chat history
+    recentMessages: StoryEntry[],
     chapters: Chapter[],
     callbacks: {
       onCreateEntry: (entry: Entry) => Promise<void>
@@ -85,7 +108,7 @@ export class LoreManagementCoordinator {
         input.storyId,
         input.currentBranchId,
         [...input.lorebookEntries], // Clone to avoid mutation issues
-        [], // Lore management runs without current chat history
+        input.recentEntries,
         input.chapters,
         {
           onCreateEntry: async (entry) => {
@@ -117,6 +140,7 @@ export class LoreManagementCoordinator {
       })
 
       uiCallbacks?.onProgress(`Complete: ${result.summary}`, result.changes.length)
+      uiCallbacks?.onSummary?.(result.summary, result.changes.length)
 
       // Give user a moment to see the completion message
       if (uiCallbacks) {

@@ -56,6 +56,7 @@ import type {
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
+import { getContextConfig } from './core/config'
 import { serviceFactory } from './core/factory'
 import {
   DEFAULT_FALLBACK_STYLE_PROMPT,
@@ -621,16 +622,20 @@ class AIService {
     _pov?: POV,
     _tense?: Tense,
   ): Promise<LoreManagementResult> {
-    // Extract recent user action and narrative
-    const recentNarration = recentMessages.filter((m) => m.type === 'narration')
-    const recentActions = recentMessages.filter((m) => m.type === 'user_action')
+    // The story since the last chapter, which is the only place the agent can read what
+    // has not been summarised yet. It used to take the single most recent action and
+    // narration and nothing else, which on a story with no chapters at all meant the agent
+    // was asked to maintain a lorebook for a story it could not see.
+    const recentLimit = getContextConfig().recentEntriesForLoreManagement
+    const recentStory = recentMessages
+      .filter((m) => m.type === 'narration' || m.type === 'user_action')
+      .slice(-recentLimit)
+      .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
+      .join('\n\n')
 
-    const narrativeResponse =
-      recentNarration.length > 0 ? recentNarration[recentNarration.length - 1].content : ''
-    const userAction =
-      recentActions.length > 0 ? recentActions[recentActions.length - 1].content : ''
-
-    // Build chapters info for lore management
+    // Build chapters info for lore management. Number, title and summary only: the
+    // per-chapter keyword and character facets were read by `list_chapters` and by nothing
+    // else, so they have been cloned into every session since that tool was removed.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
       JSON.stringify(
@@ -638,8 +643,6 @@ class AIService {
           number: c.number,
           title: c.title,
           summary: c.summary,
-          keywords: c.keywords,
-          characters: c.characters,
         })),
       ),
     )
@@ -648,8 +651,7 @@ class AIService {
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
       storyId,
-      narrativeResponse,
-      userAction,
+      recentStory,
       existingEntries: entries,
       chapters: chapterInfos,
       queryChapter: callbacks.onQueryChapter,
@@ -675,9 +677,30 @@ class AIService {
       changes.push({ type: 'update', entry })
     }
 
+    // Consolidation is the half of lore management that keeps a lorebook from growing
+    // without bound, and it used to stop here: the agent's deletes and merges were
+    // approved, logged, and then dropped on the floor by the session, so every run
+    // re-proposed the same duplicates it had "already" merged.
+    for (const { sources, merged } of sessionResult.merges) {
+      await callbacks.onMergeEntries(
+        sources.map((e) => e.id),
+        { ...merged, id: crypto.randomUUID(), branchId },
+      )
+      changes.push({ type: 'merge', entry: merged, mergedFrom: sources.map((e) => e.id) })
+    }
+
+    const mergedAway = new Set(sessionResult.merges.flatMap((m) => m.sources.map((e) => e.id)))
+    for (const entry of sessionResult.deletedEntries) {
+      if (mergedAway.has(entry.id)) continue
+      await callbacks.onDeleteEntry(entry.id)
+      changes.push({ type: 'delete', previous: entry })
+    }
+
     log('runLoreManagement complete', {
       created: sessionResult.createdEntries.length,
       updated: sessionResult.updatedEntries.length,
+      deleted: sessionResult.deletedEntries.length,
+      merged: sessionResult.merges.length,
     })
 
     return {

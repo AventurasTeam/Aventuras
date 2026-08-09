@@ -172,6 +172,10 @@ export class ChapterBatchService {
           currentBranchId: input.currentBranchId,
           lorebookEntries: input.lorebookEntries,
           chapters,
+          // What the batch deliberately left un-chapterized: `planChapterBoundaries` stops
+          // `chapterBuffer` entries short of the end, and those are the newest material in
+          // the story — the part no summary covers.
+          recentEntries: input.entries.slice(boundaries[boundaries.length - 1]?.endIndex ?? 0),
           mode: input.mode,
           pov: input.pov,
           tense: input.tense,

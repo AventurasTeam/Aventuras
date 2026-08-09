@@ -7,8 +7,22 @@
 
 export {
   LoreManagementService,
-  getDefaultLoreManagementSettings,
-  type LoreManagementSettings,
   type LoreManagementResult,
   type LoreManagementContext,
+  type LoreMergeResult,
 } from './LoreManagementService'
+
+export {
+  findDuplicateGroups,
+  formatDuplicateGroup,
+  normalizeName,
+  type DuplicateGroup,
+} from './duplicates'
+
+export {
+  cleanAliases,
+  cleanKeywords,
+  describeDropped,
+  type CleanedField,
+  type DroppedTerm,
+} from './entryFields'

@@ -97,7 +97,11 @@ export class ServiceFactory {
    */
   createLoreManagementService(): LoreManagementService {
     const loreManagementSettings = settings.systemServicesSettings.loreManagement
-    return new LoreManagementService('loreManagement', loreManagementSettings.maxIterations)
+    return new LoreManagementService(
+      'loreManagement',
+      loreManagementSettings.maxIterations,
+      settings.serviceSpecificSettings.loreManagement?.requireDuplicateResolution ?? false,
+    )
   }
 
   /**

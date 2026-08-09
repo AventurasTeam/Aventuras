@@ -564,6 +564,108 @@ Two properties of that path are worth knowing before tuning it:
   the prompt as `A: Unable to answer the question.` under a heading claiming the material is
   relevant to the current scene.
 
+### Lore Management
+
+`src/lib/services/ai/lorebook/LoreManagementService.ts` is the one agent that _writes_ to the
+Lorebook on its own. It runs after a chapter is created — automatically at the token threshold,
+manually from the Memory view, and once per batch during `chapterizeFromBeginning` (the
+SillyTavern import path) — and on demand from the **Tidy lorebook** button in the Active Context
+panel (`runManualLoreManagement`, shared by both manual callers).
+
+**Its failure mode is growth.** A model that cannot see its own past sessions re-creates what it
+already wrote, so a lorebook accumulates "Kaelen", "Kaelen the Bold" and "Kaelan" and never loses
+one. Four things hold that down, and only the last is optional:
+
+- **Deletes and merges are applied.** They used to be approved by the tool, logged, and then
+  dropped — the session's change loop handled `create` and `update` only — so every run
+  re-proposed the same consolidation it had already "done". `merges` and `deletedEntries` now
+  come back with the result and reach the caller's existing `onMergeEntries` / `onDeleteEntry`.
+- **Changes land in the snapshot as they are made.** The array the tools read is the array the
+  session mutates, so an entry created on step 2 is visible to `list_entries` on step 3. It is
+  never spliced: the model holds indices from the prompt and from every listing it has read, so
+  a delete keeps its slot and joins `removedIndices` — hidden from listings, refused by
+  everything that takes an index.
+- **`create_entry` refuses a name that already exists**, matching on names and aliases through
+  `normalizeName`. The refusal says to update that index instead. The vault assistant does not
+  get this guard: there a human reads the change before it lands.
+- **The entry tools do not take a `lorebookId`.** A story's lorebook is not an entity with an
+  id — it is the `entries` rows for a story and a branch, and the branch-resolved view of them
+  is what the service passes in. The id belongs to the Vault, where there really are several
+  lorebooks to choose between. Left in the schema it was not merely unused: a parameter that
+  exists asks to be filled, and a measured run invented `"lorebook_1"` on every call.
+  `resolveTargetEntries` answers an unknown id with an error, so every read and edit tool
+  failed while `create_entry` — the one that does not validate it — went through. An agent
+  that can only create is an agent that only grows the lorebook. It is stripped by
+  `withoutFields`, the same mechanism that removes `injectionMode`.
+- **Duplicate candidates are found in code, before the call** (`lorebook/duplicates.ts`), by
+  exact name, shared alias, token containment and a length-scaled edit distance, grouped
+  transitively. The list goes into the prompt as a worklist. Under **Require duplicate
+  consolidation** (Advanced → Lore Management, off by default) `finish_lore_management` also
+  refuses to complete while a group is untouched — which is why the loop stops on
+  `stopOnCompletedTerminalTool`, reading the tool's answer rather than its call. The refusal is
+  capped at two: the agent may be right that the groups are distinct, and a run that cannot end
+  returns nothing. `keep_separate` is how it says so.
+
+The setting gates only the obligation. The worklist and the create guard cost nothing and are
+always on.
+
+**There is no `list_chapters` tool.** The prompt carries the complete chapter list with
+untruncated summaries, so the same material never exists in two places for the agent to
+reconcile — the rule `AgenticRetrievalService` already follows. A measured run spent two of its
+five steps calling the tool and injecting 47,000 characters of summaries it had already been
+given, because the prompt's copy was cut to 200 characters and the tool's was not. Removing the
+cut is what costs: on a 41-chapter story the block goes from ~9k characters to ~47k. It is worth
+it because those summaries are this task's input (the median summary is 1,223 characters, so the
+cut showed 16% of one), because the block is the cacheable head of the prompt, and because the
+only other way to recover the missing text is `query_chapter` — a whole chapter read by a second
+model. `list_entries` stays: after a merge or a delete it is the only view of the list as it now
+stands, and the prompt says so, so it is not called before there is anything to see. It takes a
+`query` and a `limit` — the query matches names, aliases, keywords and descriptions through the
+same `entityNameMatches` the retrieval side searches with, and the cap exists because a tool
+result stays in the prompt for the rest of the run. It is deliberately **not**
+`search_entries`: that tool addresses entries by id, and every write here goes by index, so
+mixing the two addressing schemes is how the `lorebookId` bug happens again.
+
+**What each field is for is a contract, and it is split between the code and the prompt.**
+`EntryRetrievalService` matches an entry's name, its aliases _and_ its keywords against the
+scene, all three, on word boundaries — so those three fields are one budget, and two mistakes in
+them are decidable rather than debatable: an alias identical to the entry's name, and a keyword
+that repeats the name or an alias. Neither can ever add a match. `lorebook/entryFields.ts` drops
+them on the way through `create_entry`/`update_entry` and reports what it dropped in the tool
+result, so the model reads the rule applied to its own output; nothing is rejected, because
+losing a whole call over one redundant keyword is the failure this file exists to avoid. The
+comparison is `foldName`, which folds case and punctuation but keeps articles — `"The Citadel"`
+and `"Citadel"` are the same subject but not the same trigger, which is `normalizeName`'s
+distinction to make, not this one's.
+
+Everything requiring judgement stays in the prompt, where the field contract is written out: a
+name is the form the story actually uses (never `Name / Title`), other forms are aliases, and a
+keyword must be a term written in the story — never a common word like `guard` or `loyalty` that
+matches ordinary prose and puts the entry in every prompt, never a phrase the model composed
+(matching is literal), never another entry's name. Descriptions describe their own subject in the
+present, without parenthetical glosses or chapter recaps that the chapter summaries already
+carry.
+
+**The prompt is ordered for prefix caching** like the narrator's: chapter summaries first (they
+change only when a chapter is written), then the entry list, then the duplicate worklist and the
+recent story. Entries are listed oldest-first for the same reason — a new entry appends instead
+of shifting every line under it — and that order is also what makes the indices stable within a
+session. Blacklisted entries (`loreManagementBlacklisted`) are filtered out of the pool
+entirely; showing them was worse than useless, since the agent cannot act on one but can
+re-create it.
+
+**An agent with no story text must not create.** Chapters are the usual material, but a manual
+run can happen before any chapter exists, so every caller passes `recentEntries` — the
+un-chapterized tail, trimmed to `recentEntriesForLoreManagement` by `runLoreManagement`. It was
+hardcoded to `[]` on all three paths. With neither chapters nor a tail, the prompt says so and
+restricts the run to consolidating what is already written; anything it "identified as missing"
+would be invented.
+
+All three callers go through `LoreManagementCoordinator` with the same
+`buildLoreManagementCallbacks()`, which is the only place that says what a lore change does to
+the story. Each used to write those five callbacks out itself, and they had drifted — one merged
+by passing the entry whole, another by copying fourteen fields by hand.
+
 ### Prompt Packs and Template Resolution
 
 Every prompt the app sends is a Liquid template. The code baseline lives in

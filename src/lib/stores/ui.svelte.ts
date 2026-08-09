@@ -256,6 +256,17 @@ class UIStore {
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
+  /**
+   * What the last session reported it did, kept after the run ends.
+   *
+   * The agent writes a real summary — "updated Liora's entry to reflect her capture,
+   * added the First Flame detail to the Anchor" — and it used to be shown inside the
+   * progress line for two seconds and then wiped, which is long enough to notice
+   * something was written and not long enough to read it. It is the only account of what
+   * changed in the lorebook, so it outlives the run.
+   */
+  lastLoreManagementSummary = $state<string | null>(null)
+  lastLoreManagementChanges = $state<number>(0)
 
   // Lorebook activation tracking for stickiness
   // Maps entry ID -> last activation position (story entry index)
@@ -1412,6 +1423,8 @@ class UIStore {
     this.loreManagementActive = true
     this.loreManagementProgress = 'Analyzing story content...'
     this.loreManagementChanges = 0
+    // The previous run's account stops being true the moment a new one starts writing.
+    this.lastLoreManagementSummary = null
     // Close any open modals/edit modes since user can't edit during lore management
     this.lorebookEditMode = false
     this.lorebookImportModalOpen = false
@@ -1423,6 +1436,12 @@ class UIStore {
     if (changesCount !== undefined) {
       this.loreManagementChanges = changesCount
     }
+  }
+
+  /** Record what a finished session reported, for the panel to show once it is over. */
+  setLoreManagementSummary(summary: string, changeCount: number) {
+    this.lastLoreManagementSummary = summary
+    this.lastLoreManagementChanges = changeCount
   }
 
   finishLoreManagement() {

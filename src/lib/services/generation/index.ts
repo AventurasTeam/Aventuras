@@ -73,6 +73,8 @@ export type {
 } from './ChapterBatchService'
 
 // Lore management coordinator
+export { runManualLoreManagement } from './manualLoreManagement'
+export { buildLoreManagementCallbacks } from './loreCallbacks'
 export { LoreManagementCoordinator } from './LoreManagementCoordinator'
 export type {
   LoreManagementCallbacks,

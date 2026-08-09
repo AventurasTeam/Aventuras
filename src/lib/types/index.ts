@@ -623,7 +623,7 @@ export interface EntryPreview {
 
 // ===== Lore Management System (per design doc section 3.4) =====
 
-export type LoreChangeType = 'create' | 'update' | 'merge' | 'delete' | 'complete'
+export type LoreChangeType = 'create' | 'update' | 'merge' | 'delete'
 
 export interface LoreChange {
   type: LoreChangeType

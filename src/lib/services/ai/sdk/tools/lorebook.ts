@@ -15,6 +15,9 @@ import {
   type LorebookEntryPendingChangeSchema,
   type VaultLorebookPendingChangeSchema,
 } from '../schemas/lorebook'
+import { entityNameMatches } from '$lib/utils/text'
+import { normalizeName } from '../../lorebook/duplicates'
+import { cleanAliases, cleanKeywords, describeDropped } from '../../lorebook/entryFields'
 
 export type { VaultLorebookPendingChangeSchema }
 
@@ -36,6 +39,38 @@ export interface LorebookEntryToolContext {
    * Required if tools are allowed to access lorebooks other than the bound 'entries'.
    */
   getLorebookEntries?: (lorebookId: string) => VaultLorebookEntry[] | undefined
+  /**
+   * Indices of `entries` removed earlier in this session.
+   *
+   * A caller that applies changes as they are made cannot splice the array: every index
+   * the model already holds would shift under it, and the next `update_entry` would edit
+   * the wrong entry. The slot stays and is listed here instead — hidden from
+   * `list_entries`, refused by everything that takes an index.
+   */
+  removedIndices?: Set<number>
+  /**
+   * Refuse `create_entry` for a name that already exists.
+   *
+   * For an unattended caller this is the difference between managing a lorebook and
+   * growing one: a model that cannot see its own past sessions will re-create the same
+   * character every run. Where a human approves each change, the duplicate is caught by
+   * reading it, so this stays off.
+   */
+  preventDuplicateNames?: boolean
+}
+
+/**
+ * Ceiling on one `list_entries` result.
+ *
+ * Twenty is the same allowance `search_entries` gives the retrieval agent, and the reason
+ * is the same: a tool result lives in the prompt for the rest of the run, so an unbounded
+ * listing of a mature lorebook is paid for on every step that follows it.
+ */
+const MAX_LIST_ENTRIES = 20
+
+/** Case- and punctuation-insensitive match on a name or any of its aliases. */
+function matchesName(entry: VaultLorebookEntry, normalized: string): boolean {
+  return [entry.name, ...(entry.aliases ?? [])].some((n) => normalizeName(n) === normalized)
 }
 
 /**
@@ -43,7 +78,28 @@ export interface LorebookEntryToolContext {
  * Each invocation creates fresh tools bound to the current entries.
  */
 function createLorebookEntryTools(context: LorebookEntryToolContext) {
-  const { entries, activeLorebookId, onPendingChange, generateId, getLorebookEntries } = context
+  const {
+    entries,
+    activeLorebookId,
+    onPendingChange,
+    generateId,
+    getLorebookEntries,
+    removedIndices,
+    preventDuplicateNames,
+  } = context
+
+  /**
+   * Removed slots belong to the bound `entries` only — another lorebook's indices are its
+   * own, and this session never removed anything from it.
+   */
+  function isRemoved(targetEntries: VaultLorebookEntry[], index: number): boolean {
+    return targetEntries === entries && (removedIndices?.has(index) ?? false)
+  }
+
+  /** The one error text for a stale index, so the model reads the same sentence every time. */
+  function removedError(index: number): string {
+    return `Entry index ${index} was removed earlier in this session. Its slot is kept so the other indices stay valid, but there is nothing there to act on.`
+  }
 
   function resolveTargetEntries(
     lorebookId: string | undefined,
@@ -70,19 +126,36 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      */
     list_entries: tool({
       description:
-        'List all lorebook entries. Optionally filter by type. Returns entry summaries with indices for further operations.',
+        'List lorebook entries with their indices, optionally narrowed by a search term or a type. Reflects the changes made so far in this session, so it is worth calling after merging or deleting — not before, when the list you were given is still accurate.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook to list entries from'),
+        query: z
+          .string()
+          .optional()
+          .describe(
+            'Term to match against entry names, aliases, keywords and descriptions. Omit to list everything.',
+          ),
         type: entryTypeSchema
           .optional()
           .describe('Filter entries by type (character, location, item, faction, concept, event)'),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_LIST_ENTRIES)
+          .optional()
+          .describe(`Maximum entries to return (default ${MAX_LIST_ENTRIES})`),
       }),
       execute: async ({
         lorebookId,
+        query,
         type,
+        limit,
       }: {
         lorebookId?: string
+        query?: string
         type?: z.infer<typeof entryTypeSchema>
+        limit?: number
       }) => {
         const resolved = resolveTargetEntries(lorebookId)
         if (!resolved.ok) {
@@ -90,13 +163,35 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         }
         const targetEntries = resolved.targetEntries
 
-        let filtered = targetEntries
+        let filtered = targetEntries.filter((_, i) => !isRemoved(targetEntries, i))
 
         if (type) {
           filtered = filtered.filter((e) => e.type === type)
         }
 
+        // Same word-boundary matching the retrieval side searches with, over the same four
+        // fields — so "is there already an entry about X" is answered the same way here as
+        // there, and a short query cannot match inside a longer word.
+        const term = query?.trim()
+        if (term) {
+          filtered = filtered.filter(
+            (e) =>
+              entityNameMatches(term, e.name) ||
+              (e.aliases ?? []).some((alias) => entityNameMatches(term, alias)) ||
+              e.keywords.some((keyword) => entityNameMatches(term, keyword)) ||
+              entityNameMatches(term, e.description),
+          )
+        }
+
+        // Unbounded, this returned every entry of a mature lorebook in one tool result,
+        // which then sat in the prompt for the rest of the run.
+        const availableTotal = filtered.length
+        const cap = limit ?? MAX_LIST_ENTRIES
+        filtered = filtered.slice(0, cap)
+
         return {
+          availableTotal,
+          hasMore: availableTotal > filtered.length,
           entries: filtered.map((e) => {
             // Map to the full targetEntries array index
             const fullIndex = targetEntries.indexOf(e)
@@ -108,7 +203,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
               keywords: e.keywords.slice(0, 5),
             }
           }),
-          total: filtered.length,
+          returnedCount: filtered.length,
         }
       },
     }),
@@ -135,6 +230,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
             found: false,
             error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
+        }
+        if (isRemoved(targetEntries, index)) {
+          return { found: false, error: removedError(index) }
         }
 
         return {
@@ -204,12 +302,30 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
             }
           }
         }
+
+        if (preventDuplicateNames) {
+          const normalized = normalizeName(name)
+          const existing = entries.findIndex(
+            (e, i) => !isRemoved(entries, i) && matchesName(e, normalized),
+          )
+          if (existing !== -1) {
+            return {
+              success: false,
+              error: `"${entries[existing].name}" already exists at index ${existing}. Use update_entry on that index to add what you know; do not create a second entry for the same subject.`,
+              existingIndex: existing,
+            }
+          }
+        }
+
+        const cleanedAliases = cleanAliases(name, aliases)
+        const cleanedKeywords = cleanKeywords(name, cleanedAliases.value, keywords)
+
         const newEntry: VaultLorebookEntry = {
           name,
           type,
           description,
-          keywords,
-          aliases: aliases ?? [],
+          keywords: cleanedKeywords.value,
+          aliases: cleanedAliases.value,
           injectionMode: injectionMode ?? 'keyword',
           priority: priority ?? 50,
         }
@@ -226,10 +342,12 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
 
         onPendingChange(pendingChange)
 
+        const note = describeDropped(cleanedAliases.dropped, cleanedKeywords.dropped)
         return {
           success: true,
           pendingChange,
           message: `Created pending entry "${name}" (${type}). Awaiting approval.`,
+          ...(note ? { note } : {}),
         }
       },
     }),
@@ -280,6 +398,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           }
         }
 
+        if (isRemoved(targetEntries, index)) {
+          return { success: false, error: removedError(index) }
+        }
+
         const previous = targetEntries[index]
         const changeId = generateId()
 
@@ -288,6 +410,20 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         const cleanUpdates = Object.fromEntries(
           Object.entries(updates).filter(([_, v]) => v !== undefined && v !== ''),
         ) as Partial<VaultLorebookEntry>
+
+        // Both lists are compared against the name this entry will *have*, not the one it
+        // had: a rename and a new alias can arrive in the same call, and checking against
+        // the old name would keep an alias that is about to become the name itself.
+        const finalName = cleanUpdates.name ?? previous.name
+        const finalAliases = cleanUpdates.aliases
+          ? cleanAliases(finalName, cleanUpdates.aliases)
+          : { value: previous.aliases ?? [], dropped: [] }
+        if (cleanUpdates.aliases) cleanUpdates.aliases = finalAliases.value
+
+        const cleanedKeywords = cleanUpdates.keywords
+          ? cleanKeywords(finalName, finalAliases.value, cleanUpdates.keywords)
+          : { value: [], dropped: [] }
+        if (cleanUpdates.keywords) cleanUpdates.keywords = cleanedKeywords.value
 
         const pendingChange: LorebookEntryPendingChangeSchema = {
           id: changeId,
@@ -302,10 +438,12 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
 
         onPendingChange(pendingChange)
 
+        const note = describeDropped(finalAliases.dropped, cleanedKeywords.dropped)
         return {
           success: true,
           pendingChange,
           message: `Created pending update for "${previous.name}". Awaiting approval.`,
+          ...(note ? { note } : {}),
         }
       },
     }),
@@ -341,6 +479,10 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
             success: false,
             error: `Entry index ${index} out of range (0-${targetEntries.length - 1})`,
           }
+        }
+
+        if (isRemoved(targetEntries, index)) {
+          return { success: false, error: removedError(index) }
         }
 
         const previous = targetEntries[index]
@@ -401,6 +543,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
               error: `Entry index ${idx} out of range (0-${targetEntries.length - 1})`,
             }
           }
+          if (isRemoved(targetEntries, idx)) {
+            return { success: false, error: removedError(idx) }
+          }
         }
 
         // Check for duplicates
@@ -447,49 +592,63 @@ export interface ChapterInfo {
   number: number
   title: string | null
   summary: string
-  keywords?: string[]
-  characters?: string[]
 }
 export interface StoryToolContext {
   /** Available chapters for querying */
   chapters?: ChapterInfo[]
   /** Callback to query a chapter with a question */
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
+  /**
+   * The duplicate groups the session has not dealt with yet, already formatted for reading.
+   *
+   * Called by `finish_lore_management`, which is the only place the answer can still change
+   * anything: a run that consolidated nothing is the failure this whole path exists to stop.
+   */
+  pendingDuplicates?: () => string[]
+  /** Record that a duplicate group was judged to be genuinely distinct entries. */
+  onKeepSeparate?: (indices: number[], reason: string) => void
 }
+
+/**
+ * How many times finishing may be refused over unresolved duplicates.
+ *
+ * Refusing is a nudge, not a gate: the agent may be right that the remaining groups are
+ * distinct and simply not have said so, and a loop that will not let it stop burns the
+ * step ceiling and returns nothing. Two refusals is enough to turn "I'm done" into work
+ * without turning it into an argument.
+ */
+const MAX_FINISH_REJECTIONS = 2
 
 /**
  * Story and Session Tools
  *
  * Includes chapter querying and session completion tools.
+ *
+ * There is deliberately no `list_chapters`: the prompt carries the complete chapter list
+ * with untruncated summaries, so a tool returning the same material would only give the
+ * agent two versions of it to reconcile — and it did. A measured run spent two of its five
+ * steps calling it, injecting 47,000 characters of summaries that were already in front of
+ * it, because the prompt's copy was truncated to 200 characters and the tool's was not.
+ * `AgenticRetrievalService` reached the same conclusion for the same reason.
  */
 function createStoryTools(context: StoryToolContext) {
-  const { chapters, queryChapter } = context
+  const { chapters, queryChapter, pendingDuplicates, onKeepSeparate } = context
+  let finishRejections = 0
 
   return {
     /**
-     * List available chapters for querying.
+     * Resolve a duplicate group without changing anything.
      */
-    list_chapters: tool({
+    keep_separate: tool({
       description:
-        'List all available chapters with their summaries. Use this to understand the story timeline before making lore updates.',
+        'Declare that a flagged duplicate group is actually distinct entries that should both stay. Use this instead of merging when two similar names are two different things. Nothing is written; it only records the decision so you are not asked about them again.',
       inputSchema: z.object({
-        limit: z.number().optional().default(20).describe('Maximum chapters to return'),
+        indices: z.array(z.number()).min(2).describe('The indices of the group to keep apart'),
+        reason: z.string().describe('Why these are not the same subject'),
       }),
-      execute: async ({ limit }: { limit?: number }) => {
-        if (!chapters || chapters.length === 0) {
-          return { chapters: [], total: 0, message: 'No chapters available' }
-        }
-        const limitedChapters = chapters.slice(0, limit ?? 20)
-        return {
-          chapters: limitedChapters.map((ch) => ({
-            number: ch.number,
-            title: ch.title,
-            summary: ch.summary.slice(0, 500) + (ch.summary.length > 500 ? '...' : ''),
-            keywords: ch.keywords,
-            characters: ch.characters,
-          })),
-          total: chapters.length,
-        }
+      execute: async ({ indices, reason }: { indices: number[]; reason: string }) => {
+        onKeepSeparate?.(indices, reason)
+        return { acknowledged: true, indices }
       },
     }),
 
@@ -541,7 +700,7 @@ function createStoryTools(context: StoryToolContext) {
      */
     finish_lore_management: tool({
       description:
-        'Call this when you have finished reviewing and updating the lorebook. Provide a summary of all changes made.',
+        'Call this when you have finished reviewing and updating the lorebook. Provide a summary of all changes made. If duplicate groups are still open, this returns completed: false and the session continues — resolve each one with merge_entries/delete_entry or keep_separate, then call this again.',
       inputSchema: z.object({
         summary: z.string().describe('Summary of all changes made during this session'),
         entriesCreated: z.number().describe('Number of entries created'),
@@ -556,6 +715,20 @@ function createStoryTools(context: StoryToolContext) {
         entriesDeleted: number
         entriesMerged: number
       }) => {
+        // Finishing with duplicate groups untouched is the one failure this loop can still
+        // fix from the inside: the work is named, the tools are loaded, and the step that
+        // would end the run can be spent doing it instead.
+        const remaining = pendingDuplicates?.() ?? []
+        if (remaining.length > 0 && finishRejections < MAX_FINISH_REJECTIONS) {
+          finishRejections++
+          return {
+            completed: false,
+            remainingDuplicates: remaining,
+            message:
+              'Not finished yet. These possible duplicates have not been dealt with. For each one: merge_entries if they are the same subject, keep_separate if they are not. Then call finish_lore_management again.',
+          }
+        }
+
         // This tool's execution is a signal to stop the agent loop
         return {
           completed: true,
@@ -574,31 +747,57 @@ export type LoreManagementToolContext = LorebookEntryToolContext & StoryToolCont
  * Excludes browsing tools (managing the entire vault).
  */
 /**
- * Drop `injectionMode` from a tool's input schema.
+ * Drop parameters from a tool's input schema.
  *
- * The field survives in `execute`, which simply never receives it and falls back to
- * `'keyword'`. Removing it from the schema rather than ignoring it afterwards is the point:
- * the schema is what the model is shown, so a parameter left in and discarded is a
- * parameter the model spends tokens choosing.
+ * The fields survive in `execute`, which simply never receives them and falls back to its
+ * defaults. Removing them from the schema rather than ignoring them afterwards is the
+ * point: the schema is what the model is shown, so a parameter left in and discarded is a
+ * parameter the model spends tokens choosing — and, worse, one it can choose wrongly.
  */
-function withoutInjectionMode<T extends { inputSchema: unknown }>(tool: T): T {
+function withoutFields<T extends { inputSchema: unknown }>(tool: T, ...fields: string[]): T {
   // `tool()` widens `inputSchema` to the SDK's `FlexibleSchema`, which loses the Zod
-  // methods; these two are built here from `z.object`, so the narrowing is safe.
+  // methods; these are all built here from `z.object`, so the narrowing is safe.
   const schema = tool.inputSchema as z.ZodObject<z.ZodRawShape>
-  return { ...tool, inputSchema: schema.omit({ injectionMode: true }) } as T
+  const mask = Object.fromEntries(fields.map((field) => [field, true as const]))
+  return { ...tool, inputSchema: schema.omit(mask) } as T
 }
+
+/**
+ * `lorebookId` names something that does not exist here.
+ *
+ * A story's lorebook is not an entity with an id — it is the `entries` rows for a story and
+ * a branch, and the branch-resolved view of them is what the service hands these tools. The
+ * id belongs to the **Vault**, where there really are several lorebooks to choose between.
+ *
+ * Left in the schema, the parameter is not merely unused: the model fills it in, because a
+ * parameter that exists asks to be filled. A measured run invented `"lorebook_1"` on every
+ * call, and `resolveTargetEntries` answers an unknown id with an error — so `list_entries`,
+ * `read_entry`, `update_entry`, `delete_entry` and `merge_entries` all failed, while
+ * `create_entry` (the one that does not validate it) went through. An agent that can only
+ * create is an agent that only grows the lorebook, which is exactly what was observed.
+ */
+const LOREBOOK_ID = 'lorebookId'
 
 export function createLoreManagementTools(context: LoreManagementToolContext) {
   const { create_entry, update_entry, ...entryTools } = createLorebookEntryTools(context)
 
-  return {
-    ...entryTools,
+  // `satisfies` is the guard: every entry tool has to be named here, so a tool added to the
+  // factory later cannot quietly reach this agent with its `lorebookId` still attached.
+  const entry = {
+    list_entries: withoutFields(entryTools.list_entries, LOREBOOK_ID),
+    read_entry: withoutFields(entryTools.read_entry, LOREBOOK_ID),
+    delete_entry: withoutFields(entryTools.delete_entry, LOREBOOK_ID),
+    merge_entries: withoutFields(entryTools.merge_entries, LOREBOOK_ID),
     // Lore management runs unattended, so it does not get to decide that an entry belongs
     // in every prompt forever: `always` is a budget decision, past every retrieval
     // threshold, made by an agent that cannot see the budget. The vault assistant keeps it
     // — there the user reads the change before it lands.
-    create_entry: withoutInjectionMode(create_entry),
-    update_entry: withoutInjectionMode(update_entry),
+    create_entry: withoutFields(create_entry, LOREBOOK_ID, 'injectionMode'),
+    update_entry: withoutFields(update_entry, LOREBOOK_ID, 'injectionMode'),
+  } satisfies Record<keyof LorebookEntryTools, unknown>
+
+  return {
+    ...entry,
     ...createStoryTools(context),
   }
 }
