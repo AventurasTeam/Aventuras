@@ -322,11 +322,12 @@
           <button
             class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {forkReachable
               ? 'hover:text-surface-200 sm:opacity-0 sm:group-hover:opacity-100'
-              : 'cursor-not-allowed opacity-30'}"
+              : 'cursor-not-allowed opacity-30 sm:opacity-0 sm:group-hover:opacity-30'}"
             onclick={(e) => {
               e.stopPropagation()
               goToForkPoint(branch)
             }}
+            onkeydown={(e) => e.stopPropagation()}
             disabled={!forkReachable}
             title={forkReachable
               ? 'Go to fork point'
