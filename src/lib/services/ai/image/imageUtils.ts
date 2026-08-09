@@ -8,7 +8,7 @@ import { generateImage, supportsImageGeneration } from './providers/registry'
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
 import type { StorySettings } from '$lib/types'
-import { emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
+import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { createLogger } from '$lib/log'
 import { expectedPixels, defaultImageSpec } from '$lib/utils/image'
 
@@ -127,6 +127,11 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
   })
 
   log('Retrying image generation', { imageId, profileId, model, size })
+
+  // Both branches below emit `ImageReady`, which decrements the header's in-flight count —
+  // so the retry has to announce itself, or it spends another image's increment and the
+  // indicator disappears while that one is still generating.
+  emitImageQueued(imageId, image.entryId)
 
   try {
     const result = await generateImage({ profileId, model, prompt, size })

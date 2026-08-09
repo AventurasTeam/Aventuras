@@ -13,10 +13,13 @@
   onMount(() => {
     // Start tracking visibility changes for background generation detection
     ui.initVisibilityTracking()
+    // Image progress counters: bus-level bookkeeping, so it must outlive any one component
+    ui.initImageTracking()
 
     if (!isAndroid()) {
       return () => {
         ui.destroyVisibilityTracking()
+        ui.destroyImageTracking()
       }
     }
 
@@ -66,6 +69,7 @@
 
     return () => {
       ui.destroyVisibilityTracking()
+      ui.destroyImageTracking()
       delete (window as any).__aventuraBackHandler
     }
   })

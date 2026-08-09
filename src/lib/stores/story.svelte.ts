@@ -519,6 +519,11 @@ class StoryStore {
     this.resetStoryState()
     this.currentBgImage = null
     this.branches = []
+    // The image indicators are not gated on there being a story, so anything still in
+    // flight would keep counting in the library, against a story that is no longer open.
+    // Late `ImageReady` events from those generations clamp at zero rather than going
+    // negative.
+    ui.resetImageGenerationState()
     log('Story closed')
   }
 

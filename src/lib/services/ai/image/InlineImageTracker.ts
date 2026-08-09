@@ -265,6 +265,9 @@ export class InlineImageTracker {
         })
         .catch((error) => {
           log('Failed to update image record', { imageId: pending.id, error })
+          // The `Queued` above is still outstanding: a rejected generation that never
+          // emits `Ready` leaves the header counting an image that will never arrive.
+          emitImageReady(pending.id, this.entryId, false)
         })
     }
 

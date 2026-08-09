@@ -87,6 +87,7 @@ import type {
 } from './retrieval/AgenticRetrievalService'
 import type {
   ActionChoicesResult,
+  BackgroundImageAnalysisResult,
   ChapterAnalysis,
   ChapterSummaryResult,
   ChapterTimelineEstimate,
@@ -904,28 +905,40 @@ class AIService {
     // Emit analysis started
     emitImageAnalysisStarted(context.entryId)
 
+    // The analysis phase and the queueing that follows it get their own try/catch: they
+    // are one `Started` and one `Complete`, and the progress counter reads that pair. A
+    // single catch spanning both emitted `Failed` after `Complete` had already fired for
+    // a throw while queueing, closing an analysis phase twice. `Failed` stays a
+    // notification only (`StoryEntry` toasts on it) — it never ends the phase.
+    let scenes: ImageableScene[]
     try {
       // Create service and identify scenes
       const analysisService = serviceFactory.createImageAnalysisService()
-      const scenes = await analysisService.identifyScenes(analysisContext)
+      scenes = await analysisService.identifyScenes(analysisContext)
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      log('Scene analysis failed', error)
+      emitImageAnalysisComplete(context.entryId, 0, 0)
+      emitImageAnalysisFailed(context.entryId, errorMessage)
+      return
+    }
 
-      if (scenes.length === 0) {
-        log('No imageable scenes identified')
-        emitImageAnalysisComplete(context.entryId, 0, 0)
-        return
-      }
+    // Count portrait generations
+    const portraitCount = scenes.filter((s) => s.generatePortrait).length
+    const sceneCount = scenes.length - portraitCount
 
-      // Count portrait generations
-      const portraitCount = scenes.filter((s) => s.generatePortrait).length
-      const sceneCount = scenes.length - portraitCount
-
+    if (scenes.length === 0) {
+      log('No imageable scenes identified')
+    } else {
       log('Scenes identified', {
         total: scenes.length,
         scenes: sceneCount,
         portraits: portraitCount,
       })
-      emitImageAnalysisComplete(context.entryId, sceneCount, portraitCount)
+    }
+    emitImageAnalysisComplete(context.entryId, sceneCount, portraitCount)
 
+    try {
       // Queue image generation for each scene
       const getImageProfile = context.getImageProfile ?? (() => undefined)
       for (const scene of scenes) {
@@ -941,7 +954,7 @@ class AIService {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      log('Scene analysis failed', error)
+      log('Queueing analyzed image generation failed', error)
       emitImageAnalysisFailed(context.entryId, errorMessage)
     }
   }
@@ -1129,12 +1142,16 @@ class AIService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Analyzed image generation failed', { imageId, error: errorMessage })
 
-      await database.updateEmbeddedImage(imageId, {
-        status: 'failed',
-        errorMessage,
-      })
-
-      emitImageReady(imageId, entryId, false)
+      try {
+        await database.updateEmbeddedImage(imageId, {
+          status: 'failed',
+          errorMessage,
+        })
+      } finally {
+        // Balances the `ImageQueued` emitted when this was scheduled, even if recording
+        // the failure is itself what failed.
+        emitImageReady(imageId, entryId, false)
+      }
     }
   }
 
@@ -1147,28 +1164,47 @@ class AIService {
     visibleEntries: StoryEntry[],
     onBackgroundImageUpdate: (image: string) => void,
   ): Promise<void> {
+    // Two phases, two separate pairs, each closed in a `finally`: the progress counters
+    // read `Started`/`Complete` and `Queued`/`Ready`, and a single try/catch around both
+    // left them open. A throw while generating reported an analysis failure for a phase
+    // that had already completed, and a generation that simply returned nothing never
+    // balanced its `Queued` at all — the header then showed "1 image" until restart.
+    // `createBackgroundImageService` throws when no background profile is configured, so it
+    // stays inside the try: this is called fire-and-forget from `story.svelte.ts`, where a
+    // rejected promise is an unhandled rejection rather than a logged failure.
+    emitBackgroundImageAnalysisStarted()
+    let service: ReturnType<typeof serviceFactory.createBackgroundImageService> | null = null
+    let result: BackgroundImageAnalysisResult | null = null
     try {
-      const service = serviceFactory.createBackgroundImageService()
-      emitBackgroundImageAnalysisStarted()
-      const result = await service.analyzeResponsesForBackgroundImage(visibleEntries)
-      emitBackgroundImageAnalysisComplete()
-      // Ai returns empty string or short response if no change, otherwise the image prompt
-      if (result.changeNecessary) {
-        log('Background change detected, prompt:', result.prompt)
-        emitBackgroundImageQueued()
-        const image = await service.generateBackgroundImage(result.prompt)
-
-        if (image) {
-          emitBackgroundImageReady()
-          log('Background image generated successfully', { image })
-          onBackgroundImageUpdate(image)
-        } else {
-          log('Background image generation failed')
-        }
-      }
+      service = serviceFactory.createBackgroundImageService()
+      result = await service.analyzeResponsesForBackgroundImage(visibleEntries)
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Background image analysis failed', error)
+    } finally {
+      emitBackgroundImageAnalysisComplete()
+    }
+
+    // Ai returns empty string or short response if no change, otherwise the image prompt
+    if (!service || !result?.changeNecessary) return
+
+    log('Background change detected, prompt:', result.prompt)
+    emitBackgroundImageQueued()
+    try {
+      const image = await service.generateBackgroundImage(result.prompt)
+
+      if (image) {
+        log('Background image generated successfully', { image })
+        onBackgroundImageUpdate(image)
+      } else {
+        log('Background image generation failed')
+        emitBackgroundImageAnalysisFailed()
+      }
+    } catch (error) {
+      emitBackgroundImageAnalysisFailed()
+      log('Background image generation failed', error)
+    } finally {
+      emitBackgroundImageReady()
     }
   }
 

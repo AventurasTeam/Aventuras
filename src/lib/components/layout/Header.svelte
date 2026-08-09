@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { toRetrievalSnapshot, snapshotSize } from '$lib/services/ai/retrieval'
@@ -8,17 +7,6 @@
   import { errMessage } from '$lib/utils/error'
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import {
-    eventBus,
-    type ImageAnalysisStartedEvent,
-    type ImageAnalysisCompleteEvent,
-    type ImageQueuedEvent,
-    type ImageReadyEvent,
-    type BackgroundImageAnalysisStartedEvent,
-    type BackgroundImageAnalysisCompleteEvent,
-    type BackgroundImageQueuedEvent,
-    type BackgroundImageReadyEvent,
-  } from '$lib/services/events'
   import {
     PanelRight,
     Settings,
@@ -63,60 +51,6 @@
     story.closeStory()
     ui.setActivePanel('library')
   }
-
-  // Subscribe to image generation events
-  onMount(() => {
-    const unsubAnalysisStarted = eventBus.subscribe<ImageAnalysisStartedEvent>(
-      'ImageAnalysisStarted',
-      () => ui.setImageAnalysisInProgress(true),
-    )
-
-    const unsubAnalysisComplete = eventBus.subscribe<ImageAnalysisCompleteEvent>(
-      'ImageAnalysisComplete',
-      () => ui.setImageAnalysisInProgress(false),
-    )
-
-    const unsubImageQueued = eventBus.subscribe<ImageQueuedEvent>('ImageQueued', () =>
-      ui.incrementImagesGenerating(),
-    )
-
-    const unsubImageReady = eventBus.subscribe<ImageReadyEvent>('ImageReady', () =>
-      ui.decrementImagesGenerating(),
-    )
-
-    const unsubBackgroundImageAnalysisStarted =
-      eventBus.subscribe<BackgroundImageAnalysisStartedEvent>(
-        'BackgroundImageAnalysisStarted',
-        () => ui.setImageAnalysisInProgress(true),
-      )
-
-    const unsubBackgroundImageAnalysisComplete =
-      eventBus.subscribe<BackgroundImageAnalysisCompleteEvent>(
-        'BackgroundImageAnalysisComplete',
-        () => ui.setImageAnalysisInProgress(false),
-      )
-
-    const unsubBackgroundImageQueued = eventBus.subscribe<BackgroundImageQueuedEvent>(
-      'BackgroundImageQueued',
-      () => ui.incrementImagesGenerating(),
-    )
-
-    const unsubBackgroundImageReady = eventBus.subscribe<BackgroundImageReadyEvent>(
-      'BackgroundImageReady',
-      () => ui.decrementImagesGenerating(),
-    )
-
-    return () => {
-      unsubAnalysisStarted()
-      unsubAnalysisComplete()
-      unsubImageQueued()
-      unsubImageReady()
-      unsubBackgroundImageAnalysisStarted()
-      unsubBackgroundImageAnalysisComplete()
-      unsubBackgroundImageQueued()
-      unsubBackgroundImageReady()
-    }
-  })
 
   async function handleExport(exportFn: () => Promise<boolean>, formatName: string) {
     if (!story.currentStory) return
@@ -205,6 +139,31 @@
   </DropdownMenu.Item>
 {/snippet}
 
+<!--
+  Settings, with the warning badge that says the generation config has a problem. Two
+  instances render it, at complementary breakpoints, and they were duplicated markup down
+  to the badge — which is the piece most likely to be restyled and then to disagree with
+  itself.
+-->
+{#snippet settingsButton(visibilityClass: string)}
+  <div class="relative {visibilityClass}">
+    <Button
+      icon={Settings}
+      label="Settings"
+      variant="text"
+      class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+      onclick={() => ui.openSettings()}
+    />
+    {#if settings.hasGenerationConfigIssues}
+      <span
+        class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
+      >
+        <AlertTriangle class="h-2.5 w-2.5 text-white" />
+      </span>
+    {/if}
+  </div>
+{/snippet}
+
 <header
   class="bg-card relative z-10 flex h-12 items-center justify-between border-b px-1 sm:h-14 sm:px-4"
 >
@@ -272,8 +231,8 @@
       {/if}
     </div>
 
-    <!-- Back to Library Button (right side) -->
     {#if story.currentStory}
+      <!-- Back to Library Button (right side) -->
       <div class="hidden sm:block">
         <Button
           icon={Library}
@@ -284,9 +243,7 @@
           title="Return to Library"
         />
       </div>
-    {/if}
 
-    {#if story.currentStory}
       <!-- Gallery Button -->
       <Button
         icon={ImageIcon}
@@ -385,23 +342,7 @@
         opened, which is the wrong place for the one control that says something is
         misconfigured.
       -->
-      <div class="relative sm:hidden">
-        <Button
-          icon={Settings}
-          label="Settings"
-          variant="text"
-          class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
-          onclick={() => ui.openSettings()}
-          title="Settings"
-        />
-        {#if settings.hasGenerationConfigIssues}
-          <span
-            class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
-          >
-            <AlertTriangle class="h-2.5 w-2.5 text-white" />
-          </span>
-        {/if}
-      </div>
+      {@render settingsButton('sm:hidden')}
     {/if}
 
     <!-- Not gated on the lorebook having entries: the panel covers live world state too,
@@ -432,7 +373,7 @@
         target="_blank"
         rel="noopener noreferrer"
         variant="text"
-        class="text-muted-foreground hover:text-primary min-h-[44px] min-w-[44px] sm:hidden"
+        class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
         title="Join our Discord community"
       >
         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -443,22 +384,7 @@
       </Button>
     {/if}
 
-    <div class="relative hidden sm:block">
-      <Button
-        icon={Settings}
-        label="Settings"
-        variant="text"
-        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
-        onclick={() => ui.openSettings()}
-      />
-      {#if settings.hasGenerationConfigIssues}
-        <span
-          class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
-        >
-          <AlertTriangle class="h-2.5 w-2.5 text-white" />
-        </span>
-      {/if}
-    </div>
+    {@render settingsButton('hidden sm:block')}
 
     {#if story.currentStory}
       <Button
