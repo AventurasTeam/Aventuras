@@ -690,6 +690,35 @@ describe('retrieval phase — abort', () => {
     expect(events).toEqual([])
   })
 
+  it('emits no awareness bumps when cancel lands during probe capture persistence', async () => {
+    const { db, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedProbeStory({ probe_mode_active: true })
+    const controller = new AbortController()
+    let markCaptureStarted!: () => void
+    const captureStarted = new Promise<void>((resolve) => {
+      markCaptureStarted = resolve
+    })
+    let releaseCapture!: () => void
+    const capturePending = new Promise<void>((resolve) => {
+      releaseCapture = resolve
+    })
+    const controlledCaptureWrite: DbCtx['runInTransaction'] = async (ops) => {
+      markCaptureStarted()
+      await capturePending
+      await runInTransaction(ops)
+    }
+
+    const phase = runRetrievalPhase(controller.signal, controlledCaptureWrite)
+    await captureStarted
+    controller.abort()
+    releaseCapture()
+    const { result, events } = await phase
+
+    expect(events).toEqual([])
+    expect(result).toEqual({ status: 'aborted' })
+  })
+
   it('reports a cancelled turn as aborted even when the pass also failed', async () => {
     seedOpenStory()
     const controller = new AbortController()

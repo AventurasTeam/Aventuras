@@ -256,6 +256,7 @@ export async function* retrievalPhase(
 
   ctx.intermediates[RETRIEVAL_INTERMEDIATE_KEY] = outcome
   await captureProbe(outcome)
+  if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   // Downstream of the abort poll on purpose: bumping a cancelled turn's counters
   // leaves reverse-replay work for a turn that produced no prose.
