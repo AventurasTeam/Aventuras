@@ -64,6 +64,30 @@ describe('buildExtendedClassificationSchema', () => {
     expect(parsed.entryUpdates.newCharacters[0]).toMatchObject({ health: 100 })
   })
 
+  // Nothing stops a pack from calling a variable `status`, and `.extend()` lets the last
+  // shape win — so without a guard the variable would decide what the entity's own field
+  // means, and its value would be written into the native column.
+  it('lets the native field win over a variable that shares its name', () => {
+    const status = variable({
+      variableName: 'status',
+      entityType: 'character',
+      variableType: 'text',
+    })
+    const schema = buildExtendedClassificationSchema({ character: [status] }) as z.ZodType
+
+    // 'wounded' is a valid value for the pack's text variable, but not for the native enum.
+    const raw = response()
+    raw.entryUpdates.newCharacters = [
+      { name: 'Man at The Drunken Dragon', status: 'wounded' } as never,
+    ]
+    expect(schema.safeParse(raw).success).toBe(false)
+
+    raw.entryUpdates.characterUpdates = [
+      { name: 'Accompanying Knight', changes: { status: 'wounded' } } as never,
+    ]
+    expect(schema.safeParse(raw).success).toBe(false)
+  })
+
   it('still rejects a wrongly typed variable, so salvage can drop that element alone', () => {
     const schema = buildExtendedClassificationSchema({ character: [health] }) as z.ZodType
     const bad = response()
@@ -176,14 +200,18 @@ describe('salvageClassification — a bad variable value', () => {
   it('keeps an update whose native changes survive the bad value', () => {
     const raw = response()
     raw.entryUpdates.characterUpdates = [
-      { name: 'Accompanying Knight', changes: { status: 'inactive', health: 'full' } } as never,
+      {
+        name: 'Accompanying Knight',
+        changes: { status: 'inactive', health: 'full', morale: 7 },
+      } as never,
     ]
 
-    const salvaged = salvageClassification(raw, { character: [health] })
+    const salvaged = salvageClassification(raw, { character: [health, morale] })
 
     const [update] = salvaged!.entryUpdates.characterUpdates
     expect(update.name).toBe('Accompanying Knight')
     expect(update.changes.status).toBe('inactive')
+    expect((update.changes as Record<string, unknown>).morale).toBe(7)
     expect(update.changes).not.toHaveProperty('health')
   })
 

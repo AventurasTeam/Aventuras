@@ -177,6 +177,33 @@ interface ElementSchemas {
 }
 
 /**
+ * Drop the variables whose name is already a field of the entity, or return null if that
+ * leaves nothing.
+ *
+ * Nothing stops a pack author from calling a variable `status` or `description` — the name
+ * rule is only `^[a-z_][a-z0-9_]*$` — and `.extend()` lets the last shape win, so the
+ * variable would quietly replace the native field's schema. The classifier would then be
+ * told that `status` means the pack's enum, and `applyClassificationResult` would write
+ * whatever came back into the native column: `changes.status` is applied verbatim.
+ *
+ * The native contract wins because it is the one the rest of the app is written against.
+ * The variable is not lost — it is still described in the prompt by
+ * `buildCustomVarInstructions`, and `extractInlineCustomVars` still stores a value under it —
+ * it just no longer decides what the native field means.
+ */
+function withoutNativeFields(
+  varsShape: z.ZodRawShape,
+  native: z.ZodObject<z.ZodRawShape>,
+): Record<string, z.ZodType> | null {
+  const nativeFields = new Set(Object.keys(native.shape))
+  const kept: Record<string, z.ZodType> = {}
+  for (const [name, schema] of Object.entries(varsShape)) {
+    if (!nativeFields.has(name)) kept[name] = schema as z.ZodType
+  }
+  return Object.keys(kept).length > 0 ? kept : null
+}
+
+/**
  * Build the per-array *element* schema for every `entryUpdates` field, with runtime
  * variable fields added INLINE (not nested under a `customVars` object):
  *
@@ -198,36 +225,31 @@ function buildEntryUpdateElementSchemas(
     const varsShape = vars ? buildEntityVarsShape(vars) : null
     const baseUpdate = BASE_UPDATE_SCHEMAS[entityType]
     const baseNew = BASE_NEW_SCHEMAS[entityType]
-
-    if (!varsShape) {
-      elements[fields.updates] = {
-        full: baseUpdate,
-        native: baseUpdate,
-        vars: null,
-        varsAt: 'changes',
-      }
-      elements[fields.new] = { full: baseNew, native: baseNew, vars: null, varsAt: 'root' }
-      continue
-    }
-
     const originalChanges = (baseUpdate.shape as Record<string, z.ZodTypeAny>).changes
-    const extendedUpdate =
-      originalChanges instanceof z.ZodObject
-        ? baseUpdate.extend({ changes: originalChanges.extend(varsShape) })
-        : baseUpdate
-    elements[fields.updates] = {
-      full: extendedUpdate,
-      native: baseUpdate,
-      // Nothing to put back if the update schema had no `changes` object to extend.
-      vars: extendedUpdate === baseUpdate ? null : (varsShape as Record<string, z.ZodType>),
-      varsAt: 'changes',
-    }
-    elements[fields.new] = {
-      full: baseNew.extend(varsShape),
-      native: baseNew,
-      vars: varsShape as Record<string, z.ZodType>,
-      varsAt: 'root',
-    }
+
+    // Each container keeps its own surviving shape: `status` is a native field on an update's
+    // `changes` but not on a new entity, so the same variable can be legal in one and not the
+    // other.
+    const newVars = varsShape ? withoutNativeFields(varsShape, baseNew) : null
+    const changesVars =
+      varsShape && originalChanges instanceof z.ZodObject
+        ? withoutNativeFields(varsShape, originalChanges)
+        : null
+
+    elements[fields.updates] = changesVars
+      ? {
+          full: baseUpdate.extend({
+            changes: (originalChanges as z.ZodObject<z.ZodRawShape>).extend(changesVars),
+          }),
+          native: baseUpdate,
+          vars: changesVars,
+          varsAt: 'changes',
+        }
+      : { full: baseUpdate, native: baseUpdate, vars: null, varsAt: 'changes' }
+
+    elements[fields.new] = newVars
+      ? { full: baseNew.extend(newVars), native: baseNew, vars: newVars, varsAt: 'root' }
+      : { full: baseNew, native: baseNew, vars: null, varsAt: 'root' }
   }
 
   return elements
