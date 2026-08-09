@@ -73,8 +73,10 @@ transaction as the ranker output:
    budget-fill selects.
 3. **Capture writer** assembles a record from in-flight ranker state
    and writes a `probe_captures` row in the same transaction.
-4. If the per-story FIFO cap is hit, oldest capture for the branch
-   is dropped in the same transaction.
+4. If the per-story FIFO cap is hit, the oldest capture for the
+   **story** — across all its branches, per
+   [Eviction](#eviction--fifo-at-100-captures-per-story) — is dropped
+   in the same transaction.
 5. Turn proceeds to generation.
 
 A failed retrieval pass (embedder unavailable, empty pool, vec0
@@ -86,17 +88,27 @@ the failed turn would be the worst possible UX.
 
 Per capture:
 
-- **Identity.** `branch_id`, `target_entry_id` (the entry whose
-  retrieval this drove), chapter pointer, `captured_at`,
-  `capture_mode = 'light' | 'deep'`, `embedding_model_id` active at
-  capture.
-- **Params snapshot.** Full block of every retrieval-tunable knob
-  (per-type `λ`, `λ_div`, `kw_boost`, `τ_revive`, `w_action`,
-  `w_digest`, `w_prose`, `min_score_threshold`, `chapter_boost`
-  magnitude, per-type budgets, `fullChapterInBuffer`,
-  `partialChapterBuffer`, `protectedBuffer`). Frozen to
-  capture-time values; the
-  simulator diffs against current story params at inspect time.
+- **Identity.** `capture_version`, `branch_id`, `target_entry_id`
+  (the entry whose retrieval this drove), `chapter_id`,
+  `captured_at`, `capture_mode = 'light' | 'deep'`,
+  `embedding_model_id` active at capture. The version is bumped
+  whenever a captured field's shape or meaning changes, so a decode
+  warns rather than silently misreading an older payload as the
+  current type.
+- **Tokenizer identity.** `tokenizer: { encoding, version }` — which
+  vocabulary priced `tokens_estimated`. A replay under a different
+  tokenizer can then warn instead of diverging quietly.
+- **Params snapshot.** `params.ranker` embeds the ranker's own
+  `RankerParams` **verbatim**, in its declared camelCase: `weights`,
+  per-type `lambda`, per-type `pinBoost`, `lambdaDiv`, `kwBoost`,
+  `tauRevive`, `minScoreThreshold`, `chapterBoost`, `preFilterTopN`,
+  `typeOverhead`. Beside it sit the story-settings knobs the ranker
+  does not own — `retrievalBudgets`, `fullChapterInBuffer`,
+  `partialChapterBuffer`, `protectedBuffer`. Embedding the type
+  rather than restating its fields is what makes a newly added
+  tunable a type error here instead of a silently absent capture
+  field. Frozen to capture-time values; the simulator diffs against
+  current story params at inspect time.
 - **Three queries.** Q1 / Q2 / Q3 text content, plus per-query
   metadata: token count, source pointer (which entry / structural
   fields produced it), and for Q3 the per-sentence selection scores
@@ -107,18 +119,32 @@ Per capture:
   (entities / lore / happenings / threads / chapters), one row per
   candidate that entered the type's ranker pool:
   - Candidate id (`target_kind`, `target_id`).
-  - Display snapshot — denormalized name / title / brief text at
-    capture time. Survives row deletion / edit so the probe stays
-    readable indefinitely.
-  - `sim_q1`, `sim_q2`, `sim_q3` — per-query cosine similarities.
+  - `display_name` — denormalized name / title at capture time.
+    Survives row deletion / edit so the probe stays readable
+    indefinitely.
+  - `display_text` — the exact string the ranker priced. **Null on a
+    pre-filtered row**, which the simulator can never seat.
+  - `sim_q1`, `sim_q2`, `sim_q3` — per-query cosine similarities,
+    each **null where that query produced no vector**, a state a `0`
+    cannot express. Presence is read off these three and nowhere
+    else.
   - `sim_blend` — weighted-avg blend at capture-time weights.
-  - `recency_factor`, `pin_signal`, `kw_boost_value`,
+  - `recency_factor`, `pin_signal`, `chapters_old`, `kw_boost_value`,
     `chapter_boost_applied` (bool), `bypass_triggered` (bool).
+    `chapters_old` is stored clamped exactly as the decay exponent
+    read it, so a `λ` or `pin_signal` replay recomputes the factor
+    instead of trying to invert it.
+  - `common_knowledge` (bool) — happenings only, absent on the other
+    four types. The ranker forces `pin_signal = 0` and
+    `recency_factor = 1` on those rows, which the captured pair alone
+    cannot tell apart from an unpinned recent one.
   - `final_score`, `mmr_rank` (or null if pre-filtered out).
   - `selected` (bool), `drop_reason` (enum):
     `pre_filtered | below_threshold | over_budget |`
     `candidate_too_large | not_dropped`.
-  - `tokens_estimated`.
+  - `tokens_estimated` — **null on a pre-filtered row**, because
+    tokenization is deferred past the pre-filter cut (see
+    [`retrieval.md → Token estimation`](./retrieval.md#token-estimation)).
   - `embedding_stale` flag at capture time
     (per [`retrieval.md → Compute lifecycle`](./retrieval.md#compute-lifecycle)).
 - **Pool funnel summary per type.** `pool_size`,
@@ -143,8 +169,10 @@ Adds two things to a light capture:
 - The three query vectors.
 - The per-row vector for every candidate in the pool.
 
-Storage cost is roughly 100x light-mode at typical pool sizes. Lets
-the simulator re-tune `λ_div` (MMR diversity) — see
+Storage cost is 40-80x light mode gzipped — measured at dim 384 and
+dim 768 respectively on the fixture under
+[Capture cost](#capture-cost), whose write cost is the sharper
+constraint. Lets the simulator re-tune `λ_div` (MMR diversity) — see
 [Simulatable parameters](#simulatable-parameters). Toggled on a
 per-capture basis from the reader's per-turn probe affordance
 **before turn-fire**; can't be retrofitted onto a light capture.
@@ -155,7 +183,7 @@ Stored in a new `probe_captures` table:
 
 ```sql
 probe_captures {
-  branch_id TEXT, id TEXT,                    -- composite PK; forks with branch
+  branch_id TEXT, id TEXT,                    -- composite PK; branch-scoped, NOT copied on fork
   target_entry_id TEXT,                       -- FK-less story_entries.id (branch-scoped, resolved via (branch_id, id)); the entry whose retrieval this drove
   captured_at INTEGER,
   capture_mode TEXT,                          -- 'light' | 'deep'
@@ -170,7 +198,8 @@ probe_captures {
 }
 ```
 
-Branch-scoped, branched (forks branch-scoped data normally).
+Branch-scoped, but the only branch-scoped table a fork skips — see
+[`data-model.md` → Branch-copy manifest](../data-model.md#branch-model).
 **Captures are NOT delta-logged** — they're diagnostic, not story
 state. A delta-logged capture would mean rollback unwinds probe
 data, which is the opposite of what a tuner wants.
@@ -202,15 +231,40 @@ hundreds of MB and are expected to be used sparingly.
 ### Capture cost
 
 Capture write is in-transaction with the ranker output, so it adds
-to per-turn latency. Light mode adds:
+to per-turn latency. Measured on the
+[cost-budget](./retrieval.md#per-turn-cost-budget) fixture — a
+1067-row pool at 6000 happenings / 60 chapters, desktop Node 24,
+median of seven warm builds:
 
-- Serialization of in-flight ranker state to JSON: <5 ms typical.
-- Gzip compression: <5 ms typical.
-- One row insert, plus (potentially) one row delete on FIFO eviction.
+| Stage                              | light  | deep, dim 384 | deep, dim 768 |
+| ---------------------------------- | ------ | ------------- | ------------- |
+| Payload assembly                   | ~1ms   | ~12ms         | ~25ms         |
+| `JSON.stringify` + UTF-8 encode    | ~1ms   | ~31ms         | ~63ms         |
+| Gzip                               | ~9ms   | ~295ms        | ~621ms        |
+| **Build and compress, end to end** | ~11ms  | ~340ms        | ~700ms        |
+| Payload, uncompressed              | ~660KB | ~9MB          | ~17MB         |
+| Payload, gzipped                   | ~95KB  | ~3.8MB        | ~7.5MB        |
 
-Deep mode adds vector serialization — for typical pool sizes
-(~hundreds of candidates) this is still <20 ms. Negligible relative
-to the surrounding generation latency.
+Plus one row insert, and one row delete when FIFO eviction fires.
+
+**Light mode is cheap; deep mode is not.** ~11 ms against a ~108 ms
+retrieval pass is the price of the default path, and assembly stays
+there because the only tokenization a capture pays for is the three
+query texts and the structural-floor rows — pool rows reuse
+`tokens_estimated` off the trace. The fixture's floor is 4 rows, so
+that stage is not stressed by these numbers; at
+[`retrieval.md`'s measured ~45-60 µs per row](./retrieval.md#token-estimation)
+a floor in the dozens still leaves assembly under 5 ms.
+
+Deep mode costs **~340 ms at dim 384 and ~700 ms at dim 768** on the
+same fixture, three to four times the entire retrieval pass, because
+it serializes a vector for every pool row — not just the seated ones —
+as JSON number arrays. It is synchronous, on the JS thread, inside
+the write transaction. Deep mode is per-capture opt-in and reachable
+only from a developer affordance today, so this bounds the
+simulator's design rather than any shipped path: the levers, if it
+ever needs to be cheaper, are storing vectors only for rows that
+survive the pre-filter, or a binary encoding instead of JSON floats.
 
 The capture is best-effort: if the write fails (disk full,
 constraint error), the turn proceeds without a capture and the
@@ -244,12 +298,8 @@ From a light capture:
 
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
   sims into a new `sim_blend`.
-- Per-type `λ` decay rates — re-compute `recency_factor` from
-  stored `chapters_old`. **The capture does not carry that field
-  yet** — neither `CandidateTrace` nor `CaptureCandidate` has it, only
-  the derived `recency_factor` — so this is aspirational until Slice
-  3.5 settles
-  [the capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
+- Per-type `λ` decay rates — re-compute `recency_factor` from stored
+  `chapters_old`, which every captured candidate carries.
 - `kw_boost` magnitude — re-scale stored `kw_boost_value`.
 - `τ_revive` — re-evaluate the bypass branch against stored
   `sim_blend`.
@@ -262,12 +312,11 @@ From a light capture:
   `sim_blend`, `recency_factor` and `pin_signal`. Needs no field the
   capture does not already carry.
 - `pin_signal` overrides — let the user simulate "what if I pin /
-  unpin this row?" by overriding `pin_signal` per-row. **Blocked on the
-  same gap as `λ`:** an override has to recompute `recency_factor`, and
-  the captured `(recency_factor, pin_signal)` pair determines the
+  unpin this row?" by overriding `pin_signal` per-row. Rests on the
+  same field `λ` does: an override has to recompute `recency_factor`,
+  and the captured `(recency_factor, pin_signal)` pair pins down the
   underlying age only while `pin_signal < 1` — at exactly 1 the factor
-  is 1 regardless of age. See
-  [Slice 3.5 → The capture contract](../implementation/milestones/03-memory-floor/slices/05-dev-probe.md#the-capture-contract--decide-these-together).
+  is 1 regardless of age. `chapters_old` is what closes that.
 
 Adds in a deep capture:
 
@@ -277,13 +326,19 @@ Adds in a deep capture:
 ### Non-simulatable parameters
 
 Even in deep mode, the simulator can't re-derive the candidate pool
-itself. The pool composition depends on:
+itself, nor the cut that decides which of it reaches MMR:
 
 - The structural floor (computed from current scene at capture).
 - Pool exclusions (common-knowledge happenings,
   pending / resolved / failed thread mode, same-name suppression
   per [edge-cases](./edge-cases.md#name-collision-and-disambiguation)).
 - Awareness-graph filter (POV characters in scene at capture).
+- `preFilterTopN` — re-slicing the top-N by raw score changes which
+  rows reach MMR and so its greedy pick order, which needs the
+  per-row vectors a light capture does not store. Raising it is out
+  of reach even in deep mode: a pre-filtered row carries
+  `display_text` and `tokens_estimated` as null, so an admitted row
+  has neither a text to re-price nor a cost to seat against a budget.
 
 These are captured-state, not parameter-state. The simulator
 operates on the pool that **was** there. Tuning that affects pool
