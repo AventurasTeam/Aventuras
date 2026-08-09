@@ -67,13 +67,19 @@ export function replayType(
   ])
 
   const pool: Candidate[] = rows.map((r) => {
+    // Downstream this surfaces as a cosine dimension mismatch naming neither row
+    // — and in a pool of one, where MMR takes no pairwise similarity at all, as
+    // nothing.
+    if (r.vector === undefined || r.vector.length === 0) {
+      throw new Error(`capture row ${r.target_id} carries no vector`)
+    }
     const base = {
       id: r.target_id,
       displayName: r.display_name,
       // Null only on a pre-filtered row, which the captured params never costed.
       renderedText: r.display_text ?? '',
       sims: [r.sim_q1, r.sim_q2, r.sim_q3] as const,
-      vector: Float32Array.from(r.vector ?? []),
+      vector: Float32Array.from(r.vector),
       chaptersOld: r.chapters_old,
       pinSignal: r.pin_signal,
       // score() reads only `.length > 0`, so a marker reproduces the boost exactly.
@@ -81,9 +87,8 @@ export function replayType(
       embeddingStale: r.embedding_stale,
     }
     if (r.target_kind !== 'happening') return { ...base, kind: r.target_kind }
-    // Defaulting instead would re-score the row as decaying and pinnable, the one
-    // absent field that diverges silently rather than failing the way a missing
-    // vector does.
+    // Defaulting instead would re-score the row as decaying and pinnable — a
+    // divergence no error marks, unlike the missing vector rejected above.
     if (r.common_knowledge === undefined) {
       throw new Error(`capture row ${r.target_id} carries no common_knowledge`)
     }

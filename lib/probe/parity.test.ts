@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { ProbeCapturePayload } from '@/lib/db'
 import {
   countTokens,
   rankPerType,
@@ -18,6 +19,8 @@ import { buildCapturePayload } from './payload'
 import { capturesForStoryQuery, decodeCapture } from './read'
 import { replayType } from './replay'
 import { writeProbeCapture } from './writer'
+
+type PoolRow = ProbeCapturePayload['pools']['happenings'][number]
 
 const unit = (...xs: number[]): Float32Array => {
   const n = Math.hypot(...xs)
@@ -588,6 +591,26 @@ describe('replayType', () => {
     }
 
     expect(() => replayType(stripped, 'happenings')).toThrow(/common_knowledge/)
+  })
+
+  // Named rather than left to cosine: a zero-length vector is neither unit-norm
+  // nor the same dimension as its neighbours, so the failure it does produce
+  // identifies no row — and a pool of one takes no pairwise similarity at all.
+  it.each<[string, (row: PoolRow) => PoolRow]>([
+    ['absent', ({ vector: _, ...rest }) => rest],
+    ['empty', (row) => ({ ...row, vector: [] })],
+  ])('refuses a deep-capture row whose vector is %s', async (_label, corrupt) => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const [first, ...rest] = payload.pools.happenings
+    const stripped = {
+      ...payload,
+      pools: { ...payload.pools, happenings: [corrupt(first), ...rest] },
+    }
+
+    expect(() => replayType(stripped, 'happenings')).toThrow(
+      new RegExp(`${first.target_id} carries no vector`),
+    )
   })
 
   it('refuses to price a row the retuned params promote out of the pre-filtered tail', async () => {
