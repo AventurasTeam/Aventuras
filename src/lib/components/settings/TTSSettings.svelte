@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
   import { Input } from '$lib/components/ui/input'
@@ -72,20 +74,31 @@
     supportsDialogueVoice(settings.systemServicesSettings.tts.provider),
   )
 
+  /**
+   * The voice fields accept free text on OpenAI-compatible endpoints, so a keystroke
+   * would otherwise rewrite the whole settings blob to SQLite. The store update stays
+   * immediate — only the write waits.
+   */
+  const { trigger: triggerVoiceSave, flush: flushVoiceSave } = createDebouncedSave(() =>
+    settings.saveSystemServicesSettings(),
+  )
+
+  onDestroy(() => flushVoiceSave())
+
   /** Store a voice both in the active slot and in its provider-specific memory,
    * so switching provider and back restores what was chosen there. */
   function setVoice(voice: string) {
     const tts = settings.systemServicesSettings.tts
     tts.voice = voice
     if (tts.providerVoices) tts.providerVoices[tts.provider] = voice
-    settings.saveSystemServicesSettings()
+    triggerVoiceSave()
   }
 
   function setDialogueVoice(voice: string) {
     const tts = settings.systemServicesSettings.tts
     tts.dialogueVoice = voice
     if (tts.providerDialogueVoices) tts.providerDialogueVoices[tts.provider] = voice
-    settings.saveSystemServicesSettings()
+    triggerVoiceSave()
   }
 
   const providers = [
@@ -344,6 +357,7 @@
 
     <!-- Narrator voice -->
     <TTSVoiceSelector
+      id="tts-narrator-voice"
       provider={settings.systemServicesSettings.tts.provider}
       value={settings.systemServicesSettings.tts.voice}
       label={settings.systemServicesSettings.tts.provider === 'google' ? 'Language' : 'Voice'}
@@ -361,12 +375,13 @@
       <div class="space-y-3 rounded-lg border p-3">
         <div class="flex items-center justify-between gap-3">
           <div>
-            <Label>Separate Dialogue Voice</Label>
+            <Label for="tts-dialogue-voice-enabled">Separate Dialogue Voice</Label>
             <p class="text-muted-foreground text-xs">
               Speak text inside quotation marks in a second voice
             </p>
           </div>
           <Switch
+            id="tts-dialogue-voice-enabled"
             checked={settings.systemServicesSettings.tts.dialogueVoiceEnabled}
             onCheckedChange={(v) => {
               settings.systemServicesSettings.tts.dialogueVoiceEnabled = v
@@ -377,6 +392,7 @@
 
         {#if settings.systemServicesSettings.tts.dialogueVoiceEnabled}
           <TTSVoiceSelector
+            id="tts-dialogue-voice"
             provider={settings.systemServicesSettings.tts.provider}
             value={settings.systemServicesSettings.tts.dialogueVoice}
             label="Dialogue Voice"

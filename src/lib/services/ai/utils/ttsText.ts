@@ -90,8 +90,12 @@ export interface TTSSegmentOptions {
   excludedCharacters: string
 }
 
-/** Anything a voice could actually pronounce: a letter or a digit, in any script. */
-const SPEAKABLE = /[\p{L}\p{N}]/u
+/**
+ * Anything a voice could actually pronounce: a letter or a digit, in any script.
+ * Shared with `TTSService`, which applies the same rule one level down at the chunk
+ * boundary — two spellings of it could disagree about what is worth a request.
+ */
+export const SPEAKABLE = /[\p{L}\p{N}]/u
 
 /**
  * Split already-sanitized text into the voiced segments to speak.

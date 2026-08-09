@@ -6,6 +6,7 @@
 
 import { PROVIDERS } from '../sdk/providers/config'
 import { corsFetch } from '$lib/services/discovery/utils'
+import { SPEAKABLE } from './ttsText'
 
 // Constants
 export const DEFAULT_SPEECH_RATE = 1.0
@@ -55,7 +56,7 @@ export interface TTSSegment {
 }
 
 /** One generation unit: a segment split down to what the provider accepts. */
-interface TTSChunk {
+export interface TTSChunk {
   text: string
   voice: string
 }
@@ -70,11 +71,11 @@ interface TTSChunk {
  * survives its retries and aborts playback of the whole entry — so the guard is worth
  * more than the round trip it saves.
  */
-function buildChunks(segments: TTSSegment[], maxChunkLength: number): TTSChunk[] {
+export function buildChunks(segments: TTSSegment[], maxChunkLength: number): TTSChunk[] {
   const chunks: TTSChunk[] = []
   for (const segment of segments) {
     for (const text of splitTextForTTS(segment.text, maxChunkLength)) {
-      if (!/[\p{L}\p{N}]/u.test(text)) continue
+      if (!SPEAKABLE.test(text)) continue
       chunks.push({ text, voice: segment.voice })
     }
   }
@@ -918,10 +919,17 @@ export class AITTSService {
    * Generate and play TTS audio
    */
   /**
-   * Play plain text in one voice, or pre-built segments in several.
-   *
-   * An explicit `voice` (the settings preview) always means a single voice: only
+   * Plain text becomes one segment in one voice; pre-built segments pass through.
+   * An explicit `voice` (the settings preview) always means a single voice — only
    * callers that pass segments opt into the narrator/dialogue split.
+   */
+  private toSegments(input: string | TTSSegment[], voice?: string): TTSSegment[] {
+    if (typeof input !== 'string') return input
+    return [{ text: input, voice: voice || this.settings?.voice || '' }]
+  }
+
+  /**
+   * Play plain text in one voice, or pre-built segments in several.
    */
   async generateAndPlay(
     input: string | TTSSegment[],
@@ -932,8 +940,7 @@ export class AITTSService {
       throw new Error('TTS service not ready')
     }
 
-    const segments: TTSSegment[] =
-      typeof input === 'string' ? [{ text: input, voice: voice || this.settings.voice }] : input
+    const segments = this.toSegments(input, voice)
 
     // Speed is always applied client-side via playbackRate since not all
     // OpenAI-compatible servers (e.g. Kokoro) honor the speed parameter
@@ -957,10 +964,7 @@ export class AITTSService {
       throw new Error('TTS service not ready')
     }
 
-    const segments: TTSSegment[] =
-      typeof input === 'string' ? [{ text: input, voice: voice || this.settings.voice }] : input
-
-    return this.provider.generateSpeech(segments)
+    return this.provider.generateSpeech(this.toSegments(input, voice))
   }
 
   /**

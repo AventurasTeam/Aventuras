@@ -6,6 +6,7 @@ import {
   stripExcludedCharacters,
   supportsDialogueVoice,
 } from './ttsText'
+import { buildChunks } from './TTSService'
 
 const textSettings = {
   excludedCharacters: '*, #, _, ~',
@@ -137,5 +138,29 @@ describe('prepareTTSSegments', () => {
   it('returns nothing for text that is entirely excluded', () => {
     expect(prepareTTSSegments('***', options)).toEqual([])
     expect(prepareTTSSegments('', options)).toEqual([])
+  })
+})
+
+describe('buildChunks', () => {
+  it('keeps the segment voice on every chunk a long quote is split into', () => {
+    // A speech longer than the provider's limit is split into several requests; each
+    // one has to carry the dialogue voice, or a long line switches back to the
+    // narrator part-way through.
+    const longQuote = `"${'She spoke at length about the ruins. '.repeat(20)}"`
+    const segments = prepareTTSSegments(`He waited. ${longQuote} Then silence.`, {
+      narratorVoice: 'alloy',
+      dialogueVoice: 'nova',
+      excludedCharacters: '',
+    })
+
+    const chunks = buildChunks(segments, 100)
+
+    expect(chunks.length).toBeGreaterThan(5)
+    expect(chunks.filter((c) => c.voice === 'nova').length).toBeGreaterThan(3)
+    expect(new Set(chunks.map((c) => c.voice))).toEqual(new Set(['alloy', 'nova']))
+  })
+
+  it('drops a chunk with nothing pronounceable in it', () => {
+    expect(buildChunks([{ text: '...', voice: 'alloy' }], 100)).toEqual([])
   })
 })

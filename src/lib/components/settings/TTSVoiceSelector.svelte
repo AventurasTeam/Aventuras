@@ -20,6 +20,8 @@
   }
 
   interface Props {
+    /** Ties the label to whichever control this provider renders. */
+    id: string
     provider: 'openai' | 'google' | 'microsoft'
     value: string
     onChange: (voice: string) => void
@@ -32,6 +34,7 @@
   }
 
   let {
+    id,
     provider,
     value,
     onChange,
@@ -44,13 +47,14 @@
 </script>
 
 <div>
-  <Label class="mb-1 block">{label}</Label>
+  <Label for={id} class="mb-1 block">{label}</Label>
   {#if description}
     <p class="text-muted-foreground mb-2 text-xs">{description}</p>
   {/if}
 
   {#if provider === 'openai'}
     <Input
+      {id}
       type="text"
       class="w-full"
       {value}
@@ -69,7 +73,7 @@
       </div>
     {:else}
       <Select.Root type="single" {value} onValueChange={(v) => onChange(v)}>
-        <Select.Trigger class="h-10 w-full">
+        <Select.Trigger {id} class="h-10 w-full">
           {systemVoices.find((v) => v.name === value)?.name ?? 'Select system voice'}
         </Select.Trigger>
         <Select.Content>
