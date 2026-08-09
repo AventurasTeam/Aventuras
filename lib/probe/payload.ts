@@ -31,8 +31,6 @@ export type CapturePayloadInput = {
     protectedBuffer: number
   }
   outcome: RetrievalOutcome
-  /** Deep mode only; Q1/Q2/Q3 order, null where a query produced no vector — matches distributeQueryVectors' return shape. */
-  queryVectors?: readonly [Float32Array | null, Float32Array | null, Float32Array | null]
 }
 
 const candidateOf = (
@@ -84,35 +82,25 @@ const funnelOf = (bundle: RankedType | undefined): ProbeCapturePayload['funnels'
         type_budget: bundle.funnel.typeBudget,
       }
 
-const queryOf = (
-  q: QuerySpec,
-  mode: 'light' | 'deep',
-  vector: Float32Array | null | undefined,
-) => ({
+const queryOf = (q: QuerySpec) => ({
   text: q.text,
   token_count: countTokens(q.text),
   source: q.source,
   ...(q.sentenceScores ? { sentence_scores: [...q.sentenceScores] } : {}),
-  ...(mode === 'deep' && vector ? { vector: [...vector] } : {}),
 })
 
-const queriesOf = (
-  stack: QueryStack | null,
-  mode: 'light' | 'deep',
-  vectors: readonly [Float32Array | null, Float32Array | null, Float32Array | null] | undefined,
-): ProbeCapturePayload['queries'] => {
+// No query vector in either mode: λ_div — the one thing deep mode exists for —
+// needs candidate-vs-candidate cosines, and every other simulation re-blends
+// the per-row sim_q1..3 (probe.md → Deep mode).
+const queriesOf = (stack: QueryStack | null): ProbeCapturePayload['queries'] => {
   if (stack === null) {
     return [
-      queryOf({ text: '', source: 'user_action' }, mode, null),
-      queryOf({ text: '', source: 'structural_digest' }, mode, null),
-      queryOf({ text: '', source: 'prose_extract' }, mode, null),
+      queryOf({ text: '', source: 'user_action' }),
+      queryOf({ text: '', source: 'structural_digest' }),
+      queryOf({ text: '', source: 'prose_extract' }),
     ]
   }
-  return [
-    queryOf(stack.q1, mode, vectors?.[0]),
-    queryOf(stack.q2, mode, vectors?.[1]),
-    queryOf(stack.q3, mode, vectors?.[2]),
-  ]
+  return [queryOf(stack.q1), queryOf(stack.q2), queryOf(stack.q3)]
 }
 
 // run.ts's lines() isn't exported from lib/retrieval; reimplemented here so a
@@ -185,7 +173,7 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
       ...input.settings,
       retrievalBudgets: { ...input.settings.retrievalBudgets },
     },
-    queries: queriesOf(stack, mode, input.queryVectors),
+    queries: queriesOf(stack),
     pools: {
       entities: poolOf(bundles.entities, mode),
       lore: poolOf(bundles.lore, mode),

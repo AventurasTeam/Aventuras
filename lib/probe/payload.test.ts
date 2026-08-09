@@ -103,13 +103,6 @@ describe('buildCapturePayload', () => {
       settings,
       params: RANKER_DEFAULTS,
       outcome: successOutcome(),
-      // Supplied even in light mode: proves the gate is capture_mode, not
-      // merely "was a vector available to attach".
-      queryVectors: [
-        Float32Array.from([1, 0]),
-        Float32Array.from([0, 1]),
-        Float32Array.from([1, 0]),
-      ],
     })
 
     expect(Object.keys(payload).sort()).toEqual([
@@ -131,7 +124,6 @@ describe('buildCapturePayload', () => {
     expect(payload.params.ranker).toEqual(RANKER_DEFAULTS)
     expect(payload.tokenizer.encoding).toBe('o200k_base')
     expect(payload.pools.lore[0].vector).toBeUndefined()
-    expect(payload.queries[0].vector).toBeUndefined()
   })
 
   it('stamps the capture identity fields from input, not swapped', () => {
@@ -264,22 +256,17 @@ describe('buildCapturePayload', () => {
     })
   })
 
-  it('stores query and candidate vectors only in deep mode', () => {
+  it('stores candidate vectors in deep mode, and no query vector in either', () => {
     const payload = buildCapturePayload({
       ...identity,
       mode: 'deep',
       settings,
       params: RANKER_DEFAULTS,
       outcome: successOutcome(),
-      queryVectors: [
-        Float32Array.from([1, 0]),
-        Float32Array.from([0, 1]),
-        Float32Array.from([1, 0]),
-      ],
     })
 
     expect(payload.pools.lore[0].vector).toEqual([1, 0])
-    expect(payload.queries[0].vector).toEqual([1, 0])
+    expect(payload.queries.every((q) => !('vector' in q))).toBe(true)
   })
 
   it('sources a deep-mode candidate vector from the pool, not the selected set', () => {
@@ -305,21 +292,6 @@ describe('buildCapturePayload', () => {
 
     expect(payload.pools.lore[0].selected).toBe(false)
     expect(payload.pools.lore[0].drop_reason).toBe('candidate_too_large')
-    expect(payload.pools.lore[0].vector).toEqual([1, 0])
-  })
-
-  it('degrades cleanly in deep mode when queryVectors is not supplied', () => {
-    const payload = buildCapturePayload({
-      ...identity,
-      mode: 'deep',
-      settings,
-      params: RANKER_DEFAULTS,
-      outcome: successOutcome(),
-    })
-
-    expect(payload.queries.every((q) => q.vector === undefined)).toBe(true)
-    // Candidate vectors are independent of queryVectors — they come from the
-    // pool, not the query stack — so they still populate.
     expect(payload.pools.lore[0].vector).toEqual([1, 0])
   })
 

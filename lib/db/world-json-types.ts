@@ -75,7 +75,6 @@ type CaptureQuery = {
   token_count: number
   source: QuerySpec['source']
   sentence_scores?: number[]
-  vector?: number[]
 }
 
 /** A new ranker tunable must be a type error here, not a silently absent capture field. */

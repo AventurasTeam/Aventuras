@@ -114,7 +114,8 @@ Per capture:
   fields produced it), and for Q3 the per-sentence selection scores
   from the
   [heuristic prose extract](./retrieval.md#q3-heuristic-prose-extract).
-  Vectors **NOT** stored in light mode.
+  Query **vectors are never stored**, in either mode — see
+  [Deep mode](#deep-mode-per-capture-opt-in).
 - **Per-type candidate pool.** For each type
   (entities / lore / happenings / threads / chapters), one row per
   candidate that entered the type's ranker pool:
@@ -164,10 +165,13 @@ Per capture:
 
 ### Deep mode (per-capture opt-in)
 
-Adds two things to a light capture:
+Adds one thing to a light capture: the per-row vector for every
+candidate in the pool.
 
-- The three query vectors.
-- The per-row vector for every candidate in the pool.
+Candidate vectors alone are sufficient. `λ_div` — the one thing deep
+mode exists for — needs candidate-vs-candidate cosines, and every
+other simulation re-blends the per-row `sim_q1..3` the capture
+already stores, so a query vector would never be read.
 
 Storage cost is 40-80x light mode gzipped — measured at dim 384 and
 dim 768 respectively on the fixture under

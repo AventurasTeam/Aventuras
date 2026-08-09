@@ -63,7 +63,7 @@ trustworthy.
   stay readable when either flips off; per-capture delete and
   clear-all-for-story actions (direct deletes, not delta-logged).
 - **Deep-mode hook:** the capture writer accepts a
-  per-capture deep flag and stores query + candidate vectors when
+  per-capture deep flag and stores candidate vectors when
   set. The reader-side opt-in checkbox ships with the M7.5 surface;
   in M3 the flag is reachable from the dev affordance only.
 - **Developer inspection affordance:** a minimal dev-only surface
@@ -302,6 +302,14 @@ each answer constrains the next.
 
 ### Other resolved decisions
 
+- **Deep mode stores candidate vectors only — the query vectors the
+  scope bullet and canon both promised are not captured, and canon was
+  amended rather than the code.** Nothing on probe.md's simulatable
+  list reads one: `λ_div` needs candidate-vs-candidate cosines, and a
+  re-blend reads the per-row `sim_q1..3` the capture already stores.
+  Threading them would mean widening M3.4's `RetrievalOutcome` — they
+  are a local inside `runRetrievalPass` — for a dev-only, deep-only
+  field with no consumer. `CaptureQuery.vector` went with the input.
 - **The failure arm is widened with a `partial` bag** rather than the
   writer reaching into the pass. `runRetrieval` accumulates into a
   shared state object and the `VectorInvariantError` catch relocated
