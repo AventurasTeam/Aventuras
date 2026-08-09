@@ -27,7 +27,14 @@ export function compressPayload(payload: ProbeCapturePayload): CompressedPayload
   } catch (error) {
     throw new CaptureEncodeError(error)
   }
-  return { bytes: gzipSync(json), uncompressedSize: json.length }
+  // Kept separate from the encode try above, mirroring the decompress side: a
+  // deep payload large enough to fail fflate's allocation is a different fault
+  // from an unserializable one, and only the cause distinguishes them.
+  try {
+    return { bytes: gzipSync(json), uncompressedSize: json.length }
+  } catch (error) {
+    throw new CaptureEncodeError(error)
+  }
 }
 
 export function decompressPayload(bytes: Uint8Array): unknown {
