@@ -118,6 +118,9 @@ const nameWithDescription = (name: string, description: string | null): string =
 // "introducible" the way a pooled row can. Only the memory-blocks.ts "always"
 // rows (structuralPinnedEntities/Lore/Threads) reuse the ranker's own
 // entity/lore/thread projections, ENTITY_FRAMING included.
+// The three entity branches omit the `[id]` affix the templates add when
+// piggybackFires, which is decided after retrieval and so unknowable here —
+// the floor cost is a lower bound on those turns (probe.md → Structural floor).
 const sceneEntityText = (e: Pick<EntityRow, 'name' | 'description'>): string =>
   lines(`## ${e.name}`, e.description)
 

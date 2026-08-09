@@ -1,13 +1,22 @@
 import { describe, expect, it } from 'vitest'
 
 import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
+import { MEMORY_BLOCKS } from '@/lib/prompts/bundled/memory-blocks'
+import { PER_TURN_NARRATIVE } from '@/lib/prompts/bundled/per-turn'
+import { STATE_EMISSION } from '@/lib/prompts/bundled/state-emission'
+import { createEngine } from '@/lib/prompts/engine'
+import { MACRO_IDS } from '@/lib/prompts/ids'
+import type { Pack } from '@/lib/prompts/types'
 import {
   buildStructuralFloor,
   countTokens,
   rankPerType,
   RANKER_DEFAULTS,
   TOKENIZER_IDENTITY,
+  type EntityRow,
+  type LoreRow,
   type RetrievalType,
+  type ThreadRow,
 } from '@/lib/retrieval'
 import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 
@@ -94,6 +103,85 @@ const knnFailureOutcome = () =>
     { reason: 'call', detail: 'KNN blew up', staleCount: null },
     { queries: queryStack(), bundles: { chapters: chapterBundle() } },
   )
+
+const FLOOR_ENTITIES: EntityRow[] = [
+  {
+    id: 'e_scene',
+    kind: 'character',
+    status: 'active',
+    injectionMode: 'auto',
+    name: 'Mira',
+    description: 'a courier',
+  },
+  {
+    id: 'e_loc',
+    kind: 'location',
+    status: 'active',
+    injectionMode: 'auto',
+    name: 'The drowned archive',
+    description: 'half-flooded stacks',
+  },
+  {
+    id: 'e_always',
+    kind: 'character',
+    status: 'retired',
+    injectionMode: 'always',
+    name: 'The Warden',
+    description: 'a ghost who still audits the ledgers',
+  },
+]
+
+const FLOOR_LORE: LoreRow[] = [
+  {
+    id: 'l_always',
+    title: 'The Flood Accord',
+    body: 'Every archive keeps one drowned shelf.',
+    injectionMode: 'always',
+    priority: 50,
+  },
+]
+
+const FLOOR_THREADS: ThreadRow[] = [
+  {
+    id: 't_active',
+    status: 'active',
+    injectionMode: 'auto',
+    title: 'Find the missing ledger',
+    description: 'Mira needs it before the tide returns',
+  },
+  {
+    id: 't_always',
+    status: 'pending',
+    injectionMode: 'always',
+    title: "The Warden's Contract",
+    // Long enough to land on a token count distinct from every other branch —
+    // active_thread and the original wording both priced to 13, which would
+    // have let the two branches' formulas swap unnoticed.
+    description: 'a debt owed across three generations',
+  },
+]
+
+// The exact string each floor branch renders, shared by the payload assertion
+// and by the drift check that renders the real bundled templates. Every count
+// is distinct from every other's — a shared value would hide one branch's
+// formula silently taking another's.
+const FLOOR_TEXTS = {
+  sceneEntity: '## Mira\na courier',
+  currentLocation: 'The drowned archive: half-flooded stacks',
+  activeThread: 'Find the missing ledger\nMira needs it before the tide returns',
+  alwaysEntity: 'The Warden: a ghost who still audits the ledgers',
+  alwaysLore: 'The Flood Accord\nEvery archive keeps one drowned shelf.',
+  alwaysThread: "The Warden's Contract (pending)\na debt owed across three generations",
+}
+
+const floorFixture = () =>
+  buildStructuralFloor({
+    entities: FLOOR_ENTITIES,
+    lore: FLOOR_LORE,
+    threads: FLOOR_THREADS,
+    sceneEntityIds: ['e_scene'],
+    currentLocationId: 'e_loc',
+  })
 
 describe('buildCapturePayload', () => {
   it('carries the documented light-mode field inventory', () => {
@@ -343,113 +431,119 @@ describe('buildCapturePayload', () => {
   })
 
   it('emits one structural-floor row per seated entity, location, thread and always-row', () => {
-    const floor = buildStructuralFloor({
-      entities: [
-        {
-          id: 'e_scene',
-          kind: 'character',
-          status: 'active',
-          injectionMode: 'auto',
-          name: 'Mira',
-          description: 'a courier',
-        },
-        {
-          id: 'e_loc',
-          kind: 'location',
-          status: 'active',
-          injectionMode: 'auto',
-          name: 'The drowned archive',
-          description: 'half-flooded stacks',
-        },
-        {
-          id: 'e_always',
-          kind: 'character',
-          status: 'retired',
-          injectionMode: 'always',
-          name: 'The Warden',
-          description: 'a ghost who still audits the ledgers',
-        },
-      ],
-      lore: [
-        {
-          id: 'l_always',
-          title: 'The Flood Accord',
-          body: 'Every archive keeps one drowned shelf.',
-          injectionMode: 'always',
-          priority: 50,
-        },
-      ],
-      threads: [
-        {
-          id: 't_active',
-          status: 'active',
-          injectionMode: 'auto',
-          title: 'Find the missing ledger',
-          description: 'Mira needs it before the tide returns',
-        },
-        {
-          id: 't_always',
-          status: 'pending',
-          injectionMode: 'always',
-          title: "The Warden's Contract",
-          // Long enough to land on a token count distinct from every other
-          // branch below — active_thread and the original wording both priced
-          // to 13, which would have let the two branches' formulas swap unnoticed.
-          description: 'a debt owed across three generations',
-        },
-      ],
-      sceneEntityIds: ['e_scene'],
-      currentLocationId: 'e_loc',
-    })
-
     const payload = buildCapturePayload({
       ...identity,
       mode: 'light',
       settings,
       params: RANKER_DEFAULTS,
-      outcome: retrievalSuccess({ floor }),
+      outcome: retrievalSuccess({ floor: floorFixture() }),
     })
 
-    // Each row's expected text mirrors the template that actually renders it —
-    // per-turn.ts for the in-scene/current-location rows (no framing, no
-    // status: a floor-seated row is present, never "elsewhere"), memory-blocks.ts
-    // for active threads (title/description, no status) and for the three
-    // "always" rows (which do reuse the ranker's own entity/lore/thread
-    // projections). Priced through the real tokenizer as an independent oracle,
-    // and each branch's token count is distinct from every other's — a shared
-    // value would hide one branch's formula silently taking another's.
+    // Priced through the real tokenizer as an independent oracle; the strings
+    // themselves are pinned against the bundled templates below.
     expect(payload.structural_floor).toEqual([
-      { target_kind: 'entity', target_id: 'e_scene', tokens: countTokens('## Mira\na courier') },
+      {
+        target_kind: 'entity',
+        target_id: 'e_scene',
+        tokens: countTokens(FLOOR_TEXTS.sceneEntity),
+      },
       {
         target_kind: 'entity',
         target_id: 'e_loc',
-        tokens: countTokens('The drowned archive: half-flooded stacks'),
+        tokens: countTokens(FLOOR_TEXTS.currentLocation),
       },
       {
         target_kind: 'thread',
         target_id: 't_active',
-        tokens: countTokens('Find the missing ledger\nMira needs it before the tide returns'),
+        tokens: countTokens(FLOOR_TEXTS.activeThread),
       },
       {
         target_kind: 'entity',
         target_id: 'e_always',
-        tokens: countTokens('The Warden: a ghost who still audits the ledgers'),
+        tokens: countTokens(FLOOR_TEXTS.alwaysEntity),
       },
       {
         target_kind: 'lore',
         target_id: 'l_always',
-        tokens: countTokens('The Flood Accord\nEvery archive keeps one drowned shelf.'),
+        tokens: countTokens(FLOOR_TEXTS.alwaysLore),
       },
       {
         target_kind: 'thread',
         target_id: 't_always',
-        tokens: countTokens(
-          "The Warden's Contract (pending)\na debt owed across three generations",
-        ),
+        tokens: countTokens(FLOOR_TEXTS.alwaysThread),
       },
     ])
 
     const tokenCounts = payload.structural_floor.map((r) => r.tokens)
     expect(new Set(tokenCounts).size).toBe(tokenCounts.length)
+  })
+})
+
+// payload.ts reimplements six Liquid render formulas by hand, so the assertion
+// above alone pins them only against themselves. Rendering the real bundled
+// templates over the same floor is what makes template drift fail a test.
+function renderFloor(piggybackFires: boolean): string {
+  const floor = floorFixture()
+  const pack: Pack = {
+    templates: { t: { group: 'generationContext', source: PER_TURN_NARRATIVE } },
+    macros: {
+      [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },
+      [MACRO_IDS.outputFormatNarrative]: { group: 'staticContent', source: 'FMT' },
+      [MACRO_IDS.stateEmission]: { group: 'staticContent', source: STATE_EMISSION },
+    },
+  }
+  return createEngine(pack).renderFileSync('t', {
+    definition: { mode: 'adventure', genre: { promptBody: '' }, tone: { promptBody: '' } },
+    entries: [],
+    entities: FLOOR_ENTITIES,
+    sceneEntities: ['e_scene'],
+    structuralLocation: floor.currentLocation,
+    structuralActiveThreads: floor.activeThreads,
+    structuralPinnedEntities: floor.alwaysEntities,
+    structuralPinnedLore: floor.alwaysLore,
+    structuralPinnedThreads: floor.alwaysThreads,
+    retrievedEntities: [],
+    retrievedLore: [],
+    retrievedHappenings: [],
+    retrievedThreads: [],
+    retrievedChapters: [],
+    locationIds: [],
+    piggybackFires,
+  }) as string
+}
+
+describe('structural-floor formulas match the templates that render them', () => {
+  it.each(Object.entries(FLOOR_TEXTS))('renders the %s row verbatim', (_branch, text) => {
+    expect(renderFloor(false)).toContain(text)
+  })
+
+  // The gap probe.md → Structural floor records: piggyback firing is decided
+  // after retrieval, so a capture cannot know it, and the three entity rows
+  // below are priced without the id affix a piggyback turn adds.
+  it('undercounts the three entity rows on a piggyback turn', () => {
+    const rendered = renderFloor(true)
+    const payload = buildCapturePayload({
+      ...identity,
+      mode: 'light',
+      settings,
+      params: RANKER_DEFAULTS,
+      outcome: retrievalSuccess({ floor: floorFixture() }),
+    })
+    const tokensOf = (id: string) =>
+      payload.structural_floor.find((r) => r.target_id === id)?.tokens
+
+    for (const [id, affixed] of [
+      ['e_scene', '## Mira [e_scene]\na courier'],
+      ['e_loc', '[e_loc] The drowned archive: half-flooded stacks'],
+      ['e_always', '[e_always] The Warden: a ghost who still audits the ledgers'],
+    ]) {
+      expect(rendered).toContain(affixed)
+      expect(tokensOf(id!)).toBeLessThan(countTokens(affixed!))
+    }
+
+    // The three non-entity branches carry no affix, so they stay exact.
+    expect(rendered).toContain(FLOOR_TEXTS.activeThread)
+    expect(rendered).toContain(FLOOR_TEXTS.alwaysLore)
+    expect(rendered).toContain(FLOOR_TEXTS.alwaysThread)
   })
 })

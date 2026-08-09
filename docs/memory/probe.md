@@ -156,7 +156,11 @@ Per capture:
   per the mode-dependent rule + protected-buffer spillover,
   active+in-scene entities, their location, active threads,
   `injection_mode='always'` rows) and their token cost. Surfaces
-  what budget the per-type pools actually competed over.
+  what budget the per-type pools actually competed over. The token
+  cost **excludes the `[id]` affix** the templates add to the three
+  entity rows on a piggyback turn — whether piggyback fires is decided
+  after retrieval, so a capture cannot know it. On those turns the
+  floor's cost reads as a lower bound.
 - **Stale-row count per type** — rows still `embedding_stale` at
   retrieval, excluded from the pool because the pre-retrieval sync
   stage couldn't embed them (their vec0 entry was missing at
