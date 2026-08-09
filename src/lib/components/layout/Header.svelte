@@ -46,11 +46,20 @@
   let showExportMenu = $state(false)
   let showMobileMenu = $state(false)
 
+  // Both menus are mounted only while there is a story, so closing one closes the menu's
+  // own `bind:open` write-back with it: a binding that does not get to run leaves the state
+  // `true`, and the menu springs open by itself on returning to a story. Reset here rather
+  // than in `goToLibrary`, because that is not the only way out — the Android hardware back
+  // handler (`src/routes/+layout.svelte`) also calls `story.closeStory()`, and its dialog
+  // guard does not intercept these: bits-ui portals dropdown content as `role="menu"`.
+  $effect(() => {
+    if (!story.currentStory) {
+      showMobileMenu = false
+      showExportMenu = false
+    }
+  })
+
   function goToLibrary() {
-    // Closed explicitly rather than left to the menu's own close-on-select: this unmounts
-    // the menu in the same tick, and a binding that does not get to run leaves the state
-    // `true`, so the menu would spring open by itself on returning to a story.
-    showMobileMenu = false
     story.closeStory()
     ui.setActivePanel('library')
   }
