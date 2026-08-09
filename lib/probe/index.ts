@@ -5,7 +5,14 @@ export {
   decompressPayload,
 } from './compress'
 export type { CompressedPayload } from './compress'
-export { __resetCaptureMode, armDeepCapture, peekCaptureMode, spendCaptureMode } from './mode'
+export {
+  __resetCaptureMode,
+  armDeepCapture,
+  commitCaptureMode,
+  peekCaptureMode,
+  reserveCaptureMode,
+} from './mode'
+export type { CaptureReservation } from './mode'
 export { buildCapturePayload } from './payload'
 export type { CapturePayloadInput } from './payload'
 export {

@@ -3,7 +3,7 @@ import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
-import { peekCaptureMode, spendCaptureMode, writeProbeCapture } from '@/lib/probe'
+import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
   composePromptBuffer,
   countTokens,
@@ -169,6 +169,7 @@ export async function* retrievalPhase(
       return
     }
 
+    const reservation = reserveCaptureMode()
     const status = await writeProbeCapture(
       { runInTransaction: ctx.runInTransaction },
       {
@@ -182,7 +183,7 @@ export async function* retrievalPhase(
         chapterId: tail.chapterId,
         capturedAt: Date.now(),
         embeddingModelId: resolution.config.modelId,
-        mode: peekCaptureMode(),
+        mode: reservation.mode,
         appGateOn,
         storyGateOn,
         params: RANKER_DEFAULTS,
@@ -199,7 +200,7 @@ export async function* retrievalPhase(
     // A failed write leaves the arm loaded: the deep capture the user asked for
     // has not happened yet, and silently downgrading the next turn to light is
     // indistinguishable from the arm never firing.
-    if (status === 'written') spendCaptureMode()
+    if (status === 'written') commitCaptureMode(reservation)
   }
 
   if (!outcome.ok) {
