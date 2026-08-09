@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProbeCapturePayload } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { RANKER_DEFAULTS } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
@@ -59,6 +60,10 @@ describe('capturesForStoryQuery', () => {
 })
 
 describe('decodeCapture', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('maps every field distinctly, with no positional transposition', async () => {
     const { sqlite, runInTransaction } = await seededDb()
     const testInput = captureInput({
@@ -128,6 +133,34 @@ describe('decodeCapture', () => {
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
       /params/i,
     )
+  })
+
+  // Warn, not throw: a stale capture that cannot be opened is a capture that
+  // cannot be deleted from the browse screen either.
+  it.each([
+    ['capture_version', { capture_version: 99 }, 'memory.probe_capture_version_drift'],
+    [
+      'tokenizer',
+      { tokenizer: { encoding: 'cl100k_base', version: '1' } },
+      'memory.probe_capture_tokenizer_drift',
+    ],
+  ])('warns on %s drift and still returns the capture', (_field, override, event) => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { bytes } = compressPayload({ ...buildCapturePayload(captureInput()), ...override })
+
+    const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])
+
+    expect(decoded.id).toBe('pc_1')
+    expect(warn).toHaveBeenCalledWith(event, expect.objectContaining({ id: 'pc_1' }))
+  })
+
+  it('warns on neither when the capture matches the current format', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { bytes } = compressPayload(buildCapturePayload(captureInput()))
+
+    decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])
+
+    expect(warn).not.toHaveBeenCalled()
   })
 })
 

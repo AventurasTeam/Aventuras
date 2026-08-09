@@ -110,7 +110,8 @@ trustworthy.
 - Vitest throughout (this slice is mostly tests + a writer);
   no Storybook scope (no designed compounds).
 - Manual: dev affordance renders captures for a real seeded story;
-  a deep capture's size lands in the expected ~100x-light order.
+  a deep capture's size lands in the expected 40-80x-light order
+  gzipped.
 
 ## Open questions
 

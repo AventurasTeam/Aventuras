@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 
 import { captureInput, seededDb } from './__tests__/fixtures'
@@ -9,6 +10,10 @@ import { buildCapturePayload } from './payload'
 import { writeProbeCapture, type CaptureWriteInput } from './writer'
 
 describe('writeProbeCapture', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('writes one row when both gates are on', async () => {
     const { sqlite, runInTransaction } = await seededDb()
 
@@ -120,12 +125,23 @@ describe('writeProbeCapture', () => {
     expect(st2Rows.map((r) => r.id)).toEqual(['pc_other_0', 'pc_other_1', 'pc_other_2'])
   })
 
-  it('does not fail the turn when the write fails', async () => {
+  it('does not fail the turn when the write fails, and logs why', async () => {
     const runInTransaction = vi.fn().mockRejectedValue(new Error('UNIQUE constraint failed'))
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
 
-    const result = await writeProbeCapture({ runInTransaction }, captureInput())
+    const result = await writeProbeCapture({ runInTransaction }, captureInput({ id: 'pc_9' }))
 
     expect(result).toBe('failed')
+    // The message the failure banner in Story Settings counts, and the error
+    // text without which a swallowed write is undiagnosable.
+    expect(warn).toHaveBeenCalledWith(
+      'memory.probe_capture_write_failed',
+      expect.objectContaining({
+        branchId: 'br_a',
+        id: 'pc_9',
+        error: 'UNIQUE constraint failed',
+      }),
+    )
   })
 
   it('does not fail the turn when the payload cannot be encoded', async () => {

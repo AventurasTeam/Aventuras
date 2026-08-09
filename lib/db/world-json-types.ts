@@ -1,4 +1,4 @@
-import type { QuerySpec, RankerParams, RetrievalType, TOKENIZER_IDENTITY } from '@/lib/retrieval'
+import type { QuerySpec, RankerParams, RetrievalType } from '@/lib/retrieval'
 
 import type { VecTargetKind } from './embeddings/vec-tables'
 
@@ -86,8 +86,12 @@ type CaptureParamsSnapshot = {
   protectedBuffer: number
 }
 
-/** Which vocabulary priced tokens_estimated; a later replay warns across a change. */
-type CaptureTokenizer = { encoding: (typeof TOKENIZER_IDENTITY)['encoding']; version: string }
+/**
+ * Which vocabulary priced tokens_estimated; decodeCapture warns across a change.
+ * `encoding` is a free string, not the current TOKENIZER_IDENTITY literal: a
+ * stored capture's type must not follow whatever today's code encodes with.
+ */
+type CaptureTokenizer = { encoding: string; version: string }
 
 /**
  * Bumped when a captured field's shape or meaning changes, so a decode can

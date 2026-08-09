@@ -1,6 +1,8 @@
 import type { ProbeCapturePayload, RowQuery, SqlOp } from '@/lib/db'
-import { rowQuery } from '@/lib/db'
+import { CAPTURE_VERSION, rowQuery } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
+import { TOKENIZER_IDENTITY } from '@/lib/retrieval'
 
 import { decompressPayload } from './compress'
 import { assertRankerParams, RankerParamsError } from './validate'
@@ -30,6 +32,30 @@ export function capturesForStoryQuery(storyId: string): RowQuery {
   )
 }
 
+// Warns, never throws: an older capture is still worth reading, and refusing it
+// would blank the browse screen over a field the reader can present as a caveat.
+// A tokenizer change does not invalidate a capture either — it makes
+// tokens_estimated a count from a different vocabulary, which only a re-price
+// would notice.
+function warnOnCaptureDrift(id: string, payload: ProbeCapturePayload): void {
+  if (payload.capture_version !== CAPTURE_VERSION) {
+    logger.warn('memory.probe_capture_version_drift', {
+      id,
+      captured: payload.capture_version,
+      current: CAPTURE_VERSION,
+    })
+  }
+  const tokenizer = payload.tokenizer
+  const stored =
+    tokenizer === undefined || tokenizer === null
+      ? null
+      : `${tokenizer.encoding}@${tokenizer.version}`
+  const current = `${TOKENIZER_IDENTITY.encoding}@${TOKENIZER_IDENTITY.version}`
+  if (stored !== current) {
+    logger.warn('memory.probe_capture_tokenizer_drift', { id, captured: stored, current })
+  }
+}
+
 /**
  * `row` must be a positional value-array matching capturesForStoryQuery's
  * column order: id, branch_id, captured_at, capture_mode, failure_reason,
@@ -51,6 +77,7 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
   if (payload.params === undefined || payload.params === null)
     throw new RankerParamsError('params', 'capture payload has no params snapshot')
   assertRankerParams(payload.params.ranker)
+  warnOnCaptureDrift(id, payload)
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload }
 }
 

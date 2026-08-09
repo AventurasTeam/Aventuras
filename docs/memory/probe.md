@@ -207,7 +207,8 @@ probe_captures {
 ```
 
 Branch-scoped, but the only branch-scoped table a fork skips — see
-[`data-model.md` → Branch-copy manifest](../data-model.md#branch-model).
+the branch-copy manifest under
+[`data-model.md` → Branch model](../data-model.md#branch-model).
 **Captures are NOT delta-logged** — they're diagnostic, not story
 state. A delta-logged capture would mean rollback unwinds probe
 data, which is the opposite of what a tuner wants.
@@ -232,9 +233,11 @@ let captures balloon.
 
 Cap is fixed at 100 in v1, not user-tunable. If real signal shows
 tuning sessions need more headroom, a setting follows. Storage
-overhead at 100 captures is on the order of tens of MB at scale-
-assumption volumes (light mode); deep-mode captures push that to
-hundreds of MB and are expected to be used sparingly.
+overhead at 100 light captures is ~10 MB at scale-assumption
+volumes, at the ~97 KB gzipped each measured under
+[Capture cost](#capture-cost). A hundred deep ones would be ~400 MB
+at dim 384 and ~780 MB at dim 768, which is why they are expected to
+be used sparingly.
 
 ### Capture cost
 

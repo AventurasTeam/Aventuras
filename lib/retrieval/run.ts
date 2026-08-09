@@ -103,7 +103,12 @@ export type RetrievalTimings = {
    * calls: they overlap, so summing would exceed the elapsed time.
    */
   knnMs: number
-  /** Scoring, MMR, and the eager token estimate the ranker costs each pool row. */
+  /**
+   * Scoring and the sort over the whole pool, then MMR and the token estimate
+   * over the rows that survive the pre-filter — one span, because tokenization
+   * runs inside the same kept-row map that feeds MMR and splitting it would
+   * break the disjoint-sub-span contract above.
+   */
   rankMs: number
 }
 
