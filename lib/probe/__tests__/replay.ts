@@ -40,15 +40,20 @@ export function replayType(payload: ProbeCapturePayload, type: RetrievalType): R
       keywordHits: r.kw_boost_value > 0 ? ['·'] : [],
       embeddingStale: r.embedding_stale,
     }
-    return r.target_kind === 'happening'
-      ? {
-          ...base,
-          kind: 'happening' as const,
-          commonKnowledge: r.common_knowledge ?? false,
-          occurredAtEntryId: entryIdOf(r),
-          awarenessIds: [],
-        }
-      : { ...base, kind: r.target_kind }
+    if (r.target_kind !== 'happening') return { ...base, kind: r.target_kind }
+    // Defaulting instead would re-score the row as decaying and pinnable, the one
+    // absent field that diverges silently rather than failing the way a missing
+    // vector does.
+    if (r.common_knowledge === undefined) {
+      throw new Error(`capture row ${r.target_id} carries no common_knowledge`)
+    }
+    return {
+      ...base,
+      kind: 'happening' as const,
+      commonKnowledge: r.common_knowledge,
+      occurredAtEntryId: entryIdOf(r),
+      awarenessIds: [],
+    }
   })
 
   return rankPerType(pool, type, payload.params.retrievalBudgets[type], {

@@ -281,16 +281,23 @@ type ParityState = {
   budget: number
   params: RankerParams
   /** What this state is here to exercise; asserted, so an edit cannot neuter it. */
-  marks: { dropReasons: DropReason[]; revived: boolean }
+  marks: { order: string[]; dropReasons: DropReason[]; revived: boolean }
 }
 
+// `order` is the whole point of the marks: hp_1 ahead of higher-scoring hp_4
+// pins MMR's diversity term, and lo_3 ahead of higher-blending lo_2 pins the
+// pinBoost channel — neither shows up in a drop-reason set.
 const STATES: Record<string, ParityState> = {
   normal: {
     type: 'happenings',
     pool: HAPPENINGS,
     budget: 10_000,
     params: RANKER_DEFAULTS,
-    marks: { dropReasons: ['not_dropped'], revived: false },
+    marks: {
+      order: ['hp_0', 'hp_2', 'hp_1', 'hp_4', 'hp_5', 'hp_3', 'hp_6', 'hp_7'],
+      dropReasons: ['not_dropped'],
+      revived: false,
+    },
   },
   saturated: {
     type: 'happenings',
@@ -298,6 +305,7 @@ const STATES: Record<string, ParityState> = {
     budget: 60,
     params: RANKER_DEFAULTS,
     marks: {
+      order: ['hp_0', 'hp_2', 'hp_1', 'hp_4', 'hp_5', 'hp_3', 'hp_6', 'hp_7'],
       dropReasons: ['candidate_too_large', 'not_dropped', 'over_budget'],
       revived: false,
     },
@@ -307,21 +315,33 @@ const STATES: Record<string, ParityState> = {
     pool: REVIVABLE,
     budget: 10_000,
     params: RANKER_DEFAULTS,
-    marks: { dropReasons: ['below_threshold', 'not_dropped'], revived: true },
+    marks: {
+      order: ['hp_0', 'hp_1', 'hp_3', 'hp_4', 'hp_2'],
+      dropReasons: ['below_threshold', 'not_dropped'],
+      revived: true,
+    },
   },
   'pre-filtered': {
     type: 'happenings',
     pool: HAPPENINGS,
     budget: 10_000,
     params: { ...RANKER_DEFAULTS, preFilterTopN: 4 },
-    marks: { dropReasons: ['not_dropped', 'pre_filtered'], revived: false },
+    marks: {
+      order: ['hp_0', 'hp_2', 'hp_1', 'hp_4', 'hp_3', 'hp_5', 'hp_6', 'hp_7'],
+      dropReasons: ['not_dropped', 'pre_filtered'],
+      revived: false,
+    },
   },
   'pin-boosted': {
     type: 'lore',
     pool: LORE,
     budget: 10_000,
     params: RANKER_DEFAULTS,
-    marks: { dropReasons: ['not_dropped'], revived: false },
+    marks: {
+      order: ['lo_0', 'lo_1', 'lo_3', 'lo_2', 'lo_4'],
+      dropReasons: ['not_dropped'],
+      revived: false,
+    },
   },
 }
 
@@ -330,6 +350,7 @@ const marksOf = (bundle: RankedType): ParityState['marks'] => {
   // at or after the first below_threshold drop was seated by the bypass.
   const firstDrop = bundle.traces.findIndex((t) => t.dropReason === 'below_threshold')
   return {
+    order: bundle.traces.map((t) => t.id),
     dropReasons: [...new Set(bundle.traces.map((t) => t.dropReason))].sort(),
     revived: firstDrop !== -1 && bundle.traces.slice(firstDrop).some((t) => t.selected),
   }
@@ -400,6 +421,43 @@ describe('replay recomputes rather than echoing', () => {
     expect(boosted.map((t) => t.finalScore)).not.toEqual(boosted.map((t) => captured.get(t.id)))
   })
 
+  // Re-scoring each row honestly and then echoing MMR order, the floor and the
+  // budget walk would satisfy every assertion above — and would answer the one
+  // question the simulator exists for, "what if I retune this?", with the
+  // captured answer. These two retune a param each stage downstream of score().
+  it('re-fills the budget when the captured budget is tightened', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const tightened = {
+      ...payload,
+      params: {
+        ...payload.params,
+        retrievalBudgets: { ...payload.params.retrievalBudgets, happenings: 60 },
+      },
+    }
+
+    const replayed = replayType(tightened, 'happenings')
+
+    expect(payload.pools.happenings.filter((r) => r.selected)).toHaveLength(8)
+    expect(replayed.selected).toHaveLength(2)
+    expect(replayed.traces.map((t) => t.dropReason)).toContain('over_budget')
+  })
+
+  it('re-runs MMR when the captured lambdaDiv is retuned', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const retuned = {
+      ...payload,
+      params: { ...payload.params, ranker: { ...payload.params.ranker, lambdaDiv: 0.05 } },
+    }
+
+    const replayed = replayType(retuned, 'happenings')
+
+    expect(replayed.traces.map((t) => t.id)).not.toEqual(
+      payload.pools.happenings.map((r) => r.target_id),
+    )
+  })
+
   it('rereads common_knowledge rather than trusting the captured recency factor', async () => {
     const state = STATES.normal
     const payload = await storedPayload(state, rankProd(state))
@@ -422,6 +480,20 @@ describe('replay recomputes rather than echoing', () => {
 })
 
 describe('replayType', () => {
+  it('refuses a happening row whose common_knowledge flag is absent', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const stripped = {
+      ...payload,
+      pools: {
+        ...payload.pools,
+        happenings: payload.pools.happenings.map(({ common_knowledge: _, ...rest }) => rest),
+      },
+    }
+
+    expect(() => replayType(stripped, 'happenings')).toThrow(/common_knowledge/)
+  })
+
   it('refuses a light capture, which stores no vector for MMR to read', async () => {
     const state = STATES.normal
     const prod = rankProd(state)
