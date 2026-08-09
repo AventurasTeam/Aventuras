@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { logger } from '@/lib/diagnostics'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 
@@ -145,7 +144,10 @@ describe('writeProbeCapture', () => {
   })
 
   it('does not fail the turn when the payload cannot be encoded', async () => {
-    const { runInTransaction } = await createTestDb()
+    // Seeded on purpose: against an unseeded db the branch_id FK rejects the
+    // INSERT too, so 'failed' would hold even if the encode never threw.
+    const { sqlite, runInTransaction } = await seededDb()
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
     // Reaches payload.params.ranker, where JSON.stringify throws inside
     // compressPayload (probe.md → Capture write failure names gzip/encode
     // errors explicitly, not just DB errors).
@@ -158,5 +160,13 @@ describe('writeProbeCapture', () => {
     )
 
     expect(result).toBe('failed')
+    // The encode is what failed, so the write never reached the db.
+    expect(sqlite.prepare('SELECT count(*) AS n FROM probe_captures').get()).toMatchObject({
+      n: 0,
+    })
+    expect(warn).toHaveBeenCalledWith(
+      'memory.probe_capture_write_failed',
+      expect.objectContaining({ error: 'probe capture payload could not be encoded' }),
+    )
   })
 })
