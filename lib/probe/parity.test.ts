@@ -14,8 +14,8 @@ import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
 
 import { captureInput, queryStack, seededDb, settings } from './__tests__/fixtures'
-import { replayType } from './__tests__/replay'
 import { capturesForStoryQuery, decodeCapture } from './read'
+import { replayType } from './replay'
 import { writeProbeCapture } from './writer'
 
 const unit = (...xs: number[]): Float32Array => {
@@ -281,13 +281,20 @@ type ParityState = {
   budget: number
   params: RankerParams
   /** What this state is here to exercise; asserted, so an edit cannot neuter it. */
-  marks: { order: string[]; dropReasons: DropReason[]; revived: boolean }
+  marks: {
+    /** Trace order: the MMR-ranked prefix, then the pre-filtered tail in score order. */
+    order: string[]
+    dropReasons: DropReason[]
+    revived: boolean
+  }
+  /**
+   * The one relation `order` exists to pin, asserted on its own: an id-list diff
+   * invites a re-paste, a named failing pair does not.
+   */
+  ranksAhead: [string, string]
 }
 
-// `order` is the whole point of the marks: hp_1 ahead of higher-scoring hp_4
-// pins MMR's diversity term, and lo_3 ahead of higher-blending lo_2 pins the
-// pinBoost channel — neither shows up in a drop-reason set.
-const STATES: Record<string, ParityState> = {
+const STATES = {
   normal: {
     type: 'happenings',
     pool: HAPPENINGS,
@@ -298,6 +305,8 @@ const STATES: Record<string, ParityState> = {
       dropReasons: ['not_dropped'],
       revived: false,
     },
+    // hp_1 scores under hp_4 and still ranks ahead of it: MMR's diversity term.
+    ranksAhead: ['hp_1', 'hp_4'],
   },
   saturated: {
     type: 'happenings',
@@ -309,6 +318,7 @@ const STATES: Record<string, ParityState> = {
       dropReasons: ['candidate_too_large', 'not_dropped', 'over_budget'],
       revived: false,
     },
+    ranksAhead: ['hp_1', 'hp_4'],
   },
   bypassed: {
     type: 'happenings',
@@ -320,6 +330,8 @@ const STATES: Record<string, ParityState> = {
       dropReasons: ['below_threshold', 'not_dropped'],
       revived: true,
     },
+    // hp_2 blends highest of the pool and still ranks last: recency decay.
+    ranksAhead: ['hp_4', 'hp_2'],
   },
   'pre-filtered': {
     type: 'happenings',
@@ -331,6 +343,7 @@ const STATES: Record<string, ParityState> = {
       dropReasons: ['not_dropped', 'pre_filtered'],
       revived: false,
     },
+    ranksAhead: ['hp_1', 'hp_4'],
   },
   'pin-boosted': {
     type: 'lore',
@@ -342,8 +355,10 @@ const STATES: Record<string, ParityState> = {
       dropReasons: ['not_dropped'],
       revived: false,
     },
+    // lo_3 blends under lo_2 and still ranks ahead of it: the pinBoost channel.
+    ranksAhead: ['lo_3', 'lo_2'],
   },
-}
+} satisfies Record<string, ParityState>
 
 const marksOf = (bundle: RankedType): ParityState['marks'] => {
   // Ranked traces are in MMR order and belowFloor is sticky, so anything seated
@@ -392,7 +407,12 @@ async function storedPayload(state: ParityState, prod: RankedType) {
 describe.each(Object.entries(STATES))('parity — %s', (_name, state) => {
   it('replays a stored capture to the same selection, funnel and traces', async () => {
     const prod = rankProd(state)
+    const [ahead, behind] = state.ranksAhead
     expect(marksOf(prod)).toEqual(state.marks)
+    expect(prod.traces.map((t) => t.id).filter((id) => id === ahead || id === behind)).toEqual([
+      ahead,
+      behind,
+    ])
 
     const replayed = replayType(await storedPayload(state, prod), state.type)
 
@@ -492,6 +512,49 @@ describe('replayType', () => {
     }
 
     expect(() => replayType(stripped, 'happenings')).toThrow(/common_knowledge/)
+  })
+
+  it('refuses to price a row the retuned params promote out of the pre-filtered tail', async () => {
+    const state = STATES['pre-filtered']
+    const payload = await storedPayload(state, rankProd(state))
+    const retuned = {
+      ...payload,
+      params: { ...payload.params, ranker: { ...payload.params.ranker, kwBoost: 0.6 } },
+    }
+
+    // hp_7 carries a keyword hit and sits in the captured pre-filtered tail, so a
+    // larger kwBoost lifts it into the kept set with no stored cost to replay it at.
+    expect(
+      payload.pools.happenings.find((r) => r.target_id === 'hp_7')?.tokens_estimated,
+    ).toBeNull()
+    expect(() => replayType(retuned, 'happenings')).toThrow(/promoted/)
+    expect(replayType(retuned, 'happenings', { countTokens: () => 0 }).selected).not.toHaveLength(0)
+  })
+
+  it('refuses a capture whose retuned budget is not a finite non-negative number', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const retuned = {
+      ...payload,
+      params: {
+        ...payload.params,
+        retrievalBudgets: { ...payload.params.retrievalBudgets, happenings: Number.NaN },
+      },
+    }
+
+    expect(() => replayType(retuned, 'happenings')).toThrow(/retrievalBudgets\.happenings/)
+  })
+
+  it('refuses a capture whose retuned ranker params are out of range', async () => {
+    const state = STATES.normal
+    const payload = await storedPayload(state, rankProd(state))
+    const retuned = {
+      ...payload,
+      params: { ...payload.params, ranker: { ...payload.params.ranker, lambdaDiv: 0 } },
+    }
+
+    // decodeCapture already guarded this snapshot; a simulator retunes it after.
+    expect(() => replayType(retuned, 'happenings')).toThrow(/lambdaDiv/)
   })
 
   it('refuses a light capture, which stores no vector for MMR to read', async () => {

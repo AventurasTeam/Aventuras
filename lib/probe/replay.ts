@@ -1,20 +1,54 @@
 import type { ProbeCapturePayload } from '@/lib/db'
 import { rankPerType, type Candidate, type RankedType, type RetrievalType } from '@/lib/retrieval'
 
+import { assertRankerParams, RankerParamsError } from './validate'
+
 type CaptureRow = ProbeCapturePayload['pools'][RetrievalType][number]
 
 const REPLAY_CHAPTER = 'ch_replay'
 
 const entryIdOf = (row: CaptureRow): string => `entry_${row.target_id}`
 
+export type ReplayOptions = {
+  /**
+   * Prices a row the captured params pre-filtered and the replayed params
+   * promoted into the kept set. Such a row stores neither its text nor its
+   * cost, so nothing in the capture can price it; the default refuses the run
+   * rather than seating it at bare type-overhead.
+   */
+  countTokens?: (text: string) => number
+}
+
+const refusePromotedRow = (): number => {
+  throw new Error(
+    'replay: the params promoted a row the capture pre-filtered, which stores no text or token cost',
+  )
+}
+
 /**
  * Re-runs the production ranker over a captured pool. Deep captures only:
  * `mmrRank` takes a pairwise cosine over every kept row, and light mode stores
  * no vectors, so a light capture cannot reach MMR at all.
  */
-export function replayType(payload: ProbeCapturePayload, type: RetrievalType): RankedType {
+export function replayType(
+  payload: ProbeCapturePayload,
+  type: RetrievalType,
+  options: ReplayOptions = {},
+): RankedType {
   if (payload.capture_mode !== 'deep') {
     throw new Error(`replayType needs a deep capture, got ${payload.capture_mode}`)
+  }
+  // A simulator retunes the snapshot after decodeCapture validated it, so the
+  // guard has to run here too, not only at the read boundary.
+  assertRankerParams(payload.params.ranker)
+  const budget = payload.params.retrievalBudgets[type]
+  // Unvalidated anywhere else: a NaN or negative budget drops every row to
+  // over_budget with no error, which reads as a ranking result.
+  if (!Number.isFinite(budget) || budget < 0) {
+    throw new RankerParamsError(
+      `retrievalBudgets.${type}`,
+      `must be a finite non-negative number, got ${budget}`,
+    )
   }
   const rows = payload.pools[type]
 
@@ -30,7 +64,7 @@ export function replayType(payload: ProbeCapturePayload, type: RetrievalType): R
     const base = {
       id: r.target_id,
       displayName: r.display_name,
-      // Null only on a pre-filtered row, which is never costed and never seated.
+      // Null only on a pre-filtered row, which the captured params never costed.
       renderedText: r.display_text ?? '',
       sims: [r.sim_q1, r.sim_q2, r.sim_q3] as const,
       vector: Float32Array.from(r.vector ?? []),
@@ -56,15 +90,11 @@ export function replayType(payload: ProbeCapturePayload, type: RetrievalType): R
     }
   })
 
-  return rankPerType(pool, type, payload.params.retrievalBudgets[type], {
+  return rankPerType(pool, type, budget, {
     params: payload.params.ranker,
     chapterRanges,
     matchedChapterIds: new Set([REPLAY_CHAPTER]),
-    // Reaching the tokenizer would mean the capture did not carry what
-    // budget-fill needed, which is exactly what the parity test is claiming.
-    countTokens: () => {
-      throw new Error('replay reached the tokenizer; the capture was insufficient')
-    },
+    countTokens: options.countTokens ?? refusePromotedRow,
     capturedTokens: new Map(
       rows.flatMap((r) =>
         r.tokens_estimated === null ? [] : [[r.target_id, r.tokens_estimated] as const],
