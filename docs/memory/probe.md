@@ -298,6 +298,27 @@ not a UX one — but it determines whether the probe is trustworthy.
 
 ### Simulatable parameters
 
+**The light-mode list below is under review.** Slice 3.5's parity
+work found most of it unreachable from a light capture. Every
+parameter that feeds `score` changes MMR's greedy pick order, and
+recomputing that order needs the candidate-vs-candidate cosines only
+a deep capture's per-row vectors carry.
+`min_score_threshold` is further out of reach: it compares against
+the post-MMR `mmr_score`, and no capture stores one — `final_score`
+is the **pre-MMR** raw score.
+
+**Per-type budgets are the confirmed-surviving case.** The
+below-threshold latch is monotone over the MMR order, so the first
+captured `below_threshold` row pins the partition and no budget
+change can move it; re-walking `mmr_rank` order against
+`tokens_estimated` then reproduces the fill exactly.
+
+What light mode should actually offer — accept the narrower list,
+capture an `mmr_score` per row (one float, recovers the threshold),
+or store the kept-set pairwise cosines (recovers everything) — is an
+open product call, to settle before the simulator is built. Until
+then read the list as design intent, not as shipped capability.
+
 From a light capture:
 
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query

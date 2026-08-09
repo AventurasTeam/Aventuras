@@ -983,9 +983,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   reads as though `λ_div` were the only parameter needing
   candidate-vs-candidate cosines; the cosines are needed for any MMR
   recomputation at all. The two that apply after MMR do not both
-  survive either: the per-type budgets do — budget-fill can be re-walked
-  in captured `mmr_rank` order against `tokens_estimated` and the
-  captured `drop_reason` flags — but `min_score_threshold` compares
+  survive either: the per-type budgets do — **verified during the
+  Slice 3.5 whole-implementation review (2026-08-09)**: `belowFloor` in
+  `rankPerType` is a latch, so the first captured `below_threshold` row
+  pins the partition and no budget change can move it, and re-walking
+  captured `mmr_rank` order against `tokens_estimated` reproduces the
+  fill exactly — but `min_score_threshold` compares
   against `mmrScore`, and the capture stores only `final_score`, which
   is the **pre-MMR** raw score (`trace()` in `lib/retrieval/ranker.ts`
   sets `finalScore: s.score`; `mmrScore` is dropped). So the honest
@@ -994,9 +997,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   row (one float, recovers the threshold), or store the kept-set
   pairwise cosine matrix (~80 KB per type at a saturated pool, recovers
   everything) — before M7.5 builds the simulator. Slice 3.5 left the
-  list unchanged and ran its parity test on deep captures, the only mode
-  that can reach `mmrRank`. Surfaced during Slice 3.5 planning
-  (2026-08-08), sharpened during Task 15 (2026-08-09).
+  list itself unchanged and ran its parity test on deep captures, the
+  only mode that can reach `mmrRank`; its whole-implementation review
+  added an under-review caveat above the list, so a probe.md reader
+  cannot build against the unqualified promise. Surfaced during Slice
+  3.5 planning (2026-08-08), sharpened during Task 15 (2026-08-09),
+  budgets verified 2026-08-09.
 - **`distributeQueryVectors` assumes a short embed result dropped its
   trailing texts.** It fills present slots positionally
   (`out[i] = vectors[next++] ?? null`, `lib/retrieval/queries.ts`), so a
