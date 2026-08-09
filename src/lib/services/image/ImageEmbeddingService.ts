@@ -13,7 +13,8 @@
  */
 
 import type { EmbeddedImage } from '$lib/types'
-import { parseStoryMarkdown } from '$lib/utils/markdown'
+import { parseStoryMarkdown, parseStoryMarkdownInline } from '$lib/utils/markdown'
+import { dialogueSpans } from '$lib/utils/dialogue'
 import { sanitizeVisualProse } from '$lib/utils/htmlSanitize'
 import {
   picTagRegex,
@@ -69,7 +70,55 @@ function buildAgenticMarkers(content: string, images: EmbeddedImage[]): ImageMar
     }
   }
 
-  return markers.sort((a, b) => b.start - a.start)
+  return snapMarkersToDialogue(content, markers).sort((a, b) => b.start - a.start)
+}
+
+/**
+ * Widen any marker that cuts a dialogue span so it covers the whole quote.
+ *
+ * A marker's text is lifted out of the content before rendering, so a marker ending
+ * mid-quote leaves an unterminated quote behind — which is deliberately not treated
+ * as dialogue, and the line loses its colour with nothing to explain why. Since a
+ * `sourceText` is often mostly dialogue, the fix is to swallow the rest of the quote
+ * rather than to stop before it: trimming back can shrink an image's anchor to a few
+ * words, while extending it costs a slightly longer clickable run.
+ *
+ * A marker that cannot grow without colliding with another one is left exactly as it
+ * was — an overlap would corrupt both replacements, which is worse than a quote that
+ * is not coloured.
+ */
+function snapMarkersToDialogue(content: string, markers: ImageMarker[]): ImageMarker[] {
+  const spans = dialogueSpans(content)
+  if (spans.length === 0) return markers
+
+  return markers.map((marker, index) => {
+    let { start, end } = marker
+
+    // Growing over one span can bring the marker into contact with the next, so
+    // repeat until it stops moving.
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const span of spans) {
+        const intersects = start < span.end && span.start < end
+        const contains = start <= span.start && end >= span.end
+        if (!intersects || contains) continue
+
+        start = Math.min(start, span.start)
+        end = Math.max(end, span.end)
+        changed = true
+      }
+    }
+
+    if (start === marker.start && end === marker.end) return marker
+
+    const collides = markers.some((other, otherIndex) => {
+      if (otherIndex === index) return false
+      return start < other.end && other.start < end
+    })
+
+    return collides ? marker : { ...marker, start, end }
+  })
 }
 
 /** Build image map for inline <pic> tag replacement. */
@@ -101,6 +150,7 @@ function processUnified(
   images: EmbeddedImage[],
   regeneratingIds: Set<string>,
   render: (text: string) => string,
+  renderMarkerText: (text: string) => string,
 ): string {
   if (images.length === 0 && !content.includes('<pic')) {
     return render(content)
@@ -139,9 +189,12 @@ function processUnified(
             ? 'failed'
             : 'pending'
 
+    // Render the marker's own text rather than splicing it back raw: it is lifted out
+    // before the renderer runs, so anything inside it — dialogue, emphasis — would
+    // otherwise reach the page unparsed, as literal asterisks and uncoloured quotes.
     placeholderMap.set(
       placeholder,
-      `<span class="embedded-image-link ${statusClass}" data-image-id="${marker.imageId}">${originalText}</span>`,
+      `<span class="embedded-image-link ${statusClass}" data-image-id="${marker.imageId}">${renderMarkerText(originalText)}</span>`,
     )
     text = text.slice(0, marker.start) + placeholder + text.slice(marker.end)
   }
@@ -202,7 +255,13 @@ export function processStoryContent(
   images: EmbeddedImage[],
   regeneratingIds: Set<string> = new Set(),
 ): string {
-  return processUnified(content, images, regeneratingIds, parseStoryMarkdown)
+  return processUnified(
+    content,
+    images,
+    regeneratingIds,
+    parseStoryMarkdown,
+    parseStoryMarkdownInline,
+  )
 }
 
 /**
@@ -215,7 +274,15 @@ export function processVisualProseStoryContent(
   entryId: string,
   regeneratingIds: Set<string> = new Set(),
 ): string {
-  return processUnified(content, images, regeneratingIds, (t) => sanitizeVisualProse(t, entryId))
+  // Marker text stays raw here: in this mode it is already HTML, and running it
+  // through a markdown renderer would mangle the tags it is made of.
+  return processUnified(
+    content,
+    images,
+    regeneratingIds,
+    (t) => sanitizeVisualProse(t, entryId),
+    (t) => t,
+  )
 }
 
 // Keep old functions as aliases for backward compatibility (used by StreamingEntry)

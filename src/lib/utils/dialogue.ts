@@ -100,6 +100,37 @@ export function findDialogueStart(text: string): number {
   return best
 }
 
+export interface DialogueSpan {
+  /** Index of the opening quote. */
+  start: number
+  /** Index just past the closing quote. */
+  end: number
+}
+
+/**
+ * Character ranges of every dialogue span in the text.
+ *
+ * Used by the image pipeline to keep an embedded-image marker from cutting a quote
+ * in half — half a quote is an unterminated one, which by the rules above is not
+ * dialogue at all, so the line would silently lose its colour.
+ */
+export function dialogueSpans(text: string): DialogueSpan[] {
+  const spans: DialogueSpan[] = []
+  let i = 0
+
+  while (i < text.length) {
+    const match = matchDialogueAt(text, i)
+    if (match) {
+      spans.push({ start: i, end: i + match.raw.length })
+      i += match.raw.length
+    } else {
+      i++
+    }
+  }
+
+  return spans
+}
+
 /**
  * Split text into alternating narrator/dialogue segments.
  *

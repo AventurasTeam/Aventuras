@@ -108,6 +108,24 @@ export function parseMarkdown(text: string): string {
 }
 
 /**
+ * Parse a fragment of story prose without wrapping it in a block element.
+ *
+ * For text that is already inside an inline element — the span an embedded image
+ * links to, which is spliced back into an already-rendered paragraph.
+ */
+export function parseStoryMarkdownInline(text: string): string {
+  if (!text) return ''
+
+  try {
+    const result = storyMarked.parseInline(text)
+    return typeof result === 'string' ? result : ''
+  } catch (error) {
+    console.error('[Markdown] Story inline parse error:', error)
+    return escapeHtml(text)
+  }
+}
+
+/**
  * Render a description that may be HTML or Markdown.
  * If content starts with an HTML tag, render directly (bypasses marked
  * which mangles raw HTML with its breaks/paragraph wrapping).

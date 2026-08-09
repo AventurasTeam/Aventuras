@@ -778,6 +778,22 @@ single story entry. The per-entry `.dialogue-highlight` class carries the story'
 `visualProseMode`, which is what keeps the feature off there — including for player
 actions, which are plain markdown even in a Visual Prose story.
 
+**An embedded image marker and a quote can overlap, and the image pipeline has to
+give ground.** `processUnified` lifts each agentic marker's text out of the content
+before rendering and splices it back afterwards, so text inside a marker never
+reached the renderer at all — markdown in there stayed literal, and a quote stayed
+uncoloured. Two consequences, both fixed in `ImageEmbeddingService`:
+
+- Marker text is now rendered rather than spliced back raw, through a renderer the
+  caller supplies — inline story markdown for the markdown path, and identity for
+  Visual Prose, whose marker text is already HTML.
+- `snapMarkersToDialogue` widens any marker that would end mid-quote. Half a quote is
+  an unterminated one, which is deliberately not dialogue, so the line lost its
+  colour with nothing on screen to explain why. It widens rather than trims because a
+  `sourceText` is often mostly dialogue and trimming can cut an image's anchor down to
+  a few words. A marker that cannot grow without colliding with another is left
+  untouched: overlapping markers corrupt both replacements, which is worse.
+
 For TTS the voice is a property of each **chunk**, not of the call
 (`TTSSegment` in `TTSService.ts`). Playing narrator and dialogue as separate
 `streamAndPlay` calls would restart the producer/consumer queue at every quote — an
