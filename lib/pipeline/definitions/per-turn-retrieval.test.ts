@@ -18,7 +18,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { Logger } from '@/lib/diagnostics'
-import { armDeepCapture, decompressPayload } from '@/lib/probe'
+import { __resetCaptureMode, armDeepCapture, decompressPayload } from '@/lib/probe'
 import {
   RANKER_DEFAULTS,
   type CandidateTrace,
@@ -325,6 +325,17 @@ async function setAppGate(db: Awaited<ReturnType<typeof probeDb>>['db'], enabled
   await rehydrateAppSettings(db)
 }
 
+// Every capture is keyed to the entry that drove the pass, so a probe test
+// without one exercises the skip path instead of the write.
+const seedProbeStory = (settings: Partial<StorySettings>): StorySettings =>
+  seedOpenStory({
+    settings,
+    entries: [
+      entry(1, 'opening', 'The keep stands.', meta()),
+      entry(2, 'user_action', 'I draw the blade.', meta()),
+    ],
+  })
+
 function lastParams(): RetrievalParams {
   const call = runRetrievalMock.mock.calls.at(-1)
   if (!call) throw new Error('runRetrieval was never called')
@@ -336,6 +347,7 @@ beforeEach(() => {
   runRetrievalMock.mockReset().mockResolvedValue(OK_OUTCOME)
   refreshEmbeddingStatusMock.mockReset().mockResolvedValue(undefined)
   resetAllStores()
+  __resetCaptureMode()
 })
 
 // A hook, not an inline call after the awaited phase: a mock that throws rejects
@@ -1134,15 +1146,9 @@ describe('retrieval phase — probe capture', () => {
   it('captures the pass the turn ran, keyed to the entry that drove it', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)
-    seedOpenStory({
-      settings: {
-        probe_mode_active: true,
-        retrievalBudgets: { entities: 11, lore: 22, happenings: 33, threads: 44, chapters: 55 },
-      },
-      entries: [
-        entry(1, 'opening', 'The keep stands.', meta()),
-        entry(2, 'user_action', 'I draw the blade.', meta()),
-      ],
+    seedProbeStory({
+      probe_mode_active: true,
+      retrievalBudgets: { entities: 11, lore: 22, happenings: 33, threads: 44, chapters: 55 },
     })
     runRetrievalMock.mockResolvedValue(retrievalSuccess({ queries: queryStack() }))
 
@@ -1173,23 +1179,10 @@ describe('retrieval phase — probe capture', () => {
     })
   })
 
-  it('points the capture at the chapter the driving entry sits in', async () => {
-    const { db, sqlite, runInTransaction } = await probeDb()
-    await setAppGate(db, true)
-    seedOpenStory({
-      settings: { probe_mode_active: true },
-      entries: [{ ...entry(1, 'user_action', 'I draw the blade.', meta()), chapterId: 'chap_1' }],
-    })
-
-    await runRetrievalPhase(undefined, runInTransaction)
-
-    expect(payloadOf(captureRows(sqlite)[0]).chapter_id).toBe('chap_1')
-  })
-
   it('captures a failed pass with its reason and the queries it reached', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)
-    seedOpenStory({ settings: { probe_mode_active: true } })
+    seedProbeStory({ probe_mode_active: true })
     runRetrievalMock.mockResolvedValue(
       retrievalFailure(
         { reason: 'call', detail: 'provider unreachable', staleCount: null },
@@ -1211,32 +1204,62 @@ describe('retrieval phase — probe capture', () => {
   it('writes nothing when the story gate is off', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)
-    seedOpenStory({ settings: { probe_mode_active: false } })
+    seedProbeStory({ probe_mode_active: false })
 
     await runRetrievalPhase(undefined, runInTransaction)
 
     expect(captureRows(sqlite)).toEqual([])
   })
 
-  // Flipped BETWEEN two passes on purpose: a gate read once and cached agrees
-  // with any single-pass assertion, whichever value the test picked.
-  it('reads the app gate at capture time, not once', async () => {
+  // Flipped mid-pass, not between passes: the embed is bounded at 300s, so a
+  // user has a real window to toggle diagnostics while one is in flight, and a
+  // gate resolved anywhere above the capture agrees with the value the pass
+  // started under.
+  it('honors an app gate switched off while the pass was in flight', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
-    seedOpenStory({ settings: { probe_mode_active: true } })
+    await setAppGate(db, true)
+    seedProbeStory({ probe_mode_active: true })
+    runRetrievalMock.mockImplementation(async () => {
+      await setAppGate(db, false)
+      return OK_OUTCOME
+    })
 
     await runRetrievalPhase(undefined, runInTransaction)
-    expect(captureRows(sqlite)).toEqual([])
 
-    await setAppGate(db, true)
+    expect(captureRows(sqlite)).toEqual([])
+  })
+
+  it('honors an app gate switched on while the pass was in flight', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    seedProbeStory({ probe_mode_active: true })
+    runRetrievalMock.mockImplementation(async () => {
+      await setAppGate(db, true)
+      return OK_OUTCOME
+    })
+
     await runRetrievalPhase(undefined, runInTransaction)
 
     expect(captureRows(sqlite)).toHaveLength(1)
   })
 
+  it('skips the capture, saying so, when the branch carries no entry to key it to', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    seedOpenStory({ settings: { probe_mode_active: true }, entries: [] })
+
+    const { result, log } = await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(result).toEqual({ status: 'completed' })
+    expect(captureRows(sqlite)).toEqual([])
+    expect(log.debug).toHaveBeenCalledWith('retrieval.capture_skipped', {
+      reason: 'branch has no entries',
+    })
+  })
+
   it('spends an armed deep capture on one pass and reverts to light', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)
-    seedOpenStory({ settings: { probe_mode_active: true } })
+    seedProbeStory({ probe_mode_active: true })
     armDeepCapture()
 
     await runRetrievalPhase(undefined, runInTransaction)
@@ -1245,10 +1268,30 @@ describe('retrieval phase — probe capture', () => {
     expect(captureRows(sqlite).map((r) => r.capture_mode)).toEqual(['deep', 'light'])
   })
 
+  // Arming is one screen away from the toggles, so a gated turn burning the arm
+  // reads as "I armed it and got a light capture".
+  it('keeps an armed deep capture over a turn the gates swallowed', async () => {
+    const { db, sqlite, runInTransaction } = await probeDb()
+    await setAppGate(db, true)
+    const settings = seedProbeStory({ probe_mode_active: false })
+    armDeepCapture()
+
+    await runRetrievalPhase(undefined, runInTransaction)
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: { ...settings, probe_mode_active: true },
+    })
+    await runRetrievalPhase(undefined, runInTransaction)
+
+    expect(captureRows(sqlite).map((r) => r.capture_mode)).toEqual(['deep'])
+  })
+
   it('captures nothing for a turn a cancel reached before the outcome landed', async () => {
     const { db, sqlite, runInTransaction } = await probeDb()
     await setAppGate(db, true)
-    seedOpenStory({ settings: { probe_mode_active: true } })
+    seedProbeStory({ probe_mode_active: true })
     const controller = new AbortController()
     runRetrievalMock.mockImplementation(async () => {
       controller.abort()

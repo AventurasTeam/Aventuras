@@ -76,23 +76,37 @@ export async function* retrievalPhase(
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
-  const captureProbe = (outcome: RetrievalOutcome) =>
-    writeProbeCapture(
+  const captureProbe = async (outcome: RetrievalOutcome): Promise<void> => {
+    // target_entry_id is NOT NULL and carries no sentinel, so a capture with
+    // nothing to attribute itself to would be unreadable in the probe surface.
+    if (tail === undefined) {
+      ctx.log.debug('retrieval.capture_skipped', { reason: 'branch has no entries' })
+      return
+    }
+    // getAppSettings() hands back a fresh object per call, so both gates are
+    // read at capture time or they sit at whatever the pass started with
+    // (observability.md → Store ownership and gate wiring).
+    const appGateOn = appSettingsStore.getAppSettings().diagnostics.enabled
+    const storyGateOn = open.settings.probe_mode_active
+
+    await writeProbeCapture(
       { runInTransaction: ctx.runInTransaction },
       {
         id: generateId('pc'),
         branchId,
         // The pass ran for the user action submitTurn committed ahead of it.
-        targetEntryId: tail?.id ?? '',
-        chapterId: tail?.chapterId ?? null,
+        targetEntryId: tail.id,
+        // Null in practice: the driving entry is an open-region row, and a
+        // chapter id is stamped on at chapter-create time (data-model.md →
+        // story_entries).
+        chapterId: tail.chapterId,
         capturedAt: Date.now(),
         embeddingModelId: resolution.config.modelId,
-        mode: takeNextCaptureMode(),
-        // getAppSettings() hands back a fresh object per call, so the gate has
-        // to be read at capture time or it sits at its boot value
-        // (observability.md → Store ownership).
-        appGateOn: appSettingsStore.getAppSettings().diagnostics.enabled,
-        storyGateOn: open.settings.probe_mode_active,
+        // A gated turn must not spend the arm — the button that sets it is one
+        // screen away from the toggles that would swallow the capture.
+        mode: appGateOn && storyGateOn ? takeNextCaptureMode() : 'light',
+        appGateOn,
+        storyGateOn,
         params: RANKER_DEFAULTS,
         settings: {
           retrievalBudgets: open.settings.retrievalBudgets,
@@ -103,6 +117,7 @@ export async function* retrievalPhase(
         outcome,
       },
     )
+  }
 
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel

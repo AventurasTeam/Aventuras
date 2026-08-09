@@ -16,3 +16,9 @@ export function takeNextCaptureMode(): CaptureMode {
   armed = 'light'
   return mode
 }
+
+// Test seam: the flag lives outside lib/stores, so resetAllStores cannot reach
+// an arm a test left unconsumed.
+export function __resetCaptureMode(): void {
+  armed = 'light'
+}

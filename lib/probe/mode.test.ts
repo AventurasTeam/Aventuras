@@ -1,8 +1,12 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
-import { armDeepCapture, takeNextCaptureMode } from './mode'
+import { __resetCaptureMode, armDeepCapture, takeNextCaptureMode } from './mode'
 
 describe('deep-capture arming', () => {
+  beforeEach(() => {
+    __resetCaptureMode()
+  })
+
   it('captures light until something arms a deep one', () => {
     expect(takeNextCaptureMode()).toBe('light')
     expect(takeNextCaptureMode()).toBe('light')
@@ -21,5 +25,12 @@ describe('deep-capture arming', () => {
     armDeepCapture()
 
     expect(takeNextCaptureMode()).toBe('deep')
+  })
+
+  it('drops an arm nothing consumed', () => {
+    armDeepCapture()
+    __resetCaptureMode()
+
+    expect(takeNextCaptureMode()).toBe('light')
   })
 })
