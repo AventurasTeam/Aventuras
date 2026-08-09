@@ -345,8 +345,8 @@ each answer constrains the next.
 ### Findings a later slice inherits
 
 - **Deep captures are far more expensive than canon estimated.**
-  Measured at the cost-budget fixture's 1067-row pool: ~340 ms at
-  dim 384 and ~700 ms at dim 768 to build and gzip, against the
+  Measured at the cost-budget fixture's ~1070-row pool: ~340 ms at
+  dim 384 and ~670 ms at dim 768 to build and gzip, against the
   "<20 ms" `probe.md` had carried and a ~108 ms retrieval pass. It is
   synchronous, on the JS thread, inside the write transaction, and it
   is that expensive because deep mode serializes a vector for every
@@ -354,7 +354,8 @@ each answer constrains the next.
   Deep mode is per-capture opt-in from a dev route, so this bounds
   M7.5's design rather than any shipped path; the measured figures
   and the two levers now live in
-  [`probe.md → Capture cost`](../../../../memory/probe.md#capture-cost).
+  [`probe.md → Capture cost`](../../../../memory/probe.md#capture-cost),
+  re-derivable via `pnpm bench:probe`.
 - **`probe.md`'s light-mode simulatable list is wider than light mode
   can deliver.** Seven of its nine parameters feed `score`, which drives
   MMR's greedy pick order, which needs vectors light mode does not

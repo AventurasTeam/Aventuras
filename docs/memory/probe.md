@@ -239,21 +239,26 @@ hundreds of MB and are expected to be used sparingly.
 ### Capture cost
 
 Capture write is in-transaction with the ranker output, so it adds
-to per-turn latency. Measured on the
-[cost-budget](./retrieval.md#per-turn-cost-budget) fixture — a
-1067-row pool at 6000 happenings / 60 chapters, desktop Node 24,
-median of seven warm builds:
+to per-turn latency. Measured, not estimated:
+`bench/probe-capture-cost.test.ts` (`pnpm bench:probe`) builds and
+compresses a capture over the same
+[cost-budget](./retrieval.md#per-turn-cost-budget) fixture the
+retrieval bench uses — a ~1070-row pool at 6000 happenings / 60
+chapters, desktop Node 24, median of seven warm builds after two
+discarded:
 
 | Stage                              | light  | deep, dim 384 | deep, dim 768 |
 | ---------------------------------- | ------ | ------------- | ------------- |
-| Payload assembly                   | ~1ms   | ~12ms         | ~25ms         |
-| `JSON.stringify` + UTF-8 encode    | ~1ms   | ~31ms         | ~63ms         |
-| Gzip                               | ~9ms   | ~295ms        | ~621ms        |
-| **Build and compress, end to end** | ~11ms  | ~340ms        | ~700ms        |
-| Payload, uncompressed              | ~660KB | ~9MB          | ~17MB         |
-| Payload, gzipped                   | ~95KB  | ~3.8MB        | ~7.5MB        |
+| Payload assembly                   | ~1ms   | ~8ms          | ~16ms         |
+| `JSON.stringify` + UTF-8 encode    | ~1ms   | ~32ms         | ~67ms         |
+| Gzip                               | ~9ms   | ~303ms        | ~604ms        |
+| **Build and compress, end to end** | ~11ms  | ~341ms        | ~673ms        |
+| Payload, uncompressed              | ~675KB | ~9.2MB        | ~18MB         |
+| Payload, gzipped                   | ~97KB  | ~3.9MB        | ~7.8MB        |
 
 Plus one row insert, and one row delete when FIFO eviction fires.
+Neither is in the table: one statement against a PK-only table, the
+same statement in both modes.
 
 **Light mode is cheap; deep mode is not.** ~11 ms against a ~108 ms
 retrieval pass is the price of the default path, and assembly stays
@@ -264,7 +269,7 @@ that stage is not stressed by these numbers; at
 [`retrieval.md`'s measured ~45-60 µs per row](./retrieval.md#token-estimation)
 a floor in the dozens still leaves assembly under 5 ms.
 
-Deep mode costs **~340 ms at dim 384 and ~700 ms at dim 768** on the
+Deep mode costs **~340 ms at dim 384 and ~670 ms at dim 768** on the
 same fixture, three to four times the entire retrieval pass, because
 it serializes a vector for every pool row — not just the seated ones —
 as JSON number arrays. It is synchronous, on the JS thread, inside

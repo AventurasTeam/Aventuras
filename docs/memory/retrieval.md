@@ -1572,6 +1572,15 @@ Read at 6000 happenings / 15 000 awareness / 60 chapters — the top of
 the projected range. Lower scales are cheaper roughly in proportion:
 ~51ms / ~91ms at 1200 happenings, ~87ms / ~134ms at 3600.
 
+**Which rows a re-run reproduces.** The bench emits five spans:
+`totalMs`, `syncMs`, `embedMs`, `knnMs`, `rankMs`. Only two table rows
+map onto one of them — **Total** is `totalMs`, and **Scoring,
+tokenization, MMR, budget fill** is `rankMs`. The four rows above it
+are an ad-hoc M3.4 sub-split of `knnMs` and of the unnamed span before
+it (source loading has no `RetrievalTimings` member), hand-measured
+once and not instrumented since. Read them as proportions of the
+whole, not as figures `pnpm bench:retrieval` re-derives.
+
 Three things the table makes visible that the previous estimate did
 not:
 
