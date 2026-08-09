@@ -90,12 +90,23 @@ export interface TTSSegmentOptions {
   excludedCharacters: string
 }
 
+/** Anything a voice could actually pronounce: a letter or a digit, in any script. */
+const SPEAKABLE = /[\p{L}\p{N}]/u
+
 /**
  * Split already-sanitized text into the voiced segments to speak.
  *
- * Segments that hold nothing but whitespace are dropped here rather than in
- * `segmentDialogue`, which is deliberately lossless: an empty segment would cost a
- * TTS request (and on a paid endpoint, money) to say nothing.
+ * Two kinds of segment never become a request of their own, because a request that
+ * says nothing still costs a round trip — and, on a strict endpoint, fails outright,
+ * taking the whole entry's playback down with it after its retries:
+ *
+ * - whitespace-only, dropped (`segmentDialogue` is deliberately lossless, so trimming
+ *   is this function's job);
+ * - punctuation-only, folded into the segment before it. Splitting on quotes strands
+ *   the sentence's own full stop outside them — `"…an option". "This…"` leaves a
+ *   narrator segment holding just `.` — and folding it back also lets the previous
+ *   line finish on a falling intonation instead of stopping mid-air. With nothing
+ *   before it there is nothing to fold into, so it is dropped.
  */
 export function prepareTTSSegments(text: string, options: TTSSegmentOptions): TTSSegment[] {
   const { narratorVoice, dialogueVoice, excludedCharacters } = options
@@ -107,6 +118,14 @@ export function prepareTTSSegments(text: string, options: TTSSegmentOptions): TT
   for (const part of parts) {
     const spoken = stripExcludedCharacters(part.text, excludedCharacters).trim()
     if (!spoken) continue
+
+    if (!SPEAKABLE.test(spoken)) {
+      const previous = segments.at(-1)
+      // No space: these are marks that belong against the preceding word.
+      if (previous) previous.text += spoken
+      continue
+    }
+
     segments.push({
       text: spoken,
       voice: part.isDialogue && dialogueVoice ? dialogueVoice : narratorVoice,

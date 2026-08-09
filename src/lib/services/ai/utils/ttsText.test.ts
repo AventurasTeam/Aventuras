@@ -109,6 +109,31 @@ describe('prepareTTSSegments', () => {
     ])
   })
 
+  it('never emits a punctuation-only segment', () => {
+    // Reported bug: the full stop belonging to the sentence sits outside the closing
+    // quote, so it became a narrator segment holding just ".". The provider rejects
+    // that input, and after its retries the failure takes down playback of the whole
+    // entry — not just the fragment.
+    const segments = prepareTTSSegments(
+      '"i am a man of my word. no torture." i say "But, letting you go, has never been an option". "this.. \'Anchor\'.. why is the.."',
+      { ...options, dialogueVoice: 'nova' },
+    )
+
+    expect(segments).toEqual([
+      { text: '"i am a man of my word. no torture."', voice: 'nova' },
+      { text: 'i say', voice: 'alloy' },
+      { text: '"But, letting you go, has never been an option".', voice: 'nova' },
+      { text: '"this.. \'Anchor\'.. why is the.."', voice: 'nova' },
+    ])
+    expect(segments.every((s) => /[\p{L}\p{N}]/u.test(s.text))).toBe(true)
+  })
+
+  it('drops punctuation with nothing before it to attach to', () => {
+    expect(prepareTTSSegments('... "Who?"', { ...options, dialogueVoice: 'nova' })).toEqual([
+      { text: '"Who?"', voice: 'nova' },
+    ])
+  })
+
   it('returns nothing for text that is entirely excluded', () => {
     expect(prepareTTSSegments('***', options)).toEqual([])
     expect(prepareTTSSegments('', options)).toEqual([])

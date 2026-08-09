@@ -64,11 +64,17 @@ interface TTSChunk {
  * Split each segment to the provider's chunk limit, keeping its voice.
  * Chunking never crosses a segment, which costs nothing: `splitTextForTTS` already
  * prefers to break on sentence boundaries, and a quote is one.
+ *
+ * A chunk with nothing pronounceable in it is dropped here, the last point before it
+ * would become a request. A strict endpoint rejects such input, and a rejection
+ * survives its retries and aborts playback of the whole entry — so the guard is worth
+ * more than the round trip it saves.
  */
 function buildChunks(segments: TTSSegment[], maxChunkLength: number): TTSChunk[] {
   const chunks: TTSChunk[] = []
   for (const segment of segments) {
     for (const text of splitTextForTTS(segment.text, maxChunkLength)) {
+      if (!/[\p{L}\p{N}]/u.test(text)) continue
       chunks.push({ text, voice: segment.voice })
     }
   }
