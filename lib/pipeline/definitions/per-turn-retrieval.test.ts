@@ -1158,8 +1158,8 @@ describe('retrieval phase — probe capture', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
       branch_id: 'b1',
-      // The tail, not the head: the entry the pass was run for is this turn's
-      // user action, which submitTurn commits before the run starts.
+      // The tail, not the head: the capture is keyed to the row the pass ran
+      // against.
       target_entry_id: 'entry_2',
       capture_mode: 'light',
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
@@ -1206,8 +1206,11 @@ describe('retrieval phase — probe capture', () => {
     await setAppGate(db, true)
     seedProbeStory({ probe_mode_active: false })
 
-    await runRetrievalPhase(undefined, runInTransaction)
+    const { result } = await runRetrievalPhase(undefined, runInTransaction)
 
+    // Anchored on the result: an empty table also describes a pass that never
+    // reached the capture at all.
+    expect(result).toEqual({ status: 'completed' })
     expect(captureRows(sqlite)).toEqual([])
   })
 
@@ -1224,8 +1227,9 @@ describe('retrieval phase — probe capture', () => {
       return OK_OUTCOME
     })
 
-    await runRetrievalPhase(undefined, runInTransaction)
+    const { result } = await runRetrievalPhase(undefined, runInTransaction)
 
+    expect(result).toEqual({ status: 'completed' })
     expect(captureRows(sqlite)).toEqual([])
   })
 

@@ -2,7 +2,7 @@ type CaptureMode = 'light' | 'deep'
 
 let armed: CaptureMode = 'light'
 
-/** Arms the next capture as deep; the reader's per-turn checkbox lands with the probe surface. */
+/** Arms the next capture as deep. */
 export function armDeepCapture(): void {
   armed = 'deep'
 }

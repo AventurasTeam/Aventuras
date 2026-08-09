@@ -76,49 +76,6 @@ export async function* retrievalPhase(
 
   const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
-  const captureProbe = async (outcome: RetrievalOutcome): Promise<void> => {
-    // target_entry_id is NOT NULL and carries no sentinel, so a capture with
-    // nothing to attribute itself to would be unreadable in the probe surface.
-    if (tail === undefined) {
-      ctx.log.debug('retrieval.capture_skipped', { reason: 'branch has no entries' })
-      return
-    }
-    // getAppSettings() hands back a fresh object per call, so both gates are
-    // read at capture time or they sit at whatever the pass started with
-    // (observability.md → Store ownership and gate wiring).
-    const appGateOn = appSettingsStore.getAppSettings().diagnostics.enabled
-    const storyGateOn = open.settings.probe_mode_active
-
-    await writeProbeCapture(
-      { runInTransaction: ctx.runInTransaction },
-      {
-        id: generateId('pc'),
-        branchId,
-        // The pass ran for the user action submitTurn committed ahead of it.
-        targetEntryId: tail.id,
-        // Null in practice: the driving entry is an open-region row, and a
-        // chapter id is stamped on at chapter-create time (data-model.md →
-        // story_entries).
-        chapterId: tail.chapterId,
-        capturedAt: Date.now(),
-        embeddingModelId: resolution.config.modelId,
-        // A gated turn must not spend the arm — the button that sets it is one
-        // screen away from the toggles that would swallow the capture.
-        mode: appGateOn && storyGateOn ? takeNextCaptureMode() : 'light',
-        appGateOn,
-        storyGateOn,
-        params: RANKER_DEFAULTS,
-        settings: {
-          retrievalBudgets: open.settings.retrievalBudgets,
-          fullChapterInBuffer: open.settings.fullChapterInBuffer,
-          partialChapterBuffer: open.settings.partialChapterBuffer,
-          protectedBuffer: open.settings.protectedBuffer,
-        },
-        outcome,
-      },
-    )
-  }
-
   // A provider that accepts the connection and stalls would otherwise park the
   // turn forever holding the hard gate, with the pill still offering a Cancel
   // that reaches nothing.
@@ -187,6 +144,50 @@ export async function* retrievalPhase(
   // here would report every timeout as a phantom user-cancel — draft restored,
   // no error, no Switch embedder, retrying into the same dead provider.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
+
+  const captureProbe = async (probed: RetrievalOutcome): Promise<void> => {
+    // The app gate is live: getAppSettings() rebuilds from store state per call,
+    // so a mid-pass toggle is honored (observability.md → Store ownership and
+    // gate wiring). The story gate is the pass-start snapshot.
+    const appGateOn = appSettingsStore.getAppSettings().diagnostics.enabled
+    const storyGateOn = open.settings.probe_mode_active
+    // Returning before the arm is taken is what keeps a gated turn from
+    // spending a deep capture on a write that never happens.
+    if (!appGateOn || !storyGateOn) return
+    // target_entry_id is NOT NULL and carries no sentinel, so a capture with
+    // nothing to attribute itself to would be unreadable in the probe surface.
+    if (tail === undefined) {
+      ctx.log.debug('retrieval.capture_skipped', { reason: 'branch has no entries' })
+      return
+    }
+
+    await writeProbeCapture(
+      { runInTransaction: ctx.runInTransaction },
+      {
+        id: generateId('pc'),
+        branchId,
+        // Keyed to the branch tail: the row this pass ran against, whatever kind it is.
+        targetEntryId: tail.id,
+        // Null in practice: the driving entry is an open-region row, and a
+        // chapter id is stamped on at chapter-create time (data-model.md →
+        // story_entries).
+        chapterId: tail.chapterId,
+        capturedAt: Date.now(),
+        embeddingModelId: resolution.config.modelId,
+        mode: takeNextCaptureMode(),
+        appGateOn,
+        storyGateOn,
+        params: RANKER_DEFAULTS,
+        settings: {
+          retrievalBudgets: open.settings.retrievalBudgets,
+          fullChapterInBuffer: open.settings.fullChapterInBuffer,
+          partialChapterBuffer: open.settings.partialChapterBuffer,
+          protectedBuffer: open.settings.protectedBuffer,
+        },
+        outcome: probed,
+      },
+    )
+  }
 
   if (!outcome.ok) {
     const failure = bounded.expired()
