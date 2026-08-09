@@ -15,7 +15,7 @@ export {
   decodeCaptures,
   deleteCaptureOp,
 } from './read'
-export type { StoredCapture } from './read'
+export type { CorruptCapture, StoredCapture } from './read'
 export { replayType } from './replay'
 export type { ReplayOptions } from './replay'
 export { RankerParamsError } from './validate'

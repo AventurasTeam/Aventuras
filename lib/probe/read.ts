@@ -5,6 +5,8 @@ import type { EmbedderErrorKind } from '@/lib/embedder'
 import { decompressPayload } from './compress'
 import { assertRankerParams, RankerParamsError } from './validate'
 
+export type CorruptCapture = { id: string; branchId: string; error: Error }
+
 export type StoredCapture = {
   id: string
   branchId: string
@@ -61,10 +63,10 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
  */
 export function decodeCaptures(rows: readonly (readonly unknown[])[]): {
   ok: StoredCapture[]
-  corrupt: { id: string; branchId: string; error: Error }[]
+  corrupt: CorruptCapture[]
 } {
   const ok: StoredCapture[] = []
-  const corrupt: { id: string; branchId: string; error: Error }[] = []
+  const corrupt: CorruptCapture[] = []
   for (const row of rows) {
     try {
       ok.push(decodeCapture(row))
