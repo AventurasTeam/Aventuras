@@ -236,6 +236,12 @@ pub fn run() {
             sql: include_str!("../migrations/036_pack_template_baseline.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 37,
+            description: "kept_separate",
+            sql: include_str!("../migrations/037_kept_separate.sql"),
+            kind: MigrationKind::Up,
+        },
     ];
 
     #[cfg_attr(not(all(debug_assertions, feature = "devtools")), allow(unused_mut))]

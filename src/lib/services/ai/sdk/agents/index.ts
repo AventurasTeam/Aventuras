@@ -16,8 +16,6 @@ export {
 export {
   stopOnTerminalTool,
   stopOnCompletedTerminalTool,
-  stopOnAnyToolCall,
-  stopOnAny,
-  stopOnCostExceeded,
   stopWhenDone,
+  finishOnlyOnLastStep,
 } from './stopConditions'

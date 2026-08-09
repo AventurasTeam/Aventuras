@@ -439,14 +439,28 @@ On the last step `finish_retrieval` becomes the only callable tool and is requir
 produce nothing at all — its findings live in the agent's own message history and nowhere else — so
 the step that was going to happen anyway is spent on the summary instead, at no extra call. A run
 that _dies_ is a different case: there is nobody left to ask, and it falls through to the salvage
-below.
+below. Lore management uses the same policy for `finish_lore_management`: its changes are already
+written when the ceiling is reached, but the summary is the only account the user is shown.
 
 The loop stops on `finish_retrieval` or at `maxIterations` (`AGENTIC_RETRIEVAL_DEFAULTS`, default
-10 — measured runs finish in 3-5, so the ceiling only bounds the worst case). `query_chapter` has
-its own hard cap of `MAX_CHAPTER_QUERIES` (3) per run, because `maxIterations` counts steps, not
-whole-chapter reads, and a run could otherwise spend every step on one. A run that dies part-way is
-salvaged rather than discarded — chapter answers cost an LLM call each, and throwing would leave the
-turn with no retrieval at all.
+10 — measured runs finish in 3-5, so the ceiling only bounds the worst case). A run that dies
+part-way is salvaged rather than discarded — chapter answers cost an LLM call each, and throwing
+would leave the turn with no retrieval at all. The salvage is read back off the run's own event
+log, which is the only record of what was paid for.
+
+**The whole-chapter read is governed in one place for both agents**
+(`sdk/tools/chapterQueries.ts`), because `maxIterations` counts steps and a run could otherwise
+spend every one of them on a ~17,000-token read. `ChapterQueryBudget` holds three things: a
+per-run allowance, a cache so a repeated question is replayed instead of re-read, and failures
+cached like answers so a question the provider cannot answer is not re-asked until the step
+ceiling is gone. Two numbers, not one — retrieval spends `MAX_CHAPTER_QUERIES_RETRIEVAL` (3) per
+turn with `grep_chapters` as the free fallback; lore management spends
+`MAX_CHAPTER_QUERIES_LORE` (6) per session, a pass that runs once per chapter and has no cheaper
+tool. The refusal names that fallback **only where it is registered**, from the same
+`canGrepChapters` the tool list reads: sending the model to a tool its instructions deny is the
+failure that predicate exists to prevent. What is deliberately not shared is the tool itself —
+the two agents have different contexts and different result shapes, and merging them would drag
+`onEvent`/`describeProgress` into the lorebook.
 
 `finish_retrieval`'s `synthesis` and `chapterSummary` both reach the narrator, and the prompt says
 so — `chapterSummary` is optional in the schema, and a run that put its findings in `synthesis`
@@ -564,6 +578,49 @@ Two properties of that path are worth knowing before tuning it:
   the prompt as `A: Unable to answer the question.` under a heading claiming the material is
   relevant to the current scene.
 
+### Duplicate Entities
+
+Two pools accumulate duplicates, and until recently only one of them was looked at.
+`src/lib/services/duplicates/` now owns both: `names.ts` is the comparison itself (exact
+name, shared alias, token containment, length-scaled edit distance, grouped transitively),
+`index.ts` applies it per pool and filters what the user has already ruled on. Its own
+service and not a corner of the lorebook's, because `ai/lorebook`'s barrel pulls in the SDK
+and through it a rune store, which no plain module can be imported alongside.
+
+**The world state is the pool that actually grows.** The classifier mints a new `Character`
+whenever the story calls someone by a different title, so one measured save held
+`Baron Kaelen` and `Forge-Master Kaelen`, `Captain Vor'koth`, `General Vor'koth` and
+`The Captain` — thirty-eight rows for about thirty-one people. The **Duplicates** window in
+the Active Context panel is where those are resolved: one group at a time, with the members
+side by side and a radio for which name survives. A group, not a pair — grouping is
+transitive, and those four Vor'koth rows are one decision.
+
+**A merge is shown before it is written**, because it deletes rows and `deleteCharacter` is
+not undoable. `generation/mergeEntities.ts` builds a _plan_ rather than a result: every
+field carries where its value came from — `only` (one row had it), `agreed`, `union`, or
+`conflict` — and the conflicts are settled in the preview, with a third option for prose
+("keep both, one after the other").
+
+Only the defaults a machine can justify survive: a field one row has is that row's, lists
+(traits, aliases, keywords) are unioned, and everything else defaults to the row the user
+chose to keep. There is deliberately **no "the newer row wins"** — `characters`, `locations`
+and `items` have no creation timestamp, so which of two conflicting values is more recent is
+a question the data cannot answer.
+
+The first version returned a finished object and preferred the primary field by field. It
+dropped a description silently whenever both rows had one, and it put `status` outside the
+user's reach entirely — any non-`active` value from any row won, so merging a character the
+story had brought back marked them dead again whichever row was kept. For the lorebook the
+absorbed names still become **aliases** on the survivor, which is what stops the same
+duplicate being re-created.
+
+**A dismissal is remembered, in `kept_separate`** (migration 037), keyed by normalized
+**name pair** and scoped to a branch. Names rather than ids, so a later rename cannot
+resurrect a settled decision; per pair rather than per group, because a group of three can
+reappear as a group of two once one member is merged away. The lore agent reads the same
+table — groups the user has closed never reach it — and its own `keep_separate` writes to
+it, so a decision made once is not re-argued by either side.
+
 ### Lore Management
 
 `src/lib/services/ai/lorebook/LoreManagementService.ts` is the one agent that _writes_ to the
@@ -574,7 +631,7 @@ panel (`runManualLoreManagement`, shared by both manual callers).
 
 **Its failure mode is growth.** A model that cannot see its own past sessions re-creates what it
 already wrote, so a lorebook accumulates "Kaelen", "Kaelen the Bold" and "Kaelan" and never loses
-one. Four things hold that down, and only the last is optional:
+one. Several things hold that down, and only the last is optional:
 
 - **Deletes and merges are applied.** They used to be approved by the tool, logged, and then
   dropped — the session's change loop handled `create` and `update` only — so every run
@@ -586,8 +643,18 @@ one. Four things hold that down, and only the last is optional:
   a delete keeps its slot and joins `removedIndices` — hidden from listings, refused by
   everything that takes an index.
 - **`create_entry` refuses a name that already exists**, matching on names and aliases through
-  `normalizeName`. The refusal says to update that index instead. The vault assistant does not
+  `foldName`. The refusal says to update that index instead. The vault assistant does not
   get this guard: there a human reads the change before it lands.
+- **An index outlives the array it came from.** `create_entry` and `merge_entries` append, so
+  the agent legitimately holds indices past the end of the list the session started with, and a
+  delete leaves its slot in place rather than shifting everything under it.
+  `lorebook/sessionChanges.ts` owns that mapping: one slot per index, each knowing whether
+  writing it back means an insert, an update, a merge or nothing at all. That is what makes a
+  create-then-update land as one create, an update-then-delete land as one delete, and a second
+  update to the same entry keep the first — all of which were silently dropped when the write
+  side looked the index up in the original list, after the tool had already answered
+  `success: true`. A merge also carries `hiddenInfo` from every source, since the agent is never
+  shown the field and cannot carry it itself.
 - **The entry tools do not take a `lorebookId`.** A story's lorebook is not an entity with an
   id — it is the `entries` rows for a story and a branch, and the branch-resolved view of them
   is what the service passes in. The id belongs to the Vault, where there really are several
@@ -601,13 +668,41 @@ one. Four things hold that down, and only the last is optional:
   exact name, shared alias, token containment and a length-scaled edit distance, grouped
   transitively. The list goes into the prompt as a worklist. Under **Require duplicate
   consolidation** (Advanced → Lore Management, off by default) `finish_lore_management` also
-  refuses to complete while a group is untouched — which is why the loop stops on
+  refuses to complete while a group is unresolved — which is why the loop stops on
   `stopOnCompletedTerminalTool`, reading the tool's answer rather than its call. The refusal is
   capped at two: the agent may be right that the groups are distinct, and a run that cannot end
-  returns nothing. `keep_separate` is how it says so.
+  returns nothing. `keep_separate` is how it says so, and it must name **every** index of a
+  group: closing on one shared index dismissed neighbours the agent had never read.
+
+  **Resolved means the group collapsed**, not that a member was touched. An update is what the
+  agent does anyway on its next task, so counting it opened the gate without consolidating
+  anything — a group is open until deletes and merges have left it one surviving member.
 
 The setting gates only the obligation. The worklist and the create guard cost nothing and are
 always on.
+
+**One session per branch at a time**, enforced in `LoreManagementCoordinator` and not in the UI.
+Three callers can start one and none of them sees the others; two agents on one lorebook write
+over each other, because each takes an index snapshot at the start and edits by index. The lock
+is at the funnel they all pass through — `ui.loreManagementActive` could not be it, since it
+lingers two seconds after a run so the summary can be read. Keyed by branch rather than story,
+because a branch has its own resolved view of the entries. The same reasoning covers chapters:
+a turn's background tasks create one, so `ui.backgroundTasksActiveFor(storyId, branchId)`
+disables **Create Chapter Now** and `createManualChapter` refuses outright, or two chapters get
+built over overlapping ranges of the same entries.
+
+**The session's inputs are read when it starts, not when the turn did.** Everything in them
+moves during a turn: the classifier writes lorebook entries, and the chapter check that decides
+whether lore management runs at all creates the chapter. A snapshot taken up front handed the
+agent a lorebook missing what was just classified, a chapter list missing the chapter that
+triggered the run, and a "recent story" still holding the entries that chapter had absorbed. Both
+the background path and the batch importer now pass a thunk.
+
+`query_chapter` here shares `ChapterQueryBudget` with the retrieval agent — see
+[Agentic Retrieval](#ai-context-injection) — at its own allowance of six per session, and with no
+`grep_chapters` to name in the refusal. It does **not** echo the chapter summary back: every
+summary is already in the instructions untruncated, so returning one is the same text twice in one
+prompt, which is the reason there is no `list_chapters` either.
 
 **There is no `list_chapters` tool.** The prompt carries the complete chapter list with
 untruncated summaries, so the same material never exists in two places for the agent to
@@ -636,7 +731,14 @@ result, so the model reads the rule applied to its own output; nothing is reject
 losing a whole call over one redundant keyword is the failure this file exists to avoid. The
 comparison is `foldName`, which folds case and punctuation but keeps articles — `"The Citadel"`
 and `"Citadel"` are the same subject but not the same trigger, which is `normalizeName`'s
-distinction to make, not this one's.
+distinction to make, not this one's. `foldName` is also what `create_entry`'s duplicate refusal
+matches on, deliberately and not `normalizeName`: the detector is lenient because being wrong
+there costs one question, while being wrong in a hard refusal costs an entry.
+
+Both fold on `\p{L}\p{N}`, not `a-z0-9`. An ASCII class folds every Cyrillic, Greek and CJK
+name to the empty string, and empty compares equal to every other one — which made two
+unrelated characters read as duplicates, and, through `sameEntityName`, collapsed the whole
+world-state cast of a non-Latin story into its first member.
 
 Everything requiring judgement stays in the prompt, where the field contract is written out: a
 name is the form the story actually uses (never `Name / Title`), other forms are aliases, and a
@@ -656,10 +758,16 @@ re-create it.
 
 **An agent with no story text must not create.** Chapters are the usual material, but a manual
 run can happen before any chapter exists, so every caller passes `recentEntries` — the
-un-chapterized tail, trimmed to `recentEntriesForLoreManagement` by `runLoreManagement`. It was
-hardcoded to `[]` on all three paths. With neither chapters nor a tail, the prompt says so and
-restricts the run to consolidating what is already written; anything it "identified as missing"
-would be invented.
+un-chapterized tail, bounded by `runLoreManagement` to
+`recentStoryCharsForLoreManagement` (16,384). It was hardcoded to `[]` on all three paths. With
+neither chapters nor a tail, the prompt says so and restricts the run to consolidating what is
+already written; anything it "identified as missing" would be invented.
+
+**Characters, not entries, and through the same helper the retrieval tail uses**
+(`splitRecentTail`). An entry count is not a budget: ten entries is 1,000 characters of terse
+exchanges or 27,000 of long prose, and what is being bounded is the prompt. The floor of
+`MIN_RECENT_ENTRIES_FOR_LORE` (4) is not belt and braces — measured entries averaged 2,688
+characters, so a character budget alone can collapse to the player's last action.
 
 All three callers go through `LoreManagementCoordinator` with the same
 `buildLoreManagementCallbacks()`, which is the only place that says what a lore change does to
@@ -748,7 +856,19 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   tail** (`story.getUnchapterizedEntries()`) — the newest material, and the part chapter-oriented
   tools would otherwise be blind to.
 - **World state** (`Character`/`Location`/`Item`/`StoryBeat`) is rewritten by the classifier after
-  every turn. It is _not_ the Lorebook: `Entry[]` records are authored lore that changes only when
+  every turn. A lorebook `Entry` carries no live state of its own: the type has `state` fields
+  per entry type, but every creation path initialised them blank and nothing ever wrote one
+  (0 of 16 character entries on a measured 41-chapter save), so the four Tier 1 conditions that
+  read them never fired and are gone. Presence is `WorldStateInjector`'s claim to make. The
+  never-produced `mentionCount`/`firstMentioned`/`lastMentioned` are gone from the model too;
+  their columns stay, with their defaults. **A rendered entity line must never be re-readable as a name.** The classifier is
+  shown the entities that already exist and writes names back, so `- Eira (claimed as a consort)
+[inactive]` came back as the name, missed `sameEntityName`, and created a second character —
+  four of thirty-eight on a measured 41-chapter save, two carrying the subject's own
+  `relationship` verbatim. Name and attributes are now separate lines (`relationship:`,
+  `status:`, `appearance:`), in `ClassifierService.formatExistingCharacters`, in the story-beat
+  list beside it, and in `WorldStateInjector`'s narrator block, whose prose the classifier also
+  reads. It is _not_ the Lorebook: `Entry[]` records are authored lore that changes only when
   someone edits them. The two pools never overlap, and two different services inject them.
 - **`worldStateDelta`** on an entry records what its classification changed, which is what makes
   retry, time-travel delete and regenerate reversible (`rollbackService`).
@@ -831,6 +951,15 @@ in that order.
 Defaults that both the settings store and `AI_CONFIG` need live in
 `src/lib/services/ai/core/defaults.ts`, a leaf module that imports nothing — `core/config.ts`
 imports the settings store, so the store cannot import back from it.
+
+**Two rules keep that file the single source.** A constant a user can change — anything with
+a control in Advanced Settings — goes there as a named `*_DEFAULTS` object; a constant that
+guards a failure mode and has no control (`GREP_NOISE_RATIO`, `MAX_LIST_ENTRIES`,
+`MAX_CHAPTER_QUERIES_*`) stays next to the code it protects, where the reasoning lives. And
+**a consumer never writes `?? <default>`**: the store merges every block over its defaults
+on load, so the key is always present, and a fallback at the call site is a second copy of
+the number that nothing forces to agree. That form had put four stale values in the tree at
+once — a `maxIterations` of 50 in the store, 3 in a constructor, 50 again in the slider.
 
 ### Reasoning Effort
 
@@ -993,7 +1122,10 @@ ignores the setting.
 
 Settings are persisted as one JSON blob, and nothing removes legacy keys from it. Reshaping runs on
 the way from disk into the store, in `src/lib/stores/settingsMigrations.ts` — kept out of the rune
-store precisely so it can be tested. Two properties every migration there must hold:
+store precisely so it can be tested. A rename goes through here too: `recentEntriesForRetrieval`
+became `recentEntriesForSuggestions`, because it named the one thing it does not drive — neither
+retrieval service ever read it, `SuggestionsService` is its only consumer, and the slider was
+already labelled "Plot Suggestions". Two properties every migration there must hold:
 
 - **Idempotent**, because it runs on every load, not just the first after an upgrade. A migration
   that keeps firing silently reverts whatever the user changed in between.

@@ -619,27 +619,29 @@ export function expandRangeBidirectional(
  * differ by an article are the same *subject* but not the same *trigger*: matching is
  * literal and whole-word, so the alias "The Citadel" fires on that two-word phrase while
  * the keyword "Citadel" fires on the bare word, and neither makes the other redundant.
- * Identity between two lorebook entries is judged by `normalizeName` in the duplicate
- * detector, which does strip articles; redundancy between one entry's own fields, and
- * sameness of two world-state entity names, are judged by this.
+ * Lorebook-entry *identity* is judged by `normalizeName`, which does strip them.
+ *
+ * The character class is `\p{L}\p{N}`, like the rest of this file, and deliberately not
+ * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
+ * and empty compares equal to every other one.
  */
 export function foldName(raw: string): string {
   return raw
     .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\p{M}+/gu, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }
 
 /**
  * Whether two names refer to the same entity as far as spelling can tell.
  *
- * The world-state pipeline used `a.toLowerCase() === b.toLowerCase()` at fourteen call
- * sites, which is why the Characters tab can hold "The Citadel" and "Citadel" as two
- * places. All fourteen must agree: a stricter creation guard paired with a looser lookup
- * loses an update — the lookup misses, the creation is refused as a duplicate, and the
- * change lands nowhere.
+ * Replaces `a.toLowerCase() === b.toLowerCase()` across the world-state pipeline, adding
+ * accent and punctuation folding — "Elénore"/"Elenore", "Kaelen's Rest"/"Kaelens Rest".
+ * Articles still separate, as they always did. Every call site must agree: a stricter
+ * creation guard paired with a looser lookup loses an update — the lookup misses, the
+ * creation is refused as a duplicate, and the change lands nowhere.
  */
 export function sameEntityName(a: string, b: string): boolean {
   return foldName(a) === foldName(b)

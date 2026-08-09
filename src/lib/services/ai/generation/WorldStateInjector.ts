@@ -748,13 +748,17 @@ export class WorldStateInjector extends BaseAIService {
    * cannot drift -- and so the appearance fallback for the pre-object `visualDescriptors`
    * format is maintained once.
    */
-  private renderCharacterDetail(char: WorldStateContextEntry): string {
+  private renderCharacterDetail(char: WorldStateContextEntry, relationship?: unknown): string {
     let out = ''
 
     const traits = char.metadata?.traits
     const vd = char.metadata?.visualDescriptors
 
     const details: string[] = []
+
+    if (typeof relationship === 'string' && relationship) {
+      details.push(`Relationship: ${relationship}`)
+    }
 
     let appearanceStr = ''
     if (vd) {
@@ -852,14 +856,15 @@ export class WorldStateInjector extends BaseAIService {
     if (allChars.length > 0) {
       block += '\n\n[KNOWN CHARACTERS]'
       for (const char of allChars) {
+        // Name, then a separator that is not a parenthesis. This block reaches the
+        // narrator, whose prose the classifier reads back, and `Name (relationship)` is a
+        // form the classifier has been observed to return as a name — see
+        // `ClassifierService.formatExistingCharacters`.
         block += `\n• ${char.name}`
-        if (char.metadata?.relationship) {
-          block += ` (${char.metadata.relationship})`
-        }
         if (char.description) {
           block += ` - ${char.description}`
         }
-        block += this.renderCharacterDetail(char)
+        block += this.renderCharacterDetail(char, char.metadata?.relationship)
       }
     }
 

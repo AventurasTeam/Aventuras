@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { editDistance, findDuplicateGroups, normalizeName } from './duplicates'
+import { editDistance, findDuplicateGroups, normalizeName } from './names'
 
 const character = (name: string, aliases: string[] = []) => ({ name, aliases, type: 'character' })
 
@@ -8,6 +8,25 @@ describe('normalizeName', () => {
     expect(normalizeName("L'Élu")).toBe('elu')
     expect(normalizeName('Kael')).toBe('kael')
     expect(normalizeName('KAEL, the Bold')).toBe('kael the bold')
+  })
+
+  it('keeps non-Latin names, which an a-z fold turns into the empty string', () => {
+    expect(normalizeName('Иван')).toBe('иван')
+    expect(normalizeName('カエレン')).toBe('カエレン')
+    // The failure this guards: every non-Latin name folding to '' compares equal to every
+    // other one, so two unrelated characters read as duplicates.
+    expect(normalizeName('Иван')).not.toBe(normalizeName('Пётр'))
+  })
+
+  it('keeps a nobiliary particle, which is part of the surname', () => {
+    // "de"/"du"/"di" are not articles. Folded away, "De Luca" *is* "Luca" — and the same
+    // normalization once powered `create_entry`'s hard refusal, which then rejected a
+    // legitimate entry. The pair is still a candidate, which is the right answer here: it
+    // is a question for the agent, not a verdict.
+    expect(normalizeName('De Luca')).toBe('de luca')
+    expect(findDuplicateGroups([character('De Luca'), character('Luca')])[0].reason).toBe(
+      'contained',
+    )
   })
 
   it('drops a leading article but never the whole name', () => {

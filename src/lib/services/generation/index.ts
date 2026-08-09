@@ -74,8 +74,25 @@ export type {
 
 // Lore management coordinator
 export { runManualLoreManagement } from './manualLoreManagement'
-export { buildLoreManagementCallbacks } from './loreCallbacks'
-export { LoreManagementCoordinator } from './LoreManagementCoordinator'
+export { buildLoreManagementCallbacks, buildLoreManagementUICallbacks } from './loreCallbacks'
+
+// Duplicate consolidation (the worklist behind the Active Context window)
+export {
+  findAllDuplicates,
+  buildMergePlan,
+  mergeGroup,
+  keepSeparate,
+  forgetKeptSeparate,
+} from './entityConsolidation'
+export {
+  applyMergePlan,
+  hasConflicts,
+  APPEND,
+  type MergePlan,
+  type MergeField,
+  type FieldOrigin,
+} from './mergeEntities'
+export { LoreManagementCoordinator, isLoreManagementRunning } from './LoreManagementCoordinator'
 export type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,

@@ -54,7 +54,12 @@ export interface ChapterBatchInput {
   includeClassification: boolean
   storyId: string
   currentBranchId: string | null
-  lorebookEntries: Entry[]
+  /**
+   * Read at the lore management phase, not when the batch started: each chapter's
+   * classification creates lorebook entries, and a snapshot taken up front hands the agent
+   * a list missing every one of them.
+   */
+  getLorebookEntries: () => Entry[]
   mode: StoryMode
   pov: POV
   tense: Tense
@@ -170,11 +175,10 @@ export class ChapterBatchService {
         {
           storyId: input.storyId,
           currentBranchId: input.currentBranchId,
-          lorebookEntries: input.lorebookEntries,
+          lorebookEntries: input.getLorebookEntries(),
           chapters,
-          // What the batch deliberately left un-chapterized: `planChapterBoundaries` stops
-          // `chapterBuffer` entries short of the end, and those are the newest material in
-          // the story — the part no summary covers.
+          // What the batch left un-chapterized: `planChapterBoundaries` stops
+          // `chapterBuffer` entries short of the end, and no summary covers those.
           recentEntries: input.entries.slice(boundaries[boundaries.length - 1]?.endIndex ?? 0),
           mode: input.mode,
           pov: input.pov,

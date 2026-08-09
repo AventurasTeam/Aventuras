@@ -12,7 +12,12 @@ import { createLogger } from '$lib/log'
 import { formatStoryTimeOrNull } from '$lib/utils/storyTime'
 import { splitRecentTail } from './recentTail'
 import { AGENTIC_RETRIEVAL_DEFAULTS } from '../core/defaults'
-import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
+import {
+  createAgentFromPreset,
+  extractTerminalToolResult,
+  finishOnlyOnLastStep,
+  stopOnTerminalTool,
+} from '../sdk/agents'
 import type { PrepareStepFunction } from 'ai'
 import {
   canGrepChapters,
@@ -55,29 +60,6 @@ const RECENT_NARRATIVE_CHARS = 12288
  * the minimum for judging what the past needs to supply.
  */
 const MIN_RECENT_ENTRIES = 4
-
-/**
- * On the last step, leave `finish_retrieval` as the only callable tool and require it.
- *
- * A run that reaches `maxIterations` without calling it produced nothing: the agent's
- * findings live in its own message history and nowhere else, and no reconstruction from the
- * event log comes close to what the agent would write with all of it still in context. So
- * rather than salvage afterwards, spend the step that was going to happen anyway on the
- * summary. It costs no extra call.
- *
- * Does not cover a run that *dies* -- a context overflow has nobody left to ask. That still
- * falls through to the salvage path.
- */
-export function finishOnlyOnLastStep(maxIterations: number) {
-  const lastStep = Math.max(0, maxIterations - 1)
-  return ({ stepNumber }: { stepNumber: number }) =>
-    stepNumber >= lastStep
-      ? {
-          activeTools: ['finish_retrieval'],
-          toolChoice: { type: 'tool' as const, toolName: 'finish_retrieval' },
-        }
-      : {}
-}
 
 /**
  * Result from an agentic retrieval session.
@@ -182,11 +164,18 @@ export class AgenticRetrievalService extends BaseAIService {
     const record = (event: RetrievalEventInput) => {
       events.push({ ...event, at: events.length } as RetrievalEvent)
     }
-    /** Answers already paid for this run: reused on a repeat, and salvaged on truncation. */
-    const answeredQuestions = new Map<
-      string,
-      { chapterNumber: number; question: string; answer: string; failed?: boolean }
-    >()
+    /**
+     * Chapter answers this run paid for, salvaged if the agent never reaches its summary.
+     *
+     * Derived from the event log rather than tracked beside it — `ChapterQueryBudget` owns
+     * the cache now, and records every answer through `onEvent`, so a second copy here
+     * could only disagree with it. Cached replays are excluded: they are the same answer.
+     */
+    const paidChapterAnswers = () =>
+      events.filter(
+        (e): e is Extract<RetrievalEvent, { kind: 'query' }> =>
+          e.kind === 'query' && !e.cached && !e.failed,
+      )
 
     const availableEntries = context.availableEntries
     const availableChapters = context.chapters ?? []
@@ -225,53 +214,9 @@ export class AgenticRetrievalService extends BaseAIService {
       onEvent: record,
       describeProgress: () =>
         summarizeProgress(events, { steps: stepsTaken, maxIterations: this.maxIterations }),
-      onQueryChapter: context.queryChapter
-        ? async (chapterNumber: number, question: string) => {
-            // Asking the same thing twice costs a second full chapter read. The agent
-            // cannot see its own history, so dedup here and hand back what it already
-            // paid for.
-            const key = `${chapterNumber}:${question.trim().toLowerCase().replace(/\s+/g, ' ')}`
-            const previous = answeredQuestions.get(key)
-            if (previous) {
-              log('Repeat chapter question served from this run', { chapterNumber })
-              record({
-                kind: 'query',
-                chapterNumber,
-                question,
-                answer: previous.answer,
-                cached: true,
-              })
-              return previous.answer
-            }
-
-            // Not `startedAt`: that name belongs to the whole run, a few lines up, and
-            // this shadowed it.
-            const askedAt = Date.now()
-            let answer: string
-            let failed = false
-            try {
-              answer = await context.queryChapter!(chapterNumber, question)
-            } catch (error) {
-              // Cached like a success: otherwise the agent re-asks a failing question
-              // until the step budget is gone, and the transcript shows none of it.
-              failed = true
-              answer =
-                `Query failed: ${error instanceof Error ? error.message : String(error)}. ` +
-                'Use the chapter list in your instructions instead.'
-            }
-            answeredQuestions.set(key, { chapterNumber, question, answer, failed })
-            record({
-              kind: 'query',
-              chapterNumber,
-              question,
-              answer,
-              cached: false,
-              failed,
-              durationMs: Date.now() - askedAt,
-            })
-            return answer
-          }
-        : undefined,
+      // Passed straight through: the repeat cache, the failure handling and the event
+      // recording all live in `ChapterQueryBudget`, which the tool owns.
+      onQueryChapter: context.queryChapter,
       getChapterEntries: context.getChapterEntries,
       getUnchapterizedEntries: context.getUnchapterizedEntries ? () => searchableTail : undefined,
       grepEnabled: this.grepEnabled,
@@ -349,9 +294,10 @@ export class AgenticRetrievalService extends BaseAIService {
     })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('agentic-retrieval')
 
-    const prepareStep = finishOnlyOnLastStep(this.maxIterations) as PrepareStepFunction<
-      typeof tools
-    >
+    const prepareStep = finishOnlyOnLastStep(
+      'finish_retrieval',
+      this.maxIterations,
+    ) as PrepareStepFunction<typeof tools>
 
     // Create the agent
     const agent = createAgentFromPreset(
@@ -424,7 +370,7 @@ export class AgenticRetrievalService extends BaseAIService {
       log('No terminal result -- salvaging what the session gathered', {
         iterations: stepsTaken,
         failure,
-        answers: answeredQuestions.size,
+        answers: paidChapterAnswers().length,
       })
       // One line, not the transcript: this goes into the narrator's prompt, where a dump
       // of the agent's tool calls is noise it may read as story material.
@@ -434,8 +380,7 @@ export class AgenticRetrievalService extends BaseAIService {
     }
 
     const salvagedChapterContext = truncated
-      ? Array.from(answeredQuestions.values())
-          .filter((a) => !a.failed)
+      ? paidChapterAnswers()
           .map((a) => `**Chapter ${a.chapterNumber} — ${a.question}**\n${a.answer}`)
           .join('\n\n')
       : ''

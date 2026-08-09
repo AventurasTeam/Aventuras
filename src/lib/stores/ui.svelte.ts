@@ -253,17 +253,23 @@ class UIStore {
 
   // Lore management mode state
   // When active, the AI is reviewing/updating the lorebook - user editing is locked
+  /**
+   * Branches whose background tasks — chapter threshold check, lore management, style
+   * review — are still running, as `storyId:branchId`.
+   *
+   * They create chapters, so the Memory view must not offer to create one at the same time:
+   * two chapters built from overlapping ranges of the same entries. Per branch rather than
+   * global, because chapters belong to a branch and two branches never collide.
+   */
+  backgroundTaskBranches = $state<SvelteSet<string>>(new SvelteSet())
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
   /**
    * What the last session reported it did, kept after the run ends.
    *
-   * The agent writes a real summary — "updated Liora's entry to reflect her capture,
-   * added the First Flame detail to the Anchor" — and it used to be shown inside the
-   * progress line for two seconds and then wiped, which is long enough to notice
-   * something was written and not long enough to read it. It is the only account of what
-   * changed in the lorebook, so it outlives the run.
+   * It is the only account of what changed in the lorebook, and it used to live in the
+   * progress line and be wiped two seconds later — long enough to notice, not to read.
    */
   lastLoreManagementSummary = $state<string | null>(null)
   lastLoreManagementChanges = $state<number>(0)
@@ -1419,6 +1425,16 @@ class UIStore {
   }
 
   // Lore management mode methods
+  backgroundTasksActiveFor(storyId: string, branchId: string | null): boolean {
+    return this.backgroundTaskBranches.has(`${storyId}:${branchId ?? 'main'}`)
+  }
+
+  setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {
+    const key = `${storyId}:${branchId ?? 'main'}`
+    if (active) this.backgroundTaskBranches.add(key)
+    else this.backgroundTaskBranches.delete(key)
+  }
+
   startLoreManagement() {
     this.loreManagementActive = true
     this.loreManagementProgress = 'Analyzing story content...'

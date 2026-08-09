@@ -1,15 +1,16 @@
 /**
  * Duplicate candidate detection for lore management.
  *
- * The lore agent was told to deduplicate the lorebook and given nothing to deduplicate
- * *from*: it saw a flat list of names and had to notice, unprompted, that two of them were
- * the same thing. It reliably did not, and spent its session creating instead. This module
- * does the noticing in code — cheaply, before the call — so the agent is handed a worklist
- * rather than a haystack.
+ * Noticing that two entries are the same subject is done here, in code and before the
+ * call, so the agent is handed a worklist instead of a flat list of names it has to spot
+ * the duplicates in unprompted — which it reliably did not.
  *
  * These are **candidates**, never verdicts: "Guard Captain" and "Guard" may or may not be
  * one entry, and only a model reading both descriptions can say. The agent resolves each
- * group either by merging it or by calling `keep_separate` on it.
+ * group by merging it or by calling `keep_separate` on it.
+ *
+ * Deliberately lenient, because being wrong here costs one question. `create_entry`'s
+ * hard refusal uses `foldName` instead, where being wrong costs a lost entry.
  *
  * Plain TypeScript with no store or SDK imports, so it is testable on its own.
  */
@@ -44,19 +45,25 @@ const MIN_FUZZY_LENGTH = 4
 /**
  * How far apart two names may be spelled and still be the same name.
  *
- * One edit is a plausible drift on a name long enough for it to be one — "Kaelen"/"Kaelan"
- * — and on a four-letter name it is a different name: "Mara"/"Sara". A second edit is only
- * allowed once the name is long enough that two differences are still a small share of it.
+ * One edit is plausible drift on a name long enough for it — "Kaelen"/"Kaelan" — and on a
+ * four-letter name it is a different name: "Mara"/"Sara". Two edits only once the name is
+ * long enough that two differences are still a small share of it.
  */
-const MAX_EDITS_BY_LENGTH: { minLength: number; edits: number }[] = [
-  { minLength: 9, edits: 2 },
-  { minLength: 5, edits: 1 },
-]
+function allowedEdits(length: number): number {
+  if (length >= 9) return 2
+  if (length >= 5) return 1
+  return 0
+}
 
 /** A worklist is only useful if it can be read; past this the prompt is the problem. */
 const MAX_GROUPS = 20
 
-/** Leading articles carry no identity: "The Citadel" and "Citadel" are one place. */
+/**
+ * Leading articles carry no identity: "The Citadel" and "Citadel" are one place.
+ *
+ * Articles only. The nobiliary particles `de`, `du`, `di`, `van` are *not* here: they sit
+ * inside surnames, so stripping them makes "De Luca" and "Luca" one candidate.
+ */
 const LEADING_ARTICLES = new Set([
   'the',
   'a',
@@ -73,12 +80,10 @@ const LEADING_ARTICLES = new Set([
   'el',
   'los',
   'las',
+  'les',
   'der',
   'die',
   'das',
-  'les',
-  'du',
-  'de',
 ])
 
 /**
@@ -129,22 +134,17 @@ export function editDistance(a: string, b: string, max: number): number {
 
 /** Whether two normalized names are within the drift allowed at their length. */
 function isSpellingDrift(a: string, b: string): boolean {
-  const length = Math.min(a.length, b.length)
-  const allowed = MAX_EDITS_BY_LENGTH.find((rule) => length >= rule.minLength)?.edits ?? 0
+  const allowed = allowedEdits(Math.min(a.length, b.length))
   if (allowed === 0) return false
   return editDistance(a, b, allowed) <= allowed
 }
 
 interface Normalized {
   name: string
-  aliases: string[]
   type: string
   tokens: string[]
-}
-
-/** Every name this entry answers to, normalized and deduplicated. */
-function allKeys(entry: Normalized): string[] {
-  return [...new Set([entry.name, ...entry.aliases])].filter(Boolean)
+  /** Every name this entry answers to. Precomputed: every pair is compared. */
+  keys: Set<string>
 }
 
 /**
@@ -158,9 +158,9 @@ function pairReason(a: Normalized, b: Normalized): DuplicateReason | null {
 
   if (a.name === b.name) return 'same-name'
 
-  const keysA = allKeys(a)
-  const keysB = allKeys(b)
-  if (keysA.some((key) => keysB.includes(key))) return 'shared-alias'
+  for (const key of a.keys) {
+    if (b.keys.has(key)) return 'shared-alias'
+  }
 
   // Beyond exact naming, only entries of the same kind are worth comparing: a location and
   // a character sharing a word are a namesake, not a duplicate.
@@ -203,11 +203,12 @@ const REASON_RANK: Record<DuplicateReason, number> = {
 export function findDuplicateGroups(entries: DuplicateCandidateInput[]): DuplicateGroup[] {
   const normalized: Normalized[] = entries.map((entry) => {
     const name = normalizeName(entry.name)
+    const aliases = (entry.aliases ?? []).map(normalizeName).filter(Boolean)
     return {
       name,
-      aliases: (entry.aliases ?? []).map(normalizeName).filter(Boolean),
       type: entry.type,
       tokens: tokensOf(name),
+      keys: new Set([name, ...aliases].filter(Boolean)),
     }
   })
 

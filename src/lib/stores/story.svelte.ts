@@ -48,6 +48,7 @@ import { aiService } from '$lib/services/ai'
 import {
   ChapterBatchService,
   buildLoreManagementCallbacks,
+  buildLoreManagementUICallbacks,
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
@@ -3315,6 +3316,15 @@ class StoryStore {
   async createManualChapter(endEntryIndex: number): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
+    // The button is disabled while a turn's background tasks run, but that is the visible
+    // half: the check that has to hold is here, because both paths call
+    // `buildAndSaveChapter` over `lastChapterEndIndex`, and two of them racing produce two
+    // chapters covering the same entries.
+    if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
+      log('Background chapter work in flight, refusing manual chapter creation')
+      return
+    }
+
     // Find the start index (after the last chapter or beginning)
     const startIndex = this.lastChapterEndIndex
 
@@ -3379,7 +3389,7 @@ class StoryStore {
           includeClassification: options.includeClassification,
           storyId: this.currentStory.id,
           currentBranchId: this.currentStory.currentBranchId,
-          lorebookEntries: this.lorebookEntries,
+          getLorebookEntries: () => this.lorebookEntries,
           mode: this.currentStory.mode ?? 'adventure',
           pov: this.pov,
           tense: this.tense,
@@ -3396,18 +3406,11 @@ class StoryStore {
             this.chapterizationClassificationProgress = { current, total }
           },
           loreCallbacks: buildLoreManagementCallbacks(),
-          loreUICallbacks: {
-            onStart: () => {
-              this.chapterizationStatus = 'Updating lorebook...'
+          loreUICallbacks: buildLoreManagementUICallbacks({
+            onStatus: (status) => {
+              this.chapterizationStatus = status
             },
-            onProgress: (message) => {
-              this.chapterizationStatus = message
-            },
-            onSummary: ui.setLoreManagementSummary.bind(ui),
-            onComplete: () => {
-              this.chapterizationStatus = null
-            },
-          },
+          }),
         },
       )
 

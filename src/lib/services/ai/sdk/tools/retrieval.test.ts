@@ -331,20 +331,46 @@ describe('query_chapter', () => {
     expect(JSON.stringify(result)).not.toContain('Aria leaves the village.')
   })
 
-  it('lets a callback failure propagate rather than handling it a second way', async () => {
-    // AgenticRetrievalService's callback turns failures into a cached answer so the agent
-    // does not re-ask a failing question, and records the failure in the transcript.
-    // Catching here too would bypass both.
-    await expect(
-      queryOf(
-        makeContext({
-          chapters,
-          onQueryChapter: async () => {
-            throw new Error('provider down')
-          },
-        }),
-      )({ chapterNumber: 1, question: 'when did she leave?' }),
-    ).rejects.toThrow('provider down')
+  it('reports a failed read instead of throwing, and does not re-read on a retry', async () => {
+    // A failing question must not be re-asked until the step budget is gone. The budget
+    // caches the failure like an answer, so the retry is a step and not a second read.
+    let calls = 0
+    const query = queryOf(
+      makeContext({
+        chapters,
+        onQueryChapter: async () => {
+          calls++
+          throw new Error('provider down')
+        },
+      }),
+    )
+
+    const first = await query({ chapterNumber: 1, question: 'when did she leave?' })
+    const retry = await query({ chapterNumber: 1, question: 'When did she leave?  ' })
+
+    expect(first.answered).toBe(false)
+    expect(first.error).toContain('provider down')
+    expect(retry.error).toBe(first.error)
+    expect(calls).toBe(1)
+  })
+
+  it('serves a repeated question from the run cache rather than reading twice', async () => {
+    let calls = 0
+    const query = queryOf(
+      makeContext({
+        chapters,
+        onQueryChapter: async () => {
+          calls++
+          return 'She left at dawn.'
+        },
+      }),
+    )
+
+    await query({ chapterNumber: 1, question: 'when did she leave?' })
+    const again = await query({ chapterNumber: 1, question: 'WHEN did she   leave?' })
+
+    expect(again.answer).toBe('She left at dawn.')
+    expect(calls).toBe(1)
   })
 
   it('keeps the match in view when it sits far into a long entry', async () => {
@@ -391,35 +417,25 @@ describe('query_chapter', () => {
     expect(roles).toEqual(['NARRATIVE', 'ACTION'])
   })
 
-  it('only emits onEvent in query_chapter when onQueryChapter is not provided', async () => {
+  it('records every answer once, whether it was read, replayed or failed', async () => {
+    // The transcript is the only record of what a run paid for, and the salvage path reads
+    // it back. One event per call, with `cached` telling the replay apart from the read.
     const events: any[] = []
-    const onEvent = (e: any) => events.push(e)
-    const chapters = [chapter(1, 'Summary', 'Departure')]
-
-    // Case 1: onQueryChapter is provided (wrapper handles event logging)
-    const toolsWithHandler = createRetrievalTools(
+    const tools = createRetrievalTools(
       makeContext({
-        chapters,
-        onEvent,
+        chapters: [chapter(1, 'Summary', 'Departure')],
+        onEvent: (e: any) => events.push(e),
         onQueryChapter: async () => 'Answer',
       }),
     ) as Record<string, any>
 
-    await toolsWithHandler.query_chapter.execute({ chapterNumber: 1, question: 'Q?' }, {} as any)
-    expect(events.length).toBe(0)
+    await tools.query_chapter.execute({ chapterNumber: 1, question: 'Q?' }, {} as any)
+    await tools.query_chapter.execute({ chapterNumber: 1, question: 'Q?' }, {} as any)
 
-    // Case 2: onQueryChapter is absent (tool emits fallback event)
-    const toolsWithoutHandler = createRetrievalTools(
-      makeContext({
-        chapters,
-        onEvent,
-        onQueryChapter: undefined,
-      }),
-    ) as Record<string, any>
-
-    await toolsWithoutHandler.query_chapter.execute({ chapterNumber: 1, question: 'Q?' }, {} as any)
-    expect(events.length).toBe(1)
-    expect(events[0].kind).toBe('query')
+    expect(events.map((e) => [e.kind, e.cached])).toEqual([
+      ['query', false],
+      ['query', true],
+    ])
   })
 })
 
@@ -848,8 +864,13 @@ describe('query_chapter — the whole-chapter read budget', () => {
         ...overrides,
       }),
     ) as Record<string, any>
+    // Distinct questions: a repeat is served from the run cache and costs no budget.
+    let asked = 0
     return (chapterNumber: number) =>
-      tools.query_chapter.execute({ chapterNumber, question: 'what happened?' }, {} as any)
+      tools.query_chapter.execute(
+        { chapterNumber, question: `what happened, take ${++asked}?` },
+        {} as any,
+      )
   }
 
   it('answers up to the budget', async () => {
@@ -877,6 +898,23 @@ describe('query_chapter — the whole-chapter read budget', () => {
     // Including a chapter that does not exist: the budget answer must not be mistaken for
     // "that chapter is missing".
     expect((await query(99)).error).toContain('grep_chapters')
+  })
+
+  it('still answers a question it has already paid for once the budget is spent', async () => {
+    const tools = createRetrievalTools(
+      makeContext({
+        chapters: [chapter(1, 'a'), chapter(2, 'b')],
+        onQueryChapter: async () => 'an answer',
+      }),
+    ) as Record<string, any>
+    const ask = (chapterNumber: number, question: string) =>
+      tools.query_chapter.execute({ chapterNumber, question }, {} as any)
+
+    for (let i = 0; i < MAX_CHAPTER_QUERIES; i++) await ask(1, `q${i}`)
+
+    // Spent for anything new, free for what is already in the cache.
+    expect((await ask(2, 'new one')).answered).toBe(false)
+    expect((await ask(1, 'q0')).answered).toBe(true)
   })
 
   it('does not spend budget on a chapter that does not exist', async () => {

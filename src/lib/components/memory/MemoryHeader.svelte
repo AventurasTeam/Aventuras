@@ -19,6 +19,13 @@
   const threshold = $derived(story.memoryConfig.tokenThreshold)
   const autoSummarize = $derived(story.memoryConfig.autoSummarize)
   const messagesSinceLastChapter = $derived(story.messagesSinceLastChapter)
+  // A turn's background tasks may be building a chapter on this branch right now, and two
+  // chapters over overlapping ranges is what comes of offering the button anyway.
+  const chapterWorkInFlight = $derived(
+    story.currentStory
+      ? ui.backgroundTasksActiveFor(story.currentStory.id, story.currentStory.currentBranchId)
+      : false,
+  )
   const bufferSize = $derived(story.memoryConfig.chapterBuffer)
 
   const percentage = $derived(
@@ -102,7 +109,7 @@
       <Button
         class="flex-1 gap-2"
         onclick={handleCreateChapter}
-        disabled={ui.memoryLoading || messagesSinceLastChapter === 0}
+        disabled={ui.memoryLoading || chapterWorkInFlight || messagesSinceLastChapter === 0}
       >
         <Plus class="h-4 w-4" />
         <span>Create Chapter Now</span>

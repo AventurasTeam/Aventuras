@@ -149,9 +149,19 @@ Determine how much narrative time elapsed during this passage. Consider what act
 Mode: {{ mode }}
 
 ## Already Known Entities (check before adding duplicates)
-Characters: {{ existingCharacters }}
-Locations: {{ existingLocations }}
-Items: {{ existingItems }}
+A name is the whole of its bullet line. Anything indented under it is that entity's current
+state, never part of its name. When you refer to an entity that is already listed, copy its
+name **exactly** as written and nothing else — a name with the relationship or the status
+appended to it creates a second copy of the same character.
+
+### Characters
+{{ existingCharacters }}
+
+### Locations
+{{ existingLocations }}
+
+### Items
+{{ existingItems }}
 
 ## Active Story Beats (update these when resolved!)
 {{ existingBeats }}

@@ -7,8 +7,21 @@
  * whoever changed one to remember the other. Two copies of a default that must agree is
  * exactly the kind of thing that quietly stops agreeing.
  *
- * Only defaults that genuinely live in both places belong here. Everything else stays
- * where it is used.
+ * **What belongs here, and what does not.** A constant a user can change — anything with
+ * a control in Advanced Settings, or that a stored setting can override — lives here, as a
+ * named `*_DEFAULTS` object, so the shipped value exists once and the settings store and
+ * `AI_CONFIG` read the same one. A constant that guards a failure mode and has no control
+ * — `GREP_NOISE_RATIO`, `MAX_LIST_ENTRIES`, `MAX_FINISH_REJECTIONS`, `MAX_CHAPTER_QUERIES_*`
+ * — stays next to the code it protects, where the reasoning for the number is.
+ *
+ * The test of which one a constant is: would a user ever want to change it? If yes it is a
+ * default and it goes here; if the honest answer is "they would want to change something
+ * else instead", it is a guard and it stays put.
+ *
+ * The corollary, and the rule that keeps this file honest: **a consumer never writes
+ * `?? <default>`.** The settings store merges every block over its defaults on load, so a
+ * key is always present, and a fallback at the call site is a second copy of the number
+ * that nothing forces to agree — the form that produced four stale defaults at once.
  */
 
 /** Selection limits for `WorldStateInjector`. All exposed as Advanced Settings sliders. */
@@ -73,6 +86,47 @@ export const AGENTIC_RETRIEVAL_DEFAULTS = {
    * avoid ~1,200 tokens of quotes.
    */
   grepExcerptsPerSearch: 40,
+} as const
+
+/**
+ * Characters of un-chapterized story handed to lore management.
+ *
+ * The same unit the retrieval tail is measured in, and a larger allowance: this pass runs
+ * once per chapter rather than once per turn, and the tail is the *only* material no
+ * chapter summary covers, so cutting it is how the agent stops seeing what just happened.
+ *
+ * Deliberately a constant and not a setting. Too small and the agent maintains a lorebook
+ * for a story it cannot read; too large and the prompt pays for it. Neither failure is
+ * visible from a slider, so there is no useful choice to offer.
+ */
+export const RECENT_STORY_CHARS_FOR_LORE = 16384
+
+/**
+ * Entries of that tail kept whatever the budget says — roughly the last two exchanges.
+ *
+ * Not belt and braces: entries averaged 2,688 characters on a measured 40-chapter story,
+ * so a character budget alone can collapse to the player's last action. Same reason, and
+ * same number, as `MIN_RECENT_ENTRIES` on the retrieval side.
+ */
+export const MIN_RECENT_ENTRIES_FOR_LORE = 4
+
+/** Limits for the lore management loop. `maxIterations` is an Advanced Settings slider. */
+export const LORE_MANAGEMENT_DEFAULTS = {
+  /**
+   * Tool-calling rounds per session. Higher than retrieval's because the work is bounded
+   * by the lorebook rather than by the turn, but not by much: `MAX_GROUPS` caps the
+   * duplicate worklist at 20 and each group closes in **one** call (`merge_entries` or
+   * `keep_separate`), so 25 covers the worklist plus a few reads. Past that a run is
+   * going in circles, and every step re-sends a prompt whose head is tens of thousands of
+   * characters of chapter summary. `finishOnlyOnLastStep` spends the last one on the
+   * summary, so hitting the ceiling costs the account of the run, not the run.
+   */
+  maxIterations: 25,
+  /**
+   * Refuse to finish while a flagged duplicate group is unresolved. Off: it changes what a
+   * run costs, and the worklist is in the prompt either way.
+   */
+  requireDuplicateResolution: false,
 } as const
 
 /**

@@ -15,8 +15,8 @@ import {
   type LorebookEntryPendingChangeSchema,
   type VaultLorebookPendingChangeSchema,
 } from '../schemas/lorebook'
-import { entityNameMatches } from '$lib/utils/text'
-import { normalizeName } from '../../lorebook/duplicates'
+import { entityNameMatches, foldName } from '$lib/utils/text'
+import type { ChapterQueryBudget } from './chapterQueries'
 import { cleanAliases, cleanKeywords, describeDropped } from '../../lorebook/entryFields'
 
 export type { VaultLorebookPendingChangeSchema }
@@ -42,35 +42,35 @@ export interface LorebookEntryToolContext {
   /**
    * Indices of `entries` removed earlier in this session.
    *
-   * A caller that applies changes as they are made cannot splice the array: every index
-   * the model already holds would shift under it, and the next `update_entry` would edit
-   * the wrong entry. The slot stays and is listed here instead — hidden from
-   * `list_entries`, refused by everything that takes an index.
+   * Splicing would shift every index the model already holds, so the slot stays and is
+   * listed here — hidden from `list_entries`, refused by everything that takes an index.
    */
   removedIndices?: Set<number>
   /**
    * Refuse `create_entry` for a name that already exists.
    *
-   * For an unattended caller this is the difference between managing a lorebook and
-   * growing one: a model that cannot see its own past sessions will re-create the same
-   * character every run. Where a human approves each change, the duplicate is caught by
-   * reading it, so this stays off.
+   * On for unattended callers, where nothing else catches a model re-creating the same
+   * character every run; off for the vault, where a human reads the change first.
    */
   preventDuplicateNames?: boolean
 }
 
 /**
- * Ceiling on one `list_entries` result.
- *
- * Twenty is the same allowance `search_entries` gives the retrieval agent, and the reason
- * is the same: a tool result lives in the prompt for the rest of the run, so an unbounded
- * listing of a mature lorebook is paid for on every step that follows it.
+ * Ceiling on one `list_entries` result — the same allowance `search_entries` gives the
+ * retrieval agent, for the same reason: a tool result lives in the prompt for the rest of
+ * the run, so an unbounded listing is paid for on every step after it.
  */
 const MAX_LIST_ENTRIES = 20
 
-/** Case- and punctuation-insensitive match on a name or any of its aliases. */
-function matchesName(entry: VaultLorebookEntry, normalized: string): boolean {
-  return [entry.name, ...(entry.aliases ?? [])].some((n) => normalizeName(n) === normalized)
+/**
+ * Case- and punctuation-insensitive match on a name or any of its aliases.
+ *
+ * `foldName`, not the duplicate detector's `normalizeName`: this powers a hard refusal, so
+ * it must not strip leading articles. `normalizeName` is lenient on purpose and would read
+ * "De Luca" as "Luca", refusing a legitimate entry and pointing at an unrelated one.
+ */
+function matchesName(entry: VaultLorebookEntry, folded: string): boolean {
+  return [entry.name, ...(entry.aliases ?? [])].some((n) => foldName(n) === folded)
 }
 
 /**
@@ -88,10 +88,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
     preventDuplicateNames,
   } = context
 
-  /**
-   * Removed slots belong to the bound `entries` only — another lorebook's indices are its
-   * own, and this session never removed anything from it.
-   */
+  /** Removed slots belong to the bound `entries` only; another lorebook's indices are its own. */
   function isRemoved(targetEntries: VaultLorebookEntry[], index: number): boolean {
     return targetEntries === entries && (removedIndices?.has(index) ?? false)
   }
@@ -163,10 +160,15 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         }
         const targetEntries = resolved.targetEntries
 
-        let filtered = targetEntries.filter((_, i) => !isRemoved(targetEntries, i))
+        // Carry the index rather than recovering it with `indexOf` afterwards: that was
+        // a scan per returned entry, and it answers by reference identity, which is not
+        // what "which slot is this" means.
+        let filtered = targetEntries
+          .map((entry, index) => ({ entry, index }))
+          .filter(({ index }) => !isRemoved(targetEntries, index))
 
         if (type) {
-          filtered = filtered.filter((e) => e.type === type)
+          filtered = filtered.filter(({ entry }) => entry.type === type)
         }
 
         // Same word-boundary matching the retrieval side searches with, over the same four
@@ -175,7 +177,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         const term = query?.trim()
         if (term) {
           filtered = filtered.filter(
-            (e) =>
+            ({ entry: e }) =>
               entityNameMatches(term, e.name) ||
               (e.aliases ?? []).some((alias) => entityNameMatches(term, alias)) ||
               e.keywords.some((keyword) => entityNameMatches(term, keyword)) ||
@@ -183,8 +185,6 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           )
         }
 
-        // Unbounded, this returned every entry of a mature lorebook in one tool result,
-        // which then sat in the prompt for the rest of the run.
         const availableTotal = filtered.length
         const cap = limit ?? MAX_LIST_ENTRIES
         filtered = filtered.slice(0, cap)
@@ -192,17 +192,13 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         return {
           availableTotal,
           hasMore: availableTotal > filtered.length,
-          entries: filtered.map((e) => {
-            // Map to the full targetEntries array index
-            const fullIndex = targetEntries.indexOf(e)
-            return {
-              index: fullIndex,
-              name: e.name,
-              type: e.type,
-              description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
-              keywords: e.keywords.slice(0, 5),
-            }
-          }),
+          entries: filtered.map(({ entry: e, index }) => ({
+            index,
+            name: e.name,
+            type: e.type,
+            description: e.description.slice(0, 200) + (e.description.length > 200 ? '...' : ''),
+            keywords: e.keywords.slice(0, 5),
+          })),
           returnedCount: filtered.length,
         }
       },
@@ -304,9 +300,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         }
 
         if (preventDuplicateNames) {
-          const normalized = normalizeName(name)
+          const folded = foldName(name)
           const existing = entries.findIndex(
-            (e, i) => !isRemoved(entries, i) && matchesName(e, normalized),
+            (e, i) => !isRemoved(entries, i) && matchesName(e, folded),
           )
           if (existing !== -1) {
             return {
@@ -596,8 +592,11 @@ export interface ChapterInfo {
 export interface StoryToolContext {
   /** Available chapters for querying */
   chapters?: ChapterInfo[]
-  /** Callback to query a chapter with a question */
-  queryChapter?: (chapterNumber: number, question: string) => Promise<string>
+  /**
+   * The run's whole-chapter read allowance: the budget, the repeat cache, and what a
+   * failed read answers with. Built by the caller so the number is its decision.
+   */
+  chapterQueries?: ChapterQueryBudget
   /**
    * The duplicate groups the session has not dealt with yet, already formatted for reading.
    *
@@ -605,34 +604,32 @@ export interface StoryToolContext {
    * anything: a run that consolidated nothing is the failure this whole path exists to stop.
    */
   pendingDuplicates?: () => string[]
-  /** Record that a duplicate group was judged to be genuinely distinct entries. */
-  onKeepSeparate?: (indices: number[], reason: string) => void
+  /**
+   * Record that a duplicate group was judged to be genuinely distinct entries.
+   *
+   * Returns how many groups the call actually closed, so the tool can tell the model when
+   * its indices matched none — otherwise a mistyped index reads as work done.
+   */
+  onKeepSeparate?: (indices: number[], reason: string) => number
 }
 
 /**
  * How many times finishing may be refused over unresolved duplicates.
  *
- * Refusing is a nudge, not a gate: the agent may be right that the remaining groups are
- * distinct and simply not have said so, and a loop that will not let it stop burns the
- * step ceiling and returns nothing. Two refusals is enough to turn "I'm done" into work
- * without turning it into an argument.
+ * A nudge, not a gate: the agent may be right that the groups are distinct, and a loop
+ * that will not let it stop burns the step ceiling and returns nothing.
  */
 const MAX_FINISH_REJECTIONS = 2
 
 /**
- * Story and Session Tools
+ * Story and session tools: chapter querying, duplicate dismissal, session completion.
  *
- * Includes chapter querying and session completion tools.
- *
- * There is deliberately no `list_chapters`: the prompt carries the complete chapter list
- * with untruncated summaries, so a tool returning the same material would only give the
- * agent two versions of it to reconcile — and it did. A measured run spent two of its five
- * steps calling it, injecting 47,000 characters of summaries that were already in front of
- * it, because the prompt's copy was truncated to 200 characters and the tool's was not.
- * `AgenticRetrievalService` reached the same conclusion for the same reason.
+ * There is deliberately no `list_chapters`. The prompt carries every chapter summary
+ * untruncated, and a tool restating them gave the agent two versions to reconcile: a
+ * measured run spent two of five steps re-injecting 47,000 characters it already had.
  */
 function createStoryTools(context: StoryToolContext) {
-  const { chapters, queryChapter, pendingDuplicates, onKeepSeparate } = context
+  const { chapters, chapterQueries, pendingDuplicates, onKeepSeparate } = context
   let finishRejections = 0
 
   return {
@@ -641,14 +638,25 @@ function createStoryTools(context: StoryToolContext) {
      */
     keep_separate: tool({
       description:
-        'Declare that a flagged duplicate group is actually distinct entries that should both stay. Use this instead of merging when two similar names are two different things. Nothing is written; it only records the decision so you are not asked about them again.',
+        'Declare that a flagged duplicate group is actually distinct entries that should both stay. Use this instead of merging when two similar names are two different things. Nothing is written; it only records the decision so you are not asked about them again. Pass every index of the group.',
       inputSchema: z.object({
-        indices: z.array(z.number()).min(2).describe('The indices of the group to keep apart'),
+        indices: z
+          .array(z.number())
+          .min(2)
+          .describe('Every index of the group to keep apart, exactly as it was listed'),
         reason: z.string().describe('Why these are not the same subject'),
       }),
       execute: async ({ indices, reason }: { indices: number[]; reason: string }) => {
-        onKeepSeparate?.(indices, reason)
-        return { acknowledged: true, indices }
+        const closed = onKeepSeparate?.(indices, reason) ?? 0
+        if (closed === 0) {
+          return {
+            acknowledged: false,
+            indices,
+            error:
+              'No listed duplicate group is covered by those indices. Pass every index of one group, copied from the list.',
+          }
+        }
+        return { acknowledged: true, indices, groupsClosed: closed }
       },
     }),
 
@@ -657,39 +665,48 @@ function createStoryTools(context: StoryToolContext) {
      */
     query_chapter: tool({
       description:
-        'Ask a specific question about a chapter to understand story events for lore updates. Ask targeted questions like "What did [character] do?" or "What was revealed about [item]?"',
+        'Ask a specific question about a chapter to understand story events for lore updates. Ask targeted questions like "What did [character] do?" or "What was revealed about [item]?" Each call hands a whole chapter to a second model, so spend them deliberately; the chapter summaries in your instructions are complete and cost nothing.',
       inputSchema: z.object({
         chapterNumber: z.number().describe('The chapter number to query'),
         question: z.string().describe('A specific question about the chapter content'),
       }),
       execute: async ({ chapterNumber, question }: { chapterNumber: number; question: string }) => {
         if (!chapters || chapters.length === 0) {
-          return { found: false, error: 'No chapters available' }
+          return { answered: false, error: 'No chapters available' }
+        }
+        if (!chapterQueries) {
+          return { answered: false, error: 'Chapter reading is not available in this session.' }
+        }
+
+        // Before the chapter lookup, so a spent budget reads the same whichever chapter was
+        // asked for rather than being mistaken for "no such chapter". A question already in
+        // the cache is served either way: replaying it costs nothing.
+        if (chapterQueries.exhausted() && !chapterQueries.knows(chapterNumber, question)) {
+          return { answered: false, chapterNumber, error: chapterQueries.exhaustedError() }
         }
 
         const chapter = chapters.find((ch) => ch.number === chapterNumber)
         if (!chapter) {
-          return { found: false, error: `Chapter ${chapterNumber} not found` }
-        }
-
-        let answer: string | undefined
-        if (queryChapter) {
-          try {
-            answer = await queryChapter(chapterNumber, question)
-          } catch {
-            // Query failed, return summary only
+          return {
+            answered: false,
+            error: `Chapter ${chapterNumber} not found. Available: ${chapters.map((c) => c.number).join(', ')}`,
           }
         }
 
+        const { answer, failed } = await chapterQueries.ask(chapterNumber, question)
+        if (failed) {
+          return { answered: false, chapterNumber, question, error: answer }
+        }
+
+        // The summary is deliberately not echoed back: every chapter summary is already in
+        // the instructions, untruncated, so returning one here is the same text twice in
+        // one prompt — and the reason there is no `list_chapters` either.
         return {
-          found: true,
-          chapter: {
-            number: chapter.number,
-            title: chapter.title,
-            summary: chapter.summary,
-          },
+          answered: true,
+          chapterNumber,
+          chapterTitle: chapter.title || `Chapter ${chapter.number}`,
           question,
-          answer: answer ?? 'Unable to answer - using summary only',
+          answer,
         }
       },
     }),
@@ -715,9 +732,8 @@ function createStoryTools(context: StoryToolContext) {
         entriesDeleted: number
         entriesMerged: number
       }) => {
-        // Finishing with duplicate groups untouched is the one failure this loop can still
-        // fix from the inside: the work is named, the tools are loaded, and the step that
-        // would end the run can be spent doing it instead.
+        // The one failure this loop can still fix from the inside: the work is named, the
+        // tools are loaded, and the step that would end the run can be spent on it.
         const remaining = pendingDuplicates?.() ?? []
         if (remaining.length > 0 && finishRejections < MAX_FINISH_REJECTIONS) {
           finishRejections++
@@ -749,10 +765,9 @@ export type LoreManagementToolContext = LorebookEntryToolContext & StoryToolCont
 /**
  * Drop parameters from a tool's input schema.
  *
- * The fields survive in `execute`, which simply never receives them and falls back to its
- * defaults. Removing them from the schema rather than ignoring them afterwards is the
- * point: the schema is what the model is shown, so a parameter left in and discarded is a
- * parameter the model spends tokens choosing — and, worse, one it can choose wrongly.
+ * `execute` keeps its fallbacks and simply never receives them. Removing them from the
+ * schema rather than ignoring them afterwards is the point: the schema is what the model
+ * is shown, and a parameter that exists is one it spends tokens on and can fill wrongly.
  */
 function withoutFields<T extends { inputSchema: unknown }>(tool: T, ...fields: string[]): T {
   // `tool()` widens `inputSchema` to the SDK's `FlexibleSchema`, which loses the Zod
@@ -765,16 +780,10 @@ function withoutFields<T extends { inputSchema: unknown }>(tool: T, ...fields: s
 /**
  * `lorebookId` names something that does not exist here.
  *
- * A story's lorebook is not an entity with an id — it is the `entries` rows for a story and
- * a branch, and the branch-resolved view of them is what the service hands these tools. The
- * id belongs to the **Vault**, where there really are several lorebooks to choose between.
- *
- * Left in the schema, the parameter is not merely unused: the model fills it in, because a
- * parameter that exists asks to be filled. A measured run invented `"lorebook_1"` on every
- * call, and `resolveTargetEntries` answers an unknown id with an error — so `list_entries`,
- * `read_entry`, `update_entry`, `delete_entry` and `merge_entries` all failed, while
- * `create_entry` (the one that does not validate it) went through. An agent that can only
- * create is an agent that only grows the lorebook, which is exactly what was observed.
+ * A story's lorebook is not an entity with an id — it is the branch-resolved `entries`
+ * rows the service hands these tools. The id belongs to the Vault. Left in the schema a
+ * measured run invented `"lorebook_1"` on every call: every tool that validates it failed
+ * and only `create_entry` went through, so the agent could do nothing but grow the list.
  */
 const LOREBOOK_ID = 'lorebookId'
 
@@ -788,10 +797,8 @@ export function createLoreManagementTools(context: LoreManagementToolContext) {
     read_entry: withoutFields(entryTools.read_entry, LOREBOOK_ID),
     delete_entry: withoutFields(entryTools.delete_entry, LOREBOOK_ID),
     merge_entries: withoutFields(entryTools.merge_entries, LOREBOOK_ID),
-    // Lore management runs unattended, so it does not get to decide that an entry belongs
-    // in every prompt forever: `always` is a budget decision, past every retrieval
-    // threshold, made by an agent that cannot see the budget. The vault assistant keeps it
-    // — there the user reads the change before it lands.
+    // `always` is a budget decision past every retrieval threshold, and this agent runs
+    // unattended and cannot see the budget. The vault assistant keeps it: a user reads it.
     create_entry: withoutFields(create_entry, LOREBOOK_ID, 'injectionMode'),
     update_entry: withoutFields(update_entry, LOREBOOK_ID, 'injectionMode'),
   } satisfies Record<keyof LorebookEntryTools, unknown>

@@ -34,10 +34,8 @@ export {
   extractToolResults,
   extractTerminalToolResult,
   stopOnTerminalTool,
-  stopOnAnyToolCall,
-  stopOnAny,
-  stopOnCostExceeded,
   stopWhenDone,
+  finishOnlyOnLastStep,
 } from './agents'
 
 // Tool factories

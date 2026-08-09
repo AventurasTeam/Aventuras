@@ -33,7 +33,7 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import type { PromptContext } from '$lib/services/generation'
+import type { PromptContext, LoreManagementCallbacks } from '$lib/services/generation'
 import type {
   Chapter,
   Character,
@@ -56,7 +56,8 @@ import type {
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
-import { getContextConfig } from './core/config'
+import { MIN_RECENT_ENTRIES_FOR_LORE, RECENT_STORY_CHARS_FOR_LORE } from './core/defaults'
+import { splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
 import {
   DEFAULT_FALLBACK_STYLE_PROMPT,
@@ -611,31 +612,29 @@ class AIService {
     entries: Entry[],
     recentMessages: StoryEntry[],
     chapters: Chapter[],
-    callbacks: {
-      onCreateEntry: (entry: Entry) => Promise<void>
-      onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-      onDeleteEntry: (id: string) => Promise<void>
-      onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
-      onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
-    },
+    callbacks: LoreManagementCallbacks,
     _mode: StoryMode = 'adventure',
     _pov?: POV,
     _tense?: Tense,
   ): Promise<LoreManagementResult> {
-    // The story since the last chapter, which is the only place the agent can read what
-    // has not been summarised yet. It used to take the single most recent action and
-    // narration and nothing else, which on a story with no chapters at all meant the agent
-    // was asked to maintain a lorebook for a story it could not see.
-    const recentLimit = getContextConfig().recentEntriesForLoreManagement
-    const recentStory = recentMessages
-      .filter((m) => m.type === 'narration' || m.type === 'user_action')
-      .slice(-recentLimit)
+    // The story since the last chapter — the only unsummarised material the agent has. It
+    // used to be the single most recent action and narration, which on a story with no
+    // chapters left the agent maintaining a lorebook for a story it could not read.
+    //
+    // Bounded in characters through the same helper the retrieval tail uses, so both sides
+    // measure the same thing the same way. `searchable` is dropped rather than split: there
+    // is no grep here to reach what the budget leaves out.
+    const { shown } = splitRecentTail(
+      recentMessages.filter((m) => m.type === 'narration' || m.type === 'user_action'),
+      RECENT_STORY_CHARS_FOR_LORE,
+      MIN_RECENT_ENTRIES_FOR_LORE,
+    )
+    const recentStory = shown
       .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
       .join('\n\n')
 
-    // Build chapters info for lore management. Number, title and summary only: the
-    // per-chapter keyword and character facets were read by `list_chapters` and by nothing
-    // else, so they have been cloned into every session since that tool was removed.
+    // Number, title and summary only: the keyword and character facets were read by
+    // `list_chapters`, which no longer exists.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
       JSON.stringify(
@@ -655,6 +654,8 @@ class AIService {
       existingEntries: entries,
       chapters: chapterInfos,
       queryChapter: callbacks.onQueryChapter,
+      keptSeparate: await callbacks.getKeptSeparate?.(),
+      onKeepSeparate: callbacks.onKeepSeparate,
     })
 
     // Build changes array for the result
@@ -677,9 +678,8 @@ class AIService {
       changes.push({ type: 'update', entry })
     }
 
-    // Consolidation is the half of lore management that keeps a lorebook from growing
-    // without bound, and it used to stop here: the agent's deletes and merges were
-    // approved, logged, and then dropped on the floor by the session, so every run
+    // Consolidation is what keeps a lorebook from growing without bound, and it used to
+    // stop here: merges and deletes were approved, logged, then dropped, so every run
     // re-proposed the same duplicates it had "already" merged.
     for (const { sources, merged } of sessionResult.merges) {
       await callbacks.onMergeEntries(

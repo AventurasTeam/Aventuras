@@ -150,6 +150,36 @@ describe('lore management guards', () => {
     expect(result.success).toBe(true)
   })
 
+  it('does not read two different non-Latin names as the same one', async () => {
+    const tools = createLoreManagementTools({
+      ...context,
+      entries: [entry('Иван')],
+      preventDuplicateNames: true,
+    })
+
+    const result = (await tools.create_entry.execute?.(
+      { name: 'Пётр', type: 'character', description: 'another', keywords: [] } as never,
+      {} as never,
+    )) as { success: boolean }
+
+    expect(result.success).toBe(true)
+  })
+
+  it('lets a nobiliary particle name through: the refusal must not be lenient', async () => {
+    const tools = createLoreManagementTools({
+      ...context,
+      entries: [entry('Luca')],
+      preventDuplicateNames: true,
+    })
+
+    const result = (await tools.create_entry.execute?.(
+      { name: 'De Luca', type: 'character', description: 'a different man', keywords: [] } as never,
+      {} as never,
+    )) as { success: boolean }
+
+    expect(result.success).toBe(true)
+  })
+
   it('hides a removed entry from the list but keeps the indices of the rest', async () => {
     const tools = createLoreManagementTools({
       ...context,
@@ -215,6 +245,37 @@ describe('lore management guards', () => {
 
     expect(update.success).toBe(false)
     expect(read.found).toBe(false)
+  })
+})
+
+describe('keep_separate', () => {
+  it('closes only a group whose every index the call named', async () => {
+    const closed: number[][] = []
+    const tools = createLoreManagementTools({
+      ...context,
+      onKeepSeparate: (indices) => {
+        closed.push(indices)
+        return indices.length === 2 ? 1 : 0
+      },
+    })
+
+    const ok = (await tools.keep_separate.execute?.(
+      { indices: [0, 1], reason: 'two people' } as never,
+      {} as never,
+    )) as { acknowledged: boolean; groupsClosed?: number }
+    expect(ok).toMatchObject({ acknowledged: true, groupsClosed: 1 })
+  })
+
+  it('says so when the indices match no listed group, instead of reading as work done', async () => {
+    const tools = createLoreManagementTools({ ...context, onKeepSeparate: () => 0 })
+
+    const result = (await tools.keep_separate.execute?.(
+      { indices: [4, 9], reason: 'mistyped' } as never,
+      {} as never,
+    )) as { acknowledged: boolean; error?: string }
+
+    expect(result.acknowledged).toBe(false)
+    expect(result.error).toContain('No listed duplicate group')
   })
 })
 

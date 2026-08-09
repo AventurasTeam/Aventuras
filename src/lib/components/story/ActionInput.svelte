@@ -44,6 +44,7 @@
     handleEvent,
     SuggestionsRefreshService,
     buildLoreManagementCallbacks,
+    buildLoreManagementUICallbacks,
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
@@ -335,7 +336,9 @@
         pov: story.pov,
         tense: story.tense,
       },
-      loreSession: {
+      // A thunk: read when the session starts, after the classifier and the chapter check
+      // have run. See BackgroundTaskInput.loreSession.
+      loreSession: () => ({
         storyId,
         currentBranchId: story.currentStory?.currentBranchId ?? null,
         lorebookEntries: story.lorebookEntries,
@@ -344,14 +347,9 @@
         mode,
         pov: story.pov,
         tense: story.tense,
-      },
+      }),
       loreCallbacks: buildLoreManagementCallbacks(),
-      loreUICallbacks: {
-        onStart: ui.startLoreManagement.bind(ui),
-        onProgress: ui.updateLoreManagementProgress.bind(ui),
-        onSummary: ui.setLoreManagementSummary.bind(ui),
-        onComplete: ui.finishLoreManagement.bind(ui),
-      },
+      loreUICallbacks: buildLoreManagementUICallbacks(),
     }
   }
 
@@ -755,9 +753,15 @@
       const coordinator = new BackgroundTaskCoordinator(buildBackgroundTaskDependencies())
       const input = buildBackgroundTaskInput(countStyleReview, styleReviewSource)
       if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
+      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
+      // view will offer to create a chapter while this one is being created.
+      const bgStoryId = story.currentStory?.id ?? ''
+      const bgBranchId = story.currentStory?.currentBranchId ?? null
+      ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
+        .finally(() => ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false))
 
       // Android: notify user that generation completed while app is still backgrounded.
       // Awaited so the foreground service isn't torn down before the notification fires.

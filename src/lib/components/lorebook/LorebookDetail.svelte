@@ -255,9 +255,6 @@
             <div>Created: {new Date(entry.createdAt).toLocaleDateString()}</div>
             <div>Updated: {new Date(entry.updatedAt).toLocaleDateString()}</div>
             <div>Source: <span class="capitalize">{entry.createdBy}</span></div>
-            {#if entry.mentionCount > 0}
-              <div>Mentions: {entry.mentionCount}</div>
-            {/if}
           </div>
         </div>
       </div>

@@ -26,8 +26,10 @@
     X,
     ChevronDown,
     Loader2,
+    Merge,
   } from '@lucide/svelte'
   import { runManualLoreManagement } from '$lib/services/generation'
+  import DuplicatesModal from '$lib/components/duplicates/DuplicatesModal.svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
@@ -47,6 +49,8 @@
    * counts its own tokens here, from blocks it still holds; the persisted one carries the
    * count taken when those blocks were built, since they are not stored.
    */
+  let duplicatesOpen = $state(false)
+
   const snapshot = $derived<RetrievalSnapshot | null>(
     toRetrievalSnapshot(ui.lastLorebookRetrieval, ui.lastWorldStateRetrieval, countTokens) ??
       story.entries.findLast((e) => e.type === 'narration')?.metadata?.retrievalSnapshot ??
@@ -424,11 +428,9 @@
           {/each}
 
           <!--
-            Lore management otherwise only runs behind chapter creation, and this panel is
-            where its cost is visible: the entry pinned into every prompt, the duplicate
-            listed twice. Asking for a pass from here is the shortest path from noticing to
-            fixing. Same icon as its section in Settings -> Advanced, since it is the same
-            agent.
+            This panel is where lore management's cost is visible — the entry pinned into
+            every prompt, the duplicate listed twice — so it is where a pass is asked for.
+            Same icon as its section in Settings -> Advanced: it is the same agent.
           -->
           <Separator class="my-6" />
           <div class="space-y-3">
@@ -441,6 +443,16 @@
                   missing.
                 {/if}
               </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="shrink-0"
+                disabled={!story.currentStory}
+                onclick={() => (duplicatesOpen = true)}
+              >
+                <Merge class="h-3.5 w-3.5" />
+                Duplicates
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -458,11 +470,7 @@
               </Button>
             </div>
 
-            <!--
-              The agent's own account of what it changed. It used to live inside the progress
-              line and be wiped two seconds later — long enough to see that something happened,
-              not long enough to read what.
-            -->
+            <!-- The agent's own account of what it changed; see ui.lastLoreManagementSummary. -->
             {#if !ui.loreManagementActive && ui.lastLoreManagementSummary}
               <div class="bg-muted/40 space-y-1 rounded-lg border p-3">
                 <p class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
@@ -553,3 +561,7 @@
     </ScrollArea>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+{#if duplicatesOpen}
+  <DuplicatesModal onClose={() => (duplicatesOpen = false)} />
+{/if}

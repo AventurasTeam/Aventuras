@@ -2,18 +2,10 @@
  * Normalizing the fields an agent writes onto a lorebook entry.
  *
  * `EntryRetrievalService` matches an entry's **name, its aliases and its keywords** against
- * the scene, all three, on word boundaries. That makes two of the things models reliably
- * write provably dead weight rather than merely untidy:
- *
- * - an alias equal to the entry's own name — observed as `Liora` aliased to `["Liora"]`
- * - a keyword equal to the name or to an alias, which can only ever fire a match the name
- *   would already have fired
- *
- * Both are removed here rather than argued about in the prompt, because they are decidable:
- * no reading of the story makes them useful. What is *not* decided here is judgement — how
- * many keywords, whether a word is too common to be one — since dropping a keyword that
- * looks generic but was chosen deliberately is a real loss, and the prompt is the right
- * place to ask for that.
+ * the scene, all three, on word boundaries. So an alias equal to the entry's own name, or a
+ * keyword repeating the name or an alias, can never add a match. Both are dropped here
+ * rather than argued about in the prompt, because they are decidable without reading the
+ * story. Judgement — how many keywords, whether a word is too common — stays in the prompt.
  *
  * Nothing is rejected: the entry lands and the tool reports what it dropped, so the model
  * sees the rule applied to its own output instead of losing the whole call over it.

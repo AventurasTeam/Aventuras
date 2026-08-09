@@ -493,9 +493,6 @@ export interface Entry {
   injection: EntryInjection
 
   // Metadata
-  firstMentioned: string | null // Entry ID where first mentioned
-  lastMentioned: string | null // Entry ID where last mentioned
-  mentionCount: number
   createdBy: EntryCreator
   createdAt: number
   updatedAt: number

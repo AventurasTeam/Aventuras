@@ -9,15 +9,9 @@ export {
   LoreManagementService,
   type LoreManagementResult,
   type LoreManagementContext,
-  type LoreMergeResult,
 } from './LoreManagementService'
 
-export {
-  findDuplicateGroups,
-  formatDuplicateGroup,
-  normalizeName,
-  type DuplicateGroup,
-} from './duplicates'
+export { LoreSessionLedger, type LoreMergeResult, type LoreSessionChanges } from './sessionChanges'
 
 export {
   cleanAliases,

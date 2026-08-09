@@ -21,11 +21,13 @@ import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
 import {
   AGENTIC_RETRIEVAL_DEFAULTS,
   ENTRY_RETRIEVAL_DEFAULTS,
+  LORE_MANAGEMENT_DEFAULTS,
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '$lib/services/ai/core/defaults'
 import { isReasoningOn } from '$lib/services/ai/core/reasoning'
 import {
+  migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
   migrateReasoningEffort,
@@ -411,7 +413,7 @@ export function getDefaultLoreManagementSettingsForProvider(
     profileId: null, // Use default profile
     model: preset.model,
     temperature: 0.3,
-    maxIterations: 50,
+    maxIterations: LORE_MANAGEMENT_DEFAULTS.maxIterations,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
   }
@@ -798,13 +800,11 @@ export interface StyleReviewerSpecificSettings {}
 
 export interface LoreManagementSpecificSettings {
   /**
-   * Refuse to let the agent finish while a flagged duplicate group is still untouched.
+   * Refuse to let the agent finish while a flagged duplicate group is unresolved.
    *
-   * Off by default because it changes what the run *costs*: a lorebook with twenty
-   * near-duplicate names turns one pass into several, and a model that judges them all
-   * distinct still has to say so one group at a time. The duplicate list and the
-   * refusal to create an entry that already exists are not gated on this — they cost
-   * nothing and are always on. This is only the obligation to close every group.
+   * Off by default because it changes what a run costs: twenty near-duplicate names turn
+   * one pass into several. Only the obligation is gated — the worklist and the refusal to
+   * create an existing name cost nothing and are always on.
    */
   requireDuplicateResolution: boolean
 }
@@ -818,18 +818,25 @@ export interface TimelineFillSpecificSettings {}
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ChapterQuerySpecificSettings {}
 
-// Global context configuration - controls how much context is included in AI operations
+/**
+ * How much recent story each service reads.
+ *
+ * Only what a slider actually drives. `recentEntriesForNarrative` and `userActionsForStyle`
+ * were here with defaults and no reader at all; a stored key nothing consumes is a setting
+ * that lies about being one.
+ */
 export interface ContextWindowSettings {
-  /** Number of recent entries for main narrative context */
-  recentEntriesForNarrative: number
-  /** Number of recent entries for classification/retrieval operations */
-  recentEntriesForRetrieval: number
-  /** Number of recent entries for action choices context */
+  /**
+   * Entries the plot-suggestions service reads.
+   *
+   * Was `recentEntriesForRetrieval`, which named the one thing it does not drive: neither
+   * Entry Retrieval nor Agentic Retrieval ever read it — they have their own
+   * `recentEntriesCount` in `systemServicesSettings` — and `SuggestionsService` is its
+   * only consumer. `migrateContextWindow` carries a tuned value across.
+   */
+  recentEntriesForSuggestions: number
+  /** Entries the action-choices service reads. */
   recentEntriesForChoices: number
-  /** Number of user actions to analyze for style matching */
-  userActionsForStyle: number
-  /** Number of recent entries for lore management context */
-  recentEntriesForLoreManagement: number
 }
 
 // Lorebook injection limits
@@ -929,7 +936,7 @@ export function getDefaultStyleReviewerSpecificSettings(): StyleReviewerSpecific
 }
 
 export function getDefaultLoreManagementSpecificSettings(): LoreManagementSpecificSettings {
-  return { requireDuplicateResolution: false }
+  return { requireDuplicateResolution: LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution }
 }
 
 export function getDefaultInteractiveVaultSpecificSettings(): InteractiveVaultSpecificSettings {
@@ -965,11 +972,8 @@ export function getDefaultCharacterCardImportSpecificSettings(): CharacterCardIm
 
 export function getDefaultContextWindowSettings(): ContextWindowSettings {
   return {
-    recentEntriesForNarrative: 20,
-    recentEntriesForRetrieval: 5,
+    recentEntriesForSuggestions: 5,
     recentEntriesForChoices: 5,
-    userActionsForStyle: 6,
-    recentEntriesForLoreManagement: 10,
   }
 }
 
@@ -1677,7 +1681,10 @@ class SettingsStore {
             },
             tts: { ...getDefaultTTSSpecificSettings(), ...loaded.tts },
             characterCardImport: getDefaultCharacterCardImportSpecificSettings(),
-            contextWindow: { ...getDefaultContextWindowSettings(), ...loaded.contextWindow },
+            contextWindow: migrateContextWindow({
+              ...getDefaultContextWindowSettings(),
+              ...loaded.contextWindow,
+            }),
             lorebookLimits: { ...getDefaultLorebookLimitsSettings(), ...loaded.lorebookLimits },
           }
         } catch {

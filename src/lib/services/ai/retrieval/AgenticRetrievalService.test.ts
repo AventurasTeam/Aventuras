@@ -1,3 +1,4 @@
+import { finishOnlyOnLastStep } from '$lib/services/ai/sdk/agents'
 import { describe, it, expect, vi } from 'vitest'
 import type { Entry, Chapter } from '$lib/types'
 
@@ -20,11 +21,7 @@ vi.mock('$lib/stores/settings.svelte', () => ({
   },
 }))
 
-import {
-  AgenticRetrievalService,
-  buildRetrievalContext,
-  finishOnlyOnLastStep,
-} from './AgenticRetrievalService'
+import { AgenticRetrievalService, buildRetrievalContext } from './AgenticRetrievalService'
 
 describe('AgenticRetrievalService', () => {
   const service = new AgenticRetrievalService('agenticRetrieval', 5)
@@ -171,14 +168,14 @@ describe('buildRetrievalContext', () => {
 
 describe('finishOnlyOnLastStep', () => {
   it('leaves every tool available before the last step', () => {
-    const prepare = finishOnlyOnLastStep(10)
+    const prepare = finishOnlyOnLastStep('finish_retrieval', 10)
 
     expect(prepare({ stepNumber: 0 })).toEqual({})
     expect(prepare({ stepNumber: 8 })).toEqual({})
   })
 
   it('forces finish_retrieval on the last step, so the run cannot end empty-handed', () => {
-    const prepare = finishOnlyOnLastStep(10)
+    const prepare = finishOnlyOnLastStep('finish_retrieval', 10)
 
     expect(prepare({ stepNumber: 9 })).toEqual({
       activeTools: ['finish_retrieval'],
@@ -187,14 +184,20 @@ describe('finishOnlyOnLastStep', () => {
   })
 
   it('keeps forcing it past the last step, in case the loop runs on', () => {
-    expect(finishOnlyOnLastStep(3)({ stepNumber: 7 })).toHaveProperty('toolChoice')
+    expect(finishOnlyOnLastStep('finish_retrieval', 3)({ stepNumber: 7 })).toHaveProperty(
+      'toolChoice',
+    )
   })
 
   it('forces it immediately when only one step is allowed', () => {
-    expect(finishOnlyOnLastStep(1)({ stepNumber: 0 })).toHaveProperty('toolChoice')
+    expect(finishOnlyOnLastStep('finish_retrieval', 1)({ stepNumber: 0 })).toHaveProperty(
+      'toolChoice',
+    )
   })
 
   it('does not break on a zero budget', () => {
-    expect(finishOnlyOnLastStep(0)({ stepNumber: 0 })).toHaveProperty('toolChoice')
+    expect(finishOnlyOnLastStep('finish_retrieval', 0)({ stepNumber: 0 })).toHaveProperty(
+      'toolChoice',
+    )
   })
 })

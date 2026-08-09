@@ -60,7 +60,7 @@ export class SuggestionsService extends BaseAIService {
     // Get the last few entries for context
     const contextConfig = getContextConfig()
     const lorebookConfig = getLorebookConfig()
-    const lastEntries = recentEntries.slice(-contextConfig.recentEntriesForRetrieval)
+    const lastEntries = recentEntries.slice(-contextConfig.recentEntriesForSuggestions)
     let recentContent = lastEntries
       .map((e) => {
         const prefix = e.type === 'user_action' ? '[DIRECTION]' : '[NARRATIVE]'

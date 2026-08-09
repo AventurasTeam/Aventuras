@@ -19,16 +19,10 @@ import { MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS } from './defaults'
 export const AI_CONFIG = {
   /** Context window sizes for different operations */
   context: {
-    /** Number of recent entries for main narrative context */
-    recentEntriesForNarrative: 20,
-    /** Number of recent entries for classification/retrieval operations */
-    recentEntriesForRetrieval: 5,
-    /** Number of recent entries for action choices context */
+    /** Entries the plot-suggestions service reads. See ContextWindowSettings. */
+    recentEntriesForSuggestions: 5,
+    /** Entries the action-choices service reads. */
     recentEntriesForChoices: 5,
-    /** Number of user actions to analyze for style matching */
-    userActionsForStyle: 6,
-    /** Number of recent entries for lore management context */
-    recentEntriesForLoreManagement: 10,
   },
 
   /** Lorebook injection limits. Values live in ./defaults.ts: the settings store needs
@@ -60,15 +54,10 @@ export const AI_CONFIG = {
 export function getContextConfig() {
   const ctx = settings.serviceSpecificSettings?.contextWindow
   return {
-    recentEntriesForNarrative:
-      ctx?.recentEntriesForNarrative ?? AI_CONFIG.context.recentEntriesForNarrative,
-    recentEntriesForRetrieval:
-      ctx?.recentEntriesForRetrieval ?? AI_CONFIG.context.recentEntriesForRetrieval,
+    recentEntriesForSuggestions:
+      ctx?.recentEntriesForSuggestions ?? AI_CONFIG.context.recentEntriesForSuggestions,
     recentEntriesForChoices:
       ctx?.recentEntriesForChoices ?? AI_CONFIG.context.recentEntriesForChoices,
-    userActionsForStyle: ctx?.userActionsForStyle ?? AI_CONFIG.context.userActionsForStyle,
-    recentEntriesForLoreManagement:
-      ctx?.recentEntriesForLoreManagement ?? AI_CONFIG.context.recentEntriesForLoreManagement,
   }
 }
 
