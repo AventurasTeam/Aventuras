@@ -21,8 +21,9 @@ import { build, median, passInputs, TOP_SCALE } from './fixture'
  * costs, encode and gzip are what its SIZE costs, and deep mode moves only the
  * second pair.
  *
- * The row insert is excluded — it is one statement against a table with no index
- * beyond its PK, and it is the same statement in both modes.
+ * The row insert is excluded from every figure here, the combined one included —
+ * it is one statement against a table with no index beyond its PK, and it is the
+ * same statement in both modes.
  */
 const SAMPLES = 7
 const WARMUP = 2
@@ -95,13 +96,13 @@ describe('probe capture cost', () => {
           // Rebuilds and re-encodes per sample rather than gzipping the one
           // buffer above: the three stages measured in isolation each reuse a
           // warm input the write path never gets, so summing them understates.
-          const endToEndMs = medianOf(() => gzipSync(encode()))
+          const combinedMs = medianOf(() => gzipSync(encode()))
           const gzipped = gzipSync(json)
 
           process.stdout.write(
             `  dim=${dim} ${mode.padEnd(5)} pool=${poolSize}  ` +
               `assemble=${assembleMs.toFixed(1)}ms  encode=${encodeMs.toFixed(1)}ms  ` +
-              `gzip=${gzipMs.toFixed(1)}ms  end-to-end=${endToEndMs.toFixed(1)}ms  ` +
+              `gzip=${gzipMs.toFixed(1)}ms  assemble+encode+gzip=${combinedMs.toFixed(1)}ms  ` +
               `raw=${kb(json.length)}  gzipped=${kb(gzipped.length)}\n`,
           )
         }
