@@ -25,6 +25,6 @@ export {
 export type { CorruptCapture, StoredCapture } from './read'
 export { replayType } from './replay'
 export type { ReplayOptions } from './replay'
-export { RankerParamsError } from './validate'
+export { CaptureShapeError, RankerParamsError } from './validate'
 export { CAPTURE_CAP, writeProbeCapture } from './writer'
 export type { CaptureWriteDeps, CaptureWriteInput } from './writer'

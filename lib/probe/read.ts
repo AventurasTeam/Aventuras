@@ -5,7 +5,7 @@ import type { EmbedderErrorKind } from '@/lib/embedder'
 import { TOKENIZER_IDENTITY } from '@/lib/retrieval'
 
 import { decompressPayload } from './compress'
-import { assertRankerParams, RankerParamsError } from './validate'
+import { assertCaptureShape, assertRankerParams } from './validate'
 
 export type CorruptCapture = { id: string; branchId: string; error: Error }
 
@@ -82,7 +82,7 @@ function backfillFailureReason(
  * column order: id, branch_id, captured_at, capture_mode, failure_reason,
  * payload_size, payload. An object-row caller must normalize to that shape
  * first (see lib/db/runtime/exec.ts). The one place a stored capture
- * re-enters the ranker's world, so the params guard runs here.
+ * re-enters the ranker's world, so the shape and params guards run here.
  */
 export function decodeCapture(row: readonly unknown[]): StoredCapture {
   const [id, branchId, capturedAt, captureMode, failureReason, payloadSize, payloadBytes] = row as [
@@ -94,9 +94,8 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
     number | null,
     Uint8Array,
   ]
-  const decoded = decompressPayload(payloadBytes) as ProbeCapturePayload
-  if (decoded.params === undefined || decoded.params === null)
-    throw new RankerParamsError('params', 'capture payload has no params snapshot')
+  const decoded = decompressPayload(payloadBytes)
+  assertCaptureShape(decoded)
   assertRankerParams(decoded.params.ranker)
   warnOnCaptureDrift(id, decoded)
   const payload = backfillFailureReason(decoded, failureReason)

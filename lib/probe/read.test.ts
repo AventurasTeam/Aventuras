@@ -126,13 +126,44 @@ describe('decodeCapture', () => {
     expect(rows.find((c) => c.id === 'pc_2')?.payload.target_entry_id).toBe('ent_b')
   })
 
-  it('rejects a payload missing its params snapshot, not a raw TypeError', () => {
-    const corrupted = { ...buildCapturePayload(captureInput()) } as Record<string, unknown>
-    delete corrupted.params
+  // Each container a consumer indexes into, dropped one at a time: a payload
+  // that decodes but cannot be read is a corrupt row, and only a guard at this
+  // boundary can classify it as one — replayType's `pools[type]` throws a raw
+  // TypeError from inside the simulator instead.
+  it.each<[string, (payload: Record<string, unknown>) => void, RegExp]>([
+    ['params', (p) => delete p.params, /params/i],
+    ['pools', (p) => delete p.pools, /pools/i],
+    [
+      'one pool',
+      (p) => {
+        delete (p.pools as Record<string, unknown>).happenings
+      },
+      /pools\.happenings/i,
+    ],
+    ['queries', (p) => delete p.queries, /queries/i],
+    [
+      'a query',
+      (p) => {
+        ;(p.queries as unknown[]).pop()
+      },
+      /queries/i,
+    ],
+  ])('rejects a payload missing %s, not a raw TypeError', (_field, corrupt, message) => {
+    const corrupted = { ...buildCapturePayload(captureInput()) } as unknown as Record<
+      string,
+      unknown
+    >
+    corrupt(corrupted)
     const { bytes } = compressPayload(corrupted as unknown as ProbeCapturePayload)
 
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(message)
+  })
+
+  it('rejects a payload that decodes to something other than an object', () => {
+    const { bytes } = compressPayload('not a capture' as unknown as ProbeCapturePayload)
+
     expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
-      /params/i,
+      /must be an object/i,
     )
   })
 

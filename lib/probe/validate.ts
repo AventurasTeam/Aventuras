@@ -1,5 +1,16 @@
+import type { ProbeCapturePayload } from '@/lib/db'
 import type { RankerParams, RetrievalType } from '@/lib/retrieval'
 import { RETRIEVAL_TYPES } from '@/lib/retrieval'
+
+export class CaptureShapeError extends Error {
+  readonly field: string
+
+  constructor(field: string, detail: string) {
+    super(`capture payload ${field} ${detail}`)
+    this.name = 'CaptureShapeError'
+    this.field = field
+  }
+}
 
 export class RankerParamsError extends Error {
   readonly field: string
@@ -40,6 +51,39 @@ const requireInteger = (field: string, value: number): void => {
 const eachNonNegative = (field: string, record: Readonly<Record<RetrievalType, number>>): void => {
   requireObject(field, record)
   for (const type of RETRIEVAL_TYPES) inRange(`${field}.${type}`, record[type], 0, Infinity)
+}
+
+const typeOf = (value: unknown): string =>
+  value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value
+
+const requirePlainObject = (field: string, value: unknown): void => {
+  if (value === null || typeof value !== 'object' || Array.isArray(value))
+    throw new CaptureShapeError(field, `must be an object, got ${typeOf(value)}`)
+}
+
+/**
+ * Structural, not a schema: a decoded capture is a cast over JSON.parse, and
+ * every container a consumer indexes into has to be proven present before the
+ * cast is honest — a truncated payload otherwise reaches replayType as a
+ * TypeError on `pools[type]`, too late for the list path to classify the row as
+ * corrupt. Field-level drift stays tolerated on purpose (probe.md → Reading an
+ * older capture): a capture that cannot be opened cannot be deleted either.
+ * `failure_reason` is deliberately absent from the checks — a pre-v2 payload
+ * carries the marker only on the row, and read.ts backfills it.
+ */
+export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCapturePayload {
+  requirePlainObject('root', decoded)
+  const payload = decoded as Record<string, unknown>
+
+  requirePlainObject('params', payload.params)
+  requirePlainObject('pools', payload.pools)
+  const pools = payload.pools as Record<string, unknown>
+  for (const type of RETRIEVAL_TYPES) {
+    if (!Array.isArray(pools[type]))
+      throw new CaptureShapeError(`pools.${type}`, `must be an array, got ${typeOf(pools[type])}`)
+  }
+  if (!Array.isArray(payload.queries) || payload.queries.length !== 3)
+    throw new CaptureShapeError('queries', 'must be a three-query stack')
 }
 
 /**
