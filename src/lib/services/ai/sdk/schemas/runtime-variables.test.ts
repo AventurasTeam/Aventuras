@@ -117,11 +117,86 @@ describe('salvageClassification', () => {
     expect(salvaged!.scene.timeProgression).toBe('none')
   })
 
+  // `timeProgression` carries .default('none'), so an omitted one parses successfully with
+  // undefined as its input. Reading the input back instead of the parse result put undefined
+  // in the field and left the emptiness check below unable to see an empty scene.
+  it("defaults an omitted timeProgression to 'none' when the scene fails for another reason", () => {
+    const raw = response()
+    const scene = raw.scene as Record<string, unknown>
+    scene.currentLocationName = 42
+    delete scene.timeProgression
+
+    const salvaged = salvageClassification(raw, {})
+
+    expect(salvaged!.scene.timeProgression).toBe('none')
+    expect(salvaged!.scene.currentLocationName).toBeNull()
+  })
+
+  it('reports nothing to salvage for an empty turn whose scene also failed to parse', () => {
+    const raw = {
+      entryUpdates: {},
+      // Invalid, so the scene takes the field-by-field path with nothing in it to keep.
+      scene: { currentLocationName: 42, presentCharacterNames: 'Kaelen' },
+    }
+
+    expect(salvageClassification(raw, {})).toBeNull()
+  })
+
   // An empty result and a failed one are the same object, so the caller has to be able
   // to tell "salvaged nothing" from "salvaged an empty turn".
   it('returns null when there is nothing to salvage', () => {
     expect(salvageClassification(null, {})).toBeNull()
     expect(salvageClassification('not an object', {})).toBeNull()
     expect(salvageClassification({ entryUpdates: {}, scene: {} }, {})).toBeNull()
+  })
+})
+
+// A runtime variable value is the one part of an element that is recoverable by design —
+// that is the whole reason they are optional — so a bad one must cost the value, not the
+// entity carrying it.
+describe('salvageClassification — a bad variable value', () => {
+  const health = variable({ variableName: 'health', entityType: 'character', maxValue: 100 })
+  const morale = variable({ variableName: 'morale', entityType: 'character', maxValue: 10 })
+
+  it('keeps the new entity and its other variables, dropping only the bad value', () => {
+    const raw = response()
+    raw.entryUpdates.newCharacters = [
+      { name: 'Man at The Drunken Dragon', status: 'active', health: 'full', morale: 7 } as never,
+    ]
+
+    const salvaged = salvageClassification(raw, { character: [health, morale] })
+
+    const [character] = salvaged!.entryUpdates.newCharacters as unknown as Record<string, unknown>[]
+    expect(character.name).toBe('Man at The Drunken Dragon')
+    expect(character.status).toBe('active')
+    expect(character.morale).toBe(7)
+    expect(character).not.toHaveProperty('health')
+  })
+
+  it('keeps an update whose native changes survive the bad value', () => {
+    const raw = response()
+    raw.entryUpdates.characterUpdates = [
+      { name: 'Accompanying Knight', changes: { status: 'inactive', health: 'full' } } as never,
+    ]
+
+    const salvaged = salvageClassification(raw, { character: [health] })
+
+    const [update] = salvaged!.entryUpdates.characterUpdates
+    expect(update.name).toBe('Accompanying Knight')
+    expect(update.changes.status).toBe('inactive')
+    expect(update.changes).not.toHaveProperty('health')
+  })
+
+  // Applying it would write no column but still copy the entity onto the current branch,
+  // since the COW runs before the update rather than after it.
+  it('drops an update left holding nothing but the name it addresses', () => {
+    const raw = response()
+    raw.entryUpdates.characterUpdates = [
+      { name: 'Accompanying Knight', changes: { health: 'full' } } as never,
+    ]
+
+    const salvaged = salvageClassification(raw, { character: [health] })
+
+    expect(salvaged!.entryUpdates.characterUpdates).toEqual([])
   })
 })

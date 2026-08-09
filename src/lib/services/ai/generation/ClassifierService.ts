@@ -226,6 +226,10 @@ export class ClassifierService extends BaseAIService {
     // abort or a 401 has nothing to salvage from.
     if (!NoObjectGeneratedError.isInstance(error) || !error.text) return empty
 
+    // Repaired again here rather than trusting the text to be clean: `createJsonExtractMiddleware`
+    // already extracts and repairs on the way through, but it swallows its own failure and hands
+    // the original text on, so the one case that reaches this line is the one it could not fix.
+    // A repair that succeeds where it failed costs a parse; the alternative is losing the turn.
     let parsed: unknown
     try {
       parsed = JSON.parse(jsonrepair(error.text))

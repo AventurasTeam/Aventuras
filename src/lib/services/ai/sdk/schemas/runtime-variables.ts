@@ -103,9 +103,14 @@ function buildVariableBaseSchema(def: RuntimeVariable): z.ZodType {
  * without a `defaultValue` used to be a required field on every new entity of its type,
  * which made one forgotten field cost the whole turn: validation is all-or-nothing, so
  * a missing `danger_level` on a new location threw away the characters, the items, the
- * story beats and the time progression alongside it. A missing value is recoverable —
- * `mergeRuntimeVars` fills the default at apply time, and the entity keeps whatever it
- * already had — so there is nothing here worth failing a classification over.
+ * story beats and the time progression alongside it.
+ *
+ * What a missing value actually costs is small and local. On an update, `mergeRuntimeVars`
+ * only merges what the model sent, so the entity keeps the value it already had. On a new
+ * entity there is nothing to keep: no creation path writes `defaultValue` into
+ * `metadata.runtimeVars`, so the variable stays unset and `RuntimeVariableDisplay` shows it
+ * as "Not set" until a later turn or a manual edit fills it in. One unset variable against
+ * the entire turn's world state is not a trade worth making.
  */
 export function buildEntityVarsShape(variables: RuntimeVariable[]): z.ZodRawShape | null {
   if (variables.length === 0) return null
@@ -154,6 +159,24 @@ const BASE_NEW_SCHEMAS: Record<RuntimeEntityType, z.ZodObject<z.ZodRawShape>> = 
 const ENTITY_TYPES: RuntimeEntityType[] = ['character', 'location', 'item', 'story_beat']
 
 /**
+ * One `entryUpdates` array's element, in the three forms salvage needs to take it apart.
+ */
+interface ElementSchemas {
+  /** Native fields plus the runtime variables: what the provider is held to. */
+  full: z.ZodType
+  /**
+   * The native fields alone. Salvage falls back to this when `full` rejects an element,
+   * because a variable value the model got wrong is not a reason to lose the entity.
+   * Identical to `full` when the entity type has no variables.
+   */
+  native: z.ZodType
+  /** Per-variable schemas, so salvage can put back the ones that are individually fine. */
+  vars: Record<string, z.ZodType> | null
+  /** Variables sit at the top level on a new entity and inside `changes` on an update. */
+  varsAt: 'root' | 'changes'
+}
+
+/**
  * Build the per-array *element* schema for every `entryUpdates` field, with runtime
  * variable fields added INLINE (not nested under a `customVars` object):
  *
@@ -166,8 +189,8 @@ const ENTITY_TYPES: RuntimeEntityType[] = ['character', 'location', 'item', 'sto
  */
 function buildEntryUpdateElementSchemas(
   runtimeVarsByEntityType: Record<string, RuntimeVariable[]>,
-): Record<string, z.ZodType> {
-  const elements: Record<string, z.ZodType> = {}
+): Record<string, ElementSchemas> {
+  const elements: Record<string, ElementSchemas> = {}
 
   for (const entityType of ENTITY_TYPES) {
     const fields = ENTITY_TYPE_TO_SCHEMA_FIELDS[entityType]
@@ -177,17 +200,34 @@ function buildEntryUpdateElementSchemas(
     const baseNew = BASE_NEW_SCHEMAS[entityType]
 
     if (!varsShape) {
-      elements[fields.updates] = baseUpdate
-      elements[fields.new] = baseNew
+      elements[fields.updates] = {
+        full: baseUpdate,
+        native: baseUpdate,
+        vars: null,
+        varsAt: 'changes',
+      }
+      elements[fields.new] = { full: baseNew, native: baseNew, vars: null, varsAt: 'root' }
       continue
     }
 
     const originalChanges = (baseUpdate.shape as Record<string, z.ZodTypeAny>).changes
-    elements[fields.updates] =
+    const extendedUpdate =
       originalChanges instanceof z.ZodObject
         ? baseUpdate.extend({ changes: originalChanges.extend(varsShape) })
         : baseUpdate
-    elements[fields.new] = baseNew.extend(varsShape)
+    elements[fields.updates] = {
+      full: extendedUpdate,
+      native: baseUpdate,
+      // Nothing to put back if the update schema had no `changes` object to extend.
+      vars: extendedUpdate === baseUpdate ? null : (varsShape as Record<string, z.ZodType>),
+      varsAt: 'changes',
+    }
+    elements[fields.new] = {
+      full: baseNew.extend(varsShape),
+      native: baseNew,
+      vars: varsShape as Record<string, z.ZodType>,
+      varsAt: 'root',
+    }
   }
 
   return elements
@@ -215,7 +255,7 @@ export function buildExtendedClassificationSchema(
   const elements = buildEntryUpdateElementSchemas(runtimeVarsByEntityType)
   const entryUpdatesShape: Record<string, z.ZodTypeAny> = {}
   for (const [field, element] of Object.entries(elements)) {
-    entryUpdatesShape[field] = z.array(element).default([])
+    entryUpdatesShape[field] = z.array(element.full).default([])
   }
 
   return z.object({
@@ -227,6 +267,72 @@ export function buildExtendedClassificationSchema(
 // ============================================================================
 // Salvage
 // ============================================================================
+
+/**
+ * Salvage one element of an `entryUpdates` array, or return null if nothing of it survives.
+ *
+ * The whole element is tried first. When that fails the native fields are tried alone and
+ * each runtime variable is put back on its own merits: a variable value is the one thing in
+ * here that is recoverable by design — that is why they are all optional in the first place —
+ * so `health: "full"` must cost the value, not the character it was attached to.
+ */
+function salvageElement(item: unknown, schemas: ElementSchemas): unknown | null {
+  const full = schemas.full.safeParse(item)
+  if (full.success) return full.data
+
+  const native = schemas.native.safeParse(item)
+  if (!native.success) return null
+  const salvaged = native.data as Record<string, unknown>
+
+  if (schemas.vars && typeof item === 'object' && item !== null) {
+    const rawItem = item as Record<string, unknown>
+    const source = schemas.varsAt === 'changes' ? rawItem.changes : rawItem
+    const target = schemas.varsAt === 'changes' ? salvaged.changes : salvaged
+    if (source && typeof source === 'object' && target && typeof target === 'object') {
+      for (const [name, schema] of Object.entries(schemas.vars)) {
+        const value = schema.safeParse((source as Record<string, unknown>)[name])
+        // Every variable schema is `.optional()`, so an absent one parses as undefined.
+        if (value.success && value.data !== undefined) {
+          ;(target as Record<string, unknown>)[name] = value.data
+        }
+      }
+    }
+  }
+
+  // An update left holding nothing but the name it addresses is not worth keeping: applying
+  // it writes no column but still copies the entity onto the current branch (`cowCharacter`
+  // and friends run before the update, not after it), so a no-op would cost a COW row.
+  const changes = salvaged.changes
+  if (changes && typeof changes === 'object' && Object.keys(changes).length === 0) return null
+
+  return salvaged
+}
+
+/**
+ * Salvage the scene, field by field when it does not parse whole.
+ *
+ * Its three fields are independent claims, exactly like the arrays beside them: a
+ * `timeProgression` the model spelled wrong must not cost the current location.
+ */
+function salvageScene(rawScene: Record<string, unknown>): Scene {
+  const scene = sceneSchema.safeParse(rawScene)
+  if (scene.success) return scene.data
+
+  // Taken from the parse rather than from the raw value: the field carries `.default('none')`,
+  // so an omitted `timeProgression` parses successfully and its *result* is 'none' while the
+  // input is undefined. Reading the input back would put undefined in a field typed as the
+  // enum, and leave the caller's emptiness check unable to recognise an empty scene.
+  const time = sceneSchema.shape.timeProgression.safeParse(rawScene.timeProgression)
+
+  return {
+    currentLocationName:
+      typeof rawScene.currentLocationName === 'string' ? rawScene.currentLocationName : null,
+    presentCharacterNames: Array.isArray(rawScene.presentCharacterNames)
+      ? rawScene.presentCharacterNames.filter((n): n is string => typeof n === 'string')
+      : [],
+    timeProgression: time.success ? time.data : 'none',
+  }
+}
 
 /**
  * Rebuild a classification result from model output that failed whole-object validation,
@@ -262,34 +368,19 @@ export function salvageClassification(
     const value = rawEntryUpdates[field]
     const kept = Array.isArray(value)
       ? value.flatMap((item) => {
-          const parsed = element.safeParse(item)
-          return parsed.success ? [parsed.data] : []
+          const salvagedItem = salvageElement(item, element)
+          return salvagedItem === null ? [] : [salvagedItem]
         })
       : []
     salvagedCount += kept.length
     entryUpdates[field] = kept
   }
 
-  // The scene is three independent claims, so it is salvaged field by field for the same
-  // reason. A bad `timeProgression` must not cost the current location.
   const rawScene =
     typeof root.scene === 'object' && root.scene !== null
       ? (root.scene as Record<string, unknown>)
       : {}
-  const scene = sceneSchema.safeParse(rawScene)
-  const salvagedScene: Scene = scene.success
-    ? scene.data
-    : {
-        currentLocationName:
-          typeof rawScene.currentLocationName === 'string' ? rawScene.currentLocationName : null,
-        presentCharacterNames: Array.isArray(rawScene.presentCharacterNames)
-          ? rawScene.presentCharacterNames.filter((n): n is string => typeof n === 'string')
-          : [],
-        timeProgression: sceneSchema.shape.timeProgression.safeParse(rawScene.timeProgression)
-          .success
-          ? (rawScene.timeProgression as Scene['timeProgression'])
-          : 'none',
-      }
+  const salvagedScene = salvageScene(rawScene)
 
   const sceneIsEmpty =
     !salvagedScene.currentLocationName &&
