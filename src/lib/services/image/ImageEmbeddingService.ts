@@ -43,8 +43,21 @@ function getDisplayableAgenticImages(images: EmbeddedImage[]): EmbeddedImage[] {
   )
 }
 
-/** Find and mark all agentic source text matches, sorted reverse by position (for safe replacement). */
-function buildAgenticMarkers(content: string, images: EmbeddedImage[]): ImageMarker[] {
+/**
+ * Find and mark all agentic source text matches, sorted reverse by position (for safe
+ * replacement).
+ *
+ * `snapToDialogue` is off wherever dialogue is not a concept. In Visual Prose the
+ * content is generated HTML and the feature is deliberately absent, so widening a
+ * marker there can only do harm: it would grow the marker over markup on the strength
+ * of a "quote" that is really an attribute value. `getPlacedImageIds` turns it off for
+ * a different reason — widening cannot change which images are placed, only where.
+ */
+function buildAgenticMarkers(
+  content: string,
+  images: EmbeddedImage[],
+  snapToDialogue: boolean,
+): ImageMarker[] {
   const displayable = getDisplayableAgenticImages(images)
   const sortedImages = [...displayable].sort((a, b) => b.sourceText.length - a.sourceText.length)
   const markers: ImageMarker[] = []
@@ -70,7 +83,8 @@ function buildAgenticMarkers(content: string, images: EmbeddedImage[]): ImageMar
     }
   }
 
-  return snapMarkersToDialogue(content, markers).sort((a, b) => b.start - a.start)
+  const snapped = snapToDialogue ? snapMarkersToDialogue(content, markers) : markers
+  return snapped.sort((a, b) => b.start - a.start)
 }
 
 /**
@@ -151,6 +165,7 @@ function processUnified(
   regeneratingIds: Set<string>,
   render: (text: string) => string,
   renderMarkerText: (text: string) => string,
+  snapToDialogue: boolean,
 ): string {
   if (images.length === 0 && !content.includes('<pic')) {
     return render(content)
@@ -174,7 +189,7 @@ function processUnified(
   }
 
   // Step 2: Placeholder-ize agentic sourceText matches
-  const markers = buildAgenticMarkers(text, images)
+  const markers = buildAgenticMarkers(text, images, snapToDialogue)
   for (const marker of markers) {
     const originalText = text.slice(marker.start, marker.end)
     const placeholder = `IMGPH${marker.imageId.replace(/-/g, '')}IMGPH`
@@ -221,7 +236,7 @@ export function getPlacedImageIds(content: string, images: EmbeddedImage[]): Set
   const placedIds = new Set<string>()
 
   // Agentic images: placed via sourceText match
-  const agenticMarkers = buildAgenticMarkers(content, images)
+  const agenticMarkers = buildAgenticMarkers(content, images, false)
   for (const m of agenticMarkers) {
     placedIds.add(m.imageId)
   }
@@ -261,6 +276,7 @@ export function processStoryContent(
     regeneratingIds,
     parseStoryMarkdown,
     parseStoryMarkdownInline,
+    true,
   )
 }
 
@@ -282,6 +298,7 @@ export function processVisualProseStoryContent(
     regeneratingIds,
     (t) => sanitizeVisualProse(t, entryId),
     (t) => t,
+    false,
   )
 }
 

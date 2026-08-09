@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { matchDialogueAt, findDialogueStart, segmentDialogue } from './dialogue'
+import { matchDialogueAt, findDialogueStart, segmentDialogue, dialogueSpans } from './dialogue'
 import { parseStoryMarkdown, parseMarkdown } from './markdown'
 
 describe('matchDialogueAt', () => {
@@ -84,8 +84,32 @@ describe('segmentDialogue', () => {
     ])
   })
 
+  it('does not speak an attribute value as dialogue, and stays lossless', () => {
+    // TTS reaches this with markup still in place whenever `removeHtmlTags` is off.
+    const text = 'He said <b class="x">nothing</b> at all.'
+    const segments = segmentDialogue(text)
+
+    expect(segments.every((s) => !s.isDialogue)).toBe(true)
+    expect(segments.map((s) => s.text).join('')).toBe(text)
+  })
+
   it('returns nothing for empty input', () => {
     expect(segmentDialogue('')).toEqual([])
+  })
+})
+
+describe('dialogueSpans', () => {
+  it('reports the spans an image marker must not cut', () => {
+    expect(dialogueSpans('He said "hi" and left.')).toEqual([{ start: 8, end: 12 }])
+  })
+
+  it('reports no span for markup, whose quotes are attribute values', () => {
+    // This is what `ImageEmbeddingService` snaps markers to, and it also runs over
+    // Visual Prose content, which is entirely generated HTML. Reading `class="x"` as
+    // speech there would widen a marker across a tag and split it when it is lifted
+    // out of the content.
+    expect(dialogueSpans('He said "hi <b class="x">bold</b> onward')).toEqual([])
+    expect(dialogueSpans('<p class="a">Plain prose.</p>')).toEqual([])
   })
 })
 
@@ -122,6 +146,34 @@ describe('parseStoryMarkdown', () => {
   it('does not join quotes across paragraphs', () => {
     const html = parseStoryMarkdown('First "one.\n\nSecond" two.')
     expect(html).not.toContain('dialogue-line')
+  })
+
+  it('does not let an attribute quote close a span opened in prose', () => {
+    // The extension runs before marked's `tag` tokenizer, so nothing but the tag
+    // skip stops an unterminated quote from closing on `class="`. When it did, the
+    // tag was split: half escaped into text, half left as a stray end tag.
+    const html = parseStoryMarkdown('He said "hi <span class="a">x</span> done')
+    expect(html).not.toContain('dialogue-line')
+    expect(html).toContain('<span class="a">x</span>')
+  })
+
+  it('leaves a pic tag intact after an unterminated quote', () => {
+    // StreamingEntry parses before substituting <pic> placeholders, so a mangled
+    // tag here is an image silently lost from the entry.
+    const src = 'She whispered "wait— <pic prompt="dark hall"> the hall was dark.'
+    const html = parseStoryMarkdown(src)
+    expect(html).not.toContain('dialogue-line')
+    expect(html).toContain('<pic prompt="dark hall">')
+  })
+
+  it('still closes a quote that legitimately contains a tag', () => {
+    const html = parseStoryMarkdown('"hi <b>there</b> friend"')
+    expect(html).toContain('<span class="dialogue-line">"hi <b>there</b> friend"</span>')
+  })
+
+  it('treats a bare less-than as ordinary text, not a tag', () => {
+    const html = parseStoryMarkdown('"a < b, always"')
+    expect(html).toContain('dialogue-line')
   })
 
   it('keeps image placeholders intact inside dialogue', () => {

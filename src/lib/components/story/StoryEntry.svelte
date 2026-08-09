@@ -1081,7 +1081,15 @@
         excludedCharacters: ttsSettings.excludedCharacters,
       })
 
-      if (segments.length === 0) return
+      // Say so rather than doing nothing: the usual cause is an excluded-characters
+      // list that happens to cover the whole entry, and a play button that silently
+      // does nothing gives the user nothing to act on.
+      if (segments.length === 0) {
+        alert(
+          'Nothing to read aloud in this entry — check the excluded characters in TTS settings.',
+        )
+        return
+      }
 
       isPlayingTTS = true
       isGeneratingTTS = false

@@ -43,6 +43,17 @@ describe('stripExcludedCharacters', () => {
   it('escapes regex metacharacters in the list', () => {
     expect(stripExcludedCharacters('a-b]c', '-, ]')).toBe('abc')
   })
+
+  it('treats a hyphen between two characters as a literal, not a range', () => {
+    // `escapeRegex` leaves `-` alone, so `[\*-~]` was a range over printable ASCII
+    // and erased the whole entry — silently, since playback simply found nothing to
+    // say. The list order is the only thing that used to make this safe.
+    expect(stripExcludedCharacters('The captain said hello, 42 times.', '*, -, ~')).toBe(
+      'The captain said hello, 42 times.',
+    )
+    expect(stripExcludedCharacters('a-b', '*, -, ~')).toBe('ab')
+    expect(stripExcludedCharacters('Hello World 123', 'a,-,z')).toBe('Hello World 123')
+  })
 })
 
 describe('supportsDialogueVoice / resolveDialogueVoice', () => {

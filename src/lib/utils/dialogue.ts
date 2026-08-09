@@ -19,6 +19,9 @@
  *   swallow half a scene into the wrong voice.
  * - An unterminated quote is not dialogue. During streaming that means a line stays
  *   neutral until its closing quote arrives, rather than flickering.
+ * - An HTML tag is skipped whole, so a quote in one of its attributes can never
+ *   close a span that opened in prose. Raw HTML *inside* a quote still renders as
+ *   HTML; it is only the attribute quotes that stop being candidates.
  */
 
 /** Opening/closing character for each recognised quote style. */
@@ -61,6 +64,47 @@ function isParagraphBreak(text: string, index: number): boolean {
 }
 
 /**
+ * Index just past the `>` of the HTML tag starting at `index`, or -1 when what is
+ * there is not a tag.
+ *
+ * A quote may open in prose and the next quote in the text may belong to an
+ * attribute — `He said "hi <span class="a">`. Scanning blindly closes the span on
+ * that attribute quote, which splits the tag down the middle: the renderer then
+ * escapes half of it into text and the other half becomes a stray end tag, and on
+ * the streaming path a `<pic prompt="…">` mangled this way is no longer recognised,
+ * so its image is lost. The tokenizer's immunity to attribute quotes only ever
+ * covered the *opening* one — the extension runs before marked's `tag` tokenizer,
+ * so nothing else stops the closing one.
+ *
+ * Tags are skipped rather than treated as a hard stop, because raw HTML inside a
+ * quote is legitimate and rendered as such (`"<b>x</b>"`). Attribute values are
+ * tracked so a `>` inside one does not end the tag early.
+ */
+function skipTag(text: string, index: number): number {
+  if (text[index] !== '<') return -1
+  const after = text[index + 1]
+  if (!after || !/[a-zA-Z/!?]/.test(after)) return -1
+
+  let quote: string | null = null
+  for (let i = index + 1; i < text.length; i++) {
+    const ch = text[i]
+    if (quote) {
+      if (ch === quote) quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+    // An unclosed tag is not a tag: fall back to reading the text literally.
+    if (ch === '\n' && isParagraphBreak(text, i)) return -1
+    if (ch === '>') return i + 1
+  }
+
+  return -1
+}
+
+/**
  * Try to read a dialogue span starting exactly at `index`.
  * Returns null when there is no opening quote there, when it is never closed
  * within the paragraph, or when the quotes hold nothing but whitespace.
@@ -75,6 +119,16 @@ export function matchDialogueAt(text: string, index = 0): DialogueMatch | null {
   for (let i = index + 1; i < text.length; i++) {
     const ch = text[i]
     if (ch === '\n' && isParagraphBreak(text, i)) return null
+
+    if (ch === '<') {
+      const past = skipTag(text, i)
+      // -1 leaves i alone, so a literal `<` is still ordinary text.
+      if (past !== -1) {
+        i = past - 1
+        continue
+      }
+    }
+
     if (ch !== close) continue
 
     const inner = text.slice(index + 1, i)
@@ -113,12 +167,24 @@ export interface DialogueSpan {
  * Used by the image pipeline to keep an embedded-image marker from cutting a quote
  * in half — half a quote is an unterminated one, which by the rules above is not
  * dialogue at all, so the line would silently lose its colour.
+ *
+ * Tags are stepped over whole. `matchDialogueAt` refuses to *close* a span on an
+ * attribute quote, but a scanner that tries every index would happily *open* one
+ * there: `class="x"` is a well-formed pair read on its own. The renderer never meets
+ * this because marked's `tag` tokenizer consumes the tag first — the scanners have no
+ * such thing in front of them, so they need the rule spelled out.
  */
 export function dialogueSpans(text: string): DialogueSpan[] {
   const spans: DialogueSpan[] = []
   let i = 0
 
   while (i < text.length) {
+    const pastTag = text[i] === '<' ? skipTag(text, i) : -1
+    if (pastTag !== -1) {
+      i = pastTag
+      continue
+    }
+
     const match = matchDialogueAt(text, i)
     if (match) {
       spans.push({ start: i, end: i + match.raw.length })
@@ -154,6 +220,15 @@ export function segmentDialogue(text: string): DialogueSegment[] {
   }
 
   while (i < text.length) {
+    // Stepped over for the same reason as in `dialogueSpans`, and kept in the
+    // narrator run so the concatenation invariant still holds.
+    const pastTag = text[i] === '<' ? skipTag(text, i) : -1
+    if (pastTag !== -1) {
+      narrator += text.slice(i, pastTag)
+      i = pastTag
+      continue
+    }
+
     const match = matchDialogueAt(text, i)
     if (match) {
       flushNarrator()

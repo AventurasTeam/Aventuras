@@ -44,6 +44,21 @@ export function resolveTTSSanitizeOptions(
 }
 
 /**
+ * Escape one character for use inside a regex character class.
+ *
+ * `escapeRegex` alone is not enough here, and the gap is not cosmetic: it does not
+ * escape `-`, so a hyphen listed between two other characters becomes a *range*.
+ * `'*, -, ~'` — a wholly reasonable thing to exclude — compiles to `[\*-~]`, which
+ * is every printable ASCII character from `*` to `~`, and silently erases the entire
+ * entry. It cannot be fixed in `escapeRegex` itself: that function's output also
+ * goes into unicode-mode (`u`) patterns, where `\-` outside a character class is a
+ * SyntaxError.
+ */
+function escapeForCharClass(char: string): string {
+  return escapeRegex(char).replace(/-/g, '\\-')
+}
+
+/**
  * Drop the characters the user does not want pronounced.
  *
  * This is also how quotes are silenced: adding `"` to the excluded characters works
@@ -56,7 +71,7 @@ export function stripExcludedCharacters(text: string, excludedCharacters: string
 
   if (chars.length === 0) return text
 
-  return text.replace(new RegExp(`[${chars.map(escapeRegex).join('')}]`, 'g'), '')
+  return text.replace(new RegExp(`[${chars.map(escapeForCharClass).join('')}]`, 'g'), '')
 }
 
 /**

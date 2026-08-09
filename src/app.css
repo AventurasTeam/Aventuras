@@ -320,6 +320,19 @@
   color: var(--dialogue-color, var(--text-accent));
 }
 
+/* An embedded image marker states its status *in its colour* — amber generating,
+   grey pending, red failed. A quote inside one would otherwise be repainted the
+   dialogue colour and drop that signal, and this collides more often than it looks:
+   markers are deliberately widened to swallow a quote they would have cut, precisely
+   because a sourceText is usually mostly dialogue. Yield on the statuses that carry
+   information; `complete` is the ordinary link colour and has nothing to lose. */
+:root[data-dialogue-highlight='on']
+  .story-text.dialogue-highlight
+  .embedded-image-link:not(.complete)
+  .dialogue-line {
+  color: inherit;
+}
+
 /* Chat markdown overrides - compact spacing for chat bubbles */
 .chat-markdown.prose-content {
   p {

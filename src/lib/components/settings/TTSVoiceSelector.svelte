@@ -88,7 +88,7 @@
     {/if}
   {:else if provider === 'google'}
     <Select.Root type="single" {value} onValueChange={(v) => onChange(v)}>
-      <Select.Trigger class="h-10 w-full">
+      <Select.Trigger {id} class="h-10 w-full">
         {GOOGLE_TRANSLATE_LANGUAGES.find((l) => l.id === value)?.name ?? 'Select language'}
       </Select.Trigger>
       <Select.Content>

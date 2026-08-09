@@ -771,6 +771,20 @@ once, where one unterminated quote would otherwise swallow half a scene into the
 character's voice. The rule lives in the shared core so the two paths agree by
 construction rather than by coincidence.
 
+**An HTML tag is stepped over whole, and this is not the renderer's protection.** The
+`marked` extension runs at tokenizer level, which is often described as making it
+immune to a quote inside an attribute — but that only ever covered the quote that
+_opens_ a span. The extension runs before marked's `tag` tokenizer, so an unterminated
+quote in prose would close on the next `class="`, splitting the tag: half escaped into
+text, half left as a stray end tag, and a `<pic prompt="…">` mangled that way is no
+longer recognised, so its image vanishes from the entry. Meanwhile the two _scanners_
+(`dialogueSpans`, `segmentDialogue`) have no tokenizer in front of them at all and will
+happily open a span on `class="x"`, which is a well-formed pair read on its own — that
+is how an attribute value reaches the dialogue voice, and why Visual Prose forces tag
+removal below. `matchDialogueAt` therefore skips tags rather than stopping at them, so
+raw HTML _inside_ a quote still renders as HTML while attribute quotes stop being
+candidates everywhere at once.
+
 Colouring is emitted unconditionally as `<span class="dialogue-line">` and gated
 entirely in CSS (`data-dialogue-highlight` plus `--dialogue-color` on the root), so
 flipping the toggle or dragging the colour picker repaints without re-rendering a
@@ -792,7 +806,19 @@ uncoloured. Two consequences, both fixed in `ImageEmbeddingService`:
   colour with nothing on screen to explain why. It widens rather than trims because a
   `sourceText` is often mostly dialogue and trimming can cut an image's anchor down to
   a few words. A marker that cannot grow without colliding with another is left
-  untouched: overlapping markers corrupt both replacements, which is worse.
+  untouched: overlapping markers corrupt both replacements, which is worse. Checking
+  the grown marker against the _original_ others is enough, and not by luck: the
+  widening loop runs to a fixed point, so a marker ends up closed under every span it
+  touches — which makes it impossible for two grown markers to overlap without at
+  least one also reaching an original.
+- Snapping is off for Visual Prose and for `getPlacedImageIds`, via `snapToDialogue`.
+  Visual Prose content is generated HTML where dialogue is not a concept, and widening
+  cannot change _which_ images are placed, only where.
+
+The colour yields inside an image marker whose status is not `complete`. Those markers
+say _generating_, _pending_ or _failed_ in their colour, and a widened marker is mostly
+quote by design, so the dialogue colour would repaint away the only signal the status
+has.
 
 For TTS the voice is a property of each **chunk**, not of the call
 (`TTSSegment` in `TTSService.ts`). Playing narrator and dialogue as separate
@@ -809,7 +835,16 @@ Two order-dependent rules, both silent when broken and both covered by
   to one voice with no error anywhere.
 - **Visual Prose forces tag removal**, whatever `removeHtmlTags` says. That content is
   generated HTML with a `<style>` block, and the toggle defaults to false — so the
-  reader otherwise hears markup, and quotes inside `class="…"` get spoken as dialogue.
+  reader otherwise hears markup read aloud.
+
+`excludedCharacters` is compiled into a regex character class, which needs a stricter
+escape than the shared `escapeRegex`: that one does not touch `-`, so a hyphen listed
+between two other characters becomes a **range**. `'*, -, ~'` — an entirely reasonable
+thing to exclude — compiled to `[\*-~]`, every printable ASCII character from `*` to
+`~`, and erased the whole entry. It cannot be fixed in `escapeRegex` itself, whose
+output also feeds unicode-mode patterns where `\-` outside a class is a SyntaxError.
+An entry that comes out with nothing left to say now reports that rather than leaving
+the play button to do nothing.
 
 The Google Translate provider is excluded: its "voice" is a language code, so a second
 one would read the dialogue in another language. `supportsDialogueVoice` is a single
