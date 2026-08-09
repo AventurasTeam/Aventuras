@@ -143,7 +143,7 @@ function trace(
     recencyFactor: s.recencyFactor,
     pinSignal: s.pinSignal,
     chaptersOld: s.chaptersOld,
-    renderedText: tokensEstimated === null ? null : s.candidate.renderedText,
+    renderedText: dropReason === 'pre_filtered' ? null : s.candidate.renderedText,
     ...(s.candidate.kind === 'happening' ? { commonKnowledge: s.candidate.commonKnowledge } : {}),
     kwBoostValue: s.kwBoostValue,
     chapterBoostApplied: s.chapterBoostApplied,
