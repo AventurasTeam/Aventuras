@@ -139,6 +139,10 @@ slice plans when relevant.
   — `'x'.repeat(4000)` reaches tiktoken's byte-pair loop as one word and
   costs ~620 ms against ~0 ms for prose of the same length; the tell is a
   timeout that only ever fires on CI.
+- [`.toThrow(ErrorClass)` only verifies the class if a typecheck runs beside it](./tothrow-errorclass-needs-typecheck.md)
+  — a deleted error class resolves to `undefined` under Vitest's ESM
+  interop and the assertion silently degrades to "did it throw
+  anything"; only `pnpm typecheck` catches it.
 - [The `unit` Vitest project cannot render RN-Web component chrome](./unit-project-no-rn-web-chrome.md)
   — `@rn-primitives/*`'s un-transpiled `.mjs` JSX and `react-native-svg` /
   `lucide-react-native` / `nativewind`'s externalized `require('react-native')`
