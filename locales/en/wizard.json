@@ -177,10 +177,16 @@
       "discard": "Discard",
       "useThis": "Use this",
       "tryAgain": "Try again",
-      "setup": "Set up in Settings"
+      "setup": "Set up in Settings",
+      "refine": "Refine…",
+      "regenerate": "Regenerate"
     },
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
-    "failure": "Couldn't generate. {{reason}}."
+    "failure": "Couldn't generate. {{reason}}.",
+    "refine": {
+      "label": "How should this change?",
+      "placeholder": "e.g. make it darker"
+    }
   }
 }

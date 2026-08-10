@@ -46,13 +46,37 @@ function neverResolvingRun<T>() {
     new Promise(() => {})
 }
 
+// Records every guidance string `run` was called with — proves Regenerate
+// replays `lastGuidanceRef` rather than the (now-cleared) guidance input.
+function guidanceCapturingRun<T>(value: T, calls: string[]) {
+  return async (guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
+    calls.push(guidance)
+    return { status: 'ok', value }
+  }
+}
+
 type DescriptionValue = { description: string }
 type TitlesValue = { titles: string[] }
+
+// Appends the instruction to the CURRENT description rather than replacing
+// it, so a play function can observe refine's cumulative stacking.
+async function appendInstructionRefine(
+  current: DescriptionValue,
+  instruction: string,
+  _signal: AbortSignal,
+): Promise<GenerateStructuredResult<DescriptionValue>> {
+  return { status: 'ok', value: { description: `${current.description} / ${instruction}` } }
+}
 
 type ProseDemoProps = {
   resolveModelId: () => string | null
   run: (
     guidance: string,
+    signal: AbortSignal,
+  ) => Promise<GenerateStructuredResult<DescriptionValue>>
+  refine?: (
+    current: DescriptionValue,
+    instruction: string,
     signal: AbortSignal,
   ) => Promise<GenerateStructuredResult<DescriptionValue>>
   onSetup: () => void
@@ -62,7 +86,7 @@ type ProseDemoProps = {
 // Shared demo for every prose-result scenario (guidance / loading / result /
 // failure / not-configured) — result presentation only diverges at the
 // 'result' state, so one wrapper covers the rest of the state machine too.
-function ProseDemo({ resolveModelId, run, onSetup, onUse }: ProseDemoProps) {
+function ProseDemo({ resolveModelId, run, refine, onSetup, onUse }: ProseDemoProps) {
   const [committed, setCommitted] = useState('(none)')
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -73,6 +97,7 @@ function ProseDemo({ resolveModelId, run, onSetup, onUse }: ProseDemoProps) {
         ariaLabel="Suggest description"
         guidancePlaceholder='e.g. "a tense heist thriller"'
         run={run}
+        refine={refine}
         resolveModelId={resolveModelId}
         result="prose"
         getProse={(v) => v.description}
@@ -219,6 +244,83 @@ export const ProseResult_Discard: Story = {
       expect(screen.queryByText('Discarded suggestion text.')).not.toBeInTheDocument(),
     )
     expect(proseDiscardMock).not.toHaveBeenCalled()
+  },
+}
+
+const proseRefineCumulativeMock = fn()
+export const ProseResult_RefineCumulative: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'A quiet village wakes to strange lights.' })}
+      refine={appendInstructionRefine}
+      onSetup={fn()}
+      onUse={proseRefineCumulativeMock}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('A quiet village wakes to strange lights.')).toBeInTheDocument()
+
+    // First refine: 'current' is the original generation.
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    await userEvent.type(
+      await screen.findByPlaceholderText('e.g. make it darker'),
+      'make it darker',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    expect(
+      await screen.findByText('A quiet village wakes to strange lights. / make it darker'),
+    ).toBeInTheDocument()
+
+    // Second refine: 'current' must be the FIRST refine's output, not the
+    // original generation — this is what "cumulative" means.
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'add a storm')
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    expect(
+      await screen.findByText(
+        'A quiet village wakes to strange lights. / make it darker / add a storm',
+      ),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+    await waitFor(() =>
+      expect(proseRefineCumulativeMock).toHaveBeenCalledWith({
+        description: 'A quiet village wakes to strange lights. / make it darker / add a storm',
+      }),
+    )
+  },
+}
+
+const regenerateGuidanceCalls: string[] = []
+export const ProseResult_RegeneratePreservesGuidance: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={guidanceCapturingRun<DescriptionValue>(
+        { description: 'Same result either way.' },
+        regenerateGuidanceCalls,
+      )}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.type(
+      screen.getByPlaceholderText('e.g. "a tense heist thriller"'),
+      'moody and slow-burn',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('Same result either way.')).toBeInTheDocument()
+
+    // Regenerate carries no guidance UI of its own — it must replay
+    // `lastGuidanceRef`, not an empty string, on the second call.
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await waitFor(() => expect(regenerateGuidanceCalls).toHaveLength(2))
+    expect(regenerateGuidanceCalls).toEqual(['moody and slow-burn', 'moody and slow-burn'])
   },
 }
 

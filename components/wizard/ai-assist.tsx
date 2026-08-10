@@ -23,6 +23,7 @@ type AssistState<T> =
   | { kind: 'guidance' }
   | { kind: 'loading'; modelId: string }
   | { kind: 'result'; value: T }
+  | { kind: 'refine'; value: T }
   | { kind: 'failure'; detail: string }
 
 type AiAssistCommonProps<T> = {
@@ -44,6 +45,16 @@ type AiAssistCommonProps<T> = {
   /** "Set up in Settings" from the not-configured state. Caller owns the navigation. */
   onSetup: () => void
   disabled?: boolean
+  /**
+   * Prose-result refine (wizard.md → Refine). Cumulative: each call receives the
+   * CURRENT preview plus the user's instruction, so repeated refines stack.
+   * Omit to hide the Refine action (chips results never refine).
+   */
+  refine?: (
+    current: T,
+    instruction: string,
+    signal: AbortSignal,
+  ) => Promise<GenerateStructuredResult<T>>
 }
 
 type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
@@ -67,6 +78,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
 
   const [assist, setAssist] = useState<AssistState<T>>({ kind: 'idle' })
   const [guidanceText, setGuidanceText] = useState('')
+  const [refineText, setRefineText] = useState('')
   const [phoneOpen, setPhoneOpen] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
@@ -75,6 +87,9 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   // status already covers the common case, this is the defensive backstop.
   const requestSeqRef = useRef(0)
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  // Retained so Regenerate re-rolls with the SAME guidance the result came from,
+  // per wizard.md — regenerate produces a new take without guidance edits.
+  const lastGuidanceRef = useRef('')
 
   // Abort any in-flight request on unmount
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -126,6 +141,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
       setAssist({ kind: 'not-configured' })
       return
     }
+    lastGuidanceRef.current = guidance
 
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -143,6 +159,26 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   }
 
   const handleGenerate = () => void runGenerate(guidanceText)
+  const handleRegenerate = () => void runGenerate(lastGuidanceRef.current)
+
+  async function runRefine(current: T, instruction: string) {
+    const refineFn = props.result === 'prose' ? props.refine : undefined
+    const modelId = resolveModelId()
+    if (refineFn == null || modelId == null) return
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const seq = ++requestSeqRef.current
+    setAssist({ kind: 'loading', modelId })
+
+    const result = await refineFn(current, instruction, controller.signal)
+    if (requestSeqRef.current !== seq) return
+
+    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
+    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
+    else if (result.status === 'failed') setAssist({ kind: 'failure', detail: result.detail })
+  }
 
   function handleCancelLoading() {
     abortRef.current?.abort()
@@ -242,9 +278,12 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
                   </Tag>
                 ))}
               </View>
-              <View className="flex-row justify-end">
+              <View className="flex-row justify-end gap-2">
                 <Button variant="ghost" onPress={closeOverlay}>
                   <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+                </Button>
+                <Button variant="secondary" onPress={handleRegenerate}>
+                  <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
                 </Button>
               </View>
             </View>
@@ -258,9 +297,23 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
             <ScrollView className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
               <Text size="sm">{prose}</Text>
             </ScrollView>
-            <View className="flex-row justify-end gap-2">
+            <View className="flex-row flex-wrap justify-end gap-2">
               <Button variant="ghost" onPress={closeOverlay}>
                 <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+              </Button>
+              {props.result === 'prose' && props.refine != null ? (
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    setRefineText('')
+                    setAssist({ kind: 'refine', value: assist.value })
+                  }}
+                >
+                  <Text>{t('wizard:aiAssist.actions.refine')}</Text>
+                </Button>
+              ) : null}
+              <Button variant="secondary" onPress={handleRegenerate}>
+                <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
               </Button>
               <Button
                 onPress={() => {
@@ -274,6 +327,36 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
           </View>
         )
       }
+
+      case 'refine':
+        return (
+          <View className="gap-3">
+            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+            <View className="gap-1">
+              <Text size="sm" variant="muted">
+                {t('wizard:aiAssist.refine.label')}
+              </Text>
+              <Input
+                value={refineText}
+                onChangeText={setRefineText}
+                placeholder={t('wizard:aiAssist.refine.placeholder')}
+                maxLength={GUIDANCE_MAX_LENGTH}
+                aria-label={t('wizard:aiAssist.refine.label')}
+              />
+            </View>
+            <View className="flex-row justify-end gap-2">
+              <Button
+                variant="ghost"
+                onPress={() => setAssist({ kind: 'result', value: assist.value })}
+              >
+                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+              </Button>
+              <Button onPress={() => void runRefine(assist.value, refineText)}>
+                <Text>{t('wizard:aiAssist.actions.refine')}</Text>
+              </Button>
+            </View>
+          </View>
+        )
 
       case 'failure':
         return (
