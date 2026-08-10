@@ -30,6 +30,8 @@ export type FinishResult =
   | { status: 'invalid'; reasons: string[] }
   | { status: 'embed-blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
   | { status: 'embed-failed'; kind: 'init' | 'call'; message: string }
+  /** Committed, but the reader never opened — the caller must not offer a retry that re-commits. */
+  | { status: 'created-not-opened'; storyId: string }
 
 export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
@@ -216,6 +218,19 @@ export async function finishWizard(
       error: err instanceof Error ? err.message : String(err),
     })
   }
-  await openStory(storyId, ctx, navigate, nowMs)
+  // Past the commit, so neither a non-ok status nor a throw may surface as a
+  // creation failure: openStory's read-back paths throw on DB/IPC error, and a
+  // "couldn't create the story" toast would invite a retry that mints a second.
+  const openFailure = await openStory(storyId, ctx, navigate, nowMs).then(
+    (result) => (result.status === 'ok' ? null : result.status),
+    (err: unknown) => (err instanceof Error ? err.message : String(err)),
+  )
+  if (openFailure != null) {
+    logger.error('action_layer.wizard_open_after_create_failed', {
+      storyId,
+      error: openFailure,
+    })
+    return { status: 'created-not-opened', storyId }
+  }
   return { status: 'ok', storyId }
 }

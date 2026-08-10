@@ -293,6 +293,15 @@ export default function WizardRoute() {
             flushAutosave()
             return
           }
+          if (result.status === 'created-not-opened') {
+            // Committed, so the working state must go — flushing it back would
+            // leave a session whose next Finish mints a duplicate story.
+            wizardStore.reset()
+            autosaveSuppressedRef.current = false
+            toast.error(t('wizard:finish.createdNotOpened'))
+            router.replace('/')
+            return
+          }
           setEmbedFailure({ kind: result.kind, message: result.message })
           flushAutosave()
         })
