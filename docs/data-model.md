@@ -1280,8 +1280,10 @@ Wizard selection is **preset-driven** with snapshot copy:
 - **No-preset path:** preset selection is optional; user can skip
   and author label + prose from scratch.
 
-Preset catalog lives in code (bundled JSON, ~20-30 entries each for
-v1). User-authored presets in Vault are deferred —
+Preset catalog lives in code (bundled JSON). Entry count is not
+pinned here: the catalog is additive, fire-and-forget data with no
+contract surface, so it grows without a spec change.
+User-authored presets in Vault are deferred —
 [Vault content types for genre / tone / setting templates](./parked.md#vault-content-types-for-genre--tone--setting-templates)
 captures the post-v1 path.
 

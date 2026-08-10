@@ -811,7 +811,7 @@ acceptable — the opening entry Q3 reads is itself wizard-derived, so
 the world context reaches retrieval through prose rather than through
 the digest. Whether the wizard _should_ commit a starting location is
 an open question against
-[Slice 3.6](../implementation/milestones/03-memory-floor/slices/06-wizard-world-cast.md),
+[Slice 3.6b](../implementation/milestones/03-memory-floor/slices/06b-wizard-cast.md),
 which is where locations are authored.
 
 ---

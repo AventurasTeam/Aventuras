@@ -625,7 +625,7 @@ wizard-authored per story (no global default, no copy-at-creation).
 
 - **`genre` and `tone`** — preset+prose hybrid:
   `{ label: string; promptBody: string }`. Bundled preset catalog in
-  code (~20-30 entries each for v1) gives the user an on-ramp; the
+  code gives the user an on-ramp; the
   user can edit either field freely. Selection copies the preset's
   `displayName` into `label` and the preset's `promptBody` into
   `promptBody` — fire-and-forget, no preset id stored. App updates

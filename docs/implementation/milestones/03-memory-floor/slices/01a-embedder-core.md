@@ -8,7 +8,8 @@
 - **Blocks:** [Slice 3.1b](./01b-embedder-lifecycle.md),
   [Slice 3.3](./03-classifier.md) (disambiguation embeds),
   [Slice 3.4](./04-retrieval.md) (vec0 + query embeds).
-  [Slice 3.6](./06-wizard-world-cast.md) pairs via the C5
+  [Slice 3.6a](./06a-wizard-world.md) and
+  [Slice 3.6b](./06b-wizard-cast.md) pair via the C5
   wizard-commit seam — doc-as-contract, not a gate.
 
 ## Goal
@@ -103,8 +104,8 @@ M7.1; only the gate-required minimum ships here.
   in the commit embeds in-transaction; any embed failure rolls back
   the entire commit and surfaces
   `Couldn't initialize the embedder. [Retry] [Settings] [Cancel]`.
-  Implemented against the M2 commit shape (lead entity only); 3.6's
-  rows flow through unchanged.
+  Implemented against the M2 commit shape (lead entity only);
+  3.6a's lore rows and 3.6b's cast rows flow through unchanged.
 
 ## Scope: out
 
