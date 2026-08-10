@@ -194,5 +194,15 @@
       "alreadyExists": "(already exists)",
       "empty": "Nothing suggested. Try different guidance."
     }
+  },
+  "world": {
+    "heading": "What's the world like?",
+    "browsePresets": "Browse presets",
+    "replaceConfirm": {
+      "title": "Replace {{field}} with \"{{name}}\"?",
+      "body": "Your current label and body will be lost.",
+      "cancel": "Cancel",
+      "confirm": "Replace"
+    }
   }
 }
