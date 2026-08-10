@@ -1,12 +1,16 @@
 import { BookMarked } from 'lucide-react-native'
-import { useRef, useState, type ComponentRef } from 'react'
-import { ScrollView, View } from 'react-native'
+import { useMemo, useState, type Ref } from 'react'
+import { View } from 'react-native'
 
-import { ListRow } from '@/components/compounds/list-row'
 import { IconAction } from '@/components/ui/icon-action'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
-import { useTier } from '@/hooks/use-tier'
+import {
+  SearchableOverlayList,
+  type Row,
+  type Section,
+  type TriggerProps,
+} from '@/components/ui/searchable-overlay-list'
+import { Text } from '@/components/ui/text'
+import { t } from '@/lib/i18n'
 import { type WizardPreset } from '@/lib/wizard'
 
 export type PresetBrowserProps = {
@@ -16,68 +20,66 @@ export type PresetBrowserProps = {
   onPick: (preset: WizardPreset) => void
 }
 
+function matches(preset: WizardPreset, query: string): boolean {
+  if (query === '') return true
+  const needle = query.toLowerCase()
+  return (
+    preset.displayName.toLowerCase().includes(needle) ||
+    preset.tagline.toLowerCase().includes(needle)
+  )
+}
+
 export function PresetBrowser({ presets, ariaLabel, onPick }: PresetBrowserProps) {
-  const isPhone = useTier() === 'phone'
-  const [phoneOpen, setPhoneOpen] = useState(false)
-  const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  const [query, setQuery] = useState('')
 
-  function closeOverlay() {
-    if (isPhone) setPhoneOpen(false)
-    // rn-primitives Popover has no controlled `open` prop; PopoverTrigger's
-    // ref exposes an imperative close() that flips the shared root context.
-    else triggerRef.current?.close()
-  }
-
-  function handlePick(preset: WizardPreset) {
-    onPick(preset)
-    closeOverlay()
-  }
-
-  function handleTriggerPress() {
-    if (isPhone) setPhoneOpen(true)
-  }
-
-  const rows = (
-    <ScrollView className="max-h-72">
-      <View className="gap-2">
-        {presets.map((preset) => (
-          <ListRow
-            key={preset.id}
-            label={preset.displayName}
-            description={preset.tagline}
-            onPress={() => handlePick(preset)}
-          />
-        ))}
-      </View>
-    </ScrollView>
+  const sections = useMemo<Section<WizardPreset>[]>(
+    () => [
+      {
+        id: 'presets',
+        rows: presets.filter((p) => matches(p, query)).map((p) => ({ id: p.id, data: p })),
+      },
+    ],
+    [presets, query],
   )
 
-  const trigger = <IconAction icon={BookMarked} label={ariaLabel} onPress={handleTriggerPress} />
-
-  if (isPhone) {
-    // Sheet's DialogPrimitive.Root renders a real portaled View sibling even
-    // while closed; a bare Fragment would leak two layout children into the
-    // consumer's row (substrate-fragment-layout-leak lesson).
+  function renderTrigger(p: TriggerProps) {
     return (
-      <View>
-        {trigger}
-        <Sheet open={phoneOpen} onOpenChange={setPhoneOpen} ariaLabel={ariaLabel}>
-          <SheetContent anchor="bottom" size="auto">
-            {rows}
-          </SheetContent>
-        </Sheet>
+      <IconAction
+        ref={p.ref as Ref<View>}
+        icon={BookMarked}
+        label={ariaLabel}
+        onPress={p.onPress}
+      />
+    )
+  }
+
+  function renderRow(row: Row<WizardPreset>) {
+    return (
+      <View className="min-w-0 flex-1 gap-0.5">
+        <Text className="font-medium" numberOfLines={1}>
+          {row.data.displayName}
+        </Text>
+        <Text variant="muted" size="sm" numberOfLines={2}>
+          {row.data.tagline}
+        </Text>
       </View>
     )
   }
 
   return (
-    <Popover ariaLabel={ariaLabel}>
-      {/* asChild Slot injects ref + handlers; the trigger must accept them
-          (aschild-slot-props lesson). */}
-      <PopoverTrigger ref={triggerRef} asChild>
-        {trigger}
-      </PopoverTrigger>
-      <PopoverContent className="w-80">{rows}</PopoverContent>
-    </Popover>
+    <SearchableOverlayList<WizardPreset>
+      searchPlacement="in-overlay"
+      ariaLabel={ariaLabel}
+      searchPlaceholder={t('wizard:world.presets.search')}
+      sections={sections}
+      onQueryChange={setQuery}
+      renderTrigger={renderTrigger}
+      renderRow={renderRow}
+      onActivate={(row) => onPick(row.data)}
+      // Phone keyboards cover a short sheet the moment search focuses; the
+      // substrate's tall detent is the one that shrinks instead of sliding under.
+      sheetSize="tall"
+      autofocusSearch="web-only"
+    />
   )
 }

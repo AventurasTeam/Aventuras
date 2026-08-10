@@ -200,6 +200,9 @@
     "heading": "What's the world like?",
     "browseGenrePresets": "Browse genre presets",
     "browseTonePresets": "Browse tone presets",
+    "presets": {
+      "search": "Search presets"
+    },
     "genre": {
       "label": "Genre",
       "placeholder": "e.g. Hard sci-fi",
