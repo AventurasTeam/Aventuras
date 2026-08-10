@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import {
   descriptionOutputSchema,
+  labeledPromptOutputSchema,
   loreSuggestionsSchema,
   openingOutputSchema,
+  settingOutputSchema,
   titleChipsSchema,
 } from './assist-schemas'
 
@@ -67,5 +69,45 @@ describe('loreSuggestionsSchema', () => {
 
   it('rejects a reply with no lore array', () => {
     expect(() => loreSuggestionsSchema.parse({})).toThrow()
+  })
+})
+
+describe('labeledPromptOutputSchema', () => {
+  it('accepts a well-formed label + body', () => {
+    const parsed = labeledPromptOutputSchema.parse({
+      label: 'Hard sci-fi',
+      promptBody: 'This is hard science fiction.',
+    })
+    expect(parsed).toEqual({ label: 'Hard sci-fi', promptBody: 'This is hard science fiction.' })
+  })
+
+  it('trims padded model output before it can reach the store', () => {
+    const parsed = labeledPromptOutputSchema.parse({
+      label: '  Hard sci-fi  ',
+      promptBody: '  This is hard science fiction.  ',
+    })
+    expect(parsed).toEqual({ label: 'Hard sci-fi', promptBody: 'This is hard science fiction.' })
+  })
+
+  it('rejects a reply missing promptBody', () => {
+    expect(() => labeledPromptOutputSchema.parse({ label: 'Hard sci-fi' })).toThrow()
+  })
+})
+
+describe('settingOutputSchema', () => {
+  it('accepts a well-formed setting', () => {
+    expect(settingOutputSchema.parse({ setting: 'A drowned coast.' }).setting).toBe(
+      'A drowned coast.',
+    )
+  })
+
+  it('trims padded model output before it can reach the store', () => {
+    expect(settingOutputSchema.parse({ setting: '  A drowned coast.  ' }).setting).toBe(
+      'A drowned coast.',
+    )
+  })
+
+  it('rejects a reply with no setting field', () => {
+    expect(() => settingOutputSchema.parse({})).toThrow()
   })
 })

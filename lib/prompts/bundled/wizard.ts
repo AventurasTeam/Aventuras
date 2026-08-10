@@ -23,6 +23,24 @@ export const WIZARD_LORE = `Suggest five reference entries for this story's worl
 {% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
+export const WIZARD_GENRE = `Suggest a genre for this story. Return a short label naming the genre, and a promptBody of two or three paragraphs instructing a model how to write in this genre — its conventions, register, and what belongs on the page — written the way a genre preset's body reads, not an encyclopedia entry describing the genre.
+{% if definition.setting != blank %}Setting: {{ definition.setting }}
+{% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
+{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_TONE = `Suggest a tone for this story. Return a short label naming the tone, and a promptBody of two or three paragraphs instructing a model how to write in this tone — its register, pacing, and what to emphasize or avoid — written the way a tone preset's body reads, not an explanation of the tone.
+{% if definition.setting != blank %}Setting: {{ definition.setting }}
+{% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
+{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_SETTING = `Suggest a setting for this story: one or two paragraphs of freeform prose describing the world — where and when it takes place, and its defining conditions.
+{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
+{% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
+{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
 export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.
 Opening:
 {{ opening.content }}

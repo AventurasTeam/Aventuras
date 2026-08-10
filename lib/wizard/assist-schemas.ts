@@ -45,4 +45,22 @@ export const loreSuggestionsSchema = z.object({
 
 export type LoreSuggestions = z.infer<typeof loreSuggestionsSchema>
 
+export const labeledPromptOutputSchema = z.object({
+  // Trimmed at the parse boundary: these values land in stories.definition
+  // verbatim, and there is no later trim on the write path.
+  label: z.string().trim().describe('a short name for this genre or tone'),
+  promptBody: z
+    .string()
+    .trim()
+    .describe('two or three paragraphs instructing how the prose should read'),
+})
+
+export const settingOutputSchema = z.object({
+  // Same reason as labeledPromptOutputSchema above.
+  setting: z.string().trim().describe('one or two paragraphs describing the world'),
+})
+
+export type LabeledPromptOutput = z.infer<typeof labeledPromptOutputSchema>
+export type SettingOutput = z.infer<typeof settingOutputSchema>
+
 export type OpeningOutput = z.infer<typeof openingOutputSchema>

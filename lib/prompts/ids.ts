@@ -13,6 +13,9 @@ export const TEMPLATE_IDS = {
   wizardTitleChips: 'tmpl_wizard_title_chips',
   wizardDescription: 'tmpl_wizard_description',
   wizardLore: 'tmpl_wizard_lore',
+  wizardGenre: 'tmpl_wizard_genre',
+  wizardTone: 'tmpl_wizard_tone',
+  wizardSetting: 'tmpl_wizard_setting',
 } as const
 
 export const MACRO_IDS = {

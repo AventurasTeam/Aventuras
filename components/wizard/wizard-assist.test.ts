@@ -5,12 +5,18 @@ import { wizardStore } from '@/lib/stores'
 
 import {
   refineDescriptionAssist,
+  refineGenreAssist,
   refineOpeningAssist,
+  refineSettingAssist,
+  refineToneAssist,
   resolveWizardAssistModelId,
   runDescriptionAssist,
+  runGenreAssist,
   runLoreAssist,
   runOpeningAssist,
+  runSettingAssist,
   runTitleAssist,
+  runToneAssist,
   type WizardAssistDeps,
 } from './wizard-assist'
 
@@ -190,6 +196,125 @@ describe('refineDescriptionAssist', () => {
     )
     expect(res.status === 'ok' && res.value.description).toBe('A darker tale.')
     expect(capturedPrompt).toContain('A tale.')
+    expect(capturedPrompt).toContain('make it darker')
+  })
+})
+
+describe('runGenreAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the genre template and returns the parsed label + body', async () => {
+    let capturedPrompt = ''
+    const value = { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' }
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runGenreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value })
+    expect(capturedPrompt).toContain('Suggest a genre for this story')
+  })
+})
+
+describe('runToneAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the tone template and returns the parsed label + body', async () => {
+    let capturedPrompt = ''
+    const value = { label: 'Grim and unsparing', promptBody: 'Consequences land and stay.' }
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runToneAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value })
+    expect(capturedPrompt).toContain('Suggest a tone for this story')
+  })
+})
+
+describe('runSettingAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the setting template and returns the parsed setting', async () => {
+    let capturedPrompt = ''
+    const value = { setting: 'A drowned coast, centuries after the flood.' }
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runSettingAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value })
+    expect(capturedPrompt).toContain('Suggest a setting for this story')
+  })
+})
+
+describe('refineGenreAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('passes a prompt containing the current label, body, and the instruction', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { label: 'Grimdark sci-fi', promptBody: 'Even darker.' } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await refineGenreAssist(
+      { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' },
+      'make it darker',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+    )
+    expect(res.status === 'ok' && res.value.label).toBe('Grimdark sci-fi')
+    expect(capturedPrompt).toContain('Hard sci-fi')
+    expect(capturedPrompt).toContain('Rigorous futures.')
+    expect(capturedPrompt).toContain('make it darker')
+  })
+})
+
+describe('refineToneAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('passes a prompt containing the current label, body, and the instruction', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { label: 'Bleaker', promptBody: 'No mercy at all.' } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await refineToneAssist(
+      { label: 'Grim and unsparing', promptBody: 'Consequences land and stay.' },
+      'make it darker',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+    )
+    expect(res.status === 'ok' && res.value.label).toBe('Bleaker')
+    expect(capturedPrompt).toContain('Grim and unsparing')
+    expect(capturedPrompt).toContain('Consequences land and stay.')
+    expect(capturedPrompt).toContain('make it darker')
+  })
+})
+
+describe('refineSettingAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('passes a prompt containing the current setting and the instruction', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { setting: 'A drowned coast, now storm-wracked.' } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await refineSettingAssist(
+      { setting: 'A drowned coast, centuries after the flood.' },
+      'make it darker',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+    )
+    expect(res.status === 'ok' && res.value.setting).toBe('A drowned coast, now storm-wracked.')
+    expect(capturedPrompt).toContain('A drowned coast, centuries after the flood.')
     expect(capturedPrompt).toContain('make it darker')
   })
 })

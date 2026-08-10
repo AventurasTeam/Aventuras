@@ -288,6 +288,9 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
   [TEMPLATE_IDS.wizardLore]: 'wizard',
+  [TEMPLATE_IDS.wizardGenre]: 'wizard',
+  [TEMPLATE_IDS.wizardTone]: 'wizard',
+  [TEMPLATE_IDS.wizardSetting]: 'wizard',
 }
 
 // UI-level grouping name -> variable names it surfaces. A name that matches

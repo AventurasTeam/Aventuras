@@ -11,8 +11,10 @@ import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 import {
   descriptionOutputSchema,
+  labeledPromptOutputSchema,
   loreSuggestionsSchema,
   openingOutputSchema,
+  settingOutputSchema,
   titleChipsSchema,
 } from '@/lib/wizard'
 
@@ -30,6 +32,9 @@ export type OpeningAssistValue = {
 export type TitleAssistValue = { titles: string[] }
 export type DescriptionAssistValue = { description: string }
 export type LoreAssistValue = { lore: { title: string; body: string; category: string }[] }
+export type GenreAssistValue = { label: string; promptBody: string }
+export type ToneAssistValue = { label: string; promptBody: string }
+export type SettingAssistValue = { setting: string }
 
 export type WizardAssistDeps = {
   /** Test seam — production reads the live app-settings store. */
@@ -180,6 +185,90 @@ export function refineDescriptionAssist(
 ): Promise<GenerateStructuredResult<DescriptionAssistValue>> {
   return runDescriptionAssist(
     `Revise this description rather than writing a new one.\n\nCurrent description:\n${current.description}\n\nRevision instruction: ${instruction}`,
+    signal,
+    deps,
+  )
+}
+
+export function runGenreAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<GenreAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardGenre,
+    labeledPromptOutputSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+  )
+}
+
+export function runToneAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<ToneAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardTone,
+    labeledPromptOutputSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+  )
+}
+
+export function runSettingAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<SettingAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardSetting,
+    settingOutputSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+  )
+}
+
+export function refineGenreAssist(
+  current: GenreAssistValue,
+  instruction: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<GenreAssistValue>> {
+  return runGenreAssist(
+    `Revise this genre rather than writing a new one.\n\nCurrent label: ${current.label}\nCurrent body:\n${current.promptBody}\n\nRevision instruction: ${instruction}`,
+    signal,
+    deps,
+  )
+}
+
+export function refineToneAssist(
+  current: ToneAssistValue,
+  instruction: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<ToneAssistValue>> {
+  return runToneAssist(
+    `Revise this tone rather than writing a new one.\n\nCurrent label: ${current.label}\nCurrent body:\n${current.promptBody}\n\nRevision instruction: ${instruction}`,
+    signal,
+    deps,
+  )
+}
+
+export function refineSettingAssist(
+  current: SettingAssistValue,
+  instruction: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<SettingAssistValue>> {
+  return runSettingAssist(
+    `Revise this setting rather than writing a new one.\n\nCurrent setting:\n${current.setting}\n\nRevision instruction: ${instruction}`,
     signal,
     deps,
   )

@@ -120,3 +120,99 @@ describe('WIZARD_LORE', () => {
     expect(out, 'bodies stay out of the dedupe list').not.toContain('ignored here')
   })
 })
+
+describe('WIZARD_GENRE', () => {
+  it('renders setting and tone when present', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, {
+      definition: { setting: 'A drowned coast', tone: { promptBody: 'Write it grim.' } },
+      guidance: '',
+    })
+    expect(out).toContain('Setting: A drowned coast')
+    expect(out).toContain('Tone: Write it grim.')
+  })
+
+  it('omits setting and tone blocks when absent', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' })
+    expect(out).not.toContain('Setting:')
+    expect(out).not.toContain('Tone:')
+  })
+
+  it('asks for both a short label and a substantial body', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, { definition: {}, guidance: '' })
+    expect(out.toLowerCase()).toContain('label')
+    expect(out.toLowerCase()).toContain('promptbody')
+  })
+
+  it('does not render lore even when lore rows exist in context', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardGenre, {
+      definition: {},
+      lore: [{ title: 'The Old Empire', body: 'Fell.' }],
+      guidance: '',
+    })
+    expect(out).not.toContain('The Old Empire')
+    expect(out).not.toContain('World reference')
+  })
+})
+
+describe('WIZARD_TONE', () => {
+  it('renders setting and genre when present', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, {
+      definition: { setting: 'A drowned coast', genre: { promptBody: 'Hard sci-fi rules.' } },
+      guidance: '',
+    })
+    expect(out).toContain('Setting: A drowned coast')
+    expect(out).toContain('Genre: Hard sci-fi rules.')
+  })
+
+  it('omits setting and genre blocks when absent', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' })
+    expect(out).not.toContain('Setting:')
+    expect(out).not.toContain('Genre:')
+  })
+
+  it('asks for both a short label and a substantial body', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, { definition: {}, guidance: '' })
+    expect(out.toLowerCase()).toContain('label')
+    expect(out.toLowerCase()).toContain('promptbody')
+  })
+
+  it('does not render lore even when lore rows exist in context', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardTone, {
+      definition: {},
+      lore: [{ title: 'The Old Empire', body: 'Fell.' }],
+      guidance: '',
+    })
+    expect(out).not.toContain('The Old Empire')
+    expect(out).not.toContain('World reference')
+  })
+})
+
+describe('WIZARD_SETTING', () => {
+  it('renders genre and tone when present', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardSetting, {
+      definition: {
+        genre: { promptBody: 'Hard sci-fi rules.' },
+        tone: { promptBody: 'Write it grim.' },
+      },
+      guidance: '',
+    })
+    expect(out).toContain('Genre: Hard sci-fi rules.')
+    expect(out).toContain('Tone: Write it grim.')
+  })
+
+  it('omits genre and tone blocks when absent', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardSetting, { definition: {}, guidance: '' })
+    expect(out).not.toContain('Genre:')
+    expect(out).not.toContain('Tone:')
+  })
+
+  it('does not render lore even when lore rows exist in context', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardSetting, {
+      definition: {},
+      lore: [{ title: 'The Old Empire', body: 'Fell.' }],
+      guidance: '',
+    })
+    expect(out).not.toContain('The Old Empire')
+    expect(out).not.toContain('World reference')
+  })
+})
