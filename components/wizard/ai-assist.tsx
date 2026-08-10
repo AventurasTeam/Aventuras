@@ -609,7 +609,13 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       <View>
         {trigger}
         <Sheet open={phoneOpen} onOpenChange={handlePhoneOpenChange} ariaLabel={ariaLabel}>
-          <SheetContent anchor="bottom" size="auto">
+          {/* Fixed detent, not 'auto'. Dynamic sizing derives the detent from
+              measured content, so a scrollable inside it measures one height and
+              snaps to another: the sheet lands off its extended position, which
+              both misplaces it and leaves gorhom's scrollable LOCKED (it unlocks
+              only at EXTENDED/FILL_PARENT — BottomSheet.tsx animatedSheetState),
+              so every drag pans the sheet instead of scrolling the results. */}
+          <SheetContent anchor="bottom" size="medium">
             {renderBody()}
           </SheetContent>
         </Sheet>
