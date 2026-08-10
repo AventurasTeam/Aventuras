@@ -199,6 +199,28 @@
     "heading": "What's the world like?",
     "browseGenrePresets": "Browse genre presets",
     "browseTonePresets": "Browse tone presets",
+    "genre": {
+      "label": "Genre",
+      "placeholder": "e.g. Hard sci-fi",
+      "bodyLabel": "Genre description",
+      "bodyPlaceholder": "Describe the genre in a paragraph or two…",
+      "assist": "Suggest genre",
+      "guidance": "e.g. \"blend of noir and cosmic horror\""
+    },
+    "tone": {
+      "label": "Tone",
+      "placeholder": "e.g. Grim and unsparing",
+      "bodyLabel": "Tone description",
+      "bodyPlaceholder": "Describe the tone in a paragraph or two…",
+      "assist": "Suggest tone",
+      "guidance": "e.g. \"more hopeful, less grim\""
+    },
+    "setting": {
+      "label": "Setting",
+      "placeholder": "Describe the setting in a paragraph or two…",
+      "assist": "Suggest setting",
+      "guidance": "e.g. \"Norse-flavored, post-apocalypse\""
+    },
     "replaceConfirm": {
       "title": "Replace {{field}} with \"{{name}}\"?",
       "body": "Your current label and body will be lost.",
