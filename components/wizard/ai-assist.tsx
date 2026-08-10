@@ -24,7 +24,7 @@ type AssistState<T> =
   | { kind: 'loading'; modelId: string; from?: T }
   | { kind: 'result'; value: T }
   | { kind: 'refine'; value: T }
-  | { kind: 'failure'; detail: string }
+  | { kind: 'failure'; detail: string; retry: () => void }
 
 type AiAssistCommonProps<T> = {
   /** Accessible name for the trigger AND the overlay's visible heading (e.g. "Suggest setting"). */
@@ -87,8 +87,10 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   // status already covers the common case, this is the defensive backstop.
   const requestSeqRef = useRef(0)
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
-  // Retained so Regenerate re-rolls with the SAME guidance the result came from,
-  // per wizard.md — regenerate produces a new take without guidance edits.
+  // Currently always equal to guidanceText (every write path runs through
+  // runGenerate, which syncs both) — kept as its own ref anyway so Regenerate
+  // stays correct if a later change ever clears guidanceText once 'result'
+  // is reached. Not a caching shortcut; don't fold into guidanceText.
   const lastGuidanceRef = useRef('')
 
   // Abort any in-flight request on unmount
@@ -135,6 +137,31 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     if (isPhone) setPhoneOpen(true)
   }
 
+  // Shared by runGenerate/runRefine: both need the same abort / seq-bump /
+  // loading / await / status-branch dance, differing only in the call itself,
+  // the `from` value to fall back to on cancel, and the retry to attach on failure.
+  async function runCall(
+    modelId: string,
+    from: T | undefined,
+    call: (signal: AbortSignal) => Promise<GenerateStructuredResult<T>>,
+    retry: () => void,
+  ) {
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+    const seq = ++requestSeqRef.current
+    setAssist({ kind: 'loading', modelId, from })
+
+    const result = await call(controller.signal)
+    if (requestSeqRef.current !== seq) return
+
+    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
+    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
+    else if (result.status === 'failed')
+      setAssist({ kind: 'failure', detail: result.detail, retry })
+    // 'aborted' — whichever action triggered the abort already set its own state.
+  }
+
   async function runGenerate(guidance: string) {
     const modelId = resolveModelId()
     if (modelId == null) {
@@ -143,19 +170,12 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     }
     lastGuidanceRef.current = guidance
 
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    const seq = ++requestSeqRef.current
-    setAssist({ kind: 'loading', modelId })
-
-    const result = await run(guidance, controller.signal)
-    if (requestSeqRef.current !== seq) return
-
-    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
-    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
-    else if (result.status === 'failed') setAssist({ kind: 'failure', detail: result.detail })
-    // 'aborted' — whichever action triggered the abort already set its own state.
+    await runCall(
+      modelId,
+      undefined,
+      (signal) => run(guidance, signal),
+      () => void runGenerate(guidance),
+    )
   }
 
   const handleGenerate = () => void runGenerate(guidanceText)
@@ -166,18 +186,12 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     const modelId = resolveModelId()
     if (refineFn == null || modelId == null) return
 
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    const seq = ++requestSeqRef.current
-    setAssist({ kind: 'loading', modelId, from: current })
-
-    const result = await refineFn(current, instruction, controller.signal)
-    if (requestSeqRef.current !== seq) return
-
-    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
-    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
-    else if (result.status === 'failed') setAssist({ kind: 'failure', detail: result.detail })
+    await runCall(
+      modelId,
+      current,
+      (signal) => refineFn(current, instruction, signal),
+      () => void runRefine(current, instruction),
+    )
   }
 
   function handleCancelLoading() {
@@ -305,7 +319,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
               <Button variant="ghost" onPress={closeOverlay}>
                 <Text>{t('wizard:aiAssist.actions.discard')}</Text>
               </Button>
-              {props.result === 'prose' && props.refine != null ? (
+              {props.refine != null ? (
                 <Button
                   variant="secondary"
                   onPress={() => {
@@ -373,7 +387,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
               <Button variant="ghost" onPress={closeOverlay}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
-              <Button onPress={handleGenerate}>
+              <Button onPress={assist.retry}>
                 <Text>{t('wizard:aiAssist.actions.tryAgain')}</Text>
               </Button>
             </View>

@@ -56,6 +56,27 @@ function neverResolvingRefine<T>() {
   ): Promise<GenerateStructuredResult<T>> => new Promise(() => {})
 }
 
+// Fails once, then succeeds — and records every (current, instruction) pair
+// it was called with, so a play function can assert Try-again replayed the
+// SAME refine rather than falling back to a fresh generate.
+function flakyThenOkRefine<T>(
+  value: T,
+  detail: string,
+  calls: { current: T; instruction: string }[],
+) {
+  let attempts = 0
+  return async (
+    current: T,
+    instruction: string,
+    _signal: AbortSignal,
+  ): Promise<GenerateStructuredResult<T>> => {
+    calls.push({ current, instruction })
+    attempts += 1
+    if (attempts === 1) return { status: 'failed', detail }
+    return { status: 'ok', value }
+  }
+}
+
 // Records every guidance string `run` was called with — proves Regenerate
 // replays the guidance the original generate used, not an empty string.
 function guidanceCapturingRun<T>(value: T, calls: string[]) {
@@ -440,6 +461,54 @@ export const FailureThenRetrySucceeds: Story = {
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByText('Recovered description after retry.')).toBeInTheDocument()
+  },
+}
+
+const refineFailureGenerateCalls: string[] = []
+const refineFailureRetryCalls: { current: DescriptionValue; instruction: string }[] = []
+export const RefineFailureTryAgainRetriesRefine: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={guidanceCapturingRun<DescriptionValue>(
+        { description: 'Original generated take.' },
+        refineFailureGenerateCalls,
+      )}
+      refine={flakyThenOkRefine<DescriptionValue>(
+        { description: 'Refined and recovered.' },
+        'Provider request timed out after 3 retries',
+        refineFailureRetryCalls,
+      )}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.type(
+      screen.getByPlaceholderText('e.g. "a tense heist thriller"'),
+      'moody guidance',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('Original generated take.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'darker please')
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    expect(
+      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+    ).toBeInTheDocument()
+
+    // Try again must retry the REFINE that failed — same 'current', same
+    // instruction — not fall back to a fresh generate with the old guidance.
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Refined and recovered.')).toBeInTheDocument()
+
+    expect(refineFailureGenerateCalls).toEqual(['moody guidance'])
+    expect(refineFailureRetryCalls).toEqual([
+      { current: { description: 'Original generated take.' }, instruction: 'darker please' },
+      { current: { description: 'Original generated take.' }, instruction: 'darker please' },
+    ])
   },
 }
 
