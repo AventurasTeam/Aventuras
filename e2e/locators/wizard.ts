@@ -12,6 +12,15 @@ export const wizard = {
 
   leadName: (page: Page): Locator => page.getByPlaceholder(t('wizard:frame.leadName.placeholder')),
 
+  // Step 3 (World): lore rows repeat, so Title/Body need an index — each new
+  // row is appended (wizardStore.addLore) and stays expanded once opened, so
+  // DOM order matches authoring order and `nth()` addresses the right row.
+  addLore: (page: Page): Locator => page.getByRole('button', { name: t('wizard:world.lore.add') }),
+  loreTitle: (page: Page, index: number): Locator =>
+    page.getByRole('textbox', { name: t('wizard:world.lore.title') }).nth(index),
+  loreBody: (page: Page, index: number): Locator =>
+    page.getByRole('textbox', { name: t('wizard:world.lore.body') }).nth(index),
+
   // Step 5 (Opening): both carry an aria-label.
   opening: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('wizard:opening.opening.label') }),

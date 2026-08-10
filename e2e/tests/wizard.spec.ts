@@ -15,6 +15,10 @@ test.describe('create-story wizard', () => {
     lead: 'Wren Calloway',
     title: 'The Salt Road',
     opening: 'The tide went out and did not come back.',
+    lore: [
+      { title: 'The Salt Wells', body: 'Nine wells ring the drowned coast.' },
+      { title: 'The Tide Charter', body: 'The old law that binds the wells.' },
+    ],
   }
 
   test.beforeAll(async () => {
@@ -62,5 +66,24 @@ test.describe('create-story wizard', () => {
       [leadId, branchId],
     )
     expect((vecRows[0] as [number])[0], 'lead entity has a stored embedding').toBe(1)
+
+    // Both lore rows committed on the branch.
+    const loreRows = await queryApp(
+      app.window,
+      `SELECT id FROM lore WHERE branch_id = ? ORDER BY title`,
+      [branchId],
+    )
+    expect(loreRows.length, 'both lore rows committed').toBe(2)
+
+    // The real embed populated lore_vec for each row (dim 384) — asserting the
+    // settled end state, never the embedding_stale handoff flag.
+    for (const [loreId] of loreRows as [string][]) {
+      const vec = await queryApp(
+        app.window,
+        `SELECT count(*) FROM lore_vec_384 WHERE id = ? AND branch_id = ?`,
+        [loreId, branchId],
+      )
+      expect((vec[0] as [number])[0], `lore row ${loreId} has a stored embedding`).toBe(1)
+    }
   })
 })
