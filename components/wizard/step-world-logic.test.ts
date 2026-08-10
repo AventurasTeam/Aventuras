@@ -45,6 +45,15 @@ describe('invalidLoreRowIds', () => {
     expect(invalidLoreRowIds(rows)).toEqual(['lore_b'])
   })
 
+  it('returns every offender in input order, not just the first', () => {
+    const rows = [
+      row({ id: 'lore_a' }),
+      row({ id: 'lore_b', body: '' }),
+      row({ id: 'lore_c', title: '' }),
+    ]
+    expect(invalidLoreRowIds(rows)).toEqual(['lore_b', 'lore_c'])
+  })
+
   it('is empty when everything is clean', () => {
     expect(invalidLoreRowIds([row()])).toEqual([])
   })
