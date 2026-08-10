@@ -13,6 +13,7 @@ import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizar
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
 import { StepOpening } from '@/components/wizard/step-opening'
+import { StepWorld } from '@/components/wizard/step-world'
 import {
   canJumpToStep,
   stepForwardValid,
@@ -95,9 +96,10 @@ export default function WizardRoute() {
   const leadName = wizardStore.useWizard((s) => s.state.leadName)
   const calendarSystemId = wizardStore.useWizard((s) => s.state.definition.calendarSystemId)
   const worldTimeOrigin = wizardStore.useWizard((s) => s.state.definition.worldTimeOrigin)
+  const lore = wizardStore.useWizard((s) => s.state.lore)
 
-  const goNext = () => wizardStore.setStep(step === 2 ? 5 : step + 1)
-  const goBack = () => wizardStore.setStep(step === 5 ? 2 : step - 1)
+  const goNext = () => wizardStore.setStep(step === 3 ? 5 : step + 1)
+  const goBack = () => wizardStore.setStep(step === 5 ? 3 : step - 1)
 
   // Entry hard gate (wizard.md → Embedder-unavailable): no usable embedder blocks
   // the wizard outright. Focus-aware so returning from Settings (having fixed the
@@ -211,6 +213,7 @@ export default function WizardRoute() {
     leadName,
     worldTimeOrigin,
     calendar: selectedCalendar ?? null,
+    lore,
   }
   const canGoNext = stepForwardValid(step, validityParams)
   const canJumpTo = (target: number) => canJumpToStep(target, step, furthestStep, validityParams)
@@ -366,6 +369,8 @@ export default function WizardRoute() {
         <StepFrame />
       ) : step === 2 ? (
         <StepCalendar />
+      ) : step === 3 ? (
+        <StepWorld onSetupAssist={() => router.push('/settings' as Href)} />
       ) : (
         <>
           <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />

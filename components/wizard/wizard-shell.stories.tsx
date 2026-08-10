@@ -40,7 +40,8 @@ export const Step1Frame: Story = {
     // ← Back is hidden on step 1.
     expect(canvas.queryByRole('button', { name: '← Back' })).toBeNull()
 
-    // World / Cast are hard-disabled in M2 regardless of step — non-interactive.
+    // Cast is hard-disabled regardless of `canJumpTo`; World reads as disabled
+    // here only because this story's canJumpTo returns false for every step.
     const world = await canvas.findByRole('button', { name: 'World' })
     const cast = await canvas.findByRole('button', { name: 'Cast' })
     expect(world).toBeDisabled()
@@ -97,8 +98,13 @@ export const ForwardJumpToVisited: Story = {
     await userEvent.click(opening)
     await waitFor(() => expect(args.onJump).toHaveBeenCalledWith(5))
 
-    // World / Cast stay disabled even though canJumpTo would return true.
-    expect(await canvas.findByRole('button', { name: 'World' })).toBeDisabled()
+    // World is live now — canJumpTo true makes its pill clickable too.
+    const world = await canvas.findByRole('button', { name: 'World' })
+    await userEvent.click(world)
+    await waitFor(() => expect(args.onJump).toHaveBeenCalledWith(3))
+
+    // Cast stays hard-disabled even though canJumpTo would return true.
+    expect(await canvas.findByRole('button', { name: 'Cast' })).toBeDisabled()
   },
 }
 

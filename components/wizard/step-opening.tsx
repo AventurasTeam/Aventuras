@@ -12,6 +12,8 @@ import { appSettingsStore, wizardStore } from '@/lib/stores'
 import { AiAssist } from './ai-assist'
 import { MemoryCostDisclosure } from './memory-cost-disclosure'
 import {
+  refineDescriptionAssist,
+  refineOpeningAssist,
   resolveWizardAssistModelId,
   runDescriptionAssist,
   runOpeningAssist,
@@ -19,6 +21,7 @@ import {
   type DescriptionAssistValue,
   type OpeningAssistValue,
   type TitleAssistValue,
+  type WizardAssistRefine,
   type WizardAssistRun,
 } from './wizard-assist'
 
@@ -27,8 +30,10 @@ import {
 export type StepOpeningAssistSeams = {
   resolveModelId?: () => string | null
   opening?: WizardAssistRun<OpeningAssistValue>
+  refineOpening?: WizardAssistRefine<OpeningAssistValue>
   title?: WizardAssistRun<TitleAssistValue>
   description?: WizardAssistRun<DescriptionAssistValue>
+  refineDescription?: WizardAssistRefine<DescriptionAssistValue>
 }
 
 export type StepOpeningProps = {
@@ -79,6 +84,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             ariaLabel={t('wizard:opening.opening.assist')}
             guidancePlaceholder={t('wizard:opening.opening.guidance')}
             run={assist?.opening ?? runOpeningAssist}
+            refine={assist?.refineOpening ?? refineOpeningAssist}
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => v.content}
@@ -145,6 +151,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
               ariaLabel={t('wizard:opening.description.assist')}
               guidancePlaceholder={t('wizard:opening.description.guidance')}
               run={assist?.description ?? runDescriptionAssist}
+              refine={assist?.refineDescription ?? refineDescriptionAssist}
               resolveModelId={resolveModelId}
               result="prose"
               getProse={(v) => v.description}

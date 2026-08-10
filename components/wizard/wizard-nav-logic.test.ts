@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_CALENDAR_ID, getCalendar, type CalendarSystem } from '@/lib/calendar'
 
-import { canJumpToStep, stepForwardValid, type StepValidityParams } from './wizard-nav-logic'
+import {
+  ACTIVE_STEP_ORDER,
+  canJumpToStep,
+  stepForwardValid,
+  type StepValidityParams,
+} from './wizard-nav-logic'
 
 const calendar = getCalendar(DEFAULT_CALENDAR_ID)!
 
@@ -18,6 +23,7 @@ function mkParams(o: Partial<StepValidityParams> = {}): StepValidityParams {
     leadName: '',
     worldTimeOrigin: validOrigin(calendar),
     calendar,
+    lore: [],
     ...o,
   }
 }
@@ -67,5 +73,60 @@ describe('canJumpToStep', () => {
         mkParams({ mode: 'adventure', leadName: 'Aria', worldTimeOrigin: {} }),
       ),
     ).toBe(false)
+  })
+})
+
+describe('step 3 in the sequence', () => {
+  const clean: StepValidityParams = {
+    mode: 'creative',
+    narration: 'third',
+    leadName: '',
+    worldTimeOrigin: {},
+    calendar: null,
+    lore: [],
+  }
+
+  it('includes World in the active order', () => {
+    expect(ACTIVE_STEP_ORDER).toEqual([1, 2, 3, 5])
+  })
+
+  it('advances past step 3 when no lore is authored', () => {
+    expect(stepForwardValid(3, clean)).toBe(true)
+  })
+
+  it('blocks step 3 while a lore row has an empty body', () => {
+    const dirty = {
+      ...clean,
+      lore: [
+        {
+          id: 'lore_1',
+          title: 'T',
+          body: '',
+          category: '',
+          tags: [],
+          injectionMode: 'auto' as const,
+          priority: 0,
+        },
+      ],
+    }
+    expect(stepForwardValid(3, dirty)).toBe(false)
+  })
+
+  it('refuses a forward pill jump to 5 while step 3 is invalid', () => {
+    const dirty = {
+      ...clean,
+      lore: [
+        {
+          id: 'lore_1',
+          title: '',
+          body: '',
+          category: '',
+          tags: [],
+          injectionMode: 'auto' as const,
+          priority: 0,
+        },
+      ],
+    }
+    expect(canJumpToStep(5, 3, 5, dirty)).toBe(false)
   })
 })

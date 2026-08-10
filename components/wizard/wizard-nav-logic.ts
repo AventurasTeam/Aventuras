@@ -1,11 +1,12 @@
 import type { CalendarSystem } from '@/lib/calendar'
-import type { WizardWorkingState } from '@/lib/db'
+import type { WizardLoreDraft, WizardWorkingState } from '@/lib/db'
 
 import { needsLead, type Mode, type Narration } from './step-frame-logic'
+import { worldStepValid } from './step-world-logic'
 import { validateOriginTuple } from './tier-tuple-input-logic'
 
-// Active step sequence in M2 — World (3) and Cast (4) are disabled and skipped.
-export const ACTIVE_STEP_ORDER = [1, 2, 5] as const
+// Active step sequence — Cast (4) stays disabled until Slice 3.6b.
+export const ACTIVE_STEP_ORDER = [1, 2, 3, 5] as const
 
 export type StepValidityParams = {
   mode: Mode
@@ -13,12 +14,14 @@ export type StepValidityParams = {
   leadName: string
   worldTimeOrigin: WizardWorkingState['definition']['worldTimeOrigin']
   calendar: CalendarSystem | null
+  lore: readonly WizardLoreDraft[]
 }
 
 /** Whether `step` is satisfied enough to advance past it (the Next-button gate). */
 export function stepForwardValid(step: number, p: StepValidityParams): boolean {
   if (step === 1) return !needsLead(p.mode, p.narration) || p.leadName.trim() !== ''
   if (step === 2) return p.calendar != null && validateOriginTuple(p.worldTimeOrigin, p.calendar).ok
+  if (step === 3) return worldStepValid(p.lore)
   return true
 }
 

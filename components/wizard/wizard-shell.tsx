@@ -17,7 +17,7 @@ import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type WizardShellProps = {
-  /** 1-indexed active step; M2 only reaches 1 (Frame), 2 (Calendar), 5 (Opening). */
+  /** 1-indexed active step; reaches 1 (Frame), 2 (Calendar), 3 (World), 5 (Opening). */
   step: number
   canGoNext: boolean
   isFinish: boolean
@@ -35,9 +35,8 @@ type WizardShellProps = {
 
 const STEP_ORDER = [1, 2, 3, 4, 5] as const
 
-// M2 only wires steps 1 (Frame), 2 (Calendar), and 5 (Opening); World/Cast
-// land in a later milestone and stay hard-disabled regardless of `step`.
-const DISABLED_STEPS = new Set<number>([3, 4])
+// Cast (4) lands in Slice 3.6b and stays hard-disabled regardless of `step`.
+const DISABLED_STEPS = new Set<number>([4])
 
 const STEP_LABEL_KEYS = {
   1: 'wizard:steps.frame',
