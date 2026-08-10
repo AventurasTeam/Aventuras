@@ -68,8 +68,10 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
-  // Save-as-draft doesn't validate, so a resumed draft can reach Finish
-  // carrying an empty-bodied row from step 3's local editor — re-check here.
+  // In-session nav re-validates every gating step, so this can't be reached by
+  // clicking through. hydrate() sets furthestStep = state.step with no
+  // re-validation, so a persisted draft resumed straight at step 5 (the zod
+  // schema defaults title/body to '') skips step 3's gate entirely — re-check here.
   if (invalidLoreRowIds(s.lore).length > 0) reasons.push('lore')
 
   // effectiveDim only means something for a provider-backed Matryoshka model; if

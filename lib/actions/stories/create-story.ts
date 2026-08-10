@@ -115,6 +115,11 @@ export async function createStoryWithBranch(
           status: 'active',
           injectionMode: 'auto',
           state: emptyEntityState('character'),
+          // Dirty by default: the same-batch splice below is what clears it. If a
+          // future reorder or a caller that omits `embed` ever skips the splice,
+          // the row stays flagged for the sync/drain stage instead of silently
+          // defaulting to 0 and going permanently invisible to retrieval.
+          embeddingStale: 1,
           createdAt: nowMs,
           updatedAt: nowMs,
         })
@@ -138,6 +143,7 @@ export async function createStoryWithBranch(
   )
 
   for (const row of input.lore ?? []) {
+    const category = row.category.trim()
     ops.push(
       ctx.db
         .insert(lore)
@@ -146,11 +152,13 @@ export async function createStoryWithBranch(
           branchId,
           title: row.title,
           body: row.body,
-          category: row.category.trim().length > 0 ? row.category : null,
+          category: category.length > 0 ? category : null,
           tags: [...row.tags],
           keywords: [],
           injectionMode: row.injectionMode,
           priority: row.priority,
+          // Dirty by default — see the lead-entity insert above for why.
+          embeddingStale: 1,
           createdAt: nowMs,
           updatedAt: nowMs,
         })

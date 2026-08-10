@@ -519,8 +519,9 @@ describe('finishWizard', () => {
   it('blocks Finish when a lore row carries an empty title or body; DB untouched', async () => {
     const { db, ctx } = await setup()
 
-    // Save-as-draft never validates, so a resumed draft can reach Finish
-    // carrying a row step 3's own gate would have rejected.
+    // Reachable via the persistence round-trip, not in-session nav: hydrate()
+    // sets furthestStep = state.step with no re-validation, so a persisted
+    // draft resumed at step 5 can carry a dirty row step 3's gate never saw.
     const result = await finishWizard(
       makeState({
         title: 'A title',
@@ -538,6 +539,30 @@ describe('finishWizard', () => {
     expect(result.status === 'invalid' && result.reasons).toContain('lore')
     expect(await db.select().from(stories)).toHaveLength(0)
     expect(await db.select().from(lore)).toHaveLength(0)
+  })
+
+  it('rejects dirty lore before the embedder gate runs, even with no usable embedder', async () => {
+    const { ctx } = await setup()
+    const execd: string[] = []
+
+    const result = await finishWizard(
+      makeState({
+        title: 'A title',
+        opening: { content: 'Once.' },
+        lore: [loreRow({ title: '   ' })],
+      }),
+      ctx,
+      vi.fn(),
+      // Deliberately unusable embedder: if the gate ran before the lore check,
+      // this would surface as embed-blocked instead of invalid/lore.
+      { ...APP_DEFAULTS, embeddingModelId: null, installedLocalIds: [] },
+      { exec: async (sql) => void execd.push(sql), resolveProvider: () => undefined },
+      4250,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['lore'] })
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(execd).toHaveLength(0)
   })
 
   it('commits clean lore rows into the lore table', async () => {

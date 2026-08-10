@@ -594,6 +594,109 @@ describe('createStoryWithBranch — embed step', () => {
     expect(await db.select().from(lore)).toHaveLength(0)
   })
 
+  it('embed supplied but no lead and no lore: the helper is skipped, no vec DDL runs', async () => {
+    const { sqlite, ctx } = await setup()
+    const execd: string[] = []
+
+    await createStoryWithBranch(
+      {
+        title: 'Nothing to embed',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        embed: {
+          config: LOCAL_CONFIG,
+          exec: async (sql) => {
+            execd.push(sql)
+            sqlite.exec(sql)
+          },
+        },
+      },
+      ctx,
+      9700,
+    )
+
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(execd).toHaveLength(0)
+  })
+
+  it('draft-promote carrying lore: rows land on the new branch under its own PK; a same-id row on another branch is untouched', async () => {
+    const { db, sqlite, ctx } = await setup()
+    realVecOps()
+    const draftId = 'story_draft_with_lore'
+    await db.insert(stories).values({
+      id: draftId,
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 500,
+      updatedAt: 500,
+    })
+    await db
+      .insert(wizardSessions)
+      .values({ id: draftId, storyId: draftId, state: emptyWorkingState(), updatedAt: 500 })
+
+    // A pre-existing OTHER story already holding a lore row under the SAME id
+    // on a different branch — the composite PK is (branch_id, id).
+    const otherBranch = 'br_other'
+    await db
+      .insert(stories)
+      .values({ id: 'story_other', title: 'Other', status: 'active', createdAt: 1, updatedAt: 1 })
+    await db
+      .insert(branches)
+      .values({ id: otherBranch, storyId: 'story_other', name: 'main', createdAt: 1 })
+    const sharedLoreId = 'lore_11111111-1111-1111-1111-111111111111'
+    await db.insert(lore).values({
+      id: sharedLoreId,
+      branchId: otherBranch,
+      title: 'Pre-existing',
+      body: 'untouched',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { storyId, branchId } = await createStoryWithBranch(
+      {
+        storyId: draftId,
+        replaceExistingStoryId: true,
+        title: 'Promoted With Lore',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'The draft becomes real.',
+        openingMetadata: metadata,
+        lore: [loreRow({ id: sharedLoreId, category: 'Geography' })],
+        embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
+      },
+      ctx,
+      9500,
+    )
+
+    expect(storyId).toBe(draftId)
+    const storyRows = await db.select().from(stories).where(eq(stories.id, draftId))
+    expect(storyRows[0]).toMatchObject({ status: 'active', currentBranchId: branchId })
+    expect(
+      await db.select().from(wizardSessions).where(eq(wizardSessions.id, draftId)),
+    ).toHaveLength(0)
+
+    const promoted = await db.select().from(lore).where(eq(lore.branchId, branchId))
+    expect(promoted).toHaveLength(1)
+    expect(promoted[0]).toMatchObject({
+      id: sharedLoreId,
+      category: 'Geography',
+      embeddingStale: 0,
+    })
+
+    const untouched = await db.select().from(lore).where(eq(lore.branchId, otherBranch))
+    expect(untouched).toHaveLength(1)
+    expect(untouched[0].title).toBe('Pre-existing')
+
+    const vecRows = sqlite
+      .prepare('select branch_id from lore_vec_384 where id = ?')
+      .all(sharedLoreId) as { branch_id: string }[]
+    expect(vecRows.map((r) => r.branch_id)).toEqual([branchId])
+  })
+
   it('skips the embed helper entirely when no embed input is supplied', async () => {
     const { ctx } = await setup()
 
