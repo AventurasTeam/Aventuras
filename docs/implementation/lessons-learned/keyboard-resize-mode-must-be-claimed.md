@@ -97,6 +97,25 @@ everywhere except inside one screen. That tell — one screen wrong, everything
 else right — always points at that screen's own extra compensation, not at the
 window mode.
 
+## A sheet opened while the keyboard is already up never learns about it
+
+gorhom builds its keyboard state purely from events — `useAnimatedKeyboard`
+subscribes to `keyboardDidShow` / `keyboardDidHide` and never reads
+`Keyboard.metrics()`, so its state starts at `height: 0`. A sheet mounted while
+the keyboard is already open gets no event, because nothing about the keyboard
+changed, and positions itself as though there were none.
+
+The tell is an ordering asymmetry that looks like flakiness:
+
+- open the sheet, **then** focus a field inside it — works (the show event
+  arrives while the sheet is mounted)
+- have the keyboard up, **then** open the sheet — sheet sits underneath
+
+`sheet.tsx` dismisses the keyboard before presenting when one is already
+visible, which also happens to be the conventional gesture for opening an
+overlay. Focusing a field inside the sheet then fires a show event it can see —
+the path that already worked.
+
 ## `extend` does nothing on a single-detent sheet
 
 Unrelated to window mode, and worth knowing because it looks identical from the

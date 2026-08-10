@@ -9,7 +9,14 @@ import {
   useRef,
   type ComponentProps,
 } from 'react'
-import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import {
+  Keyboard,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
@@ -101,19 +108,49 @@ function BottomSheetContent({
   const isPresentedRef = useRef(false)
 
   useEffect(() => {
+    let cancelled = false
+    let pendingHide: ReturnType<typeof Keyboard.addListener> | undefined
+
+    const present = () => {
+      // Only claim presented at the moment we actually present, so an `open`
+      // that flips back while we wait below can't leave dismiss() firing
+      // against a modal that never opened.
+      isPresentedRef.current = true
+      sheetRef.current?.present()
+    }
+
     // gorhom's BottomSheetModal must register with the provider's stack before
     // present() succeeds; that registration happens in the modal's own mount
     // effects, which run after this one. Defer to the next tick.
     const handle = setTimeout(() => {
       if (open && !isPresentedRef.current) {
-        isPresentedRef.current = true
-        sheetRef.current?.present()
+        // gorhom's keyboard state is built purely from show/hide events
+        // (useAnimatedKeyboard subscribes; it never reads Keyboard.metrics), so
+        // it starts at height 0 and a sheet opened while the keyboard is
+        // already up is never told about it — it lands underneath. Close the
+        // keyboard first; focusing a field inside the sheet then fires a show
+        // event it can see, which is the path that already works.
+        if (Platform.OS !== 'web' && Keyboard.isVisible()) {
+          pendingHide = Keyboard.addListener('keyboardDidHide', () => {
+            pendingHide?.remove()
+            pendingHide = undefined
+            if (!cancelled) present()
+          })
+          Keyboard.dismiss()
+          return
+        }
+        present()
       } else if (!open && isPresentedRef.current) {
         isPresentedRef.current = false
         sheetRef.current?.dismiss()
       }
     }, 0)
-    return () => clearTimeout(handle)
+
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+      pendingHide?.remove()
+    }
   }, [open])
 
   const snapPoints = useMemo(() => {
