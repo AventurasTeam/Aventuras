@@ -7,6 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
+import type { AssistListItem } from './assist-list-logic'
 
 // AiAssist drives the popover state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).
@@ -46,6 +47,19 @@ function neverResolvingRun<T>() {
     new Promise(() => {})
 }
 
+// First call resolves, second call hangs (for a play function to cancel),
+// every call after that resolves with `after` — models a `Generate more`
+// that gets cancelled and is then followed by a fresh Generate.
+function okHangThenOkRun<T>(first: T, after: T) {
+  let call = 0
+  return (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
+    call += 1
+    if (call === 1) return Promise.resolve({ status: 'ok', value: first })
+    if (call === 2) return new Promise(() => {})
+    return Promise.resolve({ status: 'ok', value: after })
+  }
+}
+
 // Never settles — holds a refine in 'loading' so a play function can cancel
 // it mid-flight and assert the ORIGINAL preview survives, not an empty one.
 function neverResolvingRefine<T>() {
@@ -74,6 +88,18 @@ function flakyThenOkRefine<T>(
     attempts += 1
     if (attempts === 1) return { status: 'failed', detail }
     return { status: 'ok', value }
+  }
+}
+
+// Returns the next result per call — Generate / Generate more / Try again /
+// Regenerate each count as one call — repeating the last entry past the end.
+// Drives the list-result multi-page and failure-then-retry stories.
+function sequentialRun<T>(results: GenerateStructuredResult<T>[]) {
+  let call = 0
+  return async (_guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
+    const result = results[Math.min(call, results.length - 1)]
+    call += 1
+    return result
   }
 }
 
@@ -168,6 +194,73 @@ function ChipsDemo({ resolveModelId, run, onSetup, onPickChip }: ChipsDemoProps)
           onPickChip(chip, value)
         }}
         onSetup={onSetup}
+      />
+    </View>
+  )
+}
+
+type ListItemValue = { items: AssistListItem[] }
+
+type ListDemoProps = {
+  resolveModelId: () => string | null
+  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
+  existingNames?: string[]
+  onSetup: () => void
+  onImport: (items: AssistListItem[]) => void
+}
+
+function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }: ListDemoProps) {
+  const [imported, setImported] = useState<string[]>([])
+  return (
+    <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
+      <Text size="sm" variant="muted">
+        Imported: {imported.length === 0 ? '(none)' : imported.join(', ')}
+      </Text>
+      <AiAssist
+        ariaLabel="Suggest lore"
+        guidancePlaceholder='e.g. "ancient ruins"'
+        run={run}
+        resolveModelId={resolveModelId}
+        result="list"
+        getItems={(v) => v.items}
+        existingNames={existingNames}
+        onImport={(items) => {
+          setImported(items.map((i) => i.name))
+          onImport(items)
+        }}
+        onSetup={onSetup}
+      />
+    </View>
+  )
+}
+
+type ListDemoWithLiveExistingProps = {
+  resolveModelId: () => string | null
+  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
+  // Exposes the setter directly rather than via an on-screen control: a
+  // button would sit outside PopoverContent's DOM, and clicking it would
+  // register as an outside-interaction and dismiss the popover through
+  // handlePopoverOpenChange before the play function could observe anything.
+  onReady: (setExistingNames: (names: string[]) => void) => void
+}
+
+// `existingNames` toggles live (unlike ListDemo's fixed prop) so a play
+// function can check a row, THEN mark it existing — reaching the
+// checked+disabled combination a static existingNames prop can't produce.
+function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWithLiveExistingProps) {
+  const [existingNames, setExistingNames] = useState<string[]>([])
+  onReady(setExistingNames)
+  return (
+    <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
+      <AiAssist
+        ariaLabel="Suggest lore"
+        run={run}
+        resolveModelId={resolveModelId}
+        result="list"
+        getItems={(v) => v.items}
+        existingNames={existingNames}
+        onImport={fn()}
+        onSetup={fn()}
       />
     </View>
   )
@@ -591,4 +684,317 @@ export const PhoneSheetNote: Story = {
       />
     </View>
   ),
+}
+
+const RUIN_ITEM: AssistListItem = {
+  name: 'Sunken Archive',
+  detail: 'A flooded library beneath the old temple.',
+  payload: { category: 'location', tags: ['ruins', 'flooded'] },
+}
+const FACTION_ITEM: AssistListItem = {
+  name: 'Ashfall Cartel',
+  detail: 'Smugglers who trade in volcanic glass.',
+  payload: { category: 'faction' },
+}
+const PAGE_TWO_ITEM: AssistListItem = {
+  name: 'Old Jorin',
+  detail: 'The grizzled barkeeper of the Iron Tankard.',
+}
+
+export const ListResult_FirstPage: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('Sunken Archive')).toBeInTheDocument()
+    expect(screen.getByText('A flooded library beneath the old temple.')).toBeInTheDocument()
+    expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Ashfall Cartel' })).not.toBeChecked()
+  },
+}
+
+export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    expect(await screen.findByText('Old Jorin')).toBeInTheDocument()
+    // Page one's row is still on screen AND still checked — `Generate more`
+    // appends rather than replacing.
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Old Jorin' })).not.toBeChecked()
+  },
+}
+
+export const ListResult_ExistingNameDisabled: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
+      existingNames={['sunken archive']}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Sunken Archive')
+    expect(screen.getByText('(already exists)')).toBeInTheDocument()
+
+    const existingCheckbox = screen.getByRole('checkbox', { name: 'Sunken Archive' })
+    expect(existingCheckbox).toHaveStyle({ pointerEvents: 'none' })
+    // Unlike Popover's Trigger (lessons-learned/rn-primitives-disabled.md),
+    // `disabled` alone genuinely blocks this: RN-Web's Pressable sets
+    // pointer-events:none on the disabled root itself, so user-event's
+    // actionability check refuses the click outright.
+    await expect(userEvent.click(existingCheckbox)).rejects.toThrow(/pointer-events/)
+    expect(existingCheckbox).not.toBeChecked()
+
+    // The other row is unaffected — still selectable normally.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Ashfall Cartel' }))
+    expect(screen.getByRole('checkbox', { name: 'Ashfall Cartel' })).toBeChecked()
+  },
+}
+
+const importSelectedMock = fn()
+export const ListResult_ImportSelectedReportsCheckedRowsAndCloses: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
+      onSetup={fn()}
+      onImport={importSelectedMock}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    // Ashfall Cartel deliberately left unchecked.
+
+    await userEvent.click(screen.getByRole('button', { name: 'Import selected' }))
+    await waitFor(() =>
+      expect(importSelectedMock).toHaveBeenCalledWith([{ ...RUIN_ITEM, exists: false }]),
+    )
+    expect(await screen.findByText('Imported: Sunken Archive')).toBeInTheDocument()
+    // The overlay closed — its chrome is gone from the DOM.
+    expect(screen.queryByText('Ashfall Cartel')).not.toBeInTheDocument()
+  },
+}
+
+export const ListResult_FailedGenerateMoreKeepsPageAndAppendsOnRetry: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    expect(
+      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+    ).toBeInTheDocument()
+
+    // Try again must retry the SAME `Generate more` call — appending, not
+    // replacing — and page one's checked row must survive the failure
+    // screen untouched, since `listItems`/`selected` are separate state
+    // `runCall` never clobbers on a failure branch.
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Old Jorin')).toBeInTheDocument()
+    expect(screen.getByText('Sunken Archive')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Old Jorin' })).not.toBeChecked()
+  },
+}
+
+export const ListResult_FailedFirstGenerateThenRetrySucceedsWithExactPage: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', value: { items: [RUIN_ITEM, FACTION_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(
+      await screen.findByText("Couldn't generate. Provider request timed out after 3 retries."),
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    // Exactly page one's two rows — a failed FIRST Generate must leave an
+    // empty list, not a stale one the eventual success then accumulates onto.
+    expect(await screen.findByText('Sunken Archive')).toBeInTheDocument()
+    expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
+  },
+}
+
+export const ListResult_DismissalClearsSelectionForNextOpen: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [RUIN_ITEM] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(screen.queryByText('Sunken Archive')).not.toBeInTheDocument())
+
+    // Reopen and generate the SAME name again — if `selected` had leaked past
+    // the dismissal, this row would render pre-checked even though the user
+    // never touched it this session (lessons-learned/no-harmless-id-leaks.md).
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(await screen.findByRole('checkbox', { name: 'Sunken Archive' })).not.toBeChecked()
+  },
+}
+
+export const ListResult_RegenerateReplacesGenerateMoreAppends: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+        { status: 'ok', value: { items: [FACTION_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    expect(await screen.findByText('Old Jorin')).toBeInTheDocument()
+    expect(screen.getByText('Sunken Archive')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    // Regenerate replaces the whole page — both prior rows are gone, only
+    // the fresh generation remains — unlike `Generate more` above.
+    await waitFor(() => expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument())
+    expect(screen.queryByText('Sunken Archive')).not.toBeInTheDocument()
+    expect(screen.queryByText('Old Jorin')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+  },
+}
+
+export const ListResult_CancelledGenerateMoreThenFreshGenerateReplaces: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okHangThenOkRun<ListItemValue>({ items: [RUIN_ITEM] }, { items: [FACTION_ITEM] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument()
+    // Cancelling a Generate/Regenerate load always returns to the guidance
+    // screen (its `from` is always undefined, unlike refine's) — WITHOUT
+    // going through resetOnClose, so `listItems`/`selected` are untouched.
+    // Only handleGenerate's `appendRef.current = false` stops the next
+    // fresh Generate from merging into that stale leftover page.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('Optional guidance')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    await waitFor(() => expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument())
+    expect(screen.queryByText('Sunken Archive')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+  },
+}
+
+let setLiveExistingNames: (names: string[]) => void = () => {}
+export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
+  render: () => (
+    <ListDemoWithLiveExisting
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [RUIN_ITEM] })}
+      onReady={(setter) => {
+        setLiveExistingNames = setter
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+
+    // Marking it existing WHILE checked reaches a combination a static
+    // existingNames prop never produces: checked AND disabled together, with
+    // the checkmark icon actually rendered. Driven directly through the
+    // setter (not a click) — a button outside PopoverContent would register
+    // as an outside interaction and dismiss the popover before this
+    // assertion ever ran.
+    setLiveExistingNames(['Sunken Archive'])
+    const checkbox = await screen.findByRole('checkbox', { name: 'Sunken Archive' })
+    expect(checkbox).toBeChecked()
+    expect(checkbox).toHaveStyle({ pointerEvents: 'none' })
+    await expect(userEvent.click(checkbox)).rejects.toThrow(/pointer-events/)
+    expect(checkbox).toBeChecked()
+
+    // The checkmark icon is a rendered child now, not absent — the case that
+    // would matter if RN-Web's disabled styling left a gap on children.
+    // Radix's own CheckboxIndicator forces pointer-events:none on itself
+    // unconditionally, so clicking the icon directly is refused too.
+    const icon = checkbox.querySelector('svg')
+    if (icon == null) throw new Error('expected a rendered checkmark icon on a checked row')
+    await expect(userEvent.click(icon)).rejects.toThrow(/pointer-events/)
+    expect(checkbox).toBeChecked()
+  },
 }

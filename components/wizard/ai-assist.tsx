@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from '
 import { Platform, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,8 @@ import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
+
+import { markExisting, mergePages, type AssistListItem } from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -69,7 +72,17 @@ type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
   onPickChip: (chip: string, value: T) => void
 }
 
-export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T>
+type AiAssistListProps<T> = AiAssistCommonProps<T> & {
+  result: 'list'
+  /** Flattens one model reply into renderable rows. */
+  getItems: (value: T) => AssistListItem[]
+  /** Names already in the wizard's own list — drives the `(already exists)` mark. */
+  existingNames: readonly string[]
+  /** Fires once with every checked row when `Import selected` is pressed. */
+  onImport: (items: AssistListItem[]) => void
+}
+
+export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T> | AiAssistListProps<T>
 
 export function AiAssist<T>(props: AiAssistProps<T>) {
   const { ariaLabel, guidancePlaceholder, run, resolveModelId, onSetup, disabled } = props
@@ -80,6 +93,10 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   const [guidanceText, setGuidanceText] = useState('')
   const [refineText, setRefineText] = useState('')
   const [phoneOpen, setPhoneOpen] = useState(false)
+  // List results accumulate across `Generate more` pages; selection is by
+  // dedupe key rather than index so a later page cannot shift what is checked.
+  const [listItems, setListItems] = useState<AssistListItem[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const abortRef = useRef<AbortController | null>(null)
   // Guards against a stale in-flight response clobbering state set by a
@@ -92,6 +109,8 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   // stays correct if a later change ever clears guidanceText once 'result'
   // is reached. Not a caching shortcut; don't fold into guidanceText.
   const lastGuidanceRef = useRef('')
+  // `Generate more` accumulates; a fresh Generate / Regenerate replaces.
+  const appendRef = useRef(false)
 
   // Abort any in-flight request on unmount
   useEffect(() => () => abortRef.current?.abort(), [])
@@ -101,6 +120,8 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     abortRef.current = null
     requestSeqRef.current += 1
     setAssist({ kind: 'idle' })
+    setListItems([])
+    setSelected(new Set())
   }
 
   function closeOverlay() {
@@ -155,8 +176,13 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     const result = await call(controller.signal)
     if (requestSeqRef.current !== seq) return
 
-    if (result.status === 'ok') setAssist({ kind: 'result', value: result.value })
-    else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
+    if (result.status === 'ok') {
+      if (props.result === 'list') {
+        const page = props.getItems(result.value)
+        setListItems((prev) => (appendRef.current ? mergePages(prev, page) : page))
+      }
+      setAssist({ kind: 'result', value: result.value })
+    } else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
     else if (result.status === 'failed')
       setAssist({ kind: 'failure', detail: result.detail, retry })
     // 'aborted' — whichever action triggered the abort already set its own state.
@@ -178,7 +204,10 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     )
   }
 
-  const handleGenerate = () => void runGenerate(guidanceText)
+  const handleGenerate = () => {
+    appendRef.current = false
+    void runGenerate(guidanceText)
+  }
   const handleRegenerate = () => void runGenerate(lastGuidanceRef.current)
 
   async function runRefine(current: T, instruction: string) {
@@ -278,6 +307,95 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
         )
 
       case 'result': {
+        if (props.result === 'list') {
+          const marked = markExisting(listItems, props.existingNames)
+          return (
+            <View className="gap-3">
+              <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+              {marked.length === 0 ? (
+                <Text size="sm" variant="muted">
+                  {t('wizard:aiAssist.list.empty')}
+                </Text>
+              ) : (
+                <ScrollView className="max-h-72">
+                  <View className="gap-2">
+                    {marked.map((row) => (
+                      <View
+                        key={row.name}
+                        className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
+                      >
+                        <Checkbox
+                          checked={selected.has(row.name)}
+                          // Unlike Popover's Trigger (lessons-learned/rn-primitives-disabled.md),
+                          // no extra pointer-events override is needed here: RN-Web's Pressable
+                          // already sets pointer-events:none on a disabled root, and Radix's
+                          // CheckboxIndicator forces pointer-events:none on the checkmark icon
+                          // unconditionally — verified via mutation-tested Storybook coverage.
+                          disabled={row.exists}
+                          onCheckedChange={(next) =>
+                            setSelected((prev) => {
+                              const draft = new Set(prev)
+                              if (next) draft.add(row.name)
+                              else draft.delete(row.name)
+                              return draft
+                            })
+                          }
+                          aria-label={row.name}
+                        />
+                        <View className="min-w-0 flex-1 gap-0.5">
+                          <Text size="sm" className="font-medium">
+                            {row.name}
+                          </Text>
+                          <Text size="xs" variant="muted" numberOfLines={2}>
+                            {row.detail}
+                          </Text>
+                          {row.exists ? (
+                            <Text size="xs" variant="muted">
+                              {t('wizard:aiAssist.list.alreadyExists')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </ScrollView>
+              )}
+              <View className="flex-row flex-wrap justify-end gap-2">
+                <Button variant="ghost" onPress={closeOverlay}>
+                  <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    appendRef.current = false
+                    handleRegenerate()
+                  }}
+                >
+                  <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
+                </Button>
+                <Button
+                  variant="secondary"
+                  onPress={() => {
+                    appendRef.current = true
+                    handleRegenerate()
+                  }}
+                >
+                  <Text>{t('wizard:aiAssist.actions.generateMore')}</Text>
+                </Button>
+                <Button
+                  disabled={selected.size === 0}
+                  onPress={() => {
+                    props.onImport(marked.filter((row) => selected.has(row.name)))
+                    closeOverlay()
+                  }}
+                >
+                  <Text>{t('wizard:aiAssist.actions.importSelected')}</Text>
+                </Button>
+              </View>
+            </View>
+          )
+        }
+
         if (props.result === 'chips') {
           const chips = props.getChips(assist.value)
           return (

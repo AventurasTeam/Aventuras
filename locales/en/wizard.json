@@ -179,7 +179,9 @@
       "tryAgain": "Try again",
       "setup": "Set up in Settings",
       "refine": "Refine…",
-      "regenerate": "Regenerate"
+      "regenerate": "Regenerate",
+      "generateMore": "Generate more",
+      "importSelected": "Import selected"
     },
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
@@ -187,6 +189,10 @@
     "refine": {
       "label": "How should this change?",
       "placeholder": "e.g. make it darker"
+    },
+    "list": {
+      "alreadyExists": "(already exists)",
+      "empty": "Nothing suggested. Try different guidance."
     }
   }
 }
