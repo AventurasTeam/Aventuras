@@ -16,7 +16,6 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
-import { Stepper } from '@/components/ui/stepper'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
@@ -25,7 +24,7 @@ import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
-import { loreRowErrors } from './step-world-logic'
+import { loreRowErrors, parsePriorityInput, PRIORITY_MAX, PRIORITY_MIN } from './step-world-logic'
 
 export type LoreListProps = {
   rows: readonly WizardLoreDraft[]
@@ -42,9 +41,6 @@ export type LoreListProps = {
    */
   headerAction?: ReactNode
 }
-
-const PRIORITY_MIN = 0
-const PRIORITY_MAX = 100
 
 const INJECTION_MODE_OPTIONS: SelectOption[] = [
   { value: 'always', label: t('wizard:world.lore.modes.always') },
@@ -78,6 +74,21 @@ type LoreRowProps = {
 }
 
 function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
+  // Holds the priority field's raw text only while it is mid-edit, so clearing
+  // it leaves an empty box instead of snapping back to the stored number.
+  // Cleared on blur so the field re-derives from the (clamped) stored value.
+  const [priorityDraft, setPriorityDraft] = useState<string | null>(null)
+
+  function handlePriorityChange(text: string) {
+    const parsed = parsePriorityInput(text)
+    if (parsed == null) {
+      setPriorityDraft('')
+      return
+    }
+    setPriorityDraft(String(parsed))
+    wizardStore.patchLore(row.id, { priority: parsed })
+  }
+
   const chips = expanded ? [] : chipsFor(row)
   // Gated by `invalid` (the invalidIds prop), not recomputed independently —
   // a row the parent doesn't flag as invalid shows no error anywhere, even
@@ -97,7 +108,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
           aria-expanded={expanded}
           aria-label={t(expanded ? 'wizard:world.lore.collapse' : 'wizard:world.lore.expand')}
           onPress={() => onToggleExpanded(row.id)}
-          className="flex-1 flex-row items-start gap-2 px-3 py-row-y-lg"
+          className="flex-1 flex-row items-start gap-2 py-row-y-lg pl-3"
         >
           <View className="min-w-0 flex-1 gap-1">
             <Text className="font-medium" numberOfLines={1}>
@@ -127,13 +138,8 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
               </>
             ) : null}
           </View>
-          <Icon
-            as={ChevronDown}
-            size="sm"
-            className={cn('mt-0.5 shrink-0 text-fg-muted', expanded && 'rotate-180')}
-          />
         </Pressable>
-        <View className="pr-3 pt-row-y-lg">
+        <View className="flex-row items-start gap-1 pr-3 pt-row-y-lg">
           <IconAction
             icon={Trash2}
             label={t('wizard:world.lore.remove')}
@@ -141,6 +147,22 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
             variant="destructive"
             onPress={() => wizardStore.removeLore(row.id)}
           />
+          {/* Redundant pointer affordance for the row-wide Pressable above, which
+              stays the single control assistive tech sees — two buttons carrying
+              one action would read as a duplicate. Rotation sits on this wrapper
+              rather than the Icon so it never reaches react-native-svg. */}
+          <Pressable
+            aria-hidden
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            focusable={false}
+            onPress={() => onToggleExpanded(row.id)}
+            className="h-icon-action-sm w-icon-action-sm items-center justify-center"
+          >
+            <View className={cn(expanded && 'rotate-180')}>
+              <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
+            </View>
+          </Pressable>
         </View>
       </View>
       {expanded ? (
@@ -199,15 +221,20 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
                     }
                   />
                 </FormRow>
-                <FormRow label={t('wizard:world.lore.priority')}>
-                  <Stepper
-                    value={row.priority}
-                    min={PRIORITY_MIN}
-                    max={PRIORITY_MAX}
-                    onChange={(priority) => wizardStore.patchLore(row.id, { priority })}
-                    label={t('wizard:world.lore.priority')}
-                    decrementLabel={t('wizard:world.lore.priorityDecrement')}
-                    incrementLabel={t('wizard:world.lore.priorityIncrement')}
+                <FormRow
+                  label={t('wizard:world.lore.priority')}
+                  hint={t('wizard:world.lore.priorityHint', {
+                    min: PRIORITY_MIN,
+                    max: PRIORITY_MAX,
+                  })}
+                >
+                  <Input
+                    value={priorityDraft ?? String(row.priority)}
+                    onChangeText={handlePriorityChange}
+                    onBlur={() => setPriorityDraft(null)}
+                    keyboardType="number-pad"
+                    aria-label={t('wizard:world.lore.priority')}
+                    className="w-24"
                   />
                 </FormRow>
               </AccordionContent>

@@ -244,8 +244,7 @@
       "tags": "Tags",
       "injectionMode": "Injection mode",
       "priority": "Priority",
-      "priorityDecrement": "Decrease priority",
-      "priorityIncrement": "Increase priority",
+      "priorityHint": "{{min}}–{{max}}. Higher makes this more likely to be recalled.",
       "modes": { "always": "Always", "auto": "Auto", "disabled": "Disabled" },
       "errors": { "title": "Title is required.", "body": "Body is required." },
       "empty": "No lore yet. Add an entry or let AI suggest some."

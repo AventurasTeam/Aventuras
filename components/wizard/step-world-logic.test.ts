@@ -6,6 +6,9 @@ import {
   invalidLoreRowIds,
   loreRowErrors,
   needsReplaceConfirm,
+  parsePriorityInput,
+  PRIORITY_MAX,
+  PRIORITY_MIN,
   worldStepValid,
 } from './step-world-logic'
 
@@ -91,5 +94,50 @@ describe('needsReplaceConfirm', () => {
 
   it('does not fire on whitespace-only content', () => {
     expect(needsReplaceConfirm({ label: '  ', promptBody: '\n' })).toBe(false)
+  })
+})
+
+describe('parsePriorityInput', () => {
+  it('reads a plain number', () => {
+    expect(parsePriorityInput('42')).toBe(42)
+  })
+
+  it('returns null for an emptied field so the row keeps its stored value', () => {
+    expect(parsePriorityInput('')).toBeNull()
+  })
+
+  it('returns null when the text carries no digits at all', () => {
+    expect(parsePriorityInput('abc')).toBeNull()
+    expect(parsePriorityInput('   ')).toBeNull()
+  })
+
+  it('clamps above the ceiling instead of rejecting the keystroke', () => {
+    // Distinct from PRIORITY_MAX as a literal: a mutant returning the input
+    // unchanged, or one clamping to some other constant, both fail here.
+    expect(parsePriorityInput('250')).toBe(100)
+    expect(parsePriorityInput('999999999999999999999')).toBe(100)
+  })
+
+  it('never returns a value outside the field range', () => {
+    for (const text of ['0', '1', '99', '100', '101', '7.5', '-5', '0012']) {
+      const parsed = parsePriorityInput(text)
+      expect(parsed).not.toBeNull()
+      expect(parsed!).toBeGreaterThanOrEqual(PRIORITY_MIN)
+      expect(parsed!).toBeLessThanOrEqual(PRIORITY_MAX)
+    }
+  })
+
+  it('drops a leading minus rather than reading a negative', () => {
+    // '-5' loses the sign and reads as 5 — the field holds whole numbers only,
+    // so the nearest holdable value beats blocking the paste.
+    expect(parsePriorityInput('-5')).toBe(5)
+  })
+
+  it('drops a decimal point rather than rounding', () => {
+    expect(parsePriorityInput('7.5')).toBe(75)
+  })
+
+  it('reads a zero-padded value as its numeric value', () => {
+    expect(parsePriorityInput('0012')).toBe(12)
   })
 })

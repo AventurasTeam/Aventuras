@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import type { WizardLoreDraft } from '@/lib/db'
 import { wizardStore } from '@/lib/stores'
@@ -141,11 +141,10 @@ export const MoreOptionsFieldsRoundTripThroughCollapse: Story = {
     await userEvent.click(screen.getByRole('radio', { name: 'Always' }))
     expect(screen.getByRole('radio', { name: 'Always' })).toBeChecked()
 
-    const increment = screen.getByRole('button', { name: 'Increase priority' })
-    for (let i = 0; i < 5; i++) {
-      await userEvent.click(increment)
-    }
-    await waitFor(() => expect(screen.getByText('5')).toBeInTheDocument())
+    const priority = screen.getByLabelText('Priority')
+    await userEvent.clear(priority)
+    await userEvent.type(priority, '5')
+    await waitFor(() => expect(priority).toHaveValue('5'))
 
     await userEvent.click(screen.getByRole('button', { name: 'Collapse lore entry' }))
     expect(screen.queryByText('ancient')).not.toBeInTheDocument()
@@ -156,7 +155,75 @@ export const MoreOptionsFieldsRoundTripThroughCollapse: Story = {
     expect(await screen.findByText('ancient')).toBeInTheDocument()
     expect(screen.getByText('ruins')).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Always' })).toBeChecked()
-    expect(screen.getByText('5')).toBeInTheDocument()
+    expect(screen.getByLabelText('Priority')).toHaveValue('5')
+  },
+}
+
+export const PriorityClampsAndSurvivesAnEmptiedField: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedLore([loreRow({ id: 'row-1', title: 'Sealed Wells', body: 'Magic flows.', priority: 40 })])
+  },
+  render: () => <LoreListDemo />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'Expand lore entry' }))
+    await userEvent.click(screen.getByRole('button', { name: 'More options' }))
+    const priority = await screen.findByLabelText('Priority')
+    expect(priority).toHaveValue('40')
+
+    // Over the ceiling clamps rather than blocking the keystroke.
+    await userEvent.clear(priority)
+    await userEvent.type(priority, '250')
+    await waitFor(() => expect(priority).toHaveValue('100'))
+    expect(wizardStore.getWizard().state.lore[0]!.priority).toBe(100)
+
+    // An emptied field is a transient edit state, not a write — the row keeps
+    // its last committed value instead of taking 0 or NaN.
+    await userEvent.clear(priority)
+    expect(priority).toHaveValue('')
+    expect(wizardStore.getWizard().state.lore[0]!.priority).toBe(100)
+
+    // Blur re-derives the field from the store rather than leaving it blank.
+    await userEvent.tab()
+    await waitFor(() => expect(screen.getByLabelText('Priority')).toHaveValue('100'))
+  },
+}
+
+export const CaretSitsLastAndStaysVisibleWhileExpanded: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedLore([loreRow({ id: 'row-1', title: 'Sealed Wells', body: 'Magic flows.' })])
+  },
+  render: () => <LoreListDemo />,
+  // Asserts DOM order, not geometry: this harness renders without NativeWind
+  // (see lessons-learned/nativewind-classname-on-animated-view.md), so every
+  // getBoundingClientRect here would report an unstyled layout. Source order is
+  // what actually drives the rendered order inside the header's flex row.
+  play: async () => {
+    const caretIn = (header: HTMLElement) => {
+      const trash = within(header).getByRole('button', { name: 'Remove lore entry' })
+      const svgs = Array.from(header.querySelectorAll('svg')).filter((s) => !trash.contains(s))
+      return { trash, caret: svgs[0] ?? null }
+    }
+
+    const rowToggle = await screen.findByRole('button', { name: 'Expand lore entry' })
+    const header = rowToggle.parentElement!
+
+    const collapsed = caretIn(header)
+    expect(collapsed.caret).not.toBeNull()
+    // Node.DOCUMENT_POSITION_FOLLOWING — the caret comes after the trash.
+    expect(collapsed.trash.compareDocumentPosition(collapsed.caret!) & 4).toBe(4)
+
+    await userEvent.click(rowToggle)
+    await screen.findByLabelText('Title')
+
+    const expandedState = caretIn(header)
+    expect(expandedState.caret).not.toBeNull()
+    expect(expandedState.trash.compareDocumentPosition(expandedState.caret!) & 4).toBe(4)
+
+    // Clicking the caret toggles the row even though it is hidden from AT.
+    await userEvent.click(expandedState.caret!)
+    await waitFor(() => expect(screen.queryByLabelText('Title')).not.toBeInTheDocument())
   },
 }
 
