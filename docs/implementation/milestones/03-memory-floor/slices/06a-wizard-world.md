@@ -188,4 +188,50 @@ slice knowing its internals (C5).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Commit rows are inserted `embedding_stale = 1` and cleared by the
+same batch.** Recovery for an un-embedded row keys entirely on that
+flag — the pre-retrieval sync stage and the drain worker both select
+only stale rows, and nothing re-derives it outside an embedder swap.
+Inserting at the column default of `0` therefore made a row with no
+vector permanently invisible to retrieval, a state reachable today by
+calling `createStoryWithBranch` with rows but no `embed`. Inverting
+the default makes the invariant self-healing: any future reorder or
+omission of the embed splice leaves the row dirty for the drain
+instead of silently dropping it from the index. The lead-entity
+insert carried the same latent gap since 3.1a and was fixed with it.
+**Slice 3.6b's cast rows must follow this.**
+
+**`LoreList` deliberately separates pruning from auto-expand.** The
+effect watching rows only prunes ids that vanished; the `Add lore`
+handler is the sole owner of expanding a new row. A generic "new id
+⇒ expand" effect — the pattern `suggestion-categories-editor.tsx`
+uses — would pop the editor open on draft resume and behave
+arbitrarily on an AI import, because `hydrate` and `importLore` are
+non-Add insertion paths. 3.6b's `Suggest cast` import inherits this:
+imported rows must land collapsed.
+
+**Refine and Regenerate landed primitive-wide, not opening-only.**
+Canon makes the four-action row the contract for every prose result,
+so building it into `AiAssist` gave genre, tone, setting,
+description, and the opening all of it at once — less code than
+special-casing one site. Refine sits on the prose props variant
+specifically, so a chips or list caller passing it is a compile
+error rather than a silent no-op.
+
+**Every authored lore row reaches the opening prompt uncapped**, per
+the AI-assist pattern's context-shaping rule; the wizard runs no
+budget machinery. `Import selected` closes the overlay rather than
+staying open to paginate — canon's "Generate more after import"
+sentence admits both readings, and closing matches how `Use this`
+and chip-pick already terminate.
+
+**The genre / tone preset count left canon rather than shrinking.**
+`~20-30 entries each` was an unsourced sizing intuition carried from
+an exploration record into two canonical docs; the catalog is
+additive fire-and-forget data with no contract surface, so the count
+is no longer pinned anywhere and no top-up is owed against the ~10
+each shipped here.
+
+**The step-2 calendar-summary preview needed no work** — the
+renderer sampling the roadmap attributes to this milestone already
+landed in M2.3 (`computeSampleRender`).
