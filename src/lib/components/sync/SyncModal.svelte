@@ -148,15 +148,22 @@
       // leaves the device with neither copy.
       const result = await exportService.importFromContent(receivedStoryJson, true)
 
-      if (result.success) {
+      if (!result.success) {
+        error = result.error ?? 'Import failed'
+      } else {
         if (existingId) {
-          await syncService.deleteStory(existingId)
+          try {
+            await syncService.deleteStory(existingId)
+          } catch {
+            // The new copy imported fine but removing the old one failed: roll back
+            // the new copy rather than leave two stories with the same title.
+            await syncService.deleteStory(result.storyId!).catch(() => {})
+            throw new Error('Failed to remove the previous copy of this story')
+          }
         }
         await story.loadAllStories()
         syncSuccess = true
         syncMessage = `Successfully received "${receivedStoryPreview.title}"`
-      } else {
-        error = result.error ?? 'Import failed'
       }
     } catch (e) {
       error = e instanceof Error ? e.message : 'Import failed'
@@ -447,13 +454,20 @@
           // Use skipImportedSuffix=true so synced stories keep their original title
           const result = await exportService.importFromContent(storyJson, true)
 
-          if (result.success) {
-            if (existingId) {
-              await syncService.deleteStory(existingId)
-            }
-            succeeded.push(s.title)
-          } else {
+          if (!result.success) {
             failed.push(s.title)
+          } else if (existingId) {
+            try {
+              await syncService.deleteStory(existingId)
+              succeeded.push(s.title)
+            } catch {
+              // The new copy imported fine but removing the old one failed: roll back
+              // the new copy rather than leave two stories with the same title.
+              await syncService.deleteStory(result.storyId!).catch(() => {})
+              failed.push(s.title)
+            }
+          } else {
+            succeeded.push(s.title)
           }
         } catch {
           failed.push(s.title)
@@ -719,11 +733,11 @@
               <p class="text-sm">
                 {#if conflictStoryTitles.length === 1}
                   A story named "{conflictStoryTitles[0]}" already exists on this device. Pulling
-                  will remove the existing copy once the new one has been downloaded.
+                  will remove the existing copy once the new one has been imported.
                 {:else}
                   {conflictStoryTitles.length} selected stories already exist on this device:
                   {conflictStoryTitles.join(', ')}. Pulling will remove each existing copy once its
-                  replacement has been downloaded.
+                  replacement has been imported.
                 {/if}
               </p>
               <div class="mt-3 flex gap-2">
