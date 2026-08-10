@@ -16,8 +16,7 @@ import {
   type ToolLoopAgentSettings,
 } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
-import { createModelFromProfile, PROVIDERS } from '../providers'
-import { buildProviderOptions } from '../generate'
+import { resolvePresetModel } from '../presetResolution'
 import { uniqueToolCallIdMiddleware } from '../middleware'
 import type { GenerationPreset, APIProfile, ProviderType, ReasoningEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
@@ -38,7 +37,8 @@ export interface ResolvedAgentConfig {
 
 /**
  * Resolve preset → profile → model for agent creation.
- * This follows the same pattern as resolveConfig in generate.ts
+ *
+ * Shares `resolvePresetModel` with `generate.ts`; all this adds is the tool-call middleware.
  *
  * @param presetId - The preset ID (e.g., 'agentic', 'loreManagement')
  * @param serviceId - The Service ID
@@ -49,48 +49,17 @@ function resolveAgentConfig(
   serviceId: string,
   debugId?: string,
 ): ResolvedAgentConfig {
-  const preset = settings.getPresetConfig(presetId, serviceId)
-  const profileId = preset.profileId ?? settings.apiSettings.mainNarrativeProfileId
-  const profile = settings.getProfile(profileId)
+  const resolved = resolvePresetModel({ presetId, serviceId, debugId })
 
-  if (!profile) {
-    throw new Error(`Profile not found: ${profileId}`)
-  }
-
-  const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
-
-  let structuredOutputs = false
-  switch (preset.structuredOutputOverride) {
-    case 'on':
-      structuredOutputs = true
-      break
-    case 'off':
-      structuredOutputs = false
-      break
-    case 'auto':
-      const capabilities = PROVIDERS[profile.providerType].capabilities
-      structuredOutputs = capabilities?.modelCapabilityFetching
-        ? !!fetchedModel?.structuredOutput
-        : (capabilities?.structuredOutput ?? true)
-      break
-  }
-
-  const reasoning = preset.reasoningEffort
-
-  const baseModel = createModelFromProfile({
-    profile,
-    modelId: preset.model,
-    presetId,
-    debugId,
-    structuredOutputs,
-    serviceId,
-  })
   // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps
   // (e.g. Google's `functions.tool:0` scheme) get globally unique tool call IDs.
-  const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })
-  const providerOptions = buildProviderOptions(preset, profile.providerType)
-
-  return { preset, profile, providerType: profile.providerType, model, providerOptions, reasoning }
+  return {
+    ...resolved,
+    model: wrapLanguageModel({
+      model: resolved.model,
+      middleware: [uniqueToolCallIdMiddleware()],
+    }),
+  }
 }
 
 /**

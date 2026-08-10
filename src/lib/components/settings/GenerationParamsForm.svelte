@@ -4,6 +4,14 @@
   import type { ReasoningEffort } from '$lib/types'
   import { cn } from '$lib/utils/cn'
   import { supportsReasoning, supportsCapabilityFetch } from '$lib/services/ai/sdk/providers'
+  import {
+    clampReasoningToCapability,
+    REASONING_LABELS,
+    REASONING_LEVELS,
+    REASONING_SHORT_LABELS,
+    reasoningCapabilityFor,
+    type ReasoningCapability,
+  } from '$lib/services/ai/core/reasoning'
 
   import { Label } from '$lib/components/ui/label'
   import { Slider } from '$lib/components/ui/slider'
@@ -137,16 +145,6 @@
 
   let effectiveProfileId = $derived(profileId || settings.getDefaultProfileIdForProvider())
 
-  const REASONING_LEVELS: ReasoningEffort[] = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']
-  const REASONING_LABELS: Record<ReasoningEffort, string> = {
-    none: 'Off',
-    minimal: 'Minimal',
-    low: 'Low',
-    medium: 'Medium',
-    high: 'High',
-    xhigh: 'Extra',
-  }
-
   function getReasoningIndex(value?: ReasoningEffort): number {
     const index = REASONING_LEVELS.indexOf(value ?? 'none')
     return index === -1 ? 0 : index
@@ -158,47 +156,33 @@
 
   let reasoningValue = $derived(getReasoningIndex(reasoningEffort))
 
-  let modelReasoningCapability = $derived.by<'enforced' | 'supported' | 'unsupported'>(() => {
+  let modelReasoningCapability = $derived.by<ReasoningCapability>(() => {
     const profile = settings.getProfile(effectiveProfileId)
-    if (!profile || !model) return 'unsupported'
-    const m = settings.getProfileModels(effectiveProfileId).find((x) => x.id === model)
-    if (!!m?.reasoning && profile.providerType === 'nanogpt')
-      return m?.id.match(/[-:]thinking(?::.+)?$/i) !== null ? 'enforced' : 'supported'
-    if (!!m?.reasoning) return 'supported'
-    return 'unsupported'
+    if (!profile) return 'unsupported'
+    return reasoningCapabilityFor({
+      providerType: profile.providerType,
+      modelId: model,
+      providerSupportsReasoning: supportsReasoning(profile.providerType),
+      providerFetchesModelCapabilities: supportsCapabilityFetch(profile.providerType),
+      modelSupportsReasoning: settings
+        .getProfileModels(effectiveProfileId)
+        .find((x) => x.id === model)?.reasoning,
+    })
   })
 
-  let globalProviderReasoningCapability = $derived.by(() => {
+  // An enforced model cannot be turned off, so its slider has no 'none' stop.
+  let reasoningSliderMin = $derived(modelReasoningCapability === 'enforced' ? 1 : 0)
+
+  // Whether the badge can name the model or only the provider.
+  let providerFetchesModelCapabilities = $derived.by(() => {
     const profile = settings.getProfile(effectiveProfileId)
-    if (!profile || !model) return false
-    return supportsReasoning(profile.providerType)
+    return !!profile && supportsCapabilityFetch(profile.providerType)
   })
 
-  let providerModelCapabilityFetching = $derived.by(() => {
-    const profile = settings.getProfile(effectiveProfileId)
-    if (!profile) return false
-    return supportsCapabilityFetch(profile.providerType)
-  })
-
-  // 1. Reset reasoning to off when the provider/model stops supporting it
-  // 2. Force high reasoning for NanoGPT models that require it
+  // Everything the capability implies for the chosen level lives in `clampReasoningToCapability`.
   $effect(() => {
-    const _model = model // track model
-    const _profile = effectiveProfileId // track profile
-
-    // Enforcement (NanoGPT)
-    if (settings.shouldForceHighReasoning(_profile, _model) && reasoningEffort === 'none') {
-      onReasoningChange('high')
-      return
-    }
-
-    // Capability check
-    const reasoningSupported =
-      globalProviderReasoningCapability &&
-      (!providerModelCapabilityFetching || modelReasoningCapability !== 'unsupported')
-    if (!reasoningSupported && reasoningValue > 0) {
-      onReasoningChange('none')
-    }
+    const clamped = clampReasoningToCapability(reasoningEffort, modelReasoningCapability)
+    if (clamped !== reasoningEffort) onReasoningChange(clamped)
   })
 
   // ============================================================================
@@ -224,25 +208,17 @@
   />
 
   <!-- Reasoning capability badge -->
-  {#if globalProviderReasoningCapability}
-    {#if providerModelCapabilityFetching}
+  {#if modelReasoningCapability !== 'unsupported'}
+    <div class="flex items-center gap-1.5 text-xs text-emerald-500">
+      <Brain class="h-3.5 w-3.5" />
       {#if modelReasoningCapability === 'enforced'}
-        <div class="flex items-center gap-1.5 text-xs text-emerald-500">
-          <Brain class="h-3.5 w-3.5" />
-          Reasoning enabled
-        </div>
-      {:else if modelReasoningCapability === 'supported'}
-        <div class="flex items-center gap-1.5 text-xs text-emerald-500">
-          <Brain class="h-3.5 w-3.5" />
-          Reasoning supported
-        </div>
-      {/if}
-    {:else}
-      <div class="flex items-center gap-1.5 text-xs text-emerald-500">
-        <Brain class="h-3.5 w-3.5" />
+        Reasoning always on for this model
+      {:else if providerFetchesModelCapabilities}
+        Reasoning supported
+      {:else}
         Reasoning supported by provider (specific model support unknown)
-      </div>
-    {/if}
+      {/if}
+    </div>
   {/if}
 
   <!-- Temperature & Max Output Tokens row -->
@@ -354,7 +330,7 @@
   </div>
 
   <!-- Thinking / Reasoning row (shown only when provider+model supports it) -->
-  {#if globalProviderReasoningCapability && (!providerModelCapabilityFetching || modelReasoningCapability !== 'unsupported')}
+  {#if modelReasoningCapability !== 'unsupported'}
     <div
       class={cn(
         'grid grid-cols-1 gap-6 border-t pt-4 md:grid-cols-2',
@@ -365,40 +341,21 @@
         <div class="flex justify-between">
           <Label>Thinking: {REASONING_LABELS[reasoningEffort]}</Label>
         </div>
-        {#if modelReasoningCapability === 'enforced'}
-          <Slider
-            value={reasoningValue}
-            type="single"
-            min={1}
-            max={5}
-            step={1}
-            onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
-          />
-          <div class="text-muted-foreground flex justify-between text-xs">
-            <span>Min</span>
-            <span>Low</span>
-            <span>Med</span>
-            <span>High</span>
-            <span>Extra</span>
-          </div>
-        {:else}
-          <Slider
-            value={reasoningValue}
-            type="single"
-            min={0}
-            max={5}
-            step={1}
-            onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
-          />
-          <div class="text-muted-foreground flex justify-between text-xs">
-            <span>Off</span>
-            <span>Min</span>
-            <span>Low</span>
-            <span>Med</span>
-            <span>High</span>
-            <span>Extra</span>
-          </div>
-        {/if}
+        <!-- An enforced model starts at the first level above 'none'; the ticks and the
+             bounds both come from REASONING_LEVELS, so adding a level cannot desync them. -->
+        <Slider
+          value={reasoningValue}
+          type="single"
+          min={reasoningSliderMin}
+          max={REASONING_LEVELS.length - 1}
+          step={1}
+          onValueChange={(v) => onReasoningChange(getReasoningValue(v))}
+        />
+        <div class="text-muted-foreground flex justify-between text-xs">
+          {#each REASONING_LEVELS.slice(reasoningSliderMin) as level (level)}
+            <span>{REASONING_SHORT_LABELS[level]}</span>
+          {/each}
+        </div>
       </div>
     </div>
   {/if}

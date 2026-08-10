@@ -115,3 +115,53 @@ export function migrateWorldStateBudget<T extends { tier3WholesaleWordBudget: nu
   const { llmThreshold: _dropped, ...rest } = merged
   return rest as T
 }
+
+// ============================================================================
+// Reasoning effort
+// ============================================================================
+
+/**
+ * What 'none' was called on disk before the reasoning levels were aligned with the AI SDK's
+ * own names (0.7.x). This is the only place in the codebase allowed to know the old spelling:
+ * everywhere else the disabled level is 'none'.
+ *
+ * It cannot simply be dropped. Anyone who upgrades from an older install has the literal
+ * string on disk, and refusing to recognise it would silently discard their setting -- and
+ * fall back to the legacy `enableThinking` flag, which means 'high'.
+ */
+const LEGACY_REASONING_OFF = 'off'
+
+const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
+
+export type StoredReasoningEffort = (typeof REASONING_EFFORTS)[number]
+
+/**
+ * A stored reasoning level, or `undefined` when there is nothing usable to read -- which the
+ * caller must treat as "no stored choice", not as "off".
+ */
+export function migrateReasoningEffort(value?: string | null): StoredReasoningEffort | undefined {
+  if (!value) return undefined
+  if (value === LEGACY_REASONING_OFF) return 'none'
+  return (REASONING_EFFORTS as readonly string[]).includes(value)
+    ? (value as StoredReasoningEffort)
+    : undefined
+}
+
+/**
+ * The same migration across a record of objects that each carry a `reasoningEffort` -- the
+ * generation presets, the wizard settings and the system-service settings are all stored that
+ * way. Objects without a readable level are left exactly as they are.
+ */
+export function migrateReasoningIn<T>(stored: T): T {
+  if (!stored || typeof stored !== 'object') return stored
+
+  for (const value of Object.values(stored)) {
+    if (!value || typeof value !== 'object') continue
+    const holder = value as { reasoningEffort?: unknown }
+    if (typeof holder.reasoningEffort !== 'string') continue
+    const migrated = migrateReasoningEffort(holder.reasoningEffort)
+    if (migrated !== undefined) holder.reasoningEffort = migrated
+  }
+
+  return stored
+}

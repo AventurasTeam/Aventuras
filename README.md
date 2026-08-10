@@ -728,6 +728,42 @@ Defaults that both the settings store and `AI_CONFIG` need live in
 `src/lib/services/ai/core/defaults.ts`, a leaf module that imports nothing — `core/config.ts`
 imports the settings store, so the store cannot import back from it.
 
+### Reasoning Effort
+
+Every question about thinking effort is answered by `src/lib/services/ai/core/reasoning.ts`, a
+leaf module that imports only types. It exists because those questions were once answered in
+seven places, and the copies drifted.
+
+Three things about it are not obvious:
+
+- **The disabled level is `'none'`, and `'Off'` is not a value.** The levels are the AI SDK's
+  own names minus `provider-default`, which is why `'off'` was renamed in 0.7.x. The old
+  spelling survives in exactly one place — `LEGACY_REASONING_OFF` in `settingsMigrations.ts` —
+  because installs older than that have the literal string on disk, and refusing to read it
+  would discard the user's setting and fall back to the legacy `enable_thinking` flag, which
+  means `'high'`.
+- **`'none'` is sent, not omitted.** It is the value that switches thinking off:
+  NanoGPT documents `reasoning_effort: "none"` as the way to disable reasoning, and
+  `@ai-sdk/openai-compatible` would *drop* the parameter for `'none'` on its own `reasoning`
+  field. That is why the effort travels in provider options, which take precedence. Omitting
+  the parameter asks for the model's default instead — a different request.
+- **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids *are* the reasoning model,
+  so asking one for `'none'` is self-contradictory, and `clampReasoningToCapability` lifts it to
+  `ENFORCED_REASONING_FLOOR` (`'medium'` — a floor, not a preference). Every other model that
+  merely *supports* reasoning can be turned off. Reading "supports" as "enforces" is what made
+  reasoning impossible to disable on NanoGPT for an entire release: the UI learned the
+  distinction while the store that forced the level did not.
+
+`clampReasoningToCapability` is the single rule for what a capability does to a chosen level,
+which is what keeps the settings effect that applies it two lines long and testable.
+
+Alongside it, `sdk/presetResolution.ts` resolves preset → profile → model for all three
+callers — the services, the narrator and the agent factory — plus `buildProviderOptions`,
+`resolveStructuredOutputs` and `thinkingNudgeApplies`. Each of those was previously written
+per-caller. The **Thinking nudge** setting needs all three of a think-tag provider, reasoning
+on, and no native structured output; the UI asks the same predicate before offering the toggle,
+so it cannot be switched on where it does nothing.
+
 ### The Native (Rust) Layer
 
 Most of the app is TypeScript; Rust owns the jobs that would otherwise blow up the WebView heap —

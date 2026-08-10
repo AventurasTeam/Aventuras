@@ -24,9 +24,12 @@ import {
   MAX_LOREBOOK_ENTRIES_FOR_SUGGESTIONS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from '$lib/services/ai/core/defaults'
+import { isReasoningOn } from '$lib/services/ai/core/reasoning'
 import {
   migrateEntryRetrieval,
   migrateImageGeneration,
+  migrateReasoningEffort,
+  migrateReasoningIn,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
@@ -66,30 +69,6 @@ function normalizeProfile(profile: APIProfile): APIProfile {
     hiddenModels: dedupeModelIds(profile.hiddenModels ?? []),
     favoriteModels: dedupeModelIds(profile.favoriteModels ?? []),
   }
-}
-
-function normalizeReasoningEffort(value?: string | null): ReasoningEffort | undefined {
-  if (value && ['off', 'none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(value)) {
-    return value != 'off' ? (value as ReasoningEffort) : 'none'
-  } else {
-    return undefined
-  }
-}
-
-function normalizeReasoningForSettings(settings?: any | null): any {
-  if (!settings) return undefined
-
-  for (const key of Object.keys(settings)) {
-    const value = settings[key]
-    if (value && typeof value === 'object') {
-      const normalizedEffort = normalizeReasoningEffort(value.reasoningEffort)
-      if (normalizedEffort !== undefined) {
-        value.reasoningEffort = normalizedEffort
-      }
-    }
-  }
-
-  return settings
 }
 
 // ===== System Services Settings =====
@@ -1236,7 +1215,6 @@ class SettingsStore {
     maxTokens: 8192,
     reasoningEffort: 'none',
     manualBody: '',
-    enableThinking: false,
     llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
   })
 
@@ -1365,16 +1343,14 @@ class SettingsStore {
       if (temperature) this.apiSettings.temperature = parseFloat(temperature)
       if (maxTokens) this.apiSettings.maxTokens = parseInt(maxTokens)
 
-      // Load thinking toggle
-      const enableThinking = await database.getSetting('enable_thinking')
-      if (enableThinking) this.apiSettings.enableThinking = enableThinking === 'true'
-
-      const reasoningEffort = normalizeReasoningEffort(
+      // `enable_thinking` is a legacy boolean, kept only for installs old enough to have no
+      // stored level. It is never the source of truth while `main_reasoning_effort` exists.
+      const reasoningEffort = migrateReasoningEffort(
         await database.getSetting('main_reasoning_effort'),
       )
       if (reasoningEffort) {
         this.apiSettings.reasoningEffort = reasoningEffort
-      } else if (this.apiSettings.enableThinking) {
+      } else if ((await database.getSetting('enable_thinking')) === 'true') {
         this.apiSettings.reasoningEffort = 'high'
       }
 
@@ -1566,7 +1542,7 @@ class SettingsStore {
       const wizardSettingsJson = await database.getSetting('wizard_settings')
       if (wizardSettingsJson) {
         try {
-          const loaded = normalizeReasoningForSettings(JSON.parse(wizardSettingsJson))
+          const loaded = migrateReasoningIn(JSON.parse(wizardSettingsJson))
           // Merge with defaults to ensure all fields exist
           const defaults = getDefaultAdvancedWizardSettings()
           this.wizardSettings = {
@@ -1598,7 +1574,7 @@ class SettingsStore {
       const presetsJson = await database.getSetting('generation_presets')
       if (presetsJson) {
         try {
-          const loadedPresets = normalizeReasoningForSettings(JSON.parse(presetsJson))
+          const loadedPresets = migrateReasoningIn(JSON.parse(presetsJson))
           if (Array.isArray(loadedPresets) && loadedPresets.length > 0) {
             // Populate null profileIds with default profile
             const defaultProfileId = this.getDefaultProfileIdForProvider()
@@ -1687,7 +1663,7 @@ class SettingsStore {
       const systemServicesJson = await database.getSetting('system_services_settings')
       if (systemServicesJson) {
         try {
-          const loaded = normalizeReasoningForSettings(JSON.parse(systemServicesJson))
+          const loaded = migrateReasoningIn(JSON.parse(systemServicesJson))
           const defaults = getDefaultSystemServicesSettingsForProvider(
             this.getDefaultProviderType(),
           )
@@ -1859,18 +1835,16 @@ class SettingsStore {
     await database.setSetting('llm_timeout_ms', timeoutMs.toString())
   }
 
-  async setEnableThinking(enabled: boolean) {
-    this.apiSettings.enableThinking = enabled
-    this.apiSettings.reasoningEffort = enabled ? 'high' : 'none'
-    await database.setSetting('enable_thinking', enabled.toString())
-    await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
-  }
-
+  /**
+   * The only writer of the reasoning level, and of the legacy `enable_thinking` boolean that
+   * shadows it. The flag is derived here rather than tracked: it is a persistence detail for
+   * downgrades, not a second setting, and keeping it as one had eight call sites able to
+   * disagree with the level they sat next to.
+   */
   async setMainReasoningEffort(effort: ReasoningEffort) {
     this.apiSettings.reasoningEffort = effort
-    this.apiSettings.enableThinking = effort !== 'none'
     await database.setSetting('main_reasoning_effort', effort)
-    await database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString())
+    await database.setSetting('enable_thinking', isReasoningOn(effort).toString())
   }
 
   async setMainManualBody(body: string) {
@@ -2628,7 +2602,10 @@ class SettingsStore {
       database.setSetting('temperature', this.apiSettings.temperature.toString()),
       database.setSetting('max_tokens', this.apiSettings.maxTokens.toString()),
       database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort),
-      database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString()),
+      database.setSetting(
+        'enable_thinking',
+        isReasoningOn(this.apiSettings.reasoningEffort).toString(),
+      ),
       database.setSetting('default_model', this.apiSettings.defaultModel),
       database.setSetting('main_narrative_profile_id', this.apiSettings.mainNarrativeProfileId),
       database.setSetting('main_manual_body', this.apiSettings.manualBody),
@@ -2978,7 +2955,6 @@ class SettingsStore {
       maxTokens: 8192,
       reasoningEffort: defaultReasoningEffort,
       manualBody: '',
-      enableThinking: false,
       llmTimeoutMs: LLM_TIMEOUT_DEFAULT,
     }
 
@@ -3004,7 +2980,10 @@ class SettingsStore {
     await database.setSetting('default_model', this.apiSettings.defaultModel)
     await database.setSetting('temperature', this.apiSettings.temperature.toString())
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
-    await database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString())
+    await database.setSetting(
+      'enable_thinking',
+      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
+    )
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
     await database.setSetting('theme', this.uiSettings.theme)
@@ -3108,13 +3087,15 @@ class SettingsStore {
     this.apiSettings.maxTokens = defaults.services?.narrative.maxTokens ?? 8192
     this.apiSettings.reasoningEffort = defaults.services?.narrative.reasoningEffort ?? 'none'
     this.apiSettings.manualBody = ''
-    this.apiSettings.enableThinking = false
     await database.setSetting('default_model', this.apiSettings.defaultModel)
     await database.setSetting('temperature', this.apiSettings.temperature.toString())
     await database.setSetting('max_tokens', this.apiSettings.maxTokens.toString())
     await database.setSetting('main_reasoning_effort', this.apiSettings.reasoningEffort)
     await database.setSetting('main_manual_body', this.apiSettings.manualBody)
-    await database.setSetting('enable_thinking', this.apiSettings.enableThinking.toString())
+    await database.setSetting(
+      'enable_thinking',
+      isReasoningOn(this.apiSettings.reasoningEffort).toString(),
+    )
 
     // Apply provider-specific defaults to system services
     this.systemServicesSettings = getDefaultSystemServicesSettingsForProvider(provider)
@@ -3384,19 +3365,6 @@ class SettingsStore {
       if (cached?.status === 'auth') return 'auth'
     }
     return null
-  }
-
-  /**
-   * Check whether selecting a model should auto-force reasoning effort to 'high'.
-   * This is a NanoGPT-specific behavior: reasoning models on NanoGPT require
-   * effort set to high (the provider enforces it).
-   */
-  shouldForceHighReasoning(profileId: string | null | undefined, modelId: string): boolean {
-    if (!profileId) return false
-    const profile = this.getProfile(profileId)
-    if (!profile || profile.providerType !== 'nanogpt') return false
-    const model = this.getProfileModels(profileId).find((m) => m.id === modelId)
-    return !!model?.reasoning
   }
 }
 

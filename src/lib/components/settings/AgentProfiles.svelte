@@ -30,7 +30,11 @@
     AlertCircle,
     AlertTriangle,
   } from '@lucide/svelte'
-  import { fetchModelsFromProvider, getReasoningExtraction } from '$lib/services/ai/sdk/providers'
+  import { fetchModelsFromProvider } from '$lib/services/ai/sdk/providers'
+  import {
+    resolveStructuredOutputs,
+    thinkingNudgeApplies,
+  } from '$lib/services/ai/sdk/presetResolution'
 
   // Shadcn Components
   import * as Card from '$lib/components/ui/card'
@@ -320,6 +324,22 @@
     editingPresetId = newId
   }
 
+  /** Same three conditions the middleware chain applies, so the toggle cannot be inert. */
+  function nudgeApplies(preset: GenerationPreset): boolean {
+    const profile = preset.profileId ? settings.getProfile(preset.profileId) : null
+    if (!profile) return false
+    const fetchedModel = settings.getProfileModels(profile.id).find((m) => m.id === preset.model)
+    return thinkingNudgeApplies({
+      providerType: profile.providerType,
+      reasoningEffort: preset.reasoningEffort,
+      supportsStructuredOutput: resolveStructuredOutputs(
+        preset,
+        profile.providerType,
+        fetchedModel?.structuredOutput,
+      ),
+    })
+  }
+
   function startEditingPreset(preset: GenerationPreset) {
     flushSave() // flush any pending save before switching presets
     editingPresetId = preset.id
@@ -587,19 +607,16 @@
             </p>
           </div>
 
-          <!-- Thinking nudge (unchanged — only for openai-compatible / think-tag providers) -->
-          {#if preset.profileId && (() => {
-              const profile = settings.getProfile(preset.profileId)
-              return profile && (profile.providerType === 'openai-compatible' || getReasoningExtraction(profile.providerType) === 'think-tag')
-            })()}
+          <!-- Thinking nudge. Shown only where it can actually reach the model: a think-tag
+               provider, reasoning on, and no native structured output to carry the schema. -->
+          {#if nudgeApplies(preset)}
             <div class="flex flex-row items-center justify-between gap-3">
               <div class="space-y-0.5">
                 <Label class="text-sm">Thinking nudge</Label>
                 <p class="text-muted-foreground text-xs">
                   Inject a prompt to encourage the model to use <code>&lt;think&gt;</code> tags properly.
                   Useful for some local models such as Mistral models, but may cause issues with other
-                  models such as Qwen 3.5. Has no effect when using structured output with local model
-                  servers.
+                  models such as Qwen 3.5.
                 </p>
               </div>
               <Switch
