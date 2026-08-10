@@ -139,16 +139,19 @@
     showReceivedConflict = false
 
     try {
-      // If replacing, delete the existing story first
+      // Look up the existing same-titled story before importing: the freshly imported
+      // story shares that title and sorts first by updated_at, so finding it afterward
+      // would return the new story's own id instead of the one to replace.
       const existingId = await syncService.findStoryIdByTitle(receivedStoryPreview.title)
-      if (existingId) {
-        await syncService.createPreSyncBackup(existingId)
-        await syncService.deleteStory(existingId)
-      }
 
+      // Import the replacement before deleting anything, so a failed import never
+      // leaves the device with neither copy.
       const result = await exportService.importFromContent(receivedStoryJson, true)
 
       if (result.success) {
+        if (existingId) {
+          await syncService.deleteStory(existingId)
+        }
         await story.loadAllStories()
         syncSuccess = true
         syncMessage = `Successfully received "${receivedStoryPreview.title}"`
@@ -347,6 +350,9 @@
   }
 
   function toggleRemoteSelection(id: string) {
+    // A pending conflict warning was checked against the selection as it stood a moment
+    // ago; any change here invalidates it, so force a fresh check on the next attempt.
+    cancelConflict()
     const next = new SvelteSet(selectedRemoteIds)
     if (next.has(id)) next.delete(id)
     else next.add(id)
@@ -361,6 +367,7 @@
   }
 
   function toggleSelectAllRemote() {
+    cancelConflict()
     selectedRemoteIds =
       selectedRemoteIds.size === remoteStories.length
         ? new Set()
@@ -416,8 +423,8 @@
       }
     }
 
-    ui.setSyncMode('syncing')
     syncDirection = 'pull'
+    ui.setSyncMode('syncing')
     loading = true
     error = null
     showConflictWarning = false
@@ -426,34 +433,41 @@
     const succeeded: string[] = []
     const failed: string[] = []
 
-    // Pulled sequentially: each story is a separate authenticated request and gets
-    // its own pre-sync backup, so one failure never affects the others in the batch.
-    for (const s of storiesToPull) {
-      try {
-        const existingId = await syncService.findStoryIdByTitle(s.title)
-        if (existingId) {
-          await syncService.createPreSyncBackup(existingId)
-          await syncService.deleteStory(existingId)
-        }
+    try {
+      for (const s of storiesToPull) {
+        try {
+          // Look up the existing same-titled story before importing: the freshly imported
+          // story shares that title and sorts first by updated_at, so finding it afterward
+          // would return the new story's own id instead of the one to replace.
+          const existingId = await syncService.findStoryIdByTitle(s.title)
 
-        const storyJson = await syncService.pullStory(conn, s.id)
-        // Use skipImportedSuffix=true so synced stories keep their original title
-        const result = await exportService.importFromContent(storyJson, true)
+          // Import the replacement before deleting anything, so a failed pull/import
+          // never leaves the device with neither copy.
+          const storyJson = await syncService.pullStory(conn, s.id)
+          // Use skipImportedSuffix=true so synced stories keep their original title
+          const result = await exportService.importFromContent(storyJson, true)
 
-        if (result.success) {
-          succeeded.push(s.title)
-        } else {
+          if (result.success) {
+            if (existingId) {
+              await syncService.deleteStory(existingId)
+            }
+            succeeded.push(s.title)
+          } else {
+            failed.push(s.title)
+          }
+        } catch {
           failed.push(s.title)
         }
-      } catch {
-        failed.push(s.title)
+        syncProgress = { done: syncProgress.done + 1, total: storiesToPull.length }
       }
-      syncProgress = { done: syncProgress.done + 1, total: storiesToPull.length }
+
+      await story.loadAllStories()
+    } finally {
+      loading = false
     }
 
-    await story.loadAllStories()
-    loading = false
     reportBatchResult('pulled', succeeded, failed, storiesToPull.length)
+    if (!syncSuccess) ui.setSyncMode('connected')
   }
 
   async function pushSelectedStories() {
@@ -462,30 +476,42 @@
 
     const storiesToPush = localStories.filter((s) => selectedLocalIds.has(s.id))
 
-    ui.setSyncMode('syncing')
     syncDirection = 'push'
+    ui.setSyncMode('syncing')
     loading = true
     error = null
     syncProgress = { done: 0, total: storiesToPush.length }
 
+    // createPreSyncBackup() loads each pushed story into the global story store as a
+    // side effect; restore whatever was open before this batch once it's done.
+    const originalStoryId = story.currentStory?.id ?? null
     const succeeded: string[] = []
     const failed: string[] = []
 
-    for (const s of storiesToPush) {
-      try {
-        // Create backup before pushing (on local device)
-        await syncService.createPreSyncBackup(s.id)
-        const storyJson = await syncService.exportStoryToJson(s.id)
-        await syncService.pushStory(conn, storyJson)
-        succeeded.push(s.title)
-      } catch {
-        failed.push(s.title)
+    try {
+      for (const s of storiesToPush) {
+        try {
+          // Create backup before pushing (on local device)
+          await syncService.createPreSyncBackup(s.id)
+          const storyJson = await syncService.exportStoryToJson(s.id)
+          await syncService.pushStory(conn, storyJson)
+          succeeded.push(s.title)
+        } catch {
+          failed.push(s.title)
+        }
+        syncProgress = { done: syncProgress.done + 1, total: storiesToPush.length }
       }
-      syncProgress = { done: syncProgress.done + 1, total: storiesToPush.length }
+    } finally {
+      if (originalStoryId) {
+        await story.loadStory(originalStoryId).catch(() => {})
+      } else {
+        story.closeStory()
+      }
+      loading = false
     }
 
-    loading = false
     reportBatchResult('pushed', succeeded, failed, storiesToPush.length)
+    if (!syncSuccess) ui.setSyncMode('connected')
   }
 
   function cancelConflict() {
@@ -606,7 +632,7 @@
             <h3 class="mb-2 text-lg font-semibold">Story Already Exists</h3>
             <p class="text-muted-foreground mb-4">
               A story named "{receivedStoryPreview.title}" already exists on this device. Replacing
-              it will create a "Pre-sync backup" checkpoint first. Continue?
+              it will remove the existing copy once the new one has been imported. Continue?
             </p>
             <div class="flex gap-3">
               <Button variant="outline" onclick={cancelReceivedImport}>Cancel</Button>
@@ -693,11 +719,11 @@
               <p class="text-sm">
                 {#if conflictStoryTitles.length === 1}
                   A story named "{conflictStoryTitles[0]}" already exists on this device. Pulling
-                  will replace it after creating a "Pre-sync backup" checkpoint.
+                  will remove the existing copy once the new one has been downloaded.
                 {:else}
                   {conflictStoryTitles.length} selected stories already exist on this device:
-                  {conflictStoryTitles.join(', ')}. Pulling will replace them, each after creating
-                  its own "Pre-sync backup" checkpoint.
+                  {conflictStoryTitles.join(', ')}. Pulling will remove each existing copy once its
+                  replacement has been downloaded.
                 {/if}
               </p>
               <div class="mt-3 flex gap-2">
