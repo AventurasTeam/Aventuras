@@ -21,7 +21,7 @@ type AssistState<T> =
   | { kind: 'idle' }
   | { kind: 'not-configured' }
   | { kind: 'guidance' }
-  | { kind: 'loading'; modelId: string }
+  | { kind: 'loading'; modelId: string; from?: T }
   | { kind: 'result'; value: T }
   | { kind: 'refine'; value: T }
   | { kind: 'failure'; detail: string }
@@ -170,7 +170,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     const controller = new AbortController()
     abortRef.current = controller
     const seq = ++requestSeqRef.current
-    setAssist({ kind: 'loading', modelId })
+    setAssist({ kind: 'loading', modelId, from: current })
 
     const result = await refineFn(current, instruction, controller.signal)
     if (requestSeqRef.current !== seq) return
@@ -186,7 +186,11 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     // (e.g. a future multi-tick run) can't resurrect a stale 'result'
     // over the user's cancel — same backstop resetOnClose relies on.
     requestSeqRef.current += 1
-    setAssist({ kind: 'guidance' })
+    setAssist(
+      assist.kind === 'loading' && assist.from !== undefined
+        ? { kind: 'result', value: assist.from }
+        : { kind: 'guidance' },
+    )
   }
 
   function handleSetupPress() {

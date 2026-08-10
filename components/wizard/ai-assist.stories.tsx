@@ -46,8 +46,18 @@ function neverResolvingRun<T>() {
     new Promise(() => {})
 }
 
+// Never settles — holds a refine in 'loading' so a play function can cancel
+// it mid-flight and assert the ORIGINAL preview survives, not an empty one.
+function neverResolvingRefine<T>() {
+  return (
+    _current: T,
+    _instruction: string,
+    _signal: AbortSignal,
+  ): Promise<GenerateStructuredResult<T>> => new Promise(() => {})
+}
+
 // Records every guidance string `run` was called with — proves Regenerate
-// replays `lastGuidanceRef` rather than the (now-cleared) guidance input.
+// replays the guidance the original generate used, not an empty string.
 function guidanceCapturingRun<T>(value: T, calls: string[]) {
   return async (guidance: string, _signal: AbortSignal): Promise<GenerateStructuredResult<T>> => {
     calls.push(guidance)
@@ -294,6 +304,42 @@ export const ProseResult_RefineCumulative: Story = {
   },
 }
 
+const proseCancelRefineMock = fn()
+export const ProseResult_CancelRefineKeepsPreview: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'The original generated take.' })}
+      refine={neverResolvingRefine<DescriptionValue>()}
+      onSetup={fn()}
+      onUse={proseCancelRefineMock}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('The original generated take.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'darker')
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument()
+
+    // Cancelling an in-flight REFINE must return to the preview that was
+    // already there, not the empty guidance screen — there's a generated
+    // result to protect, unlike cancelling a first-time generate.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByText('The original generated take.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+    await waitFor(() =>
+      expect(proseCancelRefineMock).toHaveBeenCalledWith({
+        description: 'The original generated take.',
+      }),
+    )
+  },
+}
+
 const regenerateGuidanceCalls: string[] = []
 export const ProseResult_RegeneratePreservesGuidance: Story = {
   render: () => (
@@ -316,8 +362,8 @@ export const ProseResult_RegeneratePreservesGuidance: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
     expect(await screen.findByText('Same result either way.')).toBeInTheDocument()
 
-    // Regenerate carries no guidance UI of its own — it must replay
-    // `lastGuidanceRef`, not an empty string, on the second call.
+    // Regenerate carries no guidance UI of its own — it must replay the
+    // guidance from the original generate, not an empty string.
     await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await waitFor(() => expect(regenerateGuidanceCalls).toHaveLength(2))
     expect(regenerateGuidanceCalls).toEqual(['moody and slow-burn', 'moody and slow-burn'])
