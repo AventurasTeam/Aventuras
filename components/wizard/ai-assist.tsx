@@ -45,6 +45,12 @@ type AiAssistCommonProps<T> = {
   /** "Set up in Settings" from the not-configured state. Caller owns the navigation. */
   onSetup: () => void
   disabled?: boolean
+}
+
+type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
+  result: 'prose'
+  getProse: (value: T) => string
+  onUse: (value: T) => void
   /**
    * Prose-result refine (wizard.md → Refine). Cumulative: each call receives the
    * CURRENT preview plus the user's instruction, so repeated refines stack.
@@ -55,12 +61,6 @@ type AiAssistCommonProps<T> = {
     instruction: string,
     signal: AbortSignal,
   ) => Promise<GenerateStructuredResult<T>>
-}
-
-type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
-  result: 'prose'
-  getProse: (value: T) => string
-  onUse: (value: T) => void
 }
 
 type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
