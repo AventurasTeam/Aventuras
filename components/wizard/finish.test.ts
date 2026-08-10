@@ -109,6 +109,9 @@ type MakeStateInput = {
   narration?: WizardWorkingState['definition']['narration']
   title?: string
   description?: string
+  genre?: WizardWorkingState['definition']['genre']
+  tone?: WizardWorkingState['definition']['tone']
+  setting?: string
   leadName?: string
   leadEntityId?: string | null
   opening?: Partial<WizardWorkingState['opening']>
@@ -130,6 +133,9 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
       narration: input.narration ?? base.definition.narration,
       title: input.title ?? base.definition.title,
       description: input.description ?? base.definition.description,
+      genre: input.genre ?? base.definition.genre,
+      tone: input.tone ?? base.definition.tone,
+      setting: input.setting ?? base.definition.setting,
     },
     opening: { ...base.opening, ...input.opening },
     lore: input.lore ?? base.lore,
@@ -188,6 +194,38 @@ describe('finishWizard', () => {
     expect(await db.select().from(entities)).toHaveLength(0)
     expect(await db.select().from(deltas)).toHaveLength(0)
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
+  })
+
+  it('commits the authored genre, tone, and setting into stories.definition', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'World-shaped',
+        opening: { content: 'Once.' },
+        genre: { label: 'Grimdark fantasy', promptBody: 'Write it bleak and violent.' },
+        tone: { label: 'Wry', promptBody: 'Keep a dry, understated register.' },
+        setting: 'A drowned coastal empire in slow collapse.',
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.genre).toEqual({
+      label: 'Grimdark fantasy',
+      promptBody: 'Write it bleak and violent.',
+    })
+    expect(storyRow.definition!.tone).toEqual({
+      label: 'Wry',
+      promptBody: 'Keep a dry, understated register.',
+    })
+    expect(storyRow.definition!.setting).toBe('A drowned coastal empire in slow collapse.')
   })
 
   it('adventure+first: writes the lead entity, definition.leadEntityId, and opening refs to one id', async () => {

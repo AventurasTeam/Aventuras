@@ -54,6 +54,19 @@ describe('WIZARD_OPENING template', () => {
     })
     expect(withGuidance).toContain('Additional guidance: darker tone')
   })
+
+  it('carries the authored genre and tone bodies into the opening call', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: {
+        mode: 'creative',
+        setting: '',
+        genre: { promptBody: 'Write it as hard sci-fi, terse and technical.' },
+        tone: { promptBody: 'Keep it clinical and understated.' },
+      },
+    })
+    expect(out).toContain('Write it as hard sci-fi, terse and technical.')
+    expect(out).toContain('Keep it clinical and understated.')
+  })
 })
 
 describe('WIZARD_DESCRIPTION template', () => {
