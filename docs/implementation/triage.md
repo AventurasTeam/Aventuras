@@ -1090,15 +1090,14 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   a structural parameter instead of a named type. Fix is one exported
   schema plus its inferred type, imported by both. Surfaced by the
   Slice 3.6a Task 3 review (2026-08-10).
-- **The desktop-Popover / phone-Sheet tier wrap is written three
-  times.** `components/wizard/ai-assist.tsx`,
-  `components/wizard/preset-browser.tsx`, and
+- **The desktop-Popover / phone-Sheet tier wrap is written twice.**
+  `components/wizard/ai-assist.tsx` and
   `components/ui/searchable-overlay-list.tsx` each carry the same
   phone branch — a single `View` wrapping the trigger plus a
   `Sheet`, with its own copy of the reasoning for why the wrap
   exists (the `@rn-primitives/dialog` Root renders a real portaled
   sibling while closed, so a Fragment leaks two layout children into
-  the consumer's row). Only the phone half is a genuine triplicate:
+  the consumer's row). Only the phone half is a genuine duplicate:
   the desktop halves legitimately differ, because
   `SearchableOverlayList` drives raw `PopoverPrimitive` for a
   controlled-open bridge and trigger-width matching that the shared
@@ -1107,10 +1106,12 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   cost is already demonstrated rather than hypothetical: the preset
   browser's first commit diverged from the assist component's
   already-correct trigger-labelling pattern and needed a follow-up
-  fix to re-derive it. Extract a small shared phone-wrap helper when
-  a fourth caller appears, or the next time two of the three need
-  the same change in lockstep — not before. Surfaced by the Slice
-  3.6a Task 8 review (2026-08-10).
+  fix to re-derive it — it has since been rebuilt on
+  `SearchableOverlayList` and no longer carries a copy, which is why
+  this counts two rather than three. Extract a small shared
+  phone-wrap helper when a third caller appears, or the next time
+  both need the same change in lockstep — not before. Surfaced by
+  the Slice 3.6a Task 8 review (2026-08-10).
 - **`validateRegistry` cannot catch a template using an undeclared
   variable.** It checks two things — every `TemplateId` has a
   `TEMPLATE_GROUPS` mapping, and every name in `DISPLAY_GROUPS`

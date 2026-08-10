@@ -6,8 +6,9 @@
 - **Depends on:** [Slice 3.6a](./06a-wizard-world.md) — the Cast
   step's `✨ Suggest cast` consumes 3.6a's AI-assist list result
   shape, and both slices extend the same Finish-commit, working
-  state, and step-sequence seams. Pairs with
-  [Slice 3.1a](./01a-embedder-core.md) via the C5 wizard-commit
+  state, and step-sequence seams. The M1.5 **entity** layer is a
+  merged prerequisite here (3.6a needed only the lore half). Pairs
+  with [Slice 3.1a](./01a-embedder-core.md) via the C5 wizard-commit
   seam — doc-as-contract, not a gate.
 - **Blocks:** none
 

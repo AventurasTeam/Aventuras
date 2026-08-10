@@ -113,6 +113,9 @@ slice knowing its internals (C5).
 - The embed step in Finish — [Slice 3.1a](./01a-embedder-core.md)
   (C5).
 - World-panel editors, collision review — M4.
+- Regenerate-opening from reader chrome post-commit — parked. (This
+  slice builds the in-wizard opening refine / regenerate, so the
+  post-commit boundary belongs here rather than only in 3.6b.)
 - User-authored genre / tone / setting templates in Vault — parked.
 - Wizard-time pack selection, prompt-pack editor — parked.
 

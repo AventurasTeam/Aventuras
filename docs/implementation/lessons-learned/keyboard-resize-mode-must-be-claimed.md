@@ -37,13 +37,18 @@ this library does — and what nothing does when the mode is never claimed. So t
 manifest looks correct, the provider is mounted, and every consumer is still
 wrong.
 
-Everything that measures the window inherits the failure at once:
+With the mode **unclaimed**, everything that measures the window inherits the
+failure at once:
 
-- `@gorhom/bottom-sheet`'s `keyboardBehavior` computes against a container whose
-  height never changes, so sheets sit under the keyboard however it is set.
 - React Native's own `KeyboardAvoidingView` with `behavior="height"` resolves to
   no change.
 - Anchored popovers (autocomplete's inline listbox) stay where they were.
+
+`@gorhom/bottom-sheet` is the exception, and the distinction matters for every
+section below: it never measures the window, building its keyboard state from
+`keyboardDidShow` / `keyboardDidHide` instead. Claiming the mode therefore
+neither fixes nor breaks it — which is why its own `android_keyboardInputMode`
+has to stay on `adjustPan`, and why it has a separate failure mode of its own.
 
 ## How to apply
 
@@ -73,8 +78,10 @@ The combination that works on-device is narrow, and half of it is
 counter-intuitive:
 
 - **Root claims resize mode** via `useResizeMode()` (above).
-- **`@gorhom/bottom-sheet` stays on its `android_keyboardInputMode="adjustPan"`
-  default** and keeps translating sheets itself.
+- **`@gorhom/bottom-sheet` stays on `android_keyboardInputMode="adjustPan"`** and
+  keeps translating sheets itself. That is also gorhom's default, but `sheet.tsx`
+  and `select.tsx` both pass it explicitly so it reads as a decision rather than
+  an omission.
 
 Setting gorhom to `adjustResize` — which reads like the honest declaration,
 since the root just claimed that mode — puts every sheet back under the
@@ -90,12 +97,17 @@ resizing window.
 gorhom's source that fits the observations; treat the configuration as the
 finding and the explanation as the current best account.
 
-React Native's own `KeyboardAvoidingView` is the other consumer to check. It is
-worth being suspicious of on Android in this setup: `behavior="height"` is the
-kind of second correction that produces a surface which behaves correctly
-everywhere except inside one screen. That tell — one screen wrong, everything
-else right — always points at that screen's own extra compensation, not at the
-window mode.
+React Native's own `KeyboardAvoidingView` is the other consumer to check, and it
+is the one place the two halves above look like they disagree. They do not:
+"the window does not shrink" is about the **OS window**, while the claimed mode
+has the library consume the IME inset for **app content**. So once the mode is
+claimed there is already one correction in place, and `behavior="height"` adds a
+second — which is why the wizard, and only the wizard, misbehaved while every
+other surface was fine. That tell — one screen wrong, everything else right —
+points at that screen's own extra compensation, not at the window mode.
+
+Unclaimed, the same prop resolves to no change at all (see
+[Why](#why)); the prop is not wrong in itself, only wrong on top of the claim.
 
 ## A sheet opened while the keyboard is already up never learns about it
 

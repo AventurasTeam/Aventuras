@@ -33,6 +33,8 @@ Card chrome is purely visual — adding a variant would mix presentation with be
 
 The explicit `border` + `rounded-md` + `bg-bg-raised` make each item card-shaped; the baseline's `border-b border-border` doubles up with consumer-side `border` to produce a uniform 1px outline on all four sides. `mb-3.5` provides the gap between cards.
 
+> **Web only today.** `AccordionItem` sets `asChild` on native, which routes both its own `border-b border-border` and any consumer `className` onto a Reanimated `Animated.View` — a component NativeWind does not register, so the classes are dropped rather than applied. Card styling therefore renders on web and silently no-ops on Android. See [`nativewind-classname-on-animated-view.md`](../../implementation/lessons-learned/nativewind-classname-on-animated-view.md); closing it needs the same plain-`View` wrapper `AccordionContent` already uses.
+
 ## Single vs multi-open
 
 `@rn-primitives/accordion` supports both `type="single"` and `type="multiple"`. v1 use cases are all multi-open (Browse rail status groups, App Settings provider / profile lists — user may expand multiple to compare).
@@ -75,7 +77,7 @@ This inverts the rn-reusables baseline's 0° collapsed → 180° expanded rotati
 Four parts, scaffolded from the baseline at [`components/ui/accordion.tsx`](../../../components/ui/accordion.tsx):
 
 - `Accordion` — root, `value` / `onValueChange`, `type` (multiple by default in this project).
-- `AccordionItem` — wraps each section. Accepts className for card-style composition (above).
+- `AccordionItem` — wraps each section. Accepts className for card-style composition (above), applied on web only.
 - `AccordionTrigger` — header row, renders the rotating chevron and label.
 - `AccordionContent` — collapsible body.
 

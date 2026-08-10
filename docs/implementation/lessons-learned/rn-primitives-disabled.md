@@ -65,10 +65,16 @@ the protection `asChild` throws away).
 What closes the gap is that Radix's `CheckboxIndicator` — the only
 rendered child, so the only click-leak path — sets
 `pointer-events: none` on **itself**, inline and unconditionally,
-and that beats RN-Web's non-`!important` re-enable rule. Three
-independent blocks end up stacked: the root resolves to a real
-`<button disabled>`, the root carries `none !important`, and the
-Indicator carries its own `none`.
+and that beats RN-Web's non-`!important` re-enable rule. Two
+independent blocks end up stacked: the root carries
+`none !important`, and the Indicator carries its own `none`.
+
+There is no third block, and specifically no native `<button disabled>`
+anywhere in the tree. `checkbox.web.js` assigns `augRef.type = "button"`
+as a **property on the already-rendered node**, which is RN-Web's
+`Pressable` — a `div`. Setting `.type` on a `div` changes nothing the
+browser acts on. That assignment reads like a real button and is not
+one; do not count it as protection.
 
 So: **prove the gate is doing something before adding it.** Write the
 disabled-interaction test first, confirm it fails without the gate,

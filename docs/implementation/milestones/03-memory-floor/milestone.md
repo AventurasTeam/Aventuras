@@ -175,8 +175,9 @@ day-one: 3.1a   3.2   3.6a   3.8   3.11
   3.4 also pairs with 3.1b via C8 (its sync-failure surface's
   `Switch embedder` action opens 3.1b's swap dialog) — a
   doc-as-contract seam, not a gate.
-- **3.6a** is day-one: the M1.5 lore / entity layer plus M2.3's
-  wizard shell are merged prerequisites. Its Finish-commit rows
+- **3.6a** is day-one: the M1.5 lore layer plus M2.3's wizard shell
+  are merged prerequisites (3.6b is the half that needs the entity
+  layer). Its Finish-commit rows
   flow through 3.1a's embed step via C5 — a doc-as-contract pair,
   not a gate. 3.1b and 3.6a also co-edit wizard step 5 (memory-cost
   disclosure vs opening refine / regenerate) in non-overlapping

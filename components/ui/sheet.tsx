@@ -181,19 +181,17 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
-      // 'extend' resolves to the sheet's own tallest detent, so it only helps a
-      // sheet already tall enough to clear the keyboard — 'tall' reflows its
-      // content within the 95% it was going to occupy anyway. Every other size
-      // has exactly one detent ('auto' has none), so extending is a no-op and
-      // the keyboard simply covers the sheet. 'interactive' lifts it by the
-      // keyboard height instead, which preserves its resting size.
+      // 'extend' resolves to the sheet's own tallest detent. Every size here has
+      // exactly one ('auto' has none), so it never grows anything — it earns its
+      // keep only on 'tall', which at 95% already clears the keyboard and just
+      // reflows content inside height it was going to occupy. Shorter sheets need
+      // 'interactive', which lifts by the keyboard height and keeps their resting size.
       keyboardBehavior={size === 'tall' ? 'extend' : 'interactive'}
       keyboardBlurBehavior="restore"
-      // Leave android_keyboardInputMode at gorhom's 'adjustPan' default. Setting
-      // it to 'adjustResize' makes gorhom zero out `heightWithinContainer` and
-      // wait for a container shrink that never arrives under edge-to-edge —
-      // every sheet then sits under the keyboard. Verified on-device both ways;
-      // gorhom has to keep translating the sheet itself.
+      // Explicitly 'adjustPan', which is also gorhom's default: 'adjustResize'
+      // makes it zero out `heightWithinContainer` and wait for a container shrink
+      // that never arrives under edge-to-edge, putting every sheet under the
+      // keyboard. Verified on-device both ways; gorhom keeps translating itself.
       android_keyboardInputMode="adjustPan"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}

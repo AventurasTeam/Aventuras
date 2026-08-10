@@ -185,11 +185,11 @@ export function WizardShell({
         ))}
       </View>
 
-      {/* Android is deliberately behaviour-less: RootLayout puts the window in
-          resize mode, so the whole tree has already shrunk by the keyboard
-          height by the time this renders. 'height' would subtract it a second
-          time — which is why overlays that behave everywhere else misbehave
-          inside the wizard. iOS does not resize, so it still needs padding. */}
+      {/* Android is deliberately behaviour-less: 'height' compensates a second
+          time on top of the root's claimed resize mode, and the wizard was the
+          one screen where overlays that behave everywhere else misbehaved. iOS
+          never resizes, so it still needs padding. See
+          lessons-learned/keyboard-resize-mode-must-be-claimed.md. */}
       <KeyboardAvoidingView
         style={STATIC_STYLES.flex1}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
