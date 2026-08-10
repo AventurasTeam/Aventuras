@@ -194,7 +194,10 @@ function PhoneSheetContent({
             snapPoints={snapPoints}
             enableDynamicSizing={false}
             enablePanDownToClose
-            keyboardBehavior="extend"
+            // One detent at 33%/60%, so 'extend' resolves to the position the
+            // sheet already holds and grows nothing. 'interactive' lifts it by
+            // the keyboard height instead — same call sheet.tsx makes below 'tall'.
+            keyboardBehavior="interactive"
             keyboardBlurBehavior="restore"
             // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
             // puts every sheet back under the keyboard.
