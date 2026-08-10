@@ -38,17 +38,15 @@ function AccordionItem({
   ...props
 }: ComponentProps<typeof AccordionPrimitive.Item>) {
   return (
-    <AccordionPrimitive.Item
-      className={cn('border-b border-border', className)}
-      value={value}
-      asChild={Platform.OS !== 'web'}
-      {...props}
-    >
-      <Animated.View
-        className="native:overflow-hidden"
-        layout={Platform.select({ native: LinearTransition.duration(200) })}
-      >
-        {children}
+    <AccordionPrimitive.Item value={value} asChild={Platform.OS !== 'web'} {...props}>
+      <Animated.View layout={Platform.select({ native: LinearTransition.duration(200) })}>
+        {/* Styling lives on this plain View rather than on Item: `asChild` routes
+            Item's className onto the Animated.View on native, where NativeWind
+            registers no cssInterop and silently drops it. One owner, both
+            platforms — putting classes in both places doubles the border on web. */}
+        <View className={cn('native:overflow-hidden border-b border-border', className)}>
+          {children}
+        </View>
       </Animated.View>
     </AccordionPrimitive.Item>
   )
