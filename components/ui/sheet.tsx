@@ -9,14 +9,7 @@ import {
   useRef,
   type ComponentProps,
 } from 'react'
-import {
-  Keyboard,
-  Platform,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-  type ViewStyle,
-} from 'react-native'
+import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
 import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
@@ -24,6 +17,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { InputComponentContext } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -109,7 +103,6 @@ function BottomSheetContent({
 
   useEffect(() => {
     let cancelled = false
-    let pendingHide: ReturnType<typeof Keyboard.addListener> | undefined
 
     const present = () => {
       // Only claim presented at the moment we actually present, so an `open`
@@ -130,13 +123,10 @@ function BottomSheetContent({
         // already up is never told about it — it lands underneath. Close the
         // keyboard first; focusing a field inside the sheet then fires a show
         // event it can see, which is the path that already works.
-        if (Platform.OS !== 'web' && Keyboard.isVisible()) {
-          pendingHide = Keyboard.addListener('keyboardDidHide', () => {
-            pendingHide?.remove()
-            pendingHide = undefined
+        if (Platform.OS !== 'web') {
+          void dismissKeyboard().then(() => {
             if (!cancelled) present()
           })
-          Keyboard.dismiss()
           return
         }
         present()
@@ -149,7 +139,6 @@ function BottomSheetContent({
     return () => {
       cancelled = true
       clearTimeout(handle)
-      pendingHide?.remove()
     }
   }, [open])
 

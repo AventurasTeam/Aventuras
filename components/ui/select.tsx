@@ -12,7 +12,6 @@ import {
   type ReactNode,
 } from 'react'
 import {
-  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -33,6 +32,7 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -150,19 +150,16 @@ function PhoneSheetContent({
       setSheetIndex(-1)
       return
     }
-    if (Platform.OS === 'web' || !Keyboard.isVisible()) {
+    if (Platform.OS === 'web') {
       setSheetIndex(0)
       return
     }
     let cancelled = false
-    const sub = Keyboard.addListener('keyboardDidHide', () => {
-      sub.remove()
+    void dismissKeyboard().then(() => {
       if (!cancelled) setSheetIndex(0)
     })
-    Keyboard.dismiss()
     return () => {
       cancelled = true
-      sub.remove()
     }
   }, [open])
 
