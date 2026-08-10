@@ -77,22 +77,25 @@ type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
   onPickChip: (chip: string, value: T) => void
 }
 
-type AiAssistListProps<T> = AiAssistCommonProps<T> & {
+type AiAssistListProps<T, P> = AiAssistCommonProps<T> & {
   result: 'list'
   /** Flattens one model reply into renderable rows. */
-  getItems: (value: T) => AssistListItem[]
+  getItems: (value: T) => AssistListItem<P>[]
   /** Names already in the wizard's own list — drives the `(already exists)` mark. */
   existingNames: readonly string[]
   /**
    * Fires once with every checked row when `Import selected` is pressed.
    * `exists` is always false here — an already-existing row cannot be checked.
    */
-  onImport: (items: MarkedAssistListItem[]) => void
+  onImport: (items: MarkedAssistListItem<P>[]) => void
 }
 
-export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T> | AiAssistListProps<T>
+export type AiAssistProps<T, P = unknown> =
+  | AiAssistProseProps<T>
+  | AiAssistChipsProps<T>
+  | AiAssistListProps<T, P>
 
-export function AiAssist<T>(props: AiAssistProps<T>) {
+export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const { ariaLabel, guidancePlaceholder, run, resolveModelId, onSetup, disabled } = props
 
   const isPhone = useTier() === 'phone'
@@ -103,7 +106,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   const [phoneOpen, setPhoneOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
   // trimmed name rather than index so a later page cannot shift what is checked.
-  const [listItems, setListItems] = useState<AssistListItem[]>([])
+  const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   const abortRef = useRef<AbortController | null>(null)

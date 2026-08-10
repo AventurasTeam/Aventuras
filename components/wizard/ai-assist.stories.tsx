@@ -701,6 +701,7 @@ const FACTION_ITEM: AssistListItem = {
 const PAGE_TWO_ITEM: AssistListItem = {
   name: 'Old Jorin',
   detail: 'The grizzled barkeeper of the Iron Tankard.',
+  payload: { category: 'character' },
 }
 
 export const ListResult_FirstPage: Story = {
@@ -742,10 +743,15 @@ export const ListResult_EmptyPageShowsEmptyCopy: Story = {
   },
 }
 
-const NOIR_ITEM: AssistListItem = { name: 'Noir', detail: 'A moody detective drama.' }
+const NOIR_ITEM: AssistListItem = {
+  name: 'Noir',
+  detail: 'A moody detective drama.',
+  payload: { category: 'genre' },
+}
 const NOIR_ITEM_WHITESPACE_VARIANT: AssistListItem = {
   name: '  Noir  ',
   detail: 'A duplicate suggestion differing only by whitespace.',
+  payload: { category: 'genre' },
 }
 
 export const ListResult_DedupesWhitespaceVariantWithinOnePage: Story = {

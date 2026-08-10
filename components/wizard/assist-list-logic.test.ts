@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import { mergePages, markExisting, type AssistListItem } from './assist-list-logic'
 
-const item = (name: string): AssistListItem => ({ name, detail: `${name} detail` })
+const item = (name: string): AssistListItem => ({ name, detail: `${name} detail`, payload: null })
 
 describe('markExisting', () => {
   it('flags a case-insensitive collision with already-imported content', () => {

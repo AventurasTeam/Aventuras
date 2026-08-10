@@ -5,6 +5,8 @@ import { DEFAULT_CALENDAR_ID, getCalendar, type CalendarSystem } from '@/lib/cal
 import {
   ACTIVE_STEP_ORDER,
   canJumpToStep,
+  nextActiveStep,
+  prevActiveStep,
   stepForwardValid,
   type StepValidityParams,
 } from './wizard-nav-logic'
@@ -134,5 +136,33 @@ describe('step 3 in the sequence', () => {
     }
     expect(stepForwardValid(2, dirty), 'step 2 must pass so step 3 is the only blocker').toBe(true)
     expect(canJumpToStep(5, 3, 5, dirty)).toBe(false)
+  })
+})
+
+describe('nextActiveStep / prevActiveStep', () => {
+  it('advances to the next entry in ACTIVE_STEP_ORDER, skipping disabled steps', () => {
+    expect(nextActiveStep(1)).toBe(2)
+    expect(nextActiveStep(2)).toBe(3)
+    expect(nextActiveStep(3)).toBe(5)
+  })
+
+  it('steps back to the previous entry in ACTIVE_STEP_ORDER', () => {
+    expect(prevActiveStep(5)).toBe(3)
+    expect(prevActiveStep(3)).toBe(2)
+    expect(prevActiveStep(2)).toBe(1)
+  })
+
+  it('holds at the first/last entry rather than falling off the sequence', () => {
+    expect(prevActiveStep(1)).toBe(1)
+    expect(nextActiveStep(5)).toBe(5)
+  })
+
+  it('regression guard: enabling a step in the order is enough — no hardcoded pivot to update', () => {
+    // The exact failure mode Slice 3.6b would hit if goNext/goBack still hardcoded
+    // "3 -> 5" / "5 -> 3": with Cast (4) added to the order, step 3 must advance to
+    // 4, not jump straight to 5.
+    const orderWithCast = [1, 2, 3, 4, 5]
+    expect(nextActiveStep(3, orderWithCast)).toBe(4)
+    expect(prevActiveStep(5, orderWithCast)).toBe(4)
   })
 })

@@ -16,6 +16,8 @@ import { StepOpening } from '@/components/wizard/step-opening'
 import { StepWorld } from '@/components/wizard/step-world'
 import {
   canJumpToStep,
+  nextActiveStep,
+  prevActiveStep,
   stepForwardValid,
   type StepValidityParams,
 } from '@/components/wizard/wizard-nav-logic'
@@ -99,8 +101,8 @@ export default function WizardRoute() {
   const worldTimeOrigin = wizardStore.useWizard((s) => s.state.definition.worldTimeOrigin)
   const lore = wizardStore.useWizard((s) => s.state.lore)
 
-  const goNext = () => wizardStore.setStep(step === 3 ? 5 : step + 1)
-  const goBack = () => wizardStore.setStep(step === 5 ? 3 : step - 1)
+  const goNext = () => wizardStore.setStep(nextActiveStep(step))
+  const goBack = () => wizardStore.setStep(prevActiveStep(step))
 
   // Entry hard gate (wizard.md → Embedder-unavailable): no usable embedder blocks
   // the wizard outright. Focus-aware so returning from Settings (having fixed the

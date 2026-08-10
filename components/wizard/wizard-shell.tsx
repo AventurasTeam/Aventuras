@@ -16,6 +16,8 @@ import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
+import { DISABLED_STEPS, STEP_ORDER } from './wizard-nav-logic'
+
 type WizardShellProps = {
   /** 1-indexed active step; reaches 1 (Frame), 2 (Calendar), 3 (World), 5 (Opening). */
   step: number
@@ -32,11 +34,6 @@ type WizardShellProps = {
   canJumpTo: (step: number) => boolean
   children: ReactNode
 }
-
-const STEP_ORDER = [1, 2, 3, 4, 5] as const
-
-// Cast (4) lands in Slice 3.6b and stays hard-disabled regardless of `step`.
-const DISABLED_STEPS = new Set<number>([4])
 
 const STEP_LABEL_KEYS = {
   1: 'wizard:steps.frame',
