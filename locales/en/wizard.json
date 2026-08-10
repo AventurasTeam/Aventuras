@@ -204,6 +204,27 @@
       "body": "Your current label and body will be lost.",
       "cancel": "Cancel",
       "confirm": "Replace"
+    },
+    "lore": {
+      "sectionLabel": "Initial lore",
+      "add": "Add lore",
+      "suggest": "Suggest lore",
+      "remove": "Remove lore entry",
+      "expand": "Expand lore entry",
+      "collapse": "Collapse lore entry",
+      "untitled": "Untitled lore",
+      "title": "Title",
+      "body": "Body",
+      "category": "Category",
+      "moreOptions": "More options",
+      "tags": "Tags",
+      "injectionMode": "Injection mode",
+      "priority": "Priority",
+      "priorityDecrement": "Decrease priority",
+      "priorityIncrement": "Increase priority",
+      "modes": { "always": "Always", "auto": "Auto", "disabled": "Disabled" },
+      "errors": { "title": "Title is required.", "body": "Body is required." },
+      "empty": "No lore yet. Add an entry or let AI suggest some."
     }
   }
 }
