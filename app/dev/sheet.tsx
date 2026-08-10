@@ -8,13 +8,46 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 
+function KeyboardOrderingProbe() {
+  const [note, setNote] = useState('')
+  return (
+    <View>
+      <Heading level={3}>Keyboard ordering (phone)</Heading>
+      <Text variant="muted" size="xs" className="mt-1">
+        Focus the field, then — without dismissing — open the sheet. Sheet.tsx dismisses an open
+        keyboard before presenting, because gorhom only learns about the keyboard from show/hide
+        events and would otherwise open underneath it. Expect: keyboard closes, sheet opens at its
+        detent, focusing the sheet&apos;s own field lifts it.
+      </Text>
+      <View className="mt-3 flex-col gap-3">
+        <Input value={note} onChangeText={setNote} placeholder="Focus me first" aria-label="Note" />
+        <Sheet ariaLabel="Keyboard ordering">
+          <SheetTrigger asChild>
+            <Button variant="secondary">
+              <Text>Open short sheet</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent anchor="bottom" size="short">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Short sheet</Heading>
+              <Input placeholder="Then focus this one" aria-label="Sheet field" />
+            </View>
+          </SheetContent>
+        </Sheet>
+      </View>
+    </View>
+  )
+}
+
 export default function SheetDevRoute() {
   const [noteValue, setNoteValue] = useState('')
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView className="flex-1 bg-bg-base" keyboardShouldPersistTaps="handled">
       <ThemePicker />
       <View className="flex-col gap-6 p-4">
+        <KeyboardOrderingProbe />
+
         <View>
           <Heading level={3}>Default</Heading>
           <View className="mt-2">
