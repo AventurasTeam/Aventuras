@@ -39,6 +39,7 @@ export const loreSuggestionsSchema = z.object({
           .describe('optional grouping label, e.g. cosmology or history'),
       }),
     )
+    .min(1)
     .describe('five reference entries about this world'),
 })
 

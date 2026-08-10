@@ -173,6 +173,18 @@ slice knowing its internals (C5).
   literally rather than generalizing the confirm alongside the
   primitive-wide refine work; revisit if the inconsistency reads as
   a bug in use.
+- **Nothing in the pipeline bounds a model-authored lore string.**
+  `loreSuggestionsSchema` caps neither `title` nor `body`, and
+  neither does the write-path `loreWriteSchema`; the `lore` table's
+  columns are unbounded text. A runaway model reply therefore reaches
+  the store, the embedder, and the uncapped opening prompt at
+  whatever length it arrives. Deliberately not fixed here: a Zod
+  `.max()` rejects the **whole batch**, not the one bad row, and the
+  cost lands on a legitimate long entry while the failure it guards
+  is rare — the user also reviews every row before importing. If it
+  ever bites, the fix belongs at the write path where it can drop or
+  truncate one row, not at the parse boundary where it fails five.
+  Surfaced by the Task 7 review (2026-08-10).
 
 ## Implementation notes
 

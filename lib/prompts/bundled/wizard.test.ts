@@ -96,6 +96,16 @@ describe('WIZARD_OPENING lore block', () => {
     })
     expect(out).not.toContain('World reference:')
   })
+
+  it('does not throw and omits the block when lore is absent from the context entirely', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
+      leadEntityId: '',
+      leadName: '',
+      guidance: '',
+    })
+    expect(out).not.toContain('World reference:')
+  })
 })
 
 describe('WIZARD_LORE', () => {

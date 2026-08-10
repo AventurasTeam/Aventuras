@@ -4,6 +4,7 @@ import type { ResolveModelConfig } from '@/lib/ai'
 import { wizardStore } from '@/lib/stores'
 
 import {
+  refineDescriptionAssist,
   refineOpeningAssist,
   resolveWizardAssistModelId,
   runDescriptionAssist,
@@ -165,8 +166,30 @@ describe('refineOpeningAssist', () => {
       signal,
       { resolveConfig: () => CONFIGURED, generate },
     )
-    expect(res.status).toBe('ok')
+    expect(res.status === 'ok' && res.value.content).toBe('Revised.')
     expect(capturedPrompt).toContain('The map unrolled.')
+    expect(capturedPrompt).toContain('make it darker')
+  })
+})
+
+describe('refineDescriptionAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('passes a prompt containing both the current description and the instruction', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { description: 'A darker tale.' } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await refineDescriptionAssist(
+      { description: 'A tale.' },
+      'make it darker',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+    )
+    expect(res.status === 'ok' && res.value.description).toBe('A darker tale.')
+    expect(capturedPrompt).toContain('A tale.')
     expect(capturedPrompt).toContain('make it darker')
   })
 })
