@@ -14,6 +14,7 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
+import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 
 import {
@@ -115,10 +116,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // status already covers the common case, this is the defensive backstop.
   const requestSeqRef = useRef(0)
   const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
-  // Currently always equal to guidanceText (every write path runs through
-  // runGenerate, which syncs both) — kept as its own ref anyway so Regenerate
-  // stays correct if a later change ever clears guidanceText once 'result'
-  // is reached. Not a caching shortcut; don't fold into guidanceText.
+  // The guidance the last run actually used, which is not guidanceText: opening
+  // the trigger clears the input, and an unconfigured run returns before syncing.
+  // Regenerate has to replay the former. Not a cache; don't fold into state.
   const lastGuidanceRef = useRef('')
   // `Generate more` accumulates; a fresh Generate / Regenerate replaces.
   const appendRef = useRef(false)
@@ -184,7 +184,19 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     const seq = ++requestSeqRef.current
     setAssist({ kind: 'loading', modelId, from })
 
-    const result = await call(controller.signal)
+    // 'loading' is already set, and the runners are not async — an unresolved
+    // provider endpoint or an unregistered template id throws synchronously out
+    // of `call`. Without this the spinner never stops and nothing is logged.
+    let result: GenerateStructuredResult<T>
+    try {
+      result = await call(controller.signal)
+    } catch (err) {
+      if (requestSeqRef.current !== seq) return
+      const detail = err instanceof Error ? err.message : String(err)
+      logger.error('provider.wizard_assist_threw', { modelId, error: detail })
+      setAssist({ kind: 'failure', detail, retry })
+      return
+    }
     if (requestSeqRef.current !== seq) return
 
     if (result.status === 'ok') {
@@ -201,7 +213,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     // 'aborted' — whichever action triggered the abort already set its own state.
   }
 
-  async function runGenerate(guidance: string) {
+  async function runGenerate(guidance: string, from?: T) {
     const modelId = resolveModelId()
     if (modelId == null) {
       setAssist({ kind: 'not-configured' })
@@ -211,9 +223,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
     await runCall(
       modelId,
-      undefined,
+      from,
       (signal) => run(guidance, signal),
-      () => void runGenerate(guidance),
+      () => void runGenerate(guidance, from),
     )
   }
 
@@ -221,12 +233,19 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     appendRef.current = false
     void runGenerate(guidanceText)
   }
-  const handleRegenerate = () => void runGenerate(lastGuidanceRef.current)
+  // Regenerate/Generate more run on top of a result the user can still want
+  // back; cancelling must restore it rather than drop to the guidance form.
+  const handleRegenerate = () =>
+    void runGenerate(lastGuidanceRef.current, assist.kind === 'result' ? assist.value : undefined)
 
   async function runRefine(current: T, instruction: string) {
     const refineFn = props.result === 'prose' ? props.refine : undefined
+    if (refineFn == null) return
     const modelId = resolveModelId()
-    if (refineFn == null || modelId == null) return
+    if (modelId == null) {
+      setAssist({ kind: 'not-configured' })
+      return
+    }
 
     await runCall(
       modelId,
@@ -242,6 +261,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     // (e.g. a future multi-tick run) can't resurrect a stale 'result'
     // over the user's cancel — same backstop resetOnClose relies on.
     requestSeqRef.current += 1
+    // A cancelled `Generate more` leaves the append flag set; cancelling returns
+    // to the result view, where Regenerate would then merge instead of replace.
+    appendRef.current = false
     setAssist(
       assist.kind === 'loading' && assist.from !== undefined
         ? { kind: 'result', value: assist.from }

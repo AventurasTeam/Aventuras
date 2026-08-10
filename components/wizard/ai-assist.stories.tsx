@@ -1015,7 +1015,7 @@ export const ListResult_RegenerateClearsSelectionForReusedName: Story = {
   },
 }
 
-export const ListResult_CancelledGenerateMoreThenFreshGenerateReplaces: Story = {
+export const ListResult_CancelledGenerateMoreThenRegenerateReplaces: Story = {
   render: () => (
     <ListDemo
       resolveModelId={() => MODEL_ID}
@@ -1031,18 +1031,20 @@ export const ListResult_CancelledGenerateMoreThenFreshGenerateReplaces: Story = 
 
     await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
     expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument()
-    // Cancelling a Generate/Regenerate load always returns to the guidance
-    // screen (its `from` is always undefined, unlike refine's) — WITHOUT
-    // going through resetOnClose, so `listItems`/`selected` are untouched.
-    // Only handleGenerate's `appendRef.current = false` stops the next
-    // fresh Generate from merging into that stale leftover page.
+    // Cancelling a Regenerate/Generate more restores the page it ran on top of
+    // rather than dropping to the guidance form — the load was additive, so the
+    // user keeps what they already had, checkmarks included.
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(await screen.findByText('Optional guidance')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Sunken Archive')).toBeInTheDocument())
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    // Cancel also clears the append flag. Without that, this Regenerate would
+    // merge into the leftover page instead of replacing it.
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await waitFor(() => expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument())
     expect(screen.queryByText('Sunken Archive')).not.toBeInTheDocument()
     expect(screen.getAllByRole('checkbox')).toHaveLength(1)
+    expect(screen.getByRole('checkbox', { name: 'Ashfall Cartel' })).not.toBeChecked()
   },
 }
 
