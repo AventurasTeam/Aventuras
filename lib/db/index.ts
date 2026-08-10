@@ -211,4 +211,4 @@ export {
   vectorsByIdQuery,
 } from './embeddings'
 export { emptyWorkingState, wizardWorkingStateSchema } from './wizard-sessions/working-state'
-export type { WizardWorkingState } from './wizard-sessions/working-state'
+export type { WizardWorkingState, WizardLoreDraft } from './wizard-sessions/working-state'

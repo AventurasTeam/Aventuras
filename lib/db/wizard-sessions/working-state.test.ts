@@ -32,3 +32,43 @@ describe('wizardWorkingStateSchema', () => {
     expect(b.opening.sceneEntities).toEqual([])
   })
 })
+
+describe('lore drafts', () => {
+  it('defaults to an empty list on a fresh state', () => {
+    expect(emptyWorkingState().lore).toEqual([])
+  })
+
+  it('parses a pre-3.6a blob that has no lore key at all', () => {
+    // A session saved before this slice; must reopen without data loss.
+    const legacy = { step: 5, leadName: 'Wren', definition: { title: 'Salt Road' } }
+    const parsed = wizardWorkingStateSchema.parse(legacy)
+    expect(parsed.lore).toEqual([])
+    expect(parsed.leadName).toBe('Wren')
+    expect(parsed.definition.title).toBe('Salt Road')
+  })
+
+  it('round-trips every More-options field', () => {
+    const row = {
+      id: 'lore_11111111-1111-4111-8111-111111111111',
+      title: 'Magic systems',
+      body: 'Magic flows from sealed wells.',
+      category: 'cosmology',
+      tags: ['magic', 'wells'],
+      injectionMode: 'always' as const,
+      priority: 7,
+    }
+    expect(wizardWorkingStateSchema.parse({ lore: [row] }).lore[0]).toEqual(row)
+  })
+
+  it('fills More-options defaults when a row omits them', () => {
+    const parsed = wizardWorkingStateSchema.parse({
+      lore: [{ id: 'lore_1', title: 'T', body: 'B' }],
+    })
+    expect(parsed.lore[0]).toMatchObject({
+      category: '',
+      tags: [],
+      injectionMode: 'auto',
+      priority: 0,
+    })
+  })
+})
