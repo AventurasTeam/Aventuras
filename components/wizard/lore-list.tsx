@@ -42,6 +42,8 @@ export type LoreListProps = {
   headerAction?: ReactNode
 }
 
+const CARET_FLIPPED = { transform: [{ rotate: '180deg' }] } as const
+
 const INJECTION_MODE_OPTIONS: SelectOption[] = [
   { value: 'always', label: t('wizard:world.lore.modes.always') },
   { value: 'auto', label: t('wizard:world.lore.modes.auto') },
@@ -149,17 +151,17 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
           />
           {/* Redundant pointer affordance for the row-wide Pressable above, which
               stays the single control assistive tech sees — two buttons carrying
-              one action would read as a duplicate. Rotation sits on this wrapper
-              rather than the Icon so it never reaches react-native-svg. */}
+              one action would read as a duplicate. RN derives both platforms'
+              hiding from `aria-hidden` alone. The flip is a plain RN transform:
+              it must reach neither react-native-svg (which can't resolve it) nor
+              NativeWind (whose native output for it is unverified here). */}
           <Pressable
             aria-hidden
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
             focusable={false}
             onPress={() => onToggleExpanded(row.id)}
             className="h-icon-action-sm w-icon-action-sm items-center justify-center"
           >
-            <View className={cn(expanded && 'rotate-180')}>
+            <View style={expanded ? CARET_FLIPPED : undefined}>
               <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
             </View>
           </Pressable>
