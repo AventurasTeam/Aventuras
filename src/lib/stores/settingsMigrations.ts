@@ -25,6 +25,8 @@
 
 import { parseImageSpec, type ImageSpec } from '$lib/utils/image'
 import { ENTRY_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
+import { REASONING_LEVELS } from '$lib/services/ai/core/reasoning'
+import type { ReasoningEffort } from '$lib/types'
 
 /** Default of the removed `maxEntriesPerTier` slider, for telling tuned from untouched. */
 const LEGACY_MAX_ENTRIES_PER_TIER = 20
@@ -131,19 +133,19 @@ export function migrateWorldStateBudget<T extends { tier3WholesaleWordBudget: nu
  */
 const LEGACY_REASONING_OFF = 'off'
 
-const REASONING_EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh'] as const
-
-export type StoredReasoningEffort = (typeof REASONING_EFFORTS)[number]
-
 /**
  * A stored reasoning level, or `undefined` when there is nothing usable to read -- which the
  * caller must treat as "no stored choice", not as "off".
+ *
+ * Validated against the *current* `REASONING_LEVELS` rather than a list of its own: what this
+ * returns is assigned straight to a `ReasoningEffort`, so a level the app no longer has is not
+ * a value it may hand back. That is what drops 'max', which existed only briefly.
  */
-export function migrateReasoningEffort(value?: string | null): StoredReasoningEffort | undefined {
+export function migrateReasoningEffort(value?: string | null): ReasoningEffort | undefined {
   if (!value) return undefined
   if (value === LEGACY_REASONING_OFF) return 'none'
-  return (REASONING_EFFORTS as readonly string[]).includes(value)
-    ? (value as StoredReasoningEffort)
+  return (REASONING_LEVELS as readonly string[]).includes(value)
+    ? (value as ReasoningEffort)
     : undefined
 }
 

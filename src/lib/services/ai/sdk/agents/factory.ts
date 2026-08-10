@@ -5,7 +5,6 @@
  * Integrates with the existing settings and provider system.
  */
 
-import type { LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
 import {
   ToolLoopAgent,
   wrapLanguageModel,
@@ -16,24 +15,19 @@ import {
   type ToolLoopAgentSettings,
 } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
-import { resolvePresetModel } from '../presetResolution'
+import { resolvePresetModel, type ResolvedPreset } from '../presetResolution'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import type { GenerationPreset, APIProfile, ProviderType, ReasoningEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
 
 /**
  * Resolved configuration for creating an agent.
+ *
+ * The same thing `generate.ts` resolves -- it was declared separately while the resolution
+ * was duplicated, and listed fewer fields than the function actually returned.
  */
-export interface ResolvedAgentConfig {
-  preset: GenerationPreset
-  profile: APIProfile
-  providerType: ProviderType
-  model: LanguageModelV4
-  providerOptions?: SharedV4ProviderOptions
-  reasoning: ReasoningEffort
-}
+export type ResolvedAgentConfig = ResolvedPreset
 
 /**
  * Resolve preset → profile → model for agent creation.
@@ -192,7 +186,6 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     providerType,
     toolCount: Object.keys(tools).length,
   })
-  console.log('manual mode:', settings.advancedRequestSettings.manualMode)
   const agent = new ToolLoopAgent<never, TTools>({
     model,
     instructions,

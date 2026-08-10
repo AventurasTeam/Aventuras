@@ -20,7 +20,7 @@ import {
   resolveStructuredOutputs,
   thinkingNudgeApplies,
 } from './presetResolution'
-import { PROVIDERS, usesThinkTag } from './providers/config'
+import { usesThinkTag } from './providers/config'
 import type { GenerationPreset } from '$lib/types'
 
 describe('buildProviderOptions', () => {
@@ -146,10 +146,11 @@ describe('resolveStructuredOutputs', () => {
   })
 
   it('falls back to the provider default where it does not', () => {
-    // llama.cpp publishes no catalogue, so the per-model flag is meaningless there.
-    expect(resolveStructuredOutputs(preset('auto'), 'llamacpp', undefined)).toBe(
-      PROVIDERS.llamacpp.capabilities.structuredOutput,
-    )
+    // llama.cpp publishes no catalogue, so the per-model flag is meaningless there. The
+    // expected value is written out rather than read back from PROVIDERS, which would make
+    // the assertion agree with whatever the config says and test nothing.
+    expect(resolveStructuredOutputs(preset('auto'), 'llamacpp', undefined)).toBe(true)
+    expect(resolveStructuredOutputs(preset('auto'), 'llamacpp', false)).toBe(true)
   })
 
   it('treats a missing override as auto, which is what an older preset has stored', () => {
