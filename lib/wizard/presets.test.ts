@@ -15,8 +15,6 @@ function assertCatalogShape(catalog: readonly WizardPreset[], label: string) {
     expect(preset.id, `${label} id is kebab-case`).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/)
     expect(preset.displayName.trim().length, `${preset.id} has a display name`).toBeGreaterThan(0)
     expect(preset.tagline.trim().length, `${preset.id} has a tagline`).toBeGreaterThan(0)
-    // Bodies are "substantial prose injected into generation context"
-    // (data-model.md → Genre / tone preset hybrid), not one-liners.
     expect(preset.promptBody.trim().length, `${preset.id} body is substantial`).toBeGreaterThan(200)
   }
 }

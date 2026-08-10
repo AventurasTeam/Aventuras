@@ -19,7 +19,7 @@ export const GENRE_PRESETS: readonly WizardPreset[] = [
     tagline: 'Rigorous futures where physics does not bend for the plot.',
     promptBody: `This is hard science fiction. Technology is extrapolated from real physics, and its limits matter more than its capabilities: delta-v is budgeted, signals travel at light speed, heat has to go somewhere, and biology does not get waived for convenience. When a character solves a problem, the solution comes from understanding a constraint rather than from an unexplained device.
 
-Prefer concrete engineering detail over gee-whiz spectacle. Name the systems, the tolerances, the failure modes. Characters who work with the technology speak about it the way practitioners do — casually, with jargon they do not stop to explain, and with a working respect for what will kill them.
+Prefer concrete engineering detail over gee-whiz spectacle. Name the systems, the tolerances, the failure modes. Characters who work with the technology know it the way practitioners do: they use its jargon without stopping to explain it, and they respect what it can do to them.
 
 Avoid faster-than-light travel, artificial gravity without a stated mechanism, and any technology whose only justification is that the story needs it. If something exceptional is true of this world, establish its rules early and hold to them.`,
   },
@@ -41,7 +41,7 @@ Keep the moral lines legible even when the politics are tangled — a reader sho
 
 Keep the camera close and the stakes personal. Scenes favour interiors, meals, crafts, and conversation. Let competence be quiet and kindness be the resolving force; a character who listens well should get further than one who draws a weapon.
 
-Violence, if it appears at all, is brief, off-page, and never the point. Resolve conflicts through understanding, negotiation, or patient work rather than through defeat of an enemy. The reader should finish a scene feeling steadier than when they began.`,
+Violence, if it appears at all, is brief, off-page, and never the point. Resolve conflicts through understanding, negotiation, or patient work rather than through defeat of an enemy. Threats that cannot be talked down are rare here, and the world does not reward escalation.`,
   },
   {
     id: 'epic-fantasy',
@@ -89,7 +89,7 @@ Communities matter as much as individuals — who trusts whom, who has power, wh
     tagline: 'The supernatural, hiding in plain sight on modern streets.',
     promptBody: `This is urban fantasy. The setting is a recognizably modern city, and magic, monsters, or hidden societies exist layered underneath or alongside ordinary life — usually concealed from the general public by some mix of secrecy, disbelief, or deliberate cover. The friction between the mundane world (jobs, traffic, phones) and the hidden one is a core source of story texture.
 
-Treat the supernatural as having its own internal logic, factions, and politics — covens, packs, courts, agencies — that a character can learn to navigate the way one learns a city's neighbourhoods. Let ordinary settings (a subway platform, a diner, a rooftop) host extraordinary events without the prose treating that juxtaposition as a joke.
+Treat the supernatural as having its own internal logic, factions, and politics — covens, packs, courts, agencies — that a character can learn to navigate the way one learns a city's neighbourhoods. Let ordinary settings (a subway platform, a diner, a rooftop) host extraordinary events.
 
 Secrecy has stakes: exposure, for a character who knows about the hidden world, is usually dangerous rather than merely embarrassing. Balance genuinely strange elements against enough mundane detail that the city still feels real underneath the magic.`,
   },
@@ -170,9 +170,9 @@ This is not despair — there should be tenderness in it, and beauty noticed pre
     id: 'pulpy',
     displayName: 'Pulpy and kinetic',
     tagline: 'Fast, loud, and constantly moving forward.',
-    promptBody: `Write in a pulpy, kinetic register. Keep momentum high — short paragraphs, active verbs, scenes that open already in motion and cut away right after the payoff rather than lingering. Let action beats be vivid and immediate rather than technically precise.
+    promptBody: `Write in a pulpy, kinetic register. Keep momentum high — short paragraphs, active verbs, scenes that open already in motion and cut away right after the payoff rather than lingering. Let action beats be vivid and immediate, sketched in quick, punchy strokes rather than dwelt on.
 
-Lean into bold, larger-than-life description: danger should feel thrilling more than realistic, and a character's competence or daring can be a little exaggerated for the sake of the moment landing. Cliffhangers, close calls, and sudden reversals are welcome tools, used often.
+Lean into bold, larger-than-life description: play up the thrill of danger, and let a character's competence or daring read as showy for the sake of the moment landing. Cliffhangers, close calls, and sudden reversals are welcome tools, used often.
 
 Dialogue should crackle — quips under pressure, declarations, dares. This tone prizes propulsion and fun over restraint; a reader should feel like the scene is always accelerating toward the next turn.`,
   },
