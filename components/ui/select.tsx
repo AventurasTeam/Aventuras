@@ -2,8 +2,17 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import * as RadioGroupBase from '@rn-primitives/radio-group'
 import * as SelectBase from '@rn-primitives/select'
 import { Check, ChevronDown, ChevronDownIcon, ChevronUpIcon } from 'lucide-react-native'
-import { Fragment, useMemo, useRef, type ComponentProps, type ReactNode } from 'react'
 import {
+  Fragment,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from 'react'
+import {
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -129,6 +138,34 @@ function PhoneSheetContent({
   const sheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => [SHEET_HEIGHT_PCT[sheetSize]], [sheetSize])
 
+  // Lags `open` only long enough to close an already-visible keyboard. gorhom
+  // learns about the keyboard from show/hide events alone, so a sheet that
+  // opens while one is already up is never told and lands underneath it; see
+  // sheet.tsx, which does the same before present(). Driving the index through
+  // state rather than `open` directly is what gives us somewhere to wait.
+  const [sheetIndex, setSheetIndex] = useState(-1)
+
+  useEffect(() => {
+    if (!open) {
+      setSheetIndex(-1)
+      return
+    }
+    if (Platform.OS === 'web' || !Keyboard.isVisible()) {
+      setSheetIndex(0)
+      return
+    }
+    let cancelled = false
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      sub.remove()
+      if (!cancelled) setSheetIndex(0)
+    })
+    Keyboard.dismiss()
+    return () => {
+      cancelled = true
+      sub.remove()
+    }
+  }, [open])
+
   const backgroundStyle = useMemo<ViewStyle>(
     () => ({
       backgroundColor: theme.colors['--bg-overlay'],
@@ -153,7 +190,7 @@ function PhoneSheetContent({
         <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
           <BottomSheet
             ref={sheetRef}
-            index={open ? 0 : -1}
+            index={sheetIndex}
             snapPoints={snapPoints}
             enableDynamicSizing={false}
             enablePanDownToClose

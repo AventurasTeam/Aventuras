@@ -116,6 +116,20 @@ visible, which also happens to be the conventional gesture for opening an
 overlay. Focusing a field inside the sheet then fires a show event it can see —
 the path that already worked.
 
+`select.tsx` needs the same thing but has nowhere to put it: it drives gorhom's
+inline `BottomSheet` declaratively off the open flag, with no present() call to
+delay. It keeps a `sheetIndex` state that lags `open` across the dismissal —
+driving the index through state is what buys somewhere to wait. Any future
+gorhom surface needs one of these two shapes; the gap is in the library, so
+every instance inherits it.
+
+Neither Storybook nor the `unit` project can reach this — there is no soft
+keyboard in a headless browser. `app/dev/sheet.tsx` and `app/dev/select.tsx`
+carry a Keyboard-ordering probe (a focus-first field beside the overlay under
+test, on a `keyboardShouldPersistTaps="handled"` scroll view so the opening tap
+doesn't dismiss first). Reach for those rather than trying to reproduce it in a
+story.
+
 ## `extend` does nothing on a single-detent sheet
 
 Unrelated to window mode, and worth knowing because it looks identical from the
