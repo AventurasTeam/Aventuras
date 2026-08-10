@@ -251,6 +251,164 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     closeOverlay()
   }
 
+  function renderListResult(): ReactNode {
+    if (props.result !== 'list') return null
+    const marked = markExisting(listItems, props.existingNames)
+    return (
+      <View className="gap-3">
+        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+        {marked.length === 0 ? (
+          <Text size="sm" variant="muted">
+            {t('wizard:aiAssist.list.empty')}
+          </Text>
+        ) : (
+          <ScrollView className="max-h-72">
+            <View className="gap-2">
+              {marked.map((row) => (
+                <View
+                  key={row.name}
+                  className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
+                >
+                  <Checkbox
+                    checked={selected.has(row.name)}
+                    // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
+                    // pointer-events:none too, closing box-none's direct-children gap.
+                    disabled={row.exists}
+                    onCheckedChange={(next) =>
+                      setSelected((prev) => {
+                        const draft = new Set(prev)
+                        if (next) draft.add(row.name)
+                        else draft.delete(row.name)
+                        return draft
+                      })
+                    }
+                    aria-label={row.name}
+                  />
+                  <View className="min-w-0 flex-1 gap-0.5">
+                    <Text size="sm" className="font-medium">
+                      {row.name}
+                    </Text>
+                    <Text size="xs" variant="muted" numberOfLines={2}>
+                      {row.detail}
+                    </Text>
+                    {row.exists ? (
+                      <Text size="xs" variant="muted">
+                        {t('wizard:aiAssist.list.alreadyExists')}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+        <View className="flex-row flex-wrap justify-end gap-2">
+          <Button variant="ghost" onPress={closeOverlay}>
+            <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={() => {
+              appendRef.current = false
+              handleRegenerate()
+            }}
+          >
+            <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
+          </Button>
+          <Button
+            variant="secondary"
+            onPress={() => {
+              appendRef.current = true
+              handleRegenerate()
+            }}
+          >
+            <Text>{t('wizard:aiAssist.actions.generateMore')}</Text>
+          </Button>
+          <Button
+            disabled={selected.size === 0}
+            onPress={() => {
+              props.onImport(marked.filter((row) => selected.has(row.name) && !row.exists))
+              closeOverlay()
+            }}
+          >
+            <Text>{t('wizard:aiAssist.actions.importSelected')}</Text>
+          </Button>
+        </View>
+      </View>
+    )
+  }
+
+  function renderChipsResult(): ReactNode {
+    if (props.result !== 'chips' || assist.kind !== 'result') return null
+    const chips = props.getChips(assist.value)
+    return (
+      <View className="gap-3">
+        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+        <View className="flex-row flex-wrap gap-2">
+          {chips.map((chip) => (
+            <Tag
+              key={chip}
+              onPress={() => {
+                props.onPickChip(chip, assist.value)
+                closeOverlay()
+              }}
+            >
+              {chip}
+            </Tag>
+          ))}
+        </View>
+        <View className="flex-row justify-end gap-2">
+          <Button variant="ghost" onPress={closeOverlay}>
+            <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+          </Button>
+          <Button variant="secondary" onPress={handleRegenerate}>
+            <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
+          </Button>
+        </View>
+      </View>
+    )
+  }
+
+  function renderProseResult(): ReactNode {
+    if (props.result !== 'prose' || assist.kind !== 'result') return null
+    const prose = props.getProse(assist.value)
+    return (
+      <View className="gap-3">
+        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
+        <ScrollView className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
+          <Text size="sm">{prose}</Text>
+        </ScrollView>
+        <View className="flex-row flex-wrap justify-end gap-2">
+          <Button variant="ghost" onPress={closeOverlay}>
+            <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+          </Button>
+          {props.refine != null ? (
+            <Button
+              variant="secondary"
+              onPress={() => {
+                setRefineText('')
+                setAssist({ kind: 'refine', value: assist.value })
+              }}
+            >
+              <Text>{t('wizard:aiAssist.actions.refine')}</Text>
+            </Button>
+          ) : null}
+          <Button variant="secondary" onPress={handleRegenerate}>
+            <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
+          </Button>
+          <Button
+            onPress={() => {
+              props.onUse(assist.value)
+              closeOverlay()
+            }}
+          >
+            <Text>{t('wizard:aiAssist.actions.useThis')}</Text>
+          </Button>
+        </View>
+      </View>
+    )
+  }
+
   function renderBody(): ReactNode {
     switch (assist.kind) {
       case 'idle':
@@ -316,160 +474,10 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
           </View>
         )
 
-      case 'result': {
-        if (props.result === 'list') {
-          const marked = markExisting(listItems, props.existingNames)
-          return (
-            <View className="gap-3">
-              <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-              {marked.length === 0 ? (
-                <Text size="sm" variant="muted">
-                  {t('wizard:aiAssist.list.empty')}
-                </Text>
-              ) : (
-                <ScrollView className="max-h-72">
-                  <View className="gap-2">
-                    {marked.map((row) => (
-                      <View
-                        key={row.name}
-                        className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
-                      >
-                        <Checkbox
-                          checked={selected.has(row.name)}
-                          // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
-                          // pointer-events:none too, closing box-none's direct-children gap.
-                          disabled={row.exists}
-                          onCheckedChange={(next) =>
-                            setSelected((prev) => {
-                              const draft = new Set(prev)
-                              if (next) draft.add(row.name)
-                              else draft.delete(row.name)
-                              return draft
-                            })
-                          }
-                          aria-label={row.name}
-                        />
-                        <View className="min-w-0 flex-1 gap-0.5">
-                          <Text size="sm" className="font-medium">
-                            {row.name}
-                          </Text>
-                          <Text size="xs" variant="muted" numberOfLines={2}>
-                            {row.detail}
-                          </Text>
-                          {row.exists ? (
-                            <Text size="xs" variant="muted">
-                              {t('wizard:aiAssist.list.alreadyExists')}
-                            </Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </ScrollView>
-              )}
-              <View className="flex-row flex-wrap justify-end gap-2">
-                <Button variant="ghost" onPress={closeOverlay}>
-                  <Text>{t('wizard:aiAssist.actions.discard')}</Text>
-                </Button>
-                <Button
-                  variant="secondary"
-                  onPress={() => {
-                    appendRef.current = false
-                    handleRegenerate()
-                  }}
-                >
-                  <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
-                </Button>
-                <Button
-                  variant="secondary"
-                  onPress={() => {
-                    appendRef.current = true
-                    handleRegenerate()
-                  }}
-                >
-                  <Text>{t('wizard:aiAssist.actions.generateMore')}</Text>
-                </Button>
-                <Button
-                  disabled={selected.size === 0}
-                  onPress={() => {
-                    props.onImport(marked.filter((row) => selected.has(row.name) && !row.exists))
-                    closeOverlay()
-                  }}
-                >
-                  <Text>{t('wizard:aiAssist.actions.importSelected')}</Text>
-                </Button>
-              </View>
-            </View>
-          )
-        }
-
-        if (props.result === 'chips') {
-          const chips = props.getChips(assist.value)
-          return (
-            <View className="gap-3">
-              <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-              <View className="flex-row flex-wrap gap-2">
-                {chips.map((chip) => (
-                  <Tag
-                    key={chip}
-                    onPress={() => {
-                      props.onPickChip(chip, assist.value)
-                      closeOverlay()
-                    }}
-                  >
-                    {chip}
-                  </Tag>
-                ))}
-              </View>
-              <View className="flex-row justify-end gap-2">
-                <Button variant="ghost" onPress={closeOverlay}>
-                  <Text>{t('wizard:aiAssist.actions.discard')}</Text>
-                </Button>
-                <Button variant="secondary" onPress={handleRegenerate}>
-                  <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
-                </Button>
-              </View>
-            </View>
-          )
-        }
-
-        const prose = props.getProse(assist.value)
-        return (
-          <View className="gap-3">
-            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-            <ScrollView className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
-              <Text size="sm">{prose}</Text>
-            </ScrollView>
-            <View className="flex-row flex-wrap justify-end gap-2">
-              <Button variant="ghost" onPress={closeOverlay}>
-                <Text>{t('wizard:aiAssist.actions.discard')}</Text>
-              </Button>
-              {props.refine != null ? (
-                <Button
-                  variant="secondary"
-                  onPress={() => {
-                    setRefineText('')
-                    setAssist({ kind: 'refine', value: assist.value })
-                  }}
-                >
-                  <Text>{t('wizard:aiAssist.actions.refine')}</Text>
-                </Button>
-              ) : null}
-              <Button variant="secondary" onPress={handleRegenerate}>
-                <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
-              </Button>
-              <Button
-                onPress={() => {
-                  props.onUse(assist.value)
-                  closeOverlay()
-                }}
-              >
-                <Text>{t('wizard:aiAssist.actions.useThis')}</Text>
-              </Button>
-            </View>
-          </View>
-        )
-      }
+      case 'result':
+        if (props.result === 'list') return renderListResult()
+        if (props.result === 'chips') return renderChipsResult()
+        return renderProseResult()
 
       case 'refine':
         return (
