@@ -113,8 +113,13 @@ describe('step 3 in the sequence', () => {
   })
 
   it('refuses a forward pill jump to 5 while step 3 is invalid', () => {
-    const dirty = {
+    // Step 2 must be genuinely passable here, or `.every()` short-circuits on
+    // the calendar gate and step 3's verdict is never consulted.
+    const calendar = getCalendar(DEFAULT_CALENDAR_ID)
+    const dirty: StepValidityParams = {
       ...clean,
+      calendar: calendar ?? null,
+      worldTimeOrigin: { ...(calendar?.exampleStartValue ?? {}) },
       lore: [
         {
           id: 'lore_1',
@@ -127,6 +132,7 @@ describe('step 3 in the sequence', () => {
         },
       ],
     }
+    expect(stepForwardValid(2, dirty), 'step 2 must pass so step 3 is the only blocker').toBe(true)
     expect(canJumpToStep(5, 3, 5, dirty)).toBe(false)
   })
 })
