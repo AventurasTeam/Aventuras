@@ -1111,3 +1111,19 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   a fourth caller appears, or the next time two of the three need
   the same change in lockstep — not before. Surfaced by the Slice
   3.6a Task 8 review (2026-08-10).
+- **`validateRegistry` cannot catch a template using an undeclared
+  variable.** It checks two things — every `TemplateId` has a
+  `TEMPLATE_GROUPS` mapping, and every name in `DISPLAY_GROUPS`
+  resolves to a `VariableDef` — but it never reads template Liquid
+  source, so the direction that actually matters for prompt
+  correctness is unchecked: a template referencing a variable nobody
+  declared renders blank at runtime and passes every test. The
+  project already knows this (`templateContextMap.test.ts` says
+  "validateRegistry only walks display groups toward variables,
+  leaving both reverse directions unchecked"), so this entry is
+  about whether to close it rather than a new discovery. Closing it
+  means parsing `{{ ... }}` and `{% ... %}` out of each registered
+  template and asserting every root identifier is declared for that
+  template's group — cheap, and it would make the context map a real
+  contract instead of documentation. Surfaced by the Slice 3.6a Task
+  9b review (2026-08-10).
