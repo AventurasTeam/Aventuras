@@ -1,5 +1,5 @@
 import { ChevronDown, X } from 'lucide-react-native'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
@@ -35,6 +35,12 @@ export type LoreListProps = {
    * from `loreRowErrors`, but only display them when the row's id is here.
    */
   invalidIds: readonly string[]
+  /**
+   * Extra control rendered in the header row, before Add (e.g. step-world's
+   * "Suggest lore" trigger) — keeps `handleAdd`'s expand-on-add ownership
+   * inside this component instead of a second, divergent Add affordance.
+   */
+  headerAction?: ReactNode
 }
 
 const PRIORITY_MIN = 0
@@ -212,7 +218,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
   )
 }
 
-export function LoreList({ rows, invalidIds }: LoreListProps) {
+export function LoreList({ rows, invalidIds, headerAction }: LoreListProps) {
   // Ephemeral, component-local — never reaches the persisted blob. Keyed by id
   // and pruned below; a stale id would re-expand a recycled row (no-harmless-id-leaks.md).
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -254,9 +260,12 @@ export function LoreList({ rows, invalidIds }: LoreListProps) {
     <View className="gap-3">
       <View className="flex-row items-center justify-between">
         <Heading level={2}>{t('wizard:world.lore.sectionLabel')}</Heading>
-        <Button variant="ghost" onPress={handleAdd}>
-          <Text>{t('wizard:world.lore.add')}</Text>
-        </Button>
+        <View className="flex-row items-center gap-2">
+          {headerAction}
+          <Button variant="ghost" onPress={handleAdd}>
+            <Text>{t('wizard:world.lore.add')}</Text>
+          </Button>
+        </View>
       </View>
       {rows.length === 0 ? (
         <Text variant="muted" size="sm">

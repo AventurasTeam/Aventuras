@@ -22,6 +22,19 @@ import { needsLead } from './step-frame-logic'
 
 const ASSIST_TARGET = 'wizard-assist'
 
+/** Shared shape for every wizard-assist "generate" call — one per step-body file. */
+export type WizardAssistRun<T> = (
+  guidance: string,
+  signal: AbortSignal,
+) => Promise<GenerateStructuredResult<T>>
+
+/** Shared shape for every wizard-assist "refine" call (prose results only). */
+export type WizardAssistRefine<T> = (
+  current: T,
+  instruction: string,
+  signal: AbortSignal,
+) => Promise<GenerateStructuredResult<T>>
+
 /** Store-ready opening: model placeholders already resolved back to real ids. */
 export type OpeningAssistValue = {
   content: string

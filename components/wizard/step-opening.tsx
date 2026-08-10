@@ -5,7 +5,7 @@ import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { resolveModelCapabilities, type GenerateStructuredResult } from '@/lib/ai'
+import { resolveModelCapabilities } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 
@@ -19,12 +19,8 @@ import {
   type DescriptionAssistValue,
   type OpeningAssistValue,
   type TitleAssistValue,
+  type WizardAssistRun,
 } from './wizard-assist'
-
-type WizardAssistRun<T> = (
-  guidance: string,
-  signal: AbortSignal,
-) => Promise<GenerateStructuredResult<T>>
 
 // DI seams — stories/tests inject fakes so no real provider is hit. Production
 // omits all of these and the live ops read the app-settings store.

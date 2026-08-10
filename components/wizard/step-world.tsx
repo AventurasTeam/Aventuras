@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { View } from 'react-native'
 
 import {
@@ -15,7 +15,6 @@ import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
-import { type GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { GENRE_PRESETS, TONE_PRESETS } from '@/lib/wizard'
@@ -37,18 +36,9 @@ import {
   type LoreAssistValue,
   type SettingAssistValue,
   type ToneAssistValue,
+  type WizardAssistRefine,
+  type WizardAssistRun,
 } from './wizard-assist'
-
-type WizardAssistRun<T> = (
-  guidance: string,
-  signal: AbortSignal,
-) => Promise<GenerateStructuredResult<T>>
-
-type WizardAssistRefine<T> = (
-  current: T,
-  instruction: string,
-  signal: AbortSignal,
-) => Promise<GenerateStructuredResult<T>>
 
 // DI seams — stories/tests inject fakes so no real provider is hit. Production
 // omits all of these and the live ops read the app-settings store.
@@ -102,6 +92,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
   const resolveModelId = assist?.resolveModelId ?? (() => resolveWizardAssistModelId())
 
   const guardedApply = useGuardedApply()
+  const invalidLoreIds = useMemo(() => invalidLoreRowIds(lore), [lore])
 
   const replaceTitle =
     guardedApply.pending != null
@@ -231,8 +222,10 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
         />
       </View>
 
-      <View className="gap-3">
-        <View className="flex-row items-center justify-end">
+      <LoreList
+        rows={lore}
+        invalidIds={invalidLoreIds}
+        headerAction={
           <AiAssist
             ariaLabel={t('wizard:world.lore.suggest')}
             run={assist?.lore ?? runLoreAssist}
@@ -251,9 +244,8 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             }
             onSetup={handleSetup}
           />
-        </View>
-        <LoreList rows={lore} invalidIds={invalidLoreRowIds(lore)} />
-      </View>
+        }
+      />
 
       <AlertDialog
         open={guardedApply.pending != null}
