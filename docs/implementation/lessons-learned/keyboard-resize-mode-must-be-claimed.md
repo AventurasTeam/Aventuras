@@ -51,9 +51,9 @@ Everything that measures the window inherits the failure at once:
   state, and `useResizeMode`'s cleanup calls `setDefaultMode()` on unmount — a
   per-screen claim un-claims it for the whole app the moment that screen goes
   away.
-- **Then tell every downstream consumer that you claimed it** — see the section
-  below. Claiming the mode and leaving consumers on their defaults trades
-  under-compensation for double-compensation, which reads as a different bug.
+- **Do not then tell consumers the window resizes** — see the section below.
+  The claim restores keyboard metrics, not a shrinking container, and libraries
+  that are told otherwise stop compensating entirely.
 - **Treat "we removed the last hook call" as a keyboard regression.** The
   dependency is invisible: deleting a `useReanimatedKeyboardAnimation()` from
   one component broke keyboard avoidance in unrelated screens across the app,
