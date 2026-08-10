@@ -25,9 +25,15 @@ import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
+import { loreRowErrors } from './step-world-logic'
+
 export type LoreListProps = {
   rows: readonly WizardLoreDraft[]
-  /** From invalidLoreRowIds — drives aria-invalid and the inline error text. */
+  /**
+   * From invalidLoreRowIds. Gates whether a row shows error state at all —
+   * both the compact row and the editor derive their field-level messages
+   * from `loreRowErrors`, but only display them when the row's id is here.
+   */
   invalidIds: readonly string[]
 }
 
@@ -58,13 +64,6 @@ function chipsFor(row: WizardLoreDraft): Chip[] {
   return chips
 }
 
-function rowErrors(row: WizardLoreDraft): string[] {
-  const errors: string[] = []
-  if (blank(row.title)) errors.push(t('wizard:world.lore.errors.title'))
-  if (blank(row.body)) errors.push(t('wizard:world.lore.errors.body'))
-  return errors
-}
-
 type LoreRowProps = {
   row: WizardLoreDraft
   invalid: boolean
@@ -74,9 +73,13 @@ type LoreRowProps = {
 
 function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
   const chips = expanded ? [] : chipsFor(row)
-  const errors = invalid ? rowErrors(row) : []
-  const titleBlank = blank(row.title)
-  const bodyBlank = blank(row.body)
+  // Gated by `invalid` (the invalidIds prop), not recomputed independently —
+  // a row the parent doesn't flag as invalid shows no error anywhere, even
+  // if title/body happen to be blank (see the LoreListProps doc above).
+  const fieldErrors = invalid ? loreRowErrors(row) : []
+  const titleBlank = fieldErrors.includes('title')
+  const bodyBlank = fieldErrors.includes('body')
+  const errorMessages = fieldErrors.map((field) => t(`wizard:world.lore.errors.${field}`))
 
   return (
     <View
@@ -110,9 +113,9 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
                     ))}
                   </View>
                 ) : null}
-                {errors.length > 0 ? (
+                {errorMessages.length > 0 ? (
                   <Text size="xs" className="text-danger">
-                    {errors.join(' ')}
+                    {errorMessages.join(' ')}
                   </Text>
                 ) : null}
               </>
@@ -166,7 +169,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
               aria-label={t('wizard:world.lore.category')}
             />
           </FormRow>
-          <Accordion type="single" collapsible>
+          <Accordion type="single" collapsible defaultValue="">
             <AccordionItem value="more-options">
               <AccordionTrigger>
                 <Text>{t('wizard:world.lore.moreOptions')}</Text>
@@ -210,16 +213,12 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
 }
 
 export function LoreList({ rows, invalidIds }: LoreListProps) {
-  // Expanded rows are ephemeral UI, so this is component-local and never reaches
-  // the persisted blob. Keyed by id, and pruned when a row disappears — a stale
-  // id here would re-expand a recycled row (see the no-harmless-id-leaks lesson).
+  // Ephemeral, component-local — never reaches the persisted blob. Keyed by id
+  // and pruned below; a stale id would re-expand a recycled row (no-harmless-id-leaks.md).
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  // Prunes only — never auto-expands a newly-appeared id here. Folding
-  // "expand whatever's new" into this effect would also fire for a store
-  // change unrelated to the Add button (e.g. a hydrated resume), which is
-  // exactly the resurrection shape the lesson warns about. Add's own expand
-  // lives in handleAdd below, scoped to the row it just created.
+  // Prunes only — new-id auto-expand lives in handleAdd, not here, so a
+  // hydrated resume or importLore batch never pops an editor open unasked.
   useEffect(() => {
     const currentIds = new Set(rows.map((r) => r.id))
     setExpanded((prev) => {
@@ -247,10 +246,8 @@ export function LoreList({ rows, invalidIds }: LoreListProps) {
   }
 
   function handleAdd() {
-    wizardStore.addLore()
-    const latest = wizardStore.getWizard().state.lore
-    const added = latest[latest.length - 1]
-    if (added) setExpanded((prev) => new Set(prev).add(added.id))
+    const id = wizardStore.addLore()
+    setExpanded((prev) => new Set(prev).add(id))
   }
 
   return (

@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest'
 
 import type { WizardLoreDraft } from '@/lib/db'
 
-import { invalidLoreRowIds, needsReplaceConfirm, worldStepValid } from './step-world-logic'
+import {
+  invalidLoreRowIds,
+  loreRowErrors,
+  needsReplaceConfirm,
+  worldStepValid,
+} from './step-world-logic'
 
 function row(patch: Partial<WizardLoreDraft> = {}): WizardLoreDraft {
   return {
@@ -36,6 +41,18 @@ describe('worldStepValid', () => {
 
   it('treats whitespace-only as empty', () => {
     expect(worldStepValid([row({ body: '   \n  ' })])).toBe(false)
+  })
+})
+
+describe('loreRowErrors', () => {
+  it('is empty for a clean row', () => {
+    expect(loreRowErrors(row())).toEqual([])
+  })
+
+  it('names title and body independently, both when both are blank', () => {
+    expect(loreRowErrors(row({ title: '' }))).toEqual(['title'])
+    expect(loreRowErrors(row({ body: '' }))).toEqual(['body'])
+    expect(loreRowErrors(row({ title: '', body: '' }))).toEqual(['title', 'body'])
   })
 })
 

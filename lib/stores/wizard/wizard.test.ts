@@ -113,6 +113,12 @@ describe('lore mutators', () => {
     expect(row.injectionMode).toBe('auto')
   })
 
+  it('addLore returns the minted row id', () => {
+    const id = wizardStore.addLore()
+    const [row] = wizardStore.getWizard().state.lore
+    expect(id).toBe(row.id)
+  })
+
   it('patchLore updates only the addressed row', () => {
     wizardStore.addLore()
     wizardStore.addLore()

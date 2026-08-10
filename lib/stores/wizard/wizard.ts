@@ -24,7 +24,8 @@ type WizardState = WizardSnapshot & {
   setLeadEntityId: (leadEntityId: string | null) => void
   setEffectiveDim: (effectiveDim: number | null) => void
   setCustomDimInvalid: (invalid: boolean) => void
-  addLore: () => void
+  /** Returns the minted row's id so a caller (e.g. an "expand on add" UI) can target it without reaching back into store state. */
+  addLore: () => string
   patchLore: (id: string, patch: Partial<Omit<WizardLoreDraft, 'id'>>) => void
   removeLore: (id: string) => void
   importLore: (rows: readonly Partial<Omit<WizardLoreDraft, 'id'>>[]) => void
@@ -64,8 +65,11 @@ const store = createStore<WizardState>()((set) => {
         customDimInvalid: false,
       })),
     setCustomDimInvalid: (customDimInvalid) => set({ customDimInvalid }),
-    addLore: () =>
-      set((s) => ({ state: { ...s.state, lore: [...s.state.lore, emptyLoreDraft()] } })),
+    addLore: () => {
+      const row = emptyLoreDraft()
+      set((s) => ({ state: { ...s.state, lore: [...s.state.lore, row] } }))
+      return row.id
+    },
     patchLore: (id, patch) =>
       set((s) => ({
         state: {

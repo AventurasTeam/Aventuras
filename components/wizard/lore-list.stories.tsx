@@ -175,7 +175,31 @@ export const EmptyBodyShowsInlineErrorThatClearsOnFix: Story = {
     expect(screen.getByText('Body is required.')).toBeInTheDocument()
 
     await userEvent.type(bodyInput, 'Now it has content.')
+    expect(bodyInput).toHaveValue('Now it has content.')
     await waitFor(() => expect(screen.queryByText('Body is required.')).not.toBeInTheDocument())
+  },
+}
+
+export const EditorRespectsInvalidIdsRatherThanRecomputingLocally: Story = {
+  // No wizardStore involvement — `invalidIds` deliberately disagrees with what
+  // a local blank() check on the row would say, proving the editor defers to
+  // the prop (the single source of truth) instead of re-deriving its own
+  // verdict. A real caller would only reach this by gating invalidIds behind
+  // some step-level rule (e.g. "only after Next is pressed") that the row
+  // data alone can't reproduce.
+  render: () => <LoreList rows={[loreRow({ id: 'row-1', title: '', body: '' })]} invalidIds={[]} />,
+  play: async () => {
+    expect(screen.queryByText('Title is required.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Body is required.')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Expand lore entry' }))
+    const titleInput = await screen.findByLabelText('Title')
+    const bodyInput = screen.getByLabelText('Body')
+
+    expect(titleInput).not.toHaveAttribute('aria-invalid', 'true')
+    expect(bodyInput).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Title is required.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Body is required.')).not.toBeInTheDocument()
   },
 }
 
@@ -205,7 +229,7 @@ export const RemoveDeletesTheRightRowAmongThree: Story = {
   },
 }
 
-export const DeleteThenAddDoesNotLeakExpansionOntoARecycledId: Story = {
+export const HydratingARecycledIdAfterDeleteDoesNotLeakExpansion: Story = {
   beforeEach: () => {
     wizardStore.reset()
     seedLore([
