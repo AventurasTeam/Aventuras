@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -249,7 +249,9 @@ type ListDemoWithLiveExistingProps = {
 // checked+disabled combination a static existingNames prop can't produce.
 function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWithLiveExistingProps) {
   const [existingNames, setExistingNames] = useState<string[]>([])
-  onReady(setExistingNames)
+  useEffect(() => {
+    onReady(setExistingNames)
+  }, [onReady])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
       <AiAssist
@@ -721,6 +723,57 @@ export const ListResult_FirstPage: Story = {
   },
 }
 
+export const ListResult_EmptyPageShowsEmptyCopy: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    expect(
+      await screen.findByText('Nothing suggested. Try different guidance.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  },
+}
+
+const NOIR_ITEM: AssistListItem = { name: 'Noir', detail: 'A moody detective drama.' }
+const NOIR_ITEM_WHITESPACE_VARIANT: AssistListItem = {
+  name: '  Noir  ',
+  detail: 'A duplicate suggestion differing only by whitespace.',
+}
+
+export const ListResult_DedupesWhitespaceVariantWithinOnePage: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [NOIR_ITEM, NOIR_ITEM_WHITESPACE_VARIANT] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Noir')
+
+    // The replace path (a first Generate / Regenerate) must dedupe exactly
+    // like the append path (`Generate more`) — a reply containing the same
+    // name twice, differing only by whitespace, renders as one row. Two rows
+    // sharing a rendered name would collide on both the React `key` and the
+    // `selected` Set key, so one click would check both.
+    expect(screen.getAllByRole('checkbox', { name: 'Noir' })).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Noir' }))
+    expect(screen.getAllByRole('checkbox', { name: 'Noir', checked: true })).toHaveLength(1)
+  },
+}
+
 export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
   render: () => (
     <ListDemo
@@ -1006,7 +1059,7 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
 
     // Marking it existing WHILE checked reaches a combination a static
     // existingNames prop never produces: checked AND disabled together, with
-    // the checkmark icon actually rendered. Driven directly through the
+    // the Indicator wrapper actually rendered. Driven directly through the
     // setter (not a click) — a button outside PopoverContent would register
     // as an outside interaction and dismiss the popover before this
     // assertion ever ran.
@@ -1017,13 +1070,13 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     await expect(userEvent.click(checkbox)).rejects.toThrow(/pointer-events/)
     expect(checkbox).toBeChecked()
 
-    // The checkmark icon is a rendered child now, not absent — the case that
-    // would matter if RN-Web's disabled styling left a gap on children.
-    // Radix's own CheckboxIndicator forces pointer-events:none on itself
-    // unconditionally, so clicking the icon directly is refused too.
-    const icon = checkbox.querySelector('svg')
-    if (icon == null) throw new Error('expected a rendered checkmark icon on a checked row')
-    await expect(userEvent.click(icon)).rejects.toThrow(/pointer-events/)
+    // The Indicator wrapper is a rendered DIRECT child now, not absent — the
+    // element RN-Web's box-none reopens to `pointer-events: auto` for direct
+    // children. Radix's own CheckboxIndicator forces pointer-events:none on
+    // itself regardless, so clicking it directly is refused too.
+    const indicator = checkbox.firstElementChild
+    if (indicator == null) throw new Error('expected a rendered Indicator wrapper on a checked row')
+    await expect(userEvent.click(indicator)).rejects.toThrow(/pointer-events/)
     expect(checkbox).toBeChecked()
   },
 }

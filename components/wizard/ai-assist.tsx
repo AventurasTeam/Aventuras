@@ -102,7 +102,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
   const [refineText, setRefineText] = useState('')
   const [phoneOpen, setPhoneOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
-  // dedupe key rather than index so a later page cannot shift what is checked.
+  // trimmed name rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -189,7 +189,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
         const page = props.getItems(result.value)
         // A replace invalidates every checkmark; only an append preserves them.
         if (!appendRef.current) setSelected(new Set())
-        setListItems((prev) => (appendRef.current ? mergePages(prev, page) : page))
+        setListItems((prev) => (appendRef.current ? mergePages(prev, page) : mergePages([], page)))
       }
       setAssist({ kind: 'result', value: result.value })
     } else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
@@ -336,11 +336,8 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
                       >
                         <Checkbox
                           checked={selected.has(row.name)}
-                          // Unlike Popover's Trigger (lessons-learned/rn-primitives-disabled.md),
-                          // no extra pointer-events override is needed here: RN-Web's Pressable
-                          // already sets pointer-events:none on a disabled root, and Radix's
-                          // CheckboxIndicator forces pointer-events:none on the checkmark icon
-                          // unconditionally — verified via mutation-tested Storybook coverage.
+                          // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
+                          // pointer-events:none too, closing box-none's direct-children gap.
                           disabled={row.exists}
                           onCheckedChange={(next) =>
                             setSelected((prev) => {
@@ -395,7 +392,7 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
                 <Button
                   disabled={selected.size === 0}
                   onPress={() => {
-                    props.onImport(marked.filter((row) => selected.has(row.name)))
+                    props.onImport(marked.filter((row) => selected.has(row.name) && !row.exists))
                     closeOverlay()
                   }}
                 >
