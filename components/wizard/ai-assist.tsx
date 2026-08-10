@@ -17,13 +17,9 @@ import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
+import { cn } from '@/lib/utils'
 
-import {
-  markExisting,
-  mergePages,
-  type AssistListItem,
-  type MarkedAssistListItem,
-} from './assist-list-logic'
+import { markExisting, mergePages, type AssistListItem } from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -99,11 +95,8 @@ type AiAssistListProps<T, P> = AiAssistCommonProps & {
   getItems: (value: T) => AssistListItem<P>[]
   /** Names already in the wizard's own list — drives the `(already exists)` mark. */
   existingNames: readonly string[]
-  /**
-   * Fires once with every checked row when `Import selected` is pressed.
-   * `exists` is always false here — an already-existing row cannot be checked.
-   */
-  onImport: (items: MarkedAssistListItem<P>[]) => void
+  /** Fires once with the payload of every checked row when `Import selected` is pressed. */
+  onImport: (payloads: P[]) => void
 }
 
 export type AiAssistProps<T, P = unknown> =
@@ -302,14 +295,16 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (props.result !== 'list') return null
     const marked = markExisting(listItems, props.existingNames)
     return (
-      <View className="gap-3">
+      // Phone fills the sheet's fixed detent rather than capping short of it;
+      // the max-h is a popover concern, where nothing else bounds the height.
+      <View className={cn('gap-3', isPhone && 'flex-1')}>
         <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
         {marked.length === 0 ? (
           <Text size="sm" variant="muted">
             {t('wizard:aiAssist.list.empty')}
           </Text>
         ) : (
-          <View className="max-h-72">
+          <View className={isPhone ? 'flex-1' : 'max-h-72'}>
             <Scroller>
               <View className="gap-2">
                 {marked.map((row) => (
@@ -376,7 +371,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
           <Button
             disabled={selected.size === 0}
             onPress={() => {
-              props.onImport(marked.filter((row) => selected.has(row.name) && !row.exists))
+              props.onImport(
+                marked
+                  .filter((row) => selected.has(row.name) && !row.exists)
+                  .map((row) => row.payload),
+              )
               closeOverlay()
             }}
           >
@@ -422,9 +421,14 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (props.result !== 'prose' || assist.kind !== 'result') return null
     const prose = props.getProse(assist.value)
     return (
-      <View className="gap-3">
+      <View className={cn('gap-3', isPhone && 'flex-1')}>
         <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-        <View className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
+        <View
+          className={cn(
+            'rounded-md border border-border bg-bg-sunken p-3',
+            isPhone ? 'flex-1' : 'max-h-60',
+          )}
+        >
           <Scroller>
             <Text size="sm">{prose}</Text>
           </Scroller>
