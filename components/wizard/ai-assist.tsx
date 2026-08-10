@@ -1,3 +1,4 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { Sparkles } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
 import { Platform, ScrollView, View } from 'react-native'
@@ -100,6 +101,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const { ariaLabel, guidancePlaceholder, run, resolveModelId, onSetup, disabled } = props
 
   const isPhone = useTier() === 'phone'
+  // Inside a gorhom sheet a plain ScrollView's touches lose to the sheet's pan
+  // gesture, so rows past the fold are unreachable; BottomSheetScrollView
+  // registers with that gesture system. It is not an RN core component, so
+  // NativeWind drops className on it — every class stays on the wrapping View.
+  const Scroller = isPhone ? BottomSheetScrollView : ScrollView
 
   const [assist, setAssist] = useState<AssistState<T>>({ kind: 'idle' })
   const [guidanceText, setGuidanceText] = useState('')
@@ -287,45 +293,47 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             {t('wizard:aiAssist.list.empty')}
           </Text>
         ) : (
-          <ScrollView className="max-h-72">
-            <View className="gap-2">
-              {marked.map((row) => (
-                <View
-                  key={row.name}
-                  className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
-                >
-                  <Checkbox
-                    checked={selected.has(row.name)}
-                    // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
-                    // pointer-events:none too, closing box-none's direct-children gap.
-                    disabled={row.exists}
-                    onCheckedChange={(next) =>
-                      setSelected((prev) => {
-                        const draft = new Set(prev)
-                        if (next) draft.add(row.name)
-                        else draft.delete(row.name)
-                        return draft
-                      })
-                    }
-                    aria-label={row.name}
-                  />
-                  <View className="min-w-0 flex-1 gap-0.5">
-                    <Text size="sm" className="font-medium">
-                      {row.name}
-                    </Text>
-                    <Text size="xs" variant="muted" numberOfLines={2}>
-                      {row.detail}
-                    </Text>
-                    {row.exists ? (
-                      <Text size="xs" variant="muted">
-                        {t('wizard:aiAssist.list.alreadyExists')}
+          <View className="max-h-72">
+            <Scroller>
+              <View className="gap-2">
+                {marked.map((row) => (
+                  <View
+                    key={row.name}
+                    className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
+                  >
+                    <Checkbox
+                      checked={selected.has(row.name)}
+                      // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
+                      // pointer-events:none too, closing box-none's direct-children gap.
+                      disabled={row.exists}
+                      onCheckedChange={(next) =>
+                        setSelected((prev) => {
+                          const draft = new Set(prev)
+                          if (next) draft.add(row.name)
+                          else draft.delete(row.name)
+                          return draft
+                        })
+                      }
+                      aria-label={row.name}
+                    />
+                    <View className="min-w-0 flex-1 gap-0.5">
+                      <Text size="sm" className="font-medium">
+                        {row.name}
                       </Text>
-                    ) : null}
+                      <Text size="xs" variant="muted" numberOfLines={2}>
+                        {row.detail}
+                      </Text>
+                      {row.exists ? (
+                        <Text size="xs" variant="muted">
+                          {t('wizard:aiAssist.list.alreadyExists')}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
-                </View>
-              ))}
-            </View>
-          </ScrollView>
+                ))}
+              </View>
+            </Scroller>
+          </View>
         )}
         <View className="flex-row flex-wrap justify-end gap-2">
           <Button variant="ghost" onPress={closeOverlay}>
@@ -400,9 +408,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     return (
       <View className="gap-3">
         <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-        <ScrollView className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
-          <Text size="sm">{prose}</Text>
-        </ScrollView>
+        <View className="max-h-60 rounded-md border border-border bg-bg-sunken p-3">
+          <Scroller>
+            <Text size="sm">{prose}</Text>
+          </Scroller>
+        </View>
         <View className="flex-row flex-wrap justify-end gap-2">
           <Button variant="ghost" onPress={closeOverlay}>
             <Text>{t('wizard:aiAssist.actions.discard')}</Text>
