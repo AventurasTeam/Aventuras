@@ -31,7 +31,11 @@ export function markExisting(
   existingNames: readonly string[],
 ): MarkedAssistListItem[] {
   const taken = new Set(existingNames.map(key))
-  return items.map((item) => ({ ...item, exists: taken.has(key(item.name)) }))
+  return items.map((item) => ({
+    ...item,
+    name: item.name.trim(),
+    exists: taken.has(key(item.name)),
+  }))
 }
 
 /** Append a fresh page to the accumulated result, first-occurrence wins. */

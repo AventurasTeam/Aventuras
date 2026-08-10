@@ -17,6 +17,10 @@ describe('markExisting', () => {
   it('leaves everything importable when nothing exists yet', () => {
     expect(markExisting([item('A'), item('B')], []).every((m) => !m.exists)).toBe(true)
   })
+
+  it('trims the surviving name so the heading matches the dedupe key', () => {
+    expect(markExisting([item('  Noir  ')], [])[0].name).toBe('Noir')
+  })
 })
 
 describe('mergePages', () => {
