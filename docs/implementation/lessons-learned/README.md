@@ -96,6 +96,10 @@ slice plans when relevant.
 - [Drag-height constant drift](./drag-height-constant-drift.md)
   — measure or enforce row height; assumed-vs-actual mismatch
   produces release-time pixel snaps.
+- [`KeyboardProvider` is inert until a hook claims resize mode](./keyboard-resize-mode-must-be-claimed.md)
+  — the provider alone avoids nothing; `useResizeMode` must be claimed once at
+  the root, or every keyboard-avoiding surface measures a window that under
+  edge-to-edge never shrinks.
 - [KAV `automaticOffset` × layout-entering animation race](./kav-automatic-offset-animation-race.md)
   — `react-native-keyboard-controller` KAV measures once;
   Reanimated-entry containers drive `paddingBottom` off

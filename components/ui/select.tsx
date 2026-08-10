@@ -159,9 +159,6 @@ function PhoneSheetContent({
             enablePanDownToClose
             keyboardBehavior="extend"
             keyboardBlurBehavior="restore"
-            // See sheet.tsx: gorhom's 'adjustPan' default leaves Android without
-            // usable keyboard metrics, so keyboardBehavior never engages.
-            android_keyboardInputMode="adjustResize"
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleIndicatorStyle}
             onClose={() => onOpenChange(false)}
