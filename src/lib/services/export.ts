@@ -4,8 +4,9 @@ import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from './exportTarget'
 import { errMessage } from '$lib/utils/error'
 import { openFilters } from '$lib/utils/dialogFilters'
-import { importFromJson, importFromFile, EXPORT_FORMAT_VERSION } from './import'
-import type { AventuraExport, ImportResult } from './import'
+import { importFromJson, importFromFile, previewPackBinding, EXPORT_FORMAT_VERSION } from './import'
+import type { AventuraExport, ImportResult, RunImportOptions } from './import'
+import type { PackBindingExport } from './import/types'
 
 // Re-exported for the modules that imported these from here before the import logic moved.
 export type { AventuraExport } from './import'
@@ -39,6 +40,9 @@ class ExportService {
     branches: Branch[] = [],
     chapters: Chapter[] = [],
     currentBgImage: string | null = null,
+    // Identity and variable *shape* only — never the pack's templates, which stay owned by the
+    // pack as installed on whichever device generates. Null for a story with no pack row.
+    packBinding: PackBindingExport | null = null,
   ): Promise<boolean> {
     // embeddedImages is metadata only (no base64). The native exporter fills in each image's
     // imageData from SQLite, so the heavy bytes never sit in the JS heap (their only home would
@@ -61,6 +65,9 @@ class ExportService {
       branches,
       chapters,
       currentBgImage,
+      // Omitted rather than written as null, so a story with no pack produces a file that is
+      // byte-for-byte the legacy shape and takes the legacy import path.
+      ...(packBinding ? { packBinding } : {}),
     }
 
     const target = await resolveSaveTarget(`${this.sanitizeFilename(story.title)}.avt`, [
@@ -189,7 +196,11 @@ class ExportService {
   }
 
   // Import a story through the native file dialog.
-  async importFromAventura(): Promise<ImportResult> {
+  // `resolvePackBinding` is how the caller puts a pack mapping step in front of the import; when
+  // omitted, the headless auto-matcher decides.
+  async importFromAventura(
+    options: Pick<RunImportOptions, 'resolvePackBinding'> = {},
+  ): Promise<ImportResult> {
     // openFilters drops these on Android, where a .avt is not selectable with them. See there.
     const filePath = await open({
       filters: openFilters([
@@ -207,7 +218,7 @@ class ExportService {
       // Read natively: the file's image payloads never enter the JS heap, so a large story
       // imports without hitting Android's WebView heap cap. `filePath` may be a SAF
       // content:// URI there, which the native side opens via the fs plugin.
-      return await importFromFile(filePath)
+      return await importFromFile(filePath, options)
     } catch (error) {
       console.error('Import failed:', error)
       return {
@@ -219,11 +230,21 @@ class ExportService {
 
   // Import from a JSON string (HTML file input, and sync which receives a story over the network).
   // Set skipImportedSuffix to true for sync operations to keep the original title.
+  //
+  // Sync resolves the pack itself, before it deletes the story it is replacing, and passes the
+  // answer here through `options.resolvePackBinding` — so by the time this runs the decision is
+  // already made and simply replayed.
   async importFromContent(
     content: string,
     skipImportedSuffix: boolean = false,
+    options: Pick<RunImportOptions, 'resolvePackBinding'> = {},
   ): Promise<ImportResult> {
-    return importFromJson(content, { skipImportedSuffix })
+    return importFromJson(content, { ...options, skipImportedSuffix })
+  }
+
+  /** What a payload says about its pack, so a caller can settle it before importing. */
+  async previewPackBinding(content: string) {
+    return previewPackBinding(content)
   }
 
   private sanitizeFilename(name: string): string {

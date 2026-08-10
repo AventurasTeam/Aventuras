@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { compareVersions, validateExport, logVersionCompatibilityWarnings } from './validate'
+import { EXPORT_FORMAT_VERSION } from './types'
 import type { AventuraExport } from './types'
 
 /**
@@ -77,6 +78,23 @@ describe('validateExport', () => {
     const message = validateExport(validExport({ entries: [] }))
     expect(message).toContain('no story entries')
   })
+
+  it('accepts a file that records no pack at all', () => {
+    // Every file written before v1.9.0. It must stay an ordinary import, not an invalid file.
+    expect(validateExport(validExport({ packBinding: undefined }))).toBeNull()
+  })
+
+  it.each([
+    ['a non-object', 'not-a-binding'],
+    ['no pack identity', {}],
+    ['a nameless pack', { pack: {} }],
+    ['definitions of the wrong type', { pack: { name: 'P', author: 'A' }, variables: 'nope' }],
+  ])('accepts a file whose packBinding is %s', (_label, packBinding) => {
+    // packBinding is advisory: a malformed one degrades to "unknown pack" downstream, where the
+    // user picks (or the auto-matcher falls back). Rejecting the file would cost the user their
+    // whole story over a field that only decides which templates narrate it.
+    expect(validateExport(validExport({ packBinding } as Partial<AventuraExport>))).toBeNull()
+  })
 })
 
 describe('logVersionCompatibilityWarnings', () => {
@@ -85,14 +103,17 @@ describe('logVersionCompatibilityWarnings', () => {
   it('warns once per feature the file predates', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logVersionCompatibilityWarnings('1.5.0')
-    // Predates 1.6.0, 1.7.0 and 1.8.0; carries everything up to and including 1.5.0.
-    expect(warn).toHaveBeenCalledTimes(3)
+    // Predates 1.6.0, 1.7.0, 1.8.0 and 1.9.0; carries everything up to and including 1.5.0.
+    expect(warn).toHaveBeenCalledTimes(4)
     expect(warn.mock.calls.map(String).join('\n')).toContain('branching data')
   })
 
   it('says nothing about a file at the current format version', () => {
+    // Written against the constant, not a literal: a version bump whose FEATURE_HISTORY arm was
+    // forgotten makes this app stamp its own exports as older than their contents, so every
+    // re-import of a file it just wrote warns about a feature the file actually carries.
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    logVersionCompatibilityWarnings('1.8.0')
+    logVersionCompatibilityWarnings(EXPORT_FORMAT_VERSION)
     expect(warn).not.toHaveBeenCalled()
   })
 
@@ -105,6 +126,6 @@ describe('logVersionCompatibilityWarnings', () => {
   it('warns about every feature for the oldest possible file', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logVersionCompatibilityWarnings('1.0.0')
-    expect(warn).toHaveBeenCalledTimes(8)
+    expect(warn).toHaveBeenCalledTimes(9)
   })
 })

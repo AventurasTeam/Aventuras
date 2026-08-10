@@ -20,6 +20,57 @@ import type {
   PersistentStyleReviewState,
   EmbeddedImage,
 } from '$lib/types'
+import type {
+  CustomVariableType,
+  EnumOption,
+  RuntimeEntityType,
+  RuntimeVariableType,
+} from '$lib/services/packs/types'
+
+/**
+ * A pack variable definition as it travels in a `.avt`.
+ *
+ * Deliberately id-less: `CustomVariable.id` and `packId` are assigned per device, so carrying
+ * them off-device would only invite someone to match on them later. Matching is by name.
+ */
+export interface PackVariableExport {
+  variableName: string
+  displayName: string
+  description?: string
+  variableType: CustomVariableType
+  isRequired: boolean
+  sortOrder: number
+  defaultValue?: string
+  enumOptions?: EnumOption[]
+}
+
+/** A pack runtime-variable definition as it travels in a `.avt`. Id-less, for the same reason. */
+export interface PackRuntimeVariableExport {
+  entityType: RuntimeEntityType
+  variableName: string
+  displayName: string
+  description?: string
+  variableType: RuntimeVariableType
+  defaultValue?: string
+  minValue?: number
+  maxValue?: number
+  enumOptions?: EnumOption[]
+}
+
+/**
+ * What a story file records about the prompt pack it was written with.
+ *
+ * Enough for a recipient to re-establish the binding — identity, the story's own answers, and
+ * the shape of the variables those answers belong to — and deliberately *not* the pack's
+ * template content. Templates stay owned by the pack as installed on the device that generates,
+ * so receiving a story can never fork the recipient's packs behind their back.
+ */
+export interface PackBindingExport {
+  pack: { name: string; author: string | null }
+  customVariableValues?: Record<string, string>
+  variables?: PackVariableExport[]
+  runtimeVariables?: PackRuntimeVariableExport[]
+}
 
 export interface AventuraExport {
   version: string
@@ -38,6 +89,7 @@ export interface AventuraExport {
   branches?: Branch[] // Added in v1.6.0
   chapters?: Chapter[] // Added in v1.7.0
   currentBgImage?: string | null // Added in v1.8.0
+  packBinding?: PackBindingExport // Added in v1.9.0
 }
 
 /**
@@ -58,8 +110,10 @@ export interface AventuraExport {
  * - v1.6.0 Added checkpoints and branches
  * - v1.7.0 Added chapters (memory system)
  * - v1.8.0 Added currentBgImage (carried on the story record)
+ * - v1.9.0 Added packBinding (prompt pack identity, the story's variable answers, and the
+ *          pack's variable definitions — never its template content)
  */
-export const EXPORT_FORMAT_VERSION = '1.8.0'
+export const EXPORT_FORMAT_VERSION = '1.9.0'
 
 export interface ImportResult {
   success: boolean

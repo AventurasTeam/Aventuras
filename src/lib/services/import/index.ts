@@ -13,16 +13,36 @@ import type { AventuraExport, ImportResult, IdMaps } from './types'
 import { validateExport, logVersionCompatibilityWarnings } from './validate'
 import { buildIdMaps } from './idMaps'
 import { importStructure } from './structure'
+import type { StoryPackBinding } from './structure'
 import { importImagesInline } from './images'
+import { autoMatchPackBinding, buildBindingContext } from './packBinding'
+import type { PackBindingContext, PackBindingResolution } from './packBinding'
 
 export type { AventuraExport, ImportResult, IdMaps } from './types'
 export { EXPORT_FORMAT_VERSION } from './types'
 export { validateExport, logVersionCompatibilityWarnings, compareVersions } from './validate'
 export { buildIdMaps, createMappers } from './idMaps'
 export { importStructure } from './structure'
+export type { StoryPackBinding } from './structure'
 export { importImagesInline, resolveImageMappings } from './images'
 export type { ImageEntryMapping } from './images'
 export { importFromFile } from './native'
+export {
+  autoMatchPackBinding,
+  buildBindingContext,
+  decidePackPrompt,
+  planPackBinding,
+  sanitizePackBinding,
+  unansweredRequiredVariables,
+} from './packBinding'
+export type {
+  PackBindingContext,
+  PackBindingResolution,
+  PackPromptDecision,
+  PackPromptPlan,
+  RequiredVariableDef,
+  SanitizedPackBinding,
+} from './packBinding'
 
 export interface RunImportOptions {
   /** Sync keeps the original title; a user-facing import marks the copy. */
@@ -32,6 +52,15 @@ export interface RunImportOptions {
    * rows reference already exist. Defaults to the inline path.
    */
   importImages?: (data: AventuraExport, maps: IdMaps) => Promise<void>
+  /**
+   * Which local pack the story binds to. Called before anything is written, so returning `null`
+   * (the user cancelled) leaves nothing behind.
+   *
+   * Defaults to the headless auto-matcher, which is what makes sync correct without a code path
+   * of its own — and what keeps the pipeline UI-agnostic, since the only caller that can ask a
+   * question is the one that supplies this.
+   */
+  resolvePackBinding?: (ctx: PackBindingContext) => Promise<PackBindingResolution | null>
 }
 
 /**
@@ -47,12 +76,24 @@ export async function runImport(
   data: AventuraExport,
   options: RunImportOptions = {},
 ): Promise<ImportResult> {
-  const { skipImportedSuffix = false, importImages = importImagesInline } = options
+  const {
+    skipImportedSuffix = false,
+    importImages = importImagesInline,
+    resolvePackBinding = autoMatchPackBinding,
+  } = options
 
   const invalid = validateExport(data)
   if (invalid) return { success: false, error: invalid }
 
   logVersionCompatibilityWarnings(data.version)
+
+  // Before the first write: a cancel here costs nothing to undo, and the story never exists
+  // bound to a pack the user did not pick.
+  const context = await buildBindingContext(data.packBinding)
+  const resolution = await resolvePackBinding(context)
+  if (!resolution) return { success: false }
+
+  const packBinding = await loadTargetDefinitions(context, resolution)
 
   const maps = buildIdMaps(data)
   let storyCreated = false
@@ -60,6 +101,7 @@ export async function runImport(
   try {
     await importStructure(data, maps, {
       skipImportedSuffix,
+      packBinding,
       onStoryCreated: () => {
         storyCreated = true
       },
@@ -74,6 +116,25 @@ export async function runImport(
 }
 
 /**
+ * Pair the resolved pack's runtime variable definitions with the file's, so the entity values can
+ * be re-keyed as their rows are built.
+ *
+ * Skipped entirely when the file carries no runtime variable definitions — the overwhelmingly
+ * common case, and one extra query is one too many on a path that runs per import.
+ */
+async function loadTargetDefinitions(
+  context: PackBindingContext,
+  resolution: PackBindingResolution,
+): Promise<StoryPackBinding> {
+  const sourceRuntimeVars = context.binding?.runtimeVariables ?? []
+  const targetRuntimeVars = sourceRuntimeVars.length
+    ? await database.getRuntimeVariables(resolution.packId)
+    : []
+
+  return { ...resolution, sourceRuntimeVars, targetRuntimeVars }
+}
+
+/**
  * Undo a partial import. Best-effort: the import has already failed, and reporting a cleanup
  * problem instead of the real cause would only hide it.
  */
@@ -82,6 +143,23 @@ async function rollbackStory(storyId: string): Promise<void> {
     await database.deleteStory(storyId)
   } catch (cleanupError) {
     console.error('[Import] Failed to roll back the partially imported story:', cleanupError)
+  }
+}
+
+/**
+ * Work out what a story payload says about its pack, without importing it.
+ *
+ * Sync needs this because it deletes the story it is replacing before importing: the pack
+ * question has to be asked and answered while that story is still there, which means before
+ * `runImport` is reached. Returns `null` if the content is not parseable — the import will
+ * produce the real error message a moment later, and there is nothing to ask about either way.
+ */
+export async function previewPackBinding(content: string): Promise<PackBindingContext | null> {
+  try {
+    const data: AventuraExport = JSON.parse(content)
+    return await buildBindingContext(data.packBinding)
+  } catch {
+    return null
   }
 }
 

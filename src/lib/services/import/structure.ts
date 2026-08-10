@@ -17,12 +17,26 @@ import type {
   Branch,
   WorldStateDelta,
 } from '$lib/types'
-import type { AventuraExport, IdMaps } from './types'
+import type { AventuraExport, IdMaps, PackRuntimeVariableExport } from './types'
+import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
+import { remapRuntimeVars } from '$lib/services/packs/binding'
+import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
+
+/** The resolved binding, plus both sides' runtime variable definitions for the re-keying. */
+export interface StoryPackBinding extends PackBindingResolution {
+  sourceRuntimeVars: PackRuntimeVariableExport[]
+  targetRuntimeVars: RuntimeVariable[]
+}
 
 export interface ImportStructureOptions {
   /** Sync keeps the original title; a user-facing import marks the copy. */
   skipImportedSuffix?: boolean
+  /**
+   * Which pack the story binds to, and how to re-key its entities' values for that pack. Absent
+   * only in tests that predate the binding step; the pipeline always supplies it.
+   */
+  packBinding?: StoryPackBinding
   /**
    * Fired the moment the story row exists, before the rest of the structure is written. Lets a
    * caller start treating the import as rollback-eligible without waiting for this whole
@@ -42,9 +56,25 @@ export async function importStructure(
 ): Promise<void> {
   const { newStoryId, oldToNewId, branchIdMap, checkpointIdMap } = maps
   const { mapBranchId, mapEntryId, mapOverridesId, remapEntityId } = createMappers(maps)
-  const { skipImportedSuffix = false, onStoryCreated } = options
+  const { skipImportedSuffix = false, packBinding, onStoryCreated } = options
 
-  const importedStory: Omit<Story, 'createdAt' | 'updatedAt'> = {
+  /**
+   * Re-key one entity's runtime variable values for the pack the story is being bound to, before
+   * its row is inserted. In memory and in passing: no extra pass over the rows, and nothing new
+   * inside the rollback window.
+   */
+  const remapMetadata = <T>(metadata: T, entityType: RuntimeEntityType): T =>
+    remapRuntimeVars(
+      metadata as Record<string, unknown> | null,
+      entityType,
+      packBinding?.sourceRuntimeVars,
+      packBinding?.targetRuntimeVars,
+    ) as T
+
+  const importedStory: Omit<Story, 'createdAt' | 'updatedAt'> & {
+    packId?: string | null
+    customVariableValues?: Record<string, string> | null
+  } = {
     id: newStoryId,
     title: skipImportedSuffix ? data.story.title : `${data.story.title} (Imported)`,
     description: data.story.description,
@@ -58,6 +88,8 @@ export async function importStructure(
     timeTracker: data.story.timeTracker ?? null, // Restore time tracker from export
     currentBranchId: null, // Set after branch import (if available)
     currentBgImage: data.story.currentBgImage || null,
+    packId: packBinding?.packId ?? null,
+    customVariableValues: packBinding?.customVariableValues ?? null,
   }
 
   await database.createStory(importedStory)
@@ -206,7 +238,7 @@ export async function importStructure(
       relationship: char.relationship,
       traits: char.traits,
       status: char.status,
-      metadata: char.metadata,
+      metadata: remapMetadata(char.metadata, 'character'),
       visualDescriptors: char.visualDescriptors ?? {},
       portrait: char.portrait ?? null,
       branchId: mapBranchId(char.branchId ?? null),
@@ -232,7 +264,7 @@ export async function importStructure(
       visited: loc.visited,
       current: loc.current,
       connections: loc.connections.map((c) => oldToNewId.get(c) ?? c),
-      metadata: loc.metadata,
+      metadata: remapMetadata(loc.metadata, 'location'),
       branchId: mapBranchId(loc.branchId ?? null),
       overridesId: mapOverridesId(loc.overridesId),
       deleted: loc.deleted ?? false,
@@ -257,7 +289,7 @@ export async function importStructure(
       quantity: item.quantity,
       equipped: item.equipped,
       location: mappedLocation,
-      metadata: item.metadata,
+      metadata: remapMetadata(item.metadata, 'item'),
       branchId: mapBranchId(item.branchId ?? null),
       overridesId: mapOverridesId(item.overridesId),
       deleted: item.deleted ?? false,
@@ -279,7 +311,7 @@ export async function importStructure(
       status: beat.status,
       triggeredAt: beat.triggeredAt,
       resolvedAt: beat.resolvedAt ?? null,
-      metadata: beat.metadata,
+      metadata: remapMetadata(beat.metadata, 'story_beat'),
       branchId: mapBranchId(beat.branchId ?? null),
       overridesId: mapOverridesId(beat.overridesId),
       deleted: beat.deleted ?? false,

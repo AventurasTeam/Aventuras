@@ -16,6 +16,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { AventuraExport, ImportResult, IdMaps } from './types'
 import { runImport } from './index'
+import type { RunImportOptions } from './index'
 import { resolveImageMappings } from './images'
 
 /**
@@ -24,12 +25,18 @@ import { resolveImageMappings } from './images'
  * Falls back to nothing: if the native side cannot read the file, the error surfaces as-is.
  * `runImport` deletes the partially imported story if the image pass fails.
  */
-export async function importFromFile(filePath: string): Promise<ImportResult> {
+export async function importFromFile(
+  filePath: string,
+  options: Pick<RunImportOptions, 'resolvePackBinding'> = {},
+): Promise<ImportResult> {
   // Pass 1 — structure only. Rust skips each imageData without ever allocating it.
+  // The parsed export is available here, before any row is written, which is what lets a pack
+  // dialog run without a second read and without anything to clean up if it is cancelled.
   const lightJson = await invoke<string>('avt_read_light', { srcPath: filePath })
   const data: AventuraExport = JSON.parse(lightJson)
 
   return runImport(data, {
+    ...options,
     importImages: (parsed, maps) => importImagesNatively(filePath, parsed, maps),
   })
 }

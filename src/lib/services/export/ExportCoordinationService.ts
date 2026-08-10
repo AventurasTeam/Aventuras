@@ -16,6 +16,7 @@ import type {
   Branch,
   EmbeddedImageMeta,
 } from '$lib/types'
+import type { PackBindingExport } from '$lib/services/import/types'
 
 /** Complete story data for export */
 export interface StoryExportData {
@@ -31,6 +32,63 @@ export interface StoryExportData {
   checkpoints: Checkpoint[]
   branches: Branch[]
   chapters: Chapter[]
+  /**
+   * The story's prompt pack, as much of it as can safely travel. Null when the story has no pack
+   * row to point at (a story predating the column, or one whose pack has since been deleted) —
+   * the file then records no pack and imports as a legacy file does.
+   */
+  packBinding: PackBindingExport | null
+}
+
+/**
+ * Describe the story's pack for the file: identity, the story's own answers, and the shape of
+ * the variables those answers belong to.
+ *
+ * Template content is deliberately absent. The recipient's own pack narrates on the recipient's
+ * device, so a shared story cannot fork their templates behind their back; `.prompt.json` already
+ * exists for sharing a pack deliberately.
+ *
+ * Definitions travel without ids: `id` and `packId` are assigned per device and would only invite
+ * a later matcher to trust them.
+ */
+async function gatherPackBinding(storyId: string): Promise<PackBindingExport | null> {
+  const packId = await database.getStoryPackId(storyId)
+  if (!packId) return null
+
+  const pack = await database.getPack(packId)
+  if (!pack) return null
+
+  const [variables, runtimeVariables, customVariableValues] = await Promise.all([
+    database.getPackVariables(packId),
+    database.getRuntimeVariables(packId),
+    database.getStoryCustomVariables(storyId),
+  ])
+
+  return {
+    pack: { name: pack.name, author: pack.author },
+    ...(customVariableValues ? { customVariableValues } : {}),
+    variables: variables.map((v) => ({
+      variableName: v.variableName,
+      displayName: v.displayName,
+      description: v.description,
+      variableType: v.variableType,
+      isRequired: v.isRequired,
+      sortOrder: v.sortOrder,
+      defaultValue: v.defaultValue,
+      enumOptions: v.enumOptions,
+    })),
+    runtimeVariables: runtimeVariables.map((v) => ({
+      entityType: v.entityType,
+      variableName: v.variableName,
+      displayName: v.displayName,
+      description: v.description,
+      variableType: v.variableType,
+      defaultValue: v.defaultValue,
+      minValue: v.minValue,
+      maxValue: v.maxValue,
+      enumOptions: v.enumOptions,
+    })),
+  }
 }
 
 /**
@@ -50,6 +108,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     checkpoints,
     branches,
     chapters,
+    packBinding,
   ] = await Promise.all([
     database.getStoryEntries(storyId),
     database.getCharacters(storyId),
@@ -61,6 +120,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     database.getCheckpoints(storyId),
     database.getBranches(storyId),
     database.getChapters(storyId),
+    gatherPackBinding(storyId),
   ])
 
   return {
@@ -74,6 +134,7 @@ export async function gatherStoryData(storyId: string): Promise<StoryExportData>
     checkpoints,
     branches,
     chapters,
+    packBinding,
   }
 }
 

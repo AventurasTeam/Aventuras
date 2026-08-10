@@ -859,6 +859,15 @@ export interface ExperimentalFeatures {
   generationNotifications: boolean
   /** Android: Include preview of generated text in the completion notification */
   notificationPreview: boolean
+  /**
+   * Ask which prompt pack to use when importing a story file that records no pack.
+   *
+   * Off by default on purpose: files predating the pack section are every file in existence, and
+   * they already import bound to the built-in pack. Only consulted on the interactive file-import
+   * path, and only when the device has more than one pack — sync never prompts, and a device with
+   * one pack has nothing to choose.
+   */
+  legacyImportPackMapping: boolean
 }
 
 // ===== World State Delta Tracking (Phase 1) =====

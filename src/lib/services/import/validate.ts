@@ -58,6 +58,10 @@ const FEATURE_HISTORY: { version: string; warning: string }[] = [
     version: '1.8.0',
     warning: 'current background image (v1.8.0). Current background image will not be restored.',
   },
+  {
+    version: '1.9.0',
+    warning: 'prompt pack information (v1.9.0). The story will be bound to the built-in pack.',
+  },
 ]
 
 /** Log warnings for imports from older versions that may be missing features. */

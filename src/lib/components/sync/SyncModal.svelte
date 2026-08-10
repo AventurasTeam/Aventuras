@@ -17,11 +17,62 @@
   import { Html5Qrcode } from 'html5-qrcode'
   import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
   import { onDestroy } from 'svelte'
+  import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
+  import { settings } from '$lib/stores/settings.svelte'
+  import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
+  import type { PresetPack } from '$lib/services/packs/types'
+  import { planPackBinding } from '$lib/services/import'
+  import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Card, CardHeader, CardTitle, CardDescription } from '$lib/components/ui/card'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
+
+  /** Non-null only while a transfer is waiting on the user's pack choice. */
+  let packMapping = $state<{
+    context: PackBindingContext
+    lockedPack?: PresetPack | null
+    onlyVariables?: string[]
+    resolve: (resolution: PackBindingResolution | null) => void
+  } | null>(null)
+
+  /**
+   * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
+   *
+   * This runs ahead of `createPreSyncBackup`/`deleteStory` on purpose. Both receive paths remove
+   * the story they are replacing *before* importing, so a question asked any later would let a
+   * cancel destroy the copy being replaced and put nothing in its place.
+   *
+   * Sync can ask at all because it is user-driven: the payload is already downloaded and no
+   * remote party is waiting. A background sync would need a different answer here.
+   *
+   * Returns the resolution, or `null` if the user backed out — in which case the caller must
+   * return without touching anything.
+   */
+  async function resolveIncomingPack(storyJson: string): Promise<PackBindingResolution | null> {
+    const context = await exportService.previewPackBinding(storyJson)
+    // Unparseable: let the import produce the real error rather than inventing one here.
+    if (!context) return { packId: DEFAULT_PACK_ID }
+
+    const plan = await planPackBinding(
+      context,
+      settings.experimentalFeatures.legacyImportPackMapping,
+    )
+    if (!plan.ask) return plan.resolution
+
+    return new Promise((resolve) => {
+      packMapping = {
+        context,
+        lockedPack: plan.lockedPack,
+        onlyVariables: plan.onlyVariables,
+        resolve: (value) => {
+          packMapping = null
+          resolve(value)
+        },
+      }
+    })
+  }
 
   // State
   let serverInfo = $state<SyncServerInfo | null>(null)
@@ -129,6 +180,13 @@
   async function importReceivedStory() {
     if (!receivedStoryJson || !receivedStoryPreview) return
 
+    // Pack first — and deliberately outside the block below, whose `finally` discards the
+    // received payload. The poller has already cleared the server's copy, so a cancel that fell
+    // through to it would lose the story outright; backing out must leave it pending so the user
+    // can go install the pack and click again.
+    const packBinding = await resolveIncomingPack(receivedStoryJson)
+    if (!packBinding) return
+
     loading = true
     error = null
     showReceivedConflict = false
@@ -141,7 +199,9 @@
         await syncService.deleteStory(existingId)
       }
 
-      const result = await exportService.importFromContent(receivedStoryJson, true)
+      const result = await exportService.importFromContent(receivedStoryJson, true, {
+        resolvePackBinding: async () => packBinding,
+      })
 
       if (result.success) {
         await story.loadAllStories()
@@ -358,6 +418,17 @@
     showConflictWarning = false
 
     try {
+      // Download first, then settle the pack, and only then delete what we are replacing. The
+      // pull used to sit between the delete and the import, which meant both a failed download
+      // and a cancelled pack choice left the user with neither copy.
+      const storyJson = await syncService.pullStory(connection, selectedRemoteStory.id)
+
+      const packBinding = await resolveIncomingPack(storyJson)
+      if (!packBinding) {
+        ui.setSyncMode('select')
+        return
+      }
+
       // If replacing, delete the existing story first
       const existingId = await syncService.findStoryIdByTitle(selectedRemoteStory.title)
       if (existingId) {
@@ -365,12 +436,11 @@
         await syncService.deleteStory(existingId)
       }
 
-      // Pull the story
-      const storyJson = await syncService.pullStory(connection, selectedRemoteStory.id)
-
       // Import using existing import service
       // Use skipImportedSuffix=true so synced stories keep their original title
-      const result = await exportService.importFromContent(storyJson, true)
+      const result = await exportService.importFromContent(storyJson, true, {
+        resolvePackBinding: async () => packBinding,
+      })
 
       if (result.success) {
         await story.loadAllStories()
@@ -738,3 +808,13 @@
     {/if}
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+<!-- Pack step of an in-flight transfer. Opens before anything is written or deleted. -->
+{#if packMapping}
+  <PackMappingDialog
+    context={packMapping.context}
+    lockedPack={packMapping.lockedPack}
+    onlyVariables={packMapping.onlyVariables}
+    onResolve={packMapping.resolve}
+  />
+{/if}
