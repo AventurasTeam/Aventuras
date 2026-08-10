@@ -158,6 +158,10 @@ describe('createStoryWithBranch', () => {
       name: 'Aria',
       status: 'active',
       injectionMode: 'auto',
+      // No `embed` on this call, so nothing clears the flag. Inserting at the
+      // column default of 0 would mark an unvectored row clean and leave it
+      // permanently invisible to retrieval.
+      embeddingStale: 1,
     })
     expect(entityRows[0].state).toEqual(emptyEntityState('character'))
 
@@ -490,6 +494,9 @@ describe('createStoryWithBranch — embed step', () => {
       category: 'Geography',
       injectionMode: 'always',
       priority: 42,
+      // See the lead-entity commit test: no `embed`, so the flag must survive
+      // dirty for the drain rather than default clean.
+      embeddingStale: 1,
     })
     expect(a?.tags).toEqual(['coast', 'water'])
     expect(a?.keywords).toEqual([])
@@ -498,6 +505,7 @@ describe('createStoryWithBranch — embed step', () => {
     expect(b?.category).toBeNull()
     expect(b?.injectionMode).toBe('disabled')
     expect(b?.keywords).toEqual([])
+    expect(b?.embeddingStale).toBe(1)
   })
 
   it('embeds the lead and lore in one batched call, not one per row', async () => {

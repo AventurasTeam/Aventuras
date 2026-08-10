@@ -271,6 +271,12 @@ describe('refineGenreAssist', () => {
     expect(capturedPrompt).toContain('Hard sci-fi')
     expect(capturedPrompt).toContain('Rigorous futures.')
     expect(capturedPrompt).toContain('make it darker')
+    // GenreAssistValue and ToneAssistValue are the same shape, so the seams are
+    // interchangeable without a type error. Only the template's own line and the
+    // refine noun distinguish a genre refine from a tone one.
+    expect(capturedPrompt).toContain('Suggest a genre for this story')
+    expect(capturedPrompt).toContain('Revise this genre')
+    expect(capturedPrompt).not.toContain('Revise this tone')
   })
 })
 
@@ -294,6 +300,11 @@ describe('refineToneAssist', () => {
     expect(capturedPrompt).toContain('Grim and unsparing')
     expect(capturedPrompt).toContain('Consequences land and stay.')
     expect(capturedPrompt).toContain('make it darker')
+    // See refineGenreAssist: the value types are identical, so these two lines
+    // are the only thing standing between a mis-wired seam and a green suite.
+    expect(capturedPrompt).toContain('Suggest a tone for this story')
+    expect(capturedPrompt).toContain('Revise this tone')
+    expect(capturedPrompt).not.toContain('Revise this genre')
   })
 })
 
