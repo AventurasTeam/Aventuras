@@ -1090,3 +1090,24 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   a structural parameter instead of a named type. Fix is one exported
   schema plus its inferred type, imported by both. Surfaced by the
   Slice 3.6a Task 3 review (2026-08-10).
+- **The desktop-Popover / phone-Sheet tier wrap is written three
+  times.** `components/wizard/ai-assist.tsx`,
+  `components/wizard/preset-browser.tsx`, and
+  `components/ui/searchable-overlay-list.tsx` each carry the same
+  phone branch — a single `View` wrapping the trigger plus a
+  `Sheet`, with its own copy of the reasoning for why the wrap
+  exists (the `@rn-primitives/dialog` Root renders a real portaled
+  sibling while closed, so a Fragment leaks two layout children into
+  the consumer's row). Only the phone half is a genuine triplicate:
+  the desktop halves legitimately differ, because
+  `SearchableOverlayList` drives raw `PopoverPrimitive` for a
+  controlled-open bridge and trigger-width matching that the shared
+  `Popover` wrapper does not support, so unifying that half would
+  either bloat the wrapper or strip its escape hatches. The drift
+  cost is already demonstrated rather than hypothetical: the preset
+  browser's first commit diverged from the assist component's
+  already-correct trigger-labelling pattern and needed a follow-up
+  fix to re-derive it. Extract a small shared phone-wrap helper when
+  a fourth caller appears, or the next time two of the three need
+  the same change in lockstep — not before. Surfaced by the Slice
+  3.6a Task 8 review (2026-08-10).
