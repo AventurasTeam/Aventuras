@@ -16,7 +16,12 @@ import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
 import { t } from '@/lib/i18n'
 
-import { markExisting, mergePages, type AssistListItem } from './assist-list-logic'
+import {
+  markExisting,
+  mergePages,
+  type AssistListItem,
+  type MarkedAssistListItem,
+} from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -78,8 +83,11 @@ type AiAssistListProps<T> = AiAssistCommonProps<T> & {
   getItems: (value: T) => AssistListItem[]
   /** Names already in the wizard's own list — drives the `(already exists)` mark. */
   existingNames: readonly string[]
-  /** Fires once with every checked row when `Import selected` is pressed. */
-  onImport: (items: AssistListItem[]) => void
+  /**
+   * Fires once with every checked row when `Import selected` is pressed.
+   * `exists` is always false here — an already-existing row cannot be checked.
+   */
+  onImport: (items: MarkedAssistListItem[]) => void
 }
 
 export type AiAssistProps<T> = AiAssistProseProps<T> | AiAssistChipsProps<T> | AiAssistListProps<T>
@@ -179,6 +187,8 @@ export function AiAssist<T>(props: AiAssistProps<T>) {
     if (result.status === 'ok') {
       if (props.result === 'list') {
         const page = props.getItems(result.value)
+        // A replace invalidates every checkmark; only an append preserves them.
+        if (!appendRef.current) setSelected(new Set())
         setListItems((prev) => (appendRef.current ? mergePages(prev, page) : page))
       }
       setAssist({ kind: 'result', value: result.value })

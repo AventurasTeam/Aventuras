@@ -927,6 +927,35 @@ export const ListResult_RegenerateReplacesGenerateMoreAppends: Story = {
   },
 }
 
+export const ListResult_RegenerateClearsSelectionForReusedName: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    // A fresh batch coincidentally reusing a name from the discarded page
+    // must not resurrect its checkmark — the same no-harmless-id-leaks class
+    // dismissal guards against, one step narrower: within the same open
+    // session instead of across a reopen.
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).not.toBeChecked(),
+    )
+  },
+}
+
 export const ListResult_CancelledGenerateMoreThenFreshGenerateReplaces: Story = {
   render: () => (
     <ListDemo
