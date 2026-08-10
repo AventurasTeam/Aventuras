@@ -68,7 +68,12 @@ type SearchableOverlayListProps<T> = {
   sections: Section<T>[]
   renderRow: (row: Row<T>, state: { highlighted: boolean; selected: boolean }) => ReactNode
   renderEmpty?: (query: string) => ReactNode
-  renderFooter?: () => ReactNode
+  /**
+   * Receives the substrate's dismiss so a footer action can follow the same
+   * close-before-act order `activate` uses. A footer that navigates away must
+   * call it — the substrate cannot know which actions leave the overlay.
+   */
+  renderFooter?: (close: () => void) => ReactNode
 
   // Marks rows that represent the consumer's committed value. The substrate
   // paints each with `bg-bg-sunken` (the convention shared with Select
@@ -940,7 +945,9 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
-        <View className="mt-3 border-t border-border pt-3">{renderFooter()}</View>
+        <View className="mt-3 border-t border-border pt-3">
+          {renderFooter(() => setOpen(false))}
+        </View>
       ) : null}
     </>
   )
@@ -1211,7 +1218,9 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
-        <View className="border-t border-border px-3 py-2">{renderFooter()}</View>
+        <View className="border-t border-border px-3 py-2">
+          {renderFooter(() => setOpen(false))}
+        </View>
       ) : null}
     </>
   )

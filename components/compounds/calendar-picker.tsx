@@ -5,6 +5,7 @@ import { Chip } from '@/components/ui/chip'
 import { SearchableOverlayList, type Section } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type CalendarType = 'built-in' | 'custom'
@@ -140,16 +141,19 @@ export function CalendarPicker({
   const renderFooter = useMemo(
     () =>
       showVaultTail
-        ? () => (
+        ? (close: () => void) => (
             <Pressable
-              // `link`, matching the row Select rendered here — it navigates out
-              // of the picker rather than acting on it.
+              // Navigates out of the picker rather than acting on it, so it
+              // dismisses first — same close-before-act order as row activation.
               accessibilityRole="link"
-              onPress={() => onManageInVault?.()}
+              onPress={() => {
+                close()
+                onManageInVault?.()
+              }}
               className="px-row-x-md py-row-y-md hover:bg-tint-hover active:bg-tint-press"
             >
               <Text size="sm" className="font-medium">
-                Manage calendars in Vault →
+                {t('common:calendarPicker.manageInVault')}
               </Text>
             </Pressable>
           )
@@ -161,8 +165,8 @@ export function CalendarPicker({
     <SearchableOverlayList<CalendarOption>
       className="w-full"
       searchPlacement="in-overlay"
-      ariaLabel="Calendars"
-      searchPlaceholder="Search calendars"
+      ariaLabel={t('common:calendarPicker.ariaLabel')}
+      searchPlaceholder={t('common:calendarPicker.searchPlaceholder')}
       sections={sections}
       onQueryChange={setQuery}
       selectedRowIds={selectedRowIds}
@@ -188,7 +192,10 @@ export function CalendarPicker({
             disabled && 'opacity-50',
           )}
         >
-          <CalendarTriggerContent option={selectedOption} placeholder="Select a calendar…" />
+          <CalendarTriggerContent
+            option={selectedOption}
+            placeholder={t('common:calendarPicker.triggerPlaceholder')}
+          />
         </Pressable>
       )}
       renderRow={(row) => <CalendarRowContent option={row.data} />}
@@ -279,29 +286,29 @@ function CalendarSummary({
   editDisabled: boolean
   editDisabledReason?: string
 }) {
-  const sampleLabel = summary.sampleLabel ?? 'Sample render'
+  const sampleLabel = summary.sampleLabel ?? t('common:calendarPicker.sampleRender')
   return (
     <View className="rounded-md border border-border bg-bg-base p-4">
       <View className="gap-3">
-        <SummarySection title="Tiers">
+        <SummarySection title={t('common:calendarPicker.tiers')}>
           {summary.tiers.length === 0 ? (
             <Text size="xs" variant="muted">
               —
             </Text>
           ) : (
-            summary.tiers.map((t) => (
-              <View key={t.name} className="flex-row items-baseline gap-2">
-                <Text className="w-[72px] font-mono text-xs text-fg-secondary">{t.name}</Text>
+            summary.tiers.map((tier) => (
+              <View key={tier.name} className="flex-row items-baseline gap-2">
+                <Text className="w-[72px] font-mono text-xs text-fg-secondary">{tier.name}</Text>
                 <Text size="xs" variant="muted" className="shrink">
-                  · {t.detail}
+                  · {tier.detail}
                 </Text>
               </View>
             ))
           )}
         </SummarySection>
 
-        <SummaryRow label="Sub-divisions" value={summary.subdivisions} />
-        <SummaryRow label="Eras" value={summary.eras} />
+        <SummaryRow label={t('common:calendarPicker.subdivisions')} value={summary.subdivisions} />
+        <SummaryRow label={t('common:calendarPicker.eras')} value={summary.eras} />
         <SummaryRow
           label={sampleLabel}
           value={summary.sampleRender ?? '—'}

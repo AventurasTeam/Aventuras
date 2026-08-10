@@ -1,5 +1,15 @@
 {
   "cancel": "Cancel",
+  "calendarPicker": {
+    "ariaLabel": "Calendars",
+    "searchPlaceholder": "Search calendars",
+    "triggerPlaceholder": "Select a calendar…",
+    "manageInVault": "Manage calendars in Vault →",
+    "tiers": "Tiers",
+    "subdivisions": "Sub-divisions",
+    "eras": "Eras",
+    "sampleRender": "Sample render"
+  },
   "colorPicker": {
     "customColor": "Custom color",
     "pickCustomColor": "Pick custom color",
