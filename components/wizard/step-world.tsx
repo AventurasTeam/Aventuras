@@ -17,7 +17,7 @@ import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
-import { GENRE_PRESETS, TONE_PRESETS } from '@/lib/wizard'
+import { GENRE_PRESETS, presetValue, TONE_PRESETS } from '@/lib/wizard'
 
 import { AiAssist } from './ai-assist'
 import { LoreList } from './lore-list'
@@ -130,10 +130,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             presets={GENRE_PRESETS}
             ariaLabel={t('wizard:world.browseGenrePresets')}
             onPick={(preset) =>
-              guardedApply.request('genre', definition.genre, {
-                label: preset.displayName,
-                promptBody: preset.promptBody,
-              })
+              guardedApply.request('genre', definition.genre, presetValue(preset))
             }
           />
           <AiAssist
@@ -175,12 +172,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
           <PresetBrowser
             presets={TONE_PRESETS}
             ariaLabel={t('wizard:world.browseTonePresets')}
-            onPick={(preset) =>
-              guardedApply.request('tone', definition.tone, {
-                label: preset.displayName,
-                promptBody: preset.promptBody,
-              })
-            }
+            onPick={(preset) => guardedApply.request('tone', definition.tone, presetValue(preset))}
           />
           <AiAssist
             ariaLabel={t('wizard:world.tone.assist')}
@@ -247,7 +239,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
               v.lore.map((row) => ({ name: row.title, detail: row.body, payload: row }))
             }
             existingNames={lore.map((row) => row.title)}
-            onImport={(items) => wizardStore.importLore(items.map((item) => item.payload))}
+            onImport={wizardStore.importLore}
             onSetup={handleSetup}
           />
         }

@@ -199,14 +199,17 @@ function ChipsDemo({ resolveModelId, run, onSetup, onPickChip }: ChipsDemoProps)
   )
 }
 
-type ListItemValue = { items: AssistListItem[] }
+// `payload` carries the name too: onImport hands back payloads alone, so a
+// consumer that needs a label has to have put one there.
+type ListPayload = { name: string; category: string; tags?: string[] }
+type ListItemValue = { items: AssistListItem<ListPayload>[] }
 
 type ListDemoProps = {
   resolveModelId: () => string | null
   run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
   existingNames?: string[]
   onSetup: () => void
-  onImport: (items: AssistListItem[]) => void
+  onImport: (payloads: ListPayload[]) => void
 }
 
 function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }: ListDemoProps) {
@@ -224,9 +227,9 @@ function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }
         result="list"
         getItems={(v) => v.items}
         existingNames={existingNames}
-        onImport={(items) => {
-          setImported(items.map((i) => i.name))
-          onImport(items)
+        onImport={(payloads) => {
+          setImported(payloads.map((p) => p.name))
+          onImport(payloads)
         }}
         onSetup={onSetup}
       />
@@ -688,20 +691,20 @@ export const PhoneSheetNote: Story = {
   ),
 }
 
-const RUIN_ITEM: AssistListItem = {
+const RUIN_ITEM: AssistListItem<ListPayload> = {
   name: 'Sunken Archive',
   detail: 'A flooded library beneath the old temple.',
-  payload: { category: 'location', tags: ['ruins', 'flooded'] },
+  payload: { name: 'Sunken Archive', category: 'location', tags: ['ruins', 'flooded'] },
 }
-const FACTION_ITEM: AssistListItem = {
+const FACTION_ITEM: AssistListItem<ListPayload> = {
   name: 'Ashfall Cartel',
   detail: 'Smugglers who trade in volcanic glass.',
-  payload: { category: 'faction' },
+  payload: { name: 'Ashfall Cartel', category: 'faction' },
 }
-const PAGE_TWO_ITEM: AssistListItem = {
+const PAGE_TWO_ITEM: AssistListItem<ListPayload> = {
   name: 'Old Jorin',
   detail: 'The grizzled barkeeper of the Iron Tankard.',
-  payload: { category: 'character' },
+  payload: { name: 'Old Jorin', category: 'character' },
 }
 
 export const ListResult_FirstPage: Story = {
@@ -743,15 +746,15 @@ export const ListResult_EmptyPageShowsEmptyCopy: Story = {
   },
 }
 
-const NOIR_ITEM: AssistListItem = {
+const NOIR_ITEM: AssistListItem<ListPayload> = {
   name: 'Noir',
   detail: 'A moody detective drama.',
-  payload: { category: 'genre' },
+  payload: { name: 'Noir', category: 'genre' },
 }
-const NOIR_ITEM_WHITESPACE_VARIANT: AssistListItem = {
+const NOIR_ITEM_WHITESPACE_VARIANT: AssistListItem<ListPayload> = {
   name: '  Noir  ',
   detail: 'A duplicate suggestion differing only by whitespace.',
-  payload: { category: 'genre' },
+  payload: { name: 'Noir', category: 'genre' },
 }
 
 export const ListResult_DedupesWhitespaceVariantWithinOnePage: Story = {
@@ -855,9 +858,7 @@ export const ListResult_ImportSelectedReportsCheckedRowsAndCloses: Story = {
     // Ashfall Cartel deliberately left unchecked.
 
     await userEvent.click(screen.getByRole('button', { name: 'Import selected' }))
-    await waitFor(() =>
-      expect(importSelectedMock).toHaveBeenCalledWith([{ ...RUIN_ITEM, exists: false }]),
-    )
+    await waitFor(() => expect(importSelectedMock).toHaveBeenCalledWith([RUIN_ITEM.payload]))
     expect(await screen.findByText('Imported: Sunken Archive')).toBeInTheDocument()
     // The overlay closed — its chrome is gone from the DOM.
     expect(screen.queryByText('Ashfall Cartel')).not.toBeInTheDocument()
