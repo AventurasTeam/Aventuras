@@ -137,6 +137,30 @@ without this slice knowing its internals (C5).
 
 ## Open questions
 
+- **The list result's identity is name-only, and cast spans four
+  kinds.** 3.6a's `markExisting` / `mergePages` key on
+  `name.trim().toLowerCase()`, the selection Set is keyed by name,
+  and the rendered React key is the name. A cast batch legitimately
+  containing a location `Ashfall` and a faction `Ashfall` therefore
+  loses one row to the dedupe, and `existingNames` has the same
+  limitation against the already-authored cast. This needs a
+  kind-aware key or a caller-supplied key extractor, which is a
+  change to the shape 3.6a published — resolve it in planning rather
+  than discovering it mid-implementation. Surfaced by the 3.6a
+  whole-slice review (2026-08-10).
+- **`LoreList`'s machinery is not liftable as written.** Step 4's
+  four per-kind editors need exactly what it already has — compact
+  row plus expand set, `invalidIds`-driven inline errors, and the
+  prune-without-auto-expand invariant — but it hard-imports
+  `loreRowErrors` and calls the lore mutators directly, so none of
+  it can be reused without a refactor. Decide in planning whether to
+  extract a shared row-list shell first or accept a second copy;
+  copying means re-deriving the prune invariant from a prose note
+  rather than from code, which is how it gets lost.
+- **The working-state and store surface duplicates per collection.**
+  `lore` is a peer array with four bespoke mutators; cast will need
+  four more of the same shape. Worth a generic list-mutator helper
+  before the second copy exists rather than after.
 - **Suggest-cast batch size vs pagination** — canon default is 5
   mixed; confirm the pagination interaction with per-kind steering.
 - **Should the wizard commit a starting location?** `finish.ts`
