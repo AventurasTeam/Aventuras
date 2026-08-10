@@ -1,4 +1,4 @@
-import { ChevronDown, X } from 'lucide-react-native'
+import { ChevronDown, Trash2 } from 'lucide-react-native'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 
@@ -135,7 +135,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
         </Pressable>
         <View className="pr-3 pt-row-y-lg">
           <IconAction
-            icon={X}
+            icon={Trash2}
             label={t('wizard:world.lore.remove')}
             size="sm"
             variant="destructive"
@@ -172,6 +172,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
             <Input
               value={row.category}
               onChangeText={(category) => wizardStore.patchLore(row.id, { category })}
+              placeholder={t('wizard:world.lore.categoryPlaceholder')}
               aria-label={t('wizard:world.lore.category')}
             />
           </FormRow>

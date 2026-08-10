@@ -239,6 +239,7 @@
       "title": "Title",
       "body": "Body",
       "category": "Category",
+      "categoryPlaceholder": "e.g. cosmology",
       "moreOptions": "More options",
       "tags": "Tags",
       "injectionMode": "Injection mode",

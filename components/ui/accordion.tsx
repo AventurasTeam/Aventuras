@@ -131,11 +131,10 @@ function AccordionContent({
         )}
         {...props}
       >
-        <Animated.View
-          exiting={Platform.select({ native: FadeOutUp.duration(200) })}
-          className={cn('pb-row-y-lg', className)}
-        >
-          {children}
+        <Animated.View exiting={Platform.select({ native: FadeOutUp.duration(200) })}>
+          {/* NativeWind registers cssInterop for RN core components only, so
+              className on a Reanimated Animated.* is dropped, not applied. */}
+          <View className={cn('pb-row-y-lg', className)}>{children}</View>
         </Animated.View>
       </AccordionPrimitive.Content>
     </TextClassContext.Provider>

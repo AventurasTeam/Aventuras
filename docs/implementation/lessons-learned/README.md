@@ -54,6 +54,10 @@ slice plans when relevant.
 - [`BackHandler` is not inert on web](./backhandler-web-console-error.md)
   — RN-Web's shim `console.error`s on every subscribe; gate the
   subscribe on `Platform.OS === 'android'`, not the handler.
+- [`className` on a Reanimated `Animated.*` is silently dropped](./nativewind-classname-on-animated-view.md)
+  — NativeWind registers cssInterop for RN core components only and
+  RNW drops unknown props, so the class lands nowhere on either
+  platform; nest a plain `View` and style that.
 
 ### rn-primitives substrate
 
