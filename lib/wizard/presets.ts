@@ -3,16 +3,25 @@
 // id is stored on the story, so edits here never reach existing stories.
 export type WizardPreset = {
   /** Stable kebab-case handle. Local to this catalog; never persisted. */
-  id: string
+  readonly id: string
   /** Copied into `label`. */
-  displayName: string
+  readonly displayName: string
   /** One line, shown on the picker row. Not copied into the story. */
-  tagline: string
+  readonly tagline: string
   /** Copied into `promptBody` — substantial prose injected into generation context. */
-  promptBody: string
+  readonly promptBody: string
 }
 
-export const GENRE_PRESETS: readonly WizardPreset[] = [
+/**
+ * The exact value a pick copies into the story. Named rather than inlined
+ * because `displayName` and `label` differ, so an open-coded remap at each call
+ * site is easy to get subtly wrong and impossible for a type to catch.
+ */
+export function presetValue(preset: WizardPreset): { label: string; promptBody: string } {
+  return { label: preset.displayName, promptBody: preset.promptBody }
+}
+
+export const GENRE_PRESETS = [
   {
     id: 'hard-sci-fi',
     displayName: 'Hard sci-fi',
@@ -113,9 +122,9 @@ Play fair with the reader: information the detective uses to reach a conclusion 
 
 Pace revelation deliberately — a mystery loses tension if too much is explained too soon, and loses coherence if the solution depends on facts introduced only at the end. The satisfaction of the genre comes from a reader being able to look back and see the shape they missed.`,
   },
-]
+] as const satisfies readonly WizardPreset[]
 
-export const TONE_PRESETS: readonly WizardPreset[] = [
+export const TONE_PRESETS = [
   {
     id: 'grim',
     displayName: 'Grim and unsparing',
@@ -216,4 +225,4 @@ Let characters speak with a certain gravity, even in ordinary exchanges; small t
 
 This is not stiffness for its own sake — the formality should carry genuine weight and awe, not just archaic vocabulary. The tone should make the reader feel they are hearing something old being spoken aloud, not just reading an account of it.`,
   },
-]
+] as const satisfies readonly WizardPreset[]

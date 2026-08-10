@@ -10,4 +10,4 @@ export {
   type LabeledPromptOutput,
   type SettingOutput,
 } from './assist-schemas'
-export { GENRE_PRESETS, TONE_PRESETS, type WizardPreset } from './presets'
+export { GENRE_PRESETS, TONE_PRESETS, presetValue, type WizardPreset } from './presets'

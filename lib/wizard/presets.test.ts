@@ -29,9 +29,22 @@ describe('wizard preset catalog', () => {
   })
 
   it('genre and tone ids do not collide, so a single picker key is unambiguous', () => {
-    const overlap = GENRE_PRESETS.map((p) => p.id).filter((id) =>
-      TONE_PRESETS.some((t) => t.id === id),
-    )
+    // Widened to string deliberately: `as const satisfies` narrows each catalog
+    // to its own id literals, so tsc now rejects the comparison as provably
+    // disjoint. That is the invariant holding statically — the runtime check
+    // stays as the guard for whichever catalog a future edit widens first.
+    const toneIds: string[] = TONE_PRESETS.map((preset) => preset.id)
+    const overlap = GENRE_PRESETS.map((preset) => preset.id).filter((id) => toneIds.includes(id))
     expect(overlap).toEqual([])
+  })
+
+  it('promptBody is unique across a catalog, so no two presets copy the same prose', () => {
+    for (const [name, catalog] of [
+      ['GENRE_PRESETS', GENRE_PRESETS],
+      ['TONE_PRESETS', TONE_PRESETS],
+    ] as const) {
+      const bodies = new Set(catalog.map((preset) => preset.promptBody))
+      expect(bodies.size, `${name} has a duplicated promptBody`).toBe(catalog.length)
+    }
   })
 })
