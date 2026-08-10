@@ -138,6 +138,22 @@ without this slice knowing its internals (C5).
 
 ## Open questions
 
+- **Collapse the per-field assist runners before adding four more.**
+  `runGenreAssist` / `runToneAssist` and their refines are the same
+  function with a different template id and noun, and because
+  `GenreAssistValue` and `ToneAssistValue` are structurally identical
+  the seams accept each other — a swapped pairing compiles clean and
+  produces a plausible-looking result from the wrong prompt. 3.6a
+  covered the risk with tests (`wizard-assist.test.ts` now pins each
+  refine's template line, mutation-verified in both directions) but
+  deliberately left the shape alone, because collapsing to a
+  `runLabeledAssist(field, …)` keyed by a `LabeledField` literal
+  changes `StepWorldAssistSeams`, which this slice consumes. Cast
+  adds four more runners to the same pattern, so decide here: collapse
+  first and build cast on the collapsed shape, or accept eight
+  near-identical runners and keep leaning on the tests. Routed from
+  the 3.6a type-design review (2026-08-11).
+
 - **The list result's identity is name-only, and cast spans four
   kinds.** 3.6a's `markExisting` / `mergePages` key on
   `name.trim().toLowerCase()`, the selection Set is keyed by name,
