@@ -67,6 +67,7 @@
       "lore": "lore (every entry needs a title and a body)"
     },
     "failed": "Couldn't create the story.",
+    "createdNotOpened": "Your story was created, but it couldn't be opened. Find it on your story list.",
     "embedFailed": {
       "title": "Couldn't initialize the embedder",
       "retry": "Retry",
@@ -226,7 +227,8 @@
       "guidance": "e.g. \"Norse-flavored, post-apocalypse\""
     },
     "replaceConfirm": {
-      "title": "Replace {{field}} with \"{{name}}\"?",
+      "titleGenre": "Replace genre with \"{{name}}\"?",
+      "titleTone": "Replace tone with \"{{name}}\"?",
       "body": "Your current label and body will be lost.",
       "cancel": "Cancel",
       "confirm": "Replace"

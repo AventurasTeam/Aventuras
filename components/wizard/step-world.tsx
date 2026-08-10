@@ -22,7 +22,13 @@ import { GENRE_PRESETS, TONE_PRESETS } from '@/lib/wizard'
 import { AiAssist } from './ai-assist'
 import { LoreList } from './lore-list'
 import { PresetBrowser } from './preset-browser'
-import { invalidLoreRowIds, needsReplaceConfirm } from './step-world-logic'
+import {
+  invalidLoreRowIds,
+  labeledPatch,
+  needsReplaceConfirm,
+  type LabeledField,
+  type LabeledPrompt,
+} from './step-world-logic'
 import {
   refineGenreAssist,
   refineSettingAssist,
@@ -59,21 +65,20 @@ export type StepWorldProps = {
   assist?: StepWorldAssistSeams
 }
 
-type LabeledPrompt = { label: string; promptBody: string }
-type PendingReplace = { field: 'genre' | 'tone'; next: LabeledPrompt } | null
+type PendingReplace = { field: LabeledField; next: LabeledPrompt } | null
 
 // wizard.md → Replace-on-existing. Both entry points funnel through here so a
 // preset pick and an AI accept can never disagree about when to confirm.
 function useGuardedApply() {
   const [pending, setPending] = useState<PendingReplace>(null)
 
-  const request = (field: 'genre' | 'tone', current: LabeledPrompt, next: LabeledPrompt) => {
+  const request = (field: LabeledField, current: LabeledPrompt, next: LabeledPrompt) => {
     if (needsReplaceConfirm(current)) setPending({ field, next })
-    else wizardStore.patchDefinition({ [field]: next })
+    else wizardStore.patchDefinition(labeledPatch(field, next))
   }
 
   const confirm = () => {
-    if (pending) wizardStore.patchDefinition({ [pending.field]: pending.next })
+    if (pending) wizardStore.patchDefinition(labeledPatch(pending.field, pending.next))
     setPending(null)
   }
 
@@ -96,10 +101,11 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
 
   const replaceTitle =
     guardedApply.pending != null
-      ? t('wizard:world.replaceConfirm.title', {
-          field: guardedApply.pending.field,
-          name: guardedApply.pending.next.label,
-        })
+      ? // One full sentence per field rather than an interpolated noun: the
+        // field name inflects with the verb in several target languages.
+        guardedApply.pending.field === 'genre'
+        ? t('wizard:world.replaceConfirm.titleGenre', { name: guardedApply.pending.next.label })
+        : t('wizard:world.replaceConfirm.titleTone', { name: guardedApply.pending.next.label })
       : ''
 
   return (

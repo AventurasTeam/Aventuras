@@ -1,7 +1,22 @@
-import type { WizardLoreDraft } from '@/lib/db'
+import type { WizardLoreDraft, WizardWorkingState } from '@/lib/db'
 
 function blank(value: string): boolean {
   return value.trim().length === 0
+}
+
+type WizardDefinition = WizardWorkingState['definition']
+
+export type LabeledField = 'genre' | 'tone'
+export type LabeledPrompt = WizardDefinition['genre']
+
+/**
+ * Builds a definition patch for whichever labeled-prompt field is being written.
+ * Branches on a literal key rather than computing `{ [field]: next }`: a
+ * computed key of union type is late-bound, and TypeScript checks nothing about
+ * the value assigned through it.
+ */
+export function labeledPatch(field: LabeledField, next: LabeledPrompt): Partial<WizardDefinition> {
+  return field === 'genre' ? { genre: next } : { tone: next }
 }
 
 export type LoreRowErrorField = 'title' | 'body'
