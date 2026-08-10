@@ -1127,3 +1127,27 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   template's group — cheap, and it would make the context map a real
   contract instead of documentation. Surfaced by the Slice 3.6a Task
   9b review (2026-08-10).
+- **`wizard.md` says forward-jump is disabled; the shipped nav has
+  allowed forward-jump-to-visited since M2.3.**
+  [`wizard.md → Step indicator`](../ui/screens/wizard/wizard.md#step-indicator)
+  reads "Forward-jump disabled — must advance via `Next →` (which
+  validates current step)", but `canJumpToStep` permits a forward
+  jump whenever the target has already been visited
+  (`target <= furthestStep`) and every gating step before it is still
+  valid. The code's behavior is the better one — it is how a user
+  returns to where they were after a back-jump, and it re-validates
+  rather than trusting the visit — so the likely fix is amending
+  canon, not the code. Predates Slice 3.6a, which only extended the
+  existing rule to step 3. Surfaced by the Slice 3.6a Task 11 review
+  (2026-08-10).
+- **`StepPill`'s inline `pointerEvents: 'none'` is dead code.** The
+  `rn-primitives-disabled` gate was applied to
+  `components/wizard/wizard-shell.tsx`'s step pill, but the pill is a
+  plain RN-Web `Pressable`, not an `@rn-primitives` `asChild`
+  trigger — so there is no second Radix `onClick` bypassing the
+  disabled check, which that lesson's "Not universal" section names
+  as the required precondition. Proven by removing the style and
+  re-running all six `wizard-shell` stories green. Predates Slice
+  3.6a. Removing it is a two-line cleanup; the value is in not
+  leaving a gate that reads as load-bearing when nothing depends on
+  it. Surfaced by the Slice 3.6a Task 11 review (2026-08-10).
