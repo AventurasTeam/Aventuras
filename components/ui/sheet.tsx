@@ -51,6 +51,14 @@ type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
 
+// p-6 already pads the content; the inset is added on top of it so the padding
+// reads the same above the nav bar as it does on a device without one.
+const SHEET_PADDING_PX = 24
+
+function safeBottomStyle(bottomInset: number): ViewStyle | undefined {
+  return bottomInset > 0 ? { paddingBottom: SHEET_PADDING_PX + bottomInset } : undefined
+}
+
 const BOTTOM_SNAP_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
   short: '33%',
   medium: '60%',
@@ -84,6 +92,7 @@ function BottomSheetContent({
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
@@ -141,6 +150,10 @@ function BottomSheetContent({
       // 'interactive' translates the content-sized sheet up by the keyboard height.
       keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
       keyboardBlurBehavior="restore"
+      // gorhom defaults this to 'adjustPan', under which Android reports no
+      // usable keyboard metrics and `keyboardBehavior` above never engages —
+      // the sheet stays put and the keyboard covers it.
+      android_keyboardInputMode="adjustResize"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}
       accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}
@@ -159,10 +172,14 @@ function BottomSheetContent({
               sizes skip BottomSheetView because it captures vertical pan gestures and
               blocks nested scrollables (e.g. BottomSheetSectionList in
               SearchableOverlayList) from claiming them. */}
+          {/* Edge-to-edge draws the sheet under the system navigation bar, so
+              without this the last rows of a tall sheet sit behind it —
+              unreachable, and a scrollable reports itself fully scrolled. */}
           {size === 'auto' ? (
             <BottomSheetView>
               <View
                 className={cn('p-6', className)}
+                style={safeBottomStyle(insets.bottom)}
                 {...(contentProps as ComponentProps<typeof View>)}
               >
                 {children}
@@ -171,6 +188,7 @@ function BottomSheetContent({
           ) : (
             <View
               className={cn('flex-1 p-6', className)}
+              style={safeBottomStyle(insets.bottom)}
               {...(contentProps as ComponentProps<typeof View>)}
             >
               {children}

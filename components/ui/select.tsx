@@ -94,6 +94,14 @@ function Trigger({
 
 type ContentSheetSize = 'short' | 'medium'
 
+// Matches the sheet body's p-4 so the padding below the last row reads the same
+// above a nav bar as it does on a device without one.
+const SHEET_CONTENT_PADDING_PX = 16
+
+function sheetSafeBottomStyle(bottomInset: number): ViewStyle | undefined {
+  return bottomInset > 0 ? { paddingBottom: SHEET_CONTENT_PADDING_PX + bottomInset } : undefined
+}
+
 const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
   short: '33%',
   medium: '60%',
@@ -116,6 +124,7 @@ function PhoneSheetContent({
 }) {
   const { open, onOpenChange } = SelectBase.useRootContext()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
 
   const sheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => [SHEET_HEIGHT_PCT[sheetSize]], [sheetSize])
@@ -150,12 +159,20 @@ function PhoneSheetContent({
             enablePanDownToClose
             keyboardBehavior="extend"
             keyboardBlurBehavior="restore"
+            // See sheet.tsx: gorhom's 'adjustPan' default leaves Android without
+            // usable keyboard metrics, so keyboardBehavior never engages.
+            android_keyboardInputMode="adjustResize"
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleIndicatorStyle}
             onClose={() => onOpenChange(false)}
           >
             <TextClassContext.Provider value="text-fg-primary">
-              <View className={cn('flex-1 p-4', className)}>
+              {/* Edge-to-edge draws under the nav bar; without the inset the
+                  last option and the tail action sit behind it. */}
+              <View
+                className={cn('flex-1 p-4', className)}
+                style={sheetSafeBottomStyle(insets.bottom)}
+              >
                 <SelectBase.Content
                   disablePositioningStyle
                   position="popper"
