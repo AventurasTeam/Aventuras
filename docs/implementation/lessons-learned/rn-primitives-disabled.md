@@ -47,13 +47,28 @@ rendered child that can receive the click when the parent uses
 need the fix, and adding it there is dead code that reads as
 load-bearing.
 
-`Checkbox` is the known exemption, verified by mutation test during
-Slice 3.6a (2026-08-10): removing the inline gate changed no
-behavior. RN-Web's `Pressable` with `disabled` already compiles to
-`pointer-events: none !important` on the element itself, and Radix's
-`CheckboxIndicator` — the only rendered child, so the only possible
-click-leak path — sets `pointer-events: none` on itself
-unconditionally, independent of checked or disabled state.
+`Checkbox` is the known exemption, verified during Slice 3.6a
+(2026-08-10) by mutation test and a direct DOM hit-test: removing the
+inline gate changed no behavior.
+
+The mechanism is worth stating precisely, because the obvious reading
+is wrong. RN-Web's `Pressable` with `disabled` applies
+`pointerEvents: 'box-none'`, which its compiler emits as
+`pointer-events: none !important` on the element **plus a
+`selector > * { pointer-events: auto }` rule that re-enables direct
+children**. So the root being `none` is not on its own sufficient — a
+click landing on a re-enabled child still bubbles to the root, where
+Radix's checkbox `onClick` fires unconditionally (it normally relies
+on a native `<button disabled>` to suppress that, which is exactly
+the protection `asChild` throws away).
+
+What closes the gap is that Radix's `CheckboxIndicator` — the only
+rendered child, so the only click-leak path — sets
+`pointer-events: none` on **itself**, inline and unconditionally,
+and that beats RN-Web's non-`!important` re-enable rule. Three
+independent blocks end up stacked: the root resolves to a real
+`<button disabled>`, the root carries `none !important`, and the
+Indicator carries its own `none`.
 
 So: **prove the gate is doing something before adding it.** Write the
 disabled-interaction test first, confirm it fails without the gate,
