@@ -67,24 +67,35 @@ Everything that measures the window inherits the failure at once:
   grep -rn "useResizeMode\|useKeyboardAnimation\|useReanimatedKeyboardAnimation\|useKeyboardHandler" app/ components/ hooks/ lib/
   ```
 
-## Everyone downstream has to be told the same story
+## The mode is claimed, but nothing else may assume a resized window
 
-Claiming the mode is half the job. Resize mode is invisible state, so every
-layer that compensates for the keyboard has to agree the window already did it —
-otherwise two layers each subtract the keyboard height and the surface
-overshoots as badly as it previously undershot.
+The combination that works on-device is narrow, and half of it is
+counter-intuitive:
 
-- **`@gorhom/bottom-sheet` needs `android_keyboardInputMode="adjustResize"`.**
-  The prop is purely declarative: grep the package and it never calls
-  `setInputMode` — it only tells gorhom what the window is doing. Told the
-  truth, it sets `heightWithinContainer = 0` and lets the shrunken container
-  place the sheet. Left at its `adjustPan` default it compensates a second time.
-- **React Native's own `KeyboardAvoidingView` should have no Android
-  behavior.** `behavior="height"` under a resized window subtracts the keyboard
-  again. iOS still needs `padding` — it does not resize.
+- **Root claims resize mode** via `useResizeMode()` (above).
+- **`@gorhom/bottom-sheet` stays on its `android_keyboardInputMode="adjustPan"`
+  default** and keeps translating sheets itself.
 
-The tell for this failure mode is a surface that behaves correctly everywhere
-except inside one screen: that screen is the one adding the second correction.
+Setting gorhom to `adjustResize` — which reads like the honest declaration,
+since the root just claimed that mode — puts every sheet back under the
+keyboard. Its source shows why the failure is total rather than partial: on that
+branch it sets `heightWithinContainer = 0`, i.e. "the keyboard costs nothing
+inside my container," and stops compensating. That is only true if the container
+actually shrank, and under `edgeToEdgeEnabled` it does not — the OS stopped
+resizing edge-to-edge windows, which is the whole reason this library exists.
+The claimed mode restores usable keyboard metrics; it does not restore a
+resizing window.
+
+**Verified on-device in both directions.** The mechanism above is the reading of
+gorhom's source that fits the observations; treat the configuration as the
+finding and the explanation as the current best account.
+
+React Native's own `KeyboardAvoidingView` is the other consumer to check. It is
+worth being suspicious of on Android in this setup: `behavior="height"` is the
+kind of second correction that produces a surface which behaves correctly
+everywhere except inside one screen. That tell — one screen wrong, everything
+else right — always points at that screen's own extra compensation, not at the
+window mode.
 
 ## `extend` does nothing on a single-detent sheet
 

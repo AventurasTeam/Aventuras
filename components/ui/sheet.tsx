@@ -150,12 +150,12 @@ function BottomSheetContent({
       // 'interactive' translates the content-sized sheet up by the keyboard height.
       keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
       keyboardBlurBehavior="restore"
-      // Declarative only — gorhom never writes the window mode, it just needs to
-      // be told what the window is doing. RootLayout puts Android in resize, so
-      // gorhom must treat the keyboard as occupying no space *within* its
-      // container (the container already shrank). Left at its 'adjustPan'
-      // default it double-compensates for a keyboard the window already handled.
-      android_keyboardInputMode="adjustResize"
+      // Leave android_keyboardInputMode at gorhom's 'adjustPan' default. Setting
+      // it to 'adjustResize' makes gorhom zero out `heightWithinContainer` and
+      // wait for a container shrink that never arrives under edge-to-edge —
+      // every sheet then sits under the keyboard. Verified on-device both ways;
+      // gorhom has to keep translating the sheet itself.
+      android_keyboardInputMode="adjustPan"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}
       accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}

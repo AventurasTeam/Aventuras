@@ -159,9 +159,9 @@ function PhoneSheetContent({
             enablePanDownToClose
             keyboardBehavior="extend"
             keyboardBlurBehavior="restore"
-            // See sheet.tsx — declares the window mode RootLayout claims so
-            // gorhom doesn't compensate for a keyboard the window already did.
-            android_keyboardInputMode="adjustResize"
+            // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
+            // puts every sheet back under the keyboard.
+            android_keyboardInputMode="adjustPan"
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleIndicatorStyle}
             onClose={() => onOpenChange(false)}
