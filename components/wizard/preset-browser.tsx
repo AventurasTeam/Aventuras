@@ -7,7 +7,6 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useTier } from '@/hooks/use-tier'
-import { t } from '@/lib/i18n'
 import { type WizardPreset } from '@/lib/wizard'
 
 export type PresetBrowserProps = {
@@ -53,13 +52,7 @@ export function PresetBrowser({ presets, ariaLabel, onPick }: PresetBrowserProps
     </ScrollView>
   )
 
-  const trigger = (
-    <IconAction
-      icon={BookMarked}
-      label={t('wizard:world.browsePresets')}
-      onPress={handleTriggerPress}
-    />
-  )
+  const trigger = <IconAction icon={BookMarked} label={ariaLabel} onPress={handleTriggerPress} />
 
   if (isPhone) {
     // Sheet's DialogPrimitive.Root renders a real portaled View sibling even

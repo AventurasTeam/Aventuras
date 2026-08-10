@@ -197,7 +197,8 @@
   },
   "world": {
     "heading": "What's the world like?",
-    "browsePresets": "Browse presets",
+    "browseGenrePresets": "Browse genre presets",
+    "browseTonePresets": "Browse tone presets",
     "replaceConfirm": {
       "title": "Replace {{field}} with \"{{name}}\"?",
       "body": "Your current label and body will be lost.",

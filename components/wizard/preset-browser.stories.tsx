@@ -4,7 +4,7 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
-import { GENRE_PRESETS, type WizardPreset } from '@/lib/wizard'
+import { GENRE_PRESETS, TONE_PRESETS, type WizardPreset } from '@/lib/wizard'
 
 import { PresetBrowser } from './preset-browser'
 
@@ -50,7 +50,7 @@ export const TriggerOpensOverlay: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {
     expect(screen.queryByText(GENRE_PRESETS[0].displayName)).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Browse presets' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
     expect(await screen.findByText(GENRE_PRESETS[0].displayName)).toBeInTheDocument()
   },
 }
@@ -58,7 +58,7 @@ export const TriggerOpensOverlay: Story = {
 export const AllPresetsRenderNameAndTagline: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {
-    await userEvent.click(screen.getByRole('button', { name: 'Browse presets' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
     await screen.findByText(GENRE_PRESETS[0].displayName)
     for (const preset of GENRE_PRESETS) {
       expect(screen.getByText(preset.displayName)).toBeInTheDocument()
@@ -71,7 +71,7 @@ const pickMock = fn()
 export const PickingRowReportsExactPresetAndCloses: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={pickMock} />,
   play: async () => {
-    await userEvent.click(screen.getByRole('button', { name: 'Browse presets' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
     const noir = GENRE_PRESETS.find((preset) => preset.id === 'noir')
     if (noir == null) throw new Error('expected a "noir" fixture in GENRE_PRESETS')
 
@@ -80,6 +80,37 @@ export const PickingRowReportsExactPresetAndCloses: Story = {
     expect(await screen.findByText('Picked: Noir')).toBeInTheDocument()
     // The overlay closed — a sibling row's chrome is gone from the DOM.
     expect(screen.queryByText('Space opera')).not.toBeInTheDocument()
+  },
+}
+
+const genrePickMock = fn()
+const tonePickMock = fn()
+export const TwoInstancesAreAddressableByDistinctNames: Story = {
+  render: () => (
+    <View className="w-[640px] flex-row gap-6 rounded-md bg-bg-base p-6">
+      <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={genrePickMock} />
+      <Demo presets={TONE_PRESETS} ariaLabel="Browse tone presets" onPick={tonePickMock} />
+    </View>
+  ),
+  play: async () => {
+    // Two triggers side by side (Step 3 renders one per field): a
+    // screen-reader user must be able to tell which field a pick will
+    // overwrite, so each needs a distinct accessible name. getByRole throws
+    // on an ambiguous match, so a shared name fails right here.
+    const genreTrigger = screen.getByRole('button', { name: 'Browse genre presets' })
+    const toneTrigger = screen.getByRole('button', { name: 'Browse tone presets' })
+
+    await userEvent.click(genreTrigger)
+    expect(await screen.findByText(GENRE_PRESETS[0].displayName)).toBeInTheDocument()
+    // Only the genre catalog opened — the tone trigger's own list stayed shut.
+    expect(screen.queryByText(TONE_PRESETS[0].displayName)).not.toBeInTheDocument()
+
+    await userEvent.click(await screen.findByText(GENRE_PRESETS[0].displayName))
+    await waitFor(() => expect(genrePickMock).toHaveBeenCalledWith(GENRE_PRESETS[0]))
+
+    await userEvent.click(toneTrigger)
+    await userEvent.click(await screen.findByText(TONE_PRESETS[0].displayName))
+    await waitFor(() => expect(tonePickMock).toHaveBeenCalledWith(TONE_PRESETS[0]))
   },
 }
 
