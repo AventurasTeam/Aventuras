@@ -1,1 +1,1 @@
-export { dismissKeyboard } from './dismiss'
+export { dismissKeyboard, isKeyboardVisible } from './dismiss'

@@ -32,7 +32,7 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { dismissKeyboard } from '@/lib/keyboard'
+import { dismissKeyboard, isKeyboardVisible } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -150,7 +150,9 @@ function PhoneSheetContent({
       setSheetIndex(-1)
       return
     }
-    if (Platform.OS === 'web') {
+    // Synchronous whenever there is nothing to wait for. Every tick spent here
+    // is a tick the overlay is mounted over a sheet that has not opened yet.
+    if (Platform.OS === 'web' || !isKeyboardVisible()) {
       setSheetIndex(0)
       return
     }
@@ -184,7 +186,12 @@ function PhoneSheetContent({
     // Root context lookup happy. BottomSheetModal would portal again and lose it.
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
+        {/* Keyed off the sheet's own index, NOT `open`. While the two disagree —
+            the window the keyboard handshake opens — this layer covers the
+            screen with a closed sheet under it, and enablePanDownToClose makes
+            that sheet answer the tap with onClose, cancelling the open the user
+            just asked for. Taps must pass through until the sheet is really up. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents={sheetIndex >= 0 ? 'box-none' : 'none'}>
           <BottomSheet
             ref={sheetRef}
             index={sheetIndex}

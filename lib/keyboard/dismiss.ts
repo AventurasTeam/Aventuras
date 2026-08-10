@@ -21,6 +21,16 @@ const DISMISS_DEADLINE_MS = 400
  * Native only — callers must keep their own web branch, since there is no soft
  * keyboard to wait for there.
  */
+/**
+ * Whether a soft keyboard is currently up, per KeyboardController's own
+ * bindings rather than RN's stale-prone latch. Lets a caller keep a synchronous
+ * fast path and only pay {@link dismissKeyboard}'s await when there is
+ * something to wait for.
+ */
+export function isKeyboardVisible(): boolean {
+  return KeyboardController.isVisible()
+}
+
 export function dismissKeyboard(): Promise<void> {
   return new Promise((resolve) => {
     const deadline = setTimeout(resolve, DISMISS_DEADLINE_MS)
