@@ -181,11 +181,13 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
-      // 'extend' snaps to the max detent and reflows content within — right for
-      // fixed tall search surfaces already near 95%. An 'auto' sheet has no higher
-      // detent to extend to, so 'extend' leaves the keyboard sitting over the input;
-      // 'interactive' translates the content-sized sheet up by the keyboard height.
-      keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
+      // 'extend' resolves to the sheet's own tallest detent, so it only helps a
+      // sheet already tall enough to clear the keyboard — 'tall' reflows its
+      // content within the 95% it was going to occupy anyway. Every other size
+      // has exactly one detent ('auto' has none), so extending is a no-op and
+      // the keyboard simply covers the sheet. 'interactive' lifts it by the
+      // keyboard height instead, which preserves its resting size.
+      keyboardBehavior={size === 'tall' ? 'extend' : 'interactive'}
       keyboardBlurBehavior="restore"
       // Leave android_keyboardInputMode at gorhom's 'adjustPan' default. Setting
       // it to 'adjustResize' makes gorhom zero out `heightWithinContainer` and

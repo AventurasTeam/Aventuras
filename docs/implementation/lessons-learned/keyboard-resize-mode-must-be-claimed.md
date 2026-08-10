@@ -136,9 +136,19 @@ Unrelated to window mode, and worth knowing because it looks identical from the
 outside. `keyboardBehavior="extend"` resolves to `return highestDetentPosition`
 — the sheet's own tallest detent. A sheet configured with one snap point
 (`snapPoints={['33%']}`) is already at its tallest, so "extend" is a no-op and a
-keyboard taller than the sheet covers it completely. Only sheets whose max
-detent clears the keyboard (~95%) are actually rescued by `extend`; a short
-sheet needs the resized container, a second taller detent, or `fillParent`.
+keyboard taller than the sheet covers it completely.
+
+`extend` therefore only earns its keep on a sheet already tall enough to clear
+the keyboard, where it reflows content inside height it was going to occupy
+anyway. Everything else wants `interactive`, which lifts the sheet by the
+keyboard height and preserves its resting size — `sheet.tsx` gives `extend` to
+`tall` alone. A second, taller detent would also work, at the cost of handing
+every consumer a drag gesture it never asked for.
+
+The ordering asymmetry above and this one produce the same screenshot, so
+separate them by _when_ the keyboard arrives: covered when the keyboard was
+already up is the event-sourcing gap; covered when a field inside the sheet is
+focused afterwards is this.
 
 ## Symptom-to-cause shortcut
 
