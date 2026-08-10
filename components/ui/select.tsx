@@ -2,15 +2,7 @@ import BottomSheet, { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import * as RadioGroupBase from '@rn-primitives/radio-group'
 import * as SelectBase from '@rn-primitives/select'
 import { Check, ChevronDown, ChevronDownIcon, ChevronUpIcon } from 'lucide-react-native'
-import {
-  Fragment,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ComponentProps,
-  type ReactNode,
-} from 'react'
+import { Fragment, useMemo, useRef, type ComponentProps, type ReactNode } from 'react'
 import {
   Platform,
   Pressable,
@@ -32,7 +24,6 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { dismissKeyboard, isKeyboardVisible } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -138,33 +129,6 @@ function PhoneSheetContent({
   const sheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => [SHEET_HEIGHT_PCT[sheetSize]], [sheetSize])
 
-  // Lags `open` only long enough to close an already-visible keyboard. gorhom
-  // learns about the keyboard from show/hide events alone, so a sheet that
-  // opens while one is already up is never told and lands underneath it; see
-  // sheet.tsx, which does the same before present(). Driving the index through
-  // state rather than `open` directly is what gives us somewhere to wait.
-  const [sheetIndex, setSheetIndex] = useState(-1)
-
-  useEffect(() => {
-    if (!open) {
-      setSheetIndex(-1)
-      return
-    }
-    // Synchronous whenever there is nothing to wait for. Every tick spent here
-    // is a tick the overlay is mounted over a sheet that has not opened yet.
-    if (Platform.OS === 'web' || !isKeyboardVisible()) {
-      setSheetIndex(0)
-      return
-    }
-    let cancelled = false
-    void dismissKeyboard().then(() => {
-      if (!cancelled) setSheetIndex(0)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [open])
-
   const backgroundStyle = useMemo<ViewStyle>(
     () => ({
       backgroundColor: theme.colors['--bg-overlay'],
@@ -186,15 +150,16 @@ function PhoneSheetContent({
     // Root context lookup happy. BottomSheetModal would portal again and lose it.
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        {/* Keyed off the sheet's own index, NOT `open`. While the two disagree —
-            the window the keyboard handshake opens — this layer covers the
-            screen with a closed sheet under it, and enablePanDownToClose makes
-            that sheet answer the tap with onClose, cancelling the open the user
-            just asked for. Taps must pass through until the sheet is really up. */}
-        <View style={StyleSheet.absoluteFill} pointerEvents={sheetIndex >= 0 ? 'box-none' : 'none'}>
+        <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
           <BottomSheet
             ref={sheetRef}
-            index={sheetIndex}
+            // Derived inline, never via state. The portal mounts fresh on open,
+            // and gorhom's index-change effect snaps through handleSnapToIndex,
+            // which no-ops before the container has measured — so an index moved
+            // to 0 by a mount effect is dropped and the sheet stays closed while
+            // `open` says otherwise. Its own animate-on-mount path waits for
+            // layout; this must be the initial index for that to run.
+            index={open ? 0 : -1}
             snapPoints={snapPoints}
             enableDynamicSizing={false}
             enablePanDownToClose

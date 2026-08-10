@@ -128,12 +128,23 @@ visible, which also happens to be the conventional gesture for opening an
 overlay. Focusing a field inside the sheet then fires a show event it can see —
 the path that already worked.
 
-`select.tsx` needs the same thing but has nowhere to put it: it drives gorhom's
-inline `BottomSheet` declaratively off the open flag, with no present() call to
-delay. It keeps a `sheetIndex` state that lags `open` across the dismissal —
-driving the index through state is what buys somewhere to wait. Any future
-gorhom surface needs one of these two shapes; the gap is in the library, so
-every instance inherits it.
+`select.tsx` needs the same thing and **cannot have it**, which is worth knowing
+before trying again. It drives gorhom's inline `BottomSheet` declaratively off
+the open flag, with no `present()` to delay. Lagging the index through state was
+tried and reverted: its portal mounts fresh on open, and gorhom's index-change
+effect snaps via `handleSnapToIndex`, which no-ops before the container has
+measured. An index moved to `0` by a mount effect is therefore dropped and the
+sheet stays closed while `open` says otherwise — a live portal with nothing
+visible, so the trigger looks dead and the back gesture is swallowed dismissing
+a sheet the user never saw. The only reliable form is `index={open ? 0 : -1}`,
+because gorhom's own animate-on-mount path waits for layout.
+
+The tell that this is happening rather than the ordering gap above: it opens
+when a keyboard was up and not otherwise. That reads like a keyboard bug and is
+not one — the dismissal is simply supplying the delay that lets layout land
+first. **A phone `Select` opened over an already-visible keyboard is a known,
+accepted limitation.** Reach for a modal sheet if a surface genuinely needs
+both.
 
 Neither Storybook nor the `unit` project can reach this — there is no soft
 keyboard in a headless browser. `app/dev/sheet.tsx` and `app/dev/select.tsx`
