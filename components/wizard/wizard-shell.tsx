@@ -185,11 +185,14 @@ export function WizardShell({
         ))}
       </View>
 
+      {/* Android is deliberately behaviour-less: RootLayout puts the window in
+          resize mode, so the whole tree has already shrunk by the keyboard
+          height by the time this renders. 'height' would subtract it a second
+          time — which is why overlays that behave everywhere else misbehave
+          inside the wizard. iOS does not resize, so it still needs padding. */}
       <KeyboardAvoidingView
         style={STATIC_STYLES.flex1}
-        behavior={
-          Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined
-        }
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           className="flex-1"

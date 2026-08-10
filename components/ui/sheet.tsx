@@ -150,10 +150,12 @@ function BottomSheetContent({
       // 'interactive' translates the content-sized sheet up by the keyboard height.
       keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
       keyboardBlurBehavior="restore"
-      // android_keyboardInputMode is deliberately left at gorhom's default:
-      // react-native-keyboard-controller owns the window's soft-input mode
-      // app-wide (see RootLayout), and a second setter that restores on sheet
-      // unmount would clobber it.
+      // Declarative only — gorhom never writes the window mode, it just needs to
+      // be told what the window is doing. RootLayout puts Android in resize, so
+      // gorhom must treat the keyboard as occupying no space *within* its
+      // container (the container already shrank). Left at its 'adjustPan'
+      // default it double-compensates for a keyboard the window already handled.
+      android_keyboardInputMode="adjustResize"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}
       accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}

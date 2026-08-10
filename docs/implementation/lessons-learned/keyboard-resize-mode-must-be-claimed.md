@@ -68,6 +68,35 @@ Everything that measures the window inherits the failure at once:
   grep -rn "useResizeMode\|useKeyboardAnimation\|useReanimatedKeyboardAnimation\|useKeyboardHandler" app/ components/ hooks/ lib/
   ```
 
+## Everyone downstream has to be told the same story
+
+Claiming the mode is half the job. Resize mode is invisible state, so every
+layer that compensates for the keyboard has to agree the window already did it —
+otherwise two layers each subtract the keyboard height and the surface
+overshoots as badly as it previously undershot.
+
+- **`@gorhom/bottom-sheet` needs `android_keyboardInputMode="adjustResize"`.**
+  The prop is purely declarative: grep the package and it never calls
+  `setInputMode` — it only tells gorhom what the window is doing. Told the
+  truth, it sets `heightWithinContainer = 0` and lets the shrunken container
+  place the sheet. Left at its `adjustPan` default it compensates a second time.
+- **React Native's own `KeyboardAvoidingView` should have no Android
+  behavior.** `behavior="height"` under a resized window subtracts the keyboard
+  again. iOS still needs `padding` — it does not resize.
+
+The tell for this failure mode is a surface that behaves correctly everywhere
+except inside one screen: that screen is the one adding the second correction.
+
+## `extend` does nothing on a single-detent sheet
+
+Unrelated to window mode, and worth knowing because it looks identical from the
+outside. `keyboardBehavior="extend"` resolves to `return highestDetentPosition`
+— the sheet's own tallest detent. A sheet configured with one snap point
+(`snapPoints={['33%']}`) is already at its tallest, so "extend" is a no-op and a
+keyboard taller than the sheet covers it completely. Only sheets whose max
+detent clears the keyboard (~95%) are actually rescued by `extend`; a short
+sheet needs the resized container, a second taller detent, or `fillParent`.
+
 ## Symptom-to-cause shortcut
 
 Keyboard avoidance broken **everywhere at once**, including surfaces nobody
