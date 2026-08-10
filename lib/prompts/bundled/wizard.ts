@@ -18,8 +18,9 @@ export const WIZARD_OPENING = `Write the opening passage of a {{ definition.mode
 export const WIZARD_LORE = `Suggest five reference entries for this story's world — things that ARE, not things that happen: magic systems, factions' histories, cosmology, terminology.
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
-{% endif %}{% if lore.size > 0 %}Already written (do not repeat these):
+{% endif %}{% if lore.size > 0 or suggested.size > 0 %}Already written (do not repeat these):
 {% for row in lore %}- {{ row.title }}
+{% endfor %}{% for name in suggested %}- {{ name }}
 {% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 

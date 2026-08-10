@@ -28,6 +28,16 @@ export type WizardAssistRun<T> = (
   signal: AbortSignal,
 ) => Promise<GenerateStructuredResult<T>>
 
+/**
+ * List-result runs additionally receive the names already on screen, so a
+ * `Generate more` asks for something the earlier pages did not already contain.
+ */
+export type WizardAssistListRun<T> = (
+  guidance: string,
+  signal: AbortSignal,
+  exclude: readonly string[],
+) => Promise<GenerateStructuredResult<T>>
+
 /** Shared shape for every wizard-assist "refine" call (prose results only). */
 export type WizardAssistRefine<T> = (
   current: T,
@@ -75,8 +85,9 @@ function generateFromState<T>(
   idMap: IdBiMap,
   signal: AbortSignal,
   deps?: WizardAssistDeps,
+  extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<T>> {
-  const context = substituteIds({ ...wizardStore.getWizard().state, guidance }, idMap)
+  const context = substituteIds({ ...wizardStore.getWizard().state, guidance, ...extra }, idMap)
   const prompt = renderTemplate(templateId, context)
   const call = deps?.generate ?? generateStructured
   return call(ASSIST_TARGET, prompt, schema, config(deps), signal)
@@ -160,10 +171,16 @@ export function runDescriptionAssist(
   )
 }
 
+/**
+ * @param suggested Titles already on screen from earlier pages. Excluded
+ * alongside the committed rows so `Generate more` sends a prompt that differs
+ * from the one that produced them, instead of re-rolling and being deduped.
+ */
 export function runLoreAssist(
   guidance: string,
   signal: AbortSignal,
   deps?: WizardAssistDeps,
+  suggested: readonly string[] = [],
 ): Promise<GenerateStructuredResult<LoreAssistValue>> {
   return generateFromState(
     TEMPLATE_IDS.wizardLore,
@@ -172,6 +189,7 @@ export function runLoreAssist(
     new IdBiMap(),
     signal,
     deps,
+    { suggested: [...suggested] },
   )
 }
 

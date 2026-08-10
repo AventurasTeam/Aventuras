@@ -273,6 +273,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
         'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates.',
       required: false,
     },
+    {
+      name: 'suggested',
+      type: 'string[]',
+      category: 'Retrieval',
+      description:
+        'Titles already on screen from earlier `Generate more` pages but not yet imported. Excluded alongside `lore` so a further page is additive rather than a re-roll of the same prompt.',
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -312,6 +320,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'structuralPinnedLore',
     'structuralPinnedThreads',
     'lore',
+    'suggested',
   ],
   'Story Config': [
     'definition',

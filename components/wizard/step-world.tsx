@@ -42,6 +42,7 @@ import {
   type LoreAssistValue,
   type SettingAssistValue,
   type ToneAssistValue,
+  type WizardAssistListRun,
   type WizardAssistRefine,
   type WizardAssistRun,
 } from './wizard-assist'
@@ -56,7 +57,7 @@ export type StepWorldAssistSeams = {
   toneRefine?: WizardAssistRefine<ToneAssistValue>
   setting?: WizardAssistRun<SettingAssistValue>
   settingRefine?: WizardAssistRefine<SettingAssistValue>
-  lore?: WizardAssistRun<LoreAssistValue>
+  lore?: WizardAssistListRun<LoreAssistValue>
 }
 
 export type StepWorldProps = {
@@ -234,7 +235,10 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
         headerAction={
           <AiAssist
             ariaLabel={t('wizard:world.lore.suggest')}
-            run={assist?.lore ?? runLoreAssist}
+            run={
+              assist?.lore ??
+              ((guidance, signal, exclude) => runLoreAssist(guidance, signal, undefined, exclude))
+            }
             resolveModelId={resolveModelId}
             result="list"
             // `payload` carries the row whole — mapping back from name/detail alone

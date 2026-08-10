@@ -149,6 +149,24 @@ describe('runLoreAssist', () => {
     const res = await runLoreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
     expect(res).toEqual({ status: 'ok', value: { lore } })
     expect(capturedPrompt).toContain("Suggest five reference entries for this story's world")
+    // Nothing on screen yet, so the exclusion block must not render at all.
+    expect(capturedPrompt).not.toContain('Already written')
+  })
+
+  it('excludes the names already on screen so a further page is not a re-roll', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { lore: [] } }
+    }) as WizardAssistDeps['generate']
+
+    await runLoreAssist('', signal, { resolveConfig: () => CONFIGURED, generate }, [
+      'The Salt Wells',
+      'The Hollow King',
+    ])
+    expect(capturedPrompt).toContain('Already written (do not repeat these):')
+    expect(capturedPrompt).toContain('- The Salt Wells')
+    expect(capturedPrompt).toContain('- The Hollow King')
   })
 })
 

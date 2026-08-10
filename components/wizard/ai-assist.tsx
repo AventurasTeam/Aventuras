@@ -36,16 +36,10 @@ type AssistState<T> =
   | { kind: 'refine'; value: T }
   | { kind: 'failure'; detail: string; retry: () => void }
 
-type AiAssistCommonProps<T> = {
+type AiAssistCommonProps = {
   /** Accessible name for the trigger AND the overlay's visible heading (e.g. "Suggest setting"). */
   ariaLabel: string
   guidancePlaceholder?: string
-  /**
-   * Runs the assist from the optional guidance text. The caller bakes in the
-   * template, schema, config and any post-processing — this component only drives
-   * the popover state machine around the async result.
-   */
-  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<T>>
   /**
    * The configured model id, or null when unconfigured. Drives the pre-generate
    * "set up in Settings" branch and the loading label; the caller owns which
@@ -57,8 +51,16 @@ type AiAssistCommonProps<T> = {
   disabled?: boolean
 }
 
-type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
+/**
+ * Runs the assist from the optional guidance text. The caller bakes in the
+ * template, schema, config and any post-processing — this component only drives
+ * the overlay state machine around the async result.
+ */
+type AssistRun<T> = (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<T>>
+
+type AiAssistProseProps<T> = AiAssistCommonProps & {
   result: 'prose'
+  run: AssistRun<T>
   getProse: (value: T) => string
   onUse: (value: T) => void
   /**
@@ -73,14 +75,26 @@ type AiAssistProseProps<T> = AiAssistCommonProps<T> & {
   ) => Promise<GenerateStructuredResult<T>>
 }
 
-type AiAssistChipsProps<T> = AiAssistCommonProps<T> & {
+type AiAssistChipsProps<T> = AiAssistCommonProps & {
   result: 'chips'
+  run: AssistRun<T>
   getChips: (value: T) => string[]
   onPickChip: (chip: string, value: T) => void
 }
 
-type AiAssistListProps<T, P> = AiAssistCommonProps<T> & {
+type AiAssistListProps<T, P> = AiAssistCommonProps & {
   result: 'list'
+  /**
+   * `exclude` carries the names already on screen when `Generate more` runs.
+   * Without it that call re-sends the first page's prompt verbatim and the
+   * reply is deduped away, costing a round-trip for nothing. Empty on a fresh
+   * Generate, which is meant to re-roll.
+   */
+  run: (
+    guidance: string,
+    signal: AbortSignal,
+    exclude: readonly string[],
+  ) => Promise<GenerateStructuredResult<T>>
   /** Flattens one model reply into renderable rows. */
   getItems: (value: T) => AssistListItem<P>[]
   /** Names already in the wizard's own list — drives the `(already exists)` mark. */
@@ -98,7 +112,7 @@ export type AiAssistProps<T, P = unknown> =
   | AiAssistListProps<T, P>
 
 export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
-  const { ariaLabel, guidancePlaceholder, run, resolveModelId, onSetup, disabled } = props
+  const { ariaLabel, guidancePlaceholder, resolveModelId, onSetup, disabled } = props
 
   const isPhone = useTier() === 'phone'
   // Inside a gorhom sheet a plain ScrollView's touches lose to the sheet's pan
@@ -226,13 +240,15 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       return
     }
     lastGuidanceRef.current = guidance
+    // Only an append needs exclusions; a replace is meant to re-roll the same
+    // prompt, and listItems is about to be discarded anyway.
+    const exclude = appendRef.current ? listItems.map((item) => item.name) : []
+    const call =
+      props.result === 'list'
+        ? (signal: AbortSignal) => props.run(guidance, signal, exclude)
+        : (signal: AbortSignal) => props.run(guidance, signal)
 
-    await runCall(
-      modelId,
-      from,
-      (signal) => run(guidance, signal),
-      () => void runGenerate(guidance, from),
-    )
+    await runCall(modelId, from, call, () => void runGenerate(guidance, from))
   }
 
   const handleGenerate = () => {
