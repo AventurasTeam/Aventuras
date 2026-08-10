@@ -117,9 +117,10 @@ describe('lore mutators', () => {
     wizardStore.addLore()
     wizardStore.addLore()
     const [first, second] = wizardStore.getWizard().state.lore
+    expect(first.id).not.toBe(second.id)
     wizardStore.patchLore(second.id, { title: 'Second' })
     const after = wizardStore.getWizard().state.lore
-    expect(after[0]).toEqual(first)
+    expect(after[0]).toBe(first)
     expect(after[1].title).toBe('Second')
   })
 

@@ -57,7 +57,9 @@ describe('lore drafts', () => {
       injectionMode: 'always' as const,
       priority: 7,
     }
-    expect(wizardWorkingStateSchema.parse({ lore: [row] }).lore[0]).toEqual(row)
+    expect(
+      wizardWorkingStateSchema.parse(JSON.parse(JSON.stringify({ lore: [row] }))).lore[0],
+    ).toEqual(row)
   })
 
   it('fills More-options defaults when a row omits them', () => {
