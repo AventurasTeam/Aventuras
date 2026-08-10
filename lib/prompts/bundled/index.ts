@@ -9,7 +9,7 @@ import { STATE_EMISSION } from './state-emission'
 import { SUGGESTION_EMISSION } from './suggestion-emission'
 import { SUGGESTION_EMISSION_JSON } from './suggestion-emission-json'
 import { SUGGESTION_REFRESH } from './suggestion-refresh'
-import { WIZARD_DESCRIPTION, WIZARD_OPENING, WIZARD_TITLE_CHIPS } from './wizard'
+import { WIZARD_DESCRIPTION, WIZARD_LORE, WIZARD_OPENING, WIZARD_TITLE_CHIPS } from './wizard'
 
 export const bundledPack: Pack = {
   templates: {
@@ -29,6 +29,7 @@ export const bundledPack: Pack = {
     [TEMPLATE_IDS.wizardOpening]: { group: 'wizard', source: WIZARD_OPENING },
     [TEMPLATE_IDS.wizardTitleChips]: { group: 'wizard', source: WIZARD_TITLE_CHIPS },
     [TEMPLATE_IDS.wizardDescription]: { group: 'wizard', source: WIZARD_DESCRIPTION },
+    [TEMPLATE_IDS.wizardLore]: { group: 'wizard', source: WIZARD_LORE },
   },
   macros: {
     [MACRO_IDS.memoryBlocks]: { group: 'staticContent', source: MEMORY_BLOCKS },

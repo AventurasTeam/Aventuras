@@ -23,4 +23,25 @@ export const descriptionOutputSchema = z.object({
   description: z.string().describe('the one-sentence log line'),
 })
 
+export const loreSuggestionsSchema = z.object({
+  lore: z
+    .array(
+      z.object({
+        // Trimmed at the parse boundary: a padded title would otherwise reach
+        // the store through the list result's opaque `payload`, which bypasses
+        // the render-layer trim in markExisting.
+        title: z.string().trim().describe('short reference-entry title'),
+        body: z.string().trim().describe('one or two paragraphs of reference prose'),
+        category: z
+          .string()
+          .trim()
+          .default('')
+          .describe('optional grouping label, e.g. cosmology or history'),
+      }),
+    )
+    .describe('five reference entries about this world'),
+})
+
+export type LoreSuggestions = z.infer<typeof loreSuggestionsSchema>
+
 export type OpeningOutput = z.infer<typeof openingOutputSchema>

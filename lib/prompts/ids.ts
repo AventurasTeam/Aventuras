@@ -12,6 +12,7 @@ export const TEMPLATE_IDS = {
   wizardOpening: 'tmpl_wizard_opening',
   wizardTitleChips: 'tmpl_wizard_title_chips',
   wizardDescription: 'tmpl_wizard_description',
+  wizardLore: 'tmpl_wizard_lore',
 } as const
 
 export const MACRO_IDS = {

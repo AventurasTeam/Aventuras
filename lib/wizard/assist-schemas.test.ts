@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { descriptionOutputSchema, openingOutputSchema, titleChipsSchema } from './assist-schemas'
+import {
+  descriptionOutputSchema,
+  loreSuggestionsSchema,
+  openingOutputSchema,
+  titleChipsSchema,
+} from './assist-schemas'
 
 describe('wizard assist schemas', () => {
   it('openingOutputSchema accepts a well-formed opening', () => {
@@ -30,5 +35,37 @@ describe('wizard assist schemas', () => {
   })
   it('descriptionOutputSchema parses a log line', () => {
     expect(descriptionOutputSchema.parse({ description: 'A tale.' }).description).toBe('A tale.')
+  })
+})
+
+describe('loreSuggestionsSchema', () => {
+  it('accepts a batch of title/body rows', () => {
+    const parsed = loreSuggestionsSchema.parse({
+      lore: [{ title: 'The Old Empire', body: 'A thousand years ago…', category: 'history' }],
+    })
+    expect(parsed.lore[0].title).toBe('The Old Empire')
+    expect(parsed.lore[0].category).toBe('history')
+  })
+
+  it('defaults an omitted category to empty so the import needs no post-fill', () => {
+    const parsed = loreSuggestionsSchema.parse({ lore: [{ title: 'T', body: 'B' }] })
+    expect(parsed.lore[0].category).toBe('')
+  })
+
+  it('trims padded model output before it can reach the store', () => {
+    // The list result's `payload` carries the parsed row straight into
+    // importLore, bypassing markExisting's render-layer trim entirely.
+    const parsed = loreSuggestionsSchema.parse({
+      lore: [{ title: '  The Old Empire  ', body: '  Fell.  ', category: '  history  ' }],
+    })
+    expect(parsed.lore[0]).toEqual({
+      title: 'The Old Empire',
+      body: 'Fell.',
+      category: 'history',
+    })
+  })
+
+  it('rejects a reply with no lore array', () => {
+    expect(() => loreSuggestionsSchema.parse({})).toThrow()
   })
 })

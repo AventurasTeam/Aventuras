@@ -9,7 +9,12 @@ import {
 import { generateId, IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
-import { descriptionOutputSchema, openingOutputSchema, titleChipsSchema } from '@/lib/wizard'
+import {
+  descriptionOutputSchema,
+  loreSuggestionsSchema,
+  openingOutputSchema,
+  titleChipsSchema,
+} from '@/lib/wizard'
 
 import { needsLead } from './step-frame-logic'
 
@@ -24,6 +29,7 @@ export type OpeningAssistValue = {
 }
 export type TitleAssistValue = { titles: string[] }
 export type DescriptionAssistValue = { description: string }
+export type LoreAssistValue = { lore: { title: string; body: string; category: string }[] }
 
 export type WizardAssistDeps = {
   /** Test seam — production reads the live app-settings store. */
@@ -131,6 +137,49 @@ export function runDescriptionAssist(
     descriptionOutputSchema,
     guidance,
     new IdBiMap(),
+    signal,
+    deps,
+  )
+}
+
+export function runLoreAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<LoreAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardLore,
+    loreSuggestionsSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+  )
+}
+
+export function refineOpeningAssist(
+  current: OpeningAssistValue,
+  instruction: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<OpeningAssistValue>> {
+  // Cumulative refine (wizard.md → Refine): the CURRENT preview is the input,
+  // so repeated refines compound rather than re-rolling from the base state.
+  return runOpeningAssist(
+    `Revise this opening rather than writing a new one.\n\nCurrent opening:\n${current.content}\n\nRevision instruction: ${instruction}`,
+    signal,
+    deps,
+  )
+}
+
+export function refineDescriptionAssist(
+  current: DescriptionAssistValue,
+  instruction: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<DescriptionAssistValue>> {
+  return runDescriptionAssist(
+    `Revise this description rather than writing a new one.\n\nCurrent description:\n${current.description}\n\nRevision instruction: ${instruction}`,
     signal,
     deps,
   )

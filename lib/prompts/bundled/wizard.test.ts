@@ -67,3 +67,46 @@ describe('WIZARD_DESCRIPTION template', () => {
     expect(out.toLowerCase()).not.toContain('next beat')
   })
 })
+
+describe('WIZARD_OPENING lore block', () => {
+  it('renders every authored row, uncapped', () => {
+    const rows = Array.from({ length: 12 }, (_, i) => ({
+      title: `Row ${i}`,
+      body: `Body ${i}`,
+    }))
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
+      lore: rows,
+      leadEntityId: '',
+      leadName: '',
+      guidance: '',
+    })
+    expect(out).toContain('World reference:')
+    expect(out).toContain('- Row 0: Body 0')
+    expect(out).toContain('- Row 11: Body 11')
+  })
+
+  it('omits the block entirely when no lore is authored', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
+      lore: [],
+      leadEntityId: '',
+      leadName: '',
+      guidance: '',
+    })
+    expect(out).not.toContain('World reference:')
+  })
+})
+
+describe('WIZARD_LORE', () => {
+  it('lists already-written titles so the model does not repeat them', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardLore, {
+      definition: { setting: 'A drowned coast', genre: {} },
+      lore: [{ title: 'The Old Empire', body: 'ignored here' }],
+      guidance: '',
+    })
+    expect(out).toContain('Already written (do not repeat these):')
+    expect(out).toContain('- The Old Empire')
+    expect(out, 'bodies stay out of the dedupe list').not.toContain('ignored here')
+  })
+})

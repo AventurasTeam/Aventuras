@@ -9,8 +9,18 @@ export const WIZARD_OPENING = `Write the opening passage of a {{ definition.mode
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
-{% endif %}{% if leadEntityId != blank %}The lead character is {{ leadName }} (cast id: {{ leadEntityId }}).
+{% endif %}{% if lore.size > 0 %}World reference:
+{% for row in lore %}- {{ row.title }}: {{ row.body }}
+{% endfor %}{% endif %}{% if leadEntityId != blank %}The lead character is {{ leadName }} (cast id: {{ leadEntityId }}).
 {% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_LORE = `Suggest five reference entries for this story's world — things that ARE, not things that happen: magic systems, factions' histories, cosmology, terminology.
+{% if definition.setting != blank %}Setting: {{ definition.setting }}
+{% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
+{% endif %}{% if lore.size > 0 %}Already written (do not repeat these):
+{% for row in lore %}- {{ row.title }}
+{% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
 export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.

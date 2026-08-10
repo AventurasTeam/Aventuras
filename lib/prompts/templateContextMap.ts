@@ -265,6 +265,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       description: 'Optional per-invocation user steer appended to the prompt.',
       required: false,
     },
+    {
+      name: 'lore',
+      type: 'WizardLoreDraft[]',
+      category: 'Retrieval',
+      description:
+        'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates.',
+      required: false,
+    },
   ],
   staticContent: [],
 }
@@ -279,6 +287,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
+  [TEMPLATE_IDS.wizardLore]: 'wizard',
 }
 
 // UI-level grouping name -> variable names it surfaces. A name that matches
@@ -299,6 +308,7 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'structuralPinnedEntities',
     'structuralPinnedLore',
     'structuralPinnedThreads',
+    'lore',
   ],
   'Story Config': [
     'definition',

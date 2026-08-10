@@ -4,8 +4,10 @@ import type { ResolveModelConfig } from '@/lib/ai'
 import { wizardStore } from '@/lib/stores'
 
 import {
+  refineOpeningAssist,
   resolveWizardAssistModelId,
   runDescriptionAssist,
+  runLoreAssist,
   runOpeningAssist,
   runTitleAssist,
   type WizardAssistDeps,
@@ -123,6 +125,49 @@ describe('runTitleAssist / runDescriptionAssist', () => {
   it('returns description passthrough', async () => {
     const res = await runDescriptionAssist('', signal, deps({ description: 'A tale.' }))
     expect(res.status === 'ok' && res.value.description).toBe('A tale.')
+  })
+})
+
+describe('runLoreAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the lore template and returns the parsed batch', async () => {
+    let capturedPrompt = ''
+    const lore = [{ title: 'The Old Empire', body: 'Fell.', category: 'history' }]
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { lore } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runLoreAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value: { lore } })
+    expect(capturedPrompt).toContain("Suggest five reference entries for this story's world")
+  })
+})
+
+describe('refineOpeningAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('passes a prompt containing both the current prose and the instruction', async () => {
+    wizardStore.patchDefinition({ mode: 'creative', narration: 'third' })
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return {
+        status: 'ok',
+        value: { prose: 'Revised.', sceneEntities: [], currentLocationId: null, worldTime: 0 },
+      }
+    }) as WizardAssistDeps['generate']
+
+    const res = await refineOpeningAssist(
+      { content: 'The map unrolled.', sceneEntities: [], currentLocationId: null, model: null },
+      'make it darker',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+    )
+    expect(res.status).toBe('ok')
+    expect(capturedPrompt).toContain('The map unrolled.')
+    expect(capturedPrompt).toContain('make it darker')
   })
 })
 
