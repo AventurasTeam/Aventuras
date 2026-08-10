@@ -63,7 +63,8 @@
       "title": "a title",
       "opening": "an opening",
       "lead": "a lead character name",
-      "effectiveDim": "a valid effective dim"
+      "effectiveDim": "a valid effective dim",
+      "lore": "lore (every entry needs a title and a body)"
     },
     "failed": "Couldn't create the story.",
     "embedFailed": {

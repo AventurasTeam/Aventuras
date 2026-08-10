@@ -48,6 +48,7 @@ const FINISH_REASON_KEY = {
   opening: 'wizard:finish.missing.opening',
   lead: 'wizard:finish.missing.lead',
   effectiveDim: 'wizard:finish.missing.effectiveDim',
+  lore: 'wizard:finish.missing.lore',
 } as const
 
 type GateState =

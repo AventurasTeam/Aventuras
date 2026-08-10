@@ -21,6 +21,7 @@ import { generateId } from '@/lib/ids'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { needsLead } from './step-frame-logic'
+import { invalidLoreRowIds } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
 
@@ -67,6 +68,9 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
+  // Save-as-draft doesn't validate, so a resumed draft can reach Finish
+  // carrying an empty-bodied row from step 3's local editor — re-check here.
+  if (invalidLoreRowIds(s.lore).length > 0) reasons.push('lore')
 
   // effectiveDim only means something for a provider-backed Matryoshka model; if
   // the app default swapped to a non-Matryoshka model/backend mid-session, the
@@ -176,6 +180,7 @@ export async function finishWizard(
         openingContent: s.opening.content,
         openingMetadata,
         lead,
+        lore: s.lore,
         embed: {
           config: embedConfig,
           exec: embedCtx.exec,
