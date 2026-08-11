@@ -171,6 +171,9 @@ export function CalendarPicker({
       onQueryChange={setQuery}
       selectedRowIds={selectedRowIds}
       matchTriggerWidth
+      // 400 fits the longest built-in tier path (year → … → second) with
+      // slack; longer custom paths ellipsize behind the row's title tooltip.
+      overlayMinWidth={400}
       sheetSize="tall"
       autofocusSearch="web-only"
       disabled={disabled}

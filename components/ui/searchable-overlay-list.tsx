@@ -88,12 +88,18 @@ type SearchableOverlayListProps<T> = {
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
 
-  // Web-only opt-in: the Shape 2 popover sizes to its trigger's width (with a
-  // 240px floor so a narrow trigger doesn't crush content). Use for
+  // Web-only opt-in: the Shape 2 popover is at least as wide as its trigger
+  // (with a floor so a narrow trigger doesn't crush content). Use for
   // select-shaped consumers where the open surface should read as the trigger
   // expanding. Leave off for command-menu consumers whose surface is dialog-
   // scaled regardless of trigger. No-op on phone (Sheet covers width on its own).
   matchTriggerWidth?: boolean
+  // Raises the matchTriggerWidth floor (default 240) for consumers whose row
+  // content is known to be wider than a typical trigger. The virtualizer
+  // absolutely positions rows, so they contribute no intrinsic width — the
+  // popover cannot size itself to content; the consumer declares the width
+  // its rows need instead. Rows past the floor still ellipsize.
+  overlayMinWidth?: number
 
   onActivate: (row: Row<T>) => void
   // Optional consumer signal for the X clear button. In as-trigger mode this is the
@@ -130,16 +136,6 @@ const STATIC_STYLES = {
     maxHeight: 480,
     overflow: 'hidden' as const,
   } satisfies ViewStyle,
-  // Radix exposes `--radix-popover-trigger-width` on Content; honor it as the
-  // surface width with a 240px floor so a narrow trigger doesn't crush rows
-  // (modelId + caps + ★ need a reasonable minimum). Web-only — native phones
-  // route through Sheet which owns its own sizing.
-  overlayChromeMatchTrigger: {
-    maxHeight: 480,
-    overflow: 'hidden' as const,
-    width: 'var(--radix-popover-trigger-width)' as unknown as number,
-    minWidth: 240,
-  } satisfies ViewStyle,
   pointerEventsNone: { pointerEvents: 'none' as const } satisfies ViewStyle,
   // Native inline popover for Shape1Inline: absolute positioning relative to
   // the wrapper (which contains the input) places the popover just below the
@@ -155,6 +151,18 @@ const STATIC_STYLES = {
     zIndex: 50,
     elevation: 8,
   } satisfies ViewStyle,
+}
+
+// Radix exposes `--radix-popover-trigger-width` on Content; use it as a lower
+// bound so the surface is never narrower than its trigger but can be held open
+// wider via the consumer floor (overlayMinWidth). Web-only — native phones
+// route through Sheet which owns its own sizing.
+function matchTriggerWidthStyle(floorPx: number): ViewStyle {
+  return {
+    maxHeight: 480,
+    overflow: 'hidden',
+    minWidth: `max(var(--radix-popover-trigger-width), ${floorPx}px)` as unknown as number,
+  }
 }
 
 // Trails the consumer's row content, so a row that already fills its width
@@ -588,7 +596,10 @@ function VirtualizedRowList<T>({
     <div
       ref={parentRef}
       id={listboxId}
-      className={cn('overflow-y-auto', className)}
+      // overflow-x-hidden: `overflow-y: auto` alone computes overflow-x to
+      // auto, so any row content a px too wide spawns a horizontal scrollbar
+      // instead of ellipsizing.
+      className={cn('overflow-y-auto overflow-x-hidden', className)}
       style={style as CSSProperties}
       {...webProps}
     >
@@ -987,10 +998,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   }
 
   // Desktop / tablet — rn-primitives Popover with the controlled-open bridge.
-  // Width: `matchTriggerWidth` swaps `w-80` for the Radix trigger-width CSS var;
-  // otherwise the popover is a fixed 320px (command-menu-shaped surfaces).
+  // Width: `matchTriggerWidth` swaps `w-80` for a trigger-width lower bound
+  // (floor raisable via `overlayMinWidth`); otherwise the popover is a fixed
+  // 320px (command-menu-shaped surfaces).
   const popoverStyle = props.matchTriggerWidth
-    ? STATIC_STYLES.overlayChromeMatchTrigger
+    ? matchTriggerWidthStyle(props.overlayMinWidth ?? 240)
     : STATIC_STYLES.overlayChrome
   const content = (
     <PopoverPrimitive.Content
