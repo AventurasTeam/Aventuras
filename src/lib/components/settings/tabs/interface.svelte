@@ -13,11 +13,28 @@
   import { Input } from '$lib/components/ui/input'
   import { Badge } from '$lib/components/ui/badge'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
+  import ColorPicker from '$lib/components/shared/ColorPicker.svelte'
   import { Separator } from '$lib/components/ui/separator'
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService, UpdateError } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
   import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from '@lucide/svelte'
+
+  /**
+   * What the swatch and the preview should show. An empty stored colour means "the
+   * theme's accent", so resolve it from CSS rather than showing an empty swatch.
+   * Reading `theme` keeps this in step with a theme switch.
+   */
+  const effectiveDialogueColor = $derived.by(() => {
+    const stored = settings.uiSettings.dialogueColor
+    if (stored) return stored
+    void settings.uiSettings.theme
+    if (typeof document === 'undefined') return '#888888'
+    const accent = getComputedStyle(document.documentElement)
+      .getPropertyValue('--text-accent')
+      .trim()
+    return accent || '#888888'
+  })
 
   const storyWidthIndex = $derived(
     Math.max(
@@ -245,6 +262,53 @@
         database.setSetting('show_word_count', v.toString())
       }}
     />
+  </div>
+
+  <!-- Dialogue Highlighting -->
+  <div class="space-y-3">
+    <div class="flex items-center justify-between">
+      <div>
+        <Label>Highlight Dialogue</Label>
+        <p class="text-muted-foreground text-xs">
+          Colour quoted speech in the story text. No effect on stories using Visual Prose Styling.
+        </p>
+      </div>
+      <Switch
+        checked={settings.uiSettings.highlightDialogue}
+        onCheckedChange={(v) => settings.setHighlightDialogue(v)}
+      />
+    </div>
+
+    {#if settings.uiSettings.highlightDialogue}
+      <div class="flex items-center justify-between gap-3 pl-1">
+        <div>
+          <Label class="text-sm">Dialogue Colour</Label>
+          <p class="text-muted-foreground text-xs">
+            {settings.uiSettings.dialogueColor
+              ? 'Custom colour'
+              : "Following the current theme's accent"}
+          </p>
+        </div>
+        <div class="flex shrink-0 items-center gap-2">
+          {#if settings.uiSettings.dialogueColor}
+            <Button variant="ghost" size="sm" onclick={() => settings.setDialogueColor('')}>
+              Use theme accent
+            </Button>
+          {/if}
+          <ColorPicker
+            value={effectiveDialogueColor}
+            onChange={(c) => settings.setDialogueColor(c)}
+          />
+        </div>
+      </div>
+
+      <p class="prose-content border-border text-muted-foreground rounded-md border p-3 text-sm">
+        The captain leaned closer.
+        <span class="dialogue-line" style:color={effectiveDialogueColor}>
+          "We sail before dawn."
+        </span>
+      </p>
+    {/if}
   </div>
 
   <!-- Spellcheck Toggle -->

@@ -22,7 +22,12 @@
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
-  import { parseMarkdown } from '$lib/utils/markdown'
+  import {
+    prepareTTSSegments,
+    resolveDialogueVoice,
+    resolveTTSSanitizeOptions,
+  } from '$lib/services/ai/utils/ttsText'
+  import { parseMarkdown, parseStoryMarkdown } from '$lib/utils/markdown'
   import { findPrecedingUserAction } from '$lib/utils/storyEntries'
   import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
   import {
@@ -52,7 +57,7 @@
     DEFAULT_FALLBACK_STYLE_PROMPT,
   } from '$lib/services/ai/image/constants'
   import { SvelteSet } from 'svelte/reactivity'
-  import { escapeRegex, extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
+  import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
 
   let { entry }: { entry: StoryEntry } = $props()
 
@@ -1061,26 +1066,35 @@
 
       // Use translated content if available, otherwise use original content
       const ttsContent = entry.translatedContent ?? entry.content
-      const textToNarrate = sanitizeTextForTTS(ttsContent, {
-        removeTags: ttsSettings.removeHtmlTags,
-        removeAllTagContent: ttsSettings.removeAllHtmlContent,
-        htmlTagsToRemoveContent: ttsSettings.htmlTagsToRemoveContent.replace(/\s+/g, '').split(','),
+
+      // Order matters: strip markup, then split into voices, then drop excluded
+      // characters. Excluding `"` is a legitimate way to silence the quote marks,
+      // and doing it before the split would erase the dialogue boundaries instead.
+      const textToNarrate = sanitizeTextForTTS(
+        ttsContent,
+        resolveTTSSanitizeOptions(ttsSettings, visualProseMode),
+      )
+
+      const segments = prepareTTSSegments(textToNarrate, {
+        narratorVoice: ttsSettings.voice,
+        dialogueVoice: resolveDialogueVoice(ttsSettings),
+        excludedCharacters: ttsSettings.excludedCharacters,
       })
 
-      // Remove excluded characters after HTML cleanup
-      const excludedCharArray = ttsSettings.excludedCharacters.replace(/\s+/g, '').split(',')
-      const hasExcludedChars = excludedCharArray.some(Boolean)
-      const finalNarrationText = hasExcludedChars
-        ? textToNarrate.replace(
-            new RegExp(`[${excludedCharArray.filter(Boolean).map(escapeRegex).join('')}]`, 'g'),
-            '',
-          )
-        : textToNarrate
+      // Say so rather than doing nothing: the usual cause is an excluded-characters
+      // list that happens to cover the whole entry, and a play button that silently
+      // does nothing gives the user nothing to act on.
+      if (segments.length === 0) {
+        alert(
+          'Nothing to read aloud in this entry — check the excluded characters in TTS settings.',
+        )
+        return
+      }
 
       isPlayingTTS = true
       isGeneratingTTS = false
 
-      await aiTTSService.generateAndPlay(finalNarrationText)
+      await aiTTSService.generateAndPlay(segments)
 
       isPlayingTTS = false
     } catch (error) {
@@ -1520,6 +1534,7 @@
         bind:this={storyTextContainer}
         class="story-text prose-content relative"
         class:visual-prose-container={visualProseMode && entry.type === 'narration'}
+        class:dialogue-highlight={!visualProseMode}
         class:linking-mode={!!selectedOrphanId || !!draggingImageId}
         onclick={handleContentClick}
         ondragover={handleDragOver}
@@ -1561,8 +1576,10 @@
             {@html processStoryContent(displayContent, embeddedImages, regeneratingImageIds)}
           {/if}
         {:else if entry.type === 'user_action'}
-          <!-- User action: show original input (before translation) -->
-          {@html parseMarkdown(entry.originalInput ?? entry.content)}
+          <!-- User action: show original input (before translation).
+               Rendered with the story renderer so the player's own dialogue is
+               highlighted too, which is what makes a scene scannable at a glance. -->
+          {@html parseStoryMarkdown(entry.originalInput ?? entry.content)}
         {:else}
           {@html parseMarkdown(entry.content)}
         {/if}

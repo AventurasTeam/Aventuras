@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import { settings } from '$lib/stores/settings.svelte'
+  import { createDebouncedSave } from '$lib/utils/debounce'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
   import { Input } from '$lib/components/ui/input'
@@ -8,9 +10,19 @@
   import { Slider } from '$lib/components/ui/slider'
   import { Play, Square, RefreshCw, Loader2 } from '@lucide/svelte'
   import { GOOGLE_TRANSLATE_LANGUAGES, aiTTSService } from '$lib/services/ai/utils/TTSService'
+  import {
+    prepareTTSSegments,
+    resolveDialogueVoice,
+    supportsDialogueVoice,
+  } from '$lib/services/ai/utils/ttsText'
+  import TTSVoiceSelector from './TTSVoiceSelector.svelte'
 
   const PREVIEW_TEXT =
     'This is a preview of the selected voice. The story narration will sound like this.'
+
+  /** Holds a quote, so the preview demonstrates the hand-off between the two voices. */
+  const DIALOGUE_PREVIEW_TEXT =
+    'The captain leaned closer. "We sail before dawn," she said, and turned away.'
 
   let isPlayingPreview = $state(false)
   let isLoadingPreview = $state(false)
@@ -58,6 +70,37 @@
     }
   })
 
+  const dialogueVoiceSupported = $derived(
+    supportsDialogueVoice(settings.systemServicesSettings.tts.provider),
+  )
+
+  /**
+   * The voice fields accept free text on OpenAI-compatible endpoints, so a keystroke
+   * would otherwise rewrite the whole settings blob to SQLite. The store update stays
+   * immediate — only the write waits.
+   */
+  const { trigger: triggerVoiceSave, flush: flushVoiceSave } = createDebouncedSave(() =>
+    settings.saveSystemServicesSettings(),
+  )
+
+  onDestroy(() => flushVoiceSave())
+
+  /** Store a voice both in the active slot and in its provider-specific memory,
+   * so switching provider and back restores what was chosen there. */
+  function setVoice(voice: string) {
+    const tts = settings.systemServicesSettings.tts
+    tts.voice = voice
+    if (tts.providerVoices) tts.providerVoices[tts.provider] = voice
+    triggerVoiceSave()
+  }
+
+  function setDialogueVoice(voice: string) {
+    const tts = settings.systemServicesSettings.tts
+    tts.dialogueVoice = voice
+    if (tts.providerDialogueVoices) tts.providerDialogueVoices[tts.provider] = voice
+    triggerVoiceSave()
+  }
+
   const providers = [
     { value: 'openai', label: 'OpenAI Compatible (OpenRouter, OpenAI, Local)' },
     { value: 'google', label: 'Google Translate' },
@@ -84,8 +127,62 @@
       if (systemVoices.length > 0 && !systemVoices.some((v) => v.name === tts.voice)) {
         return `Voice "${tts.voice}" not found. Please select a different voice.`
       }
+
+      // The dialogue voice is resolved before any audio plays, so a stale one must be
+      // caught here rather than halfway through an entry.
+      const dialogueVoice = resolveDialogueVoice(tts)
+      if (
+        dialogueVoice &&
+        systemVoices.length > 0 &&
+        !systemVoices.some((v) => v.name === dialogueVoice)
+      ) {
+        return `Dialogue voice "${dialogueVoice}" not found. Please select a different voice.`
+      }
     }
     return null
+  }
+
+  /**
+   * Preview both voices on one line of prose.
+   *
+   * Goes through the same `prepareTTSSegments` the story path uses — a preview built
+   * from its own segmentation could sound right while playback misbehaves.
+   */
+  async function playDialoguePreview() {
+    const tts = settings.systemServicesSettings.tts
+    const dialogueVoice = resolveDialogueVoice(tts)
+    if (!tts.enabled || !dialogueVoice || isPlayingPreview || isLoadingPreview) return
+
+    const validationError = validateTTSSettings()
+    if (validationError) {
+      previewError = validationError
+      return
+    }
+
+    isLoadingPreview = true
+    previewError = null
+
+    try {
+      await aiTTSService.initialize(tts)
+
+      isPlayingPreview = true
+      isLoadingPreview = false
+
+      await aiTTSService.generateAndPlay(
+        prepareTTSSegments(DIALOGUE_PREVIEW_TEXT, {
+          narratorVoice: tts.voice,
+          dialogueVoice,
+          excludedCharacters: tts.excludedCharacters,
+        }),
+      )
+
+      isPlayingPreview = false
+    } catch (error) {
+      console.error('[TTSSettings] Dialogue preview failed:', error)
+      previewError = error instanceof Error ? error.message : 'Preview failed'
+      isPlayingPreview = false
+      isLoadingPreview = false
+    }
   }
 
   async function playVoicePreview() {
@@ -159,6 +256,7 @@
         onValueChange={(v) => {
           const provider = v as 'openai' | 'google' | 'microsoft'
           const tts = settings.systemServicesSettings.tts
+          const previousProvider = tts.provider
 
           // Save current voice to provider-specific slot
           if (tts.providerVoices) {
@@ -184,6 +282,13 @@
           ) {
             tts.voice = 'en'
             if (tts.providerVoices) tts.providerVoices['google'] = 'en'
+          }
+
+          // Same round-trip for the dialogue voice. Without its own memory a voice id
+          // from one provider would be left sitting in another provider's slot.
+          if (tts.providerDialogueVoices) {
+            tts.providerDialogueVoices[previousProvider] = tts.dialogueVoice
+            tts.dialogueVoice = tts.providerDialogueVoices[provider] ?? ''
           }
 
           settings.saveSystemServicesSettings()
@@ -248,93 +353,61 @@
           placeholder="tts-1"
         />
       </div>
+    {/if}
 
-      <!-- Voice -->
-      <div>
-        <Label class="mb-2 block">Voice</Label>
-        <Input
-          type="text"
-          class="w-full"
-          value={settings.systemServicesSettings.tts.voice}
-          oninput={(e) => {
-            const voice = e.currentTarget.value
-            settings.systemServicesSettings.tts.voice = voice
-            if (settings.systemServicesSettings.tts.providerVoices) {
-              settings.systemServicesSettings.tts.providerVoices['openai'] = voice
-            }
-            settings.saveSystemServicesSettings()
-          }}
-          placeholder="alloy"
-        />
-      </div>
-    {:else if settings.systemServicesSettings.tts.provider === 'microsoft'}
-      <!-- Windows System Voice Selection -->
-      <div>
-        <Label class="mb-2 block">System Voice</Label>
-        {#if isLoadingVoices}
-          <div class="text-muted-foreground flex items-center gap-2 text-sm">
-            <Loader2 class="h-4 w-4 animate-spin" />
-            Loading system voices...
+    <!-- Narrator voice -->
+    <TTSVoiceSelector
+      id="tts-narrator-voice"
+      provider={settings.systemServicesSettings.tts.provider}
+      value={settings.systemServicesSettings.tts.voice}
+      label={settings.systemServicesSettings.tts.provider === 'google' ? 'Language' : 'Voice'}
+      description={dialogueVoiceSupported &&
+      settings.systemServicesSettings.tts.dialogueVoiceEnabled
+        ? 'Used for narration outside quotation marks'
+        : undefined}
+      {systemVoices}
+      {isLoadingVoices}
+      onChange={(v) => setVoice(v)}
+    />
+
+    {#if dialogueVoiceSupported}
+      <!-- Dialogue voice -->
+      <div class="space-y-3 rounded-lg border p-3">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <Label for="tts-dialogue-voice-enabled">Separate Dialogue Voice</Label>
+            <p class="text-muted-foreground text-xs">
+              Speak text inside quotation marks in a second voice
+            </p>
           </div>
-        {:else if systemVoices.length === 0}
-          <div class="text-muted-foreground text-sm">
-            No system voices found. Make sure you're running on Windows with TTS voices installed.
-          </div>
-        {:else}
-          <Select.Root
-            type="single"
-            value={settings.systemServicesSettings.tts.voice}
-            onValueChange={(v) => {
-              settings.systemServicesSettings.tts.voice = v
-              if (settings.systemServicesSettings.tts.providerVoices) {
-                settings.systemServicesSettings.tts.providerVoices['microsoft'] = v
-              }
+          <Switch
+            id="tts-dialogue-voice-enabled"
+            checked={settings.systemServicesSettings.tts.dialogueVoiceEnabled}
+            onCheckedChange={(v) => {
+              settings.systemServicesSettings.tts.dialogueVoiceEnabled = v
               settings.saveSystemServicesSettings()
             }}
-          >
-            <Select.Trigger class="h-10 w-full">
-              {systemVoices.find((v) => v.name === settings.systemServicesSettings.tts.voice)
-                ?.name ?? 'Select system voice'}
-            </Select.Trigger>
-            <Select.Content>
-              {#each systemVoices as voice (voice.name)}
-                <Select.Item value={voice.name} label={voice.name}>
-                  {voice.name}
-                  <span class="text-muted-foreground ml-2 text-xs">({voice.lang})</span>
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
+          />
+        </div>
+
+        {#if settings.systemServicesSettings.tts.dialogueVoiceEnabled}
+          <TTSVoiceSelector
+            id="tts-dialogue-voice"
+            provider={settings.systemServicesSettings.tts.provider}
+            value={settings.systemServicesSettings.tts.dialogueVoice}
+            label="Dialogue Voice"
+            description="Recognises &quot;…&quot;, &ldquo;…&rdquo; and «…». Leave empty to keep one voice."
+            {systemVoices}
+            {isLoadingVoices}
+            placeholder="nova"
+            onChange={(v) => setDialogueVoice(v)}
+          />
+
+          <p class="text-muted-foreground text-xs">
+            To keep the quotation marks themselves from being read aloud, add them to
+            <em>Excluded Characters</em> below.
+          </p>
         {/if}
-      </div>
-    {:else if settings.systemServicesSettings.tts.provider === 'google'}
-      <!-- Language Selection -->
-      <div>
-        <Label class="mb-2 block">Language</Label>
-        <Select.Root
-          type="single"
-          value={settings.systemServicesSettings.tts.voice}
-          onValueChange={(v) => {
-            settings.systemServicesSettings.tts.voice = v
-            if (settings.systemServicesSettings.tts.providerVoices) {
-              settings.systemServicesSettings.tts.providerVoices['google'] = v
-            }
-            settings.saveSystemServicesSettings()
-          }}
-        >
-          <Select.Trigger class="h-10 w-full">
-            {GOOGLE_TRANSLATE_LANGUAGES.find(
-              (l) => l.id === settings.systemServicesSettings.tts.voice,
-            )?.name ?? 'Select language'}
-          </Select.Trigger>
-          <Select.Content>
-            {#each GOOGLE_TRANSLATE_LANGUAGES as lang (lang.id)}
-              <Select.Item value={lang.id} label={lang.name}>
-                {lang.name}
-              </Select.Item>
-            {/each}
-          </Select.Content>
-        </Select.Root>
       </div>
     {/if}
 
@@ -357,6 +430,26 @@
           Preview Voice
         {/if}
       </Button>
+
+      {#if dialogueVoiceSupported && resolveDialogueVoice(settings.systemServicesSettings.tts)}
+        <Button
+          variant="outline"
+          class="mt-2 w-full"
+          onclick={isPlayingPreview ? stopPreview : playDialoguePreview}
+          disabled={isLoadingPreview}
+        >
+          {#if isLoadingPreview}
+            <Loader2 class="mr-2 h-4 w-4 animate-spin" />
+            Loading...
+          {:else if isPlayingPreview}
+            <Square class="mr-2 h-4 w-4" />
+            Stop
+          {:else}
+            <Play class="mr-2 h-4 w-4" />
+            Preview Both Voices
+          {/if}
+        </Button>
+      {/if}
       {#if previewError}
         <p class="text-destructive mt-2 text-xs">{previewError}</p>
       {/if}

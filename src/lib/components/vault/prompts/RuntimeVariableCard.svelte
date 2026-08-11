@@ -13,7 +13,7 @@
   import { Separator } from '$lib/components/ui/separator'
   import * as Select from '$lib/components/ui/select'
   import IconPicker from './IconPicker.svelte'
-  import ColorPicker from './ColorPicker.svelte'
+  import ColorPicker from '$lib/components/shared/ColorPicker.svelte'
   import {
     ChevronDown,
     ChevronUp,

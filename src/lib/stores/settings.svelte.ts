@@ -675,6 +675,15 @@ export interface TTSServiceSettings {
   volume: number // TTS volume 0.0-1.0 (default: 1.0)
   volumeOverride: boolean // Enable volume override (default: false)
   providerVoices: Record<string, string> // Provider-specific voices
+  /**
+   * Speak quoted dialogue in a second voice. Not offered for the Google provider,
+   * where a "voice" is a language code — a second one would read the dialogue in a
+   * different language rather than a different voice.
+   */
+  dialogueVoiceEnabled: boolean
+  dialogueVoice: string // Voice ID for quoted dialogue
+  /** Per-provider memory for the dialogue voice, mirroring `providerVoices`. */
+  providerDialogueVoices: Record<string, string>
 }
 
 export function getDefaultTTSSettings(): TTSServiceSettings {
@@ -694,6 +703,9 @@ export function getDefaultTTSSettings(): TTSServiceSettings {
     volume: 1.0,
     volumeOverride: false,
     providerVoices: { openai: 'alloy', google: 'en', microsoft: '' },
+    dialogueVoiceEnabled: false,
+    dialogueVoice: '',
+    providerDialogueVoices: { openai: '', google: '', microsoft: '' },
   }
 }
 
@@ -714,6 +726,9 @@ export function getDefaultTTSSettingsForProvider(_provider: ProviderType): TTSSe
     volume: 1.0,
     volumeOverride: false,
     providerVoices: { openai: 'alloy', google: 'en', microsoft: '' },
+    dialogueVoiceEnabled: false,
+    dialogueVoice: '',
+    providerDialogueVoices: { openai: '', google: '', microsoft: '' },
   }
 }
 
@@ -1149,6 +1164,8 @@ export function getDefaultUISettings(): UISettings {
     showScrollToTop: false,
     showScrollToBottom: true,
     storyMaxWidth: '3xl',
+    highlightDialogue: false,
+    dialogueColor: '',
   }
 }
 
@@ -1523,6 +1540,14 @@ class SettingsStore {
       const storyMaxWidth = await database.getSetting('story_max_width')
       if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
         this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
+
+      const highlightDialogue = await database.getSetting('highlight_dialogue')
+      if (highlightDialogue !== null)
+        this.uiSettings.highlightDialogue = highlightDialogue === 'true'
+
+      const dialogueColor = await database.getSetting('dialogue_color')
+      if (dialogueColor !== null) this.uiSettings.dialogueColor = dialogueColor
+      this.applyDialogueHighlight()
 
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
@@ -2580,6 +2605,38 @@ class SettingsStore {
     await database.setSetting('story_max_width', width)
   }
 
+  /**
+   * Publish the dialogue colour to CSS. The toggle and the colour live on the root
+   * element, not in the rendered markup: the `<span class="dialogue-line">` wrappers
+   * are always emitted, so flipping the toggle or dragging the colour picker repaints
+   * without re-rendering a single story entry.
+   */
+  private applyDialogueHighlight() {
+    const root = document.documentElement
+    root.setAttribute('data-dialogue-highlight', this.uiSettings.highlightDialogue ? 'on' : 'off')
+
+    // No stored colour means "use the theme accent", expressed as the CSS fallback of
+    // an unset custom property rather than a hex chosen here for all 26 themes.
+    if (this.uiSettings.dialogueColor) {
+      root.style.setProperty('--dialogue-color', this.uiSettings.dialogueColor)
+    } else {
+      root.style.removeProperty('--dialogue-color')
+    }
+  }
+
+  async setHighlightDialogue(enabled: boolean) {
+    this.uiSettings.highlightDialogue = enabled
+    await database.setSetting('highlight_dialogue', enabled.toString())
+    this.applyDialogueHighlight()
+  }
+
+  /** Pass an empty string to fall back to the current theme's accent colour. */
+  async setDialogueColor(color: string) {
+    this.uiSettings.dialogueColor = color
+    await database.setSetting('dialogue_color', color)
+    this.applyDialogueHighlight()
+  }
+
   async setSidebarWidth(width: number) {
     this.uiSettings.sidebarWidth = width
     await database.setSetting('sidebar_width', width.toString())
@@ -3003,6 +3060,9 @@ class SettingsStore {
       'show_scroll_to_bottom',
       this.uiSettings.showScrollToBottom.toString(),
     )
+    await database.setSetting('highlight_dialogue', this.uiSettings.highlightDialogue.toString())
+    await database.setSetting('dialogue_color', this.uiSettings.dialogueColor)
+    this.applyDialogueHighlight()
     await database.setSetting(
       'advanced_manual_mode',
       this.advancedRequestSettings.manualMode.toString(),

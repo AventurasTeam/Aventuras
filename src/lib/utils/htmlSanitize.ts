@@ -8,7 +8,7 @@
 
 import { scopeCssSelectors } from './cssScope'
 
-interface TTSSanitizeOptions {
+export interface TTSSanitizeOptions {
   removeTags: boolean
   removeAllTagContent: boolean
   htmlTagsToRemoveContent?: string[]

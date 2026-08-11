@@ -733,6 +733,14 @@ export interface UISettings {
   showScrollToTop: boolean
   showScrollToBottom: boolean
   storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
+  /** Colour quoted speech in story text. Has no effect on Visual Prose stories. */
+  highlightDialogue: boolean
+  /**
+   * Hex colour for quoted speech. Empty means "the current theme's accent" — with 26
+   * themes a fixed hex clashes somewhere, so the default defers to the theme via a
+   * CSS fallback rather than picking a colour on the user's behalf.
+   */
+  dialogueColor: string
 }
 
 /**

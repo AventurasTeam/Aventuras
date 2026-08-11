@@ -303,6 +303,36 @@
   }
 }
 
+/* =============================================
+   DIALOGUE HIGHLIGHTING
+   =============================================
+   `.dialogue-line` spans are emitted by parseStoryMarkdown on every story entry,
+   unstyled. Both the on/off switch and the colour live here so that toggling either
+   one repaints via CSS instead of re-rendering the story.
+
+   `.dialogue-highlight` is set per entry from the story's own visualProseMode, which
+   is what keeps the feature off for Visual Prose stories — including their player
+   actions, which are plain markdown and would otherwise still be coloured. */
+
+:root[data-dialogue-highlight='on'] .story-text.dialogue-highlight .dialogue-line {
+  /* Unset --dialogue-color means "follow the theme", so the 26 themes stay coherent
+     without this file knowing anything about them. */
+  color: var(--dialogue-color, var(--text-accent));
+}
+
+/* An embedded image marker states its status *in its colour* — amber generating,
+   grey pending, red failed. A quote inside one would otherwise be repainted the
+   dialogue colour and drop that signal, and this collides more often than it looks:
+   markers are deliberately widened to swallow a quote they would have cut, precisely
+   because a sourceText is usually mostly dialogue. Yield on the statuses that carry
+   information; `complete` is the ordinary link colour and has nothing to lose. */
+:root[data-dialogue-highlight='on']
+  .story-text.dialogue-highlight
+  .embedded-image-link:not(.complete)
+  .dialogue-line {
+  color: inherit;
+}
+
 /* Chat markdown overrides - compact spacing for chat bubbles */
 .chat-markdown.prose-content {
   p {
