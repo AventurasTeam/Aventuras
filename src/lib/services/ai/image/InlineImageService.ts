@@ -277,15 +277,19 @@ export class InlineImageGenerationService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       log('Inline image generation failed', { imageId, error: errorMessage })
 
-      // Update record with error
-      await database.updateEmbeddedImage(imageId, {
-        status: 'failed',
-        errorMessage,
-      })
-
-      // Emit ready event (with failure) and notify UI
-      emitImageReady(imageId, entryId, false)
-      emitImageAnalysisFailed(entryId, errorMessage)
+      try {
+        // Update record with error
+        await database.updateEmbeddedImage(imageId, {
+          status: 'failed',
+          errorMessage,
+        })
+      } finally {
+        // Emit ready event (with failure) and notify UI. In a `finally` because the
+        // `ImageQueued` emitted when this was scheduled has to be balanced even if
+        // recording the failure is itself what failed.
+        emitImageReady(imageId, entryId, false)
+        emitImageAnalysisFailed(entryId, errorMessage)
+      }
     }
   }
 }

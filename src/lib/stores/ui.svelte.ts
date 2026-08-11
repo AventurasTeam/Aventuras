@@ -37,6 +37,7 @@ export interface RetrievalCacheKey {
 import type { SyncMode } from '$lib/types/sync'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { database } from '$lib/services/database'
+import { eventBus, type EventType } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { StreamingHtmlRenderer } from '$lib/utils/htmlStreaming'
 import { countTokens } from '$lib/services/tokenizer'
@@ -116,9 +117,17 @@ class UIStore {
   isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
   vaultTab = $state<VaultTab>('characters')
 
-  // Image generation state
-  imageAnalysisInProgress = $state(false) // LLM analyzing narrative for imageable scenes
+  // Image generation state. Both are counts, because the narration analysis and the
+  // background-image analysis run concurrently: as a boolean, whichever finished first
+  // cleared the other one's indicator.
+  private analysesRunning = $state(0) // LLM analyzing narrative for imageable scenes
   imagesGenerating = $state(0) // Count of images currently being generated
+
+  get imageAnalysisInProgress(): boolean {
+    return this.analysesRunning > 0
+  }
+
+  private imageTrackingCleanup: (() => void) | null = null
 
   // Gallery image cache - persists across component unmounts
   private galleryImageCache = new SvelteMap<string, EmbeddedImageMeta[]>()
@@ -366,21 +375,51 @@ class UIStore {
     this.isRetryingLastMessage = value
   }
 
-  // Image generation state methods
-  setImageAnalysisInProgress(value: boolean) {
-    this.imageAnalysisInProgress = value
+  /**
+   * Track image analysis/generation progress off the event bus.
+   *
+   * This lived in `Header.svelte` — the only component that reads the counts — which made
+   * app-wide bookkeeping depend on a component staying mounted, and made adding an event
+   * three edits instead of one. That is how the `*Failed` events came to be missed.
+   *
+   * Every pair below is exact at the emitting end: a `Started` is always followed by one
+   * `Complete` and a `Queued` by one `Ready`, on the failure paths too. `ImageAnalysisFailed`
+   * is deliberately absent: it is emitted for a failed *generation* as well, where no
+   * analysis is open, so counting it would close an analysis that never started.
+   */
+  initImageTracking() {
+    if (this.imageTrackingCleanup) return
+
+    const endAnalysis = () => {
+      this.analysesRunning = Math.max(0, this.analysesRunning - 1)
+    }
+    const endImage = () => {
+      this.imagesGenerating = Math.max(0, this.imagesGenerating - 1)
+    }
+
+    const handlers: [EventType, () => void][] = [
+      ['ImageAnalysisStarted', () => this.analysesRunning++],
+      ['ImageAnalysisComplete', endAnalysis],
+      ['BackgroundImageAnalysisStarted', () => this.analysesRunning++],
+      ['BackgroundImageAnalysisComplete', endAnalysis],
+      ['ImageQueued', () => this.imagesGenerating++],
+      ['ImageReady', endImage],
+      ['BackgroundImageQueued', () => this.imagesGenerating++],
+      ['BackgroundImageReady', endImage],
+    ]
+
+    const unsubscribes = handlers.map(([type, handler]) => eventBus.subscribe(type, handler))
+    this.imageTrackingCleanup = () => unsubscribes.forEach((unsubscribe) => unsubscribe())
   }
 
-  incrementImagesGenerating() {
-    this.imagesGenerating++
-  }
-
-  decrementImagesGenerating() {
-    this.imagesGenerating = Math.max(0, this.imagesGenerating - 1)
+  /** Clean up the image tracking listeners. */
+  destroyImageTracking() {
+    this.imageTrackingCleanup?.()
+    this.imageTrackingCleanup = null
   }
 
   resetImageGenerationState() {
-    this.imageAnalysisInProgress = false
+    this.analysesRunning = 0
     this.imagesGenerating = 0
   }
 

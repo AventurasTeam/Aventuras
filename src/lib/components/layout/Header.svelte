@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { story } from '$lib/stores/story.svelte'
   import { toRetrievalSnapshot, snapshotSize } from '$lib/services/ai/retrieval'
@@ -8,17 +7,6 @@
   import { errMessage } from '$lib/utils/error'
   import { Button } from '$lib/components/ui/button'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
-  import {
-    eventBus,
-    type ImageAnalysisStartedEvent,
-    type ImageAnalysisCompleteEvent,
-    type ImageQueuedEvent,
-    type ImageReadyEvent,
-    type BackgroundImageAnalysisStartedEvent,
-    type BackgroundImageAnalysisCompleteEvent,
-    type BackgroundImageQueuedEvent,
-    type BackgroundImageReadyEvent,
-  } from '$lib/services/events'
   import {
     PanelRight,
     Settings,
@@ -46,64 +34,23 @@
   let showExportMenu = $state(false)
   let showMobileMenu = $state(false)
 
+  // Both menus are mounted only while there is a story, so closing one closes the menu's
+  // own `bind:open` write-back with it: a binding that does not get to run leaves the state
+  // `true`, and the menu springs open by itself on returning to a story. Reset here rather
+  // than in `goToLibrary`, because that is not the only way out — the Android hardware back
+  // handler (`src/routes/+layout.svelte`) also calls `story.closeStory()`, and its dialog
+  // guard does not intercept these: bits-ui portals dropdown content as `role="menu"`.
+  $effect(() => {
+    if (!story.currentStory) {
+      showMobileMenu = false
+      showExportMenu = false
+    }
+  })
+
   function goToLibrary() {
     story.closeStory()
     ui.setActivePanel('library')
   }
-
-  // Subscribe to image generation events
-  onMount(() => {
-    const unsubAnalysisStarted = eventBus.subscribe<ImageAnalysisStartedEvent>(
-      'ImageAnalysisStarted',
-      () => ui.setImageAnalysisInProgress(true),
-    )
-
-    const unsubAnalysisComplete = eventBus.subscribe<ImageAnalysisCompleteEvent>(
-      'ImageAnalysisComplete',
-      () => ui.setImageAnalysisInProgress(false),
-    )
-
-    const unsubImageQueued = eventBus.subscribe<ImageQueuedEvent>('ImageQueued', () =>
-      ui.incrementImagesGenerating(),
-    )
-
-    const unsubImageReady = eventBus.subscribe<ImageReadyEvent>('ImageReady', () =>
-      ui.decrementImagesGenerating(),
-    )
-
-    const unsubBackgroundImageAnalysisStarted =
-      eventBus.subscribe<BackgroundImageAnalysisStartedEvent>(
-        'BackgroundImageAnalysisStarted',
-        () => ui.setImageAnalysisInProgress(true),
-      )
-
-    const unsubBackgroundImageAnalysisComplete =
-      eventBus.subscribe<BackgroundImageAnalysisCompleteEvent>(
-        'BackgroundImageAnalysisComplete',
-        () => ui.setImageAnalysisInProgress(false),
-      )
-
-    const unsubBackgroundImageQueued = eventBus.subscribe<BackgroundImageQueuedEvent>(
-      'BackgroundImageQueued',
-      () => ui.incrementImagesGenerating(),
-    )
-
-    const unsubBackgroundImageReady = eventBus.subscribe<BackgroundImageReadyEvent>(
-      'BackgroundImageReady',
-      () => ui.decrementImagesGenerating(),
-    )
-
-    return () => {
-      unsubAnalysisStarted()
-      unsubAnalysisComplete()
-      unsubImageQueued()
-      unsubImageReady()
-      unsubBackgroundImageAnalysisStarted()
-      unsubBackgroundImageAnalysisComplete()
-      unsubBackgroundImageQueued()
-      unsubBackgroundImageReady()
-    }
-  })
 
   async function handleExport(exportFn: () => Promise<boolean>, formatName: string) {
     if (!story.currentStory) return
@@ -192,6 +139,31 @@
   </DropdownMenu.Item>
 {/snippet}
 
+<!--
+  Settings, with the warning badge that says the generation config has a problem. Two
+  instances render it, at complementary breakpoints, and they were duplicated markup down
+  to the badge — which is the piece most likely to be restyled and then to disagree with
+  itself.
+-->
+{#snippet settingsButton(visibilityClass: string)}
+  <div class="relative {visibilityClass}">
+    <Button
+      icon={Settings}
+      label="Settings"
+      variant="text"
+      class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
+      onclick={() => ui.openSettings()}
+    />
+    {#if settings.hasGenerationConfigIssues}
+      <span
+        class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
+      >
+        <AlertTriangle class="h-2.5 w-2.5 text-white" />
+      </span>
+    {/if}
+  </div>
+{/snippet}
+
 <header
   class="bg-card relative z-10 flex h-12 items-center justify-between border-b px-1 sm:h-14 sm:px-4"
 >
@@ -259,8 +231,8 @@
       {/if}
     </div>
 
-    <!-- Back to Library Button (right side) -->
     {#if story.currentStory}
+      <!-- Back to Library Button (right side) -->
       <div class="hidden sm:block">
         <Button
           icon={Library}
@@ -271,9 +243,7 @@
           title="Return to Library"
         />
       </div>
-    {/if}
 
-    {#if story.currentStory}
       <!-- Gallery Button -->
       <Button
         icon={ImageIcon}
@@ -307,27 +277,36 @@
       </div>
     {/if}
 
-    <!-- Mobile-only menu: Library, Import/Export, Settings -->
-    <DropdownMenu.Root bind:open={showMobileMenu}>
-      <DropdownMenu.Trigger>
-        {#snippet child({ props })}
-          <Button
-            {...props}
-            variant="text"
-            class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
-            title="Menu"
-            aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
-          >
-            {#if showMobileMenu}
-              <ChevronUp class="h-5 w-5" />
-            {:else}
-              <ChevronDown class="h-5 w-5" />
-            {/if}
-          </Button>
-        {/snippet}
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end">
-        {#if story.currentStory}
+    <!--
+      Mobile-only menu: Library, Import/Export, Active Context, Settings.
+
+      Everything above Settings is story-scoped, so in the library the menu would hold a
+      single item — and a disclosure that opens onto one choice is a tap spent on nothing.
+      There it is rendered as the Settings button directly. The condition is the same
+      `story.currentStory` the items are already gated on rather than a count of them, so
+      the two cannot disagree: an item added below without a story to scope it is a second
+      entry, and would make the collapsed menu correct again by construction.
+    -->
+    {#if story.currentStory}
+      <DropdownMenu.Root bind:open={showMobileMenu}>
+        <DropdownMenu.Trigger>
+          {#snippet child({ props })}
+            <Button
+              {...props}
+              variant="text"
+              class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
+              title="Menu"
+              aria-label={showMobileMenu ? 'Close menu' : 'Open menu'}
+            >
+              {#if showMobileMenu}
+                <ChevronUp class="h-5 w-5" />
+              {:else}
+                <ChevronDown class="h-5 w-5" />
+              {/if}
+            </Button>
+          {/snippet}
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
           <DropdownMenu.Item onclick={goToLibrary}>
             <Library class="text-muted-foreground h-4 w-4" />
             Library
@@ -347,16 +326,24 @@
             {/if}
           </DropdownMenu.Item>
           <DropdownMenu.Separator class="sm:hidden" />
-        {/if}
-        <DropdownMenu.Item onclick={() => ui.openSettings()}>
-          <Settings class="text-muted-foreground h-4 w-4" />
-          Settings
-          {#if settings.hasGenerationConfigIssues}
-            <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
-          {/if}
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
+          <DropdownMenu.Item onclick={() => ui.openSettings()}>
+            <Settings class="text-muted-foreground h-4 w-4" />
+            Settings
+            {#if settings.hasGenerationConfigIssues}
+              <AlertTriangle class="ml-auto h-3.5 w-3.5 text-amber-500" />
+            {/if}
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {:else}
+      <!--
+        The desktop Settings button below is `hidden sm:block`; this is its narrow-screen
+        twin, badge included. Behind the menu the warning only appeared once the menu was
+        opened, which is the wrong place for the one control that says something is
+        misconfigured.
+      -->
+      {@render settingsButton('sm:hidden')}
+    {/if}
 
     <!-- Not gated on the lorebook having entries: the panel covers live world state too,
          which every story has. -->
@@ -386,7 +373,7 @@
         target="_blank"
         rel="noopener noreferrer"
         variant="text"
-        class="text-muted-foreground hover:text-primary min-h-[44px] min-w-[44px] sm:hidden"
+        class="text-muted-foreground hover:text-primary min-h-11 min-w-11 sm:hidden"
         title="Join our Discord community"
       >
         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -397,22 +384,7 @@
       </Button>
     {/if}
 
-    <div class="relative hidden sm:block">
-      <Button
-        icon={Settings}
-        label="Settings"
-        variant="text"
-        class="text-muted-foreground hover:text-primary min-h-11 min-w-11"
-        onclick={() => ui.openSettings()}
-      />
-      {#if settings.hasGenerationConfigIssues}
-        <span
-          class="pointer-events-none absolute top-1 right-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-amber-500"
-        >
-          <AlertTriangle class="h-2.5 w-2.5 text-white" />
-        </span>
-      {/if}
-    </div>
+    {@render settingsButton('hidden sm:block')}
 
     {#if story.currentStory}
       <Button
