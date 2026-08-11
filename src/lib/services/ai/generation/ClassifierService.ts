@@ -402,16 +402,11 @@ export class ClassifierService extends BaseAIService {
   /**
    * Format existing characters for the prompt.
    *
-   * **The name is the whole of its line, and nothing else is on it.** This list is read by
-   * the model that then writes character names back, and the previous form appended the
-   * other fields to the name — `- Eira (Validated and claimed as a consort) [inactive]`.
-   * The model returned that whole string as the name, `sameEntityName` found no match, and
-   * a second character was created. On a measured 41-chapter save four of thirty-eight
-   * characters were minted this way, two of them carrying the subject's own `relationship`
-   * verbatim inside the parentheses.
-   *
-   * Every attribute is therefore an indented `label: value` line. A parenthetical suffix
-   * cannot be told apart from a name that happens to contain one; a labelled line can.
+   * **The name is the whole of its line.** The model reads this list and writes names back,
+   * so a rendered suffix — `- Ada (claimed as a consort) [inactive]` — came back as the
+   * name and minted a second character: four of thirty-eight on a measured save. Attributes
+   * are indented `label: value` lines instead, which a name containing parentheses cannot
+   * be confused with.
    */
   private formatExistingCharacters(characters: Character[]): string {
     if (characters.length === 0) return '(none)'
@@ -420,7 +415,11 @@ export class ClassifierService extends BaseAIService {
       .map((c) => {
         let entry = `- ${c.name}`
         if (c.relationship) entry += `\n  relationship: ${c.relationship}`
-        if (c.status && c.status !== 'active') entry += `\n  status: ${c.status}`
+        // `active` is printed too. Hiding it made the list asymmetric: the model was
+        // reminded to reactivate someone who returned and never that anyone was marked
+        // present, so nobody was ever marked away and the narrator's [PRESENT] section grew
+        // to every character in the story.
+        entry += `\n  status: ${c.status ?? 'active'}`
         if (c.visualDescriptors && Object.keys(c.visualDescriptors).length > 0) {
           entry += `\n  appearance: ${this.formatVisualDescriptors(c.visualDescriptors)}`
         }

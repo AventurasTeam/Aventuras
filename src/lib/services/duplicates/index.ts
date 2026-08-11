@@ -5,20 +5,15 @@
  * need it and neither should import the other's barrel — `ai/lorebook`'s pulls in the SDK
  * and, through it, a rune store, which no plain module can be imported alongside.
  *
- * The name comparison itself lives in `./names`, written when the lore agent needed a
- * worklist. The **world state** had no detector at all, and it is where duplicates actually
- * accumulate: the classifier mints a
- * new `Character` whenever the story calls someone by a different title, so one save held
- * `Baron Kaelen` and `Forge-Master Kaelen`, `Captain Vor'koth`, `General Vor'koth` and
- * `The Captain` — thirty-eight rows for about thirty-one people.
+ * The name comparison lives in `./names`. The **world state** had no detector at all and is
+ * where duplicates accumulate: the classifier mints a new `Character` whenever the story
+ * calls someone by a different title, which on a measured save left thirty-eight rows for
+ * about thirty-one people. Some of that is now fixed at the source (see
+ * `ClassifierService.formatExistingCharacters`); this is for the rest, and for the rows
+ * already written. Only the user can say whether two of them are one person.
  *
- * Two of those causes are now fixed at the source (see
- * `ClassifierService.formatExistingCharacters`). This module is for the rest, and for the
- * rows already written: it groups what looks like one subject and hands the groups to the
- * user, who is the only one who can say whether `Kael` and `Baron Kaelen` are one person.
- *
- * **A dismissal is remembered.** Without that, the same groups come back every time the
- * window is opened, and the second visit is useless — see `keptSeparateKey`.
+ * **A dismissal is remembered**, or the same groups come back every time the window is
+ * opened — see `keptSeparateKey`.
  *
  * Plain TypeScript: no store, no database, no SDK.
  */

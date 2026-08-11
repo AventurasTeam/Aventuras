@@ -2,17 +2,12 @@
   /**
    * The duplicate worklist, one group at a time.
    *
-   * Not a tab and not a list: the unit of work is a *group*, and resolving one means
-   * comparing its members side by side and picking which name survives. A per-entity list
-   * cannot show that, and grouping is transitive — "Vor'koth", "Captain Vor'koth" and
-   * "The Captain" are one decision, not three.
+   * The unit of work is a *group*, not an entity: resolving one means comparing its members
+   * side by side and picking which name survives, and grouping is transitive, so three
+   * titles for one person are one decision rather than three.
    *
-   * Covers every pool, and the world state is the main one: the classifier mints a new
-   * `Character` whenever the story uses a different title, so that is where duplicates
-   * pile up. The lorebook comes last for the same reason — it has far fewer.
-   *
-   * Opened from the Active Context panel, which is where the cost of a duplicate is
-   * visible in the first place, but it is not a lorebook feature.
+   * Pools are ordered by where duplicates pile up — world state first, since the classifier
+   * mints a new `Character` for each new title; the lorebook last.
    */
   import {
     findAllDuplicates,
