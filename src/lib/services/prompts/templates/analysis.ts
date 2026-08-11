@@ -84,6 +84,14 @@ Example: If character has bloated appearance with duplicate Face/Hair/Eyes entri
 - This prevents story beats from stacking up indefinitely
 - Example: If "Find the missing brother" was active and the brother is found, mark it completed
 
+### Character Status - who is in the scene right now:
+- \`active\` means present in the current scene. It does not mean important, and it does not mean alive
+- Set \`inactive\` for any character listed above as \`active\` who is no longer in the scene, and \`active\` again when they return
+- The text will rarely state that someone left, so do not wait to read it — compare the list against the scene yourself
+- Silence is not absence: a character who is in the scene but says nothing stays \`active\`
+- Example: the party leaves the tavern and the innkeeper stays behind = mark the innkeeper \`inactive\`
+- This prevents every character in the story from being reported to the narrator as present
+
 ### Time Progression - ALWAYS assess how much time passed:
 Determine how much narrative time elapsed during this passage. Consider what activities occurred and how long they would realistically take.
 
