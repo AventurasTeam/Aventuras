@@ -1,6 +1,10 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
 import type { AventuraExport } from './export'
+// The one piece of the `.avt` exporter sync shares. Imported from its own module rather than the
+// `./export` barrel, which pulls in the Tauri dialog/fs plugins at module scope that sync has no
+// use for. See the note on `exportStoryToJson` for what is deliberately *not* shared.
+import { gatherPackBinding } from './export/ExportCoordinationService'
 import { database } from './database'
 import { story } from '$lib/stores/story.svelte'
 
@@ -87,7 +91,18 @@ class SyncService {
   }
 
   /**
-   * Export a story to JSON string in Aventura format
+   * Export a story to JSON string in Aventura format.
+   *
+   * The pack section comes from the `.avt` exporter's own `gatherPackBinding`, so the two agree
+   * on what a binding is by construction. The surrounding payload is still assembled here rather
+   * than through `gatherStoryData`.
+   *
+   * TECH DEBT: that split means a field added to the format reaches `.avt` and not sync unless
+   * both are edited, which is how the payload below came to stamp `1.7.0` and omit
+   * `currentBgImage` — the `.avt` path has carried both since v1.8.0. Merging the two is the
+   * fix and is out of scope here: sync loads image payloads inline, where the `.avt` path takes
+   * metadata only and lets Rust stream the bytes into SQLite, so they cannot merge without
+   * first deciding whether sync should stream natively too.
    */
   async exportStoryToJson(storyId: string): Promise<string> {
     // Get all story data from database
@@ -107,6 +122,7 @@ class SyncService {
       checkpoints,
       branches,
       chapters,
+      packBinding,
     ] = await Promise.all([
       database.getStoryEntries(storyId),
       database.getCharacters(storyId),
@@ -118,9 +134,14 @@ class SyncService {
       database.getCheckpoints(storyId),
       database.getBranches(storyId),
       database.getChapters(storyId),
+      gatherPackBinding(storyId),
     ])
 
     const exportData: AventuraExport = {
+      // Left at 1.7.0 on purpose. The receiving importer is shape-driven — it reads whichever
+      // sections are present and never compares this number — so `packBinding` below is honoured
+      // regardless. Correcting the stamp belongs with the wider fix noted on this method, not
+      // here, where it would only change what gets logged.
       version: '1.7.0',
       exportedAt: Date.now(),
       story: storyData,
@@ -135,6 +156,9 @@ class SyncService {
       checkpoints,
       branches,
       chapters,
+      // Omitted rather than written as null, so a story with no pack keeps the shape that takes
+      // the legacy import path — matching what `exportToAventura` produces.
+      ...(packBinding ? { packBinding } : {}),
     }
 
     return JSON.stringify(exportData)

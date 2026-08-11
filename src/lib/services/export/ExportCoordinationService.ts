@@ -44,6 +44,11 @@ export interface StoryExportData {
  * Describe the story's pack for the file: identity, the story's own answers, and the shape of
  * the variables those answers belong to.
  *
+ * Exported because sync needs exactly this section while keeping its own payload assembly (see
+ * `syncService.exportStoryToJson`). It takes only a story id and reads only through `database`,
+ * so it carries none of the `.avt` path's assumptions — in particular none about how image
+ * payloads are gathered, which is the part the two exporters genuinely disagree about.
+ *
  * Template content is deliberately absent. The recipient's own pack narrates on the recipient's
  * device, so a shared story cannot fork their templates behind their back; `.prompt.json` already
  * exists for sharing a pack deliberately.
@@ -51,7 +56,7 @@ export interface StoryExportData {
  * Definitions travel without ids: `id` and `packId` are assigned per device and would only invite
  * a later matcher to trust them.
  */
-async function gatherPackBinding(storyId: string): Promise<PackBindingExport | null> {
+export async function gatherPackBinding(storyId: string): Promise<PackBindingExport | null> {
   const packId = await database.getStoryPackId(storyId)
   if (!packId) return null
 
