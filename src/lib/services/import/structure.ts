@@ -15,6 +15,7 @@ import type {
   Chapter,
   Entry,
   Branch,
+  WorldStateDelta,
 } from '$lib/types'
 import type { AventuraExport, IdMaps } from './types'
 import { createMappers } from './idMaps'
@@ -120,6 +121,57 @@ export async function importStructure(
     }
   }
 
+  // A delta is a graph of entity ids, exactly like the checkpoint snapshots further down, and it
+  // needs the same treatment: every id in it was minted by the exporting install and matches
+  // nothing here. Carried over unmapped it does not merely fail to roll back — `previousState.
+  // currentLocationId` reaches `database.setCurrentLocation`, which clears `current` on every
+  // location of the story before failing to match the stale id, so a retry on an imported story
+  // would silently leave it with no current location at all.
+  //
+  // `classificationResult` is deliberately untouched: it is the raw model output, kept for
+  // debugging only, and nothing reads ids out of it.
+  const remapWorldStateDelta = (
+    delta: WorldStateDelta | null | undefined,
+  ): WorldStateDelta | null => {
+    if (!delta) return null
+
+    // Rebuilt field by field rather than spread, so a delta written by an older version (or a
+    // hand-edited file) arrives normalised instead of throwing half-way through the import.
+    const previousState = delta.previousState
+    const createdEntities = delta.createdEntities
+
+    return {
+      classificationResult: delta.classificationResult ?? {},
+      previousState: {
+        characters: (previousState?.characters ?? []).map((c) => ({
+          ...c,
+          id: remapEntityId(c.id),
+        })),
+        locations: (previousState?.locations ?? []).map((l) => ({ ...l, id: remapEntityId(l.id) })),
+        items: (previousState?.items ?? []).map((i) => ({
+          ...i,
+          id: remapEntityId(i.id),
+          // 'inventory' is a sentinel, not an id — same rule as the item loop below.
+          location: i.location === 'inventory' ? 'inventory' : remapEntityId(i.location),
+        })),
+        storyBeats: (previousState?.storyBeats ?? []).map((b) => ({
+          ...b,
+          id: remapEntityId(b.id),
+        })),
+        currentLocationId: previousState?.currentLocationId
+          ? remapEntityId(previousState.currentLocationId)
+          : null,
+        timeTracker: previousState?.timeTracker ?? null,
+      },
+      createdEntities: {
+        characterIds: (createdEntities?.characterIds ?? []).map(remapEntityId),
+        locationIds: (createdEntities?.locationIds ?? []).map(remapEntityId),
+        itemIds: (createdEntities?.itemIds ?? []).map(remapEntityId),
+        storyBeatIds: (createdEntities?.storyBeatIds ?? []).map(remapEntityId),
+      },
+    }
+  }
+
   for (const entry of data.entries) {
     const newEntryId = oldToNewId.get(entry.id) ?? crypto.randomUUID()
 
@@ -135,6 +187,11 @@ export async function importStructure(
       translatedContent: entry.translatedContent ?? null,
       translationLanguage: entry.translationLanguage ?? null,
       originalInput: entry.originalInput ?? null,
+      // `reasoning` is optional-undefined rather than nullable, unlike the two below;
+      // `addStoryEntry` turns the undefined into a NULL column either way.
+      reasoning: entry.reasoning,
+      suggestedActions: entry.suggestedActions ?? null,
+      worldStateDelta: remapWorldStateDelta(entry.worldStateDelta),
     })
   }
 
@@ -274,6 +331,9 @@ export async function importStructure(
       storyId: newStoryId,
       parentId: entry.parentId ? (remapEntityId(entry.parentId) ?? entry.parentId) : null,
       branchId: mapBranchId(entry.branchId ?? null),
+      // The snapshot carries whole entry rows, deltas included: without this a checkpoint
+      // restore would put the stale-id deltas back that the live rows above just shed.
+      worldStateDelta: remapWorldStateDelta(entry.worldStateDelta),
     })
     const remapCharacter = (char: Character): Character => ({
       ...char,

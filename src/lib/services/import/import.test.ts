@@ -16,6 +16,11 @@ const calls = {
   entries: [] as any[],
   images: [] as any[],
   deleted: [] as string[],
+  characters: [] as any[],
+  locations: [] as any[],
+  items: [] as any[],
+  storyBeats: [] as any[],
+  checkpoints: [] as any[],
 }
 let failOnCreateStory = false
 
@@ -29,13 +34,13 @@ vi.mock('$lib/services/database', () => ({
     createEmbeddedImage: vi.fn(async (i: any) => void calls.images.push(i)),
     deleteStory: vi.fn(async (id: string) => void calls.deleted.push(id)),
     addBranch: vi.fn(async () => {}),
-    addCharacter: vi.fn(async () => {}),
-    addLocation: vi.fn(async () => {}),
-    addItem: vi.fn(async () => {}),
-    addStoryBeat: vi.fn(async () => {}),
+    addCharacter: vi.fn(async (c: any) => void calls.characters.push(c)),
+    addLocation: vi.fn(async (l: any) => void calls.locations.push(l)),
+    addItem: vi.fn(async (i: any) => void calls.items.push(i)),
+    addStoryBeat: vi.fn(async (b: any) => void calls.storyBeats.push(b)),
     addEntry: vi.fn(async () => {}),
     addChapter: vi.fn(async () => {}),
-    createCheckpoint: vi.fn(async () => {}),
+    createCheckpoint: vi.fn(async (c: any) => void calls.checkpoints.push(c)),
     updateBranch: vi.fn(async () => {}),
     setStoryCurrentBranch: vi.fn(async () => {}),
   },
@@ -49,6 +54,11 @@ beforeEach(() => {
   calls.entries.length = 0
   calls.images.length = 0
   calls.deleted.length = 0
+  calls.characters.length = 0
+  calls.locations.length = 0
+  calls.items.length = 0
+  calls.storyBeats.length = 0
+  calls.checkpoints.length = 0
   failOnCreateStory = false
   invoke.mockReset()
 })
@@ -58,7 +68,43 @@ function sampleExport() {
     version: '1.8.0',
     exportedAt: 1,
     story: { id: 'story-old', title: 'T', settings: {} },
-    entries: [{ id: 'entry-1', type: 'narration', content: 'c', parentId: null, position: 0 }],
+    entries: [
+      {
+        id: 'entry-1',
+        type: 'narration',
+        content: 'c',
+        parentId: null,
+        position: 0,
+        reasoning: 'because the hero hesitated',
+        suggestedActions: '[{"text":"Fight","type":"action"}]',
+        // A realistic delta: almost every field in one is an entity id, and the import mints a
+        // fresh id for every entity, so this is the shape that proves the remap happens.
+        worldStateDelta: {
+          classificationResult: { summary: 'the hero drew a blade' },
+          previousState: {
+            characters: [{ id: 'char-old', name: 'Ren', status: 'active', traits: [] }],
+            locations: [{ id: 'loc-old', name: 'Cave', visited: true, current: true }],
+            items: [{ id: 'item-old', name: 'Blade', quantity: 1, location: 'loc-old' }],
+            storyBeats: [{ id: 'beat-old', title: 'Q', status: 'active' }],
+            currentLocationId: 'loc-old',
+            timeTracker: { years: 0, days: 1, hours: 2, minutes: 0 },
+          },
+          createdEntities: {
+            characterIds: ['char-created'],
+            locationIds: [],
+            itemIds: [],
+            storyBeatIds: [],
+          },
+        },
+      },
+    ],
+    characters: [
+      { id: 'char-old', name: 'Ren', traits: [] },
+      { id: 'char-created', name: 'Shade', traits: [] },
+    ],
+    locations: [{ id: 'loc-old', name: 'Cave', connections: [] }],
+    items: [{ id: 'item-old', name: 'Blade', location: 'loc-old' }],
+    storyBeats: [{ id: 'beat-old', title: 'Q' }],
     embeddedImages: [
       { id: 'img-1', entryId: 'entry-1', imageData: 'BASE64', prompt: 'p', status: 'completed' },
       { id: 'img-orphan', entryId: 'gone', imageData: 'BASE64', prompt: 'p', status: 'completed' },
@@ -148,6 +194,184 @@ describe('runImport — rollback', () => {
 
     expect(result.success).toBe(false)
     expect(result.error).toContain('the real cause')
+  })
+})
+
+describe('runImport — entry fields', () => {
+  it('carries reasoning, suggestedActions and worldStateDelta through to addStoryEntry', async () => {
+    const result = await runImport(sampleExport())
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].reasoning).toBe('because the hero hesitated')
+    expect(calls.entries[0].suggestedActions).toBe('[{"text":"Fight","type":"action"}]')
+    expect(calls.entries[0].worldStateDelta).not.toBeNull()
+  })
+
+  it('remaps every entity id inside worldStateDelta', async () => {
+    const result = await runImport(sampleExport())
+    expect(result.success).toBe(true)
+
+    const delta = calls.entries[0].worldStateDelta
+    const [charOld, charCreated] = calls.characters
+    const [locOld] = calls.locations
+    const [itemOld] = calls.items
+    const [beatOld] = calls.storyBeats
+
+    // Every id must be the freshly minted one, never the exporting install's.
+    expect(delta.previousState.characters[0].id).toBe(charOld.id)
+    expect(delta.previousState.locations[0].id).toBe(locOld.id)
+    expect(delta.previousState.items[0].id).toBe(itemOld.id)
+    expect(delta.previousState.storyBeats[0].id).toBe(beatOld.id)
+    expect(delta.createdEntities.characterIds).toEqual([charCreated.id])
+
+    // An item's `location` is a location id too.
+    expect(delta.previousState.items[0].location).toBe(locOld.id)
+
+    // The one that actually corrupts state when missed: `setCurrentLocation` clears `current` on
+    // every location before matching this, so a stale id leaves the story with no location at all.
+    expect(delta.previousState.currentLocationId).toBe(locOld.id)
+
+    expect(JSON.stringify(delta)).not.toContain('-old')
+    expect(JSON.stringify(delta)).not.toContain('char-created')
+
+    // Non-id payload is carried through untouched.
+    expect(delta.classificationResult).toEqual({ summary: 'the hero drew a blade' })
+    expect(delta.previousState.timeTracker).toEqual({ years: 0, days: 1, hours: 2, minutes: 0 })
+  })
+
+  it("keeps the 'inventory' sentinel out of the delta's id remapping", async () => {
+    const data = sampleExport()
+    data.entries[0].worldStateDelta.previousState.items[0].location = 'inventory'
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].worldStateDelta.previousState.items[0].location).toBe('inventory')
+  })
+
+  it('normalises a delta whose sub-objects are missing instead of failing the import', async () => {
+    const data = sampleExport()
+    data.entries[0].worldStateDelta = { classificationResult: { note: 'partial' } }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    const delta = calls.entries[0].worldStateDelta
+    expect(delta.previousState.characters).toEqual([])
+    expect(delta.previousState.currentLocationId).toBeNull()
+    expect(delta.createdEntities.itemIds).toEqual([])
+  })
+
+  it('imports an entry lacking all three fields without inventing values', async () => {
+    const data = {
+      ...sampleExport(),
+      entries: [{ id: 'entry-1', type: 'narration', content: 'c', parentId: null, position: 0 }],
+    }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    // `reasoning` is optional-undefined on StoryEntry; the other two are nullable. Either way
+    // `addStoryEntry` writes NULL, and regeneration still fires for a story with no choices.
+    expect(calls.entries[0].reasoning).toBeUndefined()
+    expect(calls.entries[0].suggestedActions).toBeNull()
+    expect(calls.entries[0].worldStateDelta).toBeNull()
+  })
+
+  it('preserves the fields on entries belonging to a non-main branch', async () => {
+    const data = {
+      ...sampleExport(),
+      branches: [
+        {
+          id: 'branch-1',
+          storyId: 'story-old',
+          name: 'side-quest',
+          parentBranchId: null,
+          forkEntryId: null,
+          checkpointId: null,
+          createdAt: 1,
+        },
+      ],
+      entries: [
+        {
+          id: 'entry-1',
+          type: 'narration',
+          content: 'c',
+          parentId: null,
+          position: 0,
+          branchId: 'branch-1',
+          reasoning: 'branch reasoning',
+          suggestedActions: '[{"text":"Explore","type":"move"}]',
+          worldStateDelta: {
+            classificationResult: {},
+            previousState: {
+              characters: [],
+              locations: [],
+              items: [],
+              storyBeats: [],
+              currentLocationId: 'loc-old',
+              timeTracker: null,
+            },
+            createdEntities: {
+              characterIds: [],
+              locationIds: [],
+              itemIds: [],
+              storyBeatIds: [],
+            },
+          },
+        },
+      ],
+    }
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.entries[0].branchId).not.toBeNull()
+    expect(calls.entries[0].reasoning).toBe('branch reasoning')
+    expect(calls.entries[0].suggestedActions).toBe('[{"text":"Explore","type":"move"}]')
+    // The remap is not skipped just because the entry sits on a branch.
+    expect(calls.entries[0].worldStateDelta.previousState.currentLocationId).toBe(
+      calls.locations[0].id,
+    )
+  })
+
+  it('remaps the delta inside a checkpoint entriesSnapshot too', async () => {
+    // A checkpoint snapshot carries whole entry rows, deltas included. Restoring one writes those
+    // rows back, so a stale-id delta surviving in a snapshot puts the bug back after the live
+    // rows have already shed it — and it would keep returning every time that checkpoint is used.
+    const data = sampleExport()
+    data.checkpoints = [
+      {
+        id: 'cp-1',
+        storyId: 'story-old',
+        name: 'before the cave',
+        lastEntryId: 'entry-1',
+        lastEntryPreview: 'c',
+        entryCount: 1,
+        entriesSnapshot: [structuredClone(data.entries[0])],
+        charactersSnapshot: [],
+        locationsSnapshot: [],
+        itemsSnapshot: [],
+        storyBeatsSnapshot: [],
+        chaptersSnapshot: [],
+        timeTrackerSnapshot: null,
+        createdAt: 1,
+      },
+    ]
+
+    const result = await runImport(data)
+
+    expect(result.success).toBe(true)
+    expect(calls.checkpoints).toHaveLength(1)
+
+    const snapshotDelta = calls.checkpoints[0].entriesSnapshot[0].worldStateDelta
+    expect(snapshotDelta.previousState.currentLocationId).toBe(calls.locations[0].id)
+    expect(snapshotDelta.previousState.characters[0].id).toBe(calls.characters[0].id)
+    expect(snapshotDelta.createdEntities.characterIds).toEqual([calls.characters[1].id])
+    expect(JSON.stringify(snapshotDelta)).not.toContain('-old')
+
+    // The snapshot's own entry id is remapped as well, or it points at no live row.
+    expect(calls.checkpoints[0].entriesSnapshot[0].id).toBe(calls.entries[0].id)
   })
 })
 
