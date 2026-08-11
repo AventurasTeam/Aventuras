@@ -22,8 +22,8 @@ export {
   generatePlainText,
   streamPlainText,
   streamStructured,
-  buildProviderOptions,
 } from './generate'
+export { buildProviderOptions } from './presetResolution'
 
 // Provider registry
 export { PROVIDERS } from './providers'

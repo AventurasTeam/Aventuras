@@ -704,7 +704,6 @@ export interface APISettings {
   maxTokens: number
   reasoningEffort: ReasoningEffort // Reasoning effort for the main narrative model
   manualBody: string // Manual request body JSON for the main narrative model
-  enableThinking: boolean // Legacy toggle for reasoning (backward compatibility)
   llmTimeoutMs: number // Request timeout in milliseconds (default: 360000 = 6 minutes)
 }
 

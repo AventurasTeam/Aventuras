@@ -114,7 +114,6 @@
       }}
       onReasoningChange={(v) => {
         settings.apiSettings.reasoningEffort = v
-        settings.apiSettings.enableThinking = v !== 'none'
         debouncedSave()
       }}
       onRefreshModels={fetchModelsToProfile}

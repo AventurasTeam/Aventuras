@@ -5,7 +5,6 @@
  * Integrates with the existing settings and provider system.
  */
 
-import type { LanguageModelV4, SharedV4ProviderOptions } from '@ai-sdk/provider'
 import {
   ToolLoopAgent,
   wrapLanguageModel,
@@ -16,29 +15,24 @@ import {
   type ToolLoopAgentSettings,
 } from 'ai'
 import { settings } from '$lib/stores/settings.svelte'
-import { createModelFromProfile, PROVIDERS } from '../providers'
-import { buildProviderOptions } from '../generate'
+import { resolvePresetModel, type ResolvedPreset } from '../presetResolution'
 import { uniqueToolCallIdMiddleware } from '../middleware'
-import type { GenerationPreset, APIProfile, ProviderType, ReasoningEffort } from '$lib/types'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('AgentFactory')
 
 /**
  * Resolved configuration for creating an agent.
+ *
+ * The same thing `generate.ts` resolves -- it was declared separately while the resolution
+ * was duplicated, and listed fewer fields than the function actually returned.
  */
-export interface ResolvedAgentConfig {
-  preset: GenerationPreset
-  profile: APIProfile
-  providerType: ProviderType
-  model: LanguageModelV4
-  providerOptions?: SharedV4ProviderOptions
-  reasoning: ReasoningEffort
-}
+export type ResolvedAgentConfig = ResolvedPreset
 
 /**
  * Resolve preset → profile → model for agent creation.
- * This follows the same pattern as resolveConfig in generate.ts
+ *
+ * Shares `resolvePresetModel` with `generate.ts`; all this adds is the tool-call middleware.
  *
  * @param presetId - The preset ID (e.g., 'agentic', 'loreManagement')
  * @param serviceId - The Service ID
@@ -49,48 +43,17 @@ function resolveAgentConfig(
   serviceId: string,
   debugId?: string,
 ): ResolvedAgentConfig {
-  const preset = settings.getPresetConfig(presetId, serviceId)
-  const profileId = preset.profileId ?? settings.apiSettings.mainNarrativeProfileId
-  const profile = settings.getProfile(profileId)
+  const resolved = resolvePresetModel({ presetId, serviceId, debugId })
 
-  if (!profile) {
-    throw new Error(`Profile not found: ${profileId}`)
-  }
-
-  const fetchedModel = settings.getProfileModels(profileId).find((m) => m.id === preset.model)
-
-  let structuredOutputs = false
-  switch (preset.structuredOutputOverride) {
-    case 'on':
-      structuredOutputs = true
-      break
-    case 'off':
-      structuredOutputs = false
-      break
-    case 'auto':
-      const capabilities = PROVIDERS[profile.providerType].capabilities
-      structuredOutputs = capabilities?.modelCapabilityFetching
-        ? !!fetchedModel?.structuredOutput
-        : (capabilities?.structuredOutput ?? true)
-      break
-  }
-
-  const reasoning = preset.reasoningEffort
-
-  const baseModel = createModelFromProfile({
-    profile,
-    modelId: preset.model,
-    presetId,
-    debugId,
-    structuredOutputs,
-    serviceId,
-  })
   // Wrap with uniqueToolCallIdMiddleware so providers that reuse IDs across steps
   // (e.g. Google's `functions.tool:0` scheme) get globally unique tool call IDs.
-  const model = wrapLanguageModel({ model: baseModel, middleware: [uniqueToolCallIdMiddleware()] })
-  const providerOptions = buildProviderOptions(preset, profile.providerType)
-
-  return { preset, profile, providerType: profile.providerType, model, providerOptions, reasoning }
+  return {
+    ...resolved,
+    model: wrapLanguageModel({
+      model: resolved.model,
+      middleware: [uniqueToolCallIdMiddleware()],
+    }),
+  }
 }
 
 /**
@@ -223,7 +186,6 @@ export function createStreamingAgenticAssistant<TTools extends ToolSet>(
     providerType,
     toolCount: Object.keys(tools).length,
   })
-  console.log('manual mode:', settings.advancedRequestSettings.manualMode)
   const agent = new ToolLoopAgent<never, TTools>({
     model,
     instructions,

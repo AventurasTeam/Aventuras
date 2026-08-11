@@ -25,7 +25,6 @@ export interface ProviderCapabilities {
    * Whether the provider supports reasoning/thinking.
    */
   reasoning: boolean
-  binaryReasoning?: true
   /**
    * How reasoning is extracted from the response.
    * - 'think-tag': Provider embeds reasoning in <think> tags, use extractReasoningMiddleware
@@ -458,19 +457,24 @@ export function supportsReasoning(providerType: ProviderType): boolean {
   return !!PROVIDERS[providerType].capabilities.reasoning
 }
 
-/** Check if a provider uses binary (on/off) reasoning instead of a level slider */
-export function supportsBinaryReasoning(providerType: ProviderType): boolean {
-  return !!PROVIDERS[providerType].capabilities.binaryReasoning
-}
-
 /** Check if a provider supports capability fetching */
 export function supportsCapabilityFetch(providerType: ProviderType): boolean {
   return !!PROVIDERS[providerType].capabilities.modelCapabilityFetching
 }
 
-/** Get the reasoning extraction method for a provider */
-export function getReasoningExtraction(
-  providerType: ProviderType,
-): ProviderCapabilities['reasoningExtraction'] {
-  return PROVIDERS[providerType].capabilities.reasoningExtraction
+/**
+ * Whether this provider emits reasoning inline in `<think>` tags rather than in a field of
+ * its own, so the response needs `extractReasoningMiddleware` to pull it back out.
+ *
+ * `openai-compatible` is included regardless of its declared capability: it is the generic
+ * "any gateway" provider, so the model behind it is unknown and the tags may show up.
+ *
+ * One expression, because it used to be three -- twice in `generate.ts` and once inline in an
+ * IIFE inside an `{#if}` in AgentProfiles, which is exactly how these drift apart.
+ */
+export function usesThinkTag(providerType: ProviderType): boolean {
+  return (
+    providerType === 'openai-compatible' ||
+    PROVIDERS[providerType].capabilities.reasoningExtraction === 'think-tag'
+  )
 }

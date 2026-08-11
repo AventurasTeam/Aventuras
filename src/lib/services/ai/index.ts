@@ -55,7 +55,7 @@ import type {
   TimeTracker,
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
-import type { StreamChunk } from './core'
+import type { StreamChunk } from './core/types'
 import { serviceFactory } from './core/factory'
 import {
   DEFAULT_FALLBACK_STYLE_PROMPT,

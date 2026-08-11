@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   migrateEntryRetrieval,
   migrateImageGeneration,
+  migrateReasoningEffort,
+  migrateReasoningIn,
   migrateWorldStateBudget,
   migrateWorldStateInjection,
 } from './settingsMigrations'
@@ -207,5 +209,61 @@ describe('migrateWorldStateBudget', () => {
     const once = migrateWorldStateBudget({ tier3WholesaleWordBudget: 500, llmThreshold: 30 })
 
     expect(migrateWorldStateBudget(once)).toEqual(once)
+  })
+})
+
+describe('migrateReasoningEffort', () => {
+  it('reads the pre-0.7.x spelling of the disabled level', () => {
+    expect(migrateReasoningEffort('off')).toBe('none')
+  })
+
+  it('passes current levels through unchanged', () => {
+    for (const level of ['none', 'minimal', 'low', 'medium', 'high', 'xhigh']) {
+      expect(migrateReasoningEffort(level), level).toBe(level)
+    }
+  })
+
+  it('reports nothing stored rather than guessing', () => {
+    // 'max' existed only on a branch; undefined/'' mean the key was never written.
+    expect(migrateReasoningEffort('max')).toBeUndefined()
+    expect(migrateReasoningEffort(undefined)).toBeUndefined()
+    expect(migrateReasoningEffort(null)).toBeUndefined()
+    expect(migrateReasoningEffort('')).toBeUndefined()
+  })
+
+  it('is idempotent, since it runs on every load', () => {
+    const once = migrateReasoningEffort('off')
+    expect(migrateReasoningEffort(once)).toBe(once)
+  })
+})
+
+describe('migrateReasoningIn', () => {
+  it('migrates every preset that carries a level', () => {
+    const stored = {
+      narrative: { reasoningEffort: 'off', model: 'a' },
+      classification: { reasoningEffort: 'high', model: 'b' },
+    }
+    expect(migrateReasoningIn(stored)).toEqual({
+      narrative: { reasoningEffort: 'none', model: 'a' },
+      classification: { reasoningEffort: 'high', model: 'b' },
+    })
+  })
+
+  it('leaves unreadable and absent levels alone', () => {
+    const stored = {
+      a: { reasoningEffort: 'nonsense' },
+      b: { model: 'x' },
+      c: null,
+    }
+    expect(migrateReasoningIn(stored)).toEqual({
+      a: { reasoningEffort: 'nonsense' },
+      b: { model: 'x' },
+      c: null,
+    })
+  })
+
+  it('survives values that are not objects', () => {
+    expect(migrateReasoningIn(undefined)).toBeUndefined()
+    expect(migrateReasoningIn('a string')).toBe('a string')
   })
 })
