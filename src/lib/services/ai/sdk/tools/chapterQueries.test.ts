@@ -20,6 +20,18 @@ describe('the budget', () => {
     expect(budget.exhausted()).toBe(true)
   })
 
+  it('charges nothing when there is no reader at all', async () => {
+    // No read is attempted and none ever will be, so a handful of questions must not
+    // exhaust an allowance that was never going to buy anything.
+    const budget = budgetOf({ ask: undefined })
+
+    const answer = await budget.ask(1, 'first?')
+
+    expect(answer.failed).toBe(true)
+    expect(budget.spent).toBe(0)
+    expect(budget.exhausted()).toBe(false)
+  })
+
   it('names a cheaper tool only when it was given one', () => {
     expect(budgetOf({ alternative: 'Use grep_chapters instead.' }).exhaustedError()).toContain(
       'grep_chapters',

@@ -166,10 +166,9 @@ export class LoreManagementService extends BaseAIService {
     /**
      * The `keep_separate` writes, awaited before the session returns.
      *
-     * The tool callback is synchronous — the agent needs its answer in the same turn —
-     * so the persistence cannot be awaited where it is started. Dropping the promise
-     * instead made a failed write an unhandled rejection and left the run reporting a
-     * dismissal that was never stored, so the next session re-asks the same question.
+     * The tool callback is synchronous — the agent needs its answer in the same step — so
+     * the write cannot be awaited where it starts. Dropping the promise made a failure an
+     * unhandled rejection and a reported dismissal that never reached the table.
      */
     const keepSeparateWrites: Promise<void>[] = []
 

@@ -3055,6 +3055,10 @@ class SettingsStore {
     // Reset system services settings based on provider
     this.systemServicesSettings = getDefaultSystemServicesSettingsForProvider(provider)
 
+    // The half of Advanced Settings that is not a model choice — context window, lorebook
+    // limits, duplicate resolution. "Reset ALL" left every one of them where it was.
+    this.serviceSpecificSettings = getDefaultServiceSpecificSettings()
+
     // Reset update settings
     this.updateSettings = getDefaultUpdateSettings()
     await grammarService.clearCustomWords()
@@ -3095,6 +3099,7 @@ class SettingsStore {
     )
     await this.saveWizardSettings()
     await this.saveSystemServicesSettings()
+    await this.saveServiceSpecificSettings()
     await this.saveUpdateSettings()
     await this.resetGenerationPresets()
     await this.resetServicePresetAssignments()

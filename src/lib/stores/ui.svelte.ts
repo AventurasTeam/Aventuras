@@ -41,6 +41,7 @@ import { eventBus, type EventType } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { StreamingHtmlRenderer } from '$lib/utils/htmlStreaming'
 import { countTokens } from '$lib/services/tokenizer'
+import { branchScopeKey } from '$lib/utils/branchScope'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -261,10 +262,8 @@ class UIStore {
    * two chapters built from overlapping ranges of the same entries. Per branch rather than
    * global, because chapters belong to a branch and two branches never collide.
    *
-   * A **count** per branch, not a flag: the run is not awaited, so the next turn can start
-   * while the previous turn's tasks are still going, and a flag would be cleared by
-   * whichever finished first — leaving the branch marked idle with work still in flight,
-   * which is exactly the state the guard exists to catch.
+   * A **count**, not a flag: the run is not awaited, so turns overlap and a flag would be
+   * cleared by whichever finished first, marking the branch idle with work still in flight.
    */
   backgroundTaskBranches = $state<SvelteMap<string, number>>(new SvelteMap())
   loreManagementActive = $state(false)
@@ -1431,11 +1430,11 @@ class UIStore {
 
   // Lore management mode methods
   backgroundTasksActiveFor(storyId: string, branchId: string | null): boolean {
-    return (this.backgroundTaskBranches.get(`${storyId}:${branchId ?? 'main'}`) ?? 0) > 0
+    return (this.backgroundTaskBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
   }
 
   setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {
-    const key = `${storyId}:${branchId ?? 'main'}`
+    const key = branchScopeKey(storyId, branchId)
     const running = this.backgroundTaskBranches.get(key) ?? 0
     if (active) this.backgroundTaskBranches.set(key, running + 1)
     else if (running <= 1) this.backgroundTaskBranches.delete(key)

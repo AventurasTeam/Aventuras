@@ -145,6 +145,16 @@ describe('keeping both', () => {
     expect(field(plan, 'description').appendable).toBe(false)
     expect(applyMergePlan(plan).description).toBe('One.')
   })
+
+  it('does not repeat text the result already carries', () => {
+    // The state a merge is re-run from after a failed removal: the primary holds the joined
+    // text and the absorbed row still exists. A plain join would append its prose to itself.
+    const plan = planCharacterMerge(character('a', { description: 'One.\n\nTwo.' }), [
+      character('b', { description: 'Two.' }),
+    ])
+    field(plan, 'description').chosen = APPEND
+    expect(applyMergePlan(plan).description).toBe('One.\n\nTwo.')
+  })
 })
 
 describe('the other pools', () => {

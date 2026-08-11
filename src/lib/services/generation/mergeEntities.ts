@@ -303,6 +303,23 @@ export function planEntryMerge(primary: Entry, others: Entry[]): MergePlan {
 /** Separator for an appended text field, matching how the lorebook already joins prose. */
 const APPEND_SEPARATOR = '\n\n'
 
+/**
+ * Join the candidates, skipping any whose text the result already carries.
+ *
+ * Two rows for one subject often repeat each other outright — the classifier copies a
+ * description forward when it mints the second. It is also what makes a merge safe to
+ * re-run after a partial failure, where the primary already holds the joined text.
+ */
+function appendCandidates(candidates: MergeCandidate[]): string {
+  const parts: string[] = []
+  for (const candidate of candidates) {
+    const text = String(candidate.value).trim()
+    if (!text || parts.some((p) => p.includes(text))) continue
+    parts.push(text)
+  }
+  return parts.join(APPEND_SEPARATOR)
+}
+
 /** What the plan writes, once its conflicts are settled. */
 export function applyMergePlan(plan: MergePlan): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -319,7 +336,7 @@ export function applyMergePlan(plan: MergePlan): Record<string, unknown> {
     // does not allow.
     if (field.candidates.length === 0) continue
     if (field.chosen === APPEND) {
-      out[field.key] = field.candidates.map((c) => String(c.value).trim()).join(APPEND_SEPARATOR)
+      out[field.key] = appendCandidates(field.candidates)
       continue
     }
     out[field.key] = field.candidates[field.chosen]?.value ?? field.candidates[0].value

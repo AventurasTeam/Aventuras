@@ -625,12 +625,9 @@ export function expandRangeBidirectional(
  * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
  * and empty compares equal to every other one.
  *
- * **An apostrophe is removed, not turned into a space**, and it is the one separator that
- * has to be. It joins rather than divides — a possessive, an elision, or a letter of the
- * name itself — so spacing it splits one word into two: `Kaelen's Rest` became
- * `kaelen s rest` and stopped matching `Kaelens Rest`, `Vor'koth` stopped matching
- * `Vorkoth`, and `L'Élu` became `l elu`, which is why `normalizeName` needed a rule about
- * leading single letters to undo it.
+ * **An apostrophe is removed, not spaced.** It joins rather than divides — a possessive or
+ * an elision — so spacing it split one word into two: `Kaelen's Rest` did not match
+ * `Kaelens Rest`, nor `Vor'koth` match `Vorkoth`.
  */
 export function foldName(raw: string): string {
   return raw

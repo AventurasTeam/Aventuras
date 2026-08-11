@@ -3670,10 +3670,8 @@ class DatabaseService {
   /**
    * The main branch as `kept_separate` stores it.
    *
-   * `branch_id` is part of the primary key, and SQLite does not enforce a primary key over
-   * a NULL, so a nullable column there would make `INSERT OR IGNORE` append a duplicate row
-   * on every repeated dismissal instead of ignoring it. Every read and write goes through
-   * this, so the two sides cannot disagree about what "main branch" is spelled as.
+   * `branch_id` is part of the primary key and SQLite does not enforce a key over NULL, so
+   * a nullable column made `INSERT OR IGNORE` append a row per repeated dismissal.
    */
   private keptSeparateBranch(branchId: string | null): string {
     return branchId ?? ''

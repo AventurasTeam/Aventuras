@@ -45,11 +45,9 @@ export interface EntityDuplicateGroup {
   /**
    * Stable identity of this group within the whole worklist.
    *
-   * Pool-qualified, because the worklist concatenates every pool and the names repeat
-   * across them by design — the classifier's `Character` row and the lore agent's `Entry`
-   * for the same person drift the same way, so `Kael`/`Kaelen` shows up in both. Two
-   * groups sharing a key collide in the window's keyed `{#each}`, which is a render error
-   * rather than a wrong answer.
+   * Pool-qualified: the worklist concatenates every pool and the names repeat across them
+   * by design — a `Character` row and the lorebook `Entry` for one person drift the same
+   * way — and two groups sharing a key collide in the window's keyed `{#each}`.
    */
   key: string
 }
@@ -72,12 +70,9 @@ export function keptSeparateKey(names: string[]): string {
  * later show up as a group of two once one member is merged away, and a whole-group key
  * would no longer match. Dismissing {A,B,C} therefore stores {A,B}, {A,C}, {B,C}.
  *
- * **A group whose names all normalize to one key still gets a key**, `name|name`. Two rows
- * called `Kaelen` are the commonest duplicate there is and the only one nobody has to
- * judge, and a pairwise loop over a single distinct name produces nothing — so the group
- * read as "every pair already dismissed" and was dropped before it was ever shown, in the
- * window and in the agent's worklist alike. The self-pair is a real dismissal: two rows
- * that share a name and are genuinely two subjects stay dismissed on the next pass.
+ * **A group whose names all normalize to one key still gets one**, `name|name`. A pairwise
+ * loop over a single distinct name produces nothing, which reads as "every pair already
+ * dismissed" — so two rows both called `Kaelen` were dropped before being shown.
  */
 export function pairKeys(names: string[]): string[] {
   const unique = [...new Set(names.map(normalizeName))].filter(Boolean).sort()
@@ -89,6 +84,18 @@ export function pairKeys(names: string[]): string[] {
     }
   }
   return pairs
+}
+
+/**
+ * How a stored dismissal is qualified by pool, and how it is read back.
+ *
+ * The database keeps one row per `(pool, pair)` and hands back a flat `pool:pair` set, so
+ * every caller had to know the separator: two wrote the prefix, two stripped it, one with
+ * a hardcoded `'lorebook:'`. A pool added later would have had to find all four.
+ */
+export function scopeToPool(keys: ReadonlySet<string>, pool: DuplicatePool): Set<string> {
+  const prefix = `${pool}:`
+  return new Set([...keys].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)))
 }
 
 /** A group survives only while at least one of its pairs has not been dismissed. */

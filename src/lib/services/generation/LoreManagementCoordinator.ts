@@ -13,6 +13,7 @@ import type {
   Tense,
 } from '$lib/types'
 import { createLogger } from '$lib/log'
+import { branchScopeKey } from '$lib/utils/branchScope'
 
 const log = createLogger('LoreManagementCoordinator')
 
@@ -108,21 +109,15 @@ const runningBranches = new Set<string>()
 /**
  * The pending `onComplete`, so a finished session cannot clear a running one's UI.
  *
- * The lock is released before the linger elapses, deliberately — the next run must not
- * wait on a message. So a session starting inside those two seconds inherits the previous
- * one's timer, which then fires and reports the lorebook idle while it is being written.
- * Module scope like the lock, and for the same reason: the callers each build their own
- * coordinator and cannot see each other's.
+ * The lock is released before the linger elapses, deliberately, so a session starting
+ * inside those two seconds would inherit the previous one's timer. Module scope like the
+ * lock: each caller builds its own coordinator.
  */
 let completionTimer: ReturnType<typeof setTimeout> | null = null
 
-function branchKey(storyId: string, branchId: string | null): string {
-  return `${storyId}:${branchId ?? 'main'}`
-}
-
 /** Whether a lore management session is running for this story branch. */
 export function isLoreManagementRunning(storyId: string, branchId: string | null): boolean {
-  return runningBranches.has(branchKey(storyId, branchId))
+  return runningBranches.has(branchScopeKey(storyId, branchId))
 }
 
 export class LoreManagementCoordinator {
@@ -137,7 +132,7 @@ export class LoreManagementCoordinator {
     callbacks: LoreManagementCallbacks,
     uiCallbacks?: LoreManagementUICallbacks,
   ): Promise<LoreSessionResult> {
-    const key = branchKey(input.storyId, input.currentBranchId)
+    const key = branchScopeKey(input.storyId, input.currentBranchId)
     if (runningBranches.has(key)) {
       log('Session already running for this branch, skipping', { key })
       return { completed: false, changeCount: 0, skipped: true }

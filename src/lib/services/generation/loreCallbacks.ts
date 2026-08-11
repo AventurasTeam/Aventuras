@@ -15,7 +15,7 @@ import { story } from '$lib/stores/story.svelte'
 import { ui } from '$lib/stores/ui.svelte'
 import { aiService } from '$lib/services/ai'
 import { database } from '$lib/services/database'
-import { pairKeys } from '$lib/services/duplicates'
+import { pairKeys, scopeToPool } from '$lib/services/duplicates'
 import type {
   LoreManagementCallbacks,
   LoreManagementUICallbacks,
@@ -42,10 +42,7 @@ export function buildLoreManagementCallbacks(): LoreManagementCallbacks {
       const current = story.currentStory
       if (!current) return new Set<string>()
       const all = await database.getKeptSeparate(current.id, current.currentBranchId)
-      const prefix = 'lorebook:'
-      return new Set(
-        [...all].filter((k) => k.startsWith(prefix)).map((k) => k.slice(prefix.length)),
-      )
+      return scopeToPool(all, 'lorebook')
     },
     onKeepSeparate: async (names) => {
       const current = story.currentStory

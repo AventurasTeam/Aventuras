@@ -117,32 +117,37 @@ export class ChapterQueryBudget {
       return record
     }
 
-    this.paid++
-
-    let result: ChapterAnswer
+    // Not charged, and not cached either: no read was attempted and none ever will be, so
+    // spending the budget on it would let a handful of questions exhaust an allowance that
+    // was never going to buy anything.
     if (!this.options.ask) {
-      result = {
+      const unavailable: ChapterAnswer = {
         answer:
           'Chapter reading is not available in this session. The chapter summaries in your instructions are all there is.',
         cached: false,
         failed: true,
       }
-    } else {
-      try {
-        result = {
-          answer: await this.options.ask(chapterNumber, question),
-          cached: false,
-          failed: false,
-        }
-      } catch (error) {
-        result = {
-          answer:
-            `Query failed: ${error instanceof Error ? error.message : String(error)}. ` +
-            'Asking this again returns the same answer without a second read; use the ' +
-            'chapter summaries in your instructions instead.',
-          cached: false,
-          failed: true,
-        }
+      this.options.onAnswer?.({ ...unavailable, chapterNumber, question, durationMs: 0 })
+      return unavailable
+    }
+
+    this.paid++
+
+    let result: ChapterAnswer
+    try {
+      result = {
+        answer: await this.options.ask(chapterNumber, question),
+        cached: false,
+        failed: false,
+      }
+    } catch (error) {
+      result = {
+        answer:
+          `Query failed: ${error instanceof Error ? error.message : String(error)}. ` +
+          'Asking this again returns the same answer without a second read; use the ' +
+          'chapter summaries in your instructions instead.',
+        cached: false,
+        failed: true,
       }
     }
 
