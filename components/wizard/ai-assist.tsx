@@ -464,6 +464,12 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     )
   }
 
+  // The compact states are shorter than the sheet's detent, so their actions
+  // would otherwise float mid-surface under a band of empty space. Result
+  // states need no spacer — their scroll pane already flexes. Desktop's popover
+  // sizes to content, so there is nothing to push against and this collapses.
+  const actionSpacer = isPhone ? <View className="flex-1" /> : null
+
   function renderBody(): ReactNode {
     switch (assist.kind) {
       case 'idle':
@@ -471,8 +477,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
       case 'not-configured':
         return (
-          <View className="gap-3">
+          <View className={cn('gap-3', isPhone && 'flex-1')}>
             <Text size="sm">{t('wizard:aiAssist.notConfigured')}</Text>
+            {actionSpacer}
             <View className="flex-row justify-end gap-2">
               <Button variant="ghost" onPress={closeOverlay}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
@@ -491,7 +498,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       // the guidance stays legible while the call it started runs.
       case 'loading':
         return (
-          <View className="gap-3">
+          <View className={cn('gap-3', isPhone && 'flex-1')}>
             <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
             <View className="gap-1">
               <Text size="sm" variant="muted">
@@ -507,14 +514,17 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               />
             </View>
             {assist.kind === 'loading' ? (
-              <View className="flex-row items-center justify-between gap-2">
-                <View className="flex-row items-center gap-2">
-                  <Spinner size="sm" />
-                  <Text size="sm" variant="muted">
-                    {t('wizard:aiAssist.loading', { model: assist.modelId })}
-                  </Text>
-                </View>
-                <Button variant="ghost" onPress={handleCancelLoading}>
+              <View className="flex-row items-center gap-2">
+                <Spinner size="sm" />
+                <Text size="sm" variant="muted">
+                  {t('wizard:aiAssist.loading', { model: assist.modelId })}
+                </Text>
+              </View>
+            ) : null}
+            {actionSpacer}
+            {assist.kind === 'loading' ? (
+              <View className="flex-row justify-end">
+                <Button variant="secondary" onPress={handleCancelLoading}>
                   <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
                 </Button>
               </View>
@@ -568,11 +578,12 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
       case 'failure':
         return (
-          <View className="gap-3">
+          <View className={cn('gap-3', isPhone && 'flex-1')}>
             <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
             <Text size="sm" className="text-danger">
               {t('wizard:aiAssist.failure', { reason: assist.detail })}
             </Text>
+            {actionSpacer}
             <View className="flex-row justify-end gap-2">
               <Button variant="ghost" onPress={closeOverlay}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
