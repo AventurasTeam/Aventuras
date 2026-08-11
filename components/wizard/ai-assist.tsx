@@ -354,9 +354,14 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                       onPress={() => toggleRow(row.name)}
                       className={cn(
                         'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
-                        !row.exists && 'active:bg-tint-press',
+                        // Press tint is touch feedback; on desktop the hover
+                        // border already signals interactivity and the sunken→
+                        // tint flash reads as loud.
                         !row.exists &&
-                          Platform.select({ web: 'cursor-pointer hover:border-border-strong' }),
+                          Platform.select({
+                            web: 'cursor-pointer hover:border-border-strong',
+                            native: 'active:bg-tint-press',
+                          }),
                       )}
                     >
                       {/* The row is the single interactive surface; the checkbox is
@@ -561,6 +566,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 maxLength={GUIDANCE_MAX_LENGTH}
                 aria-label={t('wizard:aiAssist.guidance.label')}
                 editable={assist.kind === 'guidance'}
+                // Guarded: while loading the input is read-only but may still
+                // hold focus, and Enter would abort-and-restart the run.
+                onSubmitEditing={assist.kind === 'guidance' ? handleGenerate : undefined}
               />
             </View>
             {assist.kind === 'loading' ? (
@@ -610,6 +618,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 placeholder={t('wizard:aiAssist.refine.placeholder')}
                 maxLength={GUIDANCE_MAX_LENGTH}
                 aria-label={t('wizard:aiAssist.refine.label')}
+                onSubmitEditing={() => void runRefine(assist.value, refineText)}
               />
             </View>
             <View className="flex-row justify-end gap-2">
