@@ -9,7 +9,14 @@ import {
   useRef,
   type ComponentProps,
 } from 'react'
-import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import {
+  Platform,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
@@ -45,6 +52,17 @@ function useSheetA11y(): SheetA11yValue {
 }
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
+
+// Native-only swap: gorhom's BottomSheetTextInput feeds the sheet's
+// keyboard-translate system, which is inert on web — and its blur handler
+// calls TextInput.State.currentlyFocusedInput(), which react-native-web never
+// implemented, so every blur of a sheet-hosted field on web throws.
+// Cast: gorhom types its forwarded ref `TextInput | undefined` (it maps null
+// to undefined); the instance is RN's TextInput, only the ref's empty channel
+// differs.
+const SheetInputComponent = (
+  Platform.OS === 'web' ? TextInput : BottomSheetTextInput
+) as InputComponent
 
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
@@ -193,11 +211,8 @@ function BottomSheetContent({
       <TextClassContext.Provider value="text-fg-primary">
         {/* Swap Input's underlying TextInput with gorhom's keyboard-aware variant
             so focusing an Input inside a sheet triggers gorhom's translate-up
-            behavior. Plain TextInput isn't tracked by the sheet's keyboard system.
-            Cast: gorhom types its forwarded ref `TextInput | undefined` (it maps
-            null to undefined); the instance is RN's TextInput, only the ref's
-            empty channel differs. */}
-        <InputComponentContext.Provider value={BottomSheetTextInput as InputComponent}>
+            behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
+        <InputComponentContext.Provider value={SheetInputComponent}>
           {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
               (dynamic sizing measures BottomSheetView's content height). Fixed-detent
               sizes skip BottomSheetView because it captures vertical pan gestures and
