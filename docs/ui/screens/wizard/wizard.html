@@ -189,6 +189,8 @@
   .ai-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; background: var(--bg-faint); border-radius: 4px; margin-bottom: 10px; }
   .ai-chip { padding: 4px 10px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 14px; font-size: 12px; color: var(--ink); cursor: pointer; }
   .ai-chip:hover { background: var(--bg-highlight); border-color: var(--ink); }
+  .ai-list-bulk { display: flex; gap: 12px; margin-bottom: 6px; }
+  .ai-list-bulk button { background: none; border: none; padding: 2px 4px; font-size: 11px; color: var(--ink); cursor: pointer; }
   .ai-list { display: flex; flex-direction: column; gap: 6px; padding: 10px; background: var(--bg-faint); border-radius: 4px; margin-bottom: 10px; }
   .ai-list-row { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; background: var(--bg-region); border: 1px solid var(--line-soft); border-radius: 4px; }
   .ai-list-row input[type="checkbox"] { margin-top: 3px; }
@@ -821,6 +823,7 @@
       <!-- Overlay: AI list result -->
       <div id="overlay-ai-list-result" class="ai-result hidden">
         <div class="ai-result-title"><span class="sparkle">✨</span> Suggested cast (5 of 5)</div>
+        <div class="ai-list-bulk"><button>Select all</button><button>Clear all</button></div>
         <div class="ai-list">
           <div class="ai-list-row">
             <input type="checkbox" checked>

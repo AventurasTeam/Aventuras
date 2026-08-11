@@ -848,11 +848,11 @@ active model name. Cancellable.
 
 ### Result presentation — three shapes
 
-| Shape     | Where                                                | Preview UI                                                            | Actions                                                  |
-| --------- | ---------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------- |
-| **Prose** | genre body, tone body, setting, description, opening | Read-only preview pane                                                | `Discard / Refine… / Regenerate / Use this`              |
-| **List**  | cast suggestions, lore suggestions                   | Per-row checkboxes on condensed cards; pagination via `Generate more` | `Discard / Regenerate / Generate more / Import selected` |
-| **Chips** | title suggestions                                    | 5–10 clickable label chips                                            | Click to pick; `Regenerate`; `Discard`                   |
+| Shape     | Where                                                | Preview UI                                                                                                                                | Actions                                                  |
+| --------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **Prose** | genre body, tone body, setting, description, opening | Read-only preview pane                                                                                                                    | `Discard / Refine… / Regenerate / Use this`              |
+| **List**  | cast suggestions, lore suggestions                   | Per-row checkboxes on condensed cards — the whole card toggles; `Select all` / `Clear all` above the list; pagination via `Generate more` | `Discard / Regenerate / Generate more / Import selected` |
+| **Chips** | title suggestions                                    | 5–10 clickable label chips                                                                                                                | Click to pick; `Regenerate`; `Discard`                   |
 
 ### Refine — prose-result only
 
