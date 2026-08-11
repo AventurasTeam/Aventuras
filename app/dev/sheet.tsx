@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ScrollView, TextInput, View } from 'react-native'
 
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
@@ -11,11 +11,12 @@ import { Text } from '@/components/ui/text'
 function KeyboardOrderingProbe() {
   const [note, setNote] = useState('')
   const [rawNote, setRawNote] = useState('')
-  // Controlled deliberately. Sheet swaps Input's TextInput for gorhom's
-  // BottomSheetTextInput, which renders gesture-handler's wrapped TextInput
-  // rather than RN's — so a value round-trip inside a sheet takes a different
-  // path to every other field in the app. An uncontrolled probe cannot see it.
+  // Controlled deliberately: the caret fault only appears when a value is fed
+  // back on every keystroke, so an uncontrolled probe cannot see it.
   const [sheetNote, setSheetNote] = useState('')
+  // Deliberately NOT fed back. Isolates the round-trip itself from the sheet.
+  const uncontrolledRef = useRef('')
+  const [rightNote, setRightNote] = useState('')
   return (
     <View>
       <Heading level={3}>Keyboard ordering (phone)</Heading>
@@ -47,15 +48,50 @@ function KeyboardOrderingProbe() {
                 `Bh` with the caret still between `B` and `h` — not jumped to the start. Inserting
                 mid-string is the same test: the caret must land after the typed character.
               </Text>
-              {/* Bisect partner for the field above: a bare RN TextInput,
-                  controlled the same way, skipping Input entirely. Both wrong
-                  means the sheet environment; only the one above means Input's
-                  own wrapper. Android-only symptom — desktop is unaffected. */}
+              {/* Bare RN TextInput, controlled the same way, skipping Input
+                  entirely. Confirmed to fault identically, so Input's wrapper
+                  is excluded and the fault belongs to the sheet environment. */}
               <TextInput
                 value={rawNote}
                 onChangeText={setRawNote}
                 placeholder="Bare TextInput, same test"
                 aria-label="Raw sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
+              {/* Probe C — same field, uncontrolled: no value flows back on
+                  keystroke. Healthy here means the fault is the controlled
+                  round-trip inside a sheet, and the fix is to stop feeding the
+                  value back rather than anything about the keyboard. */}
+              <TextInput
+                defaultValue=""
+                onChangeText={(next) => {
+                  uncontrolledRef.current = next
+                }}
+                placeholder="Uncontrolled, same test"
+                aria-label="Uncontrolled sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
+            </View>
+          </SheetContent>
+        </Sheet>
+
+        {/* Probe D — a right-anchored sheet is a plain Dialog with no gorhom in
+            it. Healthy here pins the fault on gorhom's BottomSheet; faulty here
+            moves it out to the portal/overlay both anchors share. */}
+        <Sheet ariaLabel="Right sheet caret probe">
+          <SheetTrigger asChild>
+            <Button variant="secondary">
+              <Text>Open right sheet (no gorhom)</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent anchor="right">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Right sheet</Heading>
+              <TextInput
+                value={rightNote}
+                onChangeText={setRightNote}
+                placeholder="Controlled, same test"
+                aria-label="Right sheet field"
                 className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
               />
             </View>
