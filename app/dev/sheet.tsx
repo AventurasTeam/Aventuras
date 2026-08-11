@@ -10,6 +10,11 @@ import { Text } from '@/components/ui/text'
 
 function KeyboardOrderingProbe() {
   const [note, setNote] = useState('')
+  // Controlled deliberately. Sheet swaps Input's TextInput for gorhom's
+  // BottomSheetTextInput, which renders gesture-handler's wrapped TextInput
+  // rather than RN's — so a value round-trip inside a sheet takes a different
+  // path to every other field in the app. An uncontrolled probe cannot see it.
+  const [sheetNote, setSheetNote] = useState('')
   return (
     <View>
       <Heading level={3}>Keyboard ordering (phone)</Heading>
@@ -30,7 +35,16 @@ function KeyboardOrderingProbe() {
           <SheetContent anchor="bottom" size="short">
             <View className="flex-col gap-3">
               <Heading level={4}>Short sheet</Heading>
-              <Input placeholder="Then focus this one" aria-label="Sheet field" />
+              <Input
+                value={sheetNote}
+                onChangeText={setSheetNote}
+                placeholder="Then focus this one"
+                aria-label="Sheet field"
+              />
+              <Text variant="muted" size="xs">
+                Cursor probe: type `Buh`, put the caret between `u` and `h`, press backspace. Expect
+                `Bh` with the caret still between `B` and `h` — not jumped to the start.
+              </Text>
             </View>
           </SheetContent>
         </Sheet>
