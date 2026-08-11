@@ -8,6 +8,7 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -823,6 +824,17 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     },
     [isControlled, onOpenChange],
   )
+
+  // The two presentations don't hand an open overlay across a tier flip: the
+  // unmounting gorhom sheet plays its full dismiss animation underneath the
+  // popover, and its late onDismiss would close the shared open state anyway.
+  // Close before paint instead; the user reopens in the new presentation.
+  const prevIsPhoneRef = useRef(isPhone)
+  useLayoutEffect(() => {
+    if (prevIsPhoneRef.current === isPhone) return
+    prevIsPhoneRef.current = isPhone
+    if (open) setOpen(false)
+  }, [isPhone, open, setOpen])
 
   const list = useSearchableList(props)
   const selectedRowIdsSet = useSelectedSet(props.selectedRowIds)

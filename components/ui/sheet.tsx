@@ -118,6 +118,16 @@ function BottomSheetContent({
   // and subsequent present() becomes a silent no-op. Track actual modal state
   // so dismiss() is only called when the modal is presented.
   const isPresentedRef = useRef(false)
+  // gorhom keeps a modal unmounted-while-presented alive until its dismiss
+  // animation completes, then still fires onDismiss; that late callback must
+  // not write the dead open state back through onOpenChange.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -204,6 +214,7 @@ function BottomSheetContent({
       handleIndicatorStyle={handleIndicatorStyle}
       accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}
       onDismiss={() => {
+        if (!isMountedRef.current) return
         isPresentedRef.current = false
         onOpenChange(false)
       }}
