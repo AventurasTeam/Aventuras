@@ -88,28 +88,6 @@ export const AGENTIC_RETRIEVAL_DEFAULTS = {
   grepExcerptsPerSearch: 40,
 } as const
 
-/**
- * Characters of un-chapterized story handed to lore management.
- *
- * The same unit the retrieval tail is measured in, and a larger allowance: this pass runs
- * once per chapter rather than once per turn, and the tail is the *only* material no
- * chapter summary covers, so cutting it is how the agent stops seeing what just happened.
- *
- * Deliberately a constant and not a setting. Too small and the agent maintains a lorebook
- * for a story it cannot read; too large and the prompt pays for it. Neither failure is
- * visible from a slider, so there is no useful choice to offer.
- */
-export const RECENT_STORY_CHARS_FOR_LORE = 16384
-
-/**
- * Entries of that tail kept whatever the budget says — roughly the last two exchanges.
- *
- * Not belt and braces: entries averaged 2,688 characters on a measured 40-chapter story,
- * so a character budget alone can collapse to the player's last action. Same reason, and
- * same number, as `MIN_RECENT_ENTRIES` on the retrieval side.
- */
-export const MIN_RECENT_ENTRIES_FOR_LORE = 4
-
 /** Limits for the lore management loop. `maxIterations` is an Advanced Settings slider. */
 export const LORE_MANAGEMENT_DEFAULTS = {
   /**
@@ -142,13 +120,42 @@ export const CHAPTER_READ_BUDGET_RATIO = 2.5
 /** Fallback when a story has no usable threshold. Mirrors `AI_CONFIG.memory.defaultTokenThreshold`. */
 const DEFAULT_TOKEN_THRESHOLD = 16000
 
+function thresholdOr(tokenThreshold: number | undefined): number {
+  return typeof tokenThreshold === 'number' && tokenThreshold > 0
+    ? tokenThreshold
+    : DEFAULT_TOKEN_THRESHOLD
+}
+
 /** Token budget for the chapter text of one chapter-reading prompt. */
 export function chapterReadBudget(tokenThreshold: number | undefined): number {
-  const threshold =
-    typeof tokenThreshold === 'number' && tokenThreshold > 0
-      ? tokenThreshold
-      : DEFAULT_TOKEN_THRESHOLD
-  return Math.round(threshold * CHAPTER_READ_BUDGET_RATIO)
+  return Math.round(thresholdOr(tokenThreshold) * CHAPTER_READ_BUDGET_RATIO)
+}
+
+/**
+ * Rough characters per token, for a budget expressed in one and spent in the other.
+ *
+ * `splitRecentTail` measures characters -- deliberately, so it costs a sum of string
+ * lengths rather than a tokenizer pass -- while the budget below is derived from a token
+ * setting. An approximation is enough: what guarantees the agent sees the present scene is
+ * `MIN_RECENT_ENTRIES_FOR_LORE`, and the budget only governs the cost above that floor.
+ */
+const CHARS_PER_TOKEN = 4
+
+/**
+ * Characters of un-chapterized story handed to lore management.
+ *
+ * The same ratio as a chapter read, against the user's own `tokenThreshold`, so it reads as
+ * "about 2.5 chapters" on both sides. It was a fixed 16,384 characters -- roughly 4k tokens
+ * against a default threshold of 16k, so the agent saw about a quarter of the material no
+ * chapter summary covers, and raising the threshold made that share smaller with nothing to
+ * say so.
+ *
+ * Normally the tail is far under this: a session runs just after a chapter was cut. It
+ * binds where it matters -- a story with automatic summarization off, or one that has not
+ * reached its first chapter, where the tail is the whole story.
+ */
+export function recentStoryBudgetChars(tokenThreshold: number | undefined): number {
+  return Math.round(thresholdOr(tokenThreshold) * CHAPTER_READ_BUDGET_RATIO * CHARS_PER_TOKEN)
 }
 
 /** Max lorebook entries handed to the plot-suggestion generator. */

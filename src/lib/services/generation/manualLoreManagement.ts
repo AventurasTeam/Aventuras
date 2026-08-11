@@ -69,6 +69,7 @@ async function startManualLoreManagement(): Promise<LoreSessionResult | null> {
       mode: currentStory.mode ?? 'adventure',
       pov: story.pov,
       tense: story.tense,
+      tokenThreshold: story.memoryConfig.tokenThreshold,
     },
     buildLoreManagementCallbacks(),
     buildLoreManagementUICallbacks(),

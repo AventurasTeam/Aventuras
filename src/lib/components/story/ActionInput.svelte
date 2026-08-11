@@ -351,6 +351,7 @@
         mode,
         pov: story.pov,
         tense: story.tense,
+        tokenThreshold: story.memoryConfig.tokenThreshold,
       }),
       loreCallbacks: buildLoreManagementCallbacks(),
       loreUICallbacks: buildLoreManagementUICallbacks(),

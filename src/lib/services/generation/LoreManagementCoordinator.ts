@@ -65,6 +65,8 @@ export interface LoreSessionInput {
   mode: StoryMode
   pov: POV
   tense: Tense
+  /** The story's own summarization threshold, which the recent-story budget scales with. */
+  tokenThreshold?: number
 }
 
 export interface LoreManagementDependencies {
@@ -78,6 +80,7 @@ export interface LoreManagementDependencies {
     mode: StoryMode,
     pov?: POV,
     tense?: Tense,
+    tokenThreshold?: number,
   ) => Promise<LoreManagementResult>
 }
 
@@ -197,6 +200,7 @@ export class LoreManagementCoordinator {
         input.mode,
         input.pov,
         input.tense,
+        input.tokenThreshold,
       )
 
       log('Lore management complete', {

@@ -56,8 +56,8 @@ import type {
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
-import { MIN_RECENT_ENTRIES_FOR_LORE, RECENT_STORY_CHARS_FOR_LORE } from './core/defaults'
-import { splitRecentTail } from './retrieval/recentTail'
+import { recentStoryBudgetChars } from './core/defaults'
+import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
 import {
   DEFAULT_FALLBACK_STYLE_PROMPT,
@@ -616,17 +616,18 @@ class AIService {
     _mode: StoryMode = 'adventure',
     _pov?: POV,
     _tense?: Tense,
+    tokenThreshold?: number,
   ): Promise<LoreManagementResult> {
     // The story since the last chapter — the only unsummarised material the agent has. It
     // used to be the single most recent action and narration, which on a story with no
     // chapters left the agent maintaining a lorebook for a story it could not read.
     //
-    // Bounded in characters through the same helper the retrieval tail uses, so both sides
-    // measure the same thing the same way. `searchable` is dropped rather than split: there
-    // is no grep here to reach what the budget leaves out.
+    // Bounded through the same helper the retrieval tail uses, so both sides measure the
+    // same thing the same way. `searchable` is dropped rather than split: there is no grep
+    // here to reach what the budget leaves out.
     const { shown } = splitRecentTail(
       recentMessages.filter((m) => m.type === 'narration' || m.type === 'user_action'),
-      RECENT_STORY_CHARS_FOR_LORE,
+      recentStoryBudgetChars(tokenThreshold),
       MIN_RECENT_ENTRIES_FOR_LORE,
     )
     const recentStory = shown

@@ -183,6 +183,7 @@ export class ChapterBatchService {
           mode: input.mode,
           pov: input.pov,
           tense: input.tense,
+          tokenThreshold: input.tokenThreshold,
         },
         callbacks.loreCallbacks,
         callbacks.loreUICallbacks,
