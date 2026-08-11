@@ -27,6 +27,7 @@
     ChevronDown,
     Loader2,
     Merge,
+    Brain,
   } from '@lucide/svelte'
   import { runManualLoreManagement } from '$lib/services/generation'
   import DuplicatesModal from '$lib/components/duplicates/DuplicatesModal.svelte'
@@ -484,7 +485,7 @@
             {/if}
           </div>
 
-          {#if ui.lastWorldStateRetrieval?.contextBlock || ui.lastLorebookRetrieval?.contextBlock}
+          {#if ui.lastWorldStateRetrieval?.contextBlock || ui.lastLorebookRetrieval?.contextBlock || ui.lastMemoryRetrieval}
             <Separator class="my-6" />
             <div class="space-y-4">
               <h3 class="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
@@ -538,6 +539,33 @@
                           <pre
                             class="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">{ui
                               .lastLorebookRetrieval.contextBlock}</pre>
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </Collapsible.Content>
+                </Collapsible.Root>
+              {/if}
+
+              <!-- Memory selects no entries, so the block is its whole view here. -->
+              {#if ui.lastMemoryRetrieval}
+                <Collapsible.Root class="bg-muted/20 rounded-lg border">
+                  <Collapsible.Trigger
+                    class="group hover:bg-muted/30 flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors"
+                  >
+                    <div class="text-foreground/90 flex items-center gap-2 text-sm font-medium">
+                      <Brain class="h-4 w-4 text-sky-500" />
+                      <span>Injected Memory</span>
+                    </div>
+                    <ChevronDown
+                      class="text-muted-foreground h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180"
+                    />
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
+                    <div class="bg-muted/30 border-t">
+                      <ScrollArea class="h-48 w-full">
+                        <div class="p-4">
+                          <pre
+                            class="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">{ui.lastMemoryRetrieval}</pre>
                         </div>
                       </ScrollArea>
                     </div>

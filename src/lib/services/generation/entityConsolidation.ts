@@ -32,12 +32,35 @@ import type { Character, Entry, Item, Location } from '$lib/types'
 
 const log = createLogger('EntityConsolidation')
 
+/** Shown when the story or branch moved under an open window: the list has to be rebuilt. */
+const STALE_WORKLIST =
+  'The story or branch changed while this list was open. Close and reopen the duplicates window.'
+
 /** Pools in the order the window shows them: where duplicates actually accumulate first. */
 const POOLS: DuplicatePool[] = ['character', 'location', 'item', 'lorebook']
 
-function currentScope(): { storyId: string; branchId: string | null } | null {
+/** Story and branch a worklist was discovered against. */
+export interface DuplicateScope {
+  storyId: string
+  branchId: string | null
+}
+
+/**
+ * A group, plus where it was found.
+ *
+ * The window is built once and acted on later, and its ids mean nothing outside that story
+ * branch, so the scope travels with the group and is checked before every write.
+ */
+export type ScopedDuplicateGroup = EntityDuplicateGroup & DuplicateScope
+
+function currentScope(): DuplicateScope | null {
   const current = story.currentStory
   return current ? { storyId: current.id, branchId: current.currentBranchId } : null
+}
+
+function inScope(group: DuplicateScope): boolean {
+  const scope = currentScope()
+  return scope !== null && scope.storyId === group.storyId && scope.branchId === group.branchId
 }
 
 /**
@@ -47,14 +70,17 @@ function currentScope(): { storyId: string; branchId: string | null } | null {
  * rarely, the table is tiny, and a stale cache here means re-asking a question the user
  * has already answered — the exact failure the table exists to prevent.
  */
-export async function findAllDuplicates(): Promise<EntityDuplicateGroup[]> {
+export async function findAllDuplicates(): Promise<ScopedDuplicateGroup[]> {
   const scope = currentScope()
   if (!scope) return []
 
   const dismissed = await database.getKeptSeparate(scope.storyId, scope.branchId)
 
   return POOLS.flatMap((pool) =>
-    findEntityDuplicates(pool, entitiesFor(pool), scopeToPool(dismissed, pool)),
+    findEntityDuplicates(pool, entitiesFor(pool), scopeToPool(dismissed, pool)).map((group) => ({
+      ...group,
+      ...scope,
+    })),
   )
 }
 
@@ -136,7 +162,8 @@ function entitiesFor(pool: DuplicatePool): DuplicateEntity[] {
  * conflict to settle — nothing is decided silently, because a merge deletes rows and
  * `deleteCharacter` is not undoable.
  */
-export function buildMergePlan(group: EntityDuplicateGroup, primaryId: string): MergePlan | null {
+export function buildMergePlan(group: ScopedDuplicateGroup, primaryId: string): MergePlan | null {
+  if (!inScope(group)) return null
   const ops = opsFor(group.pool)
   const ids = new Set(group.entities.map((e) => e.id))
   const rows = ops.rows().filter((r) => ids.has(r.id))
@@ -156,7 +183,9 @@ export function buildMergePlan(group: EntityDuplicateGroup, primaryId: string): 
  * store methods write the database and the reactive arrays together and a rollback would
  * undo only one of them.
  */
-export async function mergeGroup(group: EntityDuplicateGroup, plan: MergePlan): Promise<void> {
+export async function mergeGroup(group: ScopedDuplicateGroup, plan: MergePlan): Promise<void> {
+  if (!inScope(group)) throw new Error(STALE_WORKLIST)
+
   const others = group.entities.map((e) => e.id).filter((id) => id !== plan.primaryId)
   if (others.length === 0) return
 
@@ -183,12 +212,13 @@ export async function mergeGroup(group: EntityDuplicateGroup, plan: MergePlan): 
 }
 
 /** Record that a group is genuinely distinct subjects, so it is not offered again. */
-export async function keepSeparate(group: EntityDuplicateGroup): Promise<void> {
-  const scope = currentScope()
-  if (!scope) return
+export async function keepSeparate(group: ScopedDuplicateGroup): Promise<void> {
+  // Filed against the branch the group was found on, not whatever is open now.
+  if (!inScope(group)) throw new Error(STALE_WORKLIST)
+
   const keys = pairKeys(group.entities.map((e) => e.name))
   log('Keeping group separate', { pool: group.pool, pairs: keys.length })
-  await database.addKeptSeparate(scope.storyId, scope.branchId, group.pool, keys)
+  await database.addKeptSeparate(group.storyId, group.branchId, group.pool, keys)
 }
 
 /** Forget every dismissal on this branch. */

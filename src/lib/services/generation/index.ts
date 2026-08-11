@@ -74,7 +74,11 @@ export type {
 
 // Lore management coordinator
 export { runManualLoreManagement } from './manualLoreManagement'
-export { buildLoreManagementCallbacks, buildLoreManagementUICallbacks } from './loreCallbacks'
+export {
+  buildLoreManagementCallbacks,
+  buildLoreManagementUICallbacks,
+  type LoreCallbackScope,
+} from './loreCallbacks'
 
 // Duplicate consolidation (the worklist behind the Active Context window)
 export {
@@ -83,6 +87,8 @@ export {
   mergeGroup,
   keepSeparate,
   forgetKeptSeparate,
+  type ScopedDuplicateGroup,
+  type DuplicateScope,
 } from './entityConsolidation'
 export {
   applyMergePlan,

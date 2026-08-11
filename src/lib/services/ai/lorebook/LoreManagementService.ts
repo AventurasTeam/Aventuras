@@ -312,12 +312,13 @@ export class LoreManagementService extends BaseAIService {
     // reports must be one that reached the table.
     await Promise.all(keepSeparateWrites)
 
-    // The last finish call is the one that was accepted; the earlier ones were refusals.
     const finishResults = extractToolResults<
       FinishLoreManagementSchema & { completed: boolean },
       typeof tools
     >(result.steps, 'finish_lore_management')
-    const terminalResult = finishResults.findLast((r) => r.completed)
+    // A refused call on the forced last step still ends the run, so its summary is the only
+    // account there will be of a session that did write changes.
+    const terminalResult = finishResults.findLast((r) => r.completed) ?? finishResults.at(-1)
 
     const { createdEntries, updatedEntries, deletedEntries, merges } = ledger.result()
 
@@ -329,7 +330,7 @@ export class LoreManagementService extends BaseAIService {
       merged: merges.length,
       duplicateGroups: duplicateGroups.length,
       duplicatesLeftOpen: openDuplicateGroups().length,
-      finishRefusals: finishResults.length - (terminalResult ? 1 : 0),
+      finishRefusals: finishResults.filter((r) => !r.completed).length,
     })
 
     return {

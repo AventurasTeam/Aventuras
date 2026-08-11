@@ -207,24 +207,35 @@ export function buildChapterSummariesBlock(
     block += '\n'
   }
 
-  if (timelineFillResult && timelineFillResult.responses.length > 0) {
-    block += '## Relevant Story Data\n'
-    block +=
-      'The following information was retrieved from past chapters and is relevant to the current scene:\n\n'
-
-    for (const response of timelineFillResult.responses) {
-      const chapterLabel =
-        response.chapterNumbers.length === 1
-          ? `Chapter ${response.chapterNumbers[0]}`
-          : `Chapters ${response.chapterNumbers.join(', ')}`
-
-      block += `**${chapterLabel}**\n`
-      block += `Q: ${response.query}\n`
-      block += `A: ${response.answer}\n\n`
-    }
-  }
+  block += buildTimelineFillBlock(timelineFillResult)
 
   block += '</story_history>'
+  return block
+}
+
+/**
+ * The Q&A half of the chapter block: what memory retrieval found for this scene.
+ *
+ * Shared with the Active Context panel, which shows the same text as the injected memory.
+ */
+export function buildTimelineFillBlock(timelineFillResult?: TimelineFillResult | null): string {
+  if (!timelineFillResult || timelineFillResult.responses.length === 0) return ''
+
+  let block = '## Relevant Story Data\n'
+  block +=
+    'The following information was retrieved from past chapters and is relevant to the current scene:\n\n'
+
+  for (const response of timelineFillResult.responses) {
+    const chapterLabel =
+      response.chapterNumbers.length === 1
+        ? `Chapter ${response.chapterNumbers[0]}`
+        : `Chapters ${response.chapterNumbers.join(', ')}`
+
+    block += `**${chapterLabel}**\n`
+    block += `Q: ${response.query}\n`
+    block += `A: ${response.answer}\n\n`
+  }
+
   return block
 }
 

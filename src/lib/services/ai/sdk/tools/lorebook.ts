@@ -747,6 +747,8 @@ function createStoryTools(context: StoryToolContext) {
           finishRejections++
           return {
             completed: false,
+            // Kept: a refusal on the last step still ends the run, and this is its summary.
+            summary: args.summary,
             remainingDuplicates: remaining,
             message:
               'Not finished yet. These possible duplicates have not been dealt with. For each one: merge_entries if they are the same subject, keep_separate if they are not. Then call finish_lore_management again.',

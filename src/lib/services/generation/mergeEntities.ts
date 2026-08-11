@@ -137,10 +137,7 @@ function unionField(key: string, label: string, sources: Source[]): MergeField {
 function objectUnionField(key: string, label: string, sources: Source[]): MergeField {
   const merged = Object.assign(
     {},
-    ...sources
-      .map((s) => (s.value as Record<string, unknown> | undefined) ?? {})
-      .reverse()
-      .filter(Boolean),
+    ...sources.map((s) => (s.value as Record<string, unknown> | undefined) ?? {}).reverse(),
   ) as Record<string, unknown>
   const filled = Object.entries(merged).filter(([, v]) => !isEmpty(v))
   return {

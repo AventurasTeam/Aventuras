@@ -3662,12 +3662,6 @@ class DatabaseService {
   // ===== Kept-Separate Operations =====
 
   /**
-   * Pairs the user has declared to be different subjects, as `pair_key` strings.
-   *
-   * See `services/duplicates` for the key's shape and why it is a name pair rather than
-   * a pair of ids.
-   */
-  /**
    * The main branch as `kept_separate` stores it.
    *
    * `branch_id` is part of the primary key and SQLite does not enforce a key over NULL, so
@@ -3677,6 +3671,12 @@ class DatabaseService {
     return branchId ?? ''
   }
 
+  /**
+   * Pairs the user has declared to be different subjects, as `pool:pair_key` strings.
+   *
+   * See `services/duplicates` for the key's shape and why it is a name pair rather than
+   * a pair of ids.
+   */
   async getKeptSeparate(storyId: string, branchId: string | null): Promise<Set<string>> {
     const db = await this.getDb()
     const rows = await db.select<{ pool: string; pair_key: string }[]>(

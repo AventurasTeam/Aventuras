@@ -3313,7 +3313,8 @@ class StoryStore {
   }
 
   // Create a manual chapter at a specific entry index
-  async createManualChapter(endEntryIndex: number): Promise<void> {
+  /** @returns whether a chapter was actually written; false is a refusal, not a failure. */
+  async createManualChapter(endEntryIndex: number): Promise<boolean> {
     if (!this.currentStory) throw new Error('No story loaded')
 
     // The button is disabled while a turn's background tasks run, but that is the visible
@@ -3322,13 +3323,13 @@ class StoryStore {
     // chapters covering the same entries.
     if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
       log('Background chapter work in flight, refusing manual chapter creation')
-      // Said out loud rather than returned: the caller closes the modal either way, so a
+      // Said out loud as well as returned: the caller closes the modal either way, so a
       // silent refusal looks exactly like a chapter that was created.
       ui.showToast(
         'A chapter is already being written for this turn. Try again once it is done.',
         'warning',
       )
-      return
+      return false
     }
 
     // Find the start index (after the last chapter or beginning)
@@ -3341,6 +3342,7 @@ class StoryStore {
 
     const chapter = await this.buildAndSaveChapter(startIndex, endEntryIndex)
     log('Manual chapter created:', chapter.number, chapter.title)
+    return true
   }
 
   /**
@@ -3411,7 +3413,10 @@ class StoryStore {
           onClassificationProgress: (current, total) => {
             this.chapterizationClassificationProgress = { current, total }
           },
-          loreCallbacks: buildLoreManagementCallbacks(),
+          loreCallbacks: buildLoreManagementCallbacks({
+            storyId: this.currentStory.id,
+            branchId: this.currentStory.currentBranchId,
+          }),
           loreUICallbacks: buildLoreManagementUICallbacks({
             onStatus: (status) => {
               this.chapterizationStatus = status

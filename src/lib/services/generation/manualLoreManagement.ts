@@ -71,7 +71,10 @@ async function startManualLoreManagement(): Promise<LoreSessionResult | null> {
       tense: story.tense,
       tokenThreshold: story.memoryConfig.tokenThreshold,
     },
-    buildLoreManagementCallbacks(),
+    buildLoreManagementCallbacks({
+      storyId: currentStory.id,
+      branchId: currentStory.currentBranchId,
+    }),
     buildLoreManagementUICallbacks(),
   )
 }

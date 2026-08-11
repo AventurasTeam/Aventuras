@@ -2,6 +2,8 @@
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
   import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
+  import { buildTimelineFillBlock } from '$lib/services/ai/generation'
+  import { joinPromptBlocks } from '$lib/utils/promptBlocks'
   import { countTokens } from '$lib/services/tokenizer'
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -301,6 +303,7 @@
     styleReviewSource: string,
   ): BackgroundTaskInput {
     const storyId = story.currentStory?.id ?? ''
+    const branchId = story.currentStory?.currentBranchId ?? null
     const mode = story.currentStory?.mode ?? 'adventure'
 
     return {
@@ -337,14 +340,11 @@
         tense: story.tense,
       },
       // A thunk: read when the session starts, after the classifier and the chapter check
-      // have run. See BackgroundTaskInput.loreSession.
-      // `storyId` included, rather than the turn's own: the read happens seconds later, the
-      // user can have switched story, and the callbacks write to whatever `currentStory` is
-      // by then. A snapshot naming one story and carrying another's entries is the only
-      // combination that lands lore in the wrong place.
+      // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
+      // callbacks below, so a story switch refuses the session instead of misdirecting it.
       loreSession: () => ({
-        storyId: story.currentStory?.id ?? storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        storyId,
+        currentBranchId: branchId,
         lorebookEntries: story.lorebookEntries,
         chapters: story.currentBranchChapters,
         recentEntries: story.getUnchapterizedEntries(),
@@ -353,7 +353,7 @@
         tense: story.tense,
         tokenThreshold: story.memoryConfig.tokenThreshold,
       }),
-      loreCallbacks: buildLoreManagementCallbacks(),
+      loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
       loreUICallbacks: buildLoreManagementUICallbacks(),
     }
   }
@@ -613,6 +613,11 @@
           ui.setLastLorebookRetrieval(
             retrievalResult?.lorebookRetrievalResult ?? null,
             retrievalResult?.worldStateRetrievalResult ?? null,
+            // Whichever memory mode ran: agentic fills `chapterContext`, static the Q&A.
+            joinPromptBlocks(
+              retrievalResult?.chapterContext ?? null,
+              buildTimelineFillBlock(retrievalResult?.timelineFillResult),
+            ) || null,
           )
           // Kept for the narration entry below: the in-memory copy dies with the session.
           generationMeta.retrievalSnapshot =

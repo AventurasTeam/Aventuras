@@ -21,47 +21,75 @@ import type {
   LoreManagementUICallbacks,
 } from './LoreManagementCoordinator'
 
-export function buildLoreManagementCallbacks(): LoreManagementCallbacks {
+/**
+ * The story branch a session was started for.
+ *
+ * The callbacks write through the `story` store, which always means the story open *now*,
+ * while a session outlives the turn that started it.
+ */
+export interface LoreCallbackScope {
+  storyId: string
+  branchId: string | null
+}
+
+/**
+ * Refuse a write meant for a branch that is no longer open.
+ *
+ * A throw, not a skip: the coordinator reports the session failed and it stops here, rather
+ * than reporting a tidy-up that wrote nothing.
+ */
+function assertScope(scope: LoreCallbackScope, action: string): void {
+  const current = story.currentStory
+  if (current?.id === scope.storyId && current.currentBranchId === scope.branchId) return
+  throw new Error(
+    `Lore management: refusing to ${action}. The session was started for story ${scope.storyId}` +
+      ` (branch ${scope.branchId ?? 'main'}), which is no longer the open one.`,
+  )
+}
+
+export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreManagementCallbacks {
   return {
     // `addLorebookEntry` assigns its own id, storyId and timestamps over whatever is
     // passed, so handing it the entry whole is both shorter and safer than listing the
     // fields to keep — a field added to `Entry` is carried without touching this.
     onCreateEntry: async (entry) => {
+      assertScope(scope, `create "${entry.name}"`)
       await story.addLorebookEntry(entry)
     },
-    onUpdateEntry: story.updateLorebookEntry.bind(story),
-    onDeleteEntry: story.deleteLorebookEntry.bind(story),
-    onMergeEntries: async (entryIds, mergedEntry) => {
-      await story.deleteLorebookEntries(entryIds)
-      await story.addLorebookEntry(mergedEntry)
+    onUpdateEntry: async (id, updates) => {
+      assertScope(scope, `update entry ${id}`)
+      await story.updateLorebookEntry(id, updates)
     },
-    // The user's dismissals and the agent's are the same decision, so they share a table:
-    // without this the agent re-argues every group the user closed by hand, and its own
-    // `keep_separate` would last only until the session ended.
+    onDeleteEntry: async (id) => {
+      assertScope(scope, `delete entry ${id}`)
+      await story.deleteLorebookEntry(id)
+    },
+    // Survivor first: deleting first loses every source if the insert then fails.
+    onMergeEntries: async (entryIds, mergedEntry) => {
+      assertScope(scope, `merge into "${mergedEntry.name}"`)
+      await story.addLorebookEntry(mergedEntry)
+      await story.deleteLorebookEntries(entryIds)
+    },
+    // The user's dismissals and the agent's are the same decision, so they share a table.
+    // Addressed by scope directly: no store involved, so there is nothing to be stale.
     getKeptSeparate: async () => {
-      const current = story.currentStory
-      if (!current) return new Set<string>()
-      const all = await database.getKeptSeparate(current.id, current.currentBranchId)
+      const all = await database.getKeptSeparate(scope.storyId, scope.branchId)
       return scopeToPool(all, 'lorebook')
     },
     onKeepSeparate: async (names) => {
-      const current = story.currentStory
-      if (!current) return
-      await database.addKeptSeparate(
-        current.id,
-        current.currentBranchId,
-        'lorebook',
-        pairKeys(names),
-      )
+      await database.addKeptSeparate(scope.storyId, scope.branchId, 'lorebook', pairKeys(names))
     },
-    onQueryChapter: async (chapterNumber, question) =>
-      aiService.answerChapterQuestion(
+    // Guarded too: a chapter number resolves against whichever story's chapters are loaded.
+    onQueryChapter: async (chapterNumber, question) => {
+      assertScope(scope, `read chapter ${chapterNumber}`)
+      return aiService.answerChapterQuestion(
         chapterNumber,
         question,
         story.currentBranchChapters,
         story.getChapterEntries.bind(story),
         story.chapterReadBudget,
-      ),
+      )
+    },
   }
 }
 

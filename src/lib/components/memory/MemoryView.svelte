@@ -26,11 +26,11 @@
   async function handleCreateManualChapter(endEntryIndex: number) {
     ui.setMemoryLoading(true)
     try {
-      await story.createManualChapter(endEntryIndex)
+      const created = await story.createManualChapter(endEntryIndex)
       ui.closeManualChapterModal()
 
-      // Trigger lore management after successful chapter creation
-      void runManualLoreManagement()
+      // A refused creation leaves nothing new to read: the pass would be a wasted call.
+      if (created) void runManualLoreManagement()
     } finally {
       ui.setMemoryLoading(false)
     }

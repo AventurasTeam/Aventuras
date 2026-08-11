@@ -17,8 +17,8 @@
     forgetKeptSeparate,
     APPEND,
     type MergePlan,
+    type ScopedDuplicateGroup,
   } from '$lib/services/generation'
-  import type { EntityDuplicateGroup } from '$lib/services/duplicates'
   import { story } from '$lib/stores/story.svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -40,7 +40,7 @@
 
   let { onClose }: Props = $props()
 
-  let groups = $state<EntityDuplicateGroup[]>([])
+  let groups = $state<ScopedDuplicateGroup[]>([])
   let loading = $state(true)
   let busyKey = $state<string | null>(null)
   /** Which member the user has chosen to keep, per group. Defaults to the first. */
@@ -65,14 +65,14 @@
 
   const failed = (err: unknown) => (error = err instanceof Error ? err.message : String(err))
 
-  const POOL_LABELS: Record<EntityDuplicateGroup['pool'], string> = {
+  const POOL_LABELS: Record<ScopedDuplicateGroup['pool'], string> = {
     character: 'Character',
     location: 'Location',
     item: 'Item',
     lorebook: 'Lorebook',
   }
 
-  const REASON_LABELS: Record<EntityDuplicateGroup['reason'], string> = {
+  const REASON_LABELS: Record<ScopedDuplicateGroup['reason'], string> = {
     'same-name': 'identical names',
     'shared-alias': 'shared name or alias',
     contained: 'one name contains the other',
@@ -95,7 +95,7 @@
   }
 
   /** What the user sees under a name, so two rows can actually be told apart. */
-  function detail(group: EntityDuplicateGroup, id: string): string {
+  function detail(group: ScopedDuplicateGroup, id: string): string {
     if (group.pool === 'character') {
       const c = story.characters.find((x) => x.id === id)
       if (!c) return ''
@@ -119,9 +119,22 @@
     conflict: 'they disagree',
   }
 
-  function openPreview(group: EntityDuplicateGroup) {
+  /** A field no row filled in is `only` in the plan, which would read as a dropped value. */
+  function originLabel(field: MergePlan['fields'][number]): string {
+    if (field.origin !== 'union' && field.candidates.length === 0) return 'neither has one'
+    return ORIGIN_LABELS[field.origin]
+  }
+
+  function openPreview(group: ScopedDuplicateGroup) {
     plan = buildMergePlan(group, primaryByGroup[group.key])
     previewKey = plan ? group.key : null
+    // No plan: the rows are gone or the story moved under the window.
+    if (!plan) {
+      // Set after the refresh, which clears the error line, and only if it has nothing worse.
+      void refresh().then(() => {
+        error ??= 'Those records are no longer there. The list has been rebuilt.'
+      })
+    }
   }
 
   function closePreview() {
@@ -129,7 +142,7 @@
     plan = null
   }
 
-  async function confirmMerge(group: EntityDuplicateGroup) {
+  async function confirmMerge(group: ScopedDuplicateGroup) {
     if (!plan) return
     busyKey = group.key
     error = null
@@ -144,7 +157,7 @@
     }
   }
 
-  async function onKeepSeparate(group: EntityDuplicateGroup) {
+  async function onKeepSeparate(group: ScopedDuplicateGroup) {
     busyKey = group.key
     error = null
     try {
@@ -227,7 +240,7 @@
                     </Badge>
                   {:else}
                     <span class="text-muted-foreground text-[11px]">
-                      {ORIGIN_LABELS[field.origin]}
+                      {originLabel(field)}
                     </span>
                   {/if}
                 </div>

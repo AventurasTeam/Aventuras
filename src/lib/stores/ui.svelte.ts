@@ -222,6 +222,12 @@ class UIStore {
   // Lorebook debug state
   lastLorebookRetrieval = $state<EntryRetrievalResult | null>(null)
   lastWorldStateRetrieval = $state<WorldStateInjectionResult | null>(null)
+  /**
+   * The memory block as the narrator got it: the agentic synthesis, or static mode's Q&A.
+   *
+   * The rendered text rather than either mode's result shape. Cleared with the other two.
+   */
+  lastMemoryRetrieval = $state<string | null>(null)
   lorebookDebugOpen = $state(false)
 
   // Lorebook manager state
@@ -1089,11 +1095,12 @@ class UIStore {
     // absent-blob case used to clear, so a malformed or unparseable blob returned false with the
     // previous entry's choices still on screen, where they read as belonging to this entry.
     // Callers judge by the return value alone, so the two must not disagree.
+    // The persisted copy goes with the in-memory one, or the next load restores it.
     const clearForMode = () => {
       if (storyMode === 'adventure') {
-        this.actionChoices = []
+        this.clearActionChoices(storyId)
       } else {
-        this.suggestions = []
+        this.clearSuggestions(storyId)
       }
     }
 
@@ -1341,9 +1348,11 @@ class UIStore {
   setLastLorebookRetrieval(
     result: EntryRetrievalResult | null,
     worldState: WorldStateInjectionResult | null = null,
+    memory: string | null = null,
   ) {
     this.lastLorebookRetrieval = result
     this.lastWorldStateRetrieval = worldState
+    this.lastMemoryRetrieval = memory
   }
 
   openLorebookDebug() {
