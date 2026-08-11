@@ -309,14 +309,31 @@ export const Loading: Story = {
   ),
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    const guidance = await screen.findByRole('textbox', { name: 'Optional guidance' })
+    await userEvent.type(guidance, 'a tense heist')
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(await screen.findByText('Generating with gpt-4o-mini…')).toBeInTheDocument()
     expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeInTheDocument()
 
+    // Loading keeps the guidance form rather than swapping the body for a
+    // spinner: the sheet holds one detent across both states, so replacing the
+    // content would leave it half empty. The field stays readable, disabled.
+    const duringLoad = screen.getByRole('textbox', { name: 'Optional guidance' })
+    expect(duringLoad).toHaveValue('a tense heist')
+    // `editable={false}` reaches the DOM as readOnly, not disabled — RN-Web has
+    // no disabled concept for TextInput, and Input's own isDisabled only drives
+    // the dimming classes.
+    expect(duringLoad).toHaveAttribute('readonly')
+    // Generate is gone, so the only way forward is Cancel — no double-submit.
+    expect(screen.queryByRole('button', { name: 'Generate' })).not.toBeInTheDocument()
+
     // Cancel aborts the in-flight call and returns to guidance rather than
     // closing outright — the user can tweak guidance and retry.
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(await screen.findByText('Optional guidance')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Generate' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Optional guidance' })).not.toHaveAttribute(
+      'readonly',
+    )
   },
 }
 

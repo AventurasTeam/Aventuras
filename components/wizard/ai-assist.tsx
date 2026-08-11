@@ -485,6 +485,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         )
 
       case 'guidance':
+      // Loading keeps the guidance form rather than replacing it. Swapping to a
+      // spinner alone left the sheet holding half the content at the same
+      // detent, which reads as a broken surface rather than a working one — and
+      // the guidance stays legible while the call it started runs.
+      case 'loading':
         return (
           <View className="gap-3">
             <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
@@ -498,34 +503,31 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 placeholder={guidancePlaceholder}
                 maxLength={GUIDANCE_MAX_LENGTH}
                 aria-label={t('wizard:aiAssist.guidance.label')}
+                editable={assist.kind === 'guidance'}
               />
             </View>
-            <View className="flex-row justify-end gap-2">
-              <Button variant="ghost" onPress={closeOverlay}>
-                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
-              </Button>
-              <Button onPress={handleGenerate}>
-                <Text>{t('wizard:aiAssist.actions.generate')}</Text>
-              </Button>
-            </View>
-          </View>
-        )
-
-      case 'loading':
-        return (
-          <View className="gap-3">
-            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
-            <View className="flex-row items-center gap-2">
-              <Spinner size="sm" />
-              <Text size="sm" variant="muted">
-                {t('wizard:aiAssist.loading', { model: assist.modelId })}
-              </Text>
-            </View>
-            <View className="flex-row justify-end">
-              <Button variant="ghost" onPress={handleCancelLoading}>
-                <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
-              </Button>
-            </View>
+            {assist.kind === 'loading' ? (
+              <View className="flex-row items-center justify-between gap-2">
+                <View className="flex-row items-center gap-2">
+                  <Spinner size="sm" />
+                  <Text size="sm" variant="muted">
+                    {t('wizard:aiAssist.loading', { model: assist.modelId })}
+                  </Text>
+                </View>
+                <Button variant="ghost" onPress={handleCancelLoading}>
+                  <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+                </Button>
+              </View>
+            ) : (
+              <View className="flex-row justify-end gap-2">
+                <Button variant="ghost" onPress={closeOverlay}>
+                  <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+                </Button>
+                <Button onPress={handleGenerate}>
+                  <Text>{t('wizard:aiAssist.actions.generate')}</Text>
+                </Button>
+              </View>
+            )}
           </View>
         )
 
