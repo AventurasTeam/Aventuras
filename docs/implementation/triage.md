@@ -1191,3 +1191,33 @@ on hover`; the shipped rows render label and tagline only, so the
   `assist-list-logic.ts` breaks the folder's `<component>-logic.ts`
   pairing convention since it belongs to `ai-assist.tsx`. Surfaced
   by the Slice 3.6a whole-slice review.
+- **Emoji stand in for icons across the app; sweep and replace.**
+  User-facing chrome carries literal emoji and glyphs where the
+  design system has an icon primitive — `✨` prefixes every AI-assist
+  heading and several trigger labels, `⭐ Set as lead` and the
+  `▼ More options` / `▼ Visual` disclosures are specced as glyphs in
+  `wizard.md`, and arrows like `→` are baked into locale strings
+  (`common:calendarPicker.manageInVault`, and entries across
+  `settings`, `embedder`, `landing`, `reader`). Emoji render
+  inconsistently across platforms and font stacks, cannot be themed
+  or sized with the rest of the chrome, and land inside translatable
+  strings where they are not translatable content. Sweep `components/`,
+  `app/`, and `locales/` together: replace with `Icon`/`IconAction`
+  where the glyph is decoration or an affordance, keep it only where
+  it is genuinely textual. Canon in `wizard.md` specifies some of
+  these as glyphs, so amending the doc is part of the work rather
+  than a follow-on. Raised 2026-08-11.
+- **A generation sheet is easy to dismiss and takes unsaved output
+  with it.** Every overlay dismiss path — tap-outside, swipe-down,
+  Escape, hardware back — routes through `resetOnClose`, which aborts
+  the in-flight request and clears `assist` and `listItems`
+  unconditionally. That is correct for an untouched overlay and
+  destructive once a result exists: a generated preview, or an
+  accumulated multi-page list with rows already checked, is gone with
+  no undo and no way back but regenerating. The exposure grows with
+  the sheet, since swipe-down is both the cheapest gesture and the
+  easiest to trigger accidentally. Decide the shape: confirm before
+  discarding a dirty overlay, keep results across a dismiss and
+  restore them on reopen, or block the swipe once a result has
+  landed. Applies to `AiAssist` first but the same reset pattern will
+  reach 3.6b's cast suggestions. Raised 2026-08-11.
