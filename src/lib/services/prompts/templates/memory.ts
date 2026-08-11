@@ -5,11 +5,7 @@ const chapterAnalysisPromptTemplate: PromptTemplate = {
   name: 'Chapter Analysis',
   category: 'service',
   description: 'Identifies the best endpoint for chapter summarization',
-  content: `# Role
-You are Auto Summarize Endpoint Selector. Your task is to identify the single best chapter endpoint in the provided message range.
-
-## Task
-Select the message ID that represents the longest self-contained narrative arc within the given range. The endpoint should be at a natural narrative beat: resolution, decision, scene change, or clear transition.
+  content: `Select the message ID that ends the longest self-contained narrative arc in the provided range. The endpoint should fall on a natural beat: a resolution, a decision, a scene change, or a clear transition.
 
 ## Rules
 - Select exactly ONE endpoint
@@ -31,27 +27,21 @@ const chapterSummarizationPromptTemplate: PromptTemplate = {
   name: 'Chapter Summarization',
   category: 'service',
   description: 'Creates summaries of story chapters for the memory system',
-  content: `You are a literary analysis expert specializing in narrative structure and scene summarization. Your expertise is in distilling complex narrative elements into concise, query-friendly summaries.
-
-## Task
-Create a 'story map' summary of the provided chapter. This summary will be used as part of a searchable timeline database for quick identification and location of specific scenes.
+  content: `Create a 'story map' summary of the provided chapter. It joins a searchable timeline: what it is read for later is locating a scene and recalling what changed in it, so write it to be found, not to be admired.
 
 ## Length & Detail
 {{ detailInstruction }}
 
 ## What to Include
-For each chapter, create a concise summary that includes ONLY:
-1. The most critical plot developments that drive the story forward
-2. Key character turning points or significant changes in motivation/goals
-3. Major shifts in narrative direction, tone, or setting
-4. Essential conflicts introduced or resolved
-5. Critical character moments and their reactions
+Only what moved the story:
+1. Plot developments that drive it forward
+2. Character turning points, and changes in motivation or goals
+3. Shifts in narrative direction, tone, or setting
+4. Conflicts introduced or resolved
 
 ## What to Exclude
-- Minor details or descriptive passages
-- Dialogue excerpts (unless pivotal)
-- Stylistic or thematic analysis
-- Personal interpretations or opinions`,
+- **Interpretation.** Not what the chapter means, or how it is written — a later reader wants the events back, and a thematic reading cannot be searched.
+- Dialogue quoted at length, unless a line is itself the turning point.`,
   userContent: `{{ previousContext }}Summarize this story chapter and extract metadata.
 
 CHAPTER CONTENT:
@@ -148,14 +138,12 @@ An entry is pulled into the narrator's prompt when its **name**, one of its **al
 
   What does belong: identity, origin, permanent capabilities, allegiances, what they are known for, what they looked like before the story changed them. Not a chapter recap either — the chapter summaries are already in context, and \`Initially hostile, she gradually opened up, and is now...\` is a summary of summaries. No parenthetical glosses \`(like this one)\`, no asides correcting the record. Describe the subject, not its neighbours. When you update, rewrite the sentence that is wrong rather than appending a new one, and keep the whole thing under about 120 words.
 
-Guidelines:
+## Tools
+
 - **The two lists below are complete.** Every chapter is there with its full summary — there is no tool that lists chapters, and there is nothing else to see. Every lorebook entry is there with the index the tools take; \`read_entry\` gives you one entry's full text, and \`list_entries\` is only worth calling *after* you have merged or deleted something, to see the list as it then stands.
 {% if hasChapters %}- Use query_chapter when a summary is not enough, and ask a specific question ("What did [character] reveal?", never "Give me the full content"). Each call reads a whole chapter with a second model, there are a few per session, and asking the same question twice returns the first answer rather than reading again.
 {% else %}- There are no chapters, so query_chapter has nothing to read. Do not spend steps on it.
-{% endif %}- Use exact names from the story text
-- When merging, the combined description must not lose information: read both entries first with \`read_entry\`
-- Focus on facts that would help maintain story consistency
-
+{% endif %}
 When every duplicate group is closed and your changes are made, call finish_lore_management with a summary.`,
   // Stable material first, volatile material last: with prefix KV caching everything up to
   // the first differing token is reused. The chapter summaries change only when a chapter
@@ -172,13 +160,7 @@ When every duplicate group is closed and your changes are made, call finish_lore
 # Possible Duplicates
 Each line is one group. Close every one with \`merge_entries\`, \`keep_separate\`, or \`delete_entry\` where a member is simply erroneous.
 {{ duplicateSummary }}
-{% endif %}{{ recentStorySection }}
-Review the lorebook and the story, in this order:
-1. Close every duplicate group above.
-2. Update entries that story events have outdated.
-3. Create an entry only for something important that does not have one.
-
-Then call finish_lore_management.`,
+{% endif %}{{ recentStorySection }}`,
 }
 
 const interactiveLorebookPromptTemplate: PromptTemplate = {
@@ -204,14 +186,10 @@ The \`show_entity\` tool is always available for opening entities in the editor.
 
 ## Guidelines
 
-- **Ask clarifying questions** when the user's request is ambiguous. Understand what they want before making changes.
-- **Load the right tools** before acting. If you need to work with characters, load the \`characters\` category first. If a task spans multiple areas, load all relevant categories in one call.
-- **Use descriptive, engaging prose** for descriptions. Write content that enhances storytelling.
-- **Consider relationships** between entities. When creating a character, suggest adding related lorebook entries. When building a scenario, consider which characters fit.
-- **Explain your proposals** before creating pending changes. Tell the user what you plan to do and why.
-- **All modifications require approval** — your changes are proposed as pending diffs that the user can approve, reject, or edit before they take effect.
-- **Keep content focused** on what's useful for interactive fiction and story generation.
-- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.`,
+- **Load the right tools** before acting, and load every category a task spans in one call — loading replaces the current set, so a second call to add one drops the first.
+- **All modifications require approval.** Your changes are proposed as pending diffs the user can approve, reject, or edit, so say what you plan to do and why before proposing one.
+- **Ask** when the request is ambiguous, rather than guessing and proposing a diff to be rejected.
+- **Suggest the related entity**, since nothing else will: a new character often wants a matching lorebook entry, or a place in a scenario as an NPC.`,
 }
 
 const agenticRetrievalPromptTemplate: PromptTemplate = {
@@ -242,19 +220,9 @@ So work grep-first:
 1. Start from the chapter list below - it is complete, with every chapter's full summary. There is no tool to list chapters; that list is all of them.
 2. Use those summaries to decide which chapter can answer your question, before spending a query on it. Often the list alone is enough and no query is needed.
 3. Then call query_chapter with a targeted question, never for "full content" or "everything that happened"{% endif %}
-   - Good: "What did the protagonist learn about the artifact?"
-   - Good: "How did the confrontation with the villain end?"
-   - Bad: "Give me the full content of this chapter"
    - Chapter summaries are not repeated in tool results. The chapter list below is the one place they live; read them there.
-4. Focus on gathering context about:
-   - Characters mentioned or involved
-   - Locations being revisited
-   - Plot threads being referenced
-   - Items or information from the past
-   - Relationship history
-5. Be selective - only gather truly relevant information
-6. You can read lorebook entries with search_entries and get_entry to understand names and terms you come across. You do NOT choose which entries reach the narrator - that is handled separately, and the entries listed below are reference material for your own reasoning.{% if worldStateEnabled %} inspect_world_state does the same for live-tracked entities: characters, locations, inventory and active plot threads as they stand right now.{% endif %}
-7. When you have enough context, call finish_retrieval with:
+4. You can read lorebook entries with search_entries and get_entry to understand names and terms you come across. You do NOT choose which entries reach the narrator - that is handled separately, and the entries listed below are reference material for your own reasoning.{% if worldStateEnabled %} inspect_world_state does the same for live-tracked entities: characters, locations, inventory and active plot threads as they stand right now.{% endif %}
+5. When you have enough context, call finish_retrieval with:
    - synthesis: What you looked for and what you found
    - chapterSummary: A summary of key facts learned from your searches and chapter queries (character states, past events, relationships, plot points) that the narrator needs to know
 
