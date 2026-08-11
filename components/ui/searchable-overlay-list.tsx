@@ -76,11 +76,13 @@ type SearchableOverlayListProps<T> = {
   renderFooter?: (close: () => void) => ReactNode
 
   // Marks rows that represent the consumer's committed value. The substrate
-  // paints each with `bg-bg-sunken` (the convention shared with Select
-  // customContent), so consumers don't re-implement the selected-row affordance.
+  // paints each with `bg-tint-press` — a state layer over the overlay surface,
+  // not a surface swap: `bg-bg-sunken` sits below `bg-bg-overlay` on the dark
+  // ramp, so a selected row read as a black band cut out of the list.
   // Distinct from `highlighted` (transient keyboard cursor). When set,
   // `bg-tint-hover` is suppressed on selected rows so the selection signal
-  // isn't muddled by hover. Array semantics let a single logical selection
+  // isn't muddled by hover — which is also what keeps press-weight tint
+  // unambiguous here, since the two can never co-occur on one row. Array semantics let a single logical selection
   // surface in multiple sections — e.g. the picker tints the same model in
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
@@ -337,7 +339,7 @@ function RowListNative<T>({
         className={cn(
           ROW_BASE,
           rowClass,
-          selected && 'bg-bg-sunken',
+          selected && 'bg-tint-press',
           highlighted && !selected && 'bg-tint-hover',
           // Pointer twin of the keyboard-cursor tint; same suppress-on-selected
           // rule so the selection signal isn't muddled.
@@ -632,7 +634,7 @@ function VirtualizedRowList<T>({
                   ROW_BASE,
                   rowClass,
                   !item.isLastInSection && 'border-b border-border',
-                  selected && 'bg-bg-sunken',
+                  selected && 'bg-tint-press',
                   highlighted && !selected && 'bg-tint-hover',
                   !selected && !row.disabled && 'hover:bg-tint-hover',
                   row.disabled && 'opacity-50',
