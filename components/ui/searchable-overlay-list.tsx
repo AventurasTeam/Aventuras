@@ -825,15 +825,18 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     [isControlled, onOpenChange],
   )
 
-  // The two presentations don't hand an open overlay across a tier flip: the
-  // unmounting gorhom sheet plays its full dismiss animation underneath the
-  // popover, and its late onDismiss would close the shared open state anyway.
-  // Close before paint instead; the user reopens in the new presentation.
+  // Tier flips while open are asymmetric. Entering desktop hands the overlay
+  // off — the popover mounts open and the unmounting sheet vanishes instantly
+  // (gorhom's portal-unmount dismissal is patched to zero duration). Entering
+  // phone closes instead: auto-presenting a sheet mid-resize is intrusive.
+  // Closing on the desktop-entering flip isn't reachable anyway —
+  // PopoverControlledBridge's mount effect re-asserts the pre-flip open state
+  // over a same-commit close.
   const prevIsPhoneRef = useRef(isPhone)
   useLayoutEffect(() => {
     if (prevIsPhoneRef.current === isPhone) return
     prevIsPhoneRef.current = isPhone
-    if (open) setOpen(false)
+    if (isPhone && open) setOpen(false)
   }, [isPhone, open, setOpen])
 
   const list = useSearchableList(props)
