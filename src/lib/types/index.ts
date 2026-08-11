@@ -859,10 +859,6 @@ export interface ExperimentalFeatures {
   generationNotifications: boolean
   /** Android: Include preview of generated text in the completion notification */
   notificationPreview: boolean
-  /** Explicitly position the story view after switching branches */
-  branchSwitchLanding: boolean
-  /** Where to land when branchSwitchLanding is on */
-  branchSwitchLandingTarget: 'last-entry' | 'fork-entry'
 }
 
 // ===== World State Delta Tracking (Phase 1) =====

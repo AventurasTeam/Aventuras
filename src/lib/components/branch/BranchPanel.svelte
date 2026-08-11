@@ -11,10 +11,11 @@
     Edit2,
     Check,
     X,
-    Crosshair,
+    LayerArrowUp,
   } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
+  import { supportsHover } from '$lib/utils/platform'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -177,22 +178,37 @@
     return story.currentStory?.currentBranchId === branchId
   }
 
-  // Ids the story view can actually scroll to. `story.entries` is the ACTIVE branch's
-  // view — main + ancestors up to their forks + the branch itself — so a branch outside
-  // the current lineage (a sibling's child, say) has its fork entry nowhere in here.
+  // The action targets the branch being read. A per-branch control would be disabled on
+  // most rows anyway: `story.entries` is the ACTIVE branch's view — main + ancestors up
+  // to their forks + the branch itself — so any branch outside that lineage has its fork
+  // entry nowhere in it. The active branch always has its own, so this is enabled
+  // whenever there is a branching point at all, i.e. everywhere except main.
+  const activeBranch = $derived.by(() => {
+    const branchId = story.currentStory?.currentBranchId ?? null
+    if (!branchId) return null
+    return story.branches.find((b) => b.id === branchId) ?? null
+  })
+
   const visibleEntryIds = $derived(new Set(story.entries.map((e) => e.id)))
+  const canGoToForkPoint = $derived(
+    !!activeBranch?.forkEntryId && visibleEntryIds.has(activeBranch.forkEntryId),
+  )
 
-  function canGoToForkPoint(branch: Branch): boolean {
-    return visibleEntryIds.has(branch.forkEntryId)
-  }
+  function goToForkPoint() {
+    if (!canGoToForkPoint || !activeBranch) return
 
-  function goToForkPoint(branch: Branch) {
     // Fork points live in the story, which may not be the panel that's up — and while
     // it isn't, StoryView is destroyed rather than hidden (see AppShell). So the request
     // is left on the ui store for it to pick up on mount, not emitted at it.
-    ui.requestEntryScroll(branch.forkEntryId)
+    ui.requestEntryScroll(activeBranch.forkEntryId)
     ui.setActivePanel('story')
     ui.closeSidebarOnMobile()
+
+    // Where the platform can't hover, the button's tooltip can never explain itself and
+    // the panel may have just closed — so confirm the jump the way copying an entry does.
+    if (!supportsHover()) {
+      ui.showToast('Jumped to where this branch began', 'info', 2000)
+    }
   }
 </script>
 
@@ -200,18 +216,32 @@
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h3 class="text-surface-200 font-medium">Branches</h3>
-    <button
-      class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
-        ? 'text-surface-400 hover:text-surface-200'
-        : 'text-surface-600 cursor-not-allowed'}"
-      onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
-      disabled={!canCreateBranch}
-      title={canCreateBranch
-        ? 'Create new branch from latest checkpoint'
-        : 'No checkpoints available - checkpoints are created at chapter boundaries'}
-    >
-      <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
-    </button>
+    <div class="flex items-center">
+      <button
+        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canGoToForkPoint
+          ? 'text-surface-400 hover:text-surface-200'
+          : 'text-surface-600 cursor-not-allowed'}"
+        onclick={goToForkPoint}
+        disabled={!canGoToForkPoint}
+        title={canGoToForkPoint
+          ? 'Jump to where this branch began'
+          : 'The main branch has no branching point'}
+      >
+        <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
+      </button>
+      <button
+        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
+          ? 'text-surface-400 hover:text-surface-200'
+          : 'text-surface-600 cursor-not-allowed'}"
+        onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
+        disabled={!canCreateBranch}
+        title={canCreateBranch
+          ? 'Create new branch from latest checkpoint'
+          : 'No checkpoints available - checkpoints are created at chapter boundaries'}
+      >
+        <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
+      </button>
+    </div>
   </div>
 
   <!-- Create Branch Form -->
@@ -318,23 +348,6 @@
           {#if isCurrent(branch.id)}
             <span class="bg-accent-500 h-2 w-2 rounded-full" title="Current branch"></span>
           {/if}
-          {@const forkReachable = canGoToForkPoint(branch)}
-          <button
-            class="text-surface-500 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 {forkReachable
-              ? 'hover:text-surface-200 sm:opacity-0 sm:group-hover:opacity-100'
-              : 'cursor-not-allowed opacity-30 sm:opacity-0 sm:group-hover:opacity-30'}"
-            onclick={(e) => {
-              e.stopPropagation()
-              goToForkPoint(branch)
-            }}
-            onkeydown={(e) => e.stopPropagation()}
-            disabled={!forkReachable}
-            title={forkReachable
-              ? 'Go to fork point'
-              : "Fork point is not in the current branch's timeline — switch to this branch or its parent first"}
-          >
-            <Crosshair class="h-4 w-4 sm:h-3 sm:w-3" />
-          </button>
           <button
             class="text-surface-500 hover:text-surface-200 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
             onclick={(e) => {
