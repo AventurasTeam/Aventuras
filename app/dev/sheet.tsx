@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { ScrollView, TextInput, View } from 'react-native'
 
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Text } from '@/components/ui/text'
 
 function KeyboardOrderingProbe() {
   const [note, setNote] = useState('')
+  const [rawNote, setRawNote] = useState('')
   // Controlled deliberately. Sheet swaps Input's TextInput for gorhom's
   // BottomSheetTextInput, which renders gesture-handler's wrapped TextInput
   // rather than RN's — so a value round-trip inside a sheet takes a different
@@ -43,8 +44,20 @@ function KeyboardOrderingProbe() {
               />
               <Text variant="muted" size="xs">
                 Cursor probe: type `Buh`, put the caret between `u` and `h`, press backspace. Expect
-                `Bh` with the caret still between `B` and `h` — not jumped to the start.
+                `Bh` with the caret still between `B` and `h` — not jumped to the start. Inserting
+                mid-string is the same test: the caret must land after the typed character.
               </Text>
+              {/* Bisect partner for the field above: a bare RN TextInput,
+                  controlled the same way, skipping Input entirely. Both wrong
+                  means the sheet environment; only the one above means Input's
+                  own wrapper. Android-only symptom — desktop is unaffected. */}
+              <TextInput
+                value={rawNote}
+                onChangeText={setRawNote}
+                placeholder="Bare TextInput, same test"
+                aria-label="Raw sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
             </View>
           </SheetContent>
         </Sheet>
