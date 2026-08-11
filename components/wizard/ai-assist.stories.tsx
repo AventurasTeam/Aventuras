@@ -324,6 +324,8 @@ export const Loading: Story = {
     // no disabled concept for TextInput, and Input's own isDisabled only drives
     // the dimming classes.
     expect(duringLoad).toHaveAttribute('readonly')
+    await userEvent.click(duringLoad)
+    expect(duringLoad).toHaveAttribute('virtualkeyboardpolicy', 'manual')
     // Generate is gone, so the only way forward is Cancel — no double-submit.
     expect(screen.queryByRole('button', { name: 'Generate' })).not.toBeInTheDocument()
 

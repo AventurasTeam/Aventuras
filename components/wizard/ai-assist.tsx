@@ -569,6 +569,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 maxLength={GUIDANCE_MAX_LENGTH}
                 aria-label={t('wizard:aiAssist.guidance.label')}
                 editable={assist.kind === 'guidance'}
+                showSoftInputOnFocus={assist.kind === 'guidance'}
                 // Guarded: while loading the input is read-only but may still
                 // hold focus, and Enter would abort-and-restart the run.
                 onSubmitEditing={assist.kind === 'guidance' ? handleGenerate : undefined}
