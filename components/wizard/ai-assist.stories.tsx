@@ -739,6 +739,7 @@ export const ListResult_FirstPage: Story = {
     expect(await screen.findByText('Sunken Archive')).toBeInTheDocument()
     expect(screen.getByText('A flooded library beneath the old temple.')).toBeInTheDocument()
     expect(screen.getByText('Ashfall Cartel')).toBeInTheDocument()
+    expect(screen.getAllByRole('checkbox')).toHaveLength(2)
     expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Ashfall Cartel' })).not.toBeChecked()
   },

@@ -190,6 +190,10 @@ export function CalendarPicker({
           aria-haspopup="dialog"
           aria-expanded={p['aria-expanded']}
           aria-controls={p['aria-controls']}
+          // rn-primitives merges a web click past Pressable.disabled.
+          style={
+            Platform.OS === 'web' && disabled ? ({ pointerEvents: 'none' } as never) : undefined
+          }
           className={cn(
             'h-control-md w-full flex-row items-center rounded-md border border-border bg-bg-base px-3',
             disabled && 'opacity-50',

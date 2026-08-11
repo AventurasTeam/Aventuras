@@ -349,7 +349,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                     <Pressable
                       key={row.name}
                       accessibilityRole="checkbox"
+                      accessibilityLabel={row.name}
                       accessibilityState={{ checked: selected.has(row.name), disabled: row.exists }}
+                      aria-checked={selected.has(row.name)}
                       disabled={row.exists}
                       onPress={() => toggleRow(row.name)}
                       className={cn(
@@ -371,6 +373,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                           toggles cancel out. */}
                       <View
                         pointerEvents="none"
+                        aria-hidden={Platform.OS === 'web' ? true : undefined}
                         accessibilityElementsHidden
                         importantForAccessibility="no-hide-descendants"
                       >

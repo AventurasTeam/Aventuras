@@ -218,6 +218,17 @@ export const DisabledByGeneration: Story = {
   render: () => (
     <CalendarPickerHarness disabled disabledReason="Generation is in flight. Cancel to edit." />
   ),
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: /Earth/ })
+    const triggerContent = trigger.firstElementChild
+    if (triggerContent == null) throw new Error('expected calendar trigger content')
+
+    expect(triggerContent).toHaveStyle({ pointerEvents: 'none' })
+    await expect(userEvent.click(triggerContent)).rejects.toThrow(/pointer-events/)
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  },
 }
 
 /**
