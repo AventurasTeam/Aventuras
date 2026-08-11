@@ -105,6 +105,17 @@ export interface LoreSessionResult {
  */
 const runningBranches = new Set<string>()
 
+/**
+ * The pending `onComplete`, so a finished session cannot clear a running one's UI.
+ *
+ * The lock is released before the linger elapses, deliberately — the next run must not
+ * wait on a message. So a session starting inside those two seconds inherits the previous
+ * one's timer, which then fires and reports the lorebook idle while it is being written.
+ * Module scope like the lock, and for the same reason: the callers each build their own
+ * coordinator and cannot see each other's.
+ */
+let completionTimer: ReturnType<typeof setTimeout> | null = null
+
 function branchKey(storyId: string, branchId: string | null): string {
   return `${storyId}:${branchId ?? 'main'}`
 }
@@ -135,6 +146,12 @@ export class LoreManagementCoordinator {
 
     log('Starting lore management session', { key })
 
+    // The previous run's linger, if it is still counting down. Firing it now would report
+    // the lorebook idle while this session is writing to it.
+    if (completionTimer) {
+      clearTimeout(completionTimer)
+      completionTimer = null
+    }
     uiCallbacks?.onStart()
 
     let changeCount = 0
@@ -146,7 +163,12 @@ export class LoreManagementCoordinator {
     // The completion message is left up for a moment, but the lock is not: it is released
     // as soon as the writes are done, so the next run is not blocked by a UI delay.
     const finishUI = () => {
-      if (uiCallbacks) setTimeout(() => uiCallbacks.onComplete(), COMPLETION_LINGER_MS)
+      if (!uiCallbacks) return
+      if (completionTimer) clearTimeout(completionTimer)
+      completionTimer = setTimeout(() => {
+        completionTimer = null
+        uiCallbacks.onComplete()
+      }, COMPLETION_LINGER_MS)
     }
 
     try {

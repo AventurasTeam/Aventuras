@@ -153,11 +153,15 @@ export class LoreSessionLedger {
     }
     if (slot.kind === 'existing') slot.dirty = true
 
+    // The tool-visible entry mirrors the slot's, `injectionMode` included: it is what
+    // `list_entries` and `get_entry` hand back, so leaving it behind shows the agent the
+    // mode it just changed away from and invites it to change it again.
     Object.assign(current, {
       name: slot.entry.name,
       type: slot.entry.type,
       description: slot.entry.description,
       aliases: slot.entry.aliases,
+      injectionMode: slot.entry.injection.mode,
       keywords: slot.entry.injection.keywords,
       priority: slot.entry.injection.priority,
     })

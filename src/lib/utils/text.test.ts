@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { entityNameMatches, findTextMatches, paragraphMatches, truncateAroundMatch } from './text'
+import {
+  entityNameMatches,
+  foldName,
+  findTextMatches,
+  paragraphMatches,
+  sameEntityName,
+  truncateAroundMatch,
+} from './text'
 
 describe('entityNameMatches — word boundaries', () => {
   it('matches a name that appears as a standalone word', () => {
@@ -378,5 +385,43 @@ describe('paragraphMatches', () => {
 
   it('is false for an empty query', () => {
     expect(paragraphMatches('anything', '   ')).toBe(false)
+  })
+})
+
+describe('sameEntityName', () => {
+  it('folds away case, accents and punctuation', () => {
+    expect(sameEntityName('Elénore', 'elenore')).toBe(true)
+    expect(sameEntityName("Kaelen's Rest", 'Kaelens Rest')).toBe(true)
+  })
+
+  it('keeps articles apart, which is what separates it from normalizeName', () => {
+    expect(sameEntityName('The Citadel', 'Citadel')).toBe(false)
+  })
+
+  it('does not collapse non-Latin names, which the ASCII fold did', () => {
+    // `[^a-z0-9]` folded every one of these to the empty string, and empty compared equal
+    // to every other empty — so any two Cyrillic names were "the same entity".
+    expect(sameEntityName('Кайлен', 'Мара')).toBe(false)
+    expect(sameEntityName('Кайлен', 'кайлен')).toBe(true)
+  })
+
+  it('refuses to read two names it cannot fold as one entity', () => {
+    // Nothing but punctuation or symbols is a name this function cannot judge, not a name
+    // equal to every other unjudgeable one.
+    expect(sameEntityName('???', '!!!')).toBe(false)
+    expect(sameEntityName('', '')).toBe(false)
+  })
+})
+
+describe('foldName — the apostrophe', () => {
+  it('joins rather than divides, so a possessive does not split a word', () => {
+    expect(foldName("Kaelen's Rest")).toBe('kaelens rest')
+    expect(foldName("Vor'koth")).toBe('vorkoth')
+    expect(foldName("L'Élu")).toBe('lelu')
+  })
+
+  it('still folds the separators that are separators', () => {
+    expect(foldName('Kaelen, the Bold')).toBe('kaelen the bold')
+    expect(foldName('Ash-ford  Keep')).toBe('ash ford keep')
   })
 })

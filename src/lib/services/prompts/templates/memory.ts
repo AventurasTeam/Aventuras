@@ -121,7 +121,7 @@ const loreManagementPromptTemplate: PromptTemplate = {
 
 Work in this order, and treat the first as the one that must not be skipped:
 
-1. **Consolidate.** Work through every group listed under "Possible Duplicates". For each one: if they are the same subject, call \`merge_entries\` with the group's indices and one combined entry that keeps every fact, alias and keyword from all of them. If they are genuinely different subjects, call \`keep_separate\` with the indices and why.{% if requireDuplicateResolution %} Those are the only two ways a group is closed, and \`finish_lore_management\` will refuse while any is still open.{% endif %}
+1. **Consolidate.** Work through every group listed under "Possible Duplicates". For each one: if they are the same subject, call \`merge_entries\` with the group's indices and one combined entry that keeps every fact, alias and keyword from all of them. If they are genuinely different subjects, call \`keep_separate\` with the indices and why. If one of them is simply wrong — a mistaken or obsolete entry with nothing worth keeping — \`delete_entry\` closes the group too, by leaving one member.{% if requireDuplicateResolution %} Those are the three ways a group is closed, and \`finish_lore_management\` will refuse while any is still open.{% endif %}
 2. **Update** entries that story events have made outdated or incomplete. Prefer a targeted change over rewriting a long description.
 3. **Create** an entry only for something genuinely important that has no entry yet and is not a variant of one that does. Creating is the last resort, not the default: a fact about an existing subject belongs in that subject's entry. \`create_entry\` will refuse a name that already exists, and that refusal means "update it instead".
 
@@ -170,7 +170,7 @@ When every duplicate group is closed and your changes are made, call finish_lore
 {{ entrySummary }}
 {% if duplicateSummary != blank %}
 # Possible Duplicates
-Each line is one group. Close every one with \`merge_entries\` or \`keep_separate\`.
+Each line is one group. Close every one with \`merge_entries\`, \`keep_separate\`, or \`delete_entry\` where a member is simply erroneous.
 {{ duplicateSummary }}
 {% endif %}{{ recentStorySection }}
 Review the lorebook and the story, in this order:

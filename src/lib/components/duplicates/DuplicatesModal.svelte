@@ -59,6 +59,16 @@
    */
   let previewKey = $state<string | null>(null)
   let plan = $state<MergePlan | null>(null)
+  /**
+   * The last operation's failure, shown rather than swallowed.
+   *
+   * A merge writes and deletes rows; a merge that half-failed and reported nothing leaves
+   * the user believing a group was consolidated when it was not, and the window looks the
+   * same either way.
+   */
+  let error = $state<string | null>(null)
+
+  const failed = (err: unknown) => (error = err instanceof Error ? err.message : String(err))
 
   const POOL_LABELS: Record<EntityDuplicateGroup['pool'], string> = {
     character: 'Character',
@@ -76,11 +86,14 @@
 
   async function refresh() {
     loading = true
+    error = null
     try {
       groups = await findAllDuplicates()
       primaryByGroup = Object.fromEntries(
         groups.map((g) => [g.key, primaryByGroup[g.key] ?? g.entities[0].id]),
       )
+    } catch (err) {
+      failed(err)
     } finally {
       loading = false
     }
@@ -124,10 +137,13 @@
   async function confirmMerge(group: EntityDuplicateGroup) {
     if (!plan) return
     busyKey = group.key
+    error = null
     try {
       await mergeGroup(group, plan)
       closePreview()
       await refresh()
+    } catch (err) {
+      failed(err)
     } finally {
       busyKey = null
     }
@@ -135,9 +151,12 @@
 
   async function onKeepSeparate(group: EntityDuplicateGroup) {
     busyKey = group.key
+    error = null
     try {
       await keepSeparate(group)
       await refresh()
+    } catch (err) {
+      failed(err)
     } finally {
       busyKey = null
     }
@@ -147,8 +166,15 @@
 
   async function onForget() {
     loading = true
-    await forgetKeptSeparate()
-    await refresh()
+    error = null
+    try {
+      await forgetKeptSeparate()
+      await refresh()
+    } catch (err) {
+      failed(err)
+    } finally {
+      loading = false
+    }
   }
 </script>
 
@@ -167,6 +193,13 @@
 
     <ScrollArea class="flex-1">
       <div class="space-y-3 p-4">
+        {#if error}
+          <div
+            class="border-destructive/40 bg-destructive/10 text-destructive rounded-md border px-3 py-2 text-xs"
+          >
+            {error}
+          </div>
+        {/if}
         {#if loading}
           <div class="text-muted-foreground flex items-center gap-2 py-8 text-sm">
             <Loader2 class="h-4 w-4 animate-spin" />

@@ -664,9 +664,11 @@ one. Several things hold that down, and only the last is optional:
   failed while `create_entry` — the one that does not validate it — went through. An agent
   that can only create is an agent that only grows the lorebook. It is stripped by
   `withoutFields`, the same mechanism that removes `injectionMode`.
-- **Duplicate candidates are found in code, before the call** (`lorebook/duplicates.ts`), by
-  exact name, shared alias, token containment and a length-scaled edit distance, grouped
-  transitively. The list goes into the prompt as a worklist. Under **Require duplicate
+- **Duplicate candidates are found in code, before the call**
+  (`src/lib/services/duplicates/`: `names.ts` is the comparison, `index.ts` runs it over a
+  pool and drops what has already been dismissed), by exact name, shared alias, token
+  containment and a length-scaled edit distance, grouped transitively. The list goes into
+  the prompt as a worklist. Under **Require duplicate
   consolidation** (Advanced → Lore Management, off by default) `finish_lore_management` also
   refuses to complete while a group is unresolved — which is why the loop stops on
   `stopOnCompletedTerminalTool`, reading the tool's answer rather than its call. The refusal is
@@ -861,15 +863,19 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   (0 of 16 character entries on a measured 41-chapter save), so the four Tier 1 conditions that
   read them never fired and are gone. Presence is `WorldStateInjector`'s claim to make. The
   never-produced `mentionCount`/`firstMentioned`/`lastMentioned` are gone from the model too;
-  their columns stay, with their defaults. **A rendered entity line must never be re-readable as a name.** The classifier is
-  shown the entities that already exist and writes names back, so `- Eira (claimed as a consort)
-[inactive]` came back as the name, missed `sameEntityName`, and created a second character —
-  four of thirty-eight on a measured 41-chapter save, two carrying the subject's own
-  `relationship` verbatim. Name and attributes are now separate lines (`relationship:`,
-  `status:`, `appearance:`), in `ClassifierService.formatExistingCharacters`, in the story-beat
-  list beside it, and in `WorldStateInjector`'s narrator block, whose prose the classifier also
-  reads. It is _not_ the Lorebook: `Entry[]` records are authored lore that changes only when
-  someone edits them. The two pools never overlap, and two different services inject them.
+  their columns stay, with their defaults. It is _not_ the Lorebook: `Entry[]` records are
+  authored lore that changes only when someone edits them. The two pools never overlap, and
+  two different services inject them.
+
+  **A rendered entity line must never be re-readable as a name.** The classifier is shown
+  the entities that already exist and writes names back, so `- Eira (claimed as a consort)
+[inactive]` came back as the name, missed `sameEntityName`, and created a second
+  character — four of thirty-eight on a measured 41-chapter save, two carrying the
+  subject's own `relationship` verbatim. Name and attributes are now separate lines
+  (`relationship:`, `status:`, `appearance:`), in
+  `ClassifierService.formatExistingCharacters`, in the story-beat list beside it, and in
+  `WorldStateInjector`'s narrator block, whose prose the classifier also reads.
+
 - **`worldStateDelta`** on an entry records what its classification changed, which is what makes
   retry, time-travel delete and regenerate reversible (`rollbackService`).
 - **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
@@ -977,13 +983,13 @@ Three things about it are not obvious:
   means `'high'`.
 - **`'none'` is sent, not omitted.** It is the value that switches thinking off:
   NanoGPT documents `reasoning_effort: "none"` as the way to disable reasoning, and
-  `@ai-sdk/openai-compatible` would *drop* the parameter for `'none'` on its own `reasoning`
+  `@ai-sdk/openai-compatible` would _drop_ the parameter for `'none'` on its own `reasoning`
   field. That is why the effort travels in provider options, which take precedence. Omitting
   the parameter asks for the model's default instead — a different request.
-- **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids *are* the reasoning model,
+- **Only NanoGPT's `:thinking` variants are `enforced`.** Those ids _are_ the reasoning model,
   so asking one for `'none'` is self-contradictory, and `clampReasoningToCapability` lifts it to
   `ENFORCED_REASONING_FLOOR` (`'medium'` — a floor, not a preference). Every other model that
-  merely *supports* reasoning can be turned off. Reading "supports" as "enforces" is what made
+  merely _supports_ reasoning can be turned off. Reading "supports" as "enforces" is what made
   reasoning impossible to disable on NanoGPT for an entire release: the UI learned the
   distinction while the store that forced the level did not.
 

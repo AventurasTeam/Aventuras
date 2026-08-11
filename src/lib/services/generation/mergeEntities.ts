@@ -312,10 +312,12 @@ export function applyMergePlan(plan: MergePlan): Record<string, unknown> {
       out[field.key] = field.unionValue
       continue
     }
-    if (field.candidates.length === 0) {
-      out[field.key] = null
-      continue
-    }
+    // No row had a value, so the merge has nothing to say about this field and omits it
+    // rather than writing `null` over it. The distinction is not cosmetic: `visited` and
+    // `status` are non-nullable, and the update is a `Partial<T>` — a key that is absent
+    // leaves the record alone, a key set to `null` overwrites it with something the type
+    // does not allow.
+    if (field.candidates.length === 0) continue
     if (field.chosen === APPEND) {
       out[field.key] = field.candidates.map((c) => String(c.value).trim()).join(APPEND_SEPARATOR)
       continue

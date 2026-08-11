@@ -25,8 +25,21 @@ const log = createLogger('ManualLoreManagement')
  * lock is what all three callers pass through, and it is authoritative where
  * `ui.loreManagementActive` is not: that flag lingers for two seconds after a run so the
  * user can read the summary.
+ *
+ * **It never rejects.** Both callers are fire-and-forget — a button's `onclick` and the
+ * step after a manual chapter — so a rejection here has nowhere to go but the console, as
+ * an unhandled one. Reporting null is the same answer they already handle.
  */
 export async function runManualLoreManagement(): Promise<LoreSessionResult | null> {
+  try {
+    return await startManualLoreManagement()
+  } catch (error) {
+    log('Manual lore management failed', error)
+    return null
+  }
+}
+
+async function startManualLoreManagement(): Promise<LoreSessionResult | null> {
   if (
     !story.currentStory ||
     isLoreManagementRunning(story.currentStory.id, story.currentStory.currentBranchId)

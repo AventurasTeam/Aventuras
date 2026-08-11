@@ -3322,6 +3322,12 @@ class StoryStore {
     // chapters covering the same entries.
     if (ui.backgroundTasksActiveFor(this.currentStory.id, this.currentStory.currentBranchId)) {
       log('Background chapter work in flight, refusing manual chapter creation')
+      // Said out loud rather than returned: the caller closes the modal either way, so a
+      // silent refusal looks exactly like a chapter that was created.
+      ui.showToast(
+        'A chapter is already being written for this turn. Try again once it is done.',
+        'warning',
+      )
       return
     }
 

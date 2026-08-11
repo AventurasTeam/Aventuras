@@ -70,9 +70,33 @@ describe('dismissals', () => {
     expect(pairKeys(['Kaelen', 'Kaelan', 'Kaelen the Bold'])).toHaveLength(3)
   })
 
-  it('collapses names that normalize to the same key, leaving no pair', () => {
-    // "The Citadel" and "Citadel" are one subject to the detector, so there is nothing to
-    // keep apart and nothing to store.
-    expect(pairKeys(['The Citadel', 'Citadel'])).toEqual([])
+  it('gives a group whose names normalize alike a self-pair rather than nothing', () => {
+    // "The Citadel" and "Citadel" fold to one key, but they are still two rows the user
+    // was shown and can rule on. An empty list would read as "already dismissed" to
+    // `isOpen` and drop the group before it was ever offered.
+    expect(pairKeys(['The Citadel', 'Citadel'])).toEqual(['citadel|citadel'])
+    expect(pairKeys(['Kaelen', 'Kaelen'])).toEqual(['kaelen|kaelen'])
+  })
+
+  it('offers two rows with the same name, and remembers them being kept apart', () => {
+    // The commonest duplicate of all, and the only one nobody has to judge.
+    const groups = findEntityDuplicates('character', chars('Kaelen', 'Kaelen'))
+    expect(groups).toHaveLength(1)
+    expect(groups[0].reason).toBe('same-name')
+
+    const dismissed = new Set(pairKeys(groups[0].entities.map((e) => e.name)))
+    expect(findEntityDuplicates('character', chars('Kaelen', 'Kaelen'), dismissed)).toEqual([])
+  })
+
+  it('qualifies a group key by pool, since the names repeat across them', () => {
+    // A `Character` row and the lorebook `Entry` for the same person drift the same way,
+    // so the worklist holds two groups with identical names. The window keys its `{#each}`
+    // on this, where a collision is a render error.
+    const asCharacter = findEntityDuplicates('character', chars('Kaelen', 'Kaelan'))[0]
+    const asEntry = findEntityDuplicates('lorebook', [
+      { id: 'e0', name: 'Kaelen', type: 'character' },
+      { id: 'e1', name: 'Kaelan', type: 'character' },
+    ])[0]
+    expect(asCharacter.key).not.toBe(asEntry.key)
   })
 })

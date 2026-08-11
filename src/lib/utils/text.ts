@@ -624,12 +624,20 @@ export function expandRangeBidirectional(
  * The character class is `\p{L}\p{N}`, like the rest of this file, and deliberately not
  * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
  * and empty compares equal to every other one.
+ *
+ * **An apostrophe is removed, not turned into a space**, and it is the one separator that
+ * has to be. It joins rather than divides — a possessive, an elision, or a letter of the
+ * name itself — so spacing it splits one word into two: `Kaelen's Rest` became
+ * `kaelen s rest` and stopped matching `Kaelens Rest`, `Vor'koth` stopped matching
+ * `Vorkoth`, and `L'Élu` became `l elu`, which is why `normalizeName` needed a rule about
+ * leading single letters to undo it.
  */
 export function foldName(raw: string): string {
   return raw
     .normalize('NFD')
     .replace(/\p{M}+/gu, '')
     .toLowerCase()
+    .replace(/['’‘ʼ`ʼ]/gu, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
 }
@@ -642,7 +650,13 @@ export function foldName(raw: string): string {
  * Articles still separate, as they always did. Every call site must agree: a stricter
  * creation guard paired with a looser lookup loses an update — the lookup misses, the
  * creation is refused as a duplicate, and the change lands nowhere.
+ *
+ * A name with no letter or digit in it folds to the empty string, and two of those are not
+ * the same entity — they are two names this function cannot read. Answering `true` there is
+ * the `a-z0-9` failure again in a smaller form: it collapses every such name into one.
  */
 export function sameEntityName(a: string, b: string): boolean {
-  return foldName(a) === foldName(b)
+  const folded = foldName(a)
+  if (!folded) return false
+  return folded === foldName(b)
 }

@@ -164,6 +164,16 @@ export class LoreManagementService extends BaseAIService {
     const dismissedGroups = new Set<DuplicateGroup>()
 
     /**
+     * The `keep_separate` writes, awaited before the session returns.
+     *
+     * The tool callback is synchronous — the agent needs its answer in the same turn —
+     * so the persistence cannot be awaited where it is started. Dropping the promise
+     * instead made a failed write an unhandled rejection and left the run reporting a
+     * dismissal that was never stored, so the next session re-asks the same question.
+     */
+    const keepSeparateWrites: Promise<void>[] = []
+
+    /**
      * A group is open until it has collapsed to one surviving member, or was dismissed.
      *
      * Deliberately not "a member was touched": updating an entry is what the agent does
@@ -212,7 +222,10 @@ export class LoreManagementService extends BaseAIService {
         for (const group of closing) dismissedGroups.add(group)
         // Persisted, not just dismissed for this session: the next run would otherwise
         // ask the same question and get the same answer, at the same cost.
-        for (const group of closing) void context.onKeepSeparate?.(group.names)
+        for (const group of closing) {
+          const write = context.onKeepSeparate?.(group.names)
+          if (write) keepSeparateWrites.push(write)
+        }
         log('Duplicate groups kept separate', { indices, reason, closed: closing.length })
         return closing.length
       },
@@ -295,6 +308,10 @@ export class LoreManagementService extends BaseAIService {
 
     // Run the agent
     const result = await agent.generate({ prompt: userPrompt })
+
+    // Started inside the synchronous tool callback, settled here: a dismissal the session
+    // reports must be one that reached the table.
+    await Promise.all(keepSeparateWrites)
 
     // The last finish call is the one that was accepted; the earlier ones were refusals.
     const finishResults = extractToolResults<

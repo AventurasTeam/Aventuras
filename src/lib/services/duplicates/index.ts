@@ -42,7 +42,15 @@ export interface EntityDuplicateGroup {
   /** The records, in the order the detector grouped them. */
   entities: DuplicateEntity[]
   reason: DuplicateGroup['reason']
-  /** Stable identity of this group, so a dismissal can be stored and matched again. */
+  /**
+   * Stable identity of this group within the whole worklist.
+   *
+   * Pool-qualified, because the worklist concatenates every pool and the names repeat
+   * across them by design — the classifier's `Character` row and the lore agent's `Entry`
+   * for the same person drift the same way, so `Kael`/`Kaelen` shows up in both. Two
+   * groups sharing a key collide in the window's keyed `{#each}`, which is a render error
+   * rather than a wrong answer.
+   */
   key: string
 }
 
@@ -54,7 +62,7 @@ export interface EntityDuplicateGroup {
  * same key whichever order it was seen in.
  */
 export function keptSeparateKey(names: string[]): string {
-  return [...new Set(names.map(normalizeName))].sort().join('|')
+  return [...new Set(names.map(normalizeName))].filter(Boolean).sort().join('|')
 }
 
 /**
@@ -63,9 +71,17 @@ export function keptSeparateKey(names: string[]): string {
  * Stored per pair, not per group: the detector is transitive, so a group of three can
  * later show up as a group of two once one member is merged away, and a whole-group key
  * would no longer match. Dismissing {A,B,C} therefore stores {A,B}, {A,C}, {B,C}.
+ *
+ * **A group whose names all normalize to one key still gets a key**, `name|name`. Two rows
+ * called `Kaelen` are the commonest duplicate there is and the only one nobody has to
+ * judge, and a pairwise loop over a single distinct name produces nothing — so the group
+ * read as "every pair already dismissed" and was dropped before it was ever shown, in the
+ * window and in the agent's worklist alike. The self-pair is a real dismissal: two rows
+ * that share a name and are genuinely two subjects stay dismissed on the next pass.
  */
 export function pairKeys(names: string[]): string[] {
   const unique = [...new Set(names.map(normalizeName))].filter(Boolean).sort()
+  if (unique.length === 1) return [`${unique[0]}|${unique[0]}`]
   const pairs: string[] = []
   for (let i = 0; i < unique.length; i++) {
     for (let j = i + 1; j < unique.length; j++) {
@@ -101,7 +117,7 @@ export function findEntityDuplicates(
       pool,
       entities: group.indices.map((i) => entities[i]),
       reason: group.reason,
-      key: keptSeparateKey(group.names),
+      key: `${pool}:${keptSeparateKey(group.names)}`,
     }))
     .filter((group) =>
       isOpen(

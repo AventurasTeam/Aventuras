@@ -88,10 +88,16 @@ const LEADING_ARTICLES = new Set([
 
 /**
  * Fold a name to what identity survives spelling: no case, no accents, no punctuation, no
- * leading article. "L'Elu, il Prescelto" and "lelu il prescelto" are the same key.
+ * leading article. "L'Élu, il Prescelto" and "Elu il Prescelto" are the same key.
+ *
+ * The apostrophe is a separator here, unlike in `foldName`, which joins across it. That is
+ * the difference between the two questions: `foldName` asks whether two spellings are one
+ * name, where `Vor'koth` and `Vorkoth` plainly are; this asks what a name's identity is
+ * once its articles are gone, and `L'` is an article welded to the word after it. Splitting
+ * it is what lets the rule below drop it.
  */
 export function normalizeName(raw: string): string {
-  const folded = foldName(raw)
+  const folded = foldName(raw.replace(/['’‘ʼ`]/gu, ' '))
 
   const tokens = folded.split(' ').filter(Boolean)
   // A single letter in front is an elision the punctuation pass split off — the "l" of

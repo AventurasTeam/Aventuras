@@ -57,6 +57,18 @@ describe('update', () => {
     expect(updated.injection.keywords).toEqual(['oath'])
   })
 
+  it('mirrors an injection-mode change onto the entry the tools read back', () => {
+    // `list_entries` and `read_entry` answer from `vaultEntries`. A field the ledger wrote
+    // and that array did not shows the agent the value it just changed away from.
+    const { ledger, vaultEntries } = ledgerFor(entry('Kaelen'))
+
+    ledger.apply(change({ type: 'update', index: 0, updates: { injectionMode: 'always' } }))
+
+    const [updated] = ledger.result().updatedEntries
+    expect(updated.injection.mode).toBe('always')
+    expect(vaultEntries[0].injectionMode).toBe('always')
+  })
+
   it('lands on an entry created earlier in the same session', () => {
     const { ledger } = ledgerFor(entry('Kaelen'))
 

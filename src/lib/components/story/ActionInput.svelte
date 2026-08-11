@@ -338,8 +338,15 @@
       },
       // A thunk: read when the session starts, after the classifier and the chapter check
       // have run. See BackgroundTaskInput.loreSession.
+      //
+      // Every field comes from the store at that moment, `storyId` included — not from the
+      // turn's own `storyId`. The read happens seconds after the turn ended and the user
+      // can have switched story in between, and the callbacks write to whatever
+      // `story.currentStory` is by then: a snapshot naming one story and carrying another's
+      // entries is the one combination that lands lore in the wrong place. Consistent and
+      // possibly not the turn's story beats mixed.
       loreSession: () => ({
-        storyId,
+        storyId: story.currentStory?.id ?? storyId,
         currentBranchId: story.currentStory?.currentBranchId ?? null,
         lorebookEntries: story.lorebookEntries,
         chapters: story.currentBranchChapters,

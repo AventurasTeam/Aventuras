@@ -3667,12 +3667,23 @@ class DatabaseService {
    * See `services/duplicates` for the key's shape and why it is a name pair rather than
    * a pair of ids.
    */
+  /**
+   * The main branch as `kept_separate` stores it.
+   *
+   * `branch_id` is part of the primary key, and SQLite does not enforce a primary key over
+   * a NULL, so a nullable column there would make `INSERT OR IGNORE` append a duplicate row
+   * on every repeated dismissal instead of ignoring it. Every read and write goes through
+   * this, so the two sides cannot disagree about what "main branch" is spelled as.
+   */
+  private keptSeparateBranch(branchId: string | null): string {
+    return branchId ?? ''
+  }
+
   async getKeptSeparate(storyId: string, branchId: string | null): Promise<Set<string>> {
     const db = await this.getDb()
     const rows = await db.select<{ pool: string; pair_key: string }[]>(
-      `SELECT pool, pair_key FROM kept_separate
-       WHERE story_id = ? AND (branch_id IS ? OR branch_id = ?)`,
-      [storyId, branchId, branchId],
+      `SELECT pool, pair_key FROM kept_separate WHERE story_id = ? AND branch_id = ?`,
+      [storyId, this.keptSeparateBranch(branchId)],
     )
     return new Set(rows.map((r) => `${r.pool}:${r.pair_key}`))
   }
@@ -3686,11 +3697,12 @@ class DatabaseService {
     if (pairKeys.length === 0) return
     const db = await this.getDb()
     const now = Date.now()
+    const branch = this.keptSeparateBranch(branchId)
     for (const pairKey of pairKeys) {
       await db.execute(
         `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
          VALUES (?, ?, ?, ?, ?)`,
-        [storyId, branchId, pool, pairKey, now],
+        [storyId, branch, pool, pairKey, now],
       )
     }
   }
@@ -3698,10 +3710,10 @@ class DatabaseService {
   /** Forget every dismissal for a story branch, so the full worklist comes back. */
   async clearKeptSeparate(storyId: string, branchId: string | null): Promise<void> {
     const db = await this.getDb()
-    await db.execute(
-      `DELETE FROM kept_separate WHERE story_id = ? AND (branch_id IS ? OR branch_id = ?)`,
-      [storyId, branchId, branchId],
-    )
+    await db.execute(`DELETE FROM kept_separate WHERE story_id = ? AND branch_id = ?`, [
+      storyId,
+      this.keptSeparateBranch(branchId),
+    ])
   }
 
   // ===== Pack Variable Operations =====

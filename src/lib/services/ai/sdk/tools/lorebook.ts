@@ -130,7 +130,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           .string()
           .optional()
           .describe(
-            'Term to match against entry names, aliases, keywords and descriptions. Omit to list everything.',
+            'Term to match against entry names, aliases, keywords and descriptions. Matched as a whole word, and at least two characters — a single character matches nothing. Omit to list everything.',
           ),
         type: entryTypeSchema
           .optional()
@@ -156,7 +156,15 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
       }) => {
         const resolved = resolveTargetEntries(lorebookId)
         if (!resolved.ok) {
-          return { entries: [], total: 0, error: resolved.error }
+          // The success shape, emptied. A failure that answers with different keys reads
+          // to the model as a different kind of result than the one it asked for.
+          return {
+            entries: [],
+            availableTotal: 0,
+            returnedCount: 0,
+            hasMore: false,
+            error: resolved.error,
+          }
         }
         const targetEntries = resolved.targetEntries
 

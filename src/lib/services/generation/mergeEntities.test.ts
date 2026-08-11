@@ -158,6 +158,18 @@ describe('the other pools', () => {
     expect(field(plan, 'quantity').origin).toBe('conflict')
     expect(applyMergePlan(plan).quantity).toBe(1)
   })
+
+  it('omits a field no row filled instead of writing null over it', () => {
+    // The result is spread into a `Partial<T>` update. `visited` is a boolean and `status`
+    // is a three-value union: an absent key leaves the record alone, a null one does not.
+    const plan = planLocationMerge(location('a'), [location('b')])
+    expect('visited' in applyMergePlan(plan)).toBe(false)
+
+    const chars = planCharacterMerge(character('a'), [character('b')])
+    const merged = applyMergePlan(chars)
+    expect('description' in merged).toBe(false)
+    expect('portrait' in merged).toBe(false)
+  })
 })
 
 describe('what a plan absorbs', () => {

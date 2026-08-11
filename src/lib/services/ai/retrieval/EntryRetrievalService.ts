@@ -478,8 +478,10 @@ export class EntryRetrievalService extends BaseAIService {
   /**
    * Tier 1: Always inject entries.
    * - Entries with injection.mode === 'always'
-   * - Entries with state-based conditions (legacy, for imported lorebooks with state)
    * - "Sticky" entries (recently activated via Tier 2/3, duration based on entry type)
+   *
+   * There is no state-based branch: see the note in the body for why the four conditions
+   * that once read a lorebook entry's own live state are gone.
    *
    * Live-tracked characters/locations/items are handled by `WorldStateInjector`
    * instead -- not duplicated here.

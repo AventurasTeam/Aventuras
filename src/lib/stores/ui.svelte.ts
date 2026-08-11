@@ -260,8 +260,13 @@ class UIStore {
    * They create chapters, so the Memory view must not offer to create one at the same time:
    * two chapters built from overlapping ranges of the same entries. Per branch rather than
    * global, because chapters belong to a branch and two branches never collide.
+   *
+   * A **count** per branch, not a flag: the run is not awaited, so the next turn can start
+   * while the previous turn's tasks are still going, and a flag would be cleared by
+   * whichever finished first — leaving the branch marked idle with work still in flight,
+   * which is exactly the state the guard exists to catch.
    */
-  backgroundTaskBranches = $state<SvelteSet<string>>(new SvelteSet())
+  backgroundTaskBranches = $state<SvelteMap<string, number>>(new SvelteMap())
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
@@ -1426,13 +1431,15 @@ class UIStore {
 
   // Lore management mode methods
   backgroundTasksActiveFor(storyId: string, branchId: string | null): boolean {
-    return this.backgroundTaskBranches.has(`${storyId}:${branchId ?? 'main'}`)
+    return (this.backgroundTaskBranches.get(`${storyId}:${branchId ?? 'main'}`) ?? 0) > 0
   }
 
   setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {
     const key = `${storyId}:${branchId ?? 'main'}`
-    if (active) this.backgroundTaskBranches.add(key)
-    else this.backgroundTaskBranches.delete(key)
+    const running = this.backgroundTaskBranches.get(key) ?? 0
+    if (active) this.backgroundTaskBranches.set(key, running + 1)
+    else if (running <= 1) this.backgroundTaskBranches.delete(key)
+    else this.backgroundTaskBranches.set(key, running - 1)
   }
 
   startLoreManagement() {
