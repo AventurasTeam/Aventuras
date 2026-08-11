@@ -1,7 +1,7 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { Sparkles } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
-import { Platform, ScrollView, View } from 'react-native'
+import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -294,6 +294,15 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   function renderListResult(): ReactNode {
     if (props.result !== 'list') return null
     const marked = markExisting(listItems, props.existingNames)
+    const selectable = marked.filter((row) => !row.exists)
+    const allSelected = selectable.length > 0 && selectable.every((row) => selected.has(row.name))
+    const toggleRow = (name: string) =>
+      setSelected((prev) => {
+        const draft = new Set(prev)
+        if (draft.has(name)) draft.delete(name)
+        else draft.add(name)
+        return draft
+      })
     return (
       // Phone fills the sheet's fixed detent rather than capping short of it;
       // the max-h is a popover concern, where nothing else bounds the height.
@@ -304,47 +313,88 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             {t('wizard:aiAssist.list.empty')}
           </Text>
         ) : (
-          <View className={isPhone ? 'flex-1' : 'max-h-72'}>
-            <Scroller>
-              <View className="gap-2">
-                {marked.map((row) => (
-                  <View
-                    key={row.name}
-                    className="flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2"
-                  >
-                    <Checkbox
-                      checked={selected.has(row.name)}
-                      // RN-Web blocks the disabled root; Radix's Indicator wrapper forces
-                      // pointer-events:none too, closing box-none's direct-children gap.
+          <>
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelected(new Set(selectable.map((row) => row.name)))}
+                disabled={allSelected || selectable.length === 0}
+                className={cn(
+                  'h-control-xs justify-center px-2',
+                  (allSelected || selectable.length === 0) && 'opacity-50',
+                )}
+              >
+                <Text size="xs" className="text-fg-primary">
+                  {t('wizard:aiAssist.list.selectAll')}
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setSelected(new Set())}
+                disabled={selected.size === 0}
+                className={cn(
+                  'h-control-xs justify-center px-2',
+                  selected.size === 0 && 'opacity-50',
+                )}
+              >
+                <Text size="xs" className="text-fg-primary">
+                  {t('wizard:aiAssist.list.clearAll')}
+                </Text>
+              </Pressable>
+            </View>
+            <View className={isPhone ? 'flex-1' : 'max-h-72'}>
+              <Scroller>
+                <View className="gap-2">
+                  {marked.map((row) => (
+                    <Pressable
+                      key={row.name}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected.has(row.name), disabled: row.exists }}
                       disabled={row.exists}
-                      onCheckedChange={(next) =>
-                        setSelected((prev) => {
-                          const draft = new Set(prev)
-                          if (next) draft.add(row.name)
-                          else draft.delete(row.name)
-                          return draft
-                        })
-                      }
-                      aria-label={row.name}
-                    />
-                    <View className="min-w-0 flex-1 gap-0.5">
-                      <Text size="sm" className="font-medium">
-                        {row.name}
-                      </Text>
-                      <Text size="xs" variant="muted" numberOfLines={2}>
-                        {row.detail}
-                      </Text>
-                      {row.exists ? (
-                        <Text size="xs" variant="muted">
-                          {t('wizard:aiAssist.list.alreadyExists')}
+                      onPress={() => toggleRow(row.name)}
+                      className={cn(
+                        'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
+                        !row.exists && 'active:bg-tint-press',
+                        !row.exists &&
+                          Platform.select({ web: 'cursor-pointer hover:border-border-strong' }),
+                      )}
+                    >
+                      {/* The row is the single interactive surface; the checkbox is
+                          decorative (pointer-shielded, AT-hidden, out of tab order).
+                          A nested interactive checkbox would double-fire on web,
+                          where its click bubbles to the row Pressable and the two
+                          toggles cancel out. */}
+                      <View
+                        pointerEvents="none"
+                        accessibilityElementsHidden
+                        importantForAccessibility="no-hide-descendants"
+                      >
+                        <Checkbox
+                          checked={selected.has(row.name)}
+                          disabled={row.exists}
+                          onCheckedChange={() => toggleRow(row.name)}
+                          tabIndex={-1}
+                        />
+                      </View>
+                      <View className="min-w-0 flex-1 gap-0.5">
+                        <Text size="sm" className="font-medium">
+                          {row.name}
                         </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </Scroller>
-          </View>
+                        <Text size="xs" variant="muted" numberOfLines={2}>
+                          {row.detail}
+                        </Text>
+                        {row.exists ? (
+                          <Text size="xs" variant="muted">
+                            {t('wizard:aiAssist.list.alreadyExists')}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
+              </Scroller>
+            </View>
+          </>
         )}
         <View className="flex-row flex-wrap justify-end gap-2">
           <Button variant="ghost" onPress={closeOverlay}>

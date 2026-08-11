@@ -194,7 +194,9 @@
     },
     "list": {
       "alreadyExists": "(already exists)",
-      "empty": "Nothing suggested. Try different guidance."
+      "empty": "Nothing suggested. Try different guidance.",
+      "selectAll": "Select all",
+      "clearAll": "Clear all"
     }
   },
   "world": {
