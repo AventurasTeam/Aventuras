@@ -605,6 +605,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     />
   )
 
+  // Guidance and loading are a field and a button; only a preview earns the
+  // taller detent. Growing on arrival beats reserving the space up front.
+  const sheetSize =
+    assist.kind === 'result' || assist.kind === 'refine' ? ('medium' as const) : ('short' as const)
+
   if (isPhone) {
     // Sheet's DialogPrimitive.Root renders a real (portaled) View sibling even
     // while closed — a bare Fragment here would leak two layout children to the
@@ -613,13 +618,16 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       <View>
         {trigger}
         <Sheet open={phoneOpen} onOpenChange={handlePhoneOpenChange} ariaLabel={ariaLabel}>
-          {/* Fixed detent, not 'auto'. Dynamic sizing derives the detent from
-              measured content, so a scrollable inside it measures one height and
-              snaps to another: the sheet lands off its extended position, which
-              both misplaces it and leaves gorhom's scrollable LOCKED (it unlocks
-              only at EXTENDED/FILL_PARENT — BottomSheet.tsx animatedSheetState),
-              so every drag pans the sheet instead of scrolling the results. */}
-          <SheetContent anchor="bottom" size="medium">
+          {/* Two fixed detents rather than 'auto', which would size to content:
+              dynamic sizing derives the detent from what it measures, and a
+              scrollable inside measures one height while the sheet snaps to
+              another, so it never reaches EXTENDED — where gorhom unlocks
+              scrolling (BottomSheet.tsx animatedSheetState) — and lands off
+              position besides. Growing between two fixed detents is a supported
+              transition (its OnSnapPointChange reaction animates to the new one,
+              gated on layout being calculated) and leaves both the container
+              component and enableDynamicSizing untouched. */}
+          <SheetContent anchor="bottom" size={sheetSize}>
             {renderBody()}
           </SheetContent>
         </Sheet>
