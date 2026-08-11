@@ -58,10 +58,10 @@ function KeyboardOrderingProbe() {
                 aria-label="Raw sheet field"
                 className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
               />
-              {/* Probe C — same field, uncontrolled: no value flows back on
-                  keystroke. Healthy here means the fault is the controlled
-                  round-trip inside a sheet, and the fix is to stop feeding the
-                  value back rather than anything about the keyboard. */}
+              {/* Uncontrolled: no value flows back on keystroke. This one is
+                  CORRECT while the two above are not, which is what pins the
+                  fault on the round-trip rather than on the keyboard, the
+                  sheet's gestures, or Input. */}
               <TextInput
                 defaultValue=""
                 onChangeText={(next) => {
@@ -75,9 +75,11 @@ function KeyboardOrderingProbe() {
           </SheetContent>
         </Sheet>
 
-        {/* Probe D — a right-anchored sheet is a plain Dialog with no gorhom in
-            it. Healthy here pins the fault on gorhom's BottomSheet; faulty here
-            moves it out to the portal/overlay both anchors share. */}
+        {/* A right-anchored sheet is a plain Dialog with no gorhom in it, and
+            it faults identically — so gorhom is not involved. What both anchors
+            share is `@rn-primitives/dialog`'s portal; the right path does not
+            even provide InputComponentContext. Keep this field: it is the
+            cheapest way to tell a portal regression from a gorhom one. */}
         <Sheet ariaLabel="Right sheet caret probe">
           <SheetTrigger asChild>
             <Button variant="secondary">
