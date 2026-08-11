@@ -11,8 +11,8 @@ import { Text } from '@/components/ui/text'
 function KeyboardOrderingProbe() {
   const [note, setNote] = useState('')
   const [rawNote, setRawNote] = useState('')
-  // Controlled deliberately: the caret fault only appears when a value is fed
-  // back on every keystroke, so an uncontrolled probe cannot see it.
+  // Controlled through Input, which routes value through controlled-text-sync:
+  // this is the fixed path and must keep the caret on mid-string edits.
   const [sheetNote, setSheetNote] = useState('')
   // Deliberately NOT fed back. Isolates the round-trip itself from the sheet.
   const uncontrolledRef = useRef('')
@@ -48,9 +48,10 @@ function KeyboardOrderingProbe() {
                 `Bh` with the caret still between `B` and `h` — not jumped to the start. Inserting
                 mid-string is the same test: the caret must land after the typed character.
               </Text>
-              {/* Bare RN TextInput, controlled the same way, skipping Input
-                  entirely. Confirmed to fault identically, so Input's wrapper
-                  is excluded and the fault belongs to the sheet environment. */}
+              {/* Bare RN TextInput, controlled the same way, bypassing Input's
+                  sync shim. Faults on purpose (caret walks left on mid-string
+                  edits) — the negative control proving the shim is what fixes
+                  the field above. */}
               <TextInput
                 value={rawNote}
                 onChangeText={setRawNote}
@@ -58,10 +59,8 @@ function KeyboardOrderingProbe() {
                 aria-label="Raw sheet field"
                 className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
               />
-              {/* Uncontrolled: no value flows back on keystroke. This one is
-                  CORRECT while the two above are not, which is what pins the
-                  fault on the round-trip rather than on the keyboard, the
-                  sheet's gestures, or Input. */}
+              {/* Uncontrolled: no value flows back on keystroke, immune by
+                  construction. The reference the shim's behavior must match. */}
               <TextInput
                 defaultValue=""
                 onChangeText={(next) => {
@@ -75,11 +74,11 @@ function KeyboardOrderingProbe() {
           </SheetContent>
         </Sheet>
 
-        {/* A right-anchored sheet is a plain Dialog with no gorhom in it, and
-            it faults identically — so gorhom is not involved. What both anchors
-            share is `@rn-primitives/dialog`'s portal; the right path does not
-            even provide InputComponentContext. Keep this field: it is the
-            cheapest way to tell a portal regression from a gorhom one. */}
+        {/* A right-anchored sheet is a plain Dialog with no gorhom in it. Raw
+            controlled TextInput, no Input shim — still faults, which pins the
+            fault on `@rn-primitives/dialog`'s portal round-trip rather than on
+            gorhom. Keep this field: it is the cheapest way to tell a portal
+            regression from a gorhom one. */}
         <Sheet ariaLabel="Right sheet caret probe">
           <SheetTrigger asChild>
             <Button variant="secondary">

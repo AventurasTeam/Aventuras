@@ -5,16 +5,19 @@ import {
   type ComponentProps,
   type ComponentType,
   type ReactNode,
+  type Ref,
 } from 'react'
 import { Platform, TextInput, View } from 'react-native'
 
 import { cn } from '@/lib/utils'
 
+import { useControlledTextSync } from './controlled-text-sync'
+
 // Lets a surrounding container (Sheet's gorhom-backed BottomSheetContent in particular)
 // swap the underlying TextInput implementation without changing the consumer call site.
 // Defaults to RN's TextInput; gorhom replaces with BottomSheetTextInput so its sheet
 // keyboard-tracking system sees the focused field.
-type InputComponent = ComponentType<ComponentProps<typeof TextInput>>
+type InputComponent = ComponentType<ComponentProps<typeof TextInput> & { ref?: Ref<TextInput> }>
 const InputComponentContext = createContext<InputComponent>(TextInput)
 
 type InputSize = 'sm' | 'md' | 'lg'
@@ -81,8 +84,17 @@ export function Input({
   editable,
   onFocus,
   onBlur,
+  value,
+  defaultValue,
+  onChange,
   ...props
 }: InputProps) {
+  const { hostRef, fieldProps } = useControlledTextSync({
+    value,
+    defaultValue,
+    multiline: props.multiline,
+    onChange,
+  })
   const hasAdornment = leading != null || trailing != null
   const isDisabled = editable === false
   const ariaInvalidProp = props['aria-invalid']
@@ -109,6 +121,7 @@ export function Input({
   if (!hasAdornment) {
     return (
       <TextInputComponent
+        ref={hostRef}
         editable={editable}
         onFocus={handleFocus}
         onBlur={handleBlur}
@@ -122,6 +135,7 @@ export function Input({
           className,
         )}
         {...props}
+        {...fieldProps}
       />
     )
   }
@@ -139,6 +153,7 @@ export function Input({
     >
       {leading != null ? <View className="pl-3 pr-2">{leading}</View> : null}
       <TextInputComponent
+        ref={hostRef}
         editable={editable}
         onFocus={handleFocus}
         onBlur={handleBlur}
@@ -149,6 +164,7 @@ export function Input({
           trailing == null && 'pr-3',
         )}
         {...props}
+        {...fieldProps}
       />
       {trailing != null ? <View className="pl-2 pr-2">{trailing}</View> : null}
     </View>
@@ -156,4 +172,4 @@ export function Input({
 }
 
 export { InputComponentContext }
-export type { InputProps }
+export type { InputComponent, InputProps }

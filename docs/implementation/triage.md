@@ -1221,25 +1221,3 @@ on hover`; the shipped rows render label and tagline only, so the
   restore them on reopen, or block the swipe once a result has
   landed. Applies to `AiAssist` first but the same reset pattern will
   reach 3.6b's cast suggestions. Raised 2026-08-11.
-- **A controlled `TextInput` inside a portaled overlay loses a caret
-  position on Android.** Any mid-string edit — insert or delete —
-  leaves the caret one place left of correct; edits at the end of the
-  string are unaffected, and desktop is unaffected. Bisected on
-  `app/dev/sheet.tsx`, whose probe fields are kept for exactly this:
-  a bare `TextInput` faults identically to `Input`, so the wrapper is
-  not involved; swapping gorhom's `BottomSheetTextInput` for RN's
-  changed nothing, so gesture-handler's `createNativeWrapper` is not
-  involved; a right-anchored sheet — a plain Dialog with no gorhom in
-  it, and no `InputComponentContext` — faults the same, so gorhom is
-  not involved; and the same field **uncontrolled** in the same sheet
-  is correct. What is left is the controlled value round-trip through
-  `@rn-primitives/dialog`'s portal: the state update lands a beat after
-  the native text has advanced, and the stale selection is what gets
-  restored. Not a regression from any recent slice — every dialog and
-  sheet form on Android has it. The fix that the evidence points at is
-  to stop feeding `value` back on every keystroke: keep the native text
-  authoritative inside `Input` and push down only when the external
-  value genuinely diverges. That is a change to the most-used primitive
-  in the app, on the new architecture, and the obvious imperative escape
-  hatch (`setNativeProps`) is deprecated there — so it wants deliberate
-  work and a device, not a quick patch. Raised 2026-08-11.

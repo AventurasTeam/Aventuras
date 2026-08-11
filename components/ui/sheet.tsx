@@ -14,7 +14,7 @@ import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reani
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
-import { InputComponentContext } from '@/components/ui/input'
+import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { dismissKeyboard } from '@/lib/keyboard'
@@ -193,8 +193,11 @@ function BottomSheetContent({
       <TextClassContext.Provider value="text-fg-primary">
         {/* Swap Input's underlying TextInput with gorhom's keyboard-aware variant
             so focusing an Input inside a sheet triggers gorhom's translate-up
-            behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
-        <InputComponentContext.Provider value={BottomSheetTextInput}>
+            behavior. Plain TextInput isn't tracked by the sheet's keyboard system.
+            Cast: gorhom types its forwarded ref `TextInput | undefined` (it maps
+            null to undefined); the instance is RN's TextInput, only the ref's
+            empty channel differs. */}
+        <InputComponentContext.Provider value={BottomSheetTextInput as InputComponent}>
           {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
               (dynamic sizing measures BottomSheetView's content height). Fixed-detent
               sizes skip BottomSheetView because it captures vertical pan gestures and

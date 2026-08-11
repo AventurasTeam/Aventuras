@@ -74,6 +74,10 @@ slice plans when relevant.
 - [Input adornment DOM identity](./input-adornment-dom-identity.md)
   — always render adornments, toggle visibility; conditional
   render re-keys TextInput and loses focus.
+- [Controlled TextInput in a portal loses the caret](./portal-controlled-textinput-caret.md)
+  — the portal delivers `value` one commit late and RN's sync
+  effect rewrites native text; route fields through
+  `Input` / `Textarea`, never raw controlled TextInput in overlays.
 - [Dialog claims the touch responder](./dialog-content-responder-claim.md)
   — native `Content` blocks ScrollView scroll interception on
   Android; scrolling is flaky to start, fine once moving.
