@@ -154,15 +154,19 @@ const STATIC_STYLES = {
   } satisfies ViewStyle,
 }
 
-// Radix exposes `--radix-popover-trigger-width` on Content; use it as a lower
-// bound so the surface is never narrower than its trigger but can be held open
-// wider via the consumer floor (overlayMinWidth). Web-only — native phones
-// route through Sheet which owns its own sizing.
-function matchTriggerWidthStyle(floorPx: number): ViewStyle {
+// Lower-bound the surface at its trigger's width or the consumer floor
+// (overlayMinWidth), whichever is wider. Web reads the trigger width from
+// Radix's CSS var; native has no CSS vars — Yoga drops the string — so
+// tablet-tier native (phones route through Sheet) passes the trigger width
+// measured at open time.
+function matchTriggerWidthStyle(floorPx: number, measuredTriggerPx: number): ViewStyle {
   return {
     maxHeight: 480,
     overflow: 'hidden',
-    minWidth: `max(var(--radix-popover-trigger-width), ${floorPx}px)` as unknown as number,
+    minWidth:
+      Platform.OS === 'web'
+        ? (`max(var(--radix-popover-trigger-width), ${floorPx}px)` as unknown as number)
+        : Math.max(measuredTriggerPx, floorPx),
   }
 }
 
@@ -854,6 +858,15 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   const rowIdPrefix = useId()
   const triggerRef = useRef<unknown>(null)
 
+  // Native popovers can't read the Radix trigger-width CSS var; measure the
+  // trigger at open so matchTriggerWidth holds on tablet tiers too.
+  const [measuredTriggerWidth, setMeasuredTriggerWidth] = useState(0)
+  useEffect(() => {
+    if (Platform.OS === 'web' || isPhone || !open || !props.matchTriggerWidth) return
+    const node = triggerRef.current as View | null
+    node?.measureInWindow((_x, _y, width) => setMeasuredTriggerWidth(width))
+  }, [open, isPhone, props.matchTriggerWidth])
+
   const shouldAutofocus =
     autofocusSearch === 'always' || (autofocusSearch === 'web-only' && Platform.OS === 'web')
 
@@ -1017,7 +1030,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   // (floor raisable via `overlayMinWidth`); otherwise the popover is a fixed
   // 320px (command-menu-shaped surfaces).
   const popoverStyle = props.matchTriggerWidth
-    ? matchTriggerWidthStyle(props.overlayMinWidth ?? 240)
+    ? matchTriggerWidthStyle(props.overlayMinWidth ?? 240, measuredTriggerWidth)
     : STATIC_STYLES.overlayChrome
   const content = (
     <PopoverPrimitive.Content
