@@ -508,6 +508,7 @@ cast roster is known but only some enter the opening scene.
         voice?
         traits?
         drives?
+        faction_name?
         visual?: { physique?; face?; hair?; eyes?; attire?; distinguishing? }
       }
     | {
@@ -529,9 +530,11 @@ staged outputs (`"6 characters; 2 introduced later"` → 4 active +
 2 staged).
 
 Cross-batch reference resolution: location's
-`parent_location_name` resolves at import time to entity ids
-(matching by name within the suggested batch + existing cast);
-unresolved fall back to `null`.
+`parent_location_name` and character's `faction_name` resolve at
+import time to entity ids — matching case-insensitively by name
+against same-kind rows in the imported selection + the existing
+cast. Unresolved names (including a suggested parent or faction
+left unchecked at import) fall back to `null`.
 
 ### Lead-required gating
 
@@ -1071,7 +1074,7 @@ Tracked centrally:
 - **Chip input vs comma-separated string** — see
   [parked.md](../../../parked.md#chip-input-vs-comma-separated-string).
 - **Optional user-side scene tagging on user-written openings** —
-  see [parked.md](../../../parked.md#optional-user-side-scene-tagging-on-user-written-openings).
+  see [followups.md](../../../followups.md#ux).
 - **Regenerate-opening from reader chrome** (post-commit) — see
   [parked.md](../../../parked.md#regenerate-opening-affordance--post-commit-from-reader-chrome).
 - **Classifier-on-opening retrofit** — see
