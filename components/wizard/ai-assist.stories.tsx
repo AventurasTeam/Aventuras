@@ -9,7 +9,7 @@ import type { GenerateStructuredResult } from '@/lib/ai'
 import { AiAssist } from './ai-assist'
 import type { AssistListItem } from './assist-list-logic'
 
-// AiAssist drives the popover state machine around two injected seams: `run`
+// AiAssist drives the overlay state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).
 // The stories feed fakes so nothing hits a real provider or the settings store.
 
@@ -241,9 +241,9 @@ type ListDemoWithLiveExistingProps = {
   resolveModelId: () => string | null
   run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
   // Exposes the setter directly rather than via an on-screen control: a
-  // button would sit outside PopoverContent's DOM, and clicking it would
-  // register as an outside-interaction and dismiss the popover through
-  // handlePopoverOpenChange before the play function could observe anything.
+  // button would sit outside DialogContent's DOM, and clicking it would
+  // register as an outside-interaction and dismiss the overlay through
+  // handleOpenChange before the play function could observe anything.
   onReady: (setExistingNames: (names: string[]) => void) => void
 }
 
@@ -681,9 +681,9 @@ export const DisabledTrigger: Story = {
   ),
   play: async () => {
     const trigger = screen.getByRole('button', { name: 'Suggest description' })
-    // The web disabled gate (lessons-learned/rn-primitives-disabled.md): the
-    // inline pointer-events:none is what actually blocks the Radix trigger's
-    // onClick, since Pressable's own `disabled` doesn't stop it.
+    // The trigger is a bare Pressable, not an rn-primitives Trigger, so RN-Web's
+    // own disabled handling supplies the pointer-events gate that
+    // lessons-learned/rn-primitives-disabled.md has to work around elsewhere.
     expect(trigger).toHaveStyle({ pointerEvents: 'none' })
     // Nothing opened — no guidance chrome.
     expect(screen.queryByText('Optional guidance')).not.toBeInTheDocument()
@@ -692,13 +692,13 @@ export const DisabledTrigger: Story = {
 
 // useTier() reads the real browser window width, not a wrapper's — resize the
 // Storybook preview below 640px to see the ✨ trigger open a bottom Sheet
-// instead of a Popover (mirrors GenerationStatusPill's PhonePopover story).
+// instead of a Modal (mirrors GenerationStatusPill's PhonePopover story).
 export const PhoneSheetNote: Story = {
   render: () => (
     <View style={{ width: 360 }} className="gap-2 rounded-md bg-bg-base p-4">
       <Text variant="muted" size="sm">
         Resize the Storybook window itself below 640px to see the ✨ trigger open a bottom Sheet
-        instead of a Popover.
+        instead of a Modal.
       </Text>
       <ProseDemo
         resolveModelId={() => MODEL_ID}
@@ -848,7 +848,7 @@ export const ListResult_ExistingNameDisabled: Story = {
 
     const existingCheckbox = screen.getByRole('checkbox', { name: 'Sunken Archive' })
     expect(existingCheckbox).toHaveStyle({ pointerEvents: 'none' })
-    // Unlike Popover's Trigger (lessons-learned/rn-primitives-disabled.md),
+    // Unlike an rn-primitives Trigger (lessons-learned/rn-primitives-disabled.md),
     // `disabled` alone genuinely blocks this: RN-Web's Pressable sets
     // pointer-events:none on the disabled root itself, so user-event's
     // actionability check refuses the click outright.
@@ -1089,8 +1089,8 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     // Marking it existing WHILE checked reaches a combination a static
     // existingNames prop never produces: checked AND disabled together, with
     // the Indicator wrapper actually rendered. Driven directly through the
-    // setter (not a click) — a button outside PopoverContent would register
-    // as an outside interaction and dismiss the popover before this
+    // setter (not a click) — a button outside DialogContent would register
+    // as an outside interaction and dismiss the overlay before this
     // assertion ever ran.
     setLiveExistingNames(['Sunken Archive'])
     const checkbox = await screen.findByRole('checkbox', { name: 'Sunken Archive' })

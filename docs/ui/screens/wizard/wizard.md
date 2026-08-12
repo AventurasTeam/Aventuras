@@ -620,7 +620,7 @@ Wizard-assist emits:
 ```
 
 Standard `Discard / Refine / Regenerate / Use this` actions.
-Failure path: inline error in popover. On malformed structured
+Failure path: inline error in the overlay. On malformed structured
 output, the implementation falls back to treating the prose as
 user-written (empty `sceneEntities` / `currentLocationId`); turn-2
 classifier picks up scene metadata from there. The data shape
@@ -827,7 +827,19 @@ by the [`wizard-assist` agent](../../../data-model.md#app-settings-storage).
 Inline `✨` icon-button at the field's label/control area. Always
 visible; opt-in. Coexists with manual entry.
 
-### Guidance popover
+### Surface
+
+**Modal** on desktop and tablet, **Sheet (bottom, medium ~50–60 %)**
+on phone. The flow is multi-step (guidance → loading → preview →
+refine) and ends in a commit-or-discard decision, which is the
+Modal branch of
+[layout.md → Decision tree](../../foundations/mobile/layout.md#decision-tree)
+rather than its menu / picker Popover branch. Guidance input,
+result preview, and action row all render inside the one surface;
+refine replaces the body in place rather than stacking a second
+surface.
+
+### Guidance
 
 ```
 ✨ Suggest setting
@@ -843,8 +855,8 @@ Empty guidance allowed. Soft cap ~200 chars on the input.
 
 ### Loading
 
-Popover swaps to spinner showing the wizard-assist profile's
-active model name. Cancellable.
+The guidance form stays in place and a spinner joins it, showing
+the wizard-assist profile's active model name. Cancellable.
 
 ### Result presentation — three shapes
 
@@ -856,7 +868,7 @@ active model name. Cancellable.
 
 ### Refine — prose-result only
 
-Fourth action button on prose preview opens an iteration popover:
+Fourth action button on prose preview opens an iteration form:
 
 ```
 ✨ Refine setting
@@ -875,12 +887,12 @@ instructions. Refine doesn't apply to list or chips
 
 ### Failure
 
-Inline error in the popover: `Couldn't generate. <reason>.
+Inline error in the overlay: `Couldn't generate. <reason>.
 [Try again] [Cancel]`. No silent failure.
 
 ### No provider configured
 
-Click-time check; popover shows `AI is not configured.
+Click-time check; the overlay shows `AI is not configured.
 [Set up in Settings] [Cancel]`. Doesn't block manual wizard
 completion.
 
@@ -986,14 +998,14 @@ phone-tier specifics below.
   [platform.md → Keyboard avoidance](../../foundations/mobile/platform.md#keyboard-avoidance)
   reflows step-body content above the keyboard while a textarea is
   focused.
-- **AI-assist popover** (the `✨` guidance and result surfaces per
-  [AI-assist pattern](#ai-assist-pattern)) becomes **Sheet (bottom,
-  medium ~50–60 %)** on phone per
+- **AI-assist surface** (the `✨` guidance and result surfaces per
+  [AI-assist pattern](#ai-assist-pattern)) is a desktop / tablet
+  Modal that becomes **Sheet (bottom, medium ~50–60 %)** on phone per
   [layout.md → Mapping](../../foundations/mobile/layout.md#mapping--desktop-to-mobile).
   Guidance input, prose / list / chips result, action row all
-  inside the sheet. Refine flow: result sheet dismisses, refine
-  sheet replaces (Sheet over Sheet not allowed per
-  [layout.md → Stacking](../../foundations/mobile/layout.md#stacking)).
+  inside the sheet. Refine replaces the sheet's body in place —
+  never a second sheet, per
+  [layout.md → Stacking](../../foundations/mobile/layout.md#stacking).
 - **Replace-confirm modal** stays Modal all tiers per the layout
   binding table.
 - **Calendar swap warnings** stay Modal all tiers per

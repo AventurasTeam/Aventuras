@@ -173,6 +173,7 @@
     "guidance": {
       "label": "Optional guidance"
     },
+    "description": "Generate this field with AI, then refine, regenerate, or accept the result.",
     "actions": {
       "cancel": "Cancel",
       "generate": "Generate",
@@ -252,8 +253,15 @@
       "injectionMode": "Injection mode",
       "priority": "Priority",
       "priorityHint": "{{min}}–{{max}}. Higher makes this more likely to be recalled.",
-      "modes": { "always": "Always", "auto": "Auto", "disabled": "Disabled" },
-      "errors": { "title": "Title is required.", "body": "Body is required." },
+      "modes": {
+        "always": "Always",
+        "auto": "Auto",
+        "disabled": "Disabled"
+      },
+      "errors": {
+        "title": "Title is required.",
+        "body": "Body is required."
+      },
       "empty": "No lore yet. Add an entry or let AI suggest some."
     }
   }

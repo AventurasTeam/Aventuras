@@ -1,14 +1,20 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { Sparkles } from 'lucide-react-native'
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Platform, Pressable, ScrollView, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Heading } from '@/components/ui/heading'
 import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
@@ -117,7 +123,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const [assist, setAssist] = useState<AssistState<T>>({ kind: 'idle' })
   const [guidanceText, setGuidanceText] = useState('')
   const [refineText, setRefineText] = useState('')
-  const [phoneOpen, setPhoneOpen] = useState(false)
+  const [open, setOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
   // trimmed name rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
@@ -128,7 +134,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // later Generate / Try again / Cancel — AbortController's own 'aborted'
   // status already covers the common case, this is the defensive backstop.
   const requestSeqRef = useRef(0)
-  const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
   // The guidance the last run actually used, which is not guidanceText: opening
   // the trigger clears the input, and an unconfigured run returns before syncing.
   // Regenerate has to replay the former. Not a cache; don't fold into state.
@@ -148,26 +153,18 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     setSelected(new Set())
   }
 
+  // A controlled root never emits onOpenChange for a parent-driven close, so the
+  // reset has to ride along here rather than routing through handleOpenChange.
   function closeOverlay() {
-    if (isPhone) setPhoneOpen(false)
-    // rn-primitives Popover has no controlled `open` prop; PopoverTrigger's
-    // ref exposes an imperative close() that flips the shared root context.
-    else triggerRef.current?.close()
-    // Direct call is load-bearing on the phone path (setPhoneOpen doesn't fire
-    // the Sheet's onOpenChange) and an idempotent no-op on desktop (close()
-    // already routed through handlePopoverOpenChange → resetOnClose).
+    setOpen(false)
     resetOnClose()
   }
 
   // Catches dismiss paths that bypass closeOverlay() — tap-outside, Escape,
   // hardware back, sheet swipe-down — so an in-flight request still aborts
   // and stale result/failure state doesn't survive to the next open.
-  function handlePopoverOpenChange(next: boolean) {
-    if (!next) resetOnClose()
-  }
-
-  function handlePhoneOpenChange(next: boolean) {
-    setPhoneOpen(next)
+  function handleOpenChange(next: boolean) {
+    setOpen(next)
     if (!next) resetOnClose()
   }
 
@@ -179,7 +176,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       setGuidanceText('')
       setAssist({ kind: 'guidance' })
     }
-    if (isPhone) setPhoneOpen(true)
+    setOpen(true)
   }
 
   // Shared by runGenerate/runRefine: both need the same abort / seq-bump /
@@ -305,9 +302,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       })
     return (
       // Phone fills the sheet's fixed detent rather than capping short of it;
-      // the max-h is a popover concern, where nothing else bounds the height.
+      // the max-h bounds the dialog, which otherwise grows with its content.
       <View className={cn('gap-3', isPhone && 'flex-1')}>
-        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
         {marked.length === 0 ? (
           <Text size="sm" variant="muted">
             {t('wizard:aiAssist.list.empty')}
@@ -342,7 +338,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 </Text>
               </Pressable>
             </View>
-            <View className={isPhone ? 'flex-1' : 'max-h-72'}>
+            <View className={isPhone ? 'flex-1' : 'max-h-96'}>
               <Scroller>
                 <View className="gap-2">
                   {marked.map((row) => (
@@ -449,7 +445,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     const chips = props.getChips(assist.value)
     return (
       <View className="gap-3">
-        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
         <View className="flex-row flex-wrap gap-2">
           {chips.map((chip) => (
             <Tag
@@ -480,11 +475,10 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     const prose = props.getProse(assist.value)
     return (
       <View className={cn('gap-3', isPhone && 'flex-1')}>
-        <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
         <View
           className={cn(
             'rounded-md border border-border bg-bg-sunken p-3',
-            isPhone ? 'flex-1' : 'max-h-60',
+            isPhone ? 'flex-1' : 'max-h-96',
           )}
         >
           <Scroller>
@@ -524,8 +518,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
   // The compact states are shorter than the sheet's detent, so their actions
   // would otherwise float mid-surface under a band of empty space. Result
-  // states need no spacer — their scroll pane already flexes. Desktop's popover
-  // sizes to content, so there is nothing to push against and this collapses.
+  // states need no spacer — their scroll pane already flexes. The dialog sizes
+  // to content, so there is nothing to push against and this collapses.
   const actionSpacer = isPhone ? <View className="flex-1" /> : null
 
   function renderBody(): ReactNode {
@@ -557,7 +551,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       case 'loading':
         return (
           <View className={cn('gap-3', isPhone && 'flex-1')}>
-            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
             <View className="gap-1">
               <Text size="sm" variant="muted">
                 {t('wizard:aiAssist.guidance.label')}
@@ -611,7 +604,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       case 'refine':
         return (
           <View className="gap-3">
-            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
             <View className="gap-1">
               <Text size="sm" variant="muted">
                 {t('wizard:aiAssist.refine.label')}
@@ -642,7 +634,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       case 'failure':
         return (
           <View className={cn('gap-3', isPhone && 'flex-1')}>
-            <Heading level={3}>{`✨ ${ariaLabel}`}</Heading>
             <Text size="sm" className="text-danger">
               {t('wizard:aiAssist.failure', { reason: assist.detail })}
             </Text>
@@ -672,28 +663,25 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       label={ariaLabel}
       onPress={handleTriggerPress}
       disabled={disabled}
-      // rn-primitives + Radix let the Trigger's own onClick open the popover
-      // even when the child Pressable is `disabled` (per lessons-learned/
-      // rn-primitives-disabled.md). The inline DOM-level pointerEvents gate is
-      // the reliable web block; native/phone are covered by IconAction's
-      // disabled onPress + the handleTriggerPress guard.
-      style={Platform.OS === 'web' && disabled ? ({ pointerEvents: 'none' } as never) : undefined}
     />
   )
+
+  const title = `✨ ${ariaLabel}`
 
   // Guidance and loading are a field and a button; only a preview earns the
   // taller detent. Growing on arrival beats reserving the space up front.
   const sheetSize =
     assist.kind === 'result' || assist.kind === 'refine' ? ('medium' as const) : ('short' as const)
 
-  if (isPhone) {
-    // Sheet's DialogPrimitive.Root renders a real (portaled) View sibling even
-    // while closed — a bare Fragment here would leak two layout children to the
-    // consumer's row. Wrap in one View, mirroring SearchableOverlayList's phone branch.
-    return (
-      <View>
-        {trigger}
-        <Sheet open={phoneOpen} onOpenChange={handlePhoneOpenChange} ariaLabel={ariaLabel}>
+  // Sheet and Dialog are both @rn-primitives/dialog Roots, so one controlled
+  // `open` drives either branch and the trigger sits outside both. The wrapping
+  // View is load-bearing: a closed Root still renders a portaled sibling, and a
+  // bare Fragment would leak two layout children into the consumer's row.
+  return (
+    <View>
+      {trigger}
+      {isPhone ? (
+        <Sheet open={open} onOpenChange={handleOpenChange} ariaLabel={ariaLabel}>
           {/* Two fixed detents rather than 'auto', which would size to content:
               dynamic sizing derives the detent from what it measures, and a
               scrollable inside measures one height while the sheet snaps to
@@ -703,20 +691,29 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               transition (its OnSnapPointChange reaction animates to the new one,
               gated on layout being calculated) and leaves both the container
               component and enableDynamicSizing untouched. */}
-          <SheetContent anchor="bottom" size={sheetSize}>
+          <SheetContent anchor="bottom" size={sheetSize} className="gap-3">
+            <Heading level={3}>{title}</Heading>
             {renderBody()}
           </SheetContent>
         </Sheet>
-      </View>
-    )
-  }
-
-  return (
-    <Popover ariaLabel={ariaLabel} onOpenChange={handlePopoverOpenChange}>
-      <PopoverTrigger ref={triggerRef} asChild disabled={disabled}>
-        {trigger}
-      </PopoverTrigger>
-      <PopoverContent className="w-80">{renderBody()}</PopoverContent>
-    </Popover>
+      ) : (
+        <Dialog open={open} onOpenChange={handleOpenChange}>
+          {/* No header ×: every state ends in an explicit Cancel or Discard, and
+              those route the close through resetOnClose. */}
+          <DialogContent hideCloseButton>
+            <DialogHeader hasCloseButton={false}>
+              <DialogTitle>{title}</DialogTitle>
+              {/* Radix warns without a description, and rn-primitives' web Content
+                  forwards only its event handlers, so `aria-describedby` can never
+                  reach it from here — a real node is the only way to answer it. */}
+              <DialogDescription className="sr-only">
+                {t('wizard:aiAssist.description')}
+              </DialogDescription>
+            </DialogHeader>
+            {renderBody()}
+          </DialogContent>
+        </Dialog>
+      )}
+    </View>
   )
 }

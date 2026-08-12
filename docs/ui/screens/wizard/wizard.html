@@ -176,11 +176,11 @@
   .chip-input .chip-input-typer { flex: 1; min-width: 80px; border: none; outline: none; padding: 3px 4px; font-size: 12px; font-family: inherit; background: transparent; color: var(--ink); }
   .chip-cap-warn { font-size: 10px; color: var(--warn); margin-top: 2px; }
 
-  /* AI-assist popover (render at-rest as a card; toggle to overlay-style if needed) */
-  .ai-popover { padding: 14px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); max-width: 380px; margin-top: 8px; }
-  .ai-popover .ai-title { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
-  .ai-popover .ai-guidance-label { font-size: 11px; color: var(--ink-muted); margin-bottom: 4px; }
-  .ai-popover .ai-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+  /* AI-assist overlay — Modal on desktop, Sheet on phone (render at-rest as a card) */
+  .ai-overlay { padding: 14px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,0.08); max-width: 380px; margin-top: 8px; }
+  .ai-overlay .ai-title { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ai-overlay .ai-guidance-label { font-size: 11px; color: var(--ink-muted); margin-bottom: 4px; }
+  .ai-overlay .ai-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
   .ai-result { padding: 14px; background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; margin-top: 12px; }
   .ai-result .ai-result-title { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .ai-result .ai-preview { padding: 10px; background: var(--bg-faint); border-radius: 4px; font-size: 12px; line-height: 1.5; color: var(--ink); margin-bottom: 10px; }
@@ -797,8 +797,8 @@
         </div>
       </div>
 
-      <!-- Overlay: AI guidance popover -->
-      <div id="overlay-ai-guidance" class="ai-popover hidden">
+      <!-- Overlay: AI guidance -->
+      <div id="overlay-ai-guidance" class="ai-overlay hidden">
         <div class="ai-title"><span class="sparkle">✨</span> Suggest setting</div>
         <div class="ai-guidance-label">Optional guidance</div>
         <input class="input" placeholder='e.g. "Norse-flavored, post-apocalypse"'>
@@ -1037,7 +1037,7 @@
     }
   }));
 
-  // overlay switcher (AI popovers, replace-confirm)
+  // overlay switcher (AI assist, replace-confirm)
   const overlayBtns = document.querySelectorAll('#overlay-switcher .rb-btn');
   const overlays = {
     'ai-guidance': document.getElementById('overlay-ai-guidance'),
