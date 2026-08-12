@@ -194,6 +194,16 @@
     !!activeBranch?.forkEntryId && visibleEntryIds.has(activeBranch.forkEntryId),
   )
 
+  // Each way the button can be unavailable says so in its own words: claiming "no
+  // branching point" while entries are still loading, or "not loaded yet" for a branch
+  // that records no fork at all, would both send the reader looking for the wrong thing.
+  const forkPointTitle = $derived.by(() => {
+    if (canGoToForkPoint) return 'Jump to where this branch began'
+    if (!story.currentStory?.currentBranchId) return 'The main branch has no branching point'
+    if (!activeBranch?.forkEntryId) return 'This branch has no recorded branching point'
+    return "This branch's starting point isn't loaded yet"
+  })
+
   function goToForkPoint() {
     if (!canGoToForkPoint || !activeBranch) return
 
@@ -223,11 +233,7 @@
           : 'text-surface-600 cursor-not-allowed'}"
         onclick={goToForkPoint}
         disabled={!canGoToForkPoint}
-        title={canGoToForkPoint
-          ? 'Jump to where this branch began'
-          : !story.currentStory?.currentBranchId
-            ? 'The main branch has no branching point'
-            : "This branch's starting point isn't loaded yet"}
+        title={forkPointTitle}
       >
         <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
       </button>
