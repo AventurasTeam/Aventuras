@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  createFuzzyTextRegex,
   entityNameMatches,
   foldName,
   findTextMatches,
@@ -423,5 +424,20 @@ describe('foldName — the apostrophe', () => {
   it('still folds the separators that are separators', () => {
     expect(foldName('Kaelen, the Bold')).toBe('kaelen the bold')
     expect(foldName('Ash-ford  Keep')).toBe('ash ford keep')
+  })
+})
+
+describe('createFuzzyTextRegex', () => {
+  it('matches formatted Latin text fuzzily across markdown and punctuation', () => {
+    const regex = createFuzzyTextRegex('the **black sword**')
+    expect(regex.test('he drew the black sword slowly')).toBe(true)
+  })
+
+  it('handles non-Latin scripts (Cyrillic, CJK) without stripping them as separators', () => {
+    const cyrillicRegex = createFuzzyTextRegex('Кайлен **воин**')
+    expect(cyrillicRegex.test('Кайлен воин вошел в комнату')).toBe(true)
+
+    const cjkRegex = createFuzzyTextRegex('古い *龍*')
+    expect(cjkRegex.test('古い 龍が目を覚ました')).toBe(true)
   })
 })

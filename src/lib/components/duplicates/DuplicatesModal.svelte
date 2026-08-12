@@ -85,7 +85,7 @@
     try {
       groups = await findAllDuplicates()
       primaryByGroup = Object.fromEntries(
-        groups.map((g) => [g.key, primaryByGroup[g.key] ?? g.entities[0].id]),
+        groups.map((g) => [g.key, primaryByGroup[g.key] ?? g.entities[0]?.id ?? '']),
       )
     } catch (err) {
       failed(err)
@@ -218,7 +218,7 @@
             <CheckCircle2 class="h-6 w-6 text-emerald-500" />
             <p>Nothing left to resolve on this branch.</p>
           </div>
-        {:else if previewKey && plan}
+        {:else if previewKey && plan && groups.some((g) => g.key === previewKey)}
           {@const activePlan = plan}
           {@const group = groups.find((g) => g.key === previewKey)!}
           <div class="space-y-3">
@@ -352,7 +352,7 @@
     </ScrollArea>
 
     <ResponsiveModal.Footer class="border-t px-4 py-3">
-      {#if previewKey && plan}
+      {#if previewKey && plan && groups.some((g) => g.key === previewKey)}
         {@const group = groups.find((g) => g.key === previewKey)!}
         <Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={closePreview}>
           <ArrowLeft class="h-3.5 w-3.5" />

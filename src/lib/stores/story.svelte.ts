@@ -1942,6 +1942,7 @@ class StoryStore {
    */
   async addLorebookEntry(
     entryData: Omit<Entry, 'id' | 'storyId' | 'createdAt' | 'updatedAt' | 'branchId'> & {
+      id?: string
       branchId?: string | null
     },
   ): Promise<Entry> {
@@ -1950,7 +1951,7 @@ class StoryStore {
     const now = Date.now()
     const entry: Entry = {
       ...entryData,
-      id: crypto.randomUUID(),
+      id: entryData.id ?? crypto.randomUUID(),
       storyId: this.currentStory.id,
       createdAt: now,
       updatedAt: now,

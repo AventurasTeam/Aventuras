@@ -3696,13 +3696,15 @@ class DatabaseService {
     const db = await this.getDb()
     const now = Date.now()
     const branch = this.keptSeparateBranch(branchId)
-    for (const pairKey of pairKeys) {
-      await db.execute(
-        `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
-         VALUES (?, ?, ?, ?, ?)`,
-        [storyId, branch, pool, pairKey, now],
-      )
-    }
+    await this.withTransaction(async () => {
+      for (const pairKey of pairKeys) {
+        await db.execute(
+          `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [storyId, branch, pool, pairKey, now],
+        )
+      }
+    })
   }
 
   /** Forget every dismissal for a story branch, so the full worklist comes back. */

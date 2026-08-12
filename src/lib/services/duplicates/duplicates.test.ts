@@ -76,6 +76,10 @@ describe('dismissals', () => {
     // `isOpen` and drop the group before it was ever offered.
     expect(pairKeys(['The Citadel', 'Citadel'])).toEqual(['citadel|citadel'])
     expect(pairKeys(['Kaelen', 'Kaelen'])).toEqual(['kaelen|kaelen'])
+    expect(pairKeys(['Kaelen', 'Kaelen', 'Kaelen the Bold'])).toEqual([
+      'kaelen|kaelen',
+      'kaelen|kaelen the bold',
+    ])
   })
 
   it('offers two rows with the same name, and remembers them being kept apart', () => {

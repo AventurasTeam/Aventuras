@@ -524,11 +524,11 @@ export function createFuzzyTextRegex(text: string): RegExp {
   // 1. Normalize
   const normalized = replaceUncommonCharacters(text)
 
-  // 2. Extract alphanumeric "words"
-  const words = normalized.split(/[^a-zA-Z0-9'’‘‚]+/).filter((word) => word.length > 0)
+  // 2. Extract alphanumeric "words" (Unicode-aware: letters and numbers across scripts)
+  const words = normalized.split(/[^\p{L}\p{N}'’‘‚]+/u).filter((word) => word.length > 0)
 
   if (words.length === 0) {
-    return new RegExp(escapeRegex(text), 'gi')
+    return new RegExp(escapeRegex(text), 'giu')
   }
 
   // 3. Escape words and handle variants
@@ -541,11 +541,11 @@ export function createFuzzyTextRegex(text: string): RegExp {
   // so the match can neither cross a paragraph boundary nor start/end by absorbing one of the
   // two newlines into the match itself (which would delete it once the match gets replaced by
   // a placeholder, collapsing "\n\n" into "\n" and merging the paragraph with the previous one).
-  const fuzzySeparator = '(?:[^a-zA-Z0-9\\n]|(?<!\\n)\\n(?!\\n))*?'
+  const fuzzySeparator = '(?:[^\\p{L}\\p{N}\\n]|(?<!\\n)\\n(?!\\n))*?'
 
   const pattern = fuzzySeparator + patternParts.join(fuzzySeparator) + fuzzySeparator
 
-  return new RegExp(pattern, 'gi')
+  return new RegExp(pattern, 'giu')
 }
 
 const SENTENCE_DELIMITERS = /[.!?\n]/

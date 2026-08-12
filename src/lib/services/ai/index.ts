@@ -683,11 +683,12 @@ class AIService {
     // stop here: merges and deletes were approved, logged, then dropped, so every run
     // re-proposed the same duplicates it had "already" merged.
     for (const { sources, merged } of sessionResult.merges) {
+      const mergedEntry = { ...merged, id: crypto.randomUUID(), branchId }
       await callbacks.onMergeEntries(
         sources.map((e) => e.id),
-        { ...merged, id: crypto.randomUUID(), branchId },
+        mergedEntry,
       )
-      changes.push({ type: 'merge', entry: merged, mergedFrom: sources.map((e) => e.id) })
+      changes.push({ type: 'merge', entry: mergedEntry, mergedFrom: sources.map((e) => e.id) })
     }
 
     const mergedAway = new Set(sessionResult.merges.flatMap((m) => m.sources.map((e) => e.id)))

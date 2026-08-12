@@ -70,15 +70,30 @@ export function keptSeparateKey(names: string[]): string {
  * dismissed" — so two rows both called `Kaelen` were dropped before being shown.
  */
 export function pairKeys(names: string[]): string[] {
-  const unique = [...new Set(names.map(normalizeName))].filter(Boolean).sort()
-  if (unique.length === 1) return [`${unique[0]}|${unique[0]}`]
+  const normalized = names.map(normalizeName).filter(Boolean)
+  const counts = new Map<string, number>()
+  for (const name of normalized) {
+    counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+
+  const unique = [...counts.keys()].sort()
   const pairs: string[] = []
+
+  // Add self-pairs for names that appear multiple times in the group
+  for (const [name, count] of counts.entries()) {
+    if (count > 1) {
+      pairs.push(`${name}|${name}`)
+    }
+  }
+
+  // Add cross-pairs for distinct names
   for (let i = 0; i < unique.length; i++) {
     for (let j = i + 1; j < unique.length; j++) {
       pairs.push(`${unique[i]}|${unique[j]}`)
     }
   }
-  return pairs
+
+  return pairs.sort()
 }
 
 /**

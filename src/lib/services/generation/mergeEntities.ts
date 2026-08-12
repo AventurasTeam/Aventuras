@@ -23,6 +23,7 @@
  */
 
 import type { Character, Entry, Item, Location } from '$lib/types'
+import { escapeRegex } from '$lib/utils/text'
 
 /** Where a field's value came from, which is what the preview shows next to it. */
 export type FieldOrigin =
@@ -301,19 +302,68 @@ export function planEntryMerge(primary: Entry, others: Entry[]): MergePlan {
 const APPEND_SEPARATOR = '\n\n'
 
 /**
+ * Checks whether `needle` is contained in `haystack` as a whole-word / whole-unit text passage,
+ * so sub-word occurrences ("Gatto" in "Cattedrale") are not false positives.
+ */
+function containsAsWholeUnit(haystack: string, needle: string): boolean {
+  const normHay = haystack.toLowerCase().trim()
+  const normNeedle = needle.toLowerCase().trim()
+  if (!normNeedle) return false
+  if (normHay === normNeedle) return true
+
+  let patternStr = escapeRegex(normNeedle)
+  if (/^[\p{L}\p{N}]/u.test(normNeedle)) {
+    patternStr = '(?<![\\p{L}\\p{N}])' + patternStr
+  }
+  if (/[\p{L}\p{N}]$/u.test(normNeedle)) {
+    patternStr = patternStr + '(?![\\p{L}\\p{N}])'
+  }
+
+  return new RegExp(patternStr, 'u').test(normHay)
+}
+
+/**
  * Join the candidates, skipping any whose text the result already carries.
  *
- * Two rows for one subject often repeat each other outright — the classifier copies a
- * description forward when it mints the second. It is also what makes a merge safe to
- * re-run after a partial failure, where the primary already holds the joined text.
+ * Performs a bidirectional, boundary-aware check:
+ * - If candidate B is already covered as a whole unit by an existing part A, B is skipped.
+ * - If candidate B covers an existing part A as a whole unit (longer/more complete passage),
+ *   B replaces A.
  */
 function appendCandidates(candidates: MergeCandidate[]): string {
   const parts: string[] = []
+
   for (const candidate of candidates) {
     const text = String(candidate.value).trim()
-    if (!text || parts.some((p) => p.includes(text))) continue
-    parts.push(text)
+    if (!text) continue
+
+    // 1. If an existing part already covers this text as a whole unit, skip text.
+    if (parts.some((p) => containsAsWholeUnit(p, text))) {
+      continue
+    }
+
+    // 2. If this text covers existing parts as a whole unit, replace/remove those parts.
+    let replaced = false
+    const newParts: string[] = []
+    for (const p of parts) {
+      if (containsAsWholeUnit(text, p)) {
+        if (!replaced) {
+          newParts.push(text)
+          replaced = true
+        }
+      } else {
+        newParts.push(p)
+      }
+    }
+
+    if (replaced) {
+      parts.length = 0
+      parts.push(...newParts)
+    } else {
+      parts.push(text)
+    }
   }
+
   return parts.join(APPEND_SEPARATOR)
 }
 

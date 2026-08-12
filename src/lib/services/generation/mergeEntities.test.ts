@@ -155,6 +155,22 @@ describe('keeping both', () => {
     field(plan, 'description').chosen = APPEND
     expect(applyMergePlan(plan).description).toBe('One.\n\nTwo.')
   })
+
+  it('replaces a shorter text with a longer containing text regardless of candidate order', () => {
+    const plan = planCharacterMerge(character('a', { description: 'Two.' }), [
+      character('b', { description: 'One.\n\nTwo.' }),
+    ])
+    field(plan, 'description').chosen = APPEND
+    expect(applyMergePlan(plan).description).toBe('One.\n\nTwo.')
+  })
+
+  it('does not treat sub-word substrings as matches (e.g. Gatto inside Cattedrale)', () => {
+    const plan = planCharacterMerge(character('a', { description: 'La Cattedrale' }), [
+      character('b', { description: 'Un bel Gatto' }),
+    ])
+    field(plan, 'description').chosen = APPEND
+    expect(applyMergePlan(plan).description).toBe('La Cattedrale\n\nUn bel Gatto')
+  })
 })
 
 describe('the other pools', () => {
