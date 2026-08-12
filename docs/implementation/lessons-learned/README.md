@@ -54,6 +54,10 @@ slice plans when relevant.
 - [`BackHandler` is not inert on web](./backhandler-web-console-error.md)
   — RN-Web's shim `console.error`s on every subscribe; gate the
   subscribe on `Platform.OS === 'android'`, not the handler.
+- [`className` on a Reanimated `Animated.*` is silently dropped](./nativewind-classname-on-animated-view.md)
+  — NativeWind registers cssInterop for RN core components only and
+  RNW drops unknown props, so the class lands nowhere on either
+  platform; nest a plain `View` and style that.
 
 ### rn-primitives substrate
 
@@ -70,6 +74,10 @@ slice plans when relevant.
 - [Input adornment DOM identity](./input-adornment-dom-identity.md)
   — always render adornments, toggle visibility; conditional
   render re-keys TextInput and loses focus.
+- [Controlled TextInput in a portal loses the caret](./portal-controlled-textinput-caret.md)
+  — the portal delivers `value` one commit late and RN's sync
+  effect rewrites native text; route fields through
+  `Input` / `Textarea`, never raw controlled TextInput in overlays.
 - [Dialog claims the touch responder](./dialog-content-responder-claim.md)
   — native `Content` blocks ScrollView scroll interception on
   Android; scrolling is flaky to start, fine once moving.
@@ -92,6 +100,10 @@ slice plans when relevant.
 - [Drag-height constant drift](./drag-height-constant-drift.md)
   — measure or enforce row height; assumed-vs-actual mismatch
   produces release-time pixel snaps.
+- [`KeyboardProvider` is inert until a hook claims resize mode](./keyboard-resize-mode-must-be-claimed.md)
+  — the provider alone avoids nothing; `useResizeMode` must be claimed once at
+  the root, or every keyboard-avoiding surface measures a window that under
+  edge-to-edge never shrinks.
 - [KAV `automaticOffset` × layout-entering animation race](./kav-automatic-offset-animation-race.md)
   — `react-native-keyboard-controller` KAV measures once;
   Reanimated-entry containers drive `paddingBottom` off

@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native'
 import { DensityPicker } from '@/components/foundations/sections/density-picker'
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Heading } from '@/components/ui/heading'
+import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 
@@ -60,12 +61,33 @@ function Stateful({
   return <Select options={options} value={value} onValueChange={setValue} {...rest} />
 }
 
+function KeyboardOrderingProbe() {
+  const [note, setNote] = useState('')
+  return (
+    <View>
+      <Heading level={3}>Keyboard ordering (phone)</Heading>
+      <Text variant="muted" size="xs" className="mt-1">
+        gorhom builds its keyboard state from show/hide events only, so a sheet opened while the
+        keyboard is already up is never told about it. Focus the field, then — without dismissing —
+        open the select. Its sheet must clear the keyboard, not sit behind it. Opening the select
+        first and focusing after is the path that always worked; test this order.
+      </Text>
+      <View className="mt-3 flex-col gap-3">
+        <Input value={note} onChangeText={setNote} placeholder="Focus me first" aria-label="Note" />
+        <Stateful initial="two" mode="dropdown" options={RICH_OPTIONS} sheetSize="short" />
+      </View>
+    </View>
+  )
+}
+
 export default function SelectDevRoute() {
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView className="flex-1 bg-bg-base" keyboardShouldPersistTaps="handled">
       <ThemePicker />
       <DensityPicker />
       <View className="flex-col gap-6 p-4">
+        <KeyboardOrderingProbe />
+
         <View>
           <Heading level={3}>Default — auto-derive cascade</Heading>
           <Text variant="muted" size="xs" className="mt-1">

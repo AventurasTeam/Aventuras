@@ -94,6 +94,14 @@ function Trigger({
 
 type ContentSheetSize = 'short' | 'medium'
 
+// Matches the sheet body's p-4 so the padding below the last row reads the same
+// above a nav bar as it does on a device without one.
+const SHEET_CONTENT_PADDING_PX = 16
+
+function sheetSafeBottomStyle(bottomInset: number): ViewStyle | undefined {
+  return bottomInset > 0 ? { paddingBottom: SHEET_CONTENT_PADDING_PX + bottomInset } : undefined
+}
+
 const SHEET_HEIGHT_PCT: Record<ContentSheetSize, `${number}%`> = {
   short: '33%',
   medium: '60%',
@@ -116,6 +124,7 @@ function PhoneSheetContent({
 }) {
   const { open, onOpenChange } = SelectBase.useRootContext()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
 
   const sheetRef = useRef<BottomSheet>(null)
   const snapPoints = useMemo(() => [SHEET_HEIGHT_PCT[sheetSize]], [sheetSize])
@@ -144,18 +153,35 @@ function PhoneSheetContent({
         <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
           <BottomSheet
             ref={sheetRef}
+            // Derived inline, never via state. The portal mounts fresh on open,
+            // and gorhom's index-change effect snaps through handleSnapToIndex,
+            // which no-ops before the container has measured — so an index moved
+            // to 0 by a mount effect is dropped and the sheet stays closed while
+            // `open` says otherwise. Its own animate-on-mount path waits for
+            // layout; this must be the initial index for that to run.
             index={open ? 0 : -1}
             snapPoints={snapPoints}
             enableDynamicSizing={false}
             enablePanDownToClose
-            keyboardBehavior="extend"
+            // One detent at 33%/60%, so 'extend' resolves to the position the
+            // sheet already holds and grows nothing. 'interactive' lifts it by
+            // the keyboard height instead — same call sheet.tsx makes below 'tall'.
+            keyboardBehavior="interactive"
             keyboardBlurBehavior="restore"
+            // 'adjustPan' deliberately — see sheet.tsx for why 'adjustResize'
+            // puts every sheet back under the keyboard.
+            android_keyboardInputMode="adjustPan"
             backgroundStyle={backgroundStyle}
             handleIndicatorStyle={handleIndicatorStyle}
             onClose={() => onOpenChange(false)}
           >
             <TextClassContext.Provider value="text-fg-primary">
-              <View className={cn('flex-1 p-4', className)}>
+              {/* Edge-to-edge draws under the nav bar; without the inset the
+                  last option and the tail action sit behind it. */}
+              <View
+                className={cn('flex-1 p-4', className)}
+                style={sheetSafeBottomStyle(insets.bottom)}
+              >
                 <SelectBase.Content
                   disablePositioningStyle
                   position="popper"

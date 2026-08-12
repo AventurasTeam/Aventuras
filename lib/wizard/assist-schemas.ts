@@ -23,4 +23,44 @@ export const descriptionOutputSchema = z.object({
   description: z.string().describe('the one-sentence log line'),
 })
 
+export const loreSuggestionsSchema = z.object({
+  lore: z
+    .array(
+      z.object({
+        // Trimmed at the parse boundary: a padded title would otherwise reach
+        // the store through the list result's opaque `payload`, which bypasses
+        // the render-layer trim in markExisting.
+        title: z.string().trim().describe('short reference-entry title'),
+        body: z.string().trim().describe('one or two paragraphs of reference prose'),
+        category: z
+          .string()
+          .trim()
+          .default('')
+          .describe('optional grouping label, e.g. cosmology or history'),
+      }),
+    )
+    .min(1)
+    .describe('five reference entries about this world'),
+})
+
+export type LoreSuggestions = z.infer<typeof loreSuggestionsSchema>
+
+export const labeledPromptOutputSchema = z.object({
+  // Trimmed at the parse boundary: these values land in stories.definition
+  // verbatim, and there is no later trim on the write path.
+  label: z.string().trim().describe('a short name for this genre or tone'),
+  promptBody: z
+    .string()
+    .trim()
+    .describe('two or three paragraphs instructing how the prose should read'),
+})
+
+export const settingOutputSchema = z.object({
+  // Same reason as labeledPromptOutputSchema above.
+  setting: z.string().trim().describe('one or two paragraphs describing the world'),
+})
+
+export type LabeledPromptOutput = z.infer<typeof labeledPromptOutputSchema>
+export type SettingOutput = z.infer<typeof settingOutputSchema>
+
 export type OpeningOutput = z.infer<typeof openingOutputSchema>

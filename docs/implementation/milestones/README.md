@@ -25,4 +25,4 @@ directory (`NN-name/`) with a `milestone.md` definition and a
   creation hard gate, piggyback layer, periodic classifier,
   retrieval + ranker, dev probe, full wizard World / Cast steps,
   suggestions, worldTime editing, batched undo, regenerate;
-  twelve slices, five day-one startable.
+  fourteen slices, five day-one startable.

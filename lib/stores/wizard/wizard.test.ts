@@ -100,3 +100,54 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().customDimInvalid).toBe(false)
   })
 })
+
+describe('lore mutators', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('addLore appends a row with a minted lore id and empty fields', () => {
+    wizardStore.addLore()
+    const [row] = wizardStore.getWizard().state.lore
+    expect(row.id).toMatch(/^lore_/)
+    expect(row.title).toBe('')
+    expect(row.body).toBe('')
+    expect(row.injectionMode).toBe('auto')
+  })
+
+  it('addLore returns the minted row id', () => {
+    const id = wizardStore.addLore()
+    const [row] = wizardStore.getWizard().state.lore
+    expect(id).toBe(row.id)
+  })
+
+  it('patchLore updates only the addressed row', () => {
+    wizardStore.addLore()
+    wizardStore.addLore()
+    const [first, second] = wizardStore.getWizard().state.lore
+    expect(first.id).not.toBe(second.id)
+    wizardStore.patchLore(second.id, { title: 'Second' })
+    const after = wizardStore.getWizard().state.lore
+    expect(after[0]).toBe(first)
+    expect(after[1].title).toBe('Second')
+  })
+
+  it('removeLore drops the addressed row and keeps order', () => {
+    wizardStore.addLore()
+    wizardStore.addLore()
+    wizardStore.addLore()
+    const ids = wizardStore.getWizard().state.lore.map((r) => r.id)
+    wizardStore.removeLore(ids[1])
+    expect(wizardStore.getWizard().state.lore.map((r) => r.id)).toEqual([ids[0], ids[2]])
+  })
+
+  it('importLore appends a batch in one write', () => {
+    wizardStore.addLore()
+    wizardStore.importLore([
+      { title: 'A', body: 'a' },
+      { title: 'B', body: 'b' },
+    ])
+    const rows = wizardStore.getWizard().state.lore
+    expect(rows).toHaveLength(3)
+    expect(rows.map((r) => r.title)).toEqual(['', 'A', 'B'])
+    expect(new Set(rows.map((r) => r.id)).size, 'imported ids are distinct').toBe(3)
+  })
+})

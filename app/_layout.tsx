@@ -5,7 +5,7 @@ import { Stack } from 'expo-router'
 import { useEffect } from 'react'
 import { I18nextProvider } from 'react-i18next'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
-import { KeyboardProvider } from 'react-native-keyboard-controller'
+import { KeyboardProvider, useResizeMode } from 'react-native-keyboard-controller'
 import { SafeAreaProvider, initialWindowMetrics } from 'react-native-safe-area-context'
 
 import { SwapResumeHost } from '@/components/embedder/swap-resume-host'
@@ -23,6 +23,18 @@ import { i18n } from '@/lib/i18n'
 import '@/lib/polyfills'
 import { appSettingsStore } from '@/lib/stores'
 import { ThemeProvider } from '@/lib/themes'
+
+// `KeyboardProvider` on its own is inert on Android: the library only switches
+// the window into its managed resize mode when a consumer hook asks for it, and
+// nothing else here calls one. Under `edgeToEdgeEnabled` the OS ignores the
+// manifest's own adjustResize, so without this claim the keyboard metrics every
+// avoiding surface reads are never usable. Claiming it does not make the window
+// shrink — gorhom still compensates itself. See
+// lessons-learned/keyboard-resize-mode-must-be-claimed.md.
+function AndroidResizeMode() {
+  useResizeMode()
+  return null
+}
 
 export default function RootLayout() {
   const { success, error } = useDbMigrations()
@@ -60,6 +72,7 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider initialMetrics={initialWindowMetrics}>
           <KeyboardProvider>
+            <AndroidResizeMode />
             <ThemeProvider
               initialThemeId={appSettingsStore.getAppSettings().appearance.themeId}
               onThemeChange={(id) =>

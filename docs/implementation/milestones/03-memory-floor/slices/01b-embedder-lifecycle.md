@@ -97,7 +97,7 @@ Zod, and `stories.settings.effectiveDim` is locked at creation.
   gate on Finish, storage-only cost preview; writes
   `stories.settings.effectiveDim` at Finish (the third
   Finish-transaction toucher pinned in C5; step 5 is co-edited by
-  3.6's opening refine / regenerate in a non-overlapping region).
+  3.6a's opening refine / regenerate in a non-overlapping region).
 
 ## Scope: out
 

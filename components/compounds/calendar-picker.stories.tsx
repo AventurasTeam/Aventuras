@@ -218,6 +218,17 @@ export const DisabledByGeneration: Story = {
   render: () => (
     <CalendarPickerHarness disabled disabledReason="Generation is in flight. Cancel to edit." />
   ),
+  play: async () => {
+    const trigger = screen.getByRole('button', { name: /Earth/ })
+    const triggerContent = trigger.firstElementChild
+    if (triggerContent == null) throw new Error('expected calendar trigger content')
+
+    expect(triggerContent).toHaveStyle({ pointerEvents: 'none' })
+    await expect(userEvent.click(triggerContent)).rejects.toThrow(/pointer-events/)
+
+    expect(trigger).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('option')).not.toBeInTheDocument()
+  },
 }
 
 /**
@@ -252,6 +263,32 @@ export const SelectingOptionUpdatesTrigger: Story = {
     await userEvent.click(trigger)
     const stardateRow = await screen.findByRole('option', { name: /Stardate/ })
     await userEvent.click(stardateRow)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Stardate/ })).toBeInTheDocument(),
+    )
+  },
+}
+
+export const SearchFiltersRowsAndPickStillCommits: Story = {
+  render: () => <CalendarPickerHarness />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: /Earth/ }))
+    const search = await screen.findByPlaceholderText('Search calendars')
+
+    await userEvent.type(search, 'stardate')
+    await waitFor(() => expect(screen.queryByRole('option', { name: /Earth/ })).toBeNull())
+    expect(screen.getByRole('option', { name: /Stardate/ })).toBeInTheDocument()
+
+    // Matching runs over the tier path too: "count" is Stardate's whole tier
+    // path and appears in no calendar's name, so a name-only filter finds nothing.
+    await userEvent.clear(search)
+    await userEvent.type(search, 'count')
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Stardate/ })).toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('option', { name: /Earth/ })).toBeNull()
+
+    await userEvent.click(screen.getByRole('option', { name: /Stardate/ }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /Stardate/ })).toBeInTheDocument(),
     )

@@ -4,6 +4,7 @@ import { Platform, TextInput, type StyleProp, type TextStyle } from 'react-nativ
 import { densityTokens, useDensity } from '@/lib/density'
 import { cn } from '@/lib/utils'
 
+import { useControlledTextSync } from './controlled-text-sync'
 import { clamp, computeTextareaEnvelope } from './textarea-envelope'
 
 type TextareaProps = ComponentProps<typeof TextInput> & {
@@ -35,8 +36,17 @@ export function Textarea({
   onFocus,
   onBlur,
   style,
+  value,
+  defaultValue,
+  onChange,
   ...props
 }: TextareaProps) {
+  const { hostRef, fieldProps } = useControlledTextSync({
+    value,
+    defaultValue,
+    multiline,
+    onChange,
+  })
   const { resolved } = useDensity()
   const isDisabled = props.editable === false
   const ariaInvalidProp = props['aria-invalid']
@@ -75,6 +85,7 @@ export function Textarea({
 
   return (
     <TextInput
+      ref={hostRef}
       multiline={multiline}
       numberOfLines={Platform.select({ web: rows, native: maxRows })}
       textAlignVertical={textAlignVertical}
@@ -98,6 +109,7 @@ export function Textarea({
       )}
       style={[platformStyle, style]}
       {...props}
+      {...fieldProps}
     />
   )
 }

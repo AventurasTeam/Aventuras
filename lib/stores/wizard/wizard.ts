@@ -1,7 +1,8 @@
 import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
-import { emptyWorkingState, type WizardWorkingState } from '@/lib/db'
+import { emptyWorkingState, type WizardWorkingState, type WizardLoreDraft } from '@/lib/db'
+import { generateId } from '@/lib/ids'
 
 type WizardSnapshot = {
   state: WizardWorkingState
@@ -23,8 +24,25 @@ type WizardState = WizardSnapshot & {
   setLeadEntityId: (leadEntityId: string | null) => void
   setEffectiveDim: (effectiveDim: number | null) => void
   setCustomDimInvalid: (invalid: boolean) => void
+  /** Returns the minted row's id so a caller (e.g. an "expand on add" UI) can target it without reaching back into store state. */
+  addLore: () => string
+  patchLore: (id: string, patch: Partial<Omit<WizardLoreDraft, 'id'>>) => void
+  removeLore: (id: string) => void
+  importLore: (rows: readonly Partial<Omit<WizardLoreDraft, 'id'>>[]) => void
   hydrate: (state: WizardWorkingState) => void
   reset: () => void
+}
+
+function emptyLoreDraft(): WizardLoreDraft {
+  return {
+    id: generateId('lore'),
+    title: '',
+    body: '',
+    category: '',
+    tags: [],
+    injectionMode: 'auto',
+    priority: 0,
+  }
 }
 
 const store = createStore<WizardState>()((set) => {
@@ -47,6 +65,27 @@ const store = createStore<WizardState>()((set) => {
         customDimInvalid: false,
       })),
     setCustomDimInvalid: (customDimInvalid) => set({ customDimInvalid }),
+    addLore: () => {
+      const row = emptyLoreDraft()
+      set((s) => ({ state: { ...s.state, lore: [...s.state.lore, row] } }))
+      return row.id
+    },
+    patchLore: (id, patch) =>
+      set((s) => ({
+        state: {
+          ...s.state,
+          lore: s.state.lore.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+        },
+      })),
+    removeLore: (id) =>
+      set((s) => ({ state: { ...s.state, lore: s.state.lore.filter((row) => row.id !== id) } })),
+    importLore: (rows) =>
+      set((s) => ({
+        state: {
+          ...s.state,
+          lore: [...s.state.lore, ...rows.map((row) => ({ ...emptyLoreDraft(), ...row }))],
+        },
+      })),
     hydrate: (state) => set({ state, furthestStep: state.step, customDimInvalid: false }),
     reset: () => {
       const r = emptyWorkingState()
@@ -75,6 +114,10 @@ export const wizardStore = {
   setLeadEntityId: api.setLeadEntityId,
   setEffectiveDim: api.setEffectiveDim,
   setCustomDimInvalid: api.setCustomDimInvalid,
+  addLore: api.addLore,
+  patchLore: api.patchLore,
+  removeLore: api.removeLore,
+  importLore: api.importLore,
   hydrate: api.hydrate,
   reset: api.reset,
   subscribe: store.subscribe,

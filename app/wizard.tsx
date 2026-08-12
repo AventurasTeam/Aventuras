@@ -13,8 +13,11 @@ import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizar
 import { StepCalendar } from '@/components/wizard/step-calendar'
 import { StepFrame } from '@/components/wizard/step-frame'
 import { StepOpening } from '@/components/wizard/step-opening'
+import { StepWorld } from '@/components/wizard/step-world'
 import {
   canJumpToStep,
+  nextActiveStep,
+  prevActiveStep,
   stepForwardValid,
   type StepValidityParams,
 } from '@/components/wizard/wizard-nav-logic'
@@ -47,6 +50,7 @@ const FINISH_REASON_KEY = {
   opening: 'wizard:finish.missing.opening',
   lead: 'wizard:finish.missing.lead',
   effectiveDim: 'wizard:finish.missing.effectiveDim',
+  lore: 'wizard:finish.missing.lore',
 } as const
 
 type GateState =
@@ -95,9 +99,10 @@ export default function WizardRoute() {
   const leadName = wizardStore.useWizard((s) => s.state.leadName)
   const calendarSystemId = wizardStore.useWizard((s) => s.state.definition.calendarSystemId)
   const worldTimeOrigin = wizardStore.useWizard((s) => s.state.definition.worldTimeOrigin)
+  const lore = wizardStore.useWizard((s) => s.state.lore)
 
-  const goNext = () => wizardStore.setStep(step === 2 ? 5 : step + 1)
-  const goBack = () => wizardStore.setStep(step === 5 ? 2 : step - 1)
+  const goNext = () => wizardStore.setStep(nextActiveStep(step))
+  const goBack = () => wizardStore.setStep(prevActiveStep(step))
 
   // Entry hard gate (wizard.md → Embedder-unavailable): no usable embedder blocks
   // the wizard outright. Focus-aware so returning from Settings (having fixed the
@@ -211,6 +216,7 @@ export default function WizardRoute() {
     leadName,
     worldTimeOrigin,
     calendar: selectedCalendar ?? null,
+    lore,
   }
   const canGoNext = stepForwardValid(step, validityParams)
   const canJumpTo = (target: number) => canJumpToStep(target, step, furthestStep, validityParams)
@@ -285,6 +291,15 @@ export default function WizardRoute() {
             // surface (same rendering) so the fix path is the settings route.
             setGate({ status: 'blocked', reason: result.reason, backend: result.backend })
             flushAutosave()
+            return
+          }
+          if (result.status === 'created-not-opened') {
+            // Committed, so the working state must go — flushing it back would
+            // leave a session whose next Finish mints a duplicate story.
+            wizardStore.reset()
+            autosaveSuppressedRef.current = false
+            toast.error(t('wizard:finish.createdNotOpened'))
+            router.replace('/')
             return
           }
           setEmbedFailure({ kind: result.kind, message: result.message })
@@ -366,6 +381,8 @@ export default function WizardRoute() {
         <StepFrame />
       ) : step === 2 ? (
         <StepCalendar />
+      ) : step === 3 ? (
+        <StepWorld onSetupAssist={() => router.push('/settings' as Href)} />
       ) : (
         <>
           <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />

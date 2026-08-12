@@ -1075,3 +1075,149 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   a payload-free list query plus decode-on-View, which also moves
   corruption detection onto the specific row. Deferred as latent.
   Surfaced by the Slice 3.5 review (2026-08-09).
+- **`labeledPromptSchema` is defined twice, independently, with no
+  exported type.** `lib/db/stories/story-config-schema.ts` and
+  `lib/db/wizard-sessions/working-state.ts` each declare their own
+  private copy of the `{ label, promptBody }` Zod object that backs
+  `definition.genre` / `definition.tone`, and neither exports a
+  `LabeledPrompt` type — only the enclosing `StoryDefinition` /
+  `WizardWorkingState` are public, carrying the shape inline. The two
+  copies agree today, so nothing is broken; the risk is that the
+  wizard-session copy and the committed-story copy drift, since the
+  working-state blob is what a resumed draft parses and the config
+  schema is what Finish writes. It also means a consumer needing just
+  the pair (Slice 3.6a's `needsReplaceConfirm` is the first) has to take
+  a structural parameter instead of a named type. Fix is one exported
+  schema plus its inferred type, imported by both. Surfaced by the
+  Slice 3.6a Task 3 review (2026-08-10).
+- **The desktop-Popover / phone-Sheet tier wrap is written twice.**
+  `components/wizard/ai-assist.tsx` and
+  `components/ui/searchable-overlay-list.tsx` each carry the same
+  phone branch — a single `View` wrapping the trigger plus a
+  `Sheet`, with its own copy of the reasoning for why the wrap
+  exists (the `@rn-primitives/dialog` Root renders a real portaled
+  sibling while closed, so a Fragment leaks two layout children into
+  the consumer's row). Only the phone half is a genuine duplicate:
+  the desktop halves legitimately differ, because
+  `SearchableOverlayList` drives raw `PopoverPrimitive` for a
+  controlled-open bridge and trigger-width matching that the shared
+  `Popover` wrapper does not support, so unifying that half would
+  either bloat the wrapper or strip its escape hatches. The drift
+  cost is already demonstrated rather than hypothetical: the preset
+  browser's first commit diverged from the assist component's
+  already-correct trigger-labelling pattern and needed a follow-up
+  fix to re-derive it — it has since been rebuilt on
+  `SearchableOverlayList` and no longer carries a copy, which is why
+  this counts two rather than three. Extract a small shared
+  phone-wrap helper when a third caller appears, or the next time
+  both need the same change in lockstep — not before. Surfaced by
+  the Slice 3.6a Task 8 review (2026-08-10).
+- **`validateRegistry` cannot catch a template using an undeclared
+  variable.** It checks two things — every `TemplateId` has a
+  `TEMPLATE_GROUPS` mapping, and every name in `DISPLAY_GROUPS`
+  resolves to a `VariableDef` — but it never reads template Liquid
+  source, so the direction that actually matters for prompt
+  correctness is unchecked: a template referencing a variable nobody
+  declared renders blank at runtime and passes every test. The
+  project already knows this (`templateContextMap.test.ts` says
+  "validateRegistry only walks display groups toward variables,
+  leaving both reverse directions unchecked"), so this entry is
+  about whether to close it rather than a new discovery. Closing it
+  means parsing `{{ ... }}` and `{% ... %}` out of each registered
+  template and asserting every root identifier is declared for that
+  template's group — cheap, and it would make the context map a real
+  contract instead of documentation. Surfaced by the Slice 3.6a Task
+  9b review (2026-08-10).
+- **`wizard.md` says forward-jump is disabled; the shipped nav has
+  allowed forward-jump-to-visited since M2.3.**
+  [`wizard.md → Step indicator`](../ui/screens/wizard/wizard.md#step-indicator)
+  reads "Forward-jump disabled — must advance via `Next →` (which
+  validates current step)", but `canJumpToStep` permits a forward
+  jump whenever the target has already been visited
+  (`target <= furthestStep`) and every gating step before it is still
+  valid. The code's behavior is the better one — it is how a user
+  returns to where they were after a back-jump, and it re-validates
+  rather than trusting the visit — so the likely fix is amending
+  canon, not the code. Predates Slice 3.6a, which only extended the
+  existing rule to step 3. Surfaced by the Slice 3.6a Task 11 review
+  (2026-08-10).
+- **`StepPill`'s inline `pointerEvents: 'none'` is dead code.** The
+  `rn-primitives-disabled` gate was applied to
+  `components/wizard/wizard-shell.tsx`'s step pill, but the pill is a
+  plain RN-Web `Pressable`, not an `@rn-primitives` `asChild`
+  trigger — so there is no second Radix `onClick` bypassing the
+  disabled check, which that lesson's "Not universal" section names
+  as the required precondition. Proven by removing the style and
+  re-running all six `wizard-shell` stories green. Predates Slice
+  3.6a. Removing it is a two-line cleanup; the value is in not
+  leaving a gate that reads as load-bearing when nothing depends on
+  it. Surfaced by the Slice 3.6a Task 11 review (2026-08-10).
+- **Hand-typed lore commits untrimmed while AI-imported lore does
+  not.** `loreSuggestionsSchema` trims `title` / `body` / `category`
+  at the parse boundary, but the Finish insert in
+  `lib/actions/stories/create-story.ts` trims only `category` — so a
+  user who types `"  Foo  "` gets it stored and embedded with the
+  padding, while the AI-suggested equivalent is clean. The same
+  asymmetry applies to `definition.genre.label` / `promptBody`. Fix
+  is trimming in the insert alongside `category`, which also makes
+  the embedded composite match what the UI renders. Surfaced by the
+  Slice 3.6a whole-slice review (2026-08-10).
+- **Four assist result types are hand-redeclared beside their
+  schema-inferred equivalents, and the inferred ones are dead.**
+  `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
+  `GenreAssistValue`, `ToneAssistValue` and `SettingAssistValue` by
+  hand; `lib/wizard` simultaneously exports `LoreSuggestions`,
+  `LabeledPromptOutput` and `SettingOutput` inferred from the Zod
+  schemas, and nothing imports them. A field added to a schema will
+  not appear in the hand-written type and will not fail the build,
+  because Zod's `ZodType` stays assignable — it is simply typed
+  away. Collapse the hand-written ones onto the inferred ones.
+  (`GenreAssistValue` and `ToneAssistValue` are also byte-identical
+  to each other.) Surfaced by the Slice 3.6a whole-slice review.
+- **The preset browser drops canon's hover body preview.**
+  [`wizard.md → Step 3`](../ui/screens/wizard/wizard.md#step-3--world)
+  specifies each preset row as `displayName · tagline · preview body
+on hover`; the shipped rows render label and tagline only, so the
+  multi-paragraph `promptBody` is invisible until after the pick —
+  which is exactly the pick the replace-confirm exists to protect.
+  Either build the hover preview or amend canon. Surfaced by the
+  Slice 3.6a whole-slice review.
+- **Post-3.6a tidy in `components/wizard/`.** Three small
+  consistency items, none behavioral: the refine seams are named
+  `refineOpening` / `refineDescription` in one file and
+  `genreRefine` / `toneRefine` / `settingRefine` in another, and
+  3.6b has to pick one; `blank()` is defined twice in the folder
+  (`step-world-logic.ts` and `lore-list.tsx`); and
+  `assist-list-logic.ts` breaks the folder's `<component>-logic.ts`
+  pairing convention since it belongs to `ai-assist.tsx`. Surfaced
+  by the Slice 3.6a whole-slice review.
+- **Emoji stand in for icons across the app; sweep and replace.**
+  User-facing chrome carries literal emoji and glyphs where the
+  design system has an icon primitive — `✨` prefixes every AI-assist
+  heading and several trigger labels, `⭐ Set as lead` and the
+  `▼ More options` / `▼ Visual` disclosures are specced as glyphs in
+  `wizard.md`, and arrows like `→` are baked into locale strings
+  (`common:calendarPicker.manageInVault`, and entries across
+  `settings`, `embedder`, `landing`, `reader`). Emoji render
+  inconsistently across platforms and font stacks, cannot be themed
+  or sized with the rest of the chrome, and land inside translatable
+  strings where they are not translatable content. Sweep `components/`,
+  `app/`, and `locales/` together: replace with `Icon`/`IconAction`
+  where the glyph is decoration or an affordance, keep it only where
+  it is genuinely textual. Canon in `wizard.md` specifies some of
+  these as glyphs, so amending the doc is part of the work rather
+  than a follow-on. Raised 2026-08-11.
+- **A generation sheet is easy to dismiss and takes unsaved output
+  with it.** Every overlay dismiss path — tap-outside, swipe-down,
+  Escape, hardware back — routes through `resetOnClose`, which aborts
+  the in-flight request and clears `assist` and `listItems`
+  unconditionally. That is correct for an untouched overlay and
+  destructive once a result exists: a generated preview, or an
+  accumulated multi-page list with rows already checked, is gone with
+  no undo and no way back but regenerating. The exposure grows with
+  the sheet, since swipe-down is both the cheapest gesture and the
+  easiest to trigger accidentally. Decide the shape: confirm before
+  discarding a dirty overlay, keep results across a dismiss and
+  restore them on reopen, or block the swipe once a result has
+  landed. Applies to `AiAssist` first but the same reset pattern will
+  reach 3.6b's cast suggestions. Raised 2026-08-11.

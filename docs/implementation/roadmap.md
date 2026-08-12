@@ -141,7 +141,7 @@ M9.3.
 
 **Promoted** — defined in
 [`milestones/03-memory-floor/`](./milestones/03-memory-floor/milestone.md)
-(milestone + twelve slice docs).
+(milestone + fourteen slice docs).
 
 ---
 
@@ -726,8 +726,9 @@ explicit.
     is per-turn-owned per the cadence write-set table; an earlier
     M3.3 attribution was corrected at M3 promotion); first
     non-zero worldTime values flow through the renderer.
-  - **M3.6** — Wizard's calendar-summary preview samples the
-    renderer to show how dates will format.
+  - **M2.3** — Wizard's calendar-summary preview samples the
+    renderer to show how dates will format (`computeSampleRender`);
+    M3.6a confirmed it needed no further work.
   - **M5.3** — Chapter timeline time column consumes the renderer.
   - **M7.1** — App settings calendar tab (`default_calendar_id`
     picker into the registry). The pointer ships nullable (null at

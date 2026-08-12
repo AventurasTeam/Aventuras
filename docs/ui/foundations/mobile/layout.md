@@ -258,6 +258,7 @@ binds to one primitive:
 | Calendar picker                  | Popover             | Sheet (medium)            | Rich content (preset rows, summary panel)                  |
 | Model picker dropdown            | Popover             | Sheet (medium)            | Per `app-settings.md` "popover-rendered, virtualized list" |
 | Help / search-help popovers      | Popover             | Popover                   | Tiny content                                               |
+| Wizard AI-assist (`✨`)          | Modal               | Sheet (medium)            | Multi-step flow ending in commit-or-discard, not a picker  |
 | Peek drawer                      | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Project-specific named usage                               |
 | Raw JSON viewer                  | Sheet (right ~440)  | Sheet (bottom, tall ~95%) | Matches peek drawer pattern                                |
 | Story Settings (from in-story)   | Regular surface     | Full-screen route         | Has internal navigation (categories)                       |

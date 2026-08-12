@@ -9,14 +9,22 @@ import {
   useRef,
   type ComponentProps,
 } from 'react'
-import { Platform, StyleSheet, useWindowDimensions, View, type ViewStyle } from 'react-native'
+import {
+  Platform,
+  StyleSheet,
+  TextInput,
+  useWindowDimensions,
+  View,
+  type ViewStyle,
+} from 'react-native'
 import { FadeIn, FadeOut, SlideInRight, SlideOutRight } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
-import { InputComponentContext } from '@/components/ui/input'
+import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -45,11 +53,30 @@ function useSheetA11y(): SheetA11yValue {
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
+// Native-only swap: gorhom's BottomSheetTextInput feeds the sheet's
+// keyboard-translate system, which is inert on web — and its blur handler
+// calls TextInput.State.currentlyFocusedInput(), which react-native-web never
+// implemented, so every blur of a sheet-hosted field on web throws.
+// Cast: gorhom types its forwarded ref `TextInput | undefined` (it maps null
+// to undefined); the instance is RN's TextInput, only the ref's empty channel
+// differs.
+const SheetInputComponent = (
+  Platform.OS === 'web' ? TextInput : BottomSheetTextInput
+) as InputComponent
+
 type SheetAnchor = 'bottom' | 'right'
 type SheetSize = 'short' | 'medium' | 'tall' | 'auto'
 
 const RIGHT_WIDTH_PX = 440
 const SAFE_AREA_GAP_PX = 8
+
+// p-6 already pads the content; the inset is added on top of it so the padding
+// reads the same above the nav bar as it does on a device without one.
+const SHEET_PADDING_PX = 24
+
+function safeBottomStyle(bottomInset: number): ViewStyle | undefined {
+  return bottomInset > 0 ? { paddingBottom: SHEET_PADDING_PX + bottomInset } : undefined
+}
 
 const BOTTOM_SNAP_PCT: Record<Exclude<SheetSize, 'auto'>, `${number}%`> = {
   short: '33%',
@@ -77,6 +104,10 @@ function BottomSheetContent({
   size = 'medium',
   title = 'Sheet',
   children,
+  // Pulled out of the rest bag so it can be merged with the safe-area padding
+  // below rather than spread over it — a caller's `style` would otherwise drop
+  // the bottom inset and put the sheet's last controls under the nav bar.
+  style,
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
   ...contentProps
@@ -84,27 +115,63 @@ function BottomSheetContent({
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
+  const insets = useSafeAreaInsets()
 
   const sheetRef = useRef<BottomSheetModal>(null)
   // gorhom's dismiss() on an already-dismissed modal corrupts internal state
   // and subsequent present() becomes a silent no-op. Track actual modal state
   // so dismiss() is only called when the modal is presented.
   const isPresentedRef = useRef(false)
+  // gorhom keeps a modal unmounted-while-presented alive until its dismiss
+  // animation completes, then still fires onDismiss; that late callback must
+  // not write the dead open state back through onOpenChange.
+  const isMountedRef = useRef(true)
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
+    let cancelled = false
+
+    const present = () => {
+      // Only claim presented at the moment we actually present, so an `open`
+      // that flips back while we wait below can't leave dismiss() firing
+      // against a modal that never opened.
+      isPresentedRef.current = true
+      sheetRef.current?.present()
+    }
+
     // gorhom's BottomSheetModal must register with the provider's stack before
     // present() succeeds; that registration happens in the modal's own mount
     // effects, which run after this one. Defer to the next tick.
     const handle = setTimeout(() => {
       if (open && !isPresentedRef.current) {
-        isPresentedRef.current = true
-        sheetRef.current?.present()
+        // gorhom's keyboard state is built purely from show/hide events
+        // (useAnimatedKeyboard subscribes; it never reads Keyboard.metrics), so
+        // it starts at height 0 and a sheet opened while the keyboard is
+        // already up is never told about it — it lands underneath. Close the
+        // keyboard first; focusing a field inside the sheet then fires a show
+        // event it can see, which is the path that already works.
+        if (Platform.OS !== 'web') {
+          void dismissKeyboard().then(() => {
+            if (!cancelled) present()
+          })
+          return
+        }
+        present()
       } else if (!open && isPresentedRef.current) {
         isPresentedRef.current = false
         sheetRef.current?.dismiss()
       }
     }, 0)
-    return () => clearTimeout(handle)
+
+    return () => {
+      cancelled = true
+      clearTimeout(handle)
+    }
   }, [open])
 
   const snapPoints = useMemo(() => {
@@ -135,16 +202,23 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
-      // 'extend' snaps to the max detent and reflows content within — right for
-      // fixed tall search surfaces already near 95%. An 'auto' sheet has no higher
-      // detent to extend to, so 'extend' leaves the keyboard sitting over the input;
-      // 'interactive' translates the content-sized sheet up by the keyboard height.
-      keyboardBehavior={size === 'auto' ? 'interactive' : 'extend'}
+      // 'extend' resolves to the sheet's own tallest detent. Every size here has
+      // exactly one ('auto' has none), so it never grows anything — it earns its
+      // keep only on 'tall', which at 95% already clears the keyboard and just
+      // reflows content inside height it was going to occupy. Shorter sheets need
+      // 'interactive', which lifts by the keyboard height and keeps their resting size.
+      keyboardBehavior={size === 'tall' ? 'extend' : 'interactive'}
       keyboardBlurBehavior="restore"
+      // Explicitly 'adjustPan', which is also gorhom's default: 'adjustResize'
+      // makes it zero out `heightWithinContainer` and wait for a container shrink
+      // that never arrives under edge-to-edge, putting every sheet under the
+      // keyboard. Verified on-device both ways; gorhom keeps translating itself.
+      android_keyboardInputMode="adjustPan"
       backgroundStyle={backgroundStyle}
       handleIndicatorStyle={handleIndicatorStyle}
       accessibilityLabel={ariaLabel ?? (ariaLabelledBy ? undefined : title)}
       onDismiss={() => {
+        if (!isMountedRef.current) return
         isPresentedRef.current = false
         onOpenChange(false)
       }}
@@ -153,17 +227,21 @@ function BottomSheetContent({
         {/* Swap Input's underlying TextInput with gorhom's keyboard-aware variant
             so focusing an Input inside a sheet triggers gorhom's translate-up
             behavior. Plain TextInput isn't tracked by the sheet's keyboard system. */}
-        <InputComponentContext.Provider value={BottomSheetTextInput}>
+        <InputComponentContext.Provider value={SheetInputComponent}>
           {/* size='auto' needs BottomSheetView for gorhom's intrinsic measurement
               (dynamic sizing measures BottomSheetView's content height). Fixed-detent
               sizes skip BottomSheetView because it captures vertical pan gestures and
               blocks nested scrollables (e.g. BottomSheetSectionList in
               SearchableOverlayList) from claiming them. */}
+          {/* Edge-to-edge draws the sheet under the system navigation bar, so
+              without this the last rows of a tall sheet sit behind it —
+              unreachable, and a scrollable reports itself fully scrolled. */}
           {size === 'auto' ? (
             <BottomSheetView>
               <View
                 className={cn('p-6', className)}
                 {...(contentProps as ComponentProps<typeof View>)}
+                style={[safeBottomStyle(insets.bottom), style]}
               >
                 {children}
               </View>
@@ -172,6 +250,7 @@ function BottomSheetContent({
             <View
               className={cn('flex-1 p-6', className)}
               {...(contentProps as ComponentProps<typeof View>)}
+              style={[safeBottomStyle(insets.bottom), style]}
             >
               {children}
             </View>

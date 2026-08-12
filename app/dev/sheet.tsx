@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { ScrollView, View } from 'react-native'
+import { useRef, useState } from 'react'
+import { ScrollView, TextInput, View } from 'react-native'
 
 import { ThemePicker } from '@/components/foundations/sections/theme-picker'
 import { Button } from '@/components/ui/button'
@@ -8,13 +8,110 @@ import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 
+function KeyboardOrderingProbe() {
+  const [note, setNote] = useState('')
+  const [rawNote, setRawNote] = useState('')
+  // Controlled through Input, which routes value through controlled-text-sync:
+  // this is the fixed path and must keep the caret on mid-string edits.
+  const [sheetNote, setSheetNote] = useState('')
+  // Deliberately NOT fed back. Isolates the round-trip itself from the sheet.
+  const uncontrolledRef = useRef('')
+  const [rightNote, setRightNote] = useState('')
+  return (
+    <View>
+      <Heading level={3}>Keyboard ordering (phone)</Heading>
+      <Text variant="muted" size="xs" className="mt-1">
+        Focus the field, then — without dismissing — open the sheet. Sheet.tsx dismisses an open
+        keyboard before presenting, because gorhom only learns about the keyboard from show/hide
+        events and would otherwise open underneath it. Expect: keyboard closes, sheet opens at its
+        detent, focusing the sheet&apos;s own field lifts it.
+      </Text>
+      <View className="mt-3 flex-col gap-3">
+        <Input value={note} onChangeText={setNote} placeholder="Focus me first" aria-label="Note" />
+        <Sheet ariaLabel="Keyboard ordering">
+          <SheetTrigger asChild>
+            <Button variant="secondary">
+              <Text>Open short sheet</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent anchor="bottom" size="short">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Short sheet</Heading>
+              <Input
+                value={sheetNote}
+                onChangeText={setSheetNote}
+                placeholder="Then focus this one"
+                aria-label="Sheet field"
+              />
+              <Text variant="muted" size="xs">
+                Cursor probe: type `Buh`, put the caret between `u` and `h`, press backspace. Expect
+                `Bh` with the caret still between `B` and `h` — not jumped to the start. Inserting
+                mid-string is the same test: the caret must land after the typed character.
+              </Text>
+              {/* Bare RN TextInput, controlled the same way, bypassing Input's
+                  sync shim. Faults on purpose (caret walks left on mid-string
+                  edits) — the negative control proving the shim is what fixes
+                  the field above. */}
+              <TextInput
+                value={rawNote}
+                onChangeText={setRawNote}
+                placeholder="Bare TextInput, same test"
+                aria-label="Raw sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
+              {/* Uncontrolled: no value flows back on keystroke, immune by
+                  construction. The reference the shim's behavior must match. */}
+              <TextInput
+                defaultValue=""
+                onChangeText={(next) => {
+                  uncontrolledRef.current = next
+                }}
+                placeholder="Uncontrolled, same test"
+                aria-label="Uncontrolled sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
+            </View>
+          </SheetContent>
+        </Sheet>
+
+        {/* A right-anchored sheet is a plain Dialog with no gorhom in it. Raw
+            controlled TextInput, no Input shim — still faults, which pins the
+            fault on `@rn-primitives/dialog`'s portal round-trip rather than on
+            gorhom. Keep this field: it is the cheapest way to tell a portal
+            regression from a gorhom one. */}
+        <Sheet ariaLabel="Right sheet caret probe">
+          <SheetTrigger asChild>
+            <Button variant="secondary">
+              <Text>Open right sheet (no gorhom)</Text>
+            </Button>
+          </SheetTrigger>
+          <SheetContent anchor="right">
+            <View className="flex-col gap-3">
+              <Heading level={4}>Right sheet</Heading>
+              <TextInput
+                value={rightNote}
+                onChangeText={setRightNote}
+                placeholder="Controlled, same test"
+                aria-label="Right sheet field"
+                className="h-control-md w-full rounded-md border border-border bg-bg-base px-3 text-fg-primary"
+              />
+            </View>
+          </SheetContent>
+        </Sheet>
+      </View>
+    </View>
+  )
+}
+
 export default function SheetDevRoute() {
   const [noteValue, setNoteValue] = useState('')
 
   return (
-    <ScrollView className="flex-1 bg-bg-base">
+    <ScrollView className="flex-1 bg-bg-base" keyboardShouldPersistTaps="handled">
       <ThemePicker />
       <View className="flex-col gap-6 p-4">
+        <KeyboardOrderingProbe />
+
         <View>
           <Heading level={3}>Default</Heading>
           <View className="mt-2">

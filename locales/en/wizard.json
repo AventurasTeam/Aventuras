@@ -21,6 +21,12 @@
     "emptyHint": "Generate with ✨, or start typing below.",
     "placeholder": "Write the opening, or generate one with ✨.",
     "sceneMetadata": "Scene metadata: {{value}}",
+    "replaceConfirm": {
+      "title": "Replace the opening?",
+      "body": "The opening currently in the field will be lost.",
+      "cancel": "Cancel",
+      "confirm": "Replace"
+    },
     "storyName": "Story name",
     "opening": {
       "label": "Opening",
@@ -63,9 +69,11 @@
       "title": "a title",
       "opening": "an opening",
       "lead": "a lead character name",
-      "effectiveDim": "a valid effective dim"
+      "effectiveDim": "a valid effective dim",
+      "lore": "lore (every entry needs a title and a body)"
     },
     "failed": "Couldn't create the story.",
+    "createdNotOpened": "Your story was created, but it couldn't be opened. Find it on your story list.",
     "embedFailed": {
       "title": "Couldn't initialize the embedder",
       "retry": "Retry",
@@ -171,16 +179,96 @@
     "guidance": {
       "label": "Optional guidance"
     },
+    "description": "Generate this field with AI, then refine, regenerate, or accept the result.",
     "actions": {
       "cancel": "Cancel",
       "generate": "Generate",
       "discard": "Discard",
       "useThis": "Use this",
       "tryAgain": "Try again",
-      "setup": "Set up in Settings"
+      "setup": "Set up in Settings",
+      "refine": "Refine…",
+      "regenerate": "Regenerate",
+      "generateMore": "Generate more",
+      "importSelected": "Import selected"
     },
     "notConfigured": "AI is not configured.",
     "loading": "Generating with {{model}}…",
-    "failure": "Couldn't generate. {{reason}}."
+    "failure": "Couldn't generate. {{reason}}.",
+    "refine": {
+      "label": "How should this change?",
+      "placeholder": "e.g. make it darker"
+    },
+    "list": {
+      "alreadyExists": "(already exists)",
+      "empty": "Nothing suggested. Try different guidance.",
+      "selectAll": "Select all",
+      "clearAll": "Clear all"
+    }
+  },
+  "world": {
+    "heading": "What's the world like?",
+    "browseGenrePresets": "Browse genre presets",
+    "browseTonePresets": "Browse tone presets",
+    "presets": {
+      "search": "Search presets"
+    },
+    "genre": {
+      "label": "Genre",
+      "placeholder": "e.g. Hard sci-fi",
+      "bodyLabel": "Genre description",
+      "bodyPlaceholder": "Describe the genre in a paragraph or two…",
+      "assist": "Suggest genre",
+      "guidance": "e.g. \"blend of noir and cosmic horror\""
+    },
+    "tone": {
+      "label": "Tone",
+      "placeholder": "e.g. Grim and unsparing",
+      "bodyLabel": "Tone description",
+      "bodyPlaceholder": "Describe the tone in a paragraph or two…",
+      "assist": "Suggest tone",
+      "guidance": "e.g. \"more hopeful, less grim\""
+    },
+    "setting": {
+      "label": "Setting",
+      "placeholder": "Describe the setting in a paragraph or two…",
+      "assist": "Suggest setting",
+      "guidance": "e.g. \"Norse-flavored, post-apocalypse\""
+    },
+    "replaceConfirm": {
+      "titleGenre": "Replace genre with \"{{name}}\"?",
+      "titleTone": "Replace tone with \"{{name}}\"?",
+      "body": "Your current label and body will be lost.",
+      "cancel": "Cancel",
+      "confirm": "Replace"
+    },
+    "lore": {
+      "sectionLabel": "Initial lore",
+      "add": "Add lore",
+      "suggest": "Suggest lore",
+      "remove": "Remove lore entry",
+      "expand": "Expand lore entry",
+      "collapse": "Collapse lore entry",
+      "untitled": "Untitled lore",
+      "title": "Title",
+      "body": "Body",
+      "category": "Category",
+      "categoryPlaceholder": "e.g. cosmology",
+      "moreOptions": "More options",
+      "tags": "Tags",
+      "injectionMode": "Injection mode",
+      "priority": "Priority",
+      "priorityHint": "{{min}}–{{max}}. Higher makes this more likely to be recalled.",
+      "modes": {
+        "always": "Always",
+        "auto": "Auto",
+        "disabled": "Disabled"
+      },
+      "errors": {
+        "title": "Title is required.",
+        "body": "Body is required."
+      },
+      "empty": "No lore yet. Add an entry or let AI suggest some."
+    }
   }
 }

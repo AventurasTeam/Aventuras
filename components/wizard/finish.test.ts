@@ -8,10 +8,12 @@ import {
   emptyEntityState,
   emptyWorkingState,
   entities,
+  lore,
   stories,
   storyEntries,
   wizardSessions,
   type SqlOp,
+  type WizardLoreDraft,
   type WizardWorkingState,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
@@ -89,15 +91,32 @@ const NON_MATRYOSHKA_PROVIDER_DEFAULTS: FinishAppDefaults = {
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 
+function loreRow(overrides: Partial<WizardLoreDraft> = {}): WizardLoreDraft {
+  return {
+    id: 'lore_11111111-1111-1111-1111-111111111111',
+    title: 'The Salt Wells',
+    body: 'Nine wells ring the drowned coast.',
+    category: '',
+    tags: [],
+    injectionMode: 'auto',
+    priority: 0,
+    ...overrides,
+  }
+}
+
 type MakeStateInput = {
   mode?: WizardWorkingState['definition']['mode']
   narration?: WizardWorkingState['definition']['narration']
   title?: string
   description?: string
+  genre?: WizardWorkingState['definition']['genre']
+  tone?: WizardWorkingState['definition']['tone']
+  setting?: string
   leadName?: string
   leadEntityId?: string | null
   opening?: Partial<WizardWorkingState['opening']>
   effectiveDim?: number | null
+  lore?: WizardLoreDraft[]
 }
 
 function makeState(input: MakeStateInput = {}): WizardWorkingState {
@@ -114,8 +133,12 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
       narration: input.narration ?? base.definition.narration,
       title: input.title ?? base.definition.title,
       description: input.description ?? base.definition.description,
+      genre: input.genre ?? base.definition.genre,
+      tone: input.tone ?? base.definition.tone,
+      setting: input.setting ?? base.definition.setting,
     },
     opening: { ...base.opening, ...input.opening },
+    lore: input.lore ?? base.lore,
   }
 }
 
@@ -171,6 +194,38 @@ describe('finishWizard', () => {
     expect(await db.select().from(entities)).toHaveLength(0)
     expect(await db.select().from(deltas)).toHaveLength(0)
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
+  })
+
+  it('commits the authored genre, tone, and setting into stories.definition', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'World-shaped',
+        opening: { content: 'Once.' },
+        genre: { label: 'Grimdark fantasy', promptBody: 'Write it bleak and violent.' },
+        tone: { label: 'Wry', promptBody: 'Keep a dry, understated register.' },
+        setting: 'A drowned coastal empire in slow collapse.',
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.genre).toEqual({
+      label: 'Grimdark fantasy',
+      promptBody: 'Write it bleak and violent.',
+    })
+    expect(storyRow.definition!.tone).toEqual({
+      label: 'Wry',
+      promptBody: 'Keep a dry, understated register.',
+    })
+    expect(storyRow.definition!.setting).toBe('A drowned coastal empire in slow collapse.')
   })
 
   it('adventure+first: writes the lead entity, definition.leadEntityId, and opening refs to one id', async () => {
@@ -497,6 +552,82 @@ describe('finishWizard', () => {
     expect(result.status === 'invalid' && result.reasons).toContain('lead')
     expect(await db.select().from(stories)).toHaveLength(0)
     expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('blocks Finish when a lore row carries an empty title or body; DB untouched', async () => {
+    const { db, ctx } = await setup()
+
+    // Reachable via the persistence round-trip, not in-session nav: hydrate()
+    // sets furthestStep = state.step with no re-validation, so a persisted
+    // draft resumed at step 5 can carry a dirty row step 3's gate never saw.
+    const result = await finishWizard(
+      makeState({
+        title: 'A title',
+        opening: { content: 'Once.' },
+        lore: [loreRow({ body: '' })],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      4200,
+    )
+
+    expect(result.status).toBe('invalid')
+    expect(result.status === 'invalid' && result.reasons).toContain('lore')
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(lore)).toHaveLength(0)
+  })
+
+  it('rejects dirty lore before the embedder gate runs, even with no usable embedder', async () => {
+    const { ctx } = await setup()
+    const execd: string[] = []
+
+    const result = await finishWizard(
+      makeState({
+        title: 'A title',
+        opening: { content: 'Once.' },
+        lore: [loreRow({ title: '   ' })],
+      }),
+      ctx,
+      vi.fn(),
+      // Deliberately unusable embedder: if the gate ran before the lore check,
+      // this would surface as embed-blocked instead of invalid/lore.
+      { ...APP_DEFAULTS, embeddingModelId: null, installedLocalIds: [] },
+      { exec: async (sql) => void execd.push(sql), resolveProvider: () => undefined },
+      4250,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['lore'] })
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(execd).toHaveLength(0)
+  })
+
+  it('commits clean lore rows into the lore table', async () => {
+    const { db, ctx } = await setup()
+    const row = loreRow({ category: 'Geography', tags: ['coast'] })
+
+    const result = await finishWizard(
+      makeState({ title: 'World-building', opening: { content: 'Once.' }, lore: [row] }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      4300,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const loreRows = await db.select().from(lore).where(eq(lore.branchId, branchRows[0].id))
+    expect(loreRows).toHaveLength(1)
+    expect(loreRows[0]).toMatchObject({
+      id: row.id,
+      title: row.title,
+      body: row.body,
+      category: 'Geography',
+    })
+    expect(loreRows[0].tags).toEqual(['coast'])
   })
 
   it('promoteDraftStoryId: a resumed draft is promoted in place, its session row is gone', async () => {

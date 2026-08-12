@@ -1,0 +1,39 @@
+diff --git a/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js b/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
+index ee51e76824b2ac36661a1dc2eb41d90726fd22d4..0522319e0e3aa31407910bc1af06a1d06b209c55 100644
+--- a/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
++++ b/lib/commonjs/components/bottomSheetModal/BottomSheetModal.js
+@@ -285,7 +285,7 @@ function BottomSheetModalComponent(props, ref) {
+     }
+     statusRef.current = _constants.MODAL_STATUS.DISMISSING;
+     willUnmountSheet(key);
+-    bottomSheetRef.current?.close();
++    bottomSheetRef.current?.close({ duration: 0 });
+   }, [key, unmount, willUnmountSheet]);
+   const handlePortalRender = (0, _react.useCallback)(function handlePortalRender(render) {
+     if (__DEV__) {
+diff --git a/lib/module/components/bottomSheetModal/BottomSheetModal.js b/lib/module/components/bottomSheetModal/BottomSheetModal.js
+index 94fabdb5fd49cbd7deb0e971f9bf6b3ca3639010..e9e580a082dde8726a9cb98ccdafa24a0c051ad5 100644
+--- a/lib/module/components/bottomSheetModal/BottomSheetModal.js
++++ b/lib/module/components/bottomSheetModal/BottomSheetModal.js
+@@ -278,7 +278,7 @@ function BottomSheetModalComponent(props, ref) {
+     }
+     statusRef.current = MODAL_STATUS.DISMISSING;
+     willUnmountSheet(key);
+-    bottomSheetRef.current?.close();
++    bottomSheetRef.current?.close({ duration: 0 });
+   }, [key, unmount, willUnmountSheet]);
+   const handlePortalRender = useCallback(function handlePortalRender(render) {
+     if (__DEV__) {
+diff --git a/src/components/bottomSheetModal/BottomSheetModal.tsx b/src/components/bottomSheetModal/BottomSheetModal.tsx
+index 2954b3f4282e28c1973ab88f479eb2d7889913c5..270ccc2ab35c91e2a247dc097d16df59b03a21a5 100644
+--- a/src/components/bottomSheetModal/BottomSheetModal.tsx
++++ b/src/components/bottomSheetModal/BottomSheetModal.tsx
+@@ -392,7 +392,7 @@ function BottomSheetModalComponent<T = never>(
+ 
+       statusRef.current = MODAL_STATUS.DISMISSING;
+       willUnmountSheet(key);
+-      bottomSheetRef.current?.close();
++      bottomSheetRef.current?.close({ duration: 0 });
+     },
+     [key, unmount, willUnmountSheet]
+   );

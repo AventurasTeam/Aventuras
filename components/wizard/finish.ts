@@ -21,6 +21,7 @@ import { generateId } from '@/lib/ids'
 
 import { clampEffectiveDim } from './memory-cost-logic'
 import { needsLead } from './step-frame-logic'
+import { invalidLoreRowIds } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
 
@@ -29,6 +30,8 @@ export type FinishResult =
   | { status: 'invalid'; reasons: string[] }
   | { status: 'embed-blocked'; reason: EmbedderGateBlockedReason; backend: 'local' | 'provider' }
   | { status: 'embed-failed'; kind: 'init' | 'call'; message: string }
+  /** Committed, but the reader never opened — the caller must not offer a retry that re-commits. */
+  | { status: 'created-not-opened'; storyId: string }
 
 export type FinishAppDefaults = {
   defaultStorySettings: Partial<StorySettings>
@@ -67,6 +70,11 @@ export async function finishWizard(
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
   if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
+  // In-session nav re-validates every gating step, so this can't be reached by
+  // clicking through. hydrate() sets furthestStep = state.step with no
+  // re-validation, so a persisted draft resumed straight at step 5 (the zod
+  // schema defaults title/body to '') skips step 3's gate entirely — re-check here.
+  if (invalidLoreRowIds(s.lore).length > 0) reasons.push('lore')
 
   // effectiveDim only means something for a provider-backed Matryoshka model; if
   // the app default swapped to a non-Matryoshka model/backend mid-session, the
@@ -176,6 +184,7 @@ export async function finishWizard(
         openingContent: s.opening.content,
         openingMetadata,
         lead,
+        lore: s.lore,
         embed: {
           config: embedConfig,
           exec: embedCtx.exec,
@@ -209,6 +218,19 @@ export async function finishWizard(
       error: err instanceof Error ? err.message : String(err),
     })
   }
-  await openStory(storyId, ctx, navigate, nowMs)
+  // Past the commit, so neither a non-ok status nor a throw may surface as a
+  // creation failure: openStory's read-back paths throw on DB/IPC error, and a
+  // "couldn't create the story" toast would invite a retry that mints a second.
+  const openFailure = await openStory(storyId, ctx, navigate, nowMs).then(
+    (result) => (result.status === 'ok' ? null : result.status),
+    (err: unknown) => (err instanceof Error ? err.message : String(err)),
+  )
+  if (openFailure != null) {
+    logger.error('action_layer.wizard_open_after_create_failed', {
+      storyId,
+      error: openFailure,
+    })
+    return { status: 'created-not-opened', storyId }
+  }
   return { status: 'ok', storyId }
 }

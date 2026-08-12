@@ -10,6 +10,7 @@ import {
   emptyWorkingState,
   ensureVecTables,
   entities,
+  lore,
   packFloat32,
   sourceHash,
   stories,
@@ -17,11 +18,12 @@ import {
   upsertVecOps,
   wizardSessions,
   type SqlOp,
+  type WizardLoreDraft,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import type { StoryDefinition } from '@/lib/db/stories/story-config-schema'
 import { buildStorySettings } from '@/lib/db/stories/story-settings-defaults'
-import { EmbedderInitError, type EmbedderConfig } from '@/lib/embedder'
+import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from '@/lib/embedder'
 
 import { createStoryWithBranch } from './create-story'
 
@@ -65,6 +67,19 @@ function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefiniti
 }
 
 const metadata = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+function loreRow(overrides: Partial<WizardLoreDraft> = {}): WizardLoreDraft {
+  return {
+    id: 'lore_11111111-1111-1111-1111-111111111111',
+    title: 'The Salt Wells',
+    body: 'Nine wells ring the drowned coast.',
+    category: '',
+    tags: [],
+    injectionMode: 'auto',
+    priority: 0,
+    ...overrides,
+  }
+}
 
 async function setup() {
   const { db, sqlite, runInTransaction } = await createTestDb()
@@ -143,6 +158,10 @@ describe('createStoryWithBranch', () => {
       name: 'Aria',
       status: 'active',
       injectionMode: 'auto',
+      // No `embed` on this call, so nothing clears the flag. Inserting at the
+      // column default of 0 would mark an unvectored row clean and leave it
+      // permanently invisible to retrieval.
+      embeddingStale: 1,
     })
     expect(entityRows[0].state).toEqual(emptyEntityState('character'))
 
@@ -428,6 +447,262 @@ describe('createStoryWithBranch — embed step', () => {
     expect(await db.select().from(branches)).toHaveLength(0)
     expect(await db.select().from(entities)).toHaveLength(0)
     expect(await db.select().from(storyEntries)).toHaveLength(0)
+  })
+
+  it('lore rows land with their More-options fields; an omitted category persists as NULL', async () => {
+    const { db, ctx } = await setup()
+
+    const rowA = loreRow({
+      id: 'lore_11111111-1111-1111-1111-111111111111',
+      title: 'The Salt Wells',
+      body: 'Nine wells ring the drowned coast.',
+      category: 'Geography',
+      tags: ['coast', 'water'],
+      injectionMode: 'always',
+      priority: 42,
+    })
+    const rowB = loreRow({
+      id: 'lore_22222222-2222-2222-2222-222222222222',
+      title: 'The Hollow King',
+      body: 'A ruler who cast no shadow.',
+      category: '',
+      tags: [],
+      injectionMode: 'disabled',
+      priority: 0,
+    })
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'World-building',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        lore: [rowA, rowB],
+      },
+      ctx,
+      9000,
+    )
+
+    const loreRows = await db.select().from(lore).where(eq(lore.branchId, branchId))
+    expect(loreRows).toHaveLength(2)
+
+    const a = loreRows.find((r) => r.id === rowA.id)
+    expect(a).toMatchObject({
+      title: 'The Salt Wells',
+      body: 'Nine wells ring the drowned coast.',
+      category: 'Geography',
+      injectionMode: 'always',
+      priority: 42,
+      // See the lead-entity commit test: no `embed`, so the flag must survive
+      // dirty for the drain rather than default clean.
+      embeddingStale: 1,
+    })
+    expect(a?.tags).toEqual(['coast', 'water'])
+    expect(a?.keywords).toEqual([])
+
+    const b = loreRows.find((r) => r.id === rowB.id)
+    expect(b?.category).toBeNull()
+    expect(b?.injectionMode).toBe('disabled')
+    expect(b?.keywords).toEqual([])
+    expect(b?.embeddingStale).toBe(1)
+  })
+
+  it('embeds the lead and lore in one batched call, not one per row', async () => {
+    const { ctx } = await setup()
+    const row = loreRow({ title: 'Magic', body: 'Wells.' })
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Combined',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake.',
+        openingMetadata: metadata,
+        lead: { id: LEAD_ID, name: 'Aria' },
+        lore: [row],
+        embed: { config: LOCAL_CONFIG, exec: async () => {} },
+      },
+      ctx,
+      9100,
+    )
+
+    expect(mockedEmbed).toHaveBeenCalledTimes(1)
+    expect(mockedEmbed.mock.calls[0][1]).toEqual([
+      { kind: 'entity', id: LEAD_ID, branchId, fields: ['Aria', null] },
+      { kind: 'lore', id: row.id, branchId, fields: ['Magic', 'Wells.'] },
+    ])
+  })
+
+  it('lore INSERTs precede the spliced lore vec ops and clear the stale flag', async () => {
+    const { db, sqlite, ctx } = await setup()
+    realVecOps()
+    const row = loreRow({ title: 'The Deep Archive', body: 'Kept below the tide line.' })
+
+    const captured: SqlOp[] = []
+    const capturingCtx = {
+      db,
+      runInTransaction: async (ops: SqlOp[]) => {
+        captured.push(...ops)
+        return ctx.runInTransaction(ops)
+      },
+    }
+
+    await createStoryWithBranch(
+      {
+        title: 'Archived',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        lore: [row],
+        embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
+      },
+      capturingCtx,
+      9200,
+    )
+
+    const loreInsertIdx = captured.findIndex((op) => /insert into "lore"/i.test(op.sql))
+    const vecInsertIdx = captured.findIndex((op) => /lore_vec_384/i.test(op.sql))
+    expect(loreInsertIdx).toBeGreaterThanOrEqual(0)
+    expect(vecInsertIdx).toBeGreaterThan(loreInsertIdx)
+
+    const loreRowAfter = sqlite
+      .prepare('select embedding_stale from lore where id = ?')
+      .get(row.id) as { embedding_stale: number }
+    expect(loreRowAfter.embedding_stale).toBe(0)
+  })
+
+  it('a failing embed with a lore row rolls back: no story, no lore', async () => {
+    const { db, ctx } = await setup()
+    mockedEmbed.mockRejectedValue(new EmbedderCallError('vec table ensure failed'))
+    const row = loreRow()
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'Doomed World',
+          definition: makeDefinition(),
+          settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+          openingContent: 'Once.',
+          openingMetadata: metadata,
+          lore: [row],
+          embed: { config: LOCAL_CONFIG, exec: async () => {} },
+        },
+        ctx,
+        9300,
+      ),
+    ).rejects.toBeInstanceOf(EmbedderCallError)
+
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(lore)).toHaveLength(0)
+  })
+
+  it('embed supplied but no lead and no lore: the helper is skipped, no vec DDL runs', async () => {
+    const { sqlite, ctx } = await setup()
+    const execd: string[] = []
+
+    await createStoryWithBranch(
+      {
+        title: 'Nothing to embed',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        embed: {
+          config: LOCAL_CONFIG,
+          exec: async (sql) => {
+            execd.push(sql)
+            sqlite.exec(sql)
+          },
+        },
+      },
+      ctx,
+      9700,
+    )
+
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(execd).toHaveLength(0)
+  })
+
+  it('draft-promote carrying lore: rows land on the new branch under its own PK; a same-id row on another branch is untouched', async () => {
+    const { db, sqlite, ctx } = await setup()
+    realVecOps()
+    const draftId = 'story_draft_with_lore'
+    await db.insert(stories).values({
+      id: draftId,
+      title: 'Untitled story',
+      status: 'draft',
+      createdAt: 500,
+      updatedAt: 500,
+    })
+    await db
+      .insert(wizardSessions)
+      .values({ id: draftId, storyId: draftId, state: emptyWorkingState(), updatedAt: 500 })
+
+    // A pre-existing OTHER story already holding a lore row under the SAME id
+    // on a different branch — the composite PK is (branch_id, id).
+    const otherBranch = 'br_other'
+    await db
+      .insert(stories)
+      .values({ id: 'story_other', title: 'Other', status: 'active', createdAt: 1, updatedAt: 1 })
+    await db
+      .insert(branches)
+      .values({ id: otherBranch, storyId: 'story_other', name: 'main', createdAt: 1 })
+    const sharedLoreId = 'lore_11111111-1111-1111-1111-111111111111'
+    await db.insert(lore).values({
+      id: sharedLoreId,
+      branchId: otherBranch,
+      title: 'Pre-existing',
+      body: 'untouched',
+      injectionMode: 'auto',
+      createdAt: 1,
+      updatedAt: 1,
+    })
+
+    const { storyId, branchId } = await createStoryWithBranch(
+      {
+        storyId: draftId,
+        replaceExistingStoryId: true,
+        title: 'Promoted With Lore',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'The draft becomes real.',
+        openingMetadata: metadata,
+        lore: [loreRow({ id: sharedLoreId, category: 'Geography' })],
+        embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
+      },
+      ctx,
+      9500,
+    )
+
+    expect(storyId).toBe(draftId)
+    const storyRows = await db.select().from(stories).where(eq(stories.id, draftId))
+    expect(storyRows[0]).toMatchObject({ status: 'active', currentBranchId: branchId })
+    expect(
+      await db.select().from(wizardSessions).where(eq(wizardSessions.id, draftId)),
+    ).toHaveLength(0)
+
+    const promoted = await db.select().from(lore).where(eq(lore.branchId, branchId))
+    expect(promoted).toHaveLength(1)
+    expect(promoted[0]).toMatchObject({
+      id: sharedLoreId,
+      category: 'Geography',
+      embeddingStale: 0,
+    })
+
+    const untouched = await db.select().from(lore).where(eq(lore.branchId, otherBranch))
+    expect(untouched).toHaveLength(1)
+    expect(untouched[0].title).toBe('Pre-existing')
+
+    const vecRows = sqlite
+      .prepare('select branch_id from lore_vec_384 where id = ?')
+      .all(sharedLoreId) as { branch_id: string }[]
+    expect(vecRows.map((r) => r.branch_id)).toEqual([branchId])
   })
 
   it('skips the embed helper entirely when no embed input is supplied', async () => {

@@ -24,6 +24,20 @@ const wizardOpeningDraftSchema = z.object({
   model: z.string().nullable().default(null),
 })
 
+const wizardLoreDraftSchema = z.object({
+  // Minted at add time (generateId('lore')) so the row keeps identity across
+  // autosave round-trips and lands in the commit under the same id.
+  id: z.string(),
+  title: z.string().default(''),
+  body: z.string().default(''),
+  category: z.string().default(''),
+  tags: z.array(z.string()).default(() => []),
+  injectionMode: z.enum(['always', 'auto', 'disabled']).default('auto'),
+  priority: z.number().int().min(0).max(100).default(0),
+})
+
+export type WizardLoreDraft = z.infer<typeof wizardLoreDraftSchema>
+
 export const wizardWorkingStateSchema = z.object({
   step: z.number().int().min(1).max(5).default(1),
   definition: wizardDefinitionDraftSchema.default(() => wizardDefinitionDraftSchema.parse({})),
@@ -40,6 +54,7 @@ export const wizardWorkingStateSchema = z.object({
   // platform pre-selection fires once per session, not once per disclosure
   // mount — a deliberate Native choice survives step-nav remounts.
   effectiveDimTouched: z.boolean().default(false),
+  lore: z.array(wizardLoreDraftSchema).default(() => []),
 })
 
 export type WizardWorkingState = z.infer<typeof wizardWorkingStateSchema>

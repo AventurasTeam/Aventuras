@@ -141,6 +141,19 @@ Example built-in macros:
   the source descriptor
 - `macro_output_format_narrative` (`staticContent`) — the output
   instruction block for narrative generation
+- `macro_wizard_genre_context` (`wizard`) — the genre output contract
+  plus the state that grounds it, shared by the genre generate and
+  refine templates
+
+**Generate / refine pairs share one macro.** A field the user can
+iterate on has two templates — `tmpl_wizard_genre` and
+`tmpl_wizard_genre_refine` — differing only in the leading directive
+and the revise block. Everything else (the output contract and the
+grounding state) lives in one macro both include. Splitting them the
+other way duplicates the quality bar, which is the half most likely
+to be tuned and so the half most likely to drift. A refine template
+reads `current` and `instruction`; it carries no `guidance`, which
+steers a generate.
 
 ### Structured output — the JSON contract is not pack content
 

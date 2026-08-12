@@ -1,10 +1,11 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode, type Ref } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { Chip } from '@/components/ui/chip'
-import { Select, type SelectOption } from '@/components/ui/select'
+import { SearchableOverlayList, type Section } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
+import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
 type CalendarType = 'built-in' | 'custom'
@@ -92,6 +93,16 @@ type CalendarPickerProps = {
   className?: string
 }
 
+// Name and tier path are what a user scanning for a calendar would type; `type`
+// is a two-value chip and better served by reading the rows than by matching.
+function matchesCalendar(option: CalendarOption, query: string): boolean {
+  if (query === '') return true
+  const needle = query.toLowerCase()
+  return (
+    option.name.toLowerCase().includes(needle) || option.tierPath.toLowerCase().includes(needle)
+  )
+}
+
 export function CalendarPicker({
   options,
   selectedId,
@@ -110,44 +121,93 @@ export function CalendarPicker({
   const tier = useTier()
   const stacked = layout === 'stacked' || tier === 'phone'
 
+  const [query, setQuery] = useState('')
+
   const optsById = useMemo(() => new Map(options.map((o) => [o.id, o])), [options])
 
-  const selectOptions: SelectOption[] = useMemo(
-    () => options.map((o) => ({ value: o.id, label: o.name })),
-    [options],
+  const sections = useMemo<Section<CalendarOption>[]>(
+    () => [
+      {
+        id: 'calendars',
+        rows: options.filter((o) => matchesCalendar(o, query)).map((o) => ({ id: o.id, data: o })),
+      },
+    ],
+    [options, query],
   )
 
-  const tailAction = useMemo(
+  const selectedOption = optsById.get(selectedId)
+  const selectedRowIds = useMemo(() => [selectedId], [selectedId])
+
+  const renderFooter = useMemo(
     () =>
       showVaultTail
-        ? {
-            label: 'Manage calendars in Vault →',
-            onPress: () => onManageInVault?.(),
-          }
+        ? (close: () => void) => (
+            <Pressable
+              // Navigates out of the picker rather than acting on it, so it
+              // dismisses first — same close-before-act order as row activation.
+              accessibilityRole="link"
+              onPress={() => {
+                close()
+                onManageInVault?.()
+              }}
+              className="px-row-x-md py-row-y-md hover:bg-tint-hover active:bg-tint-press"
+            >
+              <Text size="sm" className="font-medium">
+                {t('common:calendarPicker.manageInVault')}
+              </Text>
+            </Pressable>
+          )
         : undefined,
     [showVaultTail, onManageInVault],
   )
 
   const select = (
-    <Select
+    <SearchableOverlayList<CalendarOption>
       className="w-full"
-      options={selectOptions}
-      value={selectedId}
-      onValueChange={onSelect}
-      mode="dropdown"
-      sheetSize="medium"
+      searchPlacement="in-overlay"
+      ariaLabel={t('common:calendarPicker.ariaLabel')}
+      searchPlaceholder={t('common:calendarPicker.searchPlaceholder')}
+      sections={sections}
+      onQueryChange={setQuery}
+      selectedRowIds={selectedRowIds}
+      matchTriggerWidth
+      // 400 fits the longest built-in tier path (year → … → second) with
+      // slack; longer custom paths ellipsize behind the row's title tooltip.
+      overlayMinWidth={400}
+      sheetSize="tall"
+      autofocusSearch="web-only"
       disabled={disabled}
-      placeholder="Select a calendar…"
-      label={tier === 'phone' ? 'Calendars' : undefined}
-      renderTrigger={({ selected, placeholder }) => {
-        const cal = selected != null ? optsById.get(selected.value) : undefined
-        return <CalendarTriggerContent option={cal} placeholder={placeholder ?? ''} />
-      }}
-      renderRow={({ option }) => {
-        const cal = optsById.get(option.value)
-        return cal ? <CalendarRowContent option={cal} /> : null
-      }}
-      tailAction={tailAction}
+      disabledReason={disabledReason}
+      renderTrigger={(p) => (
+        <Pressable
+          ref={p.ref as Ref<View>}
+          onPress={p.onPress}
+          disabled={disabled}
+          accessibilityRole="button"
+          // Deliberately unlabelled: the trigger's accessible name comes from
+          // its content, so it announces the selected calendar rather than a
+          // fixed word. A visible heading already names the field.
+          aria-haspopup="dialog"
+          aria-expanded={p['aria-expanded']}
+          aria-controls={p['aria-controls']}
+          // rn-primitives merges a web click past Pressable.disabled.
+          style={
+            Platform.OS === 'web' && disabled ? ({ pointerEvents: 'none' } as never) : undefined
+          }
+          className={cn(
+            'h-control-md w-full flex-row items-center rounded-md border border-border bg-bg-base px-3',
+            disabled && 'opacity-50',
+          )}
+        >
+          <CalendarTriggerContent
+            option={selectedOption}
+            placeholder={t('common:calendarPicker.triggerPlaceholder')}
+          />
+        </Pressable>
+      )}
+      renderRow={(row) => <CalendarRowContent option={row.data} />}
+      renderFooter={renderFooter}
+      onActivate={(row) => onSelect(row.id)}
     />
   )
 
@@ -233,29 +293,29 @@ function CalendarSummary({
   editDisabled: boolean
   editDisabledReason?: string
 }) {
-  const sampleLabel = summary.sampleLabel ?? 'Sample render'
+  const sampleLabel = summary.sampleLabel ?? t('common:calendarPicker.sampleRender')
   return (
     <View className="rounded-md border border-border bg-bg-base p-4">
       <View className="gap-3">
-        <SummarySection title="Tiers">
+        <SummarySection title={t('common:calendarPicker.tiers')}>
           {summary.tiers.length === 0 ? (
             <Text size="xs" variant="muted">
               —
             </Text>
           ) : (
-            summary.tiers.map((t) => (
-              <View key={t.name} className="flex-row items-baseline gap-2">
-                <Text className="w-[72px] font-mono text-xs text-fg-secondary">{t.name}</Text>
+            summary.tiers.map((tier) => (
+              <View key={tier.name} className="flex-row items-baseline gap-2">
+                <Text className="w-[72px] font-mono text-xs text-fg-secondary">{tier.name}</Text>
                 <Text size="xs" variant="muted" className="shrink">
-                  · {t.detail}
+                  · {tier.detail}
                 </Text>
               </View>
             ))
           )}
         </SummarySection>
 
-        <SummaryRow label="Sub-divisions" value={summary.subdivisions} />
-        <SummaryRow label="Eras" value={summary.eras} />
+        <SummaryRow label={t('common:calendarPicker.subdivisions')} value={summary.subdivisions} />
+        <SummaryRow label={t('common:calendarPicker.eras')} value={summary.eras} />
         <SummaryRow
           label={sampleLabel}
           value={summary.sampleRender ?? '—'}

@@ -82,7 +82,7 @@ slice enables it.
 ## Scope: out
 
 - Refine-with-guidance on replies — not in canon for reader entries
-  (refine is a wizard-opening affordance, 3.6); the composer +
+  (refine is a wizard-opening affordance, 3.6a); the composer +
   suggestions are the steering surface.
 - Swipe-switch between alternate takes — not a v1 reader feature;
   the barrier lists it for completeness but no surface exists.

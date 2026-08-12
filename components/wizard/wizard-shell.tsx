@@ -16,8 +16,10 @@ import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
+import { DISABLED_STEPS, STEP_ORDER } from './wizard-nav-logic'
+
 type WizardShellProps = {
-  /** 1-indexed active step; M2 only reaches 1 (Frame), 2 (Calendar), 5 (Opening). */
+  /** 1-indexed active step; reaches 1 (Frame), 2 (Calendar), 3 (World), 5 (Opening). */
   step: number
   canGoNext: boolean
   isFinish: boolean
@@ -32,12 +34,6 @@ type WizardShellProps = {
   canJumpTo: (step: number) => boolean
   children: ReactNode
 }
-
-const STEP_ORDER = [1, 2, 3, 4, 5] as const
-
-// M2 only wires steps 1 (Frame), 2 (Calendar), and 5 (Opening); World/Cast
-// land in a later milestone and stay hard-disabled regardless of `step`.
-const DISABLED_STEPS = new Set<number>([3, 4])
 
 const STEP_LABEL_KEYS = {
   1: 'wizard:steps.frame',
@@ -189,11 +185,14 @@ export function WizardShell({
         ))}
       </View>
 
+      {/* Android is deliberately behaviour-less: 'height' compensates a second
+          time on top of the root's claimed resize mode, and the wizard was the
+          one screen where overlays that behave everywhere else misbehaved. iOS
+          never resizes, so it still needs padding. See
+          lessons-learned/keyboard-resize-mode-must-be-claimed.md. */}
       <KeyboardAvoidingView
         style={STATIC_STYLES.flex1}
-        behavior={
-          Platform.OS === 'ios' ? 'padding' : Platform.OS === 'android' ? 'height' : undefined
-        }
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           className="flex-1"

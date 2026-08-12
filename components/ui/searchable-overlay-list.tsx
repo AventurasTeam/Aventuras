@@ -2,12 +2,13 @@ import { BottomSheetSectionList } from '@gorhom/bottom-sheet'
 import * as PopoverPrimitive from '@rn-primitives/popover'
 import { Portal } from '@rn-primitives/portal'
 import { defaultRangeExtractor, useVirtualizer, type Range } from '@tanstack/react-virtual'
-import { Search, X } from 'lucide-react-native'
+import { Check, Search, X } from 'lucide-react-native'
 import {
   Fragment,
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -68,24 +69,38 @@ type SearchableOverlayListProps<T> = {
   sections: Section<T>[]
   renderRow: (row: Row<T>, state: { highlighted: boolean; selected: boolean }) => ReactNode
   renderEmpty?: (query: string) => ReactNode
-  renderFooter?: () => ReactNode
+  /**
+   * Receives the substrate's dismiss so a footer action can follow the same
+   * close-before-act order `activate` uses. A footer that navigates away must
+   * call it — the substrate cannot know which actions leave the overlay.
+   */
+  renderFooter?: (close: () => void) => ReactNode
 
   // Marks rows that represent the consumer's committed value. The substrate
-  // paints each with `bg-bg-sunken` (the convention shared with Select
-  // customContent), so consumers don't re-implement the selected-row affordance.
+  // marks each with a trailing check and leaves the row's surface alone —
+  // matching `Select`, whose default item carries an ItemIndicator rather than
+  // a fill. Filling instead was the earlier approach and read wrong on dark:
+  // any surface token below `bg-bg-overlay` cuts the row out as a dark band,
+  // and a tint above it reads as a stuck press state.
   // Distinct from `highlighted` (transient keyboard cursor). When set,
   // `bg-tint-hover` is suppressed on selected rows so the selection signal
   // isn't muddled by hover. Array semantics let a single logical selection
-  // surface in multiple sections — e.g. the picker tints the same model in
+  // surface in multiple sections — e.g. the picker marks the same model in
   // both the Favorites strip and its provider section.
   selectedRowIds?: readonly string[]
 
-  // Web-only opt-in: the Shape 2 popover sizes to its trigger's width (with a
-  // 240px floor so a narrow trigger doesn't crush content). Use for
+  // Web-only opt-in: the Shape 2 popover is at least as wide as its trigger
+  // (with a floor so a narrow trigger doesn't crush content). Use for
   // select-shaped consumers where the open surface should read as the trigger
   // expanding. Leave off for command-menu consumers whose surface is dialog-
   // scaled regardless of trigger. No-op on phone (Sheet covers width on its own).
   matchTriggerWidth?: boolean
+  // Raises the matchTriggerWidth floor (default 240) for consumers whose row
+  // content is known to be wider than a typical trigger. The virtualizer
+  // absolutely positions rows, so they contribute no intrinsic width — the
+  // popover cannot size itself to content; the consumer declares the width
+  // its rows need instead. Rows past the floor still ellipsize.
+  overlayMinWidth?: number
 
   onActivate: (row: Row<T>) => void
   // Optional consumer signal for the X clear button. In as-trigger mode this is the
@@ -122,16 +137,6 @@ const STATIC_STYLES = {
     maxHeight: 480,
     overflow: 'hidden' as const,
   } satisfies ViewStyle,
-  // Radix exposes `--radix-popover-trigger-width` on Content; honor it as the
-  // surface width with a 240px floor so a narrow trigger doesn't crush rows
-  // (modelId + caps + ★ need a reasonable minimum). Web-only — native phones
-  // route through Sheet which owns its own sizing.
-  overlayChromeMatchTrigger: {
-    maxHeight: 480,
-    overflow: 'hidden' as const,
-    width: 'var(--radix-popover-trigger-width)' as unknown as number,
-    minWidth: 240,
-  } satisfies ViewStyle,
   pointerEventsNone: { pointerEvents: 'none' as const } satisfies ViewStyle,
   // Native inline popover for Shape1Inline: absolute positioning relative to
   // the wrapper (which contains the input) places the popover just below the
@@ -147,6 +152,29 @@ const STATIC_STYLES = {
     zIndex: 50,
     elevation: 8,
   } satisfies ViewStyle,
+}
+
+// Lower-bound the surface at its trigger's width or the consumer floor
+// (overlayMinWidth), whichever is wider. Web reads the trigger width from
+// Radix's CSS var; native has no CSS vars — Yoga drops the string — so
+// tablet-tier native (phones route through Sheet) passes the trigger width
+// measured at open time.
+function matchTriggerWidthStyle(floorPx: number, measuredTriggerPx: number): ViewStyle {
+  return {
+    maxHeight: 480,
+    overflow: 'hidden',
+    minWidth:
+      Platform.OS === 'web'
+        ? (`max(var(--radix-popover-trigger-width), ${floorPx}px)` as unknown as number)
+        : Math.max(measuredTriggerPx, floorPx),
+  }
+}
+
+// Trails the consumer's row content, so a row that already fills its width
+// keeps its layout and simply gains the mark. `shrink-0` stops it collapsing
+// when the content beside it is long.
+function SelectedMark() {
+  return <Icon as={Check} size="md" aria-hidden className="ml-2 shrink-0 text-fg-muted" />
 }
 
 function flattenEnabled<T>(sections: Section<T>[]): Row<T>[] {
@@ -332,7 +360,6 @@ function RowListNative<T>({
         className={cn(
           ROW_BASE,
           rowClass,
-          selected && 'bg-bg-sunken',
           highlighted && !selected && 'bg-tint-hover',
           // Pointer twin of the keyboard-cursor tint; same suppress-on-selected
           // rule so the selection signal isn't muddled.
@@ -341,6 +368,7 @@ function RowListNative<T>({
         )}
       >
         {renderRow(item, { highlighted, selected })}
+        {selected ? <SelectedMark /> : null}
       </Pressable>
     )
   }
@@ -573,7 +601,10 @@ function VirtualizedRowList<T>({
     <div
       ref={parentRef}
       id={listboxId}
-      className={cn('overflow-y-auto', className)}
+      // overflow-x-hidden: `overflow-y: auto` alone computes overflow-x to
+      // auto, so any row content a px too wide spawns a horizontal scrollbar
+      // instead of ellipsizing.
+      className={cn('overflow-y-auto overflow-x-hidden', className)}
       style={style as CSSProperties}
       {...webProps}
     >
@@ -627,13 +658,13 @@ function VirtualizedRowList<T>({
                   ROW_BASE,
                   rowClass,
                   !item.isLastInSection && 'border-b border-border',
-                  selected && 'bg-bg-sunken',
                   highlighted && !selected && 'bg-tint-hover',
                   !selected && !row.disabled && 'hover:bg-tint-hover',
                   row.disabled && 'opacity-50',
                 )}
               >
                 {renderRow(row, { highlighted, selected })}
+                {selected ? <SelectedMark /> : null}
               </Pressable>
             </div>
           )
@@ -798,6 +829,20 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     [isControlled, onOpenChange],
   )
 
+  // Tier flips while open are asymmetric. Entering desktop hands the overlay
+  // off — the popover mounts open and the unmounting sheet vanishes instantly
+  // (gorhom's portal-unmount dismissal is patched to zero duration). Entering
+  // phone closes instead: auto-presenting a sheet mid-resize is intrusive.
+  // Closing on the desktop-entering flip isn't reachable anyway —
+  // PopoverControlledBridge's mount effect re-asserts the pre-flip open state
+  // over a same-commit close.
+  const prevIsPhoneRef = useRef(isPhone)
+  useLayoutEffect(() => {
+    if (prevIsPhoneRef.current === isPhone) return
+    prevIsPhoneRef.current = isPhone
+    if (isPhone && open) setOpen(false)
+  }, [isPhone, open, setOpen])
+
   const list = useSearchableList(props)
   const selectedRowIdsSet = useSelectedSet(props.selectedRowIds)
 
@@ -812,6 +857,15 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   const listboxId = useId()
   const rowIdPrefix = useId()
   const triggerRef = useRef<unknown>(null)
+
+  // Native popovers can't read the Radix trigger-width CSS var; measure the
+  // trigger at open so matchTriggerWidth holds on tablet tiers too.
+  const [measuredTriggerWidth, setMeasuredTriggerWidth] = useState(0)
+  useEffect(() => {
+    if (Platform.OS === 'web' || isPhone || !open || !props.matchTriggerWidth) return
+    const node = triggerRef.current as View | null
+    node?.measureInWindow((_x, _y, width) => setMeasuredTriggerWidth(width))
+  }, [open, isPhone, props.matchTriggerWidth])
 
   const shouldAutofocus =
     autofocusSearch === 'always' || (autofocusSearch === 'web-only' && Platform.OS === 'web')
@@ -940,7 +994,9 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
-        <View className="mt-3 border-t border-border pt-3">{renderFooter()}</View>
+        <View className="mt-3 border-t border-border pt-3">
+          {renderFooter(() => setOpen(false))}
+        </View>
       ) : null}
     </>
   )
@@ -970,10 +1026,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
   }
 
   // Desktop / tablet — rn-primitives Popover with the controlled-open bridge.
-  // Width: `matchTriggerWidth` swaps `w-80` for the Radix trigger-width CSS var;
-  // otherwise the popover is a fixed 320px (command-menu-shaped surfaces).
+  // Width: `matchTriggerWidth` swaps `w-80` for a trigger-width lower bound
+  // (floor raisable via `overlayMinWidth`); otherwise the popover is a fixed
+  // 320px (command-menu-shaped surfaces).
   const popoverStyle = props.matchTriggerWidth
-    ? STATIC_STYLES.overlayChromeMatchTrigger
+    ? matchTriggerWidthStyle(props.overlayMinWidth ?? 240, measuredTriggerWidth)
     : STATIC_STYLES.overlayChrome
   const content = (
     <PopoverPrimitive.Content
@@ -1211,7 +1268,9 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
         style={STATIC_STYLES.flex1}
       />
       {renderFooter ? (
-        <View className="border-t border-border px-3 py-2">{renderFooter()}</View>
+        <View className="border-t border-border px-3 py-2">
+          {renderFooter(() => setOpen(false))}
+        </View>
       ) : null}
     </>
   )

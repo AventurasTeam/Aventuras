@@ -72,8 +72,12 @@ from the moment `processedThrough` is first written, so it ships
 with its owner.
 
 The **reader / wizard track** ships what users touch:
-[Slice 3.6](./slices/06-wizard-world-cast.md) completes the wizard
-(World and Cast steps, refine / regenerate on the opening);
+[Slice 3.6a](./slices/06a-wizard-world.md) and
+[Slice 3.6b](./slices/06b-wizard-cast.md) complete the wizard — 3.6a lands
+the World step and brings the shared AI-assist primitive up to its
+canonical result shapes (list, refine, regenerate, the last two
+lighting up the opening preview), 3.6b lands the Cast step and
+feeds the authored world and cast into opening generation;
 [Slice 3.7a](./slices/07a-suggestions.md) adds next-turn suggestion
 chips over both emission folds plus the `suggestion-refresh`
 pipeline, with [Slice 3.7b](./slices/07b-suggestion-settings.md)
@@ -86,7 +90,7 @@ promotion — the roadmap's cross-cutting table named reader
 regenerate but no slice owned it) wires regenerate over the shared
 reversal sweep. The same table's "refine on entries" phrase is
 dropped: canon defines no reader-entry refine (refine is a
-wizard-opening affordance, 3.6).
+wizard-opening affordance, 3.6a).
 [Slice 3.11](./slices/11-story-settings-shell.md) (also added at
 promotion, from an audit finding) ships the minimal Story Settings
 host that 3.1b's embedding-status panel and 3.7b's Generation-tab
@@ -118,8 +122,10 @@ browsable.
   `js-tiktoken`
 - [Slice 3.5](./slices/05-dev-probe.md) — developer-only retrieval
   probe: first `probe_captures` writes, parity test
-- [Slice 3.6](./slices/06-wizard-world-cast.md) — wizard steps 3
-  (World) and 4 (Cast), refine / regenerate on the opening
+- [Slice 3.6a](./slices/06a-wizard-world.md) — wizard step 3
+  (World), AI-assist list result shape, refine / regenerate
+- [Slice 3.6b](./slices/06b-wizard-cast.md) — wizard step 4 (Cast),
+  opening world / cast context, lead-input relocation
 - [Slice 3.7a](./slices/07a-suggestions.md) — next-turn suggestions:
   emission folds, chip strip, `suggestion-refresh` pipeline,
   creation-time palette seed
@@ -138,13 +144,14 @@ browsable.
 ## Dependency graph
 
 ```
-day-one: 3.1a   3.2   3.6   3.8   3.11
+day-one: 3.1a   3.2   3.6a   3.8   3.11
 
 3.1a ─┬→ 3.1b
       ├→ 3.3 ─┬→ 3.9
       │       └→ 3.10
       └→ 3.4 ──→ 3.5
 3.2 ───→ 3.7a ──→ 3.7b
+3.6a ──→ 3.6b
 3.11 ┄─→ 3.1b   (partial: settings-section portions only)
 3.11 ───→ 3.7b
 ```
@@ -168,12 +175,20 @@ day-one: 3.1a   3.2   3.6   3.8   3.11
   3.4 also pairs with 3.1b via C8 (its sync-failure surface's
   `Switch embedder` action opens 3.1b's swap dialog) — a
   doc-as-contract seam, not a gate.
-- **3.6** is day-one: the M1.5 lore / entity layer plus M2.3's
-  wizard shell are merged prerequisites. Its Finish-commit rows
+- **3.6a** is day-one: the M1.5 lore layer plus M2.3's wizard shell
+  are merged prerequisites (3.6b is the half that needs the entity
+  layer). Its Finish-commit rows
   flow through 3.1a's embed step via C5 — a doc-as-contract pair,
-  not a gate. 3.1b and 3.6 also co-edit wizard step 5 (memory-cost
+  not a gate. 3.1b and 3.6a also co-edit wizard step 5 (memory-cost
   disclosure vs opening refine / regenerate) in non-overlapping
   regions — parallel-safe, noted for completeness.
+- **3.6a** gates **3.6b**. The pair was one slice at promotion and
+  split during 3.6 planning (2026-08-10) on size: the combined
+  scope ran past the 100-file review cap and past "days, not
+  weeks." The edge is a real gate rather than a doc-as-contract
+  seam because 3.6b's `✨ Suggest cast` consumes the AI-assist list
+  result shape 3.6a builds, and both slices edit the same working
+  state, Finish-commit, and step-sequence code.
 - **3.8** is build-independent day-one (entry metadata + the M2
   calendar substrate); it only becomes _useful_ once 3.2's
   piggyback layer writes non-zero `worldTime` values, so its
@@ -265,19 +280,19 @@ a contract violation.
 
 ### C5 — Wizard-commit embed seam
 
-The wizard's Finish transaction is touched by three slices: 3.1a
+The wizard's Finish transaction is touched by four slices: 3.1a
 adds the embed handling (each `entities` / `lore` row embeds at its
 insert step inside the one atomic transaction, per
 [`wizard.md → What Finish does`](../../../ui/screens/wizard/wizard.md#what-finish-does--atomic-commit);
-any embed failure rolls the whole commit back), 3.6 adds the rows
-themselves (full cast + initial lore), and 3.1b writes
+any embed failure rolls the whole commit back), 3.6a adds the
+initial lore rows, 3.6b adds the full cast, and 3.1b writes
 `stories.settings.effectiveDim` from the step-5 memory-cost
 disclosure — resolved by the embed helper from the story settings
 assembled earlier in the same transaction. Pinned: all Finish
 embeds flow through 3.1a's single embed helper; 3.1a implements it
-against the M2 commit shape (lead entity only); 3.6's rows and
-3.1b's dim flow through it without any slice knowing another's
-internals.
+against the M2 commit shape (lead entity only); the 3.6a / 3.6b
+rows and 3.1b's dim flow through it without any slice knowing
+another's internals.
 
 ### C6 — Per-turn phase-list extension seam
 

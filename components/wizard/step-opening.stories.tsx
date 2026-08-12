@@ -110,6 +110,50 @@ export const OpeningAssistCommits: Story = {
   },
 }
 
+const EXISTING_OPENING = 'The harbor lay still under a bruised sky.'
+const REPLACEMENT_OPENING = 'Aria drew her blade as the storm broke over the harbor.'
+
+export const OpeningAssistOverExistingProseConfirms: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.setLeadName('Aria')
+    wizardStore.setLeadEntityId(LEAD_ID)
+    wizardStore.patchOpening({ content: EXISTING_OPENING })
+  },
+  render: () => (
+    <StepOpening
+      onSetupAssist={fn()}
+      assist={{
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: REPLACEMENT_OPENING,
+          sceneEntities: [LEAD_ID],
+          currentLocationId: null,
+          model: MODEL_ID,
+        }),
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
+    // Existing prose seeds the preview, so a fresh take comes via Regenerate.
+    await userEvent.click(await screen.findByRole('button', { name: 'Regenerate' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Use this' }))
+
+    expect(await screen.findByText('Replace the opening?')).toBeInTheDocument()
+    // Blocked until confirmed — the authored prose is still what the store holds.
+    expect(wizardStore.getWizard().state.opening.content).toBe(EXISTING_OPENING)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace' }))
+    await waitFor(() =>
+      expect(wizardStore.getWizard().state.opening.content).toBe(REPLACEMENT_OPENING),
+    )
+  },
+}
+
 export const TitleChipsFillTitle: Story = {
   beforeEach: () => {
     wizardStore.reset()

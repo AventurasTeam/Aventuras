@@ -6,15 +6,18 @@ import {
   emptyEntityState,
   entities,
   entryMetadataSchema,
+  lore,
   stories,
   storyDefinitionSchema,
   storyEntries,
   storySettingsSchema,
   wizardSessions,
+  type EmbeddedFieldRow,
   type EntryMetadata,
   type SqlOp,
   type StoryDefinition,
   type StorySettings,
+  type WizardLoreDraft,
 } from '@/lib/db'
 import { embedAndBuildVecOps, type EmbedderConfig } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
@@ -35,10 +38,13 @@ export type CreateStoryInput = {
   openingContent: string
   openingMetadata: EntryMetadata
   lead?: { id: string; name: string }
-  // Embed step (wizard Finish hard gate): when present with a lead, the lead's
-  // vec ops are spliced into the atomic batch. An embed failure throws OUT of
-  // here before runInTransaction runs, so the batch never executes and nothing
-  // persists — that IS the rollback (the transaction is one single-RPC batch).
+  /** Wizard-authored initial lore (Slice 3.6a). Each row embeds title + body. */
+  lore?: readonly WizardLoreDraft[]
+  // Embed step (wizard Finish hard gate): when present, the lead's and lore rows'
+  // vec ops are spliced into the atomic batch as ONE batched call (Contract C5 —
+  // no second embed path). An embed failure throws OUT of here before
+  // runInTransaction runs, so the batch never executes and nothing persists —
+  // that IS the rollback (the transaction is one single-RPC batch).
   embed?: {
     config: EmbedderConfig
     exec: (sql: string) => Promise<void>
@@ -109,6 +115,11 @@ export async function createStoryWithBranch(
           status: 'active',
           injectionMode: 'auto',
           state: emptyEntityState('character'),
+          // Dirty by default: the same-batch splice below is what clears it. If a
+          // future reorder or a caller that omits `embed` ever skips the splice,
+          // the row stays flagged for the sync/drain stage instead of silently
+          // defaulting to 0 and going permanently invisible to retrieval.
+          embeddingStale: 1,
           createdAt: nowMs,
           updatedAt: nowMs,
         })
@@ -131,16 +142,51 @@ export async function createStoryWithBranch(
       .toSQL(),
   )
 
-  // Splice AFTER the entities INSERT: embedAndBuildVecOps's per-row stale-clear
-  // UPDATE assumes its source row already sits earlier in the same batch.
-  if (input.embed && input.lead) {
-    const vecOps = await embedAndBuildVecOps(
-      input.embed.config,
-      [{ kind: 'entity', id: input.lead.id, branchId, fields: [input.lead.name, null] }],
-      input.embed.exec,
-      input.embed.provider,
+  for (const row of input.lore ?? []) {
+    const category = row.category.trim()
+    ops.push(
+      ctx.db
+        .insert(lore)
+        .values({
+          id: row.id,
+          branchId,
+          title: row.title,
+          body: row.body,
+          category: category.length > 0 ? category : null,
+          tags: [...row.tags],
+          keywords: [],
+          injectionMode: row.injectionMode,
+          priority: row.priority,
+          // Dirty by default — see the lead-entity insert above for why.
+          embeddingStale: 1,
+          createdAt: nowMs,
+          updatedAt: nowMs,
+        })
+        .toSQL(),
     )
-    ops.push(...vecOps)
+  }
+
+  // Splice AFTER the entities/lore INSERTs: embedAndBuildVecOps's per-row
+  // stale-clear UPDATE assumes its source row already sits earlier in the same
+  // batch. Lead + lore share one call (Contract C5) so lore never costs a
+  // second provider round-trip.
+  if (input.embed) {
+    const rows: EmbeddedFieldRow[] = []
+    if (input.lead) {
+      rows.push({ kind: 'entity', id: input.lead.id, branchId, fields: [input.lead.name, null] })
+    }
+    for (const row of input.lore ?? []) {
+      rows.push({ kind: 'lore', id: row.id, branchId, fields: [row.title, row.body] })
+    }
+    if (rows.length > 0) {
+      const vecOps = await embedAndBuildVecOps(
+        input.embed.config,
+        rows,
+        input.embed.exec,
+        input.embed.provider,
+      )
+      ops.push(...vecOps)
+    }
   }
 
   await ctx.runInTransaction(ops)
