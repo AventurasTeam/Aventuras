@@ -229,3 +229,98 @@ describe('WIZARD_SETTING', () => {
     expect(out).not.toContain('World reference')
   })
 })
+
+// Each prose field is a generate/refine pair over one shared macro. These pin
+// the sharing itself: a contract sentence that stops reaching both templates
+// means the macro was inlined back into one of them and the two can now drift.
+const REFINE_PAIRS = [
+  {
+    field: 'genre',
+    generate: TEMPLATE_IDS.wizardGenre,
+    refine: TEMPLATE_IDS.wizardGenreRefine,
+    contract: 'not an encyclopedia entry describing the genre',
+    directive: 'Revise the genre below',
+    current: { label: 'Hard sci-fi', promptBody: 'Rigorous futures.' },
+    rendered: ['Hard sci-fi', 'Rigorous futures.'],
+  },
+  {
+    field: 'tone',
+    generate: TEMPLATE_IDS.wizardTone,
+    refine: TEMPLATE_IDS.wizardToneRefine,
+    contract: 'not an explanation of the tone',
+    directive: 'Revise the tone below',
+    current: { label: 'Grim', promptBody: 'Consequences land.' },
+    rendered: ['Grim', 'Consequences land.'],
+  },
+  {
+    field: 'setting',
+    generate: TEMPLATE_IDS.wizardSetting,
+    refine: TEMPLATE_IDS.wizardSettingRefine,
+    contract: 'one or two paragraphs of freeform prose',
+    directive: 'Revise the setting below',
+    current: { setting: 'A drowned coast.' },
+    rendered: ['A drowned coast.'],
+  },
+  {
+    field: 'description',
+    generate: TEMPLATE_IDS.wizardDescription,
+    refine: TEMPLATE_IDS.wizardDescriptionRefine,
+    contract: 'one-sentence log line',
+    directive: 'Revise the description below',
+    current: { description: 'A diver hunts a drowned archive.' },
+    rendered: ['A diver hunts a drowned archive.'],
+  },
+  {
+    field: 'opening',
+    generate: TEMPLATE_IDS.wizardOpening,
+    refine: TEMPLATE_IDS.wizardOpeningRefine,
+    // The opening pair shares grounding rather than a contract sentence.
+    contract: 'Setting: A frozen coast.',
+    directive: 'Revise the opening passage',
+    current: { content: 'The harbor lay still.' },
+    rendered: ['The harbor lay still.'],
+  },
+]
+
+describe.each(REFINE_PAIRS)('$field refine template', (pair) => {
+  const ctx = {
+    definition: {
+      mode: 'adventure',
+      setting: 'A frozen coast.',
+      genre: { label: 'Weird', promptBody: 'Genre body.' },
+      tone: { label: 'Dry', promptBody: 'Tone body.' },
+    },
+    opening: { content: 'The harbor lay still.' },
+    lore: [],
+  }
+
+  it('shares its contract with the generate template through the macro', () => {
+    expect(renderTemplate(pair.generate, ctx)).toContain(pair.contract)
+    expect(
+      renderTemplate(pair.refine, { ...ctx, current: pair.current, instruction: 'darker' }),
+    ).toContain(pair.contract)
+  })
+
+  it('leads with the revise directive and renders current + instruction', () => {
+    const out = renderTemplate(pair.refine, {
+      ...ctx,
+      current: pair.current,
+      instruction: 'make it darker',
+    })
+    expect(out.startsWith(pair.directive)).toBe(true)
+    for (const fragment of pair.rendered) expect(out).toContain(fragment)
+    expect(out).toContain('Revision instruction: make it darker')
+    expect(out).not.toContain('undefined')
+  })
+
+  it('carries no guidance block — guidance steers a generate, not a refine', () => {
+    const out = renderTemplate(pair.refine, {
+      ...ctx,
+      current: pair.current,
+      instruction: 'darker',
+      guidance: 'GUIDANCE-MARKER',
+    })
+    expect(out).not.toContain('GUIDANCE-MARKER')
+    expect(out).not.toContain('Additional guidance')
+  })
+})

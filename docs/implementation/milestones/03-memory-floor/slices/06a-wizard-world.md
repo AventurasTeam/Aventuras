@@ -239,6 +239,23 @@ replace-confirm — the other half of the same canon sentence, and
 absent until now despite the Open question below claiming otherwise —
 landed with it. **Slice 3.6b's prose call sites inherit both.**
 
+**Refine is a template, not a string built in TypeScript.** The first
+cut composed an English "Revise this X rather than writing a new one"
+preamble in `wizard-assist.ts` and fed it through the _generate_
+template's `guidance` slot, so the rendered prompt led with "Suggest a
+genre for this story" and demoted the revision into a subordinate
+clause — contradicting the directive that mattered most, and putting
+the refine framing outside the pack layer that
+[`architecture.md → Macros`](../../../../architecture.md#macros--reusable-liquid-snippets-not-code-side-formatters)
+says owns all rendering variation. Each prose field is now a
+generate / refine pair over one shared macro, with `current` and
+`instruction` as registered wizard-group variables. A refine carries
+no `guidance`: canon defines it as current preview plus instruction,
+and the guidance it could otherwise inherit belongs to a generate the
+user may never have seen — the same staleness that made seeded
+`Regenerate` route through the guidance form. **Slice 3.6b's cast
+templates should follow the pair shape.**
+
 **Refine and Regenerate landed primitive-wide, not opening-only.**
 Canon makes the four-action row the contract for every prose result,
 so building it into `AiAssist` gave genre, tone, setting,

@@ -266,6 +266,22 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: false,
     },
     {
+      name: 'current',
+      type: 'GenreAssistValue | ToneAssistValue | SettingAssistValue | DescriptionAssistValue | OpeningAssistValue',
+      category: 'Generation Results',
+      description:
+        'Refine templates only — the preview being revised. Each refine template reads the fields of its own shape (e.g. current.promptBody for genre, current.content for the opening).',
+      required: false,
+    },
+    {
+      name: 'instruction',
+      type: 'string',
+      category: 'Generation Results',
+      description:
+        "Refine templates only — the user's revision instruction for this pass. Distinct from `guidance`, which steers a generate.",
+      required: false,
+    },
+    {
       name: 'lore',
       type: 'WizardLoreDraft[]',
       category: 'Retrieval',
@@ -293,12 +309,17 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.periodicClassifier]: 'classifierContext',
   [TEMPLATE_IDS.suggestionRefresh]: 'generationContext',
   [TEMPLATE_IDS.wizardOpening]: 'wizard',
+  [TEMPLATE_IDS.wizardOpeningRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTitleChips]: 'wizard',
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
+  [TEMPLATE_IDS.wizardDescriptionRefine]: 'wizard',
   [TEMPLATE_IDS.wizardLore]: 'wizard',
   [TEMPLATE_IDS.wizardGenre]: 'wizard',
+  [TEMPLATE_IDS.wizardGenreRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTone]: 'wizard',
+  [TEMPLATE_IDS.wizardToneRefine]: 'wizard',
   [TEMPLATE_IDS.wizardSetting]: 'wizard',
+  [TEMPLATE_IDS.wizardSettingRefine]: 'wizard',
 }
 
 // UI-level grouping name -> variable names it surfaces. A name that matches
@@ -333,6 +354,8 @@ export const DISPLAY_GROUPS: Record<string, string[]> = {
     'intermediates',
     'opening',
     'guidance',
+    'current',
+    'instruction',
     'piggybackFires',
     'suggestionsFire',
     'refreshGuidance',

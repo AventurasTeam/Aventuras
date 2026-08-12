@@ -122,23 +122,37 @@ function resolveOpening(
   }
 }
 
-export async function runOpeningAssist(
+// Generate and refine share the opening's id round-trip: the lead id is minted
+// before render, real ids go into the prompt as placeholders, and the reply's
+// refs are resolved back. Only the template and the extra context differ.
+async function openingCall(
+  templateId: TemplateId,
   guidance: string,
   signal: AbortSignal,
   deps?: WizardAssistDeps,
+  extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<OpeningAssistValue>> {
   ensureLeadId()
   const idMap = new IdBiMap()
   const result = await generateFromState(
-    TEMPLATE_IDS.wizardOpening,
+    templateId,
     openingOutputSchema,
     guidance,
     idMap,
     signal,
     deps,
+    extra,
   )
   if (result.status !== 'ok') return result
   return { status: 'ok', value: resolveOpening(result.value, idMap, deps) }
+}
+
+export function runOpeningAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+): Promise<GenerateStructuredResult<OpeningAssistValue>> {
+  return openingCall(TEMPLATE_IDS.wizardOpening, guidance, signal, deps)
 }
 
 export function runTitleAssist(
@@ -193,19 +207,17 @@ export function runLoreAssist(
   )
 }
 
+// Cumulative refine (wizard.md → Refine): the CURRENT preview is the input, so
+// repeated refines compound rather than re-rolling from the base state. Each
+// pass renders its own refine template with `current` + `instruction` as real
+// context variables — no guidance, which belongs to a generate.
 export function refineOpeningAssist(
   current: OpeningAssistValue,
   instruction: string,
   signal: AbortSignal,
   deps?: WizardAssistDeps,
 ): Promise<GenerateStructuredResult<OpeningAssistValue>> {
-  // Cumulative refine (wizard.md → Refine): the CURRENT preview is the input,
-  // so repeated refines compound rather than re-rolling from the base state.
-  return runOpeningAssist(
-    `Revise this opening rather than writing a new one.\n\nCurrent opening:\n${current.content}\n\nRevision instruction: ${instruction}`,
-    signal,
-    deps,
-  )
+  return openingCall(TEMPLATE_IDS.wizardOpeningRefine, '', signal, deps, { current, instruction })
 }
 
 export function refineDescriptionAssist(
@@ -214,10 +226,14 @@ export function refineDescriptionAssist(
   signal: AbortSignal,
   deps?: WizardAssistDeps,
 ): Promise<GenerateStructuredResult<DescriptionAssistValue>> {
-  return runDescriptionAssist(
-    `Revise this description rather than writing a new one.\n\nCurrent description:\n${current.description}\n\nRevision instruction: ${instruction}`,
+  return generateFromState(
+    TEMPLATE_IDS.wizardDescriptionRefine,
+    descriptionOutputSchema,
+    '',
+    new IdBiMap(),
     signal,
     deps,
+    { current, instruction },
   )
 }
 
@@ -272,10 +288,14 @@ export function refineGenreAssist(
   signal: AbortSignal,
   deps?: WizardAssistDeps,
 ): Promise<GenerateStructuredResult<GenreAssistValue>> {
-  return runGenreAssist(
-    `Revise this genre rather than writing a new one.\n\nCurrent label: ${current.label}\nCurrent body:\n${current.promptBody}\n\nRevision instruction: ${instruction}`,
+  return generateFromState(
+    TEMPLATE_IDS.wizardGenreRefine,
+    labeledPromptOutputSchema,
+    '',
+    new IdBiMap(),
     signal,
     deps,
+    { current, instruction },
   )
 }
 
@@ -285,10 +305,14 @@ export function refineToneAssist(
   signal: AbortSignal,
   deps?: WizardAssistDeps,
 ): Promise<GenerateStructuredResult<ToneAssistValue>> {
-  return runToneAssist(
-    `Revise this tone rather than writing a new one.\n\nCurrent label: ${current.label}\nCurrent body:\n${current.promptBody}\n\nRevision instruction: ${instruction}`,
+  return generateFromState(
+    TEMPLATE_IDS.wizardToneRefine,
+    labeledPromptOutputSchema,
+    '',
+    new IdBiMap(),
     signal,
     deps,
+    { current, instruction },
   )
 }
 
@@ -298,9 +322,13 @@ export function refineSettingAssist(
   signal: AbortSignal,
   deps?: WizardAssistDeps,
 ): Promise<GenerateStructuredResult<SettingAssistValue>> {
-  return runSettingAssist(
-    `Revise this setting rather than writing a new one.\n\nCurrent setting:\n${current.setting}\n\nRevision instruction: ${instruction}`,
+  return generateFromState(
+    TEMPLATE_IDS.wizardSettingRefine,
+    settingOutputSchema,
+    '',
+    new IdBiMap(),
     signal,
     deps,
+    { current, instruction },
   )
 }

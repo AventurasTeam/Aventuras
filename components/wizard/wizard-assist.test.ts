@@ -290,11 +290,14 @@ describe('refineGenreAssist', () => {
     expect(capturedPrompt).toContain('Rigorous futures.')
     expect(capturedPrompt).toContain('make it darker')
     // GenreAssistValue and ToneAssistValue are the same shape, so the seams are
-    // interchangeable without a type error. Only the template's own line and the
-    // refine noun distinguish a genre refine from a tone one.
-    expect(capturedPrompt).toContain('Suggest a genre for this story')
-    expect(capturedPrompt).toContain('Revise this genre')
-    expect(capturedPrompt).not.toContain('Revise this tone')
+    // interchangeable without a type error. The refine template's own directive
+    // and its contract macro are all that catch a mis-wired one.
+    expect(capturedPrompt).toContain('Revise the genre below')
+    expect(capturedPrompt).toContain('naming the genre')
+    expect(capturedPrompt).not.toContain('Revise the tone below')
+    // A refine leads with the revise directive. The generate directive that used
+    // to carry it — with the revision demoted into `guidance` — is gone.
+    expect(capturedPrompt).not.toContain('Suggest a genre for this story')
   })
 })
 
@@ -318,11 +321,12 @@ describe('refineToneAssist', () => {
     expect(capturedPrompt).toContain('Grim and unsparing')
     expect(capturedPrompt).toContain('Consequences land and stay.')
     expect(capturedPrompt).toContain('make it darker')
-    // See refineGenreAssist: the value types are identical, so these two lines
-    // are the only thing standing between a mis-wired seam and a green suite.
-    expect(capturedPrompt).toContain('Suggest a tone for this story')
-    expect(capturedPrompt).toContain('Revise this tone')
-    expect(capturedPrompt).not.toContain('Revise this genre')
+    // See refineGenreAssist: the value types are identical, so these lines are
+    // the only thing standing between a mis-wired seam and a green suite.
+    expect(capturedPrompt).toContain('Revise the tone below')
+    expect(capturedPrompt).toContain('naming the tone')
+    expect(capturedPrompt).not.toContain('Revise the genre below')
+    expect(capturedPrompt).not.toContain('Suggest a tone for this story')
   })
 })
 
@@ -345,6 +349,8 @@ describe('refineSettingAssist', () => {
     expect(res.status === 'ok' && res.value.setting).toBe('A drowned coast, now storm-wracked.')
     expect(capturedPrompt).toContain('A drowned coast, centuries after the flood.')
     expect(capturedPrompt).toContain('make it darker')
+    expect(capturedPrompt).toContain('Revise the setting below')
+    expect(capturedPrompt).not.toContain('Suggest a setting for this story')
   })
 })
 

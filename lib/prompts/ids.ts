@@ -10,12 +10,17 @@ export const TEMPLATE_IDS = {
   periodicClassifier: 'tmpl_periodic_classifier',
   suggestionRefresh: 'tmpl_suggestion_refresh',
   wizardOpening: 'tmpl_wizard_opening',
+  wizardOpeningRefine: 'tmpl_wizard_opening_refine',
   wizardTitleChips: 'tmpl_wizard_title_chips',
   wizardDescription: 'tmpl_wizard_description',
+  wizardDescriptionRefine: 'tmpl_wizard_description_refine',
   wizardLore: 'tmpl_wizard_lore',
   wizardGenre: 'tmpl_wizard_genre',
+  wizardGenreRefine: 'tmpl_wizard_genre_refine',
   wizardTone: 'tmpl_wizard_tone',
+  wizardToneRefine: 'tmpl_wizard_tone_refine',
   wizardSetting: 'tmpl_wizard_setting',
+  wizardSettingRefine: 'tmpl_wizard_setting_refine',
 } as const
 
 export const MACRO_IDS = {
@@ -24,6 +29,12 @@ export const MACRO_IDS = {
   stateEmission: 'macro_state_emission',
   suggestionEmission: 'macro_suggestion_emission',
   suggestionEmissionJson: 'macro_suggestion_emission_json',
+  // One per prose field: everything its generate and refine templates share.
+  wizardOpeningContext: 'macro_wizard_opening_context',
+  wizardDescriptionContext: 'macro_wizard_description_context',
+  wizardGenreContext: 'macro_wizard_genre_context',
+  wizardToneContext: 'macro_wizard_tone_context',
+  wizardSettingContext: 'macro_wizard_setting_context',
 } as const
 
 export type TemplateId = (typeof TEMPLATE_IDS)[keyof typeof TEMPLATE_IDS]

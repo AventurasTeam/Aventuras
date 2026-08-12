@@ -5,15 +5,37 @@
 // Templates carry creative content only: the JSON output contract (field list +
 // format directive) is injected at call time by lib/ai from the Zod schema the
 // reply validates against, so prompt and validator cannot drift.
-export const WIZARD_OPENING = `Write the opening passage of a {{ definition.mode }} story.
-{% if definition.setting != blank %}Setting: {{ definition.setting }}
+//
+// Each prose field is a pair — generate and refine — over one shared macro. The
+// macro holds everything the two have in common (the output contract, and the
+// wizard state that grounds the call); only the leading directive and the
+// revise block differ. Splitting it the other way would duplicate the quality
+// bar, which is the half most likely to be tuned and so the half most likely to
+// drift. Refine templates take `current` (the preview being revised) and
+// `instruction`, and deliberately carry no `guidance`: canon defines a refine as
+// current preview plus refinement instruction, and the guidance a refine could
+// otherwise inherit belongs to a generate the user may never have seen.
+
+export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
 {% endif %}{% if lore.size > 0 %}World reference:
 {% for row in lore %}- {{ row.title }}: {{ row.body }}
 {% endfor %}{% endif %}{% if leadEntityId != blank %}The lead character is {{ leadName }} (cast id: {{ leadEntityId }}).
-{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
+
+export const WIZARD_OPENING = `Write the opening passage of this {{ definition.mode }} story.
+{% include 'macro_wizard_opening_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_OPENING_REFINE = `Revise the opening passage of this {{ definition.mode }} story below, rather than writing a new one.
+
+Current opening:
+{{ current.content }}
+
+Revision instruction: {{ instruction }}
+
+{% include 'macro_wizard_opening_context' %}`
 
 export const WIZARD_LORE = `Suggest five reference entries for this story's world — things that ARE, not things that happen: magic systems, factions' histories, cosmology, terminology.
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
@@ -24,23 +46,58 @@ export const WIZARD_LORE = `Suggest five reference entries for this story's worl
 {% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
-export const WIZARD_GENRE = `Suggest a genre for this story. Return a short label naming the genre, and a promptBody of two or three paragraphs instructing a model how to write in this genre — its conventions, register, and what belongs on the page — written the way a genre preset's body reads, not an encyclopedia entry describing the genre.
+export const MACRO_WIZARD_GENRE_CONTEXT = `Return a short label naming the genre, and a promptBody of two or three paragraphs instructing a model how to write in this genre — its conventions, register, and what belongs on the page — written the way a genre preset's body reads, not an encyclopedia entry describing the genre.
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
-{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
-export const WIZARD_TONE = `Suggest a tone for this story. Return a short label naming the tone, and a promptBody of two or three paragraphs instructing a model how to write in this tone — its register, pacing, and what to emphasize or avoid — written the way a tone preset's body reads, not an explanation of the tone.
+export const WIZARD_GENRE = `Suggest a genre for this story. {% include 'macro_wizard_genre_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_GENRE_REFINE = `Revise the genre below rather than writing a new one.
+
+Current label: {{ current.label }}
+Current body:
+{{ current.promptBody }}
+
+Revision instruction: {{ instruction }}
+
+{% include 'macro_wizard_genre_context' %}`
+
+export const MACRO_WIZARD_TONE_CONTEXT = `Return a short label naming the tone, and a promptBody of two or three paragraphs instructing a model how to write in this tone — its register, pacing, and what to emphasize or avoid — written the way a tone preset's body reads, not an explanation of the tone.
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
-{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
-export const WIZARD_SETTING = `Suggest a setting for this story: one or two paragraphs of freeform prose describing the world — where and when it takes place, and its defining conditions.
+export const WIZARD_TONE = `Suggest a tone for this story. {% include 'macro_wizard_tone_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_TONE_REFINE = `Revise the tone below rather than writing a new one.
+
+Current label: {{ current.label }}
+Current body:
+{{ current.promptBody }}
+
+Revision instruction: {{ instruction }}
+
+{% include 'macro_wizard_tone_context' %}`
+
+export const MACRO_WIZARD_SETTING_CONTEXT = `A setting is one or two paragraphs of freeform prose describing the world — where and when it takes place, and its defining conditions.
 {% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
-{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
+
+export const WIZARD_SETTING = `Suggest a setting for this story. {% include 'macro_wizard_setting_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_SETTING_REFINE = `Revise the setting below rather than writing a new one.
+
+Current setting:
+{{ current.setting }}
+
+Revision instruction: {{ instruction }}
+
+{% include 'macro_wizard_setting_context' %}`
 
 export const WIZARD_TITLE_CHIPS = `Suggest five short, evocative titles for this story.
 Opening:
@@ -48,8 +105,19 @@ Opening:
 {% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
-export const WIZARD_DESCRIPTION = `Write a one-sentence description (a log line) for this story, based on its opening. Do not write narrative prose; write a concise synopsis.
+export const MACRO_WIZARD_DESCRIPTION_CONTEXT = `A description is a one-sentence log line: do not write narrative prose, write a concise synopsis of the opening below.
 Opening:
 {{ opening.content }}
-{% if guidance != blank %}Additional guidance: {{ guidance }}
+`
+
+export const WIZARD_DESCRIPTION = `Write a description for this story. {% include 'macro_wizard_description_context' %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
+
+export const WIZARD_DESCRIPTION_REFINE = `Revise the description below rather than writing a new one.
+
+Current description:
+{{ current.description }}
+
+Revision instruction: {{ instruction }}
+
+{% include 'macro_wizard_description_context' %}`
