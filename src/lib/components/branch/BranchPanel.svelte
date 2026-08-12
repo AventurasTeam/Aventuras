@@ -225,7 +225,9 @@
         disabled={!canGoToForkPoint}
         title={canGoToForkPoint
           ? 'Jump to where this branch began'
-          : 'The main branch has no branching point'}
+          : !story.currentStory?.currentBranchId
+            ? 'The main branch has no branching point'
+            : "This branch's starting point isn't loaded yet"}
       >
         <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
       </button>
