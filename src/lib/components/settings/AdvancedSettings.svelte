@@ -21,11 +21,6 @@
   import * as Collapsible from '$lib/components/ui/collapsible'
   import { Separator } from '$lib/components/ui/separator'
   import { advancedPanelView } from './advancedPanelView'
-  import {
-    ENTRY_RETRIEVAL_DEFAULTS,
-    WORLD_STATE_INJECTION_DEFAULTS,
-  } from '$lib/services/ai/core/defaults'
-  import { AGENTIC_RETRIEVAL_DEFAULTS } from '$lib/services/ai/core/defaults'
 
   // Open/closed state for every collapsible section, keyed by id so `sectionHeader` can
   // bind to it generically instead of each section carrying its own `let`.
@@ -293,8 +288,8 @@
 
             {@render sliderRow({
               label: 'Recent Entries Window',
-              value: system.entryRetrieval?.recentEntriesCount ?? 5,
-              display: `${system.entryRetrieval?.recentEntriesCount ?? 5} entries`,
+              value: system.entryRetrieval.recentEntriesCount,
+              display: `${system.entryRetrieval.recentEntriesCount} entries`,
               min: 2,
               max: 15,
               step: 1,
@@ -307,8 +302,8 @@
 
             {@render sliderRow({
               label: 'Max Matched Entries',
-              value: system.entryRetrieval?.maxTier2Entries ?? 20,
-              display: `${system.entryRetrieval?.maxTier2Entries ?? 20} entries`,
+              value: system.entryRetrieval.maxTier2Entries,
+              display: `${system.entryRetrieval.maxTier2Entries} entries`,
               min: 5,
               max: 40,
               step: 5,
@@ -323,7 +318,7 @@
               label: 'Match Against What Is in the Scene',
               description:
                 'Also look for lore about whatever World State Injection says is present — the current location, the characters in the scene, your inventory, the active quests — not only what the text names. These arrive as second-pass matches, ranked below anything named directly, so a cap drops them first. Turn it off if a dense lorebook is spending its Max Matched Entries on things nobody mentioned.',
-              checked: system.entryRetrieval?.useSceneEntities ?? true,
+              checked: system.entryRetrieval.useSceneEntities,
               onChange: (v) => {
                 system.entryRetrieval.useSceneEntities = v
                 saveSystem()
@@ -332,13 +327,8 @@
 
             {@render sliderRow({
               label: 'Include-All Budget',
-              value:
-                system.entryRetrieval?.tier3WholesaleWordBudget ??
-                ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget,
-              display: `${
-                system.entryRetrieval?.tier3WholesaleWordBudget ??
-                ENTRY_RETRIEVAL_DEFAULTS.tier3WholesaleWordBudget
-              } words`,
+              value: system.entryRetrieval.tier3WholesaleWordBudget,
+              display: `${system.entryRetrieval.tier3WholesaleWordBudget} words`,
               min: 100,
               max: 2500,
               step: 100,
@@ -362,8 +352,8 @@
 
             {@render sliderRow({
               label: 'Max LLM-Selected Entries',
-              value: system.entryRetrieval?.maxTier3Entries ?? 30,
-              display: `${system.entryRetrieval?.maxTier3Entries ?? 30} entries`,
+              value: system.entryRetrieval.maxTier3Entries,
+              display: `${system.entryRetrieval.maxTier3Entries} entries`,
               min: 5,
               max: 50,
               step: 5,
@@ -377,11 +367,11 @@
 
             {@render sliderRow({
               label: 'Max Words Per Entry',
-              value: system.entryRetrieval?.maxWordsPerEntry ?? 0,
+              value: system.entryRetrieval.maxWordsPerEntry,
               display:
-                (system.entryRetrieval?.maxWordsPerEntry ?? 0) === 0
+                system.entryRetrieval.maxWordsPerEntry === 0
                   ? 'Unlimited'
-                  : String(system.entryRetrieval?.maxWordsPerEntry ?? 0),
+                  : String(system.entryRetrieval.maxWordsPerEntry),
               min: 0,
               max: 500,
               step: 50,
@@ -426,8 +416,8 @@
 
             {@render sliderRow({
               label: 'Recent Entries Window',
-              value: system.worldStateInjection?.recentEntriesCount ?? 5,
-              display: `${system.worldStateInjection?.recentEntriesCount ?? 5} entries`,
+              value: system.worldStateInjection.recentEntriesCount,
+              display: `${system.worldStateInjection.recentEntriesCount} entries`,
               min: 2,
               max: 15,
               step: 1,
@@ -440,8 +430,8 @@
 
             {@render sliderRow({
               label: 'Max Matched Entities',
-              value: system.worldStateInjection?.maxTier2Entries ?? 40,
-              display: `${system.worldStateInjection?.maxTier2Entries ?? 40} entities`,
+              value: system.worldStateInjection.maxTier2Entries,
+              display: `${system.worldStateInjection.maxTier2Entries} entities`,
               min: 5,
               max: 60,
               step: 5,
@@ -454,13 +444,8 @@
 
             {@render sliderRow({
               label: 'Include-All Budget',
-              value:
-                system.worldStateInjection?.tier3WholesaleWordBudget ??
-                WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget,
-              display: `${
-                system.worldStateInjection?.tier3WholesaleWordBudget ??
-                WORLD_STATE_INJECTION_DEFAULTS.tier3WholesaleWordBudget
-              } words`,
+              value: system.worldStateInjection.tier3WholesaleWordBudget,
+              display: `${system.worldStateInjection.tier3WholesaleWordBudget} words`,
               min: 100,
               max: 2500,
               step: 100,
@@ -484,8 +469,8 @@
 
             {@render sliderRow({
               label: 'Max LLM-Selected Entities',
-              value: system.worldStateInjection?.maxTier3Entries ?? 50,
-              display: `${system.worldStateInjection?.maxTier3Entries ?? 50} entities`,
+              value: system.worldStateInjection.maxTier3Entries,
+              display: `${system.worldStateInjection.maxTier3Entries} entities`,
               min: 5,
               max: 80,
               step: 5,
@@ -571,7 +556,7 @@
               {#if view.memoryMode === 'static'}
                 {@render sliderRow({
                   label: 'Max Queries',
-                  value: system.timelineFill?.maxQueries ?? 5,
+                  value: system.timelineFill.maxQueries,
                   min: 1,
                   max: 10,
                   step: 1,
@@ -586,9 +571,7 @@
               {#if view.memoryMode !== 'static'}
                 {@render sliderRow({
                   label: 'Max Iterations',
-                  value:
-                    system.agenticRetrieval?.maxIterations ??
-                    AGENTIC_RETRIEVAL_DEFAULTS.maxIterations,
+                  value: system.agenticRetrieval.maxIterations,
                   min: 5,
                   max: 50,
                   step: 5,
@@ -613,8 +596,8 @@
                 {#if view.grepOn}
                   {@render sliderRow({
                     label: 'Quotes Per Search',
-                    value: system.agenticRetrieval?.grepExcerptsPerSearch ?? 40,
-                    display: `${system.agenticRetrieval?.grepExcerptsPerSearch ?? 40} quotes`,
+                    value: system.agenticRetrieval.grepExcerptsPerSearch,
+                    display: `${system.agenticRetrieval.grepExcerptsPerSearch} quotes`,
                     min: 5,
                     max: 60,
                     step: 1,
@@ -661,11 +644,11 @@
           <div class="bg-muted/10 space-y-6 border-t p-4">
             {@render sliderRow({
               label: 'Chat History Truncation (Words)',
-              value: system.classifier?.chatHistoryTruncation ?? 0,
+              value: system.classifier.chatHistoryTruncation,
               display:
-                (system.classifier?.chatHistoryTruncation ?? 0) === 0
+                system.classifier.chatHistoryTruncation === 0
                   ? 'No Limit'
-                  : String(system.classifier?.chatHistoryTruncation ?? 0),
+                  : String(system.classifier.chatHistoryTruncation),
               min: 0,
               max: 500,
               step: 50,
@@ -710,8 +693,8 @@
             {#if view.styleReviewerOn}
               {@render sliderRow({
                 label: 'Review Every',
-                value: system.styleReviewer?.triggerInterval ?? 6,
-                display: `${system.styleReviewer?.triggerInterval ?? 6} turns`,
+                value: system.styleReviewer.triggerInterval,
+                display: `${system.styleReviewer.triggerInterval} turns`,
                 min: 2,
                 max: 32,
                 step: 1,
@@ -724,8 +707,8 @@
 
               {@render sliderRow({
                 label: 'Recent Entries Window',
-                value: system.styleReviewer?.recentEntriesCount ?? 32,
-                display: `${system.styleReviewer?.recentEntriesCount ?? 32} entries`,
+                value: system.styleReviewer.recentEntriesCount,
+                display: `${system.styleReviewer.recentEntriesCount} entries`,
                 min: 4,
                 max: 64,
                 step: 1,
@@ -747,7 +730,7 @@
         {@render sectionHeader({
           id: 'loreManagement',
           title: 'Lore Management',
-          subtitle: 'Autonomous agent iteration limits',
+          subtitle: 'Autonomous agent limits and consolidation',
           icon: BookOpen,
           iconWrap: 'bg-purple-500/10 group-hover/trigger:bg-purple-500/20',
           iconColor: 'text-purple-500',
@@ -758,7 +741,7 @@
           <div class="bg-muted/10 space-y-6 border-t p-4">
             {@render sliderRow({
               label: 'Max Iterations',
-              value: system.loreManagement?.maxIterations ?? 50,
+              value: system.loreManagement.maxIterations,
               min: 10,
               max: 100,
               step: 5,
@@ -766,6 +749,17 @@
               onChange: (v) => {
                 system.loreManagement.maxIterations = v
                 saveSystem()
+              },
+            })}
+
+            {@render switchRow({
+              label: 'Require duplicate consolidation',
+              description:
+                'Entries with matching or near-identical names are listed for the agent either way. With this on, it cannot end the session until it has merged each group or declared it two separate things — which is what stops a lorebook growing duplicates, at the cost of a longer run.',
+              checked: service.loreManagement.requireDuplicateResolution,
+              onChange: (v) => {
+                service.loreManagement.requireDuplicateResolution = v
+                saveService()
               },
             })}
           </div>
@@ -805,22 +799,22 @@
           <div class="bg-muted/10 space-y-6 border-t p-4">
             {@render sliderRow({
               label: 'Plot Suggestions',
-              value: service.contextWindow?.recentEntriesForRetrieval ?? 5,
-              display: `${service.contextWindow?.recentEntriesForRetrieval ?? 5} entries`,
+              value: service.contextWindow.recentEntriesForSuggestions,
+              display: `${service.contextWindow.recentEntriesForSuggestions} entries`,
               min: 2,
               max: 15,
               step: 1,
               help: 'Recent story entries read when generating plot suggestions. Entry Retrieval and World State Injection have their own Recent Entries Window; this is not it.',
               onChange: (v) => {
-                service.contextWindow.recentEntriesForRetrieval = v
+                service.contextWindow.recentEntriesForSuggestions = v
                 saveService()
               },
             })}
 
             {@render sliderRow({
               label: 'Action Choices',
-              value: service.contextWindow?.recentEntriesForChoices ?? 5,
-              display: `${service.contextWindow?.recentEntriesForChoices ?? 5} entries`,
+              value: service.contextWindow.recentEntriesForChoices,
+              display: `${service.contextWindow.recentEntriesForChoices} entries`,
               min: 1,
               max: 10,
               step: 1,
@@ -833,8 +827,8 @@
 
             {@render sliderRow({
               label: 'Suggestions (lorebook entries)',
-              value: service.lorebookLimits?.maxForSuggestions ?? 15,
-              display: `${service.lorebookLimits?.maxForSuggestions ?? 15} entries`,
+              value: service.lorebookLimits.maxForSuggestions,
+              display: `${service.lorebookLimits.maxForSuggestions} entries`,
               min: 5,
               max: 30,
               step: 5,
@@ -866,7 +860,7 @@
           <div class="bg-muted/10 space-y-6 border-t p-4">
             {@render sliderRow({
               label: 'Batch Size',
-              value: service.lorebookClassifier?.batchSize ?? 50,
+              value: service.lorebookClassifier.batchSize,
               min: 10,
               max: 100,
               step: 10,
@@ -879,7 +873,7 @@
 
             {@render sliderRow({
               label: 'Max Concurrent Requests',
-              value: service.lorebookClassifier?.maxConcurrent ?? 5,
+              value: service.lorebookClassifier.maxConcurrent,
               min: 1,
               max: 10,
               step: 1,

@@ -524,11 +524,11 @@ export function createFuzzyTextRegex(text: string): RegExp {
   // 1. Normalize
   const normalized = replaceUncommonCharacters(text)
 
-  // 2. Extract alphanumeric "words"
-  const words = normalized.split(/[^a-zA-Z0-9'’‘‚]+/).filter((word) => word.length > 0)
+  // 2. Extract alphanumeric "words" (Unicode-aware: letters and numbers across scripts)
+  const words = normalized.split(/[^\p{L}\p{N}'’‘‚]+/u).filter((word) => word.length > 0)
 
   if (words.length === 0) {
-    return new RegExp(escapeRegex(text), 'gi')
+    return new RegExp(escapeRegex(text), 'giu')
   }
 
   // 3. Escape words and handle variants
@@ -541,11 +541,11 @@ export function createFuzzyTextRegex(text: string): RegExp {
   // so the match can neither cross a paragraph boundary nor start/end by absorbing one of the
   // two newlines into the match itself (which would delete it once the match gets replaced by
   // a placeholder, collapsing "\n\n" into "\n" and merging the paragraph with the previous one).
-  const fuzzySeparator = '(?:[^a-zA-Z0-9\\n]|(?<!\\n)\\n(?!\\n))*?'
+  const fuzzySeparator = '(?:[^\\p{L}\\p{N}\\n]|(?<!\\n)\\n(?!\\n))*?'
 
   const pattern = fuzzySeparator + patternParts.join(fuzzySeparator) + fuzzySeparator
 
-  return new RegExp(pattern, 'gi')
+  return new RegExp(pattern, 'giu')
 }
 
 const SENTENCE_DELIMITERS = /[.!?\n]/
@@ -610,4 +610,50 @@ export function expandRangeBidirectional(
     start: currentStart,
     end: currentEnd,
   }
+}
+
+/**
+ * Fold away spelling only: case, accents, punctuation, repeated spaces.
+ *
+ * Articles are kept, and that is the whole difference from `normalizeName`. Two names that
+ * differ by an article are the same *subject* but not the same *trigger*: matching is
+ * literal and whole-word, so the alias "The Citadel" fires on that two-word phrase while
+ * the keyword "Citadel" fires on the bare word, and neither makes the other redundant.
+ * Lorebook-entry *identity* is judged by `normalizeName`, which does strip them.
+ *
+ * The character class is `\p{L}\p{N}`, like the rest of this file, and deliberately not
+ * `a-z0-9`: the ASCII form folds every Cyrillic, Greek and CJK name to the empty string,
+ * and empty compares equal to every other one.
+ *
+ * **An apostrophe is removed, not spaced.** It joins rather than divides — a possessive or
+ * an elision — so spacing it split one word into two: `Kaelen's Rest` did not match
+ * `Kaelens Rest`, nor `Vor'koth` match `Vorkoth`.
+ */
+export function foldName(raw: string): string {
+  return raw
+    .normalize('NFD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/['’‘ʼ`ʼ]/gu, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+/**
+ * Whether two names refer to the same entity as far as spelling can tell.
+ *
+ * Replaces `a.toLowerCase() === b.toLowerCase()` across the world-state pipeline, adding
+ * accent and punctuation folding — "Elénore"/"Elenore", "Kaelen's Rest"/"Kaelens Rest".
+ * Articles still separate, as they always did. Every call site must agree: a stricter
+ * creation guard paired with a looser lookup loses an update — the lookup misses, the
+ * creation is refused as a duplicate, and the change lands nowhere.
+ *
+ * A name with no letter or digit in it folds to the empty string, and two of those are not
+ * the same entity — they are two names this function cannot read. Answering `true` there is
+ * the `a-z0-9` failure again in a smaller form: it collapses every such name into one.
+ */
+export function sameEntityName(a: string, b: string): boolean {
+  const folded = foldName(a)
+  if (!folded) return false
+  return folded === foldName(b)
 }

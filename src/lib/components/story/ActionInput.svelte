@@ -2,6 +2,8 @@
   import { tick } from 'svelte'
   import { ui, type RetrievalCacheKey } from '$lib/stores/ui.svelte'
   import { toRetrievalSnapshot } from '$lib/services/ai/retrieval'
+  import { buildTimelineFillBlock } from '$lib/services/ai/generation'
+  import { joinPromptBlocks } from '$lib/utils/promptBlocks'
   import { countTokens } from '$lib/services/tokenizer'
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
@@ -43,6 +45,8 @@
     WorldStateTranslationService,
     handleEvent,
     SuggestionsRefreshService,
+    buildLoreManagementCallbacks,
+    buildLoreManagementUICallbacks,
     type PipelineDependencies,
     type PipelineConfig,
     type GenerationContext,
@@ -299,6 +303,7 @@
     styleReviewSource: string,
   ): BackgroundTaskInput {
     const storyId = story.currentStory?.id ?? ''
+    const branchId = story.currentStory?.currentBranchId ?? null
     const mode = story.currentStory?.mode ?? 'adventure'
 
     return {
@@ -334,40 +339,22 @@
         pov: story.pov,
         tense: story.tense,
       },
-      loreSession: {
+      // A thunk: read when the session starts, after the classifier and the chapter check
+      // have run. See BackgroundTaskInput.loreSession. The scope is the turn's, matching the
+      // callbacks below, so a story switch refuses the session instead of misdirecting it.
+      loreSession: () => ({
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        currentBranchId: branchId,
         lorebookEntries: story.lorebookEntries,
         chapters: story.currentBranchChapters,
+        recentEntries: story.getUnchapterizedEntries(),
         mode,
         pov: story.pov,
         tense: story.tense,
-      },
-      loreCallbacks: {
-        onCreateEntry: async (entry) => {
-          await story.addLorebookEntry(entry)
-        },
-        onUpdateEntry: story.updateLorebookEntry.bind(story),
-        onDeleteEntry: story.deleteLorebookEntry.bind(story),
-        onMergeEntries: async (entryIds, mergedEntry) => {
-          await story.deleteLorebookEntries(entryIds)
-          await story.addLorebookEntry(mergedEntry)
-        },
-        onQueryChapter: async (chapterNumber, question) => {
-          return aiService.answerChapterQuestion(
-            chapterNumber,
-            question,
-            story.currentBranchChapters,
-            story.getChapterEntries.bind(story),
-            story.chapterReadBudget,
-          )
-        },
-      },
-      loreUICallbacks: {
-        onStart: ui.startLoreManagement.bind(ui),
-        onProgress: ui.updateLoreManagementProgress.bind(ui),
-        onComplete: ui.finishLoreManagement.bind(ui),
-      },
+        tokenThreshold: story.memoryConfig.tokenThreshold,
+      }),
+      loreCallbacks: buildLoreManagementCallbacks({ storyId, branchId }),
+      loreUICallbacks: buildLoreManagementUICallbacks(),
     }
   }
 
@@ -626,6 +613,11 @@
           ui.setLastLorebookRetrieval(
             retrievalResult?.lorebookRetrievalResult ?? null,
             retrievalResult?.worldStateRetrievalResult ?? null,
+            // Whichever memory mode ran: agentic fills `chapterContext`, static the Q&A.
+            joinPromptBlocks(
+              retrievalResult?.chapterContext ?? null,
+              buildTimelineFillBlock(retrievalResult?.timelineFillResult),
+            ) || null,
           )
           // Kept for the narration entry below: the in-memory copy dies with the session.
           generationMeta.retrievalSnapshot =
@@ -771,9 +763,15 @@
       const coordinator = new BackgroundTaskCoordinator(buildBackgroundTaskDependencies())
       const input = buildBackgroundTaskInput(countStyleReview, styleReviewSource)
       if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
+      // Deliberately not awaited — but the flag has to outlive the call, or the Memory
+      // view will offer to create a chapter while this one is being created.
+      const bgStoryId = story.currentStory?.id ?? ''
+      const bgBranchId = story.currentStory?.currentBranchId ?? null
+      ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
       coordinator
         .runBackgroundTasks(input)
         .catch((err) => log('Background tasks failed (non-fatal)', err))
+        .finally(() => ui.setBackgroundTasksActive(bgStoryId, bgBranchId, false))
 
       // Android: notify user that generation completed while app is still backgrounded.
       // Awaited so the foreground service isn't torn down before the notification fires.

@@ -42,49 +42,35 @@ export function stopOnTerminalTool<TTools extends ToolSet = ToolSet>(
 }
 
 /**
- * Stop when any of the specified tools is called.
- * Useful for agents that can terminate via multiple paths.
+ * Stop when a terminal tool returns `completed: true`, rather than when it is called.
  *
- * @param toolNames - Array of tool names that trigger stop
+ * A terminal tool that can refuse — "you have not dealt with these duplicates yet" — needs
+ * the loop to survive the call it refused, and `stopOnTerminalTool` reads the call, not the
+ * answer. The step limit still applies, so a tool that never accepts cannot hang the run.
+ *
+ * @param toolName - The name of the terminal tool
  * @param maxSteps - Maximum steps before forced stop (default: 10)
  */
-export function stopOnAnyToolCall<TTools extends ToolSet = ToolSet>(
-  toolNames: string[],
+export function stopOnCompletedTerminalTool<TTools extends ToolSet = ToolSet>(
+  toolName: string,
   maxSteps: number = 10,
 ): StopCondition<TTools> {
-  const toolSet = new Set(toolNames)
-
   return ({ steps }) => {
-    // Check step limit first
     if (steps.length >= maxSteps) {
       return true
     }
 
-    // Check if any terminal tool was called in the most recent step
     const lastStep = steps[steps.length - 1]
-    if (!lastStep) {
+    if (!lastStep?.toolResults) {
       return false
     }
 
-    const toolCalls = lastStep.toolCalls
-    if (!toolCalls || toolCalls.length === 0) {
-      return false
-    }
-
-    return toolCalls.some((tc) => toolSet.has(tc.toolName))
+    return lastStep.toolResults.some((result) => {
+      if (result.toolName !== toolName) return false
+      const output = 'output' in result ? (result.output as { completed?: boolean }) : undefined
+      return output?.completed === true
+    })
   }
-}
-
-/**
- * Combine multiple stop conditions with OR logic.
- * Stops when any condition is met.
- *
- * @param conditions - Array of stop conditions
- */
-export function stopOnAny<TTools extends ToolSet = ToolSet>(
-  ...conditions: StopCondition<TTools>[]
-): StopCondition<TTools> {
-  return (context) => conditions.some((condition) => condition(context))
 }
 
 /**
@@ -116,30 +102,23 @@ export function stopWhenDone<TTools extends ToolSet = ToolSet>(
 }
 
 /**
- * Create a cost-based stop condition.
- * Stops when estimated cost exceeds the budget.
+ * On the last step, leave the terminal tool as the only callable one and require it.
  *
- * @param maxCostUsd - Maximum cost in USD
- * @param inputCostPer1k - Cost per 1000 input tokens (default: $0.01)
- * @param outputCostPer1k - Cost per 1000 output tokens (default: $0.03)
+ * A run that reaches `maxSteps` without calling it produces nothing the agent wrote: its
+ * findings live in its own message history and nowhere else, and no reconstruction from
+ * the outside comes close to what it would write with all of that still in context. So
+ * rather than salvage afterwards, spend the step that was going to happen anyway on the
+ * summary. It costs no extra call.
+ *
+ * Does not cover a run that *dies* — a context overflow has nobody left to ask.
  */
-export function stopOnCostExceeded<TTools extends ToolSet = ToolSet>(
-  maxCostUsd: number,
-  inputCostPer1k: number = 0.01,
-  outputCostPer1k: number = 0.03,
-): StopCondition<TTools> {
-  return ({ steps }) => {
-    const totalUsage = steps.reduce(
-      (acc, step) => ({
-        inputTokens: acc.inputTokens + (step.usage?.inputTokens ?? 0),
-        outputTokens: acc.outputTokens + (step.usage?.outputTokens ?? 0),
-      }),
-      { inputTokens: 0, outputTokens: 0 },
-    )
-
-    const costEstimate =
-      (totalUsage.inputTokens * inputCostPer1k + totalUsage.outputTokens * outputCostPer1k) / 1000
-
-    return costEstimate > maxCostUsd
-  }
+export function finishOnlyOnLastStep(toolName: string, maxSteps: number) {
+  const lastStep = Math.max(0, maxSteps - 1)
+  return ({ stepNumber }: { stepNumber: number }) =>
+    stepNumber >= lastStep
+      ? {
+          activeTools: [toolName],
+          toolChoice: { type: 'tool' as const, toolName },
+        }
+      : {}
 }

@@ -7,8 +7,21 @@
  * whoever changed one to remember the other. Two copies of a default that must agree is
  * exactly the kind of thing that quietly stops agreeing.
  *
- * Only defaults that genuinely live in both places belong here. Everything else stays
- * where it is used.
+ * **What belongs here, and what does not.** A constant a user can change — anything with
+ * a control in Advanced Settings, or that a stored setting can override — lives here, as a
+ * named `*_DEFAULTS` object, so the shipped value exists once and the settings store and
+ * `AI_CONFIG` read the same one. A constant that guards a failure mode and has no control
+ * — `GREP_NOISE_RATIO`, `MAX_LIST_ENTRIES`, `MAX_FINISH_REJECTIONS`, `MAX_CHAPTER_QUERIES_*`
+ * — stays next to the code it protects, where the reasoning for the number is.
+ *
+ * The test of which one a constant is: would a user ever want to change it? If yes it is a
+ * default and it goes here; if the honest answer is "they would want to change something
+ * else instead", it is a guard and it stays put.
+ *
+ * The corollary, and the rule that keeps this file honest: **a consumer never writes
+ * `?? <default>`.** The settings store merges every block over its defaults on load, so a
+ * key is always present, and a fallback at the call site is a second copy of the number
+ * that nothing forces to agree — the form that produced four stale defaults at once.
  */
 
 /** Selection limits for `WorldStateInjector`. All exposed as Advanced Settings sliders. */
@@ -75,6 +88,25 @@ export const AGENTIC_RETRIEVAL_DEFAULTS = {
   grepExcerptsPerSearch: 40,
 } as const
 
+/** Limits for the lore management loop. `maxIterations` is an Advanced Settings slider. */
+export const LORE_MANAGEMENT_DEFAULTS = {
+  /**
+   * Tool-calling rounds per session. Higher than retrieval's because the work is bounded
+   * by the lorebook rather than by the turn, but not by much: `MAX_GROUPS` caps the
+   * duplicate worklist at 20 and each group closes in **one** call (`merge_entries` or
+   * `keep_separate`), so 25 covers the worklist plus a few reads. Past that a run is
+   * going in circles, and every step re-sends a prompt whose head is tens of thousands of
+   * characters of chapter summary. `finishOnlyOnLastStep` spends the last one on the
+   * summary, so hitting the ceiling costs the account of the run, not the run.
+   */
+  maxIterations: 25,
+  /**
+   * Refuse to finish while a flagged duplicate group is unresolved. Off: it changes what a
+   * run costs, and the worklist is in the prompt either way.
+   */
+  requireDuplicateResolution: false,
+} as const
+
 /**
  * Chapter-read budget, as a multiple of `memoryConfig.tokenThreshold`.
  *
@@ -88,13 +120,42 @@ export const CHAPTER_READ_BUDGET_RATIO = 2.5
 /** Fallback when a story has no usable threshold. Mirrors `AI_CONFIG.memory.defaultTokenThreshold`. */
 const DEFAULT_TOKEN_THRESHOLD = 16000
 
+function thresholdOr(tokenThreshold: number | undefined): number {
+  return typeof tokenThreshold === 'number' && tokenThreshold > 0
+    ? tokenThreshold
+    : DEFAULT_TOKEN_THRESHOLD
+}
+
 /** Token budget for the chapter text of one chapter-reading prompt. */
 export function chapterReadBudget(tokenThreshold: number | undefined): number {
-  const threshold =
-    typeof tokenThreshold === 'number' && tokenThreshold > 0
-      ? tokenThreshold
-      : DEFAULT_TOKEN_THRESHOLD
-  return Math.round(threshold * CHAPTER_READ_BUDGET_RATIO)
+  return Math.round(thresholdOr(tokenThreshold) * CHAPTER_READ_BUDGET_RATIO)
+}
+
+/**
+ * Rough characters per token, for a budget expressed in one and spent in the other.
+ *
+ * `splitRecentTail` measures characters -- deliberately, so it costs a sum of string
+ * lengths rather than a tokenizer pass -- while the budget below is derived from a token
+ * setting. An approximation is enough: what guarantees the agent sees the present scene is
+ * `MIN_RECENT_ENTRIES_FOR_LORE`, and the budget only governs the cost above that floor.
+ */
+const CHARS_PER_TOKEN = 4
+
+/**
+ * Characters of un-chapterized story handed to lore management.
+ *
+ * The same ratio as a chapter read, against the user's own `tokenThreshold`, so it reads as
+ * "about 2.5 chapters" on both sides. It was a fixed 16,384 characters -- roughly 4k tokens
+ * against a default threshold of 16k, so the agent saw about a quarter of the material no
+ * chapter summary covers, and raising the threshold made that share smaller with nothing to
+ * say so.
+ *
+ * Normally the tail is far under this: a session runs just after a chapter was cut. It
+ * binds where it matters -- a story with automatic summarization off, or one that has not
+ * reached its first chapter, where the tail is the whole story.
+ */
+export function recentStoryBudgetChars(tokenThreshold: number | undefined): number {
+  return Math.round(thresholdOr(tokenThreshold) * CHAPTER_READ_BUDGET_RATIO * CHARS_PER_TOKEN)
 }
 
 /** Max lorebook entries handed to the plot-suggestion generator. */

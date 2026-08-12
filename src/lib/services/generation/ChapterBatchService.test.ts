@@ -88,7 +88,7 @@ function baseInput(overrides: Partial<ChapterBatchInput> = {}): ChapterBatchInpu
     includeClassification: false,
     storyId: 'story-1',
     currentBranchId: null,
-    lorebookEntries: [],
+    getLorebookEntries: () => [],
     mode: 'adventure',
     pov: 'second',
     tense: 'present',

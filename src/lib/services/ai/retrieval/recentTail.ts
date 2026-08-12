@@ -27,6 +27,16 @@ import type { StoryEntry } from '$lib/types'
 /** Separator `AgenticRetrievalService` joins entry content with, charged to the budget. */
 const JOIN_LENGTH = 2
 
+/**
+ * Floor for lore management's use of this split.
+ *
+ * Next to the function it constrains rather than in `core/defaults.ts`: it guards a failure
+ * mode and has no control in Advanced Settings, which is where that file's own rule puts it.
+ * Higher than the retrieval side's floor because the pass is rare and deep -- five entries
+ * is two full exchanges plus the action that opened the next.
+ */
+export const MIN_RECENT_ENTRIES_FOR_LORE = 5
+
 export interface RecentTailSplit {
   /** Newest entries, quoted in the prompt. Never empty when `tail` is not. */
   shown: StoryEntry[]

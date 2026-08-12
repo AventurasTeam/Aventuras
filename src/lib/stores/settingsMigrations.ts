@@ -167,3 +167,37 @@ export function migrateReasoningIn<T>(stored: T): T {
 
   return stored
 }
+
+/** Default of the renamed key, for telling a tuned value from an untouched one. */
+const LEGACY_RECENT_ENTRIES_FOR_RETRIEVAL = 5
+
+/** The context-window keys this migration reads, as they may appear on disk. */
+export interface StoredContextWindow {
+  /**
+   * Renamed to `recentEntriesForSuggestions`. It named retrieval and drove neither
+   * retrieval service — `SuggestionsService` was always its only consumer.
+   */
+  recentEntriesForRetrieval?: number
+  recentEntriesForSuggestions?: number
+}
+
+/**
+ * Carry a tuned `recentEntriesForRetrieval` onto its honest name.
+ *
+ * Only a value the user actually moved: one equal to the old default was never a choice,
+ * and carrying it would pin whoever never opened the panel to a number that may change.
+ * Idempotent because it only fires while the new key still holds its own default.
+ */
+export function migrateContextWindow<T extends { recentEntriesForSuggestions: number }>(
+  merged: T & StoredContextWindow,
+): T {
+  const legacy = merged.recentEntriesForRetrieval
+  if (
+    typeof legacy === 'number' &&
+    legacy !== LEGACY_RECENT_ENTRIES_FOR_RETRIEVAL &&
+    merged.recentEntriesForSuggestions === LEGACY_RECENT_ENTRIES_FOR_RETRIEVAL
+  ) {
+    return { ...merged, recentEntriesForSuggestions: legacy }
+  }
+  return merged
+}

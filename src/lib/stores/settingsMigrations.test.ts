@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  migrateContextWindow,
   migrateEntryRetrieval,
   migrateImageGeneration,
   migrateReasoningEffort,
@@ -265,5 +266,53 @@ describe('migrateReasoningIn', () => {
   it('survives values that are not objects', () => {
     expect(migrateReasoningIn(undefined)).toBeUndefined()
     expect(migrateReasoningIn('a string')).toBe('a string')
+  })
+})
+
+describe('migrateContextWindow', () => {
+  /** What the store hands it: the new defaults with whatever was on disk spread over them. */
+  const merged = (stored: Record<string, number> = {}) => ({
+    recentEntriesForSuggestions: 5,
+    recentEntriesForChoices: 5,
+    ...stored,
+  })
+
+  it('carries a tuned value onto the renamed key', () => {
+    expect(migrateContextWindow(merged({ recentEntriesForRetrieval: 12 }))).toMatchObject({
+      recentEntriesForSuggestions: 12,
+    })
+  })
+
+  it('leaves a stored value equal to the old default alone', () => {
+    // It was never a choice: the user never opened the panel. Carrying it across would pin
+    // them to a number that is free to change.
+    expect(migrateContextWindow(merged({ recentEntriesForRetrieval: 5 }))).toMatchObject({
+      recentEntriesForSuggestions: 5,
+    })
+  })
+
+  it('does nothing when there is no legacy key', () => {
+    expect(migrateContextWindow(merged())).toMatchObject({ recentEntriesForSuggestions: 5 })
+  })
+
+  it('does not overwrite a value the user has since set on the new key', () => {
+    // Idempotence: nothing removes the legacy key from the blob, so this runs on every
+    // load. Firing again would silently revert whatever was changed in between.
+    const after = migrateContextWindow(
+      merged({ recentEntriesForRetrieval: 12, recentEntriesForSuggestions: 8 }),
+    )
+    expect(after.recentEntriesForSuggestions).toBe(8)
+  })
+
+  it('is stable when applied twice', () => {
+    const once = migrateContextWindow(merged({ recentEntriesForRetrieval: 12 }))
+    expect(migrateContextWindow(once)).toEqual(once)
+  })
+
+  it('ignores a malformed stored value', () => {
+    const after = migrateContextWindow(
+      merged({ recentEntriesForRetrieval: 'twelve' as unknown as number }),
+    )
+    expect(after.recentEntriesForSuggestions).toBe(5)
   })
 })

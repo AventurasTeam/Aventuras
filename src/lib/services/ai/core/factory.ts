@@ -45,7 +45,7 @@ export class ServiceFactory {
   createClassifierService(): ClassifierService {
     return new ClassifierService(
       'classifier',
-      settings.systemServicesSettings.classifier.chatHistoryTruncation ?? 100,
+      settings.systemServicesSettings.classifier.chatHistoryTruncation,
     )
   }
 
@@ -97,7 +97,11 @@ export class ServiceFactory {
    */
   createLoreManagementService(): LoreManagementService {
     const loreManagementSettings = settings.systemServicesSettings.loreManagement
-    return new LoreManagementService('loreManagement', loreManagementSettings.maxIterations)
+    return new LoreManagementService(
+      'loreManagement',
+      loreManagementSettings.maxIterations,
+      settings.serviceSpecificSettings.loreManagement.requireDuplicateResolution,
+    )
   }
 
   /**

@@ -25,7 +25,12 @@
     PinOff,
     X,
     ChevronDown,
+    Loader2,
+    Merge,
+    Brain,
   } from '@lucide/svelte'
+  import { runManualLoreManagement } from '$lib/services/generation'
+  import DuplicatesModal from '$lib/components/duplicates/DuplicatesModal.svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import * as Collapsible from '$lib/components/ui/collapsible'
@@ -45,6 +50,8 @@
    * counts its own tokens here, from blocks it still holds; the persisted one carries the
    * count taken when those blocks were built, since they are not stored.
    */
+  let duplicatesOpen = $state(false)
+
   const snapshot = $derived<RetrievalSnapshot | null>(
     toRetrievalSnapshot(ui.lastLorebookRetrieval, ui.lastWorldStateRetrieval, countTokens) ??
       story.entries.findLast((e) => e.type === 'narration')?.metadata?.retrievalSnapshot ??
@@ -421,7 +428,64 @@
             </div>
           {/each}
 
-          {#if ui.lastWorldStateRetrieval?.contextBlock || ui.lastLorebookRetrieval?.contextBlock}
+          <!--
+            This panel is where lore management's cost is visible — the entry pinned into
+            every prompt, the duplicate listed twice — so it is where a pass is asked for.
+            Same icon as its section in Settings -> Advanced: it is the same agent.
+          -->
+          <Separator class="my-6" />
+          <div class="space-y-3">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-muted-foreground/80 text-xs leading-snug">
+                {#if ui.loreManagementActive}
+                  {ui.loreManagementProgress || 'Working...'}
+                {:else}
+                  Consolidates duplicates, updates entries from the story so far, and adds what is
+                  missing.
+                {/if}
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="shrink-0"
+                disabled={!story.currentStory}
+                onclick={() => (duplicatesOpen = true)}
+              >
+                <Merge class="h-3.5 w-3.5" />
+                Duplicates
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                class="shrink-0"
+                disabled={ui.loreManagementActive || !story.currentStory}
+                onclick={() => void runManualLoreManagement()}
+              >
+                {#if ui.loreManagementActive}
+                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
+                  Running
+                {:else}
+                  <BookOpen class="h-3.5 w-3.5 text-purple-500" />
+                  Run lore management
+                {/if}
+              </Button>
+            </div>
+
+            <!-- The agent's own account of what it changed; see ui.lastLoreManagementSummary. -->
+            {#if !ui.loreManagementActive && ui.lastLoreManagementSummary}
+              <div class="bg-muted/40 space-y-1 rounded-lg border p-3">
+                <p class="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+                  Last run · {ui.lastLoreManagementChanges}
+                  {ui.lastLoreManagementChanges === 1 ? 'change' : 'changes'}
+                </p>
+                <p class="text-foreground/90 text-xs leading-relaxed">
+                  {ui.lastLoreManagementSummary}
+                </p>
+              </div>
+            {/if}
+          </div>
+
+          {#if ui.lastWorldStateRetrieval?.contextBlock || ui.lastLorebookRetrieval?.contextBlock || ui.lastMemoryRetrieval}
             <Separator class="my-6" />
             <div class="space-y-4">
               <h3 class="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
@@ -481,6 +545,33 @@
                   </Collapsible.Content>
                 </Collapsible.Root>
               {/if}
+
+              <!-- Memory selects no entries, so the block is its whole view here. -->
+              {#if ui.lastMemoryRetrieval}
+                <Collapsible.Root class="bg-muted/20 rounded-lg border">
+                  <Collapsible.Trigger
+                    class="group hover:bg-muted/30 flex w-full items-center justify-between rounded-lg p-3 text-left transition-colors"
+                  >
+                    <div class="text-foreground/90 flex items-center gap-2 text-sm font-medium">
+                      <Brain class="h-4 w-4 text-sky-500" />
+                      <span>Injected Memory</span>
+                    </div>
+                    <ChevronDown
+                      class="text-muted-foreground h-4 w-4 transition-transform duration-200 group-data-[state=open]:rotate-180"
+                    />
+                  </Collapsible.Trigger>
+                  <Collapsible.Content>
+                    <div class="bg-muted/30 border-t">
+                      <ScrollArea class="h-48 w-full">
+                        <div class="p-4">
+                          <pre
+                            class="text-muted-foreground font-mono text-xs break-words whitespace-pre-wrap">{ui.lastMemoryRetrieval}</pre>
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  </Collapsible.Content>
+                </Collapsible.Root>
+              {/if}
             </div>
           {/if}
         {:else}
@@ -498,3 +589,7 @@
     </ScrollArea>
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+{#if duplicatesOpen}
+  <DuplicatesModal onClose={() => (duplicatesOpen = false)} />
+{/if}

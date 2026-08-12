@@ -19,6 +19,7 @@ export {
   type NarrativeOptions,
   type WorldStateContext,
   buildChapterSummariesBlock,
+  buildTimelineFillBlock,
 } from './NarrativeService'
 
 // Classification

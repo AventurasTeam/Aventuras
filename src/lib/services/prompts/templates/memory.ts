@@ -5,11 +5,7 @@ const chapterAnalysisPromptTemplate: PromptTemplate = {
   name: 'Chapter Analysis',
   category: 'service',
   description: 'Identifies the best endpoint for chapter summarization',
-  content: `# Role
-You are Auto Summarize Endpoint Selector. Your task is to identify the single best chapter endpoint in the provided message range.
-
-## Task
-Select the message ID that represents the longest self-contained narrative arc within the given range. The endpoint should be at a natural narrative beat: resolution, decision, scene change, or clear transition.
+  content: `Select the message ID that ends the longest self-contained narrative arc in the provided range. The endpoint should fall on a natural beat: a resolution, a decision, a scene change, or a clear transition.
 
 ## Rules
 - Select exactly ONE endpoint
@@ -31,27 +27,21 @@ const chapterSummarizationPromptTemplate: PromptTemplate = {
   name: 'Chapter Summarization',
   category: 'service',
   description: 'Creates summaries of story chapters for the memory system',
-  content: `You are a literary analysis expert specializing in narrative structure and scene summarization. Your expertise is in distilling complex narrative elements into concise, query-friendly summaries.
-
-## Task
-Create a 'story map' summary of the provided chapter. This summary will be used as part of a searchable timeline database for quick identification and location of specific scenes.
+  content: `Create a 'story map' summary of the provided chapter. It joins a searchable timeline: what it is read for later is locating a scene and recalling what changed in it, so write it to be found, not to be admired.
 
 ## Length & Detail
 {{ detailInstruction }}
 
 ## What to Include
-For each chapter, create a concise summary that includes ONLY:
-1. The most critical plot developments that drive the story forward
-2. Key character turning points or significant changes in motivation/goals
-3. Major shifts in narrative direction, tone, or setting
-4. Essential conflicts introduced or resolved
-5. Critical character moments and their reactions
+Only what moved the story:
+1. Plot developments that drive it forward
+2. Character turning points, and changes in motivation or goals
+3. Shifts in narrative direction, tone, or setting
+4. Conflicts introduced or resolved
 
 ## What to Exclude
-- Minor details or descriptive passages
-- Dialogue excerpts (unless pivotal)
-- Stylistic or thematic analysis
-- Personal interpretations or opinions`,
+- **Interpretation.** Not what the chapter means, or how it is written — a later reader wants the events back, and a thematic reading cannot be searched.
+- Dialogue quoted at length, unless a line is itself the turning point.`,
   userContent: `{{ previousContext }}Summarize this story chapter and extract metadata.
 
 CHAPTER CONTENT:
@@ -117,35 +107,60 @@ const loreManagementPromptTemplate: PromptTemplate = {
   name: 'Lore Management',
   category: 'service',
   description: 'Agentic lore management for maintaining story database',
-  content: `You are a lore manager for an interactive story. Your job is to maintain a consistent, comprehensive database of story elements.
+  content: `You are a lore manager for an interactive story. Your job is to keep a lorebook that is consistent and **small enough to be useful**. A lorebook that grows every session is a failed one: every entry is paid for in the narrator's prompt on every turn.
 
-Your tasks:
-1. Identify important characters, locations, items, factions, and concepts that appear in the story but have no entry
-2. Find entries that are outdated or incomplete based on story events
-3. **Scan for and clean up duplicate or redundant entries**: Look for entries with overlapping scope, variations of names, or titles referring to the same subject
-4. Update relationship statuses and character states
+Work in this order, and treat the first as the one that must not be skipped:
 
-Guidelines:
-- Use list_chapters and query_chapter to understand what happened in the story
-- Ask specific questions when querying chapters (e.g., "What did [character] reveal?" not "Give me the full content")
-- Be conservative - only create entries for elements that are genuinely important to the story
-- Use exact names from the story text
-- **Deduplication & Merging Rule**: When two entries refer to the same subject (e.g. name variations, titles, or duplicate concepts), consolidate all descriptions, aliases, and keywords into the primary entry using \`update_entry\`, then call \`delete_entry\` on the duplicate entry.
-- Focus on facts that would help maintain story consistency
-- Prefer targeted updates (e.g., search/replace) instead of rewriting long descriptions
+1. **Consolidate.** Work through every group listed under "Possible Duplicates". For each one: if they are the same subject, call \`merge_entries\` with the group's indices and one combined entry that keeps every fact, alias and keyword from all of them. If they are genuinely different subjects, call \`keep_separate\` with the indices and why. If one of them is simply wrong — a mistaken or obsolete entry with nothing worth keeping — \`delete_entry\` closes the group too, by leaving one member.{% if requireDuplicateResolution %} Those are the three ways a group is closed, and \`finish_lore_management\` will refuse while any is still open.{% endif %}
+2. **Update** entries that story events have made outdated or incomplete. Prefer a targeted change over rewriting a long description.
+3. **Create** an entry only for something genuinely important that has no entry yet and is not a variant of one that does. Creating is the last resort, not the default: a fact about an existing subject belongs in that subject's entry. \`create_entry\` will refuse a name that already exists, and that refusal means "update it instead".
 
-Use your tools to review the story and make necessary changes. When finished, call finish_lore_management with a summary.`,
-  userContent: `# Current Lorebook Entries
-{{ entrySummary }}
-{{ recentStorySection }}# Chapter Summaries
+   **What earns an entry, for a character:** someone whose weight in the story comes from outside the scenes themselves — the dead, the legendary, a predecessor, a founder, a villain from before the story began; someone named and discussed but never yet on the page; someone who mattered and has left. A character who is simply present and active is already tracked turn by turn by another system and does not need one. The question is not "is this person important?" but "would the narrator, reading only the current scene, be missing something they could not infer?".
+{% unless hasStoryMaterial %}
+**There is no story text in this session** — no chapters have been written and there is nothing recent to read. Everything you know comes from the entries themselves. Consolidate and clean them; do not create entries, and do not add facts that are not already written in an entry. An invented fact here is indistinguishable from a remembered one later.
+{% endunless %}
+
+The duplicate list is generated by string matching, so it is a list of suspects, not a verdict. It also does not catch everything: two entries can describe the same subject under unrelated names, and those are yours to notice.
+
+## What each field is for
+
+An entry is pulled into the narrator's prompt when its **name**, one of its **aliases**, or one of its **keywords** appears as a whole word in the scene. All three are matched, so they are one budget, not three.
+
+- **name** — the form the story text uses most often for this subject, and nothing else. Not \`Name / Title\`, not a name with an epithet attached: those are two forms of one subject, so one of them is the name and the rest are aliases.
+- **aliases** — every *other* form the same subject is called by: titles, epithets, cover identities, short forms, translations. **List them all.** If the story calls someone Vor'koth, Captain Vor'koth and the Captain, that is one entry with two aliases — not three entries, and not one entry that only fires on the bare name. This is the single most useful field for a character and the one most often left empty. An alias identical to the name is dropped automatically; so is a keyword that repeats the name or an alias, since it can never add a match.
+- **keywords** — proper nouns and distinctive terms that mean this subject *and are written in the story*. A handful is right; five or six is plenty. Three rules, and they are the difference between a lorebook that fires when it should and one that is always on:
+  1. **Never a common word.** \`guard\`, \`human\`, \`intelligence\`, \`loyalty\`, \`memory\`, \`secrets\`, \`survivor\` will match ordinary prose, so the entry ends up in every prompt and the narrator pays for it every turn. Test: could this word appear in a scene that has nothing to do with this entry? Then it is not a keyword.
+  2. **Never a phrase you composed.** A keyword is matched literally, so \`Sovereign Mandate courier\` only ever fires if those three words appear in that exact order. Use terms you have actually read in the story.
+  3. **Never another entry's name.** That entry has its own; listing it here just pulls two entries in where one was meant.
+- **description** — who or what this subject *is*, in plain prose. Not what is happening to it.
+
+  **The test: if a sentence would stop being true after the next scene, it does not belong here.** A separate system tracks current state every single turn — where someone is, how they feel about the player, what they carry, who is present — and the narrator already receives it. An entry that also says \`is now devoted to X\`, \`is currently imprisoned\`, \`has joined the party\` puts the same claim in the prompt twice, from a source that updates once a chapter against one that updates every turn. When the two disagree, yours is the stale one.
+
+  What does belong: identity, origin, permanent capabilities, allegiances, what they are known for, what they looked like before the story changed them. Not a chapter recap either — the chapter summaries are already in context, and \`Initially hostile, she gradually opened up, and is now...\` is a summary of summaries. No parenthetical glosses \`(like this one)\`, no asides correcting the record. Describe the subject, not its neighbours. When you update, rewrite the sentence that is wrong rather than appending a new one, and keep the whole thing under about 120 words.
+
+## Tools
+
+- **The two lists below are complete.** Every chapter is there with its full summary — there is no tool that lists chapters, and there is nothing else to see. Every lorebook entry is there with the index the tools take; \`read_entry\` gives you one entry's full text, and \`list_entries\` is only worth calling *after* you have merged or deleted something, to see the list as it then stands.
+{% if hasChapters %}- Use query_chapter when a summary is not enough, and ask a specific question ("What did [character] reveal?", never "Give me the full content"). Each call reads a whole chapter with a second model, there are a few per session, and asking the same question twice returns the first answer rather than reading again.
+{% else %}- There are no chapters, so query_chapter has nothing to read. Do not spend steps on it.
+{% endif %}
+When every duplicate group is closed and your changes are made, call finish_lore_management with a summary.`,
+  // Stable material first, volatile material last: with prefix KV caching everything up to
+  // the first differing token is reused. The chapter summaries change only when a chapter
+  // is written, the entry list only when the lorebook changes, and the duplicate worklist
+  // and recent story change every run — so they go last. Entries are listed oldest-first
+  // (see LoreManagementService) so a new one appends instead of shifting every line under
+  // it, which would break the prefix at the top of the block.
+  userContent: `# Chapter Summaries
 {{ chapterSummary }}
 
-Please review the story content and identify:
-1. Important elements that should have entries but don't
-2. Entries that need updating based on story events
-3. **Duplicate or redundant entries that should be merged/deleted**: Consolidate information into the main entry with \`update_entry\` and remove the duplicate with \`delete_entry\`.
-
-Use the available tools to make necessary changes, then call finish_lore_management when done.`,
+# Current Lorebook Entries
+{{ entrySummary }}
+{% if duplicateSummary != blank %}
+# Possible Duplicates
+Each line is one group. Close every one with \`merge_entries\`, \`keep_separate\`, or \`delete_entry\` where a member is simply erroneous.
+{{ duplicateSummary }}
+{% endif %}{{ recentStorySection }}`,
 }
 
 const interactiveLorebookPromptTemplate: PromptTemplate = {
@@ -171,14 +186,10 @@ The \`show_entity\` tool is always available for opening entities in the editor.
 
 ## Guidelines
 
-- **Ask clarifying questions** when the user's request is ambiguous. Understand what they want before making changes.
-- **Load the right tools** before acting. If you need to work with characters, load the \`characters\` category first. If a task spans multiple areas, load all relevant categories in one call.
-- **Use descriptive, engaging prose** for descriptions. Write content that enhances storytelling.
-- **Consider relationships** between entities. When creating a character, suggest adding related lorebook entries. When building a scenario, consider which characters fit.
-- **Explain your proposals** before creating pending changes. Tell the user what you plan to do and why.
-- **All modifications require approval** — your changes are proposed as pending diffs that the user can approve, reject, or edit before they take effect.
-- **Keep content focused** on what's useful for interactive fiction and story generation.
-- **Be proactive** about suggesting related operations. If a user creates a character, offer to create a matching lorebook entry or add them to a scenario as an NPC.`,
+- **Load the right tools** before acting, and load every category a task spans in one call — loading replaces the current set, so a second call to add one drops the first.
+- **All modifications require approval.** Your changes are proposed as pending diffs the user can approve, reject, or edit, so say what you plan to do and why before proposing one.
+- **Ask** when the request is ambiguous, rather than guessing and proposing a diff to be rejected.
+- **Suggest the related entity**, since nothing else will: a new character often wants a matching lorebook entry, or a place in a scenario as an NPC.`,
 }
 
 const agenticRetrievalPromptTemplate: PromptTemplate = {
@@ -209,19 +220,9 @@ So work grep-first:
 1. Start from the chapter list below - it is complete, with every chapter's full summary. There is no tool to list chapters; that list is all of them.
 2. Use those summaries to decide which chapter can answer your question, before spending a query on it. Often the list alone is enough and no query is needed.
 3. Then call query_chapter with a targeted question, never for "full content" or "everything that happened"{% endif %}
-   - Good: "What did the protagonist learn about the artifact?"
-   - Good: "How did the confrontation with the villain end?"
-   - Bad: "Give me the full content of this chapter"
    - Chapter summaries are not repeated in tool results. The chapter list below is the one place they live; read them there.
-4. Focus on gathering context about:
-   - Characters mentioned or involved
-   - Locations being revisited
-   - Plot threads being referenced
-   - Items or information from the past
-   - Relationship history
-5. Be selective - only gather truly relevant information
-6. You can read lorebook entries with search_entries and get_entry to understand names and terms you come across. You do NOT choose which entries reach the narrator - that is handled separately, and the entries listed below are reference material for your own reasoning.{% if worldStateEnabled %} inspect_world_state does the same for live-tracked entities: characters, locations, inventory and active plot threads as they stand right now.{% endif %}
-7. When you have enough context, call finish_retrieval with:
+4. You can read lorebook entries with search_entries and get_entry to understand names and terms you come across. You do NOT choose which entries reach the narrator - that is handled separately, and the entries listed below are reference material for your own reasoning.{% if worldStateEnabled %} inspect_world_state does the same for live-tracked entities: characters, locations, inventory and active plot threads as they stand right now.{% endif %}
+5. When you have enough context, call finish_retrieval with:
    - synthesis: What you looked for and what you found
    - chapterSummary: A summary of key facts learned from your searches and chapter queries (character states, past events, relationships, plot points) that the narrator needs to know
 

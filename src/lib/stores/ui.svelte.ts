@@ -41,6 +41,7 @@ import { eventBus, type EventType } from '$lib/services/events'
 import { SvelteMap, SvelteSet } from 'svelte/reactivity'
 import { StreamingHtmlRenderer } from '$lib/utils/htmlStreaming'
 import { countTokens } from '$lib/services/tokenizer'
+import { branchScopeKey } from '$lib/utils/branchScope'
 
 export type VaultTab = 'characters' | 'lorebooks' | 'scenarios' | 'prompts'
 
@@ -221,6 +222,12 @@ class UIStore {
   // Lorebook debug state
   lastLorebookRetrieval = $state<EntryRetrievalResult | null>(null)
   lastWorldStateRetrieval = $state<WorldStateInjectionResult | null>(null)
+  /**
+   * The memory block as the narrator got it: the agentic synthesis, or static mode's Q&A.
+   *
+   * The rendered text rather than either mode's result shape. Cleared with the other two.
+   */
+  lastMemoryRetrieval = $state<string | null>(null)
   lorebookDebugOpen = $state(false)
 
   // Lorebook manager state
@@ -253,9 +260,29 @@ class UIStore {
 
   // Lore management mode state
   // When active, the AI is reviewing/updating the lorebook - user editing is locked
+  /**
+   * Branches whose background tasks — chapter threshold check, lore management, style
+   * review — are still running, as `storyId:branchId`.
+   *
+   * They create chapters, so the Memory view must not offer to create one at the same time:
+   * two chapters built from overlapping ranges of the same entries. Per branch rather than
+   * global, because chapters belong to a branch and two branches never collide.
+   *
+   * A **count**, not a flag: the run is not awaited, so turns overlap and a flag would be
+   * cleared by whichever finished first, marking the branch idle with work still in flight.
+   */
+  backgroundTaskBranches = $state<SvelteMap<string, number>>(new SvelteMap())
   loreManagementActive = $state(false)
   loreManagementProgress = $state('')
   loreManagementChanges = $state<number>(0)
+  /**
+   * What the last session reported it did, kept after the run ends.
+   *
+   * It is the only account of what changed in the lorebook, and it used to live in the
+   * progress line and be wiped two seconds later — long enough to notice, not to read.
+   */
+  lastLoreManagementSummary = $state<string | null>(null)
+  lastLoreManagementChanges = $state<number>(0)
 
   // Lorebook activation tracking for stickiness
   // Maps entry ID -> last activation position (story entry index)
@@ -1068,11 +1095,12 @@ class UIStore {
     // absent-blob case used to clear, so a malformed or unparseable blob returned false with the
     // previous entry's choices still on screen, where they read as belonging to this entry.
     // Callers judge by the return value alone, so the two must not disagree.
+    // The persisted copy goes with the in-memory one, or the next load restores it.
     const clearForMode = () => {
       if (storyMode === 'adventure') {
-        this.actionChoices = []
+        this.clearActionChoices(storyId)
       } else {
-        this.suggestions = []
+        this.clearSuggestions(storyId)
       }
     }
 
@@ -1320,9 +1348,11 @@ class UIStore {
   setLastLorebookRetrieval(
     result: EntryRetrievalResult | null,
     worldState: WorldStateInjectionResult | null = null,
+    memory: string | null = null,
   ) {
     this.lastLorebookRetrieval = result
     this.lastWorldStateRetrieval = worldState
+    this.lastMemoryRetrieval = memory
   }
 
   openLorebookDebug() {
@@ -1408,10 +1438,24 @@ class UIStore {
   }
 
   // Lore management mode methods
+  backgroundTasksActiveFor(storyId: string, branchId: string | null): boolean {
+    return (this.backgroundTaskBranches.get(branchScopeKey(storyId, branchId)) ?? 0) > 0
+  }
+
+  setBackgroundTasksActive(storyId: string, branchId: string | null, active: boolean) {
+    const key = branchScopeKey(storyId, branchId)
+    const running = this.backgroundTaskBranches.get(key) ?? 0
+    if (active) this.backgroundTaskBranches.set(key, running + 1)
+    else if (running <= 1) this.backgroundTaskBranches.delete(key)
+    else this.backgroundTaskBranches.set(key, running - 1)
+  }
+
   startLoreManagement() {
     this.loreManagementActive = true
     this.loreManagementProgress = 'Analyzing story content...'
     this.loreManagementChanges = 0
+    // The previous run's account stops being true the moment a new one starts writing.
+    this.lastLoreManagementSummary = null
     // Close any open modals/edit modes since user can't edit during lore management
     this.lorebookEditMode = false
     this.lorebookImportModalOpen = false
@@ -1423,6 +1467,12 @@ class UIStore {
     if (changesCount !== undefined) {
       this.loreManagementChanges = changesCount
     }
+  }
+
+  /** Record what a finished session reported, for the panel to show once it is over. */
+  setLoreManagementSummary(summary: string, changeCount: number) {
+    this.lastLoreManagementSummary = summary
+    this.lastLoreManagementChanges = changeCount
   }
 
   finishLoreManagement() {

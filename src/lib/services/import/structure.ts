@@ -305,13 +305,6 @@ export async function importStructure(
       adventureState: entry.adventureState,
       creativeState: entry.creativeState,
       injection: entry.injection,
-      firstMentioned: entry.firstMentioned
-        ? (oldToNewId.get(entry.firstMentioned) ?? entry.firstMentioned)
-        : null,
-      lastMentioned: entry.lastMentioned
-        ? (oldToNewId.get(entry.lastMentioned) ?? entry.lastMentioned)
-        : null,
-      mentionCount: entry.mentionCount || 0,
       createdBy: entry.createdBy || 'import',
       createdAt: entry.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -377,12 +370,6 @@ export async function importStructure(
       id: remapEntityId(entry.id),
       storyId: newStoryId,
       branchId: mapBranchId(entry.branchId ?? null),
-      firstMentioned: entry.firstMentioned
-        ? (oldToNewId.get(entry.firstMentioned) ?? entry.firstMentioned)
-        : null,
-      lastMentioned: entry.lastMentioned
-        ? (oldToNewId.get(entry.lastMentioned) ?? entry.lastMentioned)
-        : null,
     })
 
     for (const checkpoint of data.checkpoints) {

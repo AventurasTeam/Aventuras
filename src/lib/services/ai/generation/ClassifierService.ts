@@ -401,6 +401,12 @@ export class ClassifierService extends BaseAIService {
 
   /**
    * Format existing characters for the prompt.
+   *
+   * **The name is the whole of its line.** The model reads this list and writes names back,
+   * so a rendered suffix — `- Ada (claimed as a consort) [inactive]` — came back as the
+   * name and minted a second character: four of thirty-eight on a measured save. Attributes
+   * are indented `label: value` lines instead, which a name containing parentheses cannot
+   * be confused with.
    */
   private formatExistingCharacters(characters: Character[]): string {
     if (characters.length === 0) return '(none)'
@@ -408,10 +414,14 @@ export class ClassifierService extends BaseAIService {
     return characters
       .map((c) => {
         let entry = `- ${c.name}`
-        if (c.relationship) entry += ` (${c.relationship})`
-        if (c.status && c.status !== 'active') entry += ` [${c.status}]`
+        if (c.relationship) entry += `\n  relationship: ${c.relationship}`
+        // `active` is printed too. Hiding it made the list asymmetric: the model was
+        // reminded to reactivate someone who returned and never that anyone was marked
+        // present, so nobody was ever marked away and the narrator's [PRESENT] section grew
+        // to every character in the story.
+        entry += `\n  status: ${c.status ?? 'active'}`
         if (c.visualDescriptors && Object.keys(c.visualDescriptors).length > 0) {
-          entry += `\n  Appearance: ${this.formatVisualDescriptors(c.visualDescriptors)}`
+          entry += `\n  appearance: ${this.formatVisualDescriptors(c.visualDescriptors)}`
         }
         return entry
       })
@@ -443,13 +453,18 @@ export class ClassifierService extends BaseAIService {
     const activeBeats = beats.filter((b) => b.status === 'active' || b.status === 'pending')
     if (activeBeats.length === 0) return '(none)'
 
-    return activeBeats
-      .map((b) => {
-        let entry = `- "${b.title}" [${b.status}]`
-        if (b.description) entry += `: ${b.description}`
-        return entry
-      })
-      .join('\n')
+    return (
+      activeBeats
+        // Same rule as the character list: the title is the whole of its line. It is quoted
+        // as well, but a suffix is what the model copies back, so nothing follows it.
+        .map((b) => {
+          let entry = `- "${b.title}"`
+          entry += `\n  status: ${b.status}`
+          if (b.description) entry += `\n  description: ${b.description}`
+          return entry
+        })
+        .join('\n')
+    )
   }
 
   /**

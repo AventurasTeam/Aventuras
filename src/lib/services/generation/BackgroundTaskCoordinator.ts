@@ -44,7 +44,16 @@ export interface BackgroundTaskInput {
   chapterCheck: ChapterCheckInput
 
   // Lore management input (used if chapter triggers lore management)
-  loreSession: LoreSessionInput
+  /**
+   * Built when lore management is about to run, not when the turn started.
+   *
+   * Everything in it moves during the turn: the classifier writes entries, and the chapter
+   * check that decides whether lore management runs at all creates the chapter. A snapshot
+   * taken up front handed the agent a lorebook without the entries just classified, a
+   * chapter list without the chapter that triggered it, and a "recent story" still holding
+   * the entries that chapter had just absorbed.
+   */
+  loreSession: () => LoreSessionInput
   loreCallbacks: LoreManagementCallbacks
   loreUICallbacks?: LoreManagementUICallbacks
 }
@@ -106,7 +115,7 @@ export class BackgroundTaskCoordinator {
     if (result.chapterCreation.loreManagementTriggered) {
       try {
         result.loreManagement = await this.loreCoordinator.runSession(
-          input.loreSession,
+          input.loreSession(),
           input.loreCallbacks,
           input.loreUICallbacks,
         )

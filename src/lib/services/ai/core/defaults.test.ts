@@ -3,9 +3,26 @@ import {
   AGENTIC_RETRIEVAL_DEFAULTS,
   CHAPTER_READ_BUDGET_RATIO,
   chapterReadBudget,
+  recentStoryBudgetChars,
   ENTRY_RETRIEVAL_DEFAULTS,
   WORLD_STATE_INJECTION_DEFAULTS,
 } from './defaults'
+
+describe('recentStoryBudgetChars', () => {
+  it('scales with the same threshold the chapter read does', () => {
+    // "About 2.5 chapters" on both sides, converted to the characters `splitRecentTail`
+    // measures. It was a fixed 16,384 — a quarter of the tail on a default threshold, and
+    // a smaller share the higher the user set it.
+    expect(recentStoryBudgetChars(16_000)).toBe(chapterReadBudget(16_000) * 4)
+    expect(recentStoryBudgetChars(32_000)).toBe(recentStoryBudgetChars(16_000) * 2)
+  })
+
+  it('falls back on a threshold nobody set', () => {
+    expect(recentStoryBudgetChars(undefined)).toBe(recentStoryBudgetChars(16_000))
+    expect(recentStoryBudgetChars(0)).toBe(recentStoryBudgetChars(16_000))
+    expect(recentStoryBudgetChars(-1)).toBe(recentStoryBudgetChars(16_000))
+  })
+})
 
 describe('chapterReadBudget', () => {
   it("scales with the story's own chapterization threshold", () => {

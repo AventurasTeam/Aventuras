@@ -9,6 +9,7 @@ import { tool, type ToolSet } from 'ai'
 import * as z from 'zod'
 import type { Entry, Chapter, StoryEntry, Character, Location, Item, StoryBeat } from '$lib/types'
 import { entryTypeSchema } from '../schemas/lorebook'
+import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_RETRIEVAL } from './chapterQueries'
 import {
   entityNameMatches,
   findTextMatches,
@@ -122,18 +123,16 @@ const WIDE_EXCERPT_WORDS = 150
 export const UNCHAPTERIZED = -1
 
 /**
- * `query_chapter` calls one run may make.
+ * `query_chapter` calls one retrieval run may make.
  *
  * Nothing bounded this before: `timelineFill.maxQueries` only caps the *static* path's
  * generated question list, and the agent's own `maxIterations` counts steps, not queries.
- * A run was therefore free to spend every step on a whole-chapter read -- ~17,000 tokens
- * each, so ten steps is ~150,000 tokens for one narrator turn.
+ * A run was free to spend every step on a ~17,000-token read.
  *
- * Three is well clear of observed behaviour (runs use 0-2) and caps the worst case at
- * roughly one grep-led turn's total. Not a setting: it guards a failure mode, and the
- * number a user would want to tune is the excerpt cap that avoids reaching it.
+ * The budget, the repeat cache and the failure handling live in `chapterQueries.ts`,
+ * shared with lore management — which spends a different number, for a different reason.
  */
-export const MAX_CHAPTER_QUERIES = 3
+export const MAX_CHAPTER_QUERIES = MAX_CHAPTER_QUERIES_RETRIEVAL
 
 /**
  * Matches per excerpt slot above which a search is treated as noise rather than as an
@@ -211,8 +210,8 @@ interface RunState {
    * spares the agent a second identical wall of prose.
    */
   grepResults: Map<string, Record<string, unknown>>
-  /** Whole-chapter reads spent so far. See MAX_CHAPTER_QUERIES. */
-  chapterQueries: number
+  /** The run's whole-chapter read allowance, and the answers it has already paid for. */
+  chapterQueries: ChapterQueryBudget
 }
 
 function createSearchEntriesTool({ entries, onEvent, describeProgress }: RetrievalToolContext) {
@@ -223,7 +222,8 @@ function createSearchEntriesTool({ entries, onEvent, describeProgress }: Retriev
   return tool({
     description:
       'Search available lorebook entries by keyword, name, or type. ' +
-      'Returns matching entry summaries with their IDs, names, types, and brief excerpts. ' +
+      'Returns matching entries with their IDs, names, types and descriptions; ' +
+      'get_entry adds an entry’s tracked state. ' +
       'Reference material for your own reasoning: reading an entry does not put it in ' +
       "the narrator's prompt, which is decided separately.",
     inputSchema: z.object({
@@ -291,13 +291,15 @@ function createSearchEntriesTool({ entries, onEvent, describeProgress }: Retriev
         availableTotal,
         returnedCount: sliced.length,
         hasMore: availableTotal > sliced.length,
+        // The description once. It used to be sent in full *and* as a 150-character
+        // `excerpt` of the same string, for twenty entries, on every search. The full text
+        // is what `retrieval.test.ts` pins, so the excerpt is what goes.
         entries: sliced.map((e) => ({
           id: e.id,
           name: e.name,
           type: e.type,
           aliases: e.aliases ?? [],
           description: e.description,
-          excerpt: e.description.length > 150 ? `${e.description.slice(0, 150)}...` : e.description,
           injectionMode: e.injection?.mode ?? 'keyword',
           priority: e.injection?.priority ?? 50,
         })),
@@ -797,7 +799,8 @@ function createGrepChaptersTool(context: RetrievalToolContext, state: RunState) 
 }
 
 function createQueryChapterTool(context: RetrievalToolContext, state: RunState) {
-  const { chapters, onEvent, describeProgress, onQueryChapter } = context
+  const { chapters, describeProgress } = context
+  const budget = state.chapterQueries
 
   return tool({
     description:
@@ -817,15 +820,13 @@ function createQueryChapterTool(context: RetrievalToolContext, state: RunState) 
     }),
     execute: async ({ chapterNumber, question }: { chapterNumber: number; question: string }) => {
       // Checked before the chapter lookup so a spent budget reads the same whichever
-      // chapter was asked for, and points at the tool that can still answer.
-      if (state.chapterQueries >= MAX_CHAPTER_QUERIES) {
+      // chapter was asked for, and points at the tool that can still answer. A question
+      // already in the cache is served either way: replaying it costs nothing.
+      if (budget.exhausted() && !budget.knows(chapterNumber, question)) {
         return {
           answered: false,
           chapterNumber,
-          error:
-            `You have used all ${MAX_CHAPTER_QUERIES} whole-chapter reads for this turn. ` +
-            'Use grep_chapters instead -- with chapterNumbers set to the chapter you ' +
-            'wanted, the whole excerpt allowance goes to it, and it costs nothing.',
+          error: budget.exhaustedError(),
           soFar: describeProgress(),
         }
       }
@@ -848,25 +849,15 @@ function createQueryChapterTool(context: RetrievalToolContext, state: RunState) 
         }
       }
 
-      state.chapterQueries++
-
-      let answer: string
-      if (onQueryChapter) {
-        // No try/catch: `onQueryChapter` owns its failures, and the one real
-        // implementation deliberately turns them into a cached answer so a failing
-        // question is not re-asked until the step budget is gone. Catching here as well
-        // would bypass that -- and its event recording, leaving the failure out of the
-        // transcript entirely.
-        answer = await onQueryChapter(chapterNumber, question)
-      } else {
-        answer = chapter.summary || 'No summary available for this chapter.'
-        onEvent({
-          kind: 'query',
+      const { answer, failed } = await budget.ask(chapterNumber, question)
+      if (failed) {
+        return {
+          answered: false,
           chapterNumber,
           question,
-          answer,
-          cached: false,
-        })
+          error: answer,
+          soFar: describeProgress(),
+        }
       }
 
       return {
@@ -1018,7 +1009,22 @@ function createInspectWorldStateTool({
  * still checked against its own `inputSchema` where it is written.
  */
 export function createRetrievalTools(context: RetrievalToolContext) {
-  const state: RunState = { grepResults: new Map(), chapterQueries: 0 }
+  // The refusal names `grep_chapters` as the cheaper route, so it may only do so where
+  // that tool is actually registered — the same expression, not a second copy of it.
+  const grepAvailable = canGrepChapters(context)
+  const state: RunState = {
+    grepResults: new Map(),
+    chapterQueries: new ChapterQueryBudget({
+      max: MAX_CHAPTER_QUERIES,
+      scope: 'turn',
+      alternative: grepAvailable
+        ? 'Use grep_chapters instead — with chapterNumbers set to the chapter you wanted, ' +
+          'the whole excerpt allowance goes to it, and it costs nothing.'
+        : undefined,
+      ask: context.onQueryChapter,
+      onAnswer: (record) => context.onEvent({ kind: 'query', ...record }),
+    }),
+  }
 
   const tools: ToolSet = {
     search_entries: createSearchEntriesTool(context),
@@ -1026,7 +1032,7 @@ export function createRetrievalTools(context: RetrievalToolContext) {
     finish_retrieval: createFinishRetrievalTool(context),
   }
 
-  if (canGrepChapters(context)) {
+  if (grepAvailable) {
     tools.grep_chapters = createGrepChaptersTool(context, state)
   }
   if (context.chapters.length > 0) {

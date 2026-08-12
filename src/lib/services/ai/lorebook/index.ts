@@ -7,8 +7,16 @@
 
 export {
   LoreManagementService,
-  getDefaultLoreManagementSettings,
-  type LoreManagementSettings,
   type LoreManagementResult,
   type LoreManagementContext,
 } from './LoreManagementService'
+
+export { LoreSessionLedger, type LoreMergeResult, type LoreSessionChanges } from './sessionChanges'
+
+export {
+  cleanAliases,
+  cleanKeywords,
+  describeDropped,
+  type CleanedField,
+  type DroppedTerm,
+} from './entryFields'

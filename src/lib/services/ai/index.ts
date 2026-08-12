@@ -33,7 +33,7 @@ import {
   emitBackgroundImageQueued,
   emitBackgroundImageReady,
 } from '$lib/services/events'
-import type { PromptContext } from '$lib/services/generation'
+import type { PromptContext, LoreManagementCallbacks } from '$lib/services/generation'
 import type {
   Chapter,
   Character,
@@ -56,6 +56,8 @@ import type {
 } from '$lib/types'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import type { StreamChunk } from './core/types'
+import { recentStoryBudgetChars } from './core/defaults'
+import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
 import {
   DEFAULT_FALLBACK_STYLE_PROMPT,
@@ -610,27 +612,30 @@ class AIService {
     entries: Entry[],
     recentMessages: StoryEntry[],
     chapters: Chapter[],
-    callbacks: {
-      onCreateEntry: (entry: Entry) => Promise<void>
-      onUpdateEntry: (id: string, updates: Partial<Entry>) => Promise<void>
-      onDeleteEntry: (id: string) => Promise<void>
-      onMergeEntries: (entryIds: string[], mergedEntry: Entry) => Promise<void>
-      onQueryChapter?: (chapterNumber: number, question: string) => Promise<string>
-    },
+    callbacks: LoreManagementCallbacks,
     _mode: StoryMode = 'adventure',
     _pov?: POV,
     _tense?: Tense,
+    tokenThreshold?: number,
   ): Promise<LoreManagementResult> {
-    // Extract recent user action and narrative
-    const recentNarration = recentMessages.filter((m) => m.type === 'narration')
-    const recentActions = recentMessages.filter((m) => m.type === 'user_action')
+    // The story since the last chapter — the only unsummarised material the agent has. It
+    // used to be the single most recent action and narration, which on a story with no
+    // chapters left the agent maintaining a lorebook for a story it could not read.
+    //
+    // Bounded through the same helper the retrieval tail uses, so both sides measure the
+    // same thing the same way. `searchable` is dropped rather than split: there is no grep
+    // here to reach what the budget leaves out.
+    const { shown } = splitRecentTail(
+      recentMessages.filter((m) => m.type === 'narration' || m.type === 'user_action'),
+      recentStoryBudgetChars(tokenThreshold),
+      MIN_RECENT_ENTRIES_FOR_LORE,
+    )
+    const recentStory = shown
+      .map((m) => `[${m.type === 'user_action' ? 'ACTION' : 'NARRATIVE'}] ${m.content}`)
+      .join('\n\n')
 
-    const narrativeResponse =
-      recentNarration.length > 0 ? recentNarration[recentNarration.length - 1].content : ''
-    const userAction =
-      recentActions.length > 0 ? recentActions[recentActions.length - 1].content : ''
-
-    // Build chapters info for lore management
+    // Number, title and summary only: the keyword and character facets were read by
+    // `list_chapters`, which no longer exists.
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
     const chapterInfos = JSON.parse(
       JSON.stringify(
@@ -638,8 +643,6 @@ class AIService {
           number: c.number,
           title: c.title,
           summary: c.summary,
-          keywords: c.keywords,
-          characters: c.characters,
         })),
       ),
     )
@@ -648,11 +651,12 @@ class AIService {
     const service = serviceFactory.createLoreManagementService()
     const sessionResult = await service.runSession({
       storyId,
-      narrativeResponse,
-      userAction,
+      recentStory,
       existingEntries: entries,
       chapters: chapterInfos,
       queryChapter: callbacks.onQueryChapter,
+      keptSeparate: await callbacks.getKeptSeparate?.(),
+      onKeepSeparate: callbacks.onKeepSeparate,
     })
 
     // Build changes array for the result
@@ -675,9 +679,30 @@ class AIService {
       changes.push({ type: 'update', entry })
     }
 
+    // Consolidation is what keeps a lorebook from growing without bound, and it used to
+    // stop here: merges and deletes were approved, logged, then dropped, so every run
+    // re-proposed the same duplicates it had "already" merged.
+    for (const { sources, merged } of sessionResult.merges) {
+      const mergedEntry = { ...merged, id: crypto.randomUUID(), branchId }
+      await callbacks.onMergeEntries(
+        sources.map((e) => e.id),
+        mergedEntry,
+      )
+      changes.push({ type: 'merge', entry: mergedEntry, mergedFrom: sources.map((e) => e.id) })
+    }
+
+    const mergedAway = new Set(sessionResult.merges.flatMap((m) => m.sources.map((e) => e.id)))
+    for (const entry of sessionResult.deletedEntries) {
+      if (mergedAway.has(entry.id)) continue
+      await callbacks.onDeleteEntry(entry.id)
+      changes.push({ type: 'delete', previous: entry })
+    }
+
     log('runLoreManagement complete', {
       created: sessionResult.createdEntries.length,
       updated: sessionResult.updatedEntries.length,
+      deleted: sessionResult.deletedEntries.length,
+      merged: sessionResult.merges.length,
     })
 
     return {

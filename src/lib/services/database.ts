@@ -2161,9 +2161,6 @@ class DatabaseService {
         entry.adventureState ? JSON.stringify(entry.adventureState) : null,
         entry.creativeState ? JSON.stringify(entry.creativeState) : null,
         JSON.stringify(entry.injection),
-        entry.firstMentioned,
-        entry.lastMentioned,
-        entry.mentionCount,
         entry.createdBy,
         entry.createdAt,
         entry.updatedAt,
@@ -2177,8 +2174,7 @@ class DatabaseService {
     await db.execute(
       `INSERT INTO entries (
         id, story_id, name, type, description, hidden_info, aliases,
-        state, adventure_state, creative_state, injection,
-        first_mentioned, last_mentioned, mention_count, created_by,
+        state, adventure_state, creative_state, injection, created_by,
         created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
       ) VALUES ${valuePlaceholders}`,
       values,
@@ -2190,10 +2186,9 @@ class DatabaseService {
     await db.execute(
       `INSERT INTO entries (
         id, story_id, name, type, description, hidden_info, aliases,
-        state, adventure_state, creative_state, injection,
-        first_mentioned, last_mentioned, mention_count, created_by,
+        state, adventure_state, creative_state, injection, created_by,
         created_at, updated_at, lore_management_blacklisted, branch_id, overrides_id, deleted
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.id,
         entry.storyId,
@@ -2206,9 +2201,6 @@ class DatabaseService {
         entry.adventureState ? JSON.stringify(entry.adventureState) : null,
         entry.creativeState ? JSON.stringify(entry.creativeState) : null,
         JSON.stringify(entry.injection),
-        entry.firstMentioned,
-        entry.lastMentioned,
-        entry.mentionCount,
         entry.createdBy,
         entry.createdAt,
         entry.updatedAt,
@@ -2260,18 +2252,6 @@ class DatabaseService {
     if (updates.injection !== undefined) {
       setClauses.push('injection = ?')
       values.push(JSON.stringify(updates.injection))
-    }
-    if (updates.firstMentioned !== undefined) {
-      setClauses.push('first_mentioned = ?')
-      values.push(updates.firstMentioned)
-    }
-    if (updates.lastMentioned !== undefined) {
-      setClauses.push('last_mentioned = ?')
-      values.push(updates.lastMentioned)
-    }
-    if (updates.mentionCount !== undefined) {
-      setClauses.push('mention_count = ?')
-      values.push(updates.mentionCount)
     }
     if (updates.loreManagementBlacklisted !== undefined) {
       setClauses.push('lore_management_blacklisted = ?')
@@ -2847,9 +2827,6 @@ class DatabaseService {
       injection: row.injection
         ? JSON.parse(row.injection)
         : { mode: 'keyword', keywords: [], priority: 0 },
-      firstMentioned: row.first_mentioned,
-      lastMentioned: row.last_mentioned,
-      mentionCount: row.mention_count ?? 0,
       createdBy: row.created_by || 'user',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -3679,6 +3656,63 @@ class DatabaseService {
     await db.execute('DELETE FROM pack_templates WHERE pack_id = ? AND template_id = ?', [
       packId,
       templateId,
+    ])
+  }
+
+  // ===== Kept-Separate Operations =====
+
+  /**
+   * The main branch as `kept_separate` stores it.
+   *
+   * `branch_id` is part of the primary key and SQLite does not enforce a key over NULL, so
+   * a nullable column made `INSERT OR IGNORE` append a row per repeated dismissal.
+   */
+  private keptSeparateBranch(branchId: string | null): string {
+    return branchId ?? ''
+  }
+
+  /**
+   * Pairs the user has declared to be different subjects, as `pool:pair_key` strings.
+   *
+   * See `services/duplicates` for the key's shape and why it is a name pair rather than
+   * a pair of ids.
+   */
+  async getKeptSeparate(storyId: string, branchId: string | null): Promise<Set<string>> {
+    const db = await this.getDb()
+    const rows = await db.select<{ pool: string; pair_key: string }[]>(
+      `SELECT pool, pair_key FROM kept_separate WHERE story_id = ? AND branch_id = ?`,
+      [storyId, this.keptSeparateBranch(branchId)],
+    )
+    return new Set(rows.map((r) => `${r.pool}:${r.pair_key}`))
+  }
+
+  async addKeptSeparate(
+    storyId: string,
+    branchId: string | null,
+    pool: string,
+    pairKeys: string[],
+  ): Promise<void> {
+    if (pairKeys.length === 0) return
+    const db = await this.getDb()
+    const now = Date.now()
+    const branch = this.keptSeparateBranch(branchId)
+    await this.withTransaction(async () => {
+      for (const pairKey of pairKeys) {
+        await db.execute(
+          `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+          [storyId, branch, pool, pairKey, now],
+        )
+      }
+    })
+  }
+
+  /** Forget every dismissal for a story branch, so the full worklist comes back. */
+  async clearKeptSeparate(storyId: string, branchId: string | null): Promise<void> {
+    const db = await this.getDb()
+    await db.execute(`DELETE FROM kept_separate WHERE story_id = ? AND branch_id = ?`, [
+      storyId,
+      this.keptSeparateBranch(branchId),
     ])
   }
 

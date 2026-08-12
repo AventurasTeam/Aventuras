@@ -493,9 +493,6 @@ export interface Entry {
   injection: EntryInjection
 
   // Metadata
-  firstMentioned: string | null // Entry ID where first mentioned
-  lastMentioned: string | null // Entry ID where last mentioned
-  mentionCount: number
   createdBy: EntryCreator
   createdAt: number
   updatedAt: number
@@ -623,7 +620,7 @@ export interface EntryPreview {
 
 // ===== Lore Management System (per design doc section 3.4) =====
 
-export type LoreChangeType = 'create' | 'update' | 'merge' | 'delete' | 'complete'
+export type LoreChangeType = 'create' | 'update' | 'merge' | 'delete'
 
 export interface LoreChange {
   type: LoreChangeType

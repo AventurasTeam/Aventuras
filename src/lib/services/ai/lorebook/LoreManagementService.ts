@@ -9,14 +9,26 @@ import type { Entry, VaultLorebookEntry } from '$lib/types'
 import type { ServiceId } from '$lib/stores/settings.svelte'
 import { BaseAIService } from '../BaseAIService'
 import { createLogger } from '$lib/log'
-import { createAgentFromPreset, extractTerminalToolResult, stopOnTerminalTool } from '../sdk/agents'
+import {
+  createAgentFromPreset,
+  extractToolResults,
+  finishOnlyOnLastStep,
+  stopOnCompletedTerminalTool,
+} from '../sdk/agents'
+import type { PrepareStepFunction } from 'ai'
 import { createLoreManagementTools } from '../sdk/tools'
-import type {
-  FinishLoreManagementSchema,
-  LorebookEntryPendingChangeSchema,
-} from '../sdk/schemas/lorebook'
+import type { FinishLoreManagementSchema } from '../sdk/schemas/lorebook'
 import { ContextBuilder } from '$lib/services/context'
 import type { LoreManagementToolContext } from '../sdk/tools/lorebook'
+import {
+  findDuplicateGroups,
+  formatDuplicateGroup,
+  pairKeys,
+  type DuplicateGroup,
+} from '$lib/services/duplicates'
+import { LoreSessionLedger, type LoreMergeResult } from './sessionChanges'
+import { ChapterQueryBudget, MAX_CHAPTER_QUERIES_LORE } from '../sdk/tools/chapterQueries'
+import { LORE_MANAGEMENT_DEFAULTS } from '../core/defaults'
 
 const log = createLogger('LoreManagement')
 
@@ -26,6 +38,8 @@ const log = createLogger('LoreManagement')
 export interface LoreManagementResult {
   updatedEntries: Entry[]
   createdEntries: Entry[]
+  deletedEntries: Entry[]
+  merges: LoreMergeResult[]
   reasoning?: string
 }
 
@@ -36,8 +50,6 @@ export interface LoreManagementChapter {
   number: number
   title: string | null
   summary: string
-  keywords?: string[]
-  characters?: string[]
 }
 
 /**
@@ -45,28 +57,25 @@ export interface LoreManagementChapter {
  */
 export interface LoreManagementContext {
   storyId: string
-  narrativeResponse: string
-  userAction: string
+  /**
+   * Story text the chapters do not cover yet, already formatted and bounded by the caller.
+   *
+   * Empty is normal — a run triggered right after a chapter has almost nothing after it.
+   * Empty *and* no chapters means the agent has no story at all; see `hasStoryMaterial`.
+   */
+  recentStory: string
   existingEntries: Entry[]
   /** Available chapters for querying */
   chapters?: LoreManagementChapter[]
   /** Callback to query a chapter with a question */
   queryChapter?: (chapterNumber: number, question: string) => Promise<string>
-}
-
-/**
- * Settings for lore management behavior.
- */
-export interface LoreManagementSettings {
-  enabled: boolean
-  maxIterations: number
-}
-
-export function getDefaultLoreManagementSettings(): LoreManagementSettings {
-  return {
-    enabled: true,
-    maxIterations: 3,
-  }
+  /**
+   * Name pairs already declared distinct — by the user in the duplicates window, or by an
+   * earlier run. Groups they cover are not put to the agent again.
+   */
+  keptSeparate?: ReadonlySet<string>
+  /** Persist a `keep_separate` decision, so it outlives the session. */
+  onKeepSeparate?: (names: string[]) => Promise<void>
 }
 
 /**
@@ -90,10 +99,16 @@ function entryToVaultEntry(entry: Entry): VaultLorebookEntry {
  */
 export class LoreManagementService extends BaseAIService {
   private maxIterations: number
+  private requireDuplicateResolution: boolean
 
-  constructor(serviceId: ServiceId, maxIterations: number = 3) {
+  constructor(
+    serviceId: ServiceId,
+    maxIterations: number = LORE_MANAGEMENT_DEFAULTS.maxIterations,
+    requireDuplicateResolution: boolean = LORE_MANAGEMENT_DEFAULTS.requireDuplicateResolution,
+  ) {
     super(serviceId)
     this.maxIterations = maxIterations
+    this.requireDuplicateResolution = requireDuplicateResolution
   }
 
   /**
@@ -107,24 +122,69 @@ export class LoreManagementService extends BaseAIService {
     context: LoreManagementContext,
     signal?: AbortSignal,
   ): Promise<LoreManagementResult> {
+    // A blacklisted entry is not the agent's business, and showing it is worse than
+    // useless: it cannot act on one, but it can re-create it from scratch.
+    const managed = [...context.existingEntries]
+      .filter((e) => !e.loreManagementBlacklisted)
+      // Oldest first, so a new entry appends instead of reshuffling every line under it:
+      // that is what keeps the prompt cacheable and the indices stable within a session.
+      .sort((a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id))
+
     log('Starting lore management session', {
       storyId: context.storyId,
-      entryCount: context.existingEntries.length,
+      entryCount: managed.length,
+      blacklisted: context.existingEntries.length - managed.length,
       maxIterations: this.maxIterations,
     })
 
-    // Track pending changes - in autonomous mode, we auto-approve everything
-    const pendingChanges: LorebookEntryPendingChangeSchema[] = []
-    const createdEntries: Entry[] = []
-    const updatedEntries: Entry[] = []
     let changeIdCounter = 0
 
     // Convert entries to vault format for tools
     // Deep clone to avoid Svelte proxy issues with AI SDK structured cloning
-    const vaultEntries = JSON.parse(JSON.stringify(context.existingEntries.map(entryToVaultEntry)))
+    const vaultEntries: VaultLorebookEntry[] = JSON.parse(
+      JSON.stringify(managed.map(entryToVaultEntry)),
+    )
     const plainChapters = context.chapters
       ? JSON.parse(JSON.stringify(context.chapters))
       : undefined
+
+    /**
+     * Where an approved change lands. Owns the index -> entry mapping, which grows with
+     * `vaultEntries` as the agent creates and merges.
+     */
+    const ledger = new LoreSessionLedger(managed, vaultEntries, context.storyId)
+    const removedIndices = ledger.removedIndices
+
+    // Groups the user (or an earlier run) already closed never reach the agent: re-arguing
+    // a settled question costs a step and can only end the same way.
+    const settled = context.keptSeparate ?? new Set<string>()
+    const duplicateGroups = findDuplicateGroups(vaultEntries).filter((group) =>
+      pairKeys(group.names).some((pair) => !settled.has(pair)),
+    )
+    const dismissedGroups = new Set<DuplicateGroup>()
+
+    /**
+     * The `keep_separate` writes, awaited before the session returns.
+     *
+     * The tool callback is synchronous — the agent needs its answer in the same step — so
+     * the write cannot be awaited where it starts. Dropping the promise made a failure an
+     * unhandled rejection and a reported dismissal that never reached the table.
+     */
+    const keepSeparateWrites: Promise<void>[] = []
+
+    /**
+     * A group is open until it has collapsed to one surviving member, or was dismissed.
+     *
+     * Deliberately not "a member was touched": updating an entry is what the agent does
+     * anyway on its second task, so that test closed groups without consolidating
+     * anything — and closing them is the whole point of the obligation.
+     */
+    const openDuplicateGroups = () =>
+      duplicateGroups.filter(
+        (group) =>
+          !dismissedGroups.has(group) &&
+          group.indices.filter((i) => !removedIndices.has(i)).length > 1,
+      )
 
     // Create tool context with chapter querying
     const toolContext: LoreManagementToolContext = {
@@ -132,12 +192,42 @@ export class LoreManagementService extends BaseAIService {
       onPendingChange: (change) => {
         // Auto-approve in autonomous mode
         change.status = 'approved'
-        pendingChanges.push(change)
+        ledger.apply(change)
         log('Auto-approved change', { type: change.type, id: change.id })
       },
       generateId: () => `lm-${++changeIdCounter}`,
+      removedIndices,
+      preventDuplicateNames: true,
       chapters: plainChapters,
-      queryChapter: context.queryChapter,
+      // Fewer reads than the retrieval agent gets, and for a different reason — see
+      // MAX_CHAPTER_QUERIES_LORE. No `alternative`: there is no grep here to point at.
+      chapterQueries: new ChapterQueryBudget({
+        max: MAX_CHAPTER_QUERIES_LORE,
+        scope: 'session',
+        ask: context.queryChapter,
+      }),
+      // Without the obligation there is nothing to refuse over, so the predicate is not
+      // installed: the worklist and `keep_separate` stay, they just stop being a gate.
+      pendingDuplicates: this.requireDuplicateResolution
+        ? () => openDuplicateGroups().map(formatDuplicateGroup)
+        : undefined,
+      onKeepSeparate: (indices, reason) => {
+        const named = new Set(indices)
+        // Every index of a group must be named. Closing on a single shared index dismissed
+        // neighbouring groups the agent had never looked at.
+        const closing = duplicateGroups.filter(
+          (group) => !dismissedGroups.has(group) && group.indices.every((i) => named.has(i)),
+        )
+        for (const group of closing) dismissedGroups.add(group)
+        // Persisted, not just dismissed for this session: the next run would otherwise
+        // ask the same question and get the same answer, at the same cost.
+        for (const group of closing) {
+          const write = context.onKeepSeparate?.(group.names)
+          if (write) keepSeparateWrites.push(write)
+        }
+        log('Duplicate groups kept separate', { indices, reason, closed: closing.length })
+        return closing.length
+      },
     }
 
     // Create tools
@@ -145,36 +235,53 @@ export class LoreManagementService extends BaseAIService {
 
     // Build entry summaries for user prompt (use 0-based indices to match tool expectations)
     const entrySummary =
-      context.existingEntries
+      managed
         .map(
           (e, i) =>
             `[${i}] [${e.type}] ${e.name}: ${e.description?.slice(0, 100) || 'No description'}`,
         )
         .join('\n') || 'No entries yet.'
 
-    // Build recent story section
-    const recentStorySection = `# Recent Story Content
-User action: ${context.userAction}
+    const duplicateSummary = duplicateGroups.map(formatDuplicateGroup).join('\n')
 
-Narrative:
-${context.narrativeResponse}
+    // Left out entirely rather than printed empty: an empty heading is text the model
+    // reads to learn nothing, and there is nothing after the last chapter more often than not.
+    const recentStorySection = context.recentStory
+      ? `# Story Since The Last Chapter\n${context.recentStory}\n`
+      : ''
 
-`
+    const hasChapters = Boolean(context.chapters && context.chapters.length > 0)
 
-    // Build chapter summary from chapters array
-    const chapterSummary =
-      context.chapters && context.chapters.length > 0
-        ? context.chapters
-            .map(
-              (ch) =>
-                `Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''} - ${ch.summary.slice(0, 200)}...`,
-            )
-            .join('\n')
-        : 'No chapters available. Use list_chapters and query_chapter tools to explore story history.'
+    // The agent's only view of the chapter index — there is no list_chapters tool, so the
+    // summaries never exist in two places for it to reconcile.
+    //
+    // Untruncated, at a deliberate cost: ~9k characters to ~47k on a 41-chapter story. The
+    // summaries *are* this task's input, the block is first in the prompt so a prefix cache
+    // reuses it between runs, and the only way to recover what a cut removed is
+    // `query_chapter` — a whole chapter read by a second model. Cutting converts tokens
+    // into LLM calls rather than saving them.
+    const chapterSummary = hasChapters
+      ? context
+          .chapters!.map(
+            (ch) => `- Chapter ${ch.number}${ch.title ? `: ${ch.title}` : ''}\n  ${ch.summary}`,
+          )
+          .join('\n')
+      : 'No chapters have been written yet.'
 
     // Render prompts through unified pipeline
     const ctx = new ContextBuilder()
-    ctx.add({ entrySummary, recentStorySection, chapterSummary })
+    ctx.add({
+      entrySummary,
+      duplicateSummary,
+      recentStorySection,
+      chapterSummary,
+      hasChapters,
+      // With neither chapters nor recent text the agent has only the entry list. It can
+      // still consolidate; anything it "identifies as missing" would be invented, so the
+      // prompt says so rather than leaving it to judgement.
+      hasStoryMaterial: hasChapters || Boolean(context.recentStory),
+      requireDuplicateResolution: this.requireDuplicateResolution,
+    })
     const { system: systemPrompt, user: userPrompt } = await ctx.render('lore-management')
 
     // Create the agent
@@ -183,7 +290,16 @@ ${context.narrativeResponse}
         presetId: this.presetId,
         instructions: systemPrompt,
         tools,
-        stopWhen: stopOnTerminalTool('finish_lore_management', this.maxIterations),
+        // The terminal tool refuses to finish while duplicate groups are open, so the loop
+        // has to read its answer rather than its call.
+        stopWhen: stopOnCompletedTerminalTool('finish_lore_management', this.maxIterations),
+        // A run that hits the ceiling has already written its changes, but its account of
+        // them lives only in the message history — and that summary is the only thing the
+        // user is shown. Spend the last step, which was going to happen anyway, on it.
+        prepareStep: finishOnlyOnLastStep(
+          'finish_lore_management',
+          this.maxIterations,
+        ) as PrepareStepFunction<typeof tools>,
         signal,
       },
       'lore-management',
@@ -192,147 +308,37 @@ ${context.narrativeResponse}
     // Run the agent
     const result = await agent.generate({ prompt: userPrompt })
 
-    // Extract the terminal result
+    // Started inside the synchronous tool callback, settled here: a dismissal the session
+    // reports must be one that reached the table.
+    await Promise.all(keepSeparateWrites)
 
-    const terminalResult = extractTerminalToolResult<
-      FinishLoreManagementSchema & { completed: boolean }
-    >(result.steps as any, 'finish_lore_management')
+    const finishResults = extractToolResults<
+      FinishLoreManagementSchema & { completed: boolean },
+      typeof tools
+    >(result.steps, 'finish_lore_management')
+    // A refused call on the forced last step still ends the run, so its summary is the only
+    // account there will be of a session that did write changes.
+    const terminalResult = finishResults.findLast((r) => r.completed) ?? finishResults.at(-1)
+
+    const { createdEntries, updatedEntries, deletedEntries, merges } = ledger.result()
 
     log('Lore management session completed', {
       steps: result.steps.length,
-      pendingChanges: pendingChanges.length,
-      terminalResult,
+      created: createdEntries.length,
+      updated: updatedEntries.length,
+      deleted: deletedEntries.length,
+      merged: merges.length,
+      duplicateGroups: duplicateGroups.length,
+      duplicatesLeftOpen: openDuplicateGroups().length,
+      finishRefusals: finishResults.filter((r) => !r.completed).length,
     })
-
-    // Process approved changes to build result
-    // Note: In this autonomous mode, changes are captured but not actually
-    // applied to the database here - that's handled by the caller
-    for (const change of pendingChanges) {
-      if (change.status !== 'approved') continue
-
-      switch (change.type) {
-        case 'create':
-          if (change.entry) {
-            // Create a minimal Entry from the VaultLorebookEntry
-            const newEntry: Entry = {
-              id: `pending-${change.id}`,
-              storyId: context.storyId,
-              name: change.entry.name,
-              type: change.entry.type,
-              description: change.entry.description,
-              hiddenInfo: null,
-              aliases: [],
-              state: createDefaultState(change.entry.type),
-              adventureState: null,
-              creativeState: null,
-              injection: {
-                mode: change.entry.injectionMode,
-                keywords: change.entry.keywords,
-                priority: change.entry.priority,
-              },
-              firstMentioned: null,
-              lastMentioned: null,
-              mentionCount: 0,
-              createdBy: 'ai',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              loreManagementBlacklisted: false,
-              branchId: null,
-            }
-            createdEntries.push(newEntry)
-          }
-          break
-
-        case 'update':
-          if (change.index !== undefined && change.updates) {
-            const original = context.existingEntries[change.index]
-            if (original) {
-              const updated: Entry = {
-                ...original,
-                ...(change.updates.name && { name: change.updates.name }),
-                ...(change.updates.description && { description: change.updates.description }),
-                ...(change.updates.type && { type: change.updates.type }),
-                injection: {
-                  ...original.injection,
-                  ...(change.updates.injectionMode && { mode: change.updates.injectionMode }),
-                  ...(change.updates.keywords && { keywords: change.updates.keywords }),
-                  ...(change.updates.priority !== undefined && {
-                    priority: change.updates.priority,
-                  }),
-                },
-                updatedAt: Date.now(),
-              }
-              updatedEntries.push(updated)
-            }
-          }
-          break
-
-        // Delete and merge operations would need different handling
-        // depending on how the caller wants to process them
-      }
-    }
 
     return {
       updatedEntries,
       createdEntries,
+      deletedEntries,
+      merges,
       reasoning: terminalResult?.summary,
     }
-  }
-}
-
-/**
- * Create default state for an entry type.
- */
-function createDefaultState(type: Entry['type']): Entry['state'] {
-  switch (type) {
-    case 'character':
-      return {
-        type: 'character',
-        isPresent: false,
-        lastSeenLocation: null,
-        currentDisposition: null,
-        relationship: { level: 0, status: 'neutral', history: [] },
-        knownFacts: [],
-        revealedSecrets: [],
-      }
-    case 'location':
-      return {
-        type: 'location',
-        isCurrentLocation: false,
-        visitCount: 0,
-        changes: [],
-        presentCharacters: [],
-        presentItems: [],
-      }
-    case 'item':
-      return {
-        type: 'item',
-        inInventory: false,
-        currentLocation: null,
-        condition: null,
-        uses: [],
-      }
-    case 'faction':
-      return {
-        type: 'faction',
-        playerStanding: 0,
-        status: 'unknown',
-        knownMembers: [],
-      }
-    case 'concept':
-      return {
-        type: 'concept',
-        revealed: false,
-        comprehensionLevel: 'unknown',
-        relatedEntries: [],
-      }
-    case 'event':
-      return {
-        type: 'event',
-        occurred: false,
-        occurredAt: null,
-        witnesses: [],
-        consequences: [],
-      }
   }
 }

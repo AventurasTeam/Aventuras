@@ -478,8 +478,10 @@ export class EntryRetrievalService extends BaseAIService {
   /**
    * Tier 1: Always inject entries.
    * - Entries with injection.mode === 'always'
-   * - Entries with state-based conditions (legacy, for imported lorebooks with state)
    * - "Sticky" entries (recently activated via Tier 2/3, duration based on entry type)
+   *
+   * There is no state-based branch: see the note in the body for why the four conditions
+   * that once read a lorebook entry's own live state are gone.
    *
    * Live-tracked characters/locations/items are handled by `WorldStateInjector`
    * instead -- not duplicated here.
@@ -505,42 +507,13 @@ export class EntryRetrievalService extends BaseAIService {
         reason = 'always inject'
       }
 
-      // Check state-based conditions (for imported lorebooks that have state)
-      if (entry.state) {
-        switch (entry.state.type) {
-          case 'character':
-            if ('isPresent' in entry.state && entry.state.isPresent) {
-              shouldInclude = true
-              priority = Math.max(priority, 85)
-              reason = 'lorebook: character present'
-            }
-            break
-          case 'location':
-            if ('isCurrentLocation' in entry.state && entry.state.isCurrentLocation) {
-              shouldInclude = true
-              priority = Math.max(priority, 90)
-              reason = 'lorebook: current location'
-            }
-            break
-          case 'item':
-            if ('inInventory' in entry.state && entry.state.inInventory) {
-              shouldInclude = true
-              priority = Math.max(priority, 75)
-              reason = 'lorebook: in inventory'
-            }
-            break
-          case 'faction':
-            if (
-              'status' in entry.state &&
-              (entry.state.status === 'allied' || entry.state.status === 'hostile')
-            ) {
-              shouldInclude = true
-              priority = Math.max(priority, 70)
-              reason = `lorebook: faction ${entry.state.status}`
-            }
-            break
-        }
-      }
+      // No state-based Tier 1 here. A lorebook entry's live-state fields — `isPresent`,
+      // `isCurrentLocation`, `inInventory`, a faction's standing — were initialized blank
+      // by every creation path and written by nothing, so the four conditions that read
+      // them never fired: 0 of 16 character entries on a measured 41-chapter save. They
+      // were also the wrong owner. Presence is `WorldStateInjector`'s claim to make; a
+      // lorebook entry says who someone *is*, and pulling it in because a character is in
+      // the room is Tier 2's job, through the scene-entity handover.
 
       // Check stickiness (recently activated entries stay in Tier 1)
       if (!shouldInclude && activationTracker && currentPosition !== undefined) {
@@ -673,10 +646,6 @@ export class EntryRetrievalService extends BaseAIService {
       block += `\n\n• ${heading}:`
       for (const { entry } of section) {
         block += `\n  - ${entry.name}: ${this.truncateEntryText(entry.description)}`
-        // Only characters carry a disposition worth stating alongside the description.
-        if (entry.state?.type === 'character' && entry.state.currentDisposition) {
-          block += ` [${entry.state.currentDisposition}]`
-        }
       }
     }
 
