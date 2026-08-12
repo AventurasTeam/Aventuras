@@ -782,7 +782,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         <Dialog open={open} onOpenChange={handleOpenChange}>
           {/* No header ×: every state ends in an explicit Cancel or Discard, and
               those route the close through resetOnClose. */}
-          <DialogContent hideCloseButton>
+          {/* Explicit width, not the primitive's content-sized default: the body
+              swaps per state and the loading line is wider than the guidance
+              label, so a content-sized dialog visibly resizes mid-flow. 32rem
+              matches DialogContent's own sm:max-w-lg cap. */}
+          <DialogContent className="w-[32rem]" hideCloseButton>
             <DialogHeader hasCloseButton={false}>
               <DialogTitle>{title}</DialogTitle>
               {/* Radix warns without a description, and rn-primitives' web Content
