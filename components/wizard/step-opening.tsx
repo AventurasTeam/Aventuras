@@ -1,6 +1,17 @@
+import { useState } from 'react'
 import { View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
@@ -49,6 +60,9 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const leadEntityId = wizardStore.useWizard((s) => s.state.leadEntityId)
 
   const hasContent = opening.content.trim().length > 0
+  // wizard.md → Replace-on-existing: a candidate accepted over authored prose
+  // is staged here until confirmed, never written straight to the store.
+  const [pendingOpening, setPendingOpening] = useState<OpeningAssistValue | null>(null)
   const isAiGenerated = opening.model != null
 
   const handleSetup = onSetupAssist ?? (() => {})
@@ -89,7 +103,10 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => v.content}
-            onUse={(v) => wizardStore.patchOpening(v)}
+            onUse={(v) => {
+              if (hasContent) setPendingOpening(v)
+              else wizardStore.patchOpening(v)
+            }}
             onSetup={handleSetup}
           />
         </View>
@@ -165,6 +182,39 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
       </View>
 
       <MemoryCostDisclosure embeddingBackend={embeddingBackend} capabilities={memoryCapabilities} />
+
+      {/* wizard.md → Committed prose: accepting a candidate over a non-empty
+          opening confirms first, the same guard genre and tone already use. */}
+      <AlertDialog
+        open={pendingOpening != null}
+        onOpenChange={(next) => {
+          if (!next) setPendingOpening(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('wizard:opening.replaceConfirm.title')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('wizard:opening.replaceConfirm.body')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel asChild>
+              <Button variant="secondary">
+                <Text>{t('wizard:opening.replaceConfirm.cancel')}</Text>
+              </Button>
+            </AlertDialogCancel>
+            <Button
+              onPress={() => {
+                if (pendingOpening) wizardStore.patchOpening(pendingOpening)
+                setPendingOpening(null)
+              }}
+            >
+              <Text>{t('wizard:opening.replaceConfirm.confirm')}</Text>
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </View>
   )
 }

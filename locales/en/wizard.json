@@ -21,6 +21,12 @@
     "emptyHint": "Generate with ✨, or start typing below.",
     "placeholder": "Write the opening, or generate one with ✨.",
     "sceneMetadata": "Scene metadata: {{value}}",
+    "replaceConfirm": {
+      "title": "Replace the opening?",
+      "body": "The opening currently in the field will be lost.",
+      "cancel": "Cancel",
+      "confirm": "Replace"
+    },
     "storyName": "Story name",
     "opening": {
       "label": "Opening",

@@ -213,6 +213,32 @@ arbitrarily on an AI import, because `hydrate` and `importLore` are
 non-Add insertion paths. 3.6b's `Suggest cast` import inherits this:
 imported rows must land collapsed.
 
+**The assist overlay is a Modal on desktop and tablet, not a
+Popover.** That binding was inherited from the trigger being an icon
+rather than derived from
+[`layout.md → Decision tree`](../../../../ui/foundations/mobile/layout.md#decision-tree),
+whose Popover branch is menus, pickers, and selection lists; a
+multi-step flow ending in commit-or-discard is the Modal branch.
+`Sheet` and `Dialog` are both `@rn-primitives/dialog` Roots, so the
+swap collapsed the phone and desktop branches onto one controlled
+`open` and retired the imperative `PopoverTrigger.close()` escape
+hatch. The trigger leaving the Trigger primitive also made the
+`rn-primitives-disabled` workaround redundant there.
+
+**The committed-prose entry point landed with the primitive.** Canon
+calls the committed-state `✨` a "regenerate / refine entry point",
+but only regenerate existed — the trigger always opened the guidance
+form, so refine was reachable only from a preview the same session
+had generated. A non-empty prose field now opens seeded on its own
+value with a `Cancel / Refine… / Regenerate` row, and regains
+`Discard` / `Use this` once a candidate exists. Seeded `Regenerate`
+routes through the guidance form rather than replaying
+`lastGuidanceRef`, which on a seeded open holds either nothing or
+guidance from an earlier open the user never saw. The opening's
+replace-confirm — the other half of the same canon sentence, and
+absent until now despite the Open question below claiming otherwise —
+landed with it. **Slice 3.6b's prose call sites inherit both.**
+
 **Refine and Regenerate landed primitive-wide, not opening-only.**
 Canon makes the four-action row the contract for every prose result,
 so building it into `AiAssist` gave genre, tone, setting,
