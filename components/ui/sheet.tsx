@@ -104,6 +104,10 @@ function BottomSheetContent({
   size = 'medium',
   title = 'Sheet',
   children,
+  // Pulled out of the rest bag so it can be merged with the safe-area padding
+  // below rather than spread over it — a caller's `style` would otherwise drop
+  // the bottom inset and put the sheet's last controls under the nav bar.
+  style,
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
   ...contentProps
@@ -236,8 +240,8 @@ function BottomSheetContent({
             <BottomSheetView>
               <View
                 className={cn('p-6', className)}
-                style={safeBottomStyle(insets.bottom)}
                 {...(contentProps as ComponentProps<typeof View>)}
+                style={[safeBottomStyle(insets.bottom), style]}
               >
                 {children}
               </View>
@@ -245,8 +249,8 @@ function BottomSheetContent({
           ) : (
             <View
               className={cn('flex-1 p-6', className)}
-              style={safeBottomStyle(insets.bottom)}
               {...(contentProps as ComponentProps<typeof View>)}
+              style={[safeBottomStyle(insets.bottom), style]}
             >
               {children}
             </View>
