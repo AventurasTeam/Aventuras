@@ -9,6 +9,7 @@ describe('WorldStateTranslationService', () => {
 
     const res = await service.translateEntities(
       {
+        storyId: 'story-1',
         classificationResult: {
           newCharacters: [{ name: 'Gareth', description: 'Missing rogue' }],
           newLocations: [],
@@ -57,6 +58,7 @@ describe('WorldStateTranslationService', () => {
 
     const res = await service.translateEntities(
       {
+        storyId: 'story-1',
         classificationResult: {
           newCharacters: [{ name: 'Aria', description: 'Brave warrior' }],
           newLocations: [],

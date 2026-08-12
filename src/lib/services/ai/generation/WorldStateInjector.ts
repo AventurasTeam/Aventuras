@@ -104,6 +104,8 @@ export interface SceneEntity {
 }
 
 export interface WorldStateInjectorOptions {
+  /** Story whose pack supplies the Tier 3 template; undefined only outside a story. */
+  storyId: string | undefined
   signal?: AbortSignal
   activationTracker?: ActivationTracker
   /** The entry `userInput` came from, so Tier 3 does not see the action twice. */
@@ -194,9 +196,9 @@ export class WorldStateInjector extends BaseAIService {
     worldState: WorldStateInjectorInput,
     userInput: string,
     recentEntries: StoryEntry[],
-    options: WorldStateInjectorOptions = {},
+    options: WorldStateInjectorOptions,
   ): Promise<WorldStateInjectionResult> {
-    const { signal, activationTracker, userActionEntryId, onSceneEntities } = options
+    const { storyId, signal, activationTracker, userActionEntryId, onSceneEntities } = options
     const currentPosition = activationTracker?.currentPosition ?? recentEntries.length
 
     log('buildContext called', {
@@ -265,6 +267,7 @@ export class WorldStateInjector extends BaseAIService {
         budget: this.config.tier3WholesaleWordBudget,
       })
       tier3 = await this.selectTier3WithLLM(
+        storyId,
         candidates,
         userInput,
         recentEntries,
@@ -706,6 +709,7 @@ export class WorldStateInjector extends BaseAIService {
    * than `tier3WholesaleWordBudget` -- below that they are all included and no call is made.
    */
   private async selectTier3WithLLM(
+    storyId: string | undefined,
     candidates: WorldStateCandidate[],
     userInput: string,
     recentEntries: StoryEntry[],
@@ -714,6 +718,7 @@ export class WorldStateInjector extends BaseAIService {
     userActionEntryId?: string,
   ): Promise<WorldStateContextEntry[]> {
     const result = await runTier3Selection({
+      storyId,
       candidates,
       userInput,
       recentEntries,

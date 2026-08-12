@@ -65,6 +65,7 @@ export class MemoryService extends BaseAIService {
    * Generate chapter summary from entries.
    */
   async summarizeChapter(
+    storyId: string | undefined,
     entries: StoryEntry[],
     previousChapters?: Chapter[],
     mode: string = 'adventure',
@@ -85,7 +86,7 @@ export class MemoryService extends BaseAIService {
         ? `Previous chapters:\n${previousChapters.map((c) => `Chapter ${c.number}: ${c.summary}`).join('\n\n')}`
         : ''
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({
       mode,
       pov,
@@ -117,6 +118,7 @@ export class MemoryService extends BaseAIService {
    * Analyze entries to determine if a chapter should be created.
    */
   async analyzeForChapter(
+    storyId: string | undefined,
     entries: StoryEntry[],
     lastChapterEndIndex: number,
     tokensOutsideBuffer: number,
@@ -132,7 +134,7 @@ export class MemoryService extends BaseAIService {
       .map((e, index) => `[Message ${firstValidMessageId + index}] [${e.type}]: ${e.content}`)
       .join('\n\n')
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({
       mode,
       pov,
@@ -160,10 +162,13 @@ export class MemoryService extends BaseAIService {
    * chapters batch-created from imported history, where entries carry no
    * metadata.timeStart/timeEnd.
    */
-  async estimateChapterTimeline(summary: string): Promise<ChapterTimelineEstimate> {
+  async estimateChapterTimeline(
+    storyId: string | undefined,
+    summary: string,
+  ): Promise<ChapterTimelineEstimate> {
     log('estimateChapterTimeline', { summaryLength: summary.length })
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ chapterSummary: summary })
     const { system, user: prompt } = await ctx.render('chapter-timeline')
 
@@ -178,6 +183,7 @@ export class MemoryService extends BaseAIService {
    * Decide whether to retrieve past chapters for context.
    */
   async decideRetrieval(
+    storyId: string | undefined,
     context: RetrievalContext,
     mode: string = 'adventure',
     pov: string = 'second',
@@ -193,7 +199,7 @@ export class MemoryService extends BaseAIService {
       .map((c) => `Chapter ${c.number}: ${c.summary}`)
       .join('\n\n')
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({
       mode,
       pov,

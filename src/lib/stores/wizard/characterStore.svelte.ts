@@ -14,6 +14,13 @@ import type {
 import { SvelteSet } from 'svelte/reactivity'
 
 export class CharacterStore {
+  /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
+  private packId: () => string | undefined
+
+  constructor(packId: () => string | undefined) {
+    this.packId = packId
+  }
+
   // Protagonist State
   protagonist = $state<GeneratedProtagonist | null>(null)
   protagonistTranslated = $state<GeneratedProtagonist | null>(null)
@@ -90,6 +97,7 @@ export class CharacterStore {
 
     try {
       this.protagonist = await scenarioService.generateProtagonist(
+        this.packId(),
         expandedSetting,
         selectedGenre,
         selectedMode,
@@ -184,6 +192,7 @@ export class CharacterStore {
 
     try {
       this.protagonist = await scenarioService.elaborateCharacter(
+        this.packId(),
         {
           name: sourceName || undefined,
           description: sourceDescription || undefined,
@@ -222,6 +231,7 @@ export class CharacterStore {
 
     try {
       this.protagonist = await scenarioService.refineCharacter(
+        this.packId(),
         this.protagonist,
         expandedSetting,
         selectedGenre,
@@ -252,6 +262,7 @@ export class CharacterStore {
 
     try {
       this.supportingCharacters = await scenarioService.generateCharacters(
+        this.packId(),
         expandedSetting,
         this.protagonist,
         selectedGenre,
@@ -352,6 +363,7 @@ export class CharacterStore {
 
     try {
       const elaborated = await scenarioService.elaborateCharacter(
+        this.packId(),
         {
           name: this.supportingCharacterName.trim() || undefined,
           description: this.supportingCharacterDescription.trim() || undefined,
@@ -488,6 +500,7 @@ export class CharacterStore {
         const translated = await aiService.translateWizardBatch(
           fields,
           translationSettings.targetLanguage,
+          this.packId(),
         )
 
         this.protagonistTranslated = {
@@ -546,7 +559,7 @@ export class CharacterStore {
     if (char.relationship) fields.relationship = char.relationship
     if (char.traits?.length) fields.traits = char.traits.join(', ')
 
-    const translated = await aiService.translateWizardBatch(fields, targetLanguage)
+    const translated = await aiService.translateWizardBatch(fields, targetLanguage, this.packId())
 
     return {
       ...char,
@@ -570,7 +583,7 @@ export class CharacterStore {
 
     try {
       const content = await CharacterCardImport.readFile(file)
-      const result = await CharacterCardImport.clean(content, selectedGenre)
+      const result = await CharacterCardImport.clean(this.packId(), content, selectedGenre)
 
       if (!result.success && result.errors.length > 0) {
         this.cardImportError = result.errors.join('; ')

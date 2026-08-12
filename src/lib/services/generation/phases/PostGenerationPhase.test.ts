@@ -52,6 +52,7 @@ function makeInput(overrides: Partial<PostGenerationInput> = {}): PostGeneration
   return {
     isCreativeMode: false,
     disableSuggestions: false,
+    storyId: 'story-1',
     entries: [],
     activeThreads: [],
     lorebookEntries: [],

@@ -42,7 +42,7 @@
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
   import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
+  import { resolveStylePrompt } from '$lib/services/ai/image'
 
   let showAddForm = $state(false)
   let newName = $state('')
@@ -408,16 +408,10 @@
       // Get the style prompt from database (external template)
       const styleId = imageSettings.portraitStyleId
 
-      let stylePrompt = ''
-      try {
-        const template = await database.getPackTemplate('default-pack', styleId)
-        stylePrompt = template?.content || ''
-      } catch {
-        stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-      }
+      const stylePrompt = await resolveStylePrompt(story.currentStory?.id, styleId)
 
       // Build the portrait generation prompt using ContextBuilder
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(story.currentStory?.id)
       ctx.add({
         mode: 'adventure',
         pov: 'second',

@@ -125,6 +125,8 @@ export interface SceneEntity {
 }
 
 export interface EntryRetrievalOptions {
+  /** Story whose pack supplies the Tier 3 template; undefined only outside a story. */
+  storyId: string | undefined
   activationTracker?: ActivationTracker
   signal?: AbortSignal
   /** The entry `userInput` came from, so Tier 3 does not see the action twice. */
@@ -235,9 +237,9 @@ export class EntryRetrievalService extends BaseAIService {
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    options: EntryRetrievalOptions = {},
+    options: EntryRetrievalOptions,
   ): Promise<EntryRetrievalResult> {
-    const { activationTracker, signal, userActionEntryId, sceneEntities } = options
+    const { storyId, activationTracker, signal, userActionEntryId, sceneEntities } = options
     const currentPosition = activationTracker?.currentPosition ?? recentStoryEntries.length
 
     log('getRelevantEntries called', {
@@ -326,6 +328,7 @@ export class EntryRetrievalService extends BaseAIService {
         words: wholesaleWords,
       })
       tier3 = await this.getLLMSelectedEntries(
+        storyId,
         remainingEntries,
         userInput,
         recentStoryEntries,
@@ -552,6 +555,7 @@ export class EntryRetrievalService extends BaseAIService {
    * Asks the LLM to select the most relevant entries from the candidate pool.
    */
   private async getLLMSelectedEntries(
+    storyId: string | undefined,
     availableEntries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
@@ -571,6 +575,7 @@ export class EntryRetrievalService extends BaseAIService {
     }))
 
     const result = await runTier3Selection({
+      storyId,
       candidates,
       userInput,
       recentEntries: recentStoryEntries,

@@ -282,7 +282,7 @@ class ScenarioVaultStore {
   ): Promise<void> {
     // Parse and convert
     const jsonString = await CharacterCardImport.readFile(file)
-    const result = await CharacterCardImport.clean(jsonString, options.genre)
+    const result = await CharacterCardImport.clean(undefined, jsonString, options.genre)
 
     if (!result.success && result.errors.length > 0 && !result.settingSeed) {
       throw new Error(result.errors.join('; '))

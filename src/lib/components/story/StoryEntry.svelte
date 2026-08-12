@@ -42,7 +42,11 @@
     type ImageAnalysisFailedEvent,
     type TTSQueuedEvent,
   } from '$lib/services/events'
-  import { inlineImageService, retryImageGeneration } from '$lib/services/ai/image'
+  import {
+    inlineImageService,
+    retryImageGeneration,
+    resolveStylePrompt,
+  } from '$lib/services/ai/image'
   import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
@@ -52,10 +56,7 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import {
-    IMAGE_STUCK_THRESHOLD_MS,
-    DEFAULT_FALLBACK_STYLE_PROMPT,
-  } from '$lib/services/ai/image/constants'
+  import { IMAGE_STUCK_THRESHOLD_MS } from '$lib/services/ai/image/constants'
   import { SvelteSet } from 'svelte/reactivity'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
 
@@ -666,15 +667,7 @@
 
   async function fetchCurrentStylePrompt(): Promise<string> {
     const styleId = settings.systemServicesSettings.imageGeneration.styleId
-    try {
-      const template = await database.getPackTemplate('default-pack', styleId)
-      if (template?.content) {
-        return template.content
-      }
-    } catch {
-      // Template not found, use fallback
-    }
-    return DEFAULT_FALLBACK_STYLE_PROMPT
+    return resolveStylePrompt(story.currentStory?.id, styleId)
   }
 
   // Open the image view/edit modal

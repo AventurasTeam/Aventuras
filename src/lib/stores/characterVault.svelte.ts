@@ -338,7 +338,7 @@ class CharacterVaultStore {
       if (!parsed) throw new Error('Failed to parse character card')
 
       // Sanitize
-      const sanitized = await CharacterCardImport.sanitize(jsonString)
+      const sanitized = await CharacterCardImport.sanitize(undefined, jsonString)
 
       // Convert image if needed
       let portrait: string | null = null

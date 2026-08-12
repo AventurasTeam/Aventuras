@@ -16,7 +16,10 @@ vi.mock('../sdk/generate', () => ({
 
 const rendered: Record<string, string>[] = []
 vi.mock('$lib/services/context', () => ({
-  ContextBuilder: class {
+  ContextBuilder: class ContextBuilderMock {
+    static async forPack() {
+      return new ContextBuilderMock()
+    }
     add(vars: Record<string, string>) {
       rendered.push(vars)
     }
@@ -121,6 +124,7 @@ describe('countWholesaleWords', () => {
 
 describe('runTier3Selection', () => {
   const request = {
+    storyId: undefined,
     candidates: [
       { id: 'a-uuid', type: 'character', name: 'Aria', description: 'A swordswoman.' },
       { id: 'b-uuid', type: 'location', name: 'The Tower', description: null },
@@ -209,6 +213,7 @@ describe('runTier3Selection', () => {
 
 describe('runTier3Selection caching', () => {
   const cachedRequest = {
+    storyId: undefined,
     candidates: [
       { id: 'a-uuid', type: 'character', name: 'Aria', description: 'A swordswoman.' },
       { id: 'b-uuid', type: 'location', name: 'The Tower', description: null },

@@ -57,13 +57,13 @@ export interface RetrievalDependencies {
     worldState: GenerationContext['worldState'],
     userInput: string,
     recentEntries: GenerationContext['visibleEntries'],
-    options?: WorldStateInjectorOptions,
+    options: WorldStateInjectorOptions,
   ) => Promise<WorldStateInjectionResult>
   getRelevantLorebookEntries: (
     entries: GenerationContext['worldState']['lorebookEntries'],
     userInput: string,
     recentStoryEntries: GenerationContext['visibleEntries'],
-    options?: EntryRetrievalOptions,
+    options: EntryRetrievalOptions,
   ) => Promise<EntryRetrievalResult>
 }
 
@@ -79,7 +79,7 @@ export class RetrievalPhase {
     yield { type: 'phase_start', phase: 'retrieval' } satisfies PhaseStartEvent
 
     const { context, dependencies, memoryRetrievalEnabled, activationTracker } = input
-    const { worldState, visibleEntries, userAction, abortSignal } = context
+    const { worldState, visibleEntries, userAction, abortSignal, story } = context
     const { chapters, lorebookEntries, memoryConfig } = worldState
 
     let chapterContext: string | null = null
@@ -121,6 +121,7 @@ export class RetrievalPhase {
     stageA.push(
       dependencies
         .buildWorldStateContext(worldState, userAction.content, visibleEntries, {
+          storyId: story.id,
           signal: abortSignal,
           activationTracker,
           userActionEntryId: userAction.entryId,
@@ -158,6 +159,7 @@ export class RetrievalPhase {
               // to 15, and anything above 10 did nothing.
               visibleEntries,
               {
+                storyId: story.id,
                 activationTracker,
                 signal: abortSignal,
                 userActionEntryId: userAction.entryId,

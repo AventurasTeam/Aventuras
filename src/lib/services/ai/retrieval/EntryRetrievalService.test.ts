@@ -57,7 +57,7 @@ describe('EntryRetrievalService', () => {
   })
 
   it('retrieves Tier 1 entries (mode === "always")', async () => {
-    const result = await service.getRelevantEntries(mockEntries, '', [])
+    const result = await service.getRelevantEntries(mockEntries, '', [], { storyId: undefined })
 
     expect(result.tier1.map((r) => r.entry.name)).toContain('Ancient Artifact')
     expect(result.tier1.map((r) => r.entry.name)).not.toContain('Shadow Cult')
@@ -68,7 +68,12 @@ describe('EntryRetrievalService', () => {
       { type: 'narration', content: 'We discovered a temple dedicated to the void.' } as StoryEntry,
     ]
 
-    const result = await service.getRelevantEntries(mockEntries, 'Where is the cult?', recentStory)
+    const result = await service.getRelevantEntries(
+      mockEntries,
+      'Where is the cult?',
+      recentStory,
+      { storyId: undefined },
+    )
 
     expect(result.tier2.map((r) => r.entry.name)).toContain('Shadow Cult')
     expect(result.tier2.map((r) => r.entry.name)).not.toContain('Forbidden Magic') // mode === 'never'
@@ -80,14 +85,16 @@ describe('EntryRetrievalService', () => {
       enableLLMSelection: false,
     })
 
-    const result = await wordLimitedService.getRelevantEntries(mockEntries, '', [])
+    const result = await wordLimitedService.getRelevantEntries(mockEntries, '', [], {
+      storyId: undefined,
+    })
 
     // Description is "A glowing orb of celestial energy." -> truncated to "A glowing orb [...]"
     expect(result.contextBlock).toContain('A glowing orb [...]')
   })
 
   it('formats context block with [LOREBOOK CONTEXT]', async () => {
-    const result = await service.getRelevantEntries(mockEntries, 'void', [])
+    const result = await service.getRelevantEntries(mockEntries, 'void', [], { storyId: undefined })
 
     expect(result.contextBlock).toContain('[LOREBOOK CONTEXT]')
     expect(result.contextBlock).toContain('Ancient Artifact')
@@ -100,7 +107,9 @@ describe('EntryRetrievalService', () => {
     // Agentic mode, so Tier 1 never ran and `mode: 'always'` injected nothing -- the agent
     // decided the lorebook instead. The phase no longer skips it and the agent no longer
     // selects, so the guarantee is a guarantee again.
-    const noMatches = await service.getRelevantEntries(mockEntries, 'nothing relevant here', [])
+    const noMatches = await service.getRelevantEntries(mockEntries, 'nothing relevant here', [], {
+      storyId: undefined,
+    })
 
     expect(noMatches.tier1.map((r) => r.entry.name)).toContain('Ancient Artifact')
     expect(noMatches.contextBlock).toContain('Ancient Artifact')
@@ -124,7 +133,7 @@ describe('EntryRetrievalService', () => {
       enableLLMSelection: false,
     })
 
-    const result = await tight.getRelevantEntries(alwaysEntries, '', [])
+    const result = await tight.getRelevantEntries(alwaysEntries, '', [], { storyId: undefined })
 
     expect(result.tier1).toHaveLength(30)
   })
@@ -144,7 +153,9 @@ describe('EntryRetrievalService', () => {
     it('caps Tier 2 at the configured limit', async () => {
       const capped = new EntryRetrievalService({ maxTier2Entries: 5, enableLLMSelection: false })
 
-      const result = await capped.getRelevantEntries(keyworded(20), 'the beacon', [])
+      const result = await capped.getRelevantEntries(keyworded(20), 'the beacon', [], {
+        storyId: undefined,
+      })
 
       expect(result.tier2).toHaveLength(5)
     })
@@ -156,7 +167,7 @@ describe('EntryRetrievalService', () => {
       const pool = keyworded(20).reverse()
       const capped = new EntryRetrievalService({ maxTier2Entries: 3, enableLLMSelection: false })
 
-      const result = await capped.getRelevantEntries(pool, 'the beacon', [])
+      const result = await capped.getRelevantEntries(pool, 'the beacon', [], { storyId: undefined })
 
       expect(result.tier2.map((r) => r.entry.name)).toEqual(['Keyed 0', 'Keyed 1', 'Keyed 2'])
     })
@@ -186,6 +197,7 @@ describe('EntryRetrievalService', () => {
       const entries = [entry('l1', 'House of Stone', ['Morvana'])]
 
       const result = await service.getRelevantEntries(entries, 'I look around.', [], {
+        storyId: undefined,
         sceneEntities: [{ type: 'character', name: 'Morvana' }],
       })
 
@@ -203,6 +215,7 @@ describe('EntryRetrievalService', () => {
       ]
 
       const result = await service.getRelevantEntries(entries, 'We reach the harbour.', [], {
+        storyId: undefined,
         sceneEntities: [{ type: 'character', name: 'Morvana' }],
       })
 
@@ -222,6 +235,7 @@ describe('EntryRetrievalService', () => {
       })
 
       const result = await noCrossfeed.getRelevantEntries(entries, 'I look around.', [], {
+        storyId: undefined,
         sceneEntities: [{ type: 'character', name: 'Morvana' }],
       })
 
@@ -235,19 +249,25 @@ describe('EntryRetrievalService', () => {
         useSceneEntities: false,
       })
 
-      const result = await noCrossfeed.getRelevantEntries(linkedEntries, action, [])
+      const result = await noCrossfeed.getRelevantEntries(linkedEntries, action, [], {
+        storyId: undefined,
+      })
 
       expect(result.tier2.map((r) => r.entry.name).sort()).toEqual(['Rusthaven', 'Siren Docks'])
     })
 
     it('finds an entry named only by another entry the first pass matched', async () => {
-      const result = await service.getRelevantEntries(linkedEntries, action, [])
+      const result = await service.getRelevantEntries(linkedEntries, action, [], {
+        storyId: undefined,
+      })
 
       expect(result.tier2.map((r) => r.entry.name).sort()).toEqual(['Rusthaven', 'Siren Docks'])
     })
 
     it('ranks a second-pass hit below the first-pass one that led to it', async () => {
-      const result = await service.getRelevantEntries(linkedEntries, action, [])
+      const result = await service.getRelevantEntries(linkedEntries, action, [], {
+        storyId: undefined,
+      })
 
       const [first, second] = result.tier2
       expect(first.entry.name).toBe('Rusthaven')
@@ -262,6 +282,7 @@ describe('EntryRetrievalService', () => {
         [...linkedEntries, entry('l3', 'Harbour Watch', ['Siren Docks'])],
         action,
         [],
+        { storyId: undefined },
       )
 
       expect(result.tier2.map((r) => r.entry.name)).not.toContain('Harbour Watch')
@@ -273,6 +294,7 @@ describe('EntryRetrievalService', () => {
         [entry('s1', 'Zyl', ['archivist']), entry('s2', 'Zyl Archive', ['Zyl'])],
         'The archivist arrives.',
         [],
+        { storyId: undefined },
       )
 
       expect(result.tier2.map((r) => r.entry.name)).toEqual(['Zyl'])
@@ -306,7 +328,9 @@ describe('EntryRetrievalService', () => {
         'getLLMSelectedEntries',
       )
 
-      const result = await service.getRelevantEntries(uncovered(2, 40), '', [])
+      const result = await service.getRelevantEntries(uncovered(2, 40), '', [], {
+        storyId: undefined,
+      })
 
       expect(result.tier3.map((r) => r.entry.name)).toEqual(['Unmatched0', 'Unmatched1'])
       expect(llm).not.toHaveBeenCalled()
@@ -326,7 +350,7 @@ describe('EntryRetrievalService', () => {
         )
         .mockResolvedValue([])
 
-      await service.getRelevantEntries(uncovered(3, 300), '', [])
+      await service.getRelevantEntries(uncovered(3, 300), '', [], { storyId: undefined })
 
       expect(llm).toHaveBeenCalled()
     })
@@ -345,7 +369,7 @@ describe('EntryRetrievalService', () => {
         )
         .mockResolvedValue([])
 
-      await service.getRelevantEntries(uncovered(500, 0), '', [])
+      await service.getRelevantEntries(uncovered(500, 0), '', [], { storyId: undefined })
 
       expect(llm).toHaveBeenCalled()
     })
@@ -357,7 +381,7 @@ describe('EntryRetrievalService', () => {
         tier3WholesaleWordBudget: BUDGET,
       })
 
-      const result = await off.getRelevantEntries(uncovered(3, 300), '', [])
+      const result = await off.getRelevantEntries(uncovered(3, 300), '', [], { storyId: undefined })
 
       expect(result.tier3).toEqual([])
     })
@@ -370,7 +394,7 @@ describe('EntryRetrievalService', () => {
         tier3WholesaleWordBudget: BUDGET,
       })
 
-      const result = await off.getRelevantEntries(uncovered(2, 40), '', [])
+      const result = await off.getRelevantEntries(uncovered(2, 40), '', [], { storyId: undefined })
 
       expect(result.tier3).toHaveLength(2)
     })
@@ -388,6 +412,7 @@ describe('EntryRetrievalService', () => {
       const record = vi.spyOn(tracker, 'recordActivation')
 
       const result = await service.getRelevantEntries(uncovered(2, 40), '', [], {
+        storyId: undefined,
         activationTracker: tracker,
       })
 
@@ -413,7 +438,10 @@ describe('EntryRetrievalService', () => {
       const tracker = new SimpleActivationTracker(10)
       const record = vi.spyOn(tracker, 'recordActivation')
 
-      await service.getRelevantEntries(entries, '', [], { activationTracker: tracker })
+      await service.getRelevantEntries(entries, '', [], {
+        storyId: undefined,
+        activationTracker: tracker,
+      })
 
       expect(record).toHaveBeenCalledWith(entries[1].id, 10)
     })

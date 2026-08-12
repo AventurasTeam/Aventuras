@@ -42,8 +42,14 @@ export interface SuggestionsRefreshDependencies {
     activeThreads: StoryBeat[],
     lorebookEntries: Entry[],
     promptContext: PromptContext,
+    latestNarrativeResponse: string | undefined,
+    storyId: string | undefined,
   ) => Promise<SuggestionsResult>
-  translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
+  translateSuggestions: (
+    suggestions: Suggestion[],
+    targetLanguage: string,
+    storyId: string | undefined,
+  ) => Promise<Suggestion[]>
 }
 
 export interface SuggestionsRefreshResult {
@@ -64,6 +70,7 @@ export class SuggestionsRefreshService {
    */
   async refresh(input: SuggestionsRefreshInput): Promise<SuggestionsRefreshResult> {
     const {
+      storyId,
       entries,
       pendingQuests,
       storyMode,
@@ -92,6 +99,8 @@ export class SuggestionsRefreshService {
       pendingQuests,
       activeLorebookEntries,
       { mode: storyMode, pov, tense, protagonistName, genre, settingDescription, tone, themes },
+      undefined,
+      storyId,
     )
 
     // Translate if enabled
@@ -103,6 +112,7 @@ export class SuggestionsRefreshService {
         finalSuggestions = await this.deps.translateSuggestions(
           result.suggestions,
           translationSettings.targetLanguage,
+          storyId,
         )
         translated = true
         log('Suggestions translated')

@@ -3271,6 +3271,7 @@ class StoryStore {
 
     // Generate summary with previous chapters as context
     const chapterData = await aiService.summarizeChapter(
+      this.currentStory?.id,
       chapterEntries,
       previousChapters,
       this.currentStory?.mode ?? 'adventure',

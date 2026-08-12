@@ -31,7 +31,7 @@ const log = createLogger('ChapterBatchService')
 export interface ChapterBatchServiceDependencies {
   buildAndSaveChapter: (startIndex: number, endIndex: number) => Promise<Chapter>
   runLoreManagement: LoreManagementDependencies['runLoreManagement']
-  estimateChapterTimeline: (summary: string) => Promise<TimeTracker>
+  estimateChapterTimeline: (storyId: string | undefined, summary: string) => Promise<TimeTracker>
   getTimeTracker: () => TimeTracker
   setTimeTracker: (time: TimeTracker) => Promise<void>
   updateChapterTimes: (
@@ -125,7 +125,7 @@ export class ChapterBatchService {
       // 2. Timeline (sequential)
       if (input.includeTimeline) {
         callbacks.onTimelineProgress?.(chapterIndex, totalChapters)
-        const delta = await this.deps.estimateChapterTimeline(chapter.summary)
+        const delta = await this.deps.estimateChapterTimeline(input.storyId, chapter.summary)
         const startTime = time
         await this.deps.setTimeTracker({
           years: startTime.years + delta.years,

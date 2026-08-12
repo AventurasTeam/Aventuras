@@ -39,6 +39,7 @@ const disabled = { enabled: false } as unknown as TranslationSettings
 
 function makeInput(overrides: Partial<TranslationInput> = {}): TranslationInput {
   return {
+    storyId: 'story-1',
     narrativeContent: 'The dragon fell.',
     narrativeEntryId: 'n1',
     isVisualProse: false,
@@ -70,7 +71,7 @@ describe('TranslationPhase', () => {
       new TranslationPhase({ translateNarration }).execute(makeInput({ isVisualProse: true })),
     )
 
-    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true)
+    expect(translateNarration).toHaveBeenCalledWith('The dragon fell.', 'it', true, 'story-1')
   })
 
   it('skips without calling the translator when translation is off', async () => {

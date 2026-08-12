@@ -59,6 +59,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async expandSetting(
+    packId: string | undefined,
     seed: string,
     genre: Genre,
     customGenre?: string,
@@ -83,7 +84,7 @@ class ScenarioService {
       : ''
     const lorebookContext = this.buildSettingLorebookContext(lorebookEntries)
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({ genreLabel, seed, lorebookContext, customInstruction: customInstructionBlock })
     const { system, user: prompt } = await ctx.render('setting-expansion')
 
@@ -107,6 +108,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async refineSetting(
+    packId: string | undefined,
     currentSetting: ExpandedSetting,
     genre: Genre,
     customGenre?: string,
@@ -148,7 +150,7 @@ class ScenarioService {
 
     const lorebookContext = this.buildSettingLorebookContext(lorebookEntries)
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       genreLabel,
       currentSetting: currentSettingBlock,
@@ -177,6 +179,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async elaborateCharacter(
+    packId: string | undefined,
     userInput: {
       name?: string
       description?: string
@@ -221,7 +224,7 @@ class ScenarioService {
     const characterBackground = characterBackgroundParts.join('\n')
     const settingContext = setting ? `SETTING: ${setting.name}\n${setting.description}` : ''
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       genreLabel,
       toneInstruction,
@@ -254,6 +257,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async refineCharacter(
+    packId: string | undefined,
     currentCharacter: GeneratedProtagonist,
     setting: ExpandedSetting | null,
     genre: Genre,
@@ -289,7 +293,7 @@ class ScenarioService {
 
     const settingContext = setting ? `SETTING: ${setting.name}\n${setting.description}` : ''
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       genreLabel,
       toneInstruction,
@@ -320,6 +324,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async generateProtagonist(
+    packId: string | undefined,
     setting: ExpandedSetting,
     genre: Genre,
     mode: StoryMode,
@@ -347,7 +352,7 @@ class ScenarioService {
     const povInstruction = `${povContext}\n${modeContext}`
     const settingDescription = `${setting.description}\n\nATMOSPHERE: ${setting.atmosphere}\n\nTHEMES: ${setting.themes.join(', ')}`
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       mode,
       pov,
@@ -378,6 +383,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async generateCharacters(
+    packId: string | undefined,
     setting: ExpandedSetting,
     protagonist: GeneratedProtagonist,
     genre: Genre,
@@ -390,7 +396,7 @@ class ScenarioService {
     const presetConfig = settings.getPresetConfig(presetId || '', 'Supporting Characters')
     const genreLabel = genre === 'custom' && customGenre ? customGenre : genre
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       count,
       genreLabel,
@@ -421,6 +427,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async generateOpening(
+    packId: string | undefined,
     wizardData: WizardData,
     presetId?: string,
     lorebookEntries?: { name: string; type: string; description: string; hiddenInfo?: string }[],
@@ -435,6 +442,7 @@ class ScenarioService {
 
     const presetConfig = settings.getPresetConfig(presetId || '', 'Opening Generation')
     const { system, prompt, templateId } = await this.buildOpeningPrompts(
+      packId,
       wizardData,
       lorebookEntries,
       'json',
@@ -460,6 +468,7 @@ class ScenarioService {
    * @throws Error - Service not implemented during SDK migration
    */
   async refineOpening(
+    packId: string | undefined,
     wizardData: WizardData,
     currentOpening: GeneratedOpening,
     presetId?: string,
@@ -474,6 +483,7 @@ class ScenarioService {
 
     const presetConfig = settings.getPresetConfig(presetId || '', 'Opening Refinement')
     const { system, prompt, templateId } = await this.buildOpeningRefinementPrompts(
+      packId,
       wizardData,
       currentOpening,
       lorebookEntries,
@@ -496,6 +506,7 @@ class ScenarioService {
   }
 
   private async buildOpeningPrompts(
+    packId: string | undefined,
     wizardData: WizardData,
     lorebookEntries?: { name: string; type: string; description: string; hiddenInfo?: string }[],
     outputMode: 'json' | 'stream' = 'json',
@@ -544,7 +555,7 @@ class ScenarioService {
         ? ''
         : `\nDescribe the environment and situation. Do NOT write anything ${protagonistName} does, says, thinks, or perceives. End with a moment that invites action.`
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       genreLabel,
       mode,
@@ -571,6 +582,7 @@ class ScenarioService {
   }
 
   private async buildOpeningRefinementPrompts(
+    packId: string | undefined,
     wizardData: WizardData,
     currentOpening: GeneratedOpening,
     lorebookEntries?: { name: string; type: string; description: string; hiddenInfo?: string }[],
@@ -630,7 +642,7 @@ class ScenarioService {
       currentOpening.scene,
     ].join('\n')
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({
       genreLabel,
       mode,

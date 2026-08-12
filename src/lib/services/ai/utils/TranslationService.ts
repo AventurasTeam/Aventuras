@@ -105,7 +105,8 @@ export class TranslationService extends BaseAIService {
   async translateNarration(
     content: string,
     targetLanguage: string,
-    _isVisualProse: boolean = false,
+    _isVisualProse: boolean,
+    storyId: string | undefined,
   ): Promise<TranslationResult> {
     // Skip if target is English or content is empty
     if (targetLanguage === 'en' || !content.trim()) {
@@ -113,7 +114,7 @@ export class TranslationService extends BaseAIService {
     }
 
     try {
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
       const { system, user: prompt } = await ctx.render('translate-narration')
 
@@ -137,14 +138,18 @@ export class TranslationService extends BaseAIService {
   /**
    * Translate user input to English.
    */
-  async translateInput(content: string, sourceLanguage: string): Promise<TranslationResult> {
+  async translateInput(
+    content: string,
+    sourceLanguage: string,
+    storyId: string | undefined,
+  ): Promise<TranslationResult> {
     // Skip if source is English or content is empty
     if (sourceLanguage === 'en' || !content.trim()) {
       return { translatedContent: content }
     }
 
     try {
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({ sourceLanguage: this.getLanguageName(sourceLanguage), content })
       const { system, user: prompt } = await ctx.render('translate-input')
 
@@ -171,6 +176,7 @@ export class TranslationService extends BaseAIService {
   async translateUIElements(
     items: UITranslationItem[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<UITranslationItem[]> {
     if (items.length === 0) return []
     if (targetLanguage === 'en') return items
@@ -183,7 +189,7 @@ export class TranslationService extends BaseAIService {
           type: item.type,
         })),
       )
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), elementsJson })
       const { system, user: prompt } = await ctx.render('translate-ui')
 
@@ -208,6 +214,7 @@ export class TranslationService extends BaseAIService {
   async translateSuggestions<T extends { text: string; type?: string }>(
     suggestions: T[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<T[]> {
     if (suggestions.length === 0) return []
     if (targetLanguage === 'en') return suggestions
@@ -219,7 +226,7 @@ export class TranslationService extends BaseAIService {
           type: s.type,
         })),
       )
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), suggestionsJson })
       const { system, user: prompt } = await ctx.render('translate-suggestions')
 
@@ -249,6 +256,7 @@ export class TranslationService extends BaseAIService {
   async translateActionChoices<T extends { text: string; type?: string }>(
     choices: T[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<T[]> {
     if (choices.length === 0) return []
     if (targetLanguage === 'en') return choices
@@ -260,7 +268,7 @@ export class TranslationService extends BaseAIService {
           type: c.type,
         })),
       )
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), choicesJson })
       const { system, user: prompt } = await ctx.render('translate-action-choices')
 
@@ -289,13 +297,14 @@ export class TranslationService extends BaseAIService {
   async translateWizardContent(
     content: string,
     targetLanguage: string,
+    packId: string | undefined,
   ): Promise<TranslationResult> {
     if (targetLanguage === 'en' || !content.trim()) {
       return { translatedContent: content }
     }
 
     try {
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPackId(packId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content })
       const { system, user: prompt } = await ctx.render('translate-wizard-content')
 
@@ -322,6 +331,7 @@ export class TranslationService extends BaseAIService {
   async translateWizardBatch(
     fields: Record<string, string>,
     targetLanguage: string,
+    packId: string | undefined,
   ): Promise<Record<string, string>> {
     if (targetLanguage === 'en') {
       return fields
@@ -335,7 +345,7 @@ export class TranslationService extends BaseAIService {
     try {
       // Format as JSON object with field keys
       const fieldsJson = JSON.stringify(fields)
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPackId(packId)
       ctx.add({ targetLanguage: this.getLanguageName(targetLanguage), content: fieldsJson })
       const { system } = await ctx.render('translate-wizard-content')
 

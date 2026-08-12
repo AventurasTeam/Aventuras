@@ -39,6 +39,8 @@ export interface Tier3SelectionResult {
 }
 
 export interface Tier3SelectionRequest {
+  /** Story whose pack supplies the template; undefined only outside a story. */
+  storyId: string | undefined
   candidates: Tier3Candidate[]
   userInput: string
   recentEntries: StoryEntry[]
@@ -144,6 +146,7 @@ export function clearTier3SelectionCache(): void {
  * Returns `null` on failure — both callers treat that as "no Tier 3 entries".
  */
 export async function runTier3Selection({
+  storyId,
   candidates,
   userInput,
   recentEntries,
@@ -197,7 +200,7 @@ export async function runTier3Selection({
     )
     .join('\n')
 
-  const ctx = new ContextBuilder()
+  const ctx = await ContextBuilder.forPack(storyId)
   ctx.add({
     recentContent: recentContent(filteredRecent, recentEntriesCount, AS_PROSE, true),
     userInput,

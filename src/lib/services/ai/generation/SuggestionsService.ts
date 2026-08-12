@@ -39,14 +39,14 @@ export class SuggestionsService extends BaseAIService {
    * @param recentEntries - Recent story entries for context
    * @param activeThreads - Active story beats/threads
    * @param lorebookEntries - Optional lorebook entries for world context
-   * @param storyId - Story ID for ContextBuilder (optional, falls back to manual context)
+   * @param storyId - Story whose pack supplies the template; undefined only outside a story
    * @param latestNarrativeResponse - Latest generated narration (optional, used when entries are stale)
    */
   async generateSuggestions(
     recentEntries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
-    storyId?: string,
+    lorebookEntries: Entry[] | undefined,
+    storyId: string | undefined,
     latestNarrativeResponse?: string,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {

@@ -21,7 +21,7 @@ import { settings } from '$lib/stores/settings.svelte'
 import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
+import { resolveStylePrompt } from './stylePrompt'
 import { createLogger } from '$lib/log'
 
 const log = createLogger('InlineImageGen')
@@ -161,7 +161,7 @@ export class InlineImageGenerationService {
     }
 
     // Build full prompt with style
-    const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
+    const stylePrompt = await resolveStylePrompt(context.storyId, imageSettings.styleId)
     const fullPrompt = `${tag.prompt}. ${stylePrompt}`
 
     const { width, height } = expectedPixels(sizeToUse)
@@ -205,23 +205,6 @@ export class InlineImageGenerationService {
     ).catch((error) => {
       log('Async inline image generation failed', { imageId, error })
     })
-  }
-
-  /**
-   * Get the style prompt for the selected style ID.
-   * Image style templates are external (raw text) -- fetched directly from the database.
-   */
-  private async getStylePrompt(styleId: string): Promise<string> {
-    try {
-      const template = await database.getPackTemplate('default-pack', styleId)
-      if (template?.content) {
-        return template.content
-      }
-    } catch {
-      // Template not found, use fallback
-    }
-
-    return DEFAULT_FALLBACK_STYLE_PROMPT
   }
 
   /**

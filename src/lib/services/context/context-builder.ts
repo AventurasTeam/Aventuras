@@ -28,6 +28,48 @@ export class ContextBuilder {
   }
 
   /**
+   * Factory for services that populate their own context and need nothing from the story
+   * but the pack its templates come from. Resolves the pack and its variables; skips the
+   * entity loads `forStory` does.
+   *
+   * `storyId` is undefined only where no story exists yet, which resolves to the default
+   * pack. It is a required argument so that a caller which *has* a story cannot omit it
+   * by accident -- that omission renders the default pack's template for a story the user
+   * pointed at another pack, and nothing about the output says so.
+   *
+   * Never throws: a caller holds a template it must render, and several build their
+   * context outside the try that guards the model call. Losing the pack costs a
+   * customization; propagating the failure would cost the turn.
+   */
+  static async forPack(storyId: string | undefined): Promise<ContextBuilder> {
+    let packId = 'default-pack'
+    let storyVarValues: Record<string, string> | null = null
+
+    if (storyId) {
+      try {
+        packId = (await database.getStoryPackId(storyId)) || 'default-pack'
+        storyVarValues = await database.getStoryCustomVariables(storyId)
+      } catch (error) {
+        log('forPack: pack lookup failed, using default pack', { storyId, error })
+      }
+    }
+
+    const builder = await ContextBuilder.forPackId(packId)
+    if (storyVarValues) builder.add(storyVarValues)
+
+    return builder
+  }
+
+  /**
+   * Same, for the wizard and anywhere else holding a pack directly rather than a story.
+   */
+  static async forPackId(packId: string | undefined): Promise<ContextBuilder> {
+    const builder = new ContextBuilder(packId || 'default-pack')
+    await builder.loadCustomVariables()
+    return builder
+  }
+
+  /**
    * Convenience factory: create a ContextBuilder pre-populated from a story.
    * Loads story settings, protagonist, location, time, and pack custom variables.
    */

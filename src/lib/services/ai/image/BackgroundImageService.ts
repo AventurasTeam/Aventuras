@@ -21,6 +21,7 @@ export class BackgroundImageService extends BaseAIService {
   }
 
   async analyzeResponsesForBackgroundImage(
+    storyId: string | undefined,
     visibleEntries: StoryEntry[],
   ): Promise<BackgroundImageAnalysisResult> {
     log('analyzeResponsesForBackgroundImage called', {
@@ -40,7 +41,7 @@ export class BackgroundImageService extends BaseAIService {
     const previousResponse = narrationEntries[narrationEntries.length - 2]?.content
     const currentResponse = narrationEntries[narrationEntries.length - 1]?.content
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ previousResponse, currentResponse })
     const { system, user: prompt } = await ctx.render('background-image-prompt-analysis')
 

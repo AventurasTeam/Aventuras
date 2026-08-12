@@ -83,6 +83,7 @@ export function buildLoreManagementCallbacks(scope: LoreCallbackScope): LoreMana
     onQueryChapter: async (chapterNumber, question) => {
       assertScope(scope, `read chapter ${chapterNumber}`)
       return aiService.answerChapterQuestion(
+        scope.storyId,
         chapterNumber,
         question,
         story.currentBranchChapters,

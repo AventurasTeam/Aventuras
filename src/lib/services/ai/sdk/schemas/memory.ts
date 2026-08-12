@@ -23,7 +23,9 @@ export type ChapterAnalysis = z.infer<typeof chapterAnalysisSchema>
 
 export const chapterSummaryResultSchema = z.object({
   title: z.string().nullable().describe('Short evocative chapter title').optional(),
-  summary: z.string().describe('Concise 2-3 sentence summary of what happened'),
+  summary: z
+    .string()
+    .describe('A summary of what happened, follow the verbosity instructions in prompt.'),
   keywords: z.array(z.string()).describe('Key words for search'),
   characters: z.array(z.string()).describe('Character names mentioned'),
   locations: z.array(z.string()).describe('Location names mentioned'),

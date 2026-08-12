@@ -78,7 +78,11 @@
       log('Translating user input', {
         sourceLanguage: translationSettings.sourceLanguage,
       })
-      const result = await aiService.translateInput(content, translationSettings.sourceLanguage)
+      const result = await aiService.translateInput(
+        content,
+        translationSettings.sourceLanguage,
+        story.currentStory?.id,
+      )
       log('Input translated', {
         originalLength: content.length,
         translatedLength: result.translatedContent.length,
@@ -232,6 +236,7 @@
       runAgenticRetrieval: (options) =>
         aiService.runAgenticRetrieval({
           ...options,
+          storyId: story.currentStory?.id,
           getChapterEntries: story.getChapterEntries.bind(story),
           getUnchapterizedEntries: story.getUnchapterizedEntries.bind(story),
         }),
@@ -240,6 +245,7 @@
       // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
       runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
         aiService.runTimelineFill(
+          story.currentStory?.id,
           visibleEntries,
           chapters,
           story.getChapterEntries.bind(story),
@@ -248,6 +254,7 @@
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
+          story.currentStory?.id,
           chapterNumber,
           question,
           chapters,
@@ -294,7 +301,17 @@
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
       },
-      styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
+      styleReview: {
+        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount) =>
+          aiService.analyzeStyle(
+            story.currentStory?.id,
+            entries,
+            mode,
+            pov,
+            tense,
+            recentEntriesCount,
+          ),
+      },
     }
   }
 
@@ -686,6 +703,7 @@
             translationService
               .translateEntities(
                 {
+                  storyId: story.currentStory!.id,
                   classificationResult: {
                     newCharacters: event.result.entryUpdates.newCharacters,
                     newLocations: event.result.entryUpdates.newLocations,

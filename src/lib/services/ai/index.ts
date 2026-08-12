@@ -60,9 +60,9 @@ import { recentStoryBudgetChars } from './core/defaults'
 import { MIN_RECENT_ENTRIES_FOR_LORE, splitRecentTail } from './retrieval/recentTail'
 import { serviceFactory } from './core/factory'
 import {
-  DEFAULT_FALLBACK_STYLE_PROMPT,
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
+  resolveStylePrompt,
 } from './image'
 import type { InlineImageContext, ImageAnalysisContext } from './image'
 import { generateImage as registryGenerateImage } from './image/providers/registry'
@@ -188,6 +188,8 @@ interface WorldState extends WorldStateContext {
  * against shuffling them wrong was that two of the types happened to differ.
  */
 export interface AgenticRetrievalOptions {
+  /** Story whose pack supplies the template; undefined only outside a story. */
+  storyId: string | undefined
   userInput: string
   recentEntries: StoryEntry[]
   chapters: Chapter[]
@@ -334,10 +336,10 @@ class AIService {
   async generateSuggestions(
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
-    promptContext?: PromptContext,
-    latestNarrativeResponse?: string,
-    storyId?: string,
+    lorebookEntries: Entry[] | undefined,
+    promptContext: PromptContext | undefined,
+    latestNarrativeResponse: string | undefined,
+    storyId: string | undefined,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {
       entriesCount: entries.length,
@@ -364,10 +366,10 @@ class AIService {
     entries: StoryEntry[],
     worldState: WorldState,
     narrativeResponse: string,
-    lorebookEntries?: Entry[],
-    promptContext?: PromptContext,
-    pov?: 'first' | 'second' | 'third',
-    storyId?: string,
+    lorebookEntries: Entry[] | undefined,
+    promptContext: PromptContext | undefined,
+    pov: 'first' | 'second' | 'third' | undefined,
+    storyId: string | undefined,
   ): Promise<ActionChoicesResult> {
     log('generateActionChoices called', {
       entriesCount: entries.length,
@@ -420,6 +422,7 @@ class AIService {
    * Analyze narration entries for style issues.
    */
   async analyzeStyle(
+    storyId: string | undefined,
     entries: StoryEntry[],
     mode: StoryMode = 'adventure',
     pov?: POV,
@@ -427,13 +430,14 @@ class AIService {
     recentEntriesCount?: number,
   ): Promise<StyleReviewResult> {
     const service = serviceFactory.createStyleReviewerService()
-    return service.analyzeStyle(entries, mode, pov, tense, recentEntriesCount)
+    return service.analyzeStyle(storyId, entries, mode, pov, tense, recentEntriesCount)
   }
 
   /**
    * Analyze if a new chapter should be created.
    */
   async analyzeForChapter(
+    storyId: string | undefined,
     entries: StoryEntry[],
     lastChapterEndIndex: number,
     config: MemoryConfig,
@@ -444,6 +448,7 @@ class AIService {
   ): Promise<ChapterAnalysis> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.analyzeForChapter(
+      storyId,
       entries,
       lastChapterEndIndex,
       tokensOutsideBuffer,
@@ -457,6 +462,7 @@ class AIService {
    * Generate a summary and metadata for a chapter.
    */
   async summarizeChapter(
+    storyId: string | undefined,
     entries: StoryEntry[],
     previousChapters?: Chapter[],
     mode: StoryMode = 'adventure',
@@ -466,6 +472,7 @@ class AIService {
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
     return memoryService.summarizeChapter(
+      storyId,
       entries,
       previousChapters,
       mode,
@@ -479,6 +486,7 @@ class AIService {
    * Resummarize an existing chapter.
    */
   async resummarizeChapter(
+    storyId: string | undefined,
     chapter: Chapter,
     entries: StoryEntry[],
     allChapters: Chapter[],
@@ -488,21 +496,33 @@ class AIService {
     summaryDetail: SummaryDetail = 'auto',
   ): Promise<ChapterSummaryResult> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.summarizeChapter(entries, allChapters, mode, pov, tense, summaryDetail)
+    return memoryService.summarizeChapter(
+      storyId,
+      entries,
+      allChapters,
+      mode,
+      pov,
+      tense,
+      summaryDetail,
+    )
   }
 
   /**
    * Estimate in-story time elapsed during a chapter, from its summary alone.
    */
-  async estimateChapterTimeline(summary: string): Promise<ChapterTimelineEstimate> {
+  async estimateChapterTimeline(
+    storyId: string | undefined,
+    summary: string,
+  ): Promise<ChapterTimelineEstimate> {
     const memoryService = serviceFactory.createMemoryService()
-    return memoryService.estimateChapterTimeline(summary)
+    return memoryService.estimateChapterTimeline(storyId, summary)
   }
 
   /**
    * Decide which chapters are relevant for the current context.
    */
   async decideRetrieval(
+    storyId: string | undefined,
     userInput: string,
     recentEntries: StoryEntry[],
     chapters: Chapter[],
@@ -517,7 +537,7 @@ class AIService {
       recentNarrative: recentContent(recentEntries, recentEntries.length, AS_HAYSTACK),
       availableChapters: chapters,
     }
-    return memoryService.decideRetrieval(context, mode, pov, tense)
+    return memoryService.decideRetrieval(storyId, context, mode, pov, tense)
   }
 
   /**
@@ -540,8 +560,8 @@ class AIService {
     worldState: WorldState,
     userInput: string,
     recentEntries: StoryEntry[],
-    config?: Partial<WorldStateInjectorConfig>,
-    options: WorldStateInjectorOptions = {},
+    config: Partial<WorldStateInjectorConfig> | undefined,
+    options: WorldStateInjectorOptions,
   ): Promise<WorldStateInjectionResult> {
     log('buildWorldStateContext called', {
       userInputLength: userInput.length,
@@ -575,7 +595,7 @@ class AIService {
     entries: Entry[],
     userInput: string,
     recentStoryEntries: StoryEntry[],
-    options: EntryRetrievalOptions = {},
+    options: EntryRetrievalOptions,
   ): Promise<EntryRetrievalResult> {
     log('getRelevantLorebookEntries called', {
       totalEntries: entries.length,
@@ -732,6 +752,7 @@ class AIService {
 
     // Build context for the service
     const context: AgenticRetrievalContext = {
+      storyId: options.storyId,
       userInput,
       // Build recent narrative from entries
       recentNarrative: recentContent(recentEntries, recentEntries.length, AS_PROSE),
@@ -770,6 +791,7 @@ class AIService {
    * Run timeline fill to gather context from past chapters.
    */
   async runTimelineFill(
+    storyId: string | undefined,
     visibleEntries: StoryEntry[],
     chapters: Chapter[],
     getChapterEntries: (chapter: Chapter) => StoryEntry[],
@@ -786,6 +808,7 @@ class AIService {
 
     const timelineFillService = serviceFactory.createTimelineFillService()
     return timelineFillService.runTimelineFill(
+      storyId,
       visibleEntries,
       chapters,
       getChapterEntries,
@@ -798,6 +821,7 @@ class AIService {
    * Answer a specific chapter question.
    */
   async answerChapterQuestion(
+    storyId: string | undefined,
     chapterNumber: number,
     question: string,
     chapters: Chapter[],
@@ -814,6 +838,7 @@ class AIService {
 
     const chapterQueryService = serviceFactory.createChapterQueryService()
     const answer = await chapterQueryService.answerQuestion(
+      storyId,
       question,
       chapters,
       [chapterNumber],
@@ -904,10 +929,11 @@ class AIService {
       .map((c) => c.name)
 
     // Build style prompt
-    const stylePrompt = await this.getStylePrompt(imageSettings.styleId)
+    const stylePrompt = await resolveStylePrompt(context.storyId, imageSettings.styleId)
 
     // Build analysis context
     const analysisContext: ImageAnalysisContext = {
+      storyId: context.storyId,
       narrativeResponse: context.narrativeResponse,
       userAction: context.userAction,
       presentCharacters: context.presentCharacters.map((c) => ({
@@ -1055,7 +1081,7 @@ class AIService {
     }
 
     // Build full prompt with style
-    const stylePrompt = await this.getStylePrompt(styleId)
+    const stylePrompt = await resolveStylePrompt(storyId, styleId)
     const fullPrompt = `${scene.prompt}. ${stylePrompt}`
 
     const { width, height } = expectedPixels(sizeToUse)
@@ -1202,7 +1228,7 @@ class AIService {
     let result: BackgroundImageAnalysisResult | null = null
     try {
       service = serviceFactory.createBackgroundImageService()
-      result = await service.analyzeResponsesForBackgroundImage(visibleEntries)
+      result = await service.analyzeResponsesForBackgroundImage(storyId, visibleEntries)
     } catch (error) {
       emitBackgroundImageAnalysisFailed()
       log('Background image analysis failed', error)
@@ -1233,23 +1259,6 @@ class AIService {
     }
   }
 
-  /**
-   * Get the style prompt for the selected style ID.
-   * Image style templates are external (raw text) -- fetched directly from the database.
-   */
-  private async getStylePrompt(styleId: string): Promise<string> {
-    try {
-      const template = await database.getPackTemplate('default-pack', styleId)
-      if (template?.content) {
-        return template.content
-      }
-    } catch {
-      // Template not found, use fallback
-    }
-
-    return DEFAULT_FALLBACK_STYLE_PROMPT
-  }
-
   // ===== Translation Methods =====
 
   /**
@@ -1258,18 +1267,23 @@ class AIService {
   async translateNarration(
     content: string,
     targetLanguage: string,
-    isVisualProse: boolean = false,
+    isVisualProse: boolean,
+    storyId: string | undefined,
   ): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('narration')
-    return service.translateNarration(content, targetLanguage, isVisualProse)
+    return service.translateNarration(content, targetLanguage, isVisualProse, storyId)
   }
 
   /**
    * Translate user input to English.
    */
-  async translateInput(content: string, sourceLanguage: string): Promise<TranslationResult> {
+  async translateInput(
+    content: string,
+    sourceLanguage: string,
+    storyId: string | undefined,
+  ): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('input')
-    return service.translateInput(content, sourceLanguage)
+    return service.translateInput(content, sourceLanguage, storyId)
   }
 
   /**
@@ -1278,9 +1292,10 @@ class AIService {
   async translateUIElements(
     items: UITranslationItem[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<UITranslationItem[]> {
     const service = serviceFactory.createTranslationService('ui')
-    return service.translateUIElements(items, targetLanguage)
+    return service.translateUIElements(items, targetLanguage, storyId)
   }
 
   /**
@@ -1289,9 +1304,10 @@ class AIService {
   async translateSuggestions<T extends { text: string; type?: string }>(
     suggestions: T[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<T[]> {
     const service = serviceFactory.createTranslationService('suggestions')
-    return service.translateSuggestions(suggestions, targetLanguage)
+    return service.translateSuggestions(suggestions, targetLanguage, storyId)
   }
 
   /**
@@ -1300,9 +1316,10 @@ class AIService {
   async translateActionChoices<T extends { text: string; type?: string }>(
     choices: T[],
     targetLanguage: string,
+    storyId: string | undefined,
   ): Promise<T[]> {
     const service = serviceFactory.createTranslationService('actionChoices')
-    return service.translateActionChoices(choices, targetLanguage)
+    return service.translateActionChoices(choices, targetLanguage, storyId)
   }
 
   /**
@@ -1311,9 +1328,10 @@ class AIService {
   async translateWizardContent(
     content: string,
     targetLanguage: string,
+    packId: string | undefined,
   ): Promise<TranslationResult> {
     const service = serviceFactory.createTranslationService('wizard')
-    return service.translateWizardContent(content, targetLanguage)
+    return service.translateWizardContent(content, targetLanguage, packId)
   }
 
   /**
@@ -1322,9 +1340,10 @@ class AIService {
   async translateWizardBatch(
     fields: Record<string, string>,
     targetLanguage: string,
+    packId: string | undefined,
   ): Promise<Record<string, string>> {
     const service = serviceFactory.createTranslationService('wizard')
-    return service.translateWizardBatch(fields, targetLanguage)
+    return service.translateWizardBatch(fields, targetLanguage, packId)
   }
 }
 
