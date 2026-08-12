@@ -29,13 +29,21 @@ import { markExisting, mergePages, type AssistListItem } from './assist-list-log
 
 const GUIDANCE_MAX_LENGTH = 200
 
+/**
+ * The prose on screen plus where it came from. `seeded` marks the field's own
+ * committed value rather than a generated candidate, and has to survive every
+ * round-trip that can bounce back to it — otherwise cancelling a refine or a
+ * regenerate lands on committed prose wearing `Discard` and `Use this`.
+ */
+type Preview<T> = { value: T; seeded?: boolean }
+
 type AssistState<T> =
   | { kind: 'idle' }
   | { kind: 'not-configured' }
   | { kind: 'guidance' }
-  | { kind: 'loading'; modelId: string; from?: T; mode: 'generate' | 'refine' }
-  | { kind: 'result'; value: T }
-  | { kind: 'refine'; value: T }
+  | { kind: 'loading'; modelId: string; from?: Preview<T>; mode: 'generate' | 'refine' }
+  | ({ kind: 'result' } & Preview<T>)
+  | ({ kind: 'refine' } & Preview<T>)
   | { kind: 'failure'; detail: string; retry: () => void }
 
 type AiAssistCommonProps = {
@@ -65,6 +73,12 @@ type AiAssistProseProps<T> = AiAssistCommonProps & {
   run: AssistRun<T>
   getProse: (value: T) => string
   onUse: (value: T) => void
+  /**
+   * The field's already-committed value. When it carries prose, the trigger
+   * opens straight into a preview of it as the refine / regenerate base
+   * (wizard.md → Committed prose) rather than into the guidance form.
+   */
+  committed?: T
   /**
    * Prose-result refine (wizard.md → Refine). Cumulative: each call receives the
    * CURRENT preview plus the user's instruction, so repeated refines stack.
@@ -168,13 +182,26 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (!next) resetOnClose()
   }
 
+  // The committed value only counts as a seed once it actually carries prose —
+  // an empty field has nothing to refine and belongs on the generate path.
+  function seedValue(): T | undefined {
+    if (props.result !== 'prose' || props.committed === undefined) return undefined
+    return props.getProse(props.committed).trim().length > 0 ? props.committed : undefined
+  }
+
   function handleTriggerPress() {
     if (disabled) return
     if (resolveModelId() == null) {
       setAssist({ kind: 'not-configured' })
-    } else {
+      setOpen(true)
+      return
+    }
+    const seed = seedValue()
+    if (seed === undefined) {
       setGuidanceText('')
       setAssist({ kind: 'guidance' })
+    } else {
+      setAssist({ kind: 'result', value: seed, seeded: true })
     }
     setOpen(true)
   }
@@ -184,7 +211,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // the `from` value to fall back to on cancel, and the retry to attach on failure.
   async function runCall(
     modelId: string,
-    from: T | undefined,
+    from: Preview<T> | undefined,
     mode: 'generate' | 'refine',
     call: (signal: AbortSignal) => Promise<GenerateStructuredResult<T>>,
     retry: () => void,
@@ -224,7 +251,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     // 'aborted' — whichever action triggered the abort already set its own state.
   }
 
-  async function runGenerate(guidance: string, from?: T) {
+  async function runGenerate(guidance: string, from?: Preview<T>) {
     const modelId = resolveModelId()
     if (modelId == null) {
       setAssist({ kind: 'not-configured' })
@@ -248,10 +275,20 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   }
   // Regenerate/Generate more run on top of a result the user can still want
   // back; cancelling must restore it rather than drop to the guidance form.
+  // A seeded preview never collected guidance, so its Regenerate has to ask for
+  // it rather than re-rolling on whatever an earlier open left in the ref — the
+  // user would never see the text that shaped the take they got back.
+  const handleRegenerateFromSeed = () => {
+    setGuidanceText('')
+    setAssist({ kind: 'guidance' })
+  }
   const handleRegenerate = () =>
-    void runGenerate(lastGuidanceRef.current, assist.kind === 'result' ? assist.value : undefined)
+    void runGenerate(
+      lastGuidanceRef.current,
+      assist.kind === 'result' ? { value: assist.value, seeded: assist.seeded } : undefined,
+    )
 
-  async function runRefine(current: T, instruction: string) {
+  async function runRefine(base: Preview<T>, instruction: string) {
     const refineFn = props.result === 'prose' ? props.refine : undefined
     if (refineFn == null) return
     const modelId = resolveModelId()
@@ -262,10 +299,10 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
     await runCall(
       modelId,
-      current,
+      base,
       'refine',
-      (signal) => refineFn(current, instruction, signal),
-      () => void runRefine(current, instruction),
+      (signal) => refineFn(base.value, instruction, signal),
+      () => void runRefine(base, instruction),
     )
   }
 
@@ -280,7 +317,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     appendRef.current = false
     setAssist(
       assist.kind === 'loading' && assist.from !== undefined
-        ? { kind: 'result', value: assist.from }
+        ? { kind: 'result', ...assist.from }
         : { kind: 'guidance' },
     )
   }
@@ -487,32 +524,46 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <Text size="sm">{prose}</Text>
           </Scroller>
         </View>
+        {/* A seeded preview is the field's own committed prose, so it has
+            nothing to discard and nothing to accept — only the two ways
+            forward. Both produce a candidate, which restores the full row. */}
         <View className="flex-row flex-wrap justify-end gap-2">
           <Button variant="ghost" onPress={closeOverlay}>
-            <Text>{t('wizard:aiAssist.actions.discard')}</Text>
+            <Text>
+              {t(
+                assist.seeded
+                  ? 'wizard:aiAssist.actions.cancel'
+                  : 'wizard:aiAssist.actions.discard',
+              )}
+            </Text>
           </Button>
           {props.refine != null ? (
             <Button
               variant="secondary"
               onPress={() => {
                 setRefineText('')
-                setAssist({ kind: 'refine', value: assist.value })
+                setAssist({ kind: 'refine', value: assist.value, seeded: assist.seeded })
               }}
             >
               <Text>{t('wizard:aiAssist.actions.refine')}</Text>
             </Button>
           ) : null}
-          <Button variant="secondary" onPress={handleRegenerate}>
+          <Button
+            variant="secondary"
+            onPress={assist.seeded ? handleRegenerateFromSeed : handleRegenerate}
+          >
             <Text>{t('wizard:aiAssist.actions.regenerate')}</Text>
           </Button>
-          <Button
-            onPress={() => {
-              props.onUse(assist.value)
-              closeOverlay()
-            }}
-          >
-            <Text>{t('wizard:aiAssist.actions.useThis')}</Text>
-          </Button>
+          {assist.seeded ? null : (
+            <Button
+              onPress={() => {
+                props.onUse(assist.value)
+                closeOverlay()
+              }}
+            >
+              <Text>{t('wizard:aiAssist.actions.useThis')}</Text>
+            </Button>
+          )}
         </View>
       </View>
     )
@@ -641,7 +692,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         return renderProseResult()
 
       case 'refine': {
-        const submit = () => void runRefine(assist.value, refineText)
+        const base = { value: assist.value, seeded: assist.seeded }
+        const submit = () => void runRefine(base, refineText)
         return renderPromptForm({
           label: t('wizard:aiAssist.refine.label'),
           value: refineText,
@@ -651,10 +703,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
           onSubmit: submit,
           actions: (
             <View className="flex-row justify-end gap-2">
-              <Button
-                variant="ghost"
-                onPress={() => setAssist({ kind: 'result', value: assist.value })}
-              >
+              <Button variant="ghost" onPress={() => setAssist({ kind: 'result', ...base })}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
               <Button onPress={submit}>

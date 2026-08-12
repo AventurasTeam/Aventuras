@@ -85,6 +85,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
             guidancePlaceholder={t('wizard:opening.opening.guidance')}
             run={assist?.opening ?? runOpeningAssist}
             refine={assist?.refineOpening ?? refineOpeningAssist}
+            committed={opening}
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => v.content}
@@ -152,6 +153,7 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
               guidancePlaceholder={t('wizard:opening.description.guidance')}
               run={assist?.description ?? runDescriptionAssist}
               refine={assist?.refineDescription ?? refineDescriptionAssist}
+              committed={{ description: definition.description }}
               resolveModelId={resolveModelId}
               result="prose"
               getProse={(v) => v.description}

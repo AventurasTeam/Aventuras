@@ -601,10 +601,9 @@ prose does **not** clear metadata refs — refs stay intact (user
 might tweak prose without invalidating cast/location grounding).
 For fresh metadata, user regenerates via `✨`.
 
-`✨` button stays available in committed state — regenerate /
-refine entry point. Click on existing committed prose →
-confirm-on-replace if non-empty (consistent with genre/tone
-replace pattern).
+`✨` stays available in the committed state as the regenerate /
+refine entry point, per
+[Committed prose as the base](#committed-prose-as-the-base).
 
 ### AI-assist for opening — structured output
 
@@ -884,6 +883,28 @@ Cumulative — user can refine multiple times. Each refine is its
 own wizard-assist call with current preview + refinement
 instructions. Refine doesn't apply to list or chips
 (`Regenerate` suffices).
+
+### Committed prose as the base
+
+Every prose field keeps its `✨` live after the field has content,
+and pressing it opens on that content as a **seeded preview**
+rather than on the guidance form. A seeded preview's action row is
+`Cancel / Refine… / Regenerate` — the prose on screen is already
+the field's value, so there is nothing to discard and nothing to
+accept yet.
+
+- `Refine…` iterates on the committed prose, exactly as it does on
+  a generated preview.
+- `Regenerate` collects fresh guidance first: a seeded preview
+  never gathered any, so re-rolling silently would run on guidance
+  the user cannot see.
+
+Either action produces a candidate, which restores the full
+`Discard / Refine… / Regenerate / Use this` row. Accepting a
+candidate over a non-empty field confirms-on-replace, consistent
+with the genre / tone replace pattern. An empty field (whitespace
+included) has nothing to refine and opens the guidance form as
+usual.
 
 ### Failure
 

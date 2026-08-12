@@ -165,6 +165,11 @@ export const AiSuggestOverNonEmptyToneAlsoTriggersConfirm: Story = {
   ),
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Suggest tone' }))
+    // A non-empty tone opens seeded on its own committed prose: nothing to
+    // accept yet, so reaching a replaceable candidate goes through Regenerate.
+    expect(await screen.findByRole('button', { name: 'Regenerate' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Use this' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(await screen.findByText(/Grim and unsparing/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Use this' }))

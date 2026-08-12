@@ -138,6 +138,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             guidancePlaceholder={t('wizard:world.genre.guidance')}
             run={assist?.genre ?? runGenreAssist}
             refine={assist?.genreRefine ?? refineGenreAssist}
+            committed={definition.genre}
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => `${v.label}\n\n${v.promptBody}`}
@@ -179,6 +180,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             guidancePlaceholder={t('wizard:world.tone.guidance')}
             run={assist?.tone ?? runToneAssist}
             refine={assist?.toneRefine ?? refineToneAssist}
+            committed={definition.tone}
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => `${v.label}\n\n${v.promptBody}`}
@@ -205,6 +207,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             guidancePlaceholder={t('wizard:world.setting.guidance')}
             run={assist?.setting ?? runSettingAssist}
             refine={assist?.settingRefine ?? refineSettingAssist}
+            committed={{ setting: definition.setting }}
             resolveModelId={resolveModelId}
             result="prose"
             getProse={(v) => v.setting}

@@ -138,28 +138,31 @@ type ProseDemoProps = {
   ) => Promise<GenerateStructuredResult<DescriptionValue>>
   onSetup: () => void
   onUse: (value: DescriptionValue) => void
+  /** Pre-existing field content — drives the seeded-preview entry point. */
+  committed?: DescriptionValue
 }
 
 // Shared demo for every prose-result scenario (guidance / loading / result /
 // failure / not-configured) — result presentation only diverges at the
 // 'result' state, so one wrapper covers the rest of the state machine too.
-function ProseDemo({ resolveModelId, run, refine, onSetup, onUse }: ProseDemoProps) {
-  const [committed, setCommitted] = useState('(none)')
+function ProseDemo({ resolveModelId, run, refine, onSetup, onUse, committed }: ProseDemoProps) {
+  const [lastUsed, setLastUsed] = useState('(none)')
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
       <Text size="sm" variant="muted">
-        Committed: {committed}
+        Committed: {lastUsed}
       </Text>
       <AiAssist
         ariaLabel="Suggest description"
         guidancePlaceholder='e.g. "a tense heist thriller"'
         run={run}
         refine={refine}
+        committed={committed}
         resolveModelId={resolveModelId}
         result="prose"
         getProse={(v) => v.description}
         onUse={(v) => {
-          setCommitted(v.description)
+          setLastUsed(v.description)
           onUse(v)
         }}
         onSetup={onSetup}
@@ -507,6 +510,83 @@ export const ProseResult_RefineLoadingKeepsRefineForm: Story = {
     // an earlier, different call that the user is not currently answering.
     expect(screen.getByPlaceholderText('e.g. make it darker')).toHaveValue('darker')
     expect(screen.queryByPlaceholderText('e.g. "a tense heist thriller"')).not.toBeInTheDocument()
+  },
+}
+
+const COMMITTED = { description: 'The prose already sitting in the field.' }
+
+export const Committed_SeedsPreviewInsteadOfGuidance: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'should not be reached' })}
+      refine={neverResolvingRefine<DescriptionValue>()}
+      committed={COMMITTED}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+
+    // The committed prose IS the preview, so there is no guidance form to fill
+    // and nothing to accept or throw away — only the two ways forward.
+    expect(await screen.findByText(COMMITTED.description)).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('e.g. "a tense heist thriller"')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refine…' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Regenerate' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Use this' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
+  },
+}
+
+export const Committed_EmptyStillOpensGuidance: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'A generated take.' })}
+      committed={{ description: '   ' }}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    // Whitespace is not content: an empty field has nothing to refine, so the
+    // seed is refused and the generate path runs as if no committed prop existed.
+    expect(await screen.findByPlaceholderText('e.g. "a tense heist thriller"')).toBeInTheDocument()
+  },
+}
+
+const seededRefineCalls: { current: DescriptionValue; instruction: string }[] = []
+export const Committed_RefineBuildsOnCommittedProse: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'should not be reached' })}
+      refine={async (current, instruction) => {
+        seededRefineCalls.push({ current, instruction })
+        return { status: 'ok', value: { description: 'The refined take.' } }
+      }}
+      committed={COMMITTED}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    seededRefineCalls.length = 0
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Refine…' }))
+    await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'darker')
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+
+    // The committed prose is the refine base — this is the entry point canon
+    // names for iterating on prose that is already in the field.
+    expect(await screen.findByText('The refined take.')).toBeInTheDocument()
+    expect(seededRefineCalls).toEqual([{ current: COMMITTED, instruction: 'darker' }])
+    // A candidate exists now, so the accept/reject actions come back.
+    expect(screen.getByRole('button', { name: 'Use this' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument()
   },
 }
 
