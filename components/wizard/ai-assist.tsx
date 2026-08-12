@@ -33,7 +33,7 @@ type AssistState<T> =
   | { kind: 'idle' }
   | { kind: 'not-configured' }
   | { kind: 'guidance' }
-  | { kind: 'loading'; modelId: string; from?: T }
+  | { kind: 'loading'; modelId: string; from?: T; mode: 'generate' | 'refine' }
   | { kind: 'result'; value: T }
   | { kind: 'refine'; value: T }
   | { kind: 'failure'; detail: string; retry: () => void }
@@ -185,6 +185,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   async function runCall(
     modelId: string,
     from: T | undefined,
+    mode: 'generate' | 'refine',
     call: (signal: AbortSignal) => Promise<GenerateStructuredResult<T>>,
     retry: () => void,
   ) {
@@ -192,7 +193,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     const controller = new AbortController()
     abortRef.current = controller
     const seq = ++requestSeqRef.current
-    setAssist({ kind: 'loading', modelId, from })
+    setAssist({ kind: 'loading', modelId, from, mode })
 
     // 'loading' is already set, and the runners are not async — an unresolved
     // provider endpoint or an unregistered template id throws synchronously out
@@ -238,7 +239,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         ? (signal: AbortSignal) => props.run(guidance, signal, exclude)
         : (signal: AbortSignal) => props.run(guidance, signal)
 
-    await runCall(modelId, from, call, () => void runGenerate(guidance, from))
+    await runCall(modelId, from, 'generate', call, () => void runGenerate(guidance, from))
   }
 
   const handleGenerate = () => {
@@ -262,6 +263,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     await runCall(
       modelId,
       current,
+      'refine',
       (signal) => refineFn(current, instruction, signal),
       () => void runRefine(current, instruction),
     )
@@ -522,6 +524,60 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // to content, so there is nothing to push against and this collapses.
   const actionSpacer = isPhone ? <View className="flex-1" /> : null
 
+  const loadingActions = (
+    <View className="flex-row justify-end">
+      <Button variant="secondary" onPress={handleCancelLoading}>
+        <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+      </Button>
+    </View>
+  )
+
+  // Guidance and refine are the same surface — a labelled field over an action
+  // row — differing only in which text they collect and where cancelling goes.
+  function renderPromptForm(opts: {
+    label: string
+    value: string
+    onChangeText: (next: string) => void
+    placeholder?: string
+    /** Model id while this form's own call is in flight; null when idle. */
+    loadingModelId: string | null
+    onSubmit?: () => void
+    actions: ReactNode
+  }): ReactNode {
+    const idle = opts.loadingModelId == null
+    return (
+      <View className={cn('gap-3', isPhone && 'flex-1')}>
+        <View className="gap-1">
+          <Text size="sm" variant="muted">
+            {opts.label}
+          </Text>
+          <Input
+            value={opts.value}
+            onChangeText={opts.onChangeText}
+            placeholder={opts.placeholder}
+            maxLength={GUIDANCE_MAX_LENGTH}
+            aria-label={opts.label}
+            editable={idle}
+            showSoftInputOnFocus={idle}
+            // Guarded: while loading the input is read-only but may still hold
+            // focus, and Enter would abort-and-restart the run.
+            onSubmitEditing={idle ? opts.onSubmit : undefined}
+          />
+        </View>
+        {idle ? null : (
+          <View className="flex-row items-center gap-2">
+            <Spinner size="sm" />
+            <Text size="sm" variant="muted">
+              {t('wizard:aiAssist.loading', { model: opts.loadingModelId })}
+            </Text>
+          </View>
+        )}
+        {actionSpacer}
+        {opts.actions}
+      </View>
+    )
+  }
+
   function renderBody(): ReactNode {
     switch (assist.kind) {
       case 'idle':
@@ -543,80 +599,57 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
           </View>
         )
 
+      // A form stays mounted through its own loading pass rather than being
+      // replaced by a bare spinner: the text that started the call stays
+      // legible, and the surface keeps the shape the user was just looking at.
       case 'guidance':
-      // Loading keeps the guidance form rather than replacing it. Swapping to a
-      // spinner alone left the sheet holding half the content at the same
-      // detent, which reads as a broken surface rather than a working one — and
-      // the guidance stays legible while the call it started runs.
       case 'loading':
-        return (
-          <View className={cn('gap-3', isPhone && 'flex-1')}>
-            <View className="gap-1">
-              <Text size="sm" variant="muted">
-                {t('wizard:aiAssist.guidance.label')}
-              </Text>
-              <Input
-                value={guidanceText}
-                onChangeText={setGuidanceText}
-                placeholder={guidancePlaceholder}
-                maxLength={GUIDANCE_MAX_LENGTH}
-                aria-label={t('wizard:aiAssist.guidance.label')}
-                editable={assist.kind === 'guidance'}
-                showSoftInputOnFocus={assist.kind === 'guidance'}
-                // Guarded: while loading the input is read-only but may still
-                // hold focus, and Enter would abort-and-restart the run.
-                onSubmitEditing={assist.kind === 'guidance' ? handleGenerate : undefined}
-              />
-            </View>
-            {assist.kind === 'loading' ? (
-              <View className="flex-row items-center gap-2">
-                <Spinner size="sm" />
-                <Text size="sm" variant="muted">
-                  {t('wizard:aiAssist.loading', { model: assist.modelId })}
-                </Text>
-              </View>
-            ) : null}
-            {actionSpacer}
-            {assist.kind === 'loading' ? (
-              <View className="flex-row justify-end">
-                <Button variant="secondary" onPress={handleCancelLoading}>
-                  <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
-                </Button>
-              </View>
-            ) : (
-              <View className="flex-row justify-end gap-2">
-                <Button variant="ghost" onPress={closeOverlay}>
-                  <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
-                </Button>
-                <Button onPress={handleGenerate}>
-                  <Text>{t('wizard:aiAssist.actions.generate')}</Text>
-                </Button>
-              </View>
-            )}
-          </View>
-        )
+        return assist.kind === 'loading' && assist.mode === 'refine'
+          ? renderPromptForm({
+              label: t('wizard:aiAssist.refine.label'),
+              value: refineText,
+              onChangeText: setRefineText,
+              placeholder: t('wizard:aiAssist.refine.placeholder'),
+              loadingModelId: assist.modelId,
+              actions: loadingActions,
+            })
+          : renderPromptForm({
+              label: t('wizard:aiAssist.guidance.label'),
+              value: guidanceText,
+              onChangeText: setGuidanceText,
+              placeholder: guidancePlaceholder,
+              loadingModelId: assist.kind === 'loading' ? assist.modelId : null,
+              onSubmit: handleGenerate,
+              actions:
+                assist.kind === 'loading' ? (
+                  loadingActions
+                ) : (
+                  <View className="flex-row justify-end gap-2">
+                    <Button variant="ghost" onPress={closeOverlay}>
+                      <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
+                    </Button>
+                    <Button onPress={handleGenerate}>
+                      <Text>{t('wizard:aiAssist.actions.generate')}</Text>
+                    </Button>
+                  </View>
+                ),
+            })
 
       case 'result':
         if (props.result === 'list') return renderListResult()
         if (props.result === 'chips') return renderChipsResult()
         return renderProseResult()
 
-      case 'refine':
-        return (
-          <View className="gap-3">
-            <View className="gap-1">
-              <Text size="sm" variant="muted">
-                {t('wizard:aiAssist.refine.label')}
-              </Text>
-              <Input
-                value={refineText}
-                onChangeText={setRefineText}
-                placeholder={t('wizard:aiAssist.refine.placeholder')}
-                maxLength={GUIDANCE_MAX_LENGTH}
-                aria-label={t('wizard:aiAssist.refine.label')}
-                onSubmitEditing={() => void runRefine(assist.value, refineText)}
-              />
-            </View>
+      case 'refine': {
+        const submit = () => void runRefine(assist.value, refineText)
+        return renderPromptForm({
+          label: t('wizard:aiAssist.refine.label'),
+          value: refineText,
+          onChangeText: setRefineText,
+          placeholder: t('wizard:aiAssist.refine.placeholder'),
+          loadingModelId: null,
+          onSubmit: submit,
+          actions: (
             <View className="flex-row justify-end gap-2">
               <Button
                 variant="ghost"
@@ -624,12 +657,13 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               >
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
-              <Button onPress={() => void runRefine(assist.value, refineText)}>
+              <Button onPress={submit}>
                 <Text>{t('wizard:aiAssist.actions.refine')}</Text>
               </Button>
             </View>
-          </View>
-        )
+          ),
+        })
+      }
 
       case 'failure':
         return (
@@ -668,10 +702,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
   const title = `✨ ${ariaLabel}`
 
-  // Guidance and loading are a field and a button; only a preview earns the
+  // Guidance and refine are a field and a button; only a preview earns the
   // taller detent. Growing on arrival beats reserving the space up front.
-  const sheetSize =
-    assist.kind === 'result' || assist.kind === 'refine' ? ('medium' as const) : ('short' as const)
+  const sheetSize = assist.kind === 'result' ? ('medium' as const) : ('short' as const)
 
   // Sheet and Dialog are both @rn-primitives/dialog Roots, so one controlled
   // `open` drives either branch and the trigger sits outside both. The wrapping

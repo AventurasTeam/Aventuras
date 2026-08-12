@@ -478,6 +478,38 @@ export const ProseResult_CancelRefineKeepsPreview: Story = {
   },
 }
 
+export const ProseResult_RefineLoadingKeepsRefineForm: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'The original generated take.' })}
+      refine={neverResolvingRefine<DescriptionValue>()}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.type(
+      await screen.findByPlaceholderText('e.g. "a tense heist thriller"'),
+      'moody',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Generate' }))
+    expect(await screen.findByText('The original generated take.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    await userEvent.type(await screen.findByPlaceholderText('e.g. make it darker'), 'darker')
+    await userEvent.click(screen.getByRole('button', { name: 'Refine…' }))
+    expect(await screen.findByRole('progressbar', { name: 'Loading' })).toBeInTheDocument()
+
+    // An in-flight refine keeps the instruction that started it on screen.
+    // Rendering the generate form instead would surface 'moody' — guidance from
+    // an earlier, different call that the user is not currently answering.
+    expect(screen.getByPlaceholderText('e.g. make it darker')).toHaveValue('darker')
+    expect(screen.queryByPlaceholderText('e.g. "a tense heist thriller"')).not.toBeInTheDocument()
+  },
+}
+
 const regenerateGuidanceCalls: string[] = []
 export const ProseResult_RegeneratePreservesGuidance: Story = {
   render: () => (
