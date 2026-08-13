@@ -224,4 +224,6 @@ export type {
   WizardLocationDraft,
   WizardItemDraft,
   WizardFactionDraft,
+  WizardCastDraftPatch,
+  WizardCastDraftByKind,
 } from './wizard-sessions/working-state'

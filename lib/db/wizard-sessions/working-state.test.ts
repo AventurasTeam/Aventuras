@@ -35,6 +35,19 @@ describe('wizardWorkingStateSchema', () => {
     a.opening.sceneEntities.push('entity_1')
     expect(b.definition.worldTimeOrigin).toEqual({})
     expect(b.opening.sceneEntities).toEqual([])
+
+    const c = emptyCastDraft('character', 'char_1')
+    const d = emptyCastDraft('character', 'char_2')
+    expect(c.visual).not.toBe(d.visual)
+    expect(c.traits).not.toBe(d.traits)
+    expect(c.tags).not.toBe(d.tags)
+
+    c.visual.physique = 'tall'
+    c.traits.push('bold')
+    c.tags.push('lead')
+    expect(d.visual.physique).toBe('')
+    expect(d.traits).toEqual([])
+    expect(d.tags).toEqual([])
   })
 })
 
@@ -86,17 +99,20 @@ describe('cast drafts', () => {
   })
 
   it('emptyCastDraft fills per-kind defaults', () => {
-    const char = emptyCastDraft('character', 'char_1')
-    expect(char).toMatchObject({
+    // Character is the widest kind — covers every shared field plus the
+    // nested visual object — so toEqual here also pins the shared columns.
+    expect(emptyCastDraft('character', 'char_1')).toEqual({
       kind: 'character',
       id: 'char_1',
       name: '',
+      description: '',
       status: 'active',
+      voice: '',
       traits: [],
       drives: [],
-      visual: { physique: '', distinguishing: '' },
       factionId: null,
       tags: [],
+      visual: { physique: '', face: '', hair: '', eyes: '', attire: '', distinguishing: '' },
     })
     expect(emptyCastDraft('location', 'loc_1')).toMatchObject({
       kind: 'location',

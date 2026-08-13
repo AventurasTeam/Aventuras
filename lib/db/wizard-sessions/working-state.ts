@@ -47,13 +47,13 @@ const castVisualDraftSchema = z.object({
   distinguishing: z.string().default(''),
 })
 
-// Shared columns of every cast row; `retired` is unreachable at wizard time (canon).
 const castDraftShared = {
   // Minted at add/import time so the row keeps identity across autosave
   // round-trips and lands in the commit under the same id (same rule as lore).
   id: z.string(),
   name: z.string().default(''),
   description: z.string().default(''),
+  // `retired` is unreachable at wizard time (canon); only active|staged apply.
   status: z.enum(['active', 'staged']).default('active'),
   tags: z.array(z.string()).default(() => []),
 }
@@ -101,8 +101,23 @@ export type WizardLocationDraft = z.infer<typeof locationCastDraftSchema>
 export type WizardItemDraft = z.infer<typeof itemCastDraftSchema>
 export type WizardFactionDraft = z.infer<typeof factionCastDraftSchema>
 
-export function emptyCastDraft(kind: WizardCastDraft['kind'], id: string): WizardCastDraft {
-  return wizardCastDraftSchema.parse({ kind, id })
+// `Omit` isn't distributive over a union by itself; the `T extends unknown`
+// clause forces per-member distribution so each kind's own fields survive.
+type CastDraftPatchOf<T> = T extends unknown ? Partial<Omit<T, 'id' | 'kind'>> : never
+
+/** Patch accepted by a by-id cast mutator: any one kind's editable fields. */
+export type WizardCastDraftPatch = CastDraftPatchOf<WizardCastDraft>
+
+export type WizardCastDraftByKind<K extends WizardCastDraft['kind']> = Extract<
+  WizardCastDraft,
+  { kind: K }
+>
+
+export function emptyCastDraft<K extends WizardCastDraft['kind']>(
+  kind: K,
+  id: string,
+): WizardCastDraftByKind<K> {
+  return wizardCastDraftSchema.parse({ kind, id }) as WizardCastDraftByKind<K>
 }
 
 export const wizardWorkingStateSchema = z.object({
