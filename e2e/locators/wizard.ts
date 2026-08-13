@@ -28,7 +28,11 @@ export const wizard = {
   // strategy). Mirrors reader.ts's `data-entry-row` anchor and the
   // component's own Storybook interaction tests (step-cast.stories.tsx).
   castRows: (page: Page): Locator => page.getByTestId('cast-row'),
-  castRow: (page: Page, castId: string): Locator => page.locator(`[data-cast-id="${castId}"]`),
+  // Both attributes qualified, not just `data-cast-id`: keeps the anchor
+  // unique even if a cast id is ever surfaced elsewhere in the DOM (e.g. a
+  // scene-tag chip on step 5).
+  castRow: (page: Page, castId: string): Locator =>
+    page.locator(`[data-testid="cast-row"][data-cast-id="${castId}"]`),
   castName: (page: Page, castId: string): Locator =>
     wizard.castRow(page, castId).getByRole('textbox', { name: t('wizard:cast.editor.name') }),
   // Status is a 2-option Select; resolveMode picks 'segment' at ≤3 options

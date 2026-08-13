@@ -13,11 +13,18 @@ import { wizard, type CastKind } from '../locators/wizard'
 // (the same anchor the row-scoped locators key off) is the only way the spec
 // learns the id the rest of that row's fields must scope through.
 export async function addCastRow(page: Page, kind: CastKind): Promise<string> {
+  const rows = wizard.castRows(page)
+  const before = await rows.count()
   await wizard.addCast(page).click()
   await wizard.addCastKind(page, kind).click()
-  const row = wizard.castRows(page).last()
-  await expect(row).toBeVisible()
-  const id = await row.getAttribute('data-cast-id')
+  // toHaveCount, not toBeVisible on .last(): the previous last row is already
+  // visible, so a visibility check can't fail for the reason it exists. If
+  // addCast ever regresses to a no-op, this is what stops addCastRow from
+  // silently returning the previous row's id and overwriting its fields —
+  // instead of a confusing row-count failure downstream that points at the
+  // commit path when the bug is in authoring.
+  await expect(rows).toHaveCount(before + 1)
+  const id = await rows.last().getAttribute('data-cast-id')
   if (!id) throw new Error('cast row rendered with no data-cast-id')
   return id
 }

@@ -10,10 +10,21 @@ import { wizard } from '../locators/wizard'
 
 // The slice's headline evidence: five cast rows spanning all four kinds,
 // mixing active and staged status, committed through the real wizard Finish
-// path in one batch. Drives entirely through the UI; asserts entirely against
-// the DB (docs/testing.md → Selector strategy, Tier 1) — this spec does not
-// re-verify rendering, only that createStoryWithBranch's single-batch
-// insert-then-embed actually lands every row.
+// path. Drives entirely through the UI; asserts entirely against the DB
+// (docs/testing.md → Selector strategy, Tier 1).
+//
+// What the assertions below actually prove: every committed row — active and
+// staged alike — lands with the right kind/status, ends up embedded, and is
+// left clean (embedding_stale = 0); and the committed lead resolves to the
+// active character, never the staged one. They do NOT prove the embed call is
+// batched rather than per-row — embedRowsToVecOps (lib/embedder/service.ts)
+// emits the same per-row upsert + stale-clear ops either way, so a DB read
+// can't tell the two apart. Contract C5's real coverage is
+// create-story.test.ts's "embeds the whole cast and lore in one batched
+// call, not one per row". Also uncovered here: the opening's sceneEntities
+// filter (this spec types the opening by hand, so it's always empty — see
+// finish.test.ts) and each kind's per-kind `state` shape (untouched despite
+// "all four kinds").
 test.describe('create-story wizard — mixed cast', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
@@ -83,11 +94,28 @@ test.describe('create-story wizard — mixed cast', () => {
 
     const storyRows = await queryApp(
       app.window,
-      `SELECT current_branch_id FROM stories WHERE title = ?`,
+      `SELECT current_branch_id, status FROM stories WHERE title = ?`,
       [STORY.title],
     )
     expect(storyRows.length, 'exactly one story with the title').toBe(1)
-    const branchId = (storyRows[0] as [string])[0]
+    const [branchId, storyStatus] = storyRows[0] as [string, string]
+    expect(storyStatus, 'story committed active').toBe('active')
+
+    // The two-character trap this spec sets up (one active, one staged) is
+    // pointless unless something reads which one actually became the lead.
+    // createStoryWithBranch's guard only requires leadEntityId to match SOME
+    // cast character — the staged one qualifies — so a wrong-lead commit
+    // (activeLead exists precisely to forbid this) would pass every check
+    // above and still slip through unnoticed without this assertion.
+    const definitionRows = await queryApp(
+      app.window,
+      `SELECT json_extract(definition, '$.leadEntityId') FROM stories WHERE title = ?`,
+      [STORY.title],
+    )
+    expect(
+      (definitionRows[0] as [string])[0],
+      'committed definition.leadEntityId points at the active lead, not the staged character',
+    ).toBe(leadId)
 
     const expected = [
       { ...LEAD, status: 'active' },
@@ -114,10 +142,18 @@ test.describe('create-story wizard — mixed cast', () => {
       expect(status, `${row.name} status`).toBe(row.status)
     }
 
-    // Every committed row — active and staged alike — got a real embedding
-    // from the same batched call Finish makes: createStoryWithBranch splices
-    // cast + lore vec ops into ONE call (Contract C5), with no per-status
-    // second path that a staged row could fall through.
+    // Branch-wide count alongside the per-id checks below: five entities and
+    // five vec rows, so an orphan vec row can't slip past a per-id check that
+    // only ever looks for a match, never counts the total.
+    const vecCountRows = await queryApp(
+      app.window,
+      `SELECT count(*) FROM entities_vec_384 WHERE branch_id = ?`,
+      [branchId],
+    )
+    expect((vecCountRows[0] as [number])[0], 'exactly five embedded rows on the branch').toBe(5)
+
+    // Every committed row — active and staged alike — got a real embedding;
+    // no per-status path drops a row.
     for (const [id] of entityRows) {
       const vecRows = await queryApp(
         app.window,
@@ -127,10 +163,9 @@ test.describe('create-story wizard — mixed cast', () => {
       expect((vecRows[0] as [number])[0], `entity ${id} has a stored embedding`).toBe(1)
     }
 
-    // No committed row is left dirty. entities are inserted with
-    // embeddingStale: 1 and the same-batch embed splice clears it
-    // (create-story.ts) — a split embed call, or a row the splice missed,
-    // would leave this nonzero.
+    // No committed row is left dirty. entities insert with embeddingStale: 1,
+    // and the embed splice clears it per row (create-story.ts) — a row the
+    // splice missed (e.g. filtered out by status) would leave this nonzero.
     const staleRows = await queryApp(
       app.window,
       `SELECT count(*) FROM entities WHERE branch_id = ? AND embedding_stale = 1`,
