@@ -28,7 +28,7 @@ import { wizardStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
-import { canSetLead, castRowErrors } from './step-cast-logic'
+import { canSetLead } from './step-cast-logic'
 
 const STATUS_OPTIONS: SelectOption[] = [
   { value: 'active', label: t('wizard:cast.editor.statusActive') },
@@ -62,7 +62,7 @@ export type CommonEditorProps<T extends WizardCastDraft> = {
 
 function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolean }) {
   const isPhone = useTier() === 'phone'
-  const nameError = invalid && castRowErrors(row).includes('name')
+  const nameError = invalid
   return (
     // Phone stacks: the status column can't shrink below its two segments, and
     // taking that off a 320 px screen leaves the name field unusable.
