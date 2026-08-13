@@ -79,7 +79,7 @@ describe('composeKey', () => {
     const paddedRow = {
       name: 'x',
       detail: '',
-      dedupeKey: composeKey('location', '  Ashfall  '),
+      dedupeKey: composeKey(' Location ', '  Ashfall  '),
       payload: 1,
     }
     const cleanExistingKey = composeKey('location', 'Ashfall')
@@ -87,7 +87,6 @@ describe('composeKey', () => {
 
     // Naive interpolation — normalizing the JOINED string rather than each part
     // — would leave the padding as interior whitespace and miss this match.
-    const naiveKey = 'location:  Ashfall  '.trim().toLowerCase()
-    expect(naiveKey).not.toBe(cleanExistingKey)
+    expect(itemKey({ name: 'x', dedupeKey: 'location:  Ashfall  ' })).not.toBe(cleanExistingKey)
   })
 })
