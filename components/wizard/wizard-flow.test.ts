@@ -6,6 +6,7 @@ import { parseStructured } from '@/lib/ai'
 import {
   branches,
   deltas,
+  emptyCastDraft,
   emptyWorkingState,
   entities,
   stories,
@@ -271,6 +272,11 @@ describe('wizard full-flow integration', () => {
         worldTimeOrigin: { year: 2024, month: 3, day: 10 },
       },
       leadName: 'Kade',
+      // A populated cast row keeps this modern, fully-formed draft out of
+      // migrateLegacyLead's bare-lead path (empty cast + non-blank leadName),
+      // which is a separate, dedicated scenario covered in session.test.ts.
+      leadEntityId: 'char_kade',
+      cast: [{ ...emptyCastDraft('character', 'char_kade'), name: 'Kade' }],
       opening: { ...base.opening, content: 'Kade set out at first light.' },
     }
 

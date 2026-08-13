@@ -12,7 +12,7 @@ import {
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { generateId } from '@/lib/ids'
-import { rehydrateStories } from '@/lib/stores'
+import { CAST_ID_PREFIX, rehydrateStories } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import type { DbCtx } from '../types'
@@ -99,15 +99,13 @@ export async function saveStoryDraft(
   return { storyId }
 }
 
-// Pre-3.6b working states carried the lead as a bare name (M2's step-1 input).
-// Convert it to a real character cast row at the parse boundary so both load
-// paths (draft resume, live-session continue) see the modern shape and the
-// opening's sceneEntities refs keep resolving to the same id.
+// Pre-3.6b working states carried the lead as a bare `leadName` string.
 export function migrateLegacyLead(state: WizardWorkingState): WizardWorkingState {
   if (state.cast.length > 0 || state.leadName.trim().length === 0) return state
-  const id = state.leadEntityId ?? generateId('char')
-  const lead = { ...emptyCastDraft('character', id), name: state.leadName }
-  return { ...state, cast: [lead], leadEntityId: id }
+  // Reuse, don't mint: the opening's sceneEntities already reference this id.
+  const id = state.leadEntityId ?? generateId(CAST_ID_PREFIX.character)
+  const lead = { ...emptyCastDraft('character', id), name: state.leadName.trim() }
+  return { ...state, cast: [lead], leadEntityId: id, leadName: '' }
 }
 
 // Persisted rows predate the current schema: a field the wizard now reads may
