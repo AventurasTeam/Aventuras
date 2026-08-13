@@ -42,10 +42,9 @@ describe('cast validation gates', () => {
   it('canSetLead allows one-click reassignment: any active character but the current lead', () => {
     const a = char('a')
     const b = char('b', 'Jorin')
-    expect(canSetLead(b, [a, b], 'a')).toBe(true) // b is active + not lead, even though a already holds it
-    expect(canSetLead(a, [a, b], 'a')).toBe(false) // a already is the lead
-    expect(canSetLead(a, [b], 'a')).toBe(false) // leadEntityId names a even though a isn't in the passed cast
-    expect(canSetLead(char('c', 'X', 'staged'), [a], null)).toBe(false)
-    expect(canSetLead(emptyCastDraft('item', 'i'), [], null)).toBe(false)
+    expect(canSetLead(b, 'a')).toBe(true) // b is active + not lead, even though a already holds it
+    expect(canSetLead(a, 'a')).toBe(false) // a already is the lead
+    expect(canSetLead(char('c', 'X', 'staged'), null)).toBe(false)
+    expect(canSetLead(emptyCastDraft('item', 'i'), null)).toBe(false)
   })
 })

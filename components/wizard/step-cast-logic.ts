@@ -14,9 +14,10 @@ export function invalidCastRowIds(cast: readonly WizardCastDraft[]): string[] {
  * The lead is only real while it points at an ACTIVE character row (canon:
  * staged can't lead). Re-derives from `cast` rather than trusting
  * `leadEntityId` directly — a hydrated draft can carry a stale pointer past
- * the store's own staging cascade (`setCastStatus`). This is the only
- * sanctioned reader of `leadEntityId`; a consumer that compares the pointer
- * directly instead defeats the re-derivation.
+ * the store's own staging cascade (`setCastStatus`). Route every "is there a
+ * lead / which row holds it" question through here; comparing `leadEntityId`
+ * raw for that answers a resolution question without resolving it. Comparing
+ * it raw for row IDENTITY — is this row the pointer's target — is fine.
  */
 export function activeLead(
   cast: readonly WizardCastDraft[],
@@ -36,11 +37,10 @@ export function castStepValid(
   return !leadRequired || activeLead(cast, leadEntityId) != null
 }
 
-/** wizard.md → Compact row presentation: any active character can claim the lead with one click, including reassigning it away from the current lead. */
-export function canSetLead(
-  row: WizardCastDraft,
-  cast: readonly WizardCastDraft[],
-  leadEntityId: string | null,
-): boolean {
+/**
+ * wizard.md → Compact row presentation: any active character can claim the
+ * lead in one click, reassigning it away from the current lead.
+ */
+export function canSetLead(row: WizardCastDraft, leadEntityId: string | null): boolean {
   return row.kind === 'character' && row.status === 'active' && row.id !== leadEntityId
 }
