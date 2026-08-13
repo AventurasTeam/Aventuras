@@ -21,8 +21,10 @@ describe('bundled pack', () => {
         genre: { promptBody: '' },
         tone: { promptBody: '' },
       },
-      leadName: 'Aria',
       leadEntityId: 'c1',
+      // The opening names the lead through its cast row, not `leadName`
+      // (legacy — bundled templates no longer read it).
+      cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
     })
     expect(out).toContain('adventure')
     expect(out).toContain('A frozen coast.')

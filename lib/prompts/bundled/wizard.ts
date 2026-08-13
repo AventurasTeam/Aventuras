@@ -1,5 +1,5 @@
 // wizard-group templates. The wizard isn't a pipeline run; these consume the
-// full in-progress wizard working-state (definition, leadName/leadEntityId,
+// full in-progress wizard working-state (definition, cast/leadEntityId,
 // opening) plus a per-invocation `guidance`. All rendering variation is resolved
 // here in Liquid — the UI passes state through, it does not pre-shape the prompt.
 // Templates carry creative content only: the JSON output contract (field list +
@@ -16,12 +16,18 @@
 // current preview plus refinement instruction, and the guidance a refine could
 // otherwise inherit belongs to a generate the user may never have seen.
 
+// activeCast, not the raw cast.size gate: staged rows must not appear in
+// sceneEntities/currentLocationId (canon), and gating the header on the
+// unfiltered array would leave a dangling "Cast —" label when everything
+// authored so far is staged (architecture.md's conditional-section-header rule).
 export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
 {% endif %}{% if lore.size > 0 %}World reference:
 {% for row in lore %}- {{ row.title }}: {{ row.body }}
-{% endfor %}{% endif %}{% if leadEntityId != blank %}The lead character is {{ leadName }} (cast id: {{ leadEntityId }}).
+{% endfor %}{% endif %}{% assign activeCast = cast | active %}{% if activeCast.size > 0 %}Cast — sceneEntities and currentLocationId must reference only these cast ids:
+{% for row in activeCast %}- {{ row.name }} ({{ row.kind }}, cast id: {{ row.id }}){% if row.description != blank %}: {{ row.description }}{% endif %}
+{% endfor %}{% endif %}{% if leadEntityId != blank %}The lead character's cast id is {{ leadEntityId }}.
 {% endif %}`
 
 export const WIZARD_OPENING = `Write the opening passage of this {{ definition.mode }} story.
@@ -44,6 +50,19 @@ export const WIZARD_LORE = `Suggest five reference entries for this story's worl
 {% for row in lore %}- {{ row.title }}
 {% endfor %}{% for name in suggested %}- {{ name }}
 {% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
+{% endif %}`
+
+export const WIZARD_CAST = `Suggest five cast entries for this story — a mix of characters, locations, items and factions unless the guidance below directs otherwise.
+{% if definition.setting != blank %}Setting: {{ definition.setting }}
+{% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
+{% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
+{% endif %}{% if lore.size > 0 %}World reference:
+{% for row in lore %}- {{ row.title }}: {{ row.body }}
+{% endfor %}{% endif %}{% if cast.size > 0 or suggested.size > 0 %}Already in the cast (do not repeat these):
+{% for row in cast %}- {{ row.name }} ({{ row.kind }})
+{% endfor %}{% for name in suggested %}- {{ name }}
+{% endfor %}{% endif %}A character's faction_name and a location's parent_location_name may reference a faction or location from this batch or from the existing cast, by exact name.
+{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
 export const MACRO_WIZARD_GENRE_CONTEXT = `Return a short label naming the genre, and a promptBody of two or three paragraphs instructing a model how to write in this genre — its conventions, register, and what belongs on the page — written the way a genre preset's body reads, not an encyclopedia entry describing the genre.

@@ -240,7 +240,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'string',
       category: 'Entities',
       description:
-        'Lead character display name; blank on lead-less paths (creative + third-person).',
+        'Lead character display name; blank on lead-less paths (creative + third-person). Legacy — pre-3.6b drafts only; bundled templates no longer read it.',
       required: false,
     },
     {
@@ -249,6 +249,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       category: 'Entities',
       description:
         'Lead cast id — a placeholder after id-substitution, so a model can echo it in sceneEntities; blank on lead-less paths.',
+      required: false,
+    },
+    {
+      name: 'cast',
+      type: 'WizardCastDraft[]',
+      category: 'Entities',
+      description:
+        'Wizard-authored cast rows (id/kind/name/description/status plus per-kind identity). Ids are placeholders after substitution, so the opening can echo them in sceneEntities.',
       required: false,
     },
     {
@@ -314,6 +322,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
   [TEMPLATE_IDS.wizardDescriptionRefine]: 'wizard',
   [TEMPLATE_IDS.wizardLore]: 'wizard',
+  [TEMPLATE_IDS.wizardCast]: 'wizard',
   [TEMPLATE_IDS.wizardGenre]: 'wizard',
   [TEMPLATE_IDS.wizardGenreRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTone]: 'wizard',
@@ -326,7 +335,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries', 'turns'],
-  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId'],
+  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId', 'cast'],
   Plot: ['happenings'],
   Retrieval: [
     'retrievedEntities',

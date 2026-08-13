@@ -10,8 +10,11 @@ const leadCtx = {
     genre: { promptBody: '' },
     tone: { promptBody: '' },
   },
-  leadName: 'Aria',
   leadEntityId: 'c1',
+  // The opening context now names the lead through its cast row, not `leadName`
+  // (dropped — see templateContextMap.ts); the row must be present for the
+  // lead's name to reach the prompt at all.
+  cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
 }
 const leadlessCtx = {
   definition: {
@@ -227,6 +230,66 @@ describe('WIZARD_SETTING', () => {
     })
     expect(out).not.toContain('The Old Empire')
     expect(out).not.toContain('World reference')
+  })
+})
+
+describe('WIZARD_OPENING cast block', () => {
+  it('renders the opening context from the authored cast, active rows only', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: {
+        mode: 'adventure',
+        genre: { promptBody: '' },
+        tone: { promptBody: '' },
+        setting: 'A drowned coast.',
+      },
+      lore: [{ title: 'The Salt Wells', body: 'Nine wells.' }],
+      cast: [
+        {
+          id: 'c1',
+          kind: 'character',
+          name: 'Aria',
+          description: 'A blacksmith.',
+          status: 'active',
+        },
+        {
+          id: 'l1',
+          kind: 'location',
+          name: 'Mornstone Keep',
+          description: 'A fortress.',
+          status: 'active',
+        },
+        {
+          id: 'c2',
+          kind: 'character',
+          name: 'Gandalf',
+          description: 'A wizard.',
+          status: 'staged',
+        },
+      ],
+      leadEntityId: 'c1',
+      guidance: '',
+    })
+    expect(out).toContain('Aria (character, cast id: c1): A blacksmith.')
+    expect(out).toContain('Mornstone Keep (location, cast id: l1)')
+    expect(out).not.toContain('Gandalf')
+    expect(out).toContain("The lead character's cast id is c1")
+  })
+})
+
+describe('WIZARD_CAST', () => {
+  it('renders the cast template with existing-cast and suggested exclusions', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardCast, {
+      definition: { genre: { promptBody: 'Grim fantasy.' }, tone: { promptBody: '' }, setting: '' },
+      lore: [],
+      cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
+      suggested: ['Old Jorin'],
+      guidance: 'more factions',
+    })
+    expect(out).toContain('Suggest five cast entries')
+    expect(out).toContain('- Aria (character)')
+    expect(out).toContain('- Old Jorin')
+    expect(out).toContain('faction_name')
+    expect(out).toContain('Additional guidance: more factions')
   })
 })
 
