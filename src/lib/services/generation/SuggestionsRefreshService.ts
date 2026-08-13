@@ -3,17 +3,8 @@
  * Coordinates suggestion generation and optional translation for creative writing mode.
  */
 
-import type {
-  StoryEntry,
-  StoryBeat,
-  Entry,
-  StoryMode,
-  POV,
-  Tense,
-  TranslationSettings,
-} from '$lib/types'
+import type { StoryEntry, StoryBeat, Entry, StoryMode, TranslationSettings } from '$lib/types'
 import type { Suggestion, SuggestionsResult } from '$lib/services/ai/sdk/schemas/suggestions'
-import type { PromptContext } from '$lib/services/generation/phases/PostGenerationPhase'
 import type { RetrievedEntry } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { TranslationService } from '$lib/services/ai/utils/TranslationService'
 import { createLogger } from '$lib/log'
@@ -25,13 +16,6 @@ export interface SuggestionsRefreshInput {
   entries: StoryEntry[]
   pendingQuests: StoryBeat[]
   storyMode: StoryMode
-  pov: POV
-  tense: Tense
-  protagonistName: string
-  genre?: string
-  settingDescription?: string
-  tone?: string
-  themes?: string[]
   lastLorebookRetrieval: RetrievedEntry[] | null
   translationSettings: TranslationSettings
 }
@@ -41,9 +25,14 @@ export interface SuggestionsRefreshDependencies {
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries: Entry[],
-    promptContext: PromptContext,
+    latestNarrativeResponse: string | undefined,
+    storyId: string | undefined,
   ) => Promise<SuggestionsResult>
-  translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
+  translateSuggestions: (
+    suggestions: Suggestion[],
+    targetLanguage: string,
+    storyId: string | undefined,
+  ) => Promise<Suggestion[]>
 }
 
 export interface SuggestionsRefreshResult {
@@ -64,16 +53,10 @@ export class SuggestionsRefreshService {
    */
   async refresh(input: SuggestionsRefreshInput): Promise<SuggestionsRefreshResult> {
     const {
+      storyId,
       entries,
       pendingQuests,
       storyMode,
-      pov,
-      tense,
-      protagonistName,
-      genre,
-      settingDescription,
-      tone,
-      themes,
       lastLorebookRetrieval,
       translationSettings,
     } = input
@@ -91,7 +74,8 @@ export class SuggestionsRefreshService {
       entries,
       pendingQuests,
       activeLorebookEntries,
-      { mode: storyMode, pov, tense, protagonistName, genre, settingDescription, tone, themes },
+      undefined,
+      storyId,
     )
 
     // Translate if enabled
@@ -103,6 +87,7 @@ export class SuggestionsRefreshService {
         finalSuggestions = await this.deps.translateSuggestions(
           result.suggestions,
           translationSettings.targetLanguage,
+          storyId,
         )
         translated = true
         log('Suggestions translated')

@@ -41,6 +41,7 @@ export interface ChapterCheckInput {
 
 export interface ChapterServiceDependencies {
   analyzeForChapter: (
+    storyId: string | undefined,
     entries: StoryEntry[],
     lastChapterEndIndex: number,
     config: MemoryConfig,
@@ -51,6 +52,7 @@ export interface ChapterServiceDependencies {
   ) => Promise<ChapterAnalysisResult>
 
   summarizeChapter: (
+    storyId: string | undefined,
     entries: StoryEntry[],
     previousChapters?: Chapter[],
     mode?: StoryMode,
@@ -115,6 +117,7 @@ export class ChapterService {
     }
 
     const analysis = await this.deps.analyzeForChapter(
+      input.storyId,
       analysisEntries,
       input.lastChapterEndIndex,
       memoryConfig,
@@ -158,6 +161,7 @@ export class ChapterService {
 
     const previousChapters = [...currentBranchChapters].sort((a, b) => a.number - b.number)
     const summary = await this.deps.summarizeChapter(
+      input.storyId,
       chapterEntries,
       previousChapters,
       mode,

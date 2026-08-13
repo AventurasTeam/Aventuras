@@ -269,7 +269,7 @@ export class LoreManagementService extends BaseAIService {
       : 'No chapters have been written yet.'
 
     // Render prompts through unified pipeline
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
       entrySummary,
       duplicateSummary,

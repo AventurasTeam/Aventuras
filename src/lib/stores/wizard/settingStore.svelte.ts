@@ -8,6 +8,13 @@ import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import type { GeneratedCharacter } from '$lib/services/ai/sdk'
 
 export class SettingStore {
+  /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
+  private packId: () => string | undefined
+
+  constructor(packId: () => string | undefined) {
+    this.packId = packId
+  }
+
   settingSeed = $state('')
   expandedSetting = $state<ExpandedSetting | null>(null)
   expandedSettingTranslated = $state<ExpandedSetting | null>(null)
@@ -91,6 +98,7 @@ export class SettingStore {
           : undefined
 
       this.expandedSetting = await scenarioService.expandSetting(
+        this.packId(),
         seed,
         selectedGenre,
         customGenre || undefined,
@@ -132,6 +140,7 @@ export class SettingStore {
           : undefined
 
       this.expandedSetting = await scenarioService.refineSetting(
+        this.packId(),
         this.expandedSetting,
         selectedGenre,
         customGenre || undefined,
@@ -185,7 +194,7 @@ export class SettingStore {
       if (loc.description) fields[`loc_${i}_desc`] = loc.description
     })
 
-    const translated = await aiService.translateWizardBatch(fields, targetLanguage)
+    const translated = await aiService.translateWizardBatch(fields, targetLanguage, this.packId())
 
     const translatedLocations = (setting.keyLocations || []).map((loc, i) => ({
       name: translated[`loc_${i}_name`] || loc.name,

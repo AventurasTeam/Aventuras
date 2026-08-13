@@ -99,7 +99,7 @@ describe('WorldStateInjector', () => {
   })
 
   it('selects Tier 1 entities (current location, present/active characters, equipped items, active story beats)', async () => {
-    const result = await injector.buildContext(worldState, '', [])
+    const result = await injector.buildContext(worldState, '', [], { storyId: undefined })
 
     expect(result.tier1.map((e) => e.name)).toContain('Oakvale')
     expect(result.tier1.map((e) => e.name)).toContain('Aria')
@@ -116,7 +116,9 @@ describe('WorldStateInjector', () => {
       } as StoryEntry,
     ]
 
-    const result = await injector.buildContext(worldState, 'Borin, are you ready?', recentEntries)
+    const result = await injector.buildContext(worldState, 'Borin, are you ready?', recentEntries, {
+      storyId: undefined,
+    })
 
     // Borin is Inactive, but mentioned in user input / recent narrative -> Tier 2
     expect(result.tier2.map((e) => e.name)).toContain('Borin')
@@ -124,7 +126,7 @@ describe('WorldStateInjector', () => {
   })
 
   it('builds a formatted context block containing selected entities', async () => {
-    const result = await injector.buildContext(worldState, 'Borin', [])
+    const result = await injector.buildContext(worldState, 'Borin', [], { storyId: undefined })
 
     expect(result.contextBlock).toContain('[CURRENT LOCATION]')
     expect(result.contextBlock).toContain('Oakvale')
@@ -148,7 +150,7 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: true,
       })
 
-      const result = await small.buildContext(worldState, '', [])
+      const result = await small.buildContext(worldState, '', [], { storyId: undefined })
 
       expect(result.tier3.map((e) => e.name).sort()).toEqual([...uncovered].sort())
       expect(runTier3Selection).not.toHaveBeenCalled()
@@ -161,7 +163,7 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: false,
       })
 
-      const result = await off.buildContext(worldState, '', [])
+      const result = await off.buildContext(worldState, '', [], { storyId: undefined })
 
       expect(result.tier3.map((e) => e.name).sort()).toEqual([...uncovered].sort())
       expect(runTier3Selection).not.toHaveBeenCalled()
@@ -201,7 +203,7 @@ describe('WorldStateInjector', () => {
       runTier3Selection.mockResolvedValue({ selectedIndices: new Set(['0']) })
       const over = new WorldStateInjector({ tier3WholesaleWordBudget: 5, enableLLMSelection: true })
 
-      const result = await over.buildContext(worldStateLarge, '', [])
+      const result = await over.buildContext(worldStateLarge, '', [], { storyId: undefined })
 
       expect(runTier3Selection).toHaveBeenCalledTimes(1)
       expect(result.tier3.map((e) => e.name)).toEqual(['Borin'])
@@ -213,7 +215,7 @@ describe('WorldStateInjector', () => {
       runTier3Selection.mockResolvedValue({ selectedIndices: new Set() })
       const over = new WorldStateInjector({ tier3WholesaleWordBudget: 5, enableLLMSelection: true })
 
-      await over.buildContext(worldStateLarge, '', [])
+      await over.buildContext(worldStateLarge, '', [], { storyId: undefined })
 
       expect(runTier3Selection.mock.calls[0][0].serviceLabel).toBe('tier3-world-state-selection')
     })
@@ -225,7 +227,7 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: false,
       })
 
-      const result = await over.buildContext(worldState, '', [])
+      const result = await over.buildContext(worldState, '', [], { storyId: undefined })
 
       expect(result.tier3).toEqual([])
       expect(runTier3Selection).not.toHaveBeenCalled()
@@ -238,7 +240,7 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: true,
       })
 
-      const result = await injector3.buildContext(covered, '', [])
+      const result = await injector3.buildContext(covered, '', [], { storyId: undefined })
 
       expect(result.tier3).toEqual([])
       expect(runTier3Selection).not.toHaveBeenCalled()
@@ -269,7 +271,7 @@ describe('WorldStateInjector', () => {
         .map((c) => c.name)
         .join(' ')
 
-      const result = await injector2.buildContext(poolOf(20), mentions, [])
+      const result = await injector2.buildContext(poolOf(20), mentions, [], { storyId: undefined })
 
       expect(result.tier2).toHaveLength(5)
     })
@@ -283,7 +285,7 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: true,
       })
 
-      const result = await injector2.buildContext(poolOf(20), '', [])
+      const result = await injector2.buildContext(poolOf(20), '', [], { storyId: undefined })
 
       expect(result.tier3).toHaveLength(20)
     })
@@ -302,8 +304,14 @@ describe('WorldStateInjector', () => {
       const injector2 = new WorldStateInjector({ maxTier2Entries: 40, maxTier3Entries: 50 })
 
       // Turn 1 activates all 20 through Tier 2; turn 2 mentions none of them.
-      await injector2.buildContext(pool, mentions, [], { activationTracker: tracker })
-      const result = await injector2.buildContext(pool, '', [], { activationTracker: tracker })
+      await injector2.buildContext(pool, mentions, [], {
+        storyId: undefined,
+        activationTracker: tracker,
+      })
+      const result = await injector2.buildContext(pool, '', [], {
+        storyId: undefined,
+        activationTracker: tracker,
+      })
 
       expect(result.tier1.filter((e) => e.metadata?.sticky)).toHaveLength(20)
     })
@@ -326,14 +334,18 @@ describe('WorldStateInjector', () => {
     }
 
     it('is always in Tier 1, mentioned or not', async () => {
-      const unmentioned = await injector.buildContext(withPlayer, 'nothing about anyone', [])
+      const unmentioned = await injector.buildContext(withPlayer, 'nothing about anyone', [], {
+        storyId: undefined,
+      })
       expect(unmentioned.tier1.map((e) => e.name)).toContain('Kestrel')
     })
 
     it('gets a section of its own rather than being listed among the NPCs', async () => {
       // Observed on a real turn before this: the protagonist reached the prompt only when
       // their name happened to appear recently, and then under [KNOWN CHARACTERS].
-      const result = await injector.buildContext(withPlayer, 'Kestrel, ready?', [])
+      const result = await injector.buildContext(withPlayer, 'Kestrel, ready?', [], {
+        storyId: undefined,
+      })
       const block = result.contextBlock
 
       expect(block).toContain('[PROTAGONIST]')
@@ -345,12 +357,14 @@ describe('WorldStateInjector', () => {
     })
 
     it('carries traits and appearance, which image generation depends on', async () => {
-      const result = await injector.buildContext(withPlayer, '', [])
+      const result = await injector.buildContext(withPlayer, '', [], { storyId: undefined })
       expect(result.contextBlock).toContain('stubborn')
     })
 
     it('cannot be re-selected into Tier 2 or Tier 3', async () => {
-      const result = await injector.buildContext(withPlayer, 'Kestrel Kestrel Kestrel', [])
+      const result = await injector.buildContext(withPlayer, 'Kestrel Kestrel Kestrel', [], {
+        storyId: undefined,
+      })
 
       expect(result.tier2.map((e) => e.name)).not.toContain('Kestrel')
       expect(result.tier3.map((e) => e.name)).not.toContain('Kestrel')
@@ -375,8 +389,8 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: false,
         tier3WholesaleWordBudget: 0,
       })
-      await local.buildContext(state, names, [], { activationTracker: tracker })
-      return local.buildContext(state, '', [], { activationTracker: tracker })
+      await local.buildContext(state, names, [], { storyId: undefined, activationTracker: tracker })
+      return local.buildContext(state, '', [], { storyId: undefined, activationTracker: tracker })
     }
 
     it('never lists a sticky item as carried', async () => {
@@ -441,6 +455,7 @@ describe('WorldStateInjector', () => {
       })
 
       const first = await generous.buildContext(worldState, '', [], {
+        storyId: undefined,
         activationTracker: tracker,
       })
 
@@ -451,7 +466,10 @@ describe('WorldStateInjector', () => {
       }
 
       // And so nothing carries into the next turn as Tier 1 sticky.
-      const next = await generous.buildContext(worldState, '', [], { activationTracker: tracker })
+      const next = await generous.buildContext(worldState, '', [], {
+        storyId: undefined,
+        activationTracker: tracker,
+      })
       expect(next.tier1.filter((e) => e.metadata?.sticky)).toHaveLength(0)
     })
 
@@ -471,6 +489,7 @@ describe('WorldStateInjector', () => {
 
       // Naming Borin pulls him into Tier 2; the rest of the leftover goes in wholesale.
       const result = await generous.buildContext(worldState, 'Borin, are you ready?', [], {
+        storyId: undefined,
         activationTracker: tracker,
       })
 
@@ -499,7 +518,10 @@ describe('WorldStateInjector', () => {
         enableLLMSelection: true,
       })
 
-      const result = await tight.buildContext(worldState, '', [], { activationTracker: tracker })
+      const result = await tight.buildContext(worldState, '', [], {
+        storyId: undefined,
+        activationTracker: tracker,
+      })
 
       expect(result.tier3).toHaveLength(1)
       expect(positions.get(result.tier3[0].id)).toBe(4)

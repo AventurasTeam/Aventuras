@@ -7,7 +7,7 @@
   import { countTokens } from '$lib/services/tokenizer'
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import type { EntryMetadata } from '$lib/types'
+  import type { EntryMetadata, Story } from '$lib/types'
   import { aiService } from '$lib/services/ai'
   import { database } from '$lib/services/database'
   import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
@@ -78,7 +78,11 @@
       log('Translating user input', {
         sourceLanguage: translationSettings.sourceLanguage,
       })
-      const result = await aiService.translateInput(content, translationSettings.sourceLanguage)
+      const result = await aiService.translateInput(
+        content,
+        translationSettings.sourceLanguage,
+        story.currentStory?.id,
+      )
       log('Input translated', {
         originalLength: content.length,
         translatedLength: result.translatedContent.length,
@@ -225,13 +229,19 @@
   // Builder Functions
   // ============================================================================
 
-  function buildPipelineDependencies(): PipelineDependencies {
+  /**
+   * `storyId` is the turn's, captured by the caller, not `story.currentStory` read live:
+   * these run across the whole generation, and a story switch mid-turn would otherwise
+   * point the rest of it at another story's pack.
+   */
+  function buildPipelineDependencies(storyId: string): PipelineDependencies {
     return {
       shouldUseAgenticRetrieval: () =>
         aiService.shouldUseAgenticRetrieval(settings.systemServicesSettings.timelineFill),
       runAgenticRetrieval: (options) =>
         aiService.runAgenticRetrieval({
           ...options,
+          storyId,
           getChapterEntries: story.getChapterEntries.bind(story),
           getUnchapterizedEntries: story.getUnchapterizedEntries.bind(story),
         }),
@@ -240,6 +250,7 @@
       // is about `tokenThreshold` tokens by construction. See `story.chapterReadBudget`.
       runTimelineFill: (visibleEntries, chapters, alreadyInContext) =>
         aiService.runTimelineFill(
+          storyId,
           visibleEntries,
           chapters,
           story.getChapterEntries.bind(story),
@@ -248,6 +259,7 @@
         ),
       answerChapterQuestion: (chapterNumber, question, chapters) =>
         aiService.answerChapterQuestion(
+          storyId,
           chapterNumber,
           question,
           chapters,
@@ -283,7 +295,7 @@
     }
   }
 
-  function buildBackgroundTaskDependencies(): BackgroundTaskDependencies {
+  function buildBackgroundTaskDependencies(storyId: string): BackgroundTaskDependencies {
     return {
       chapterService: {
         analyzeForChapter: aiService.analyzeForChapter.bind(aiService),
@@ -294,17 +306,21 @@
       loreManagement: {
         runLoreManagement: aiService.runLoreManagement.bind(aiService),
       },
-      styleReview: { analyzeStyle: aiService.analyzeStyle.bind(aiService) },
+      styleReview: {
+        analyzeStyle: (entries, mode, pov, tense, recentEntriesCount) =>
+          aiService.analyzeStyle(storyId, entries, mode, pov, tense, recentEntriesCount),
+      },
     }
   }
 
   function buildBackgroundTaskInput(
+    currentStory: Story,
     countStyleReview: boolean,
     styleReviewSource: string,
   ): BackgroundTaskInput {
-    const storyId = story.currentStory?.id ?? ''
-    const branchId = story.currentStory?.currentBranchId ?? null
-    const mode = story.currentStory?.mode ?? 'adventure'
+    const storyId = currentStory.id
+    const branchId = currentStory.currentBranchId ?? null
+    const mode = currentStory.mode ?? 'adventure'
 
     return {
       styleReview: {
@@ -327,7 +343,7 @@
       },
       chapterCheck: {
         storyId,
-        currentBranchId: story.currentStory?.currentBranchId ?? null,
+        currentBranchId: branchId,
         entries: story.entries,
         lastChapterEndIndex: story.lastChapterEndIndex,
         tokensSinceLastChapter: story.tokensSinceLastChapter,
@@ -547,7 +563,7 @@
         cachedRetrievalResult: options?.cachedRetrievalResult ?? null,
       }
 
-      const deps = buildPipelineDependencies()
+      const deps = buildPipelineDependencies(currentStoryRef.id)
       const pipeline = new GenerationPipeline(deps)
 
       let fullResponse = ''
@@ -686,6 +702,7 @@
             translationService
               .translateEntities(
                 {
+                  storyId: currentStoryRef.id,
                   classificationResult: {
                     newCharacters: event.result.entryUpdates.newCharacters,
                     newLocations: event.result.entryUpdates.newLocations,
@@ -760,13 +777,15 @@
         emitTTSQueued(narrationEntry.id, fullResponse)
       }
 
-      const coordinator = new BackgroundTaskCoordinator(buildBackgroundTaskDependencies())
-      const input = buildBackgroundTaskInput(countStyleReview, styleReviewSource)
+      const coordinator = new BackgroundTaskCoordinator(
+        buildBackgroundTaskDependencies(currentStoryRef.id),
+      )
+      const input = buildBackgroundTaskInput(currentStoryRef, countStyleReview, styleReviewSource)
       if (!story.memoryConfig.autoSummarize) input.chapterCheck.tokensOutsideBuffer = 0
       // Deliberately not awaited — but the flag has to outlive the call, or the Memory
       // view will offer to create a chapter while this one is being created.
-      const bgStoryId = story.currentStory?.id ?? ''
-      const bgBranchId = story.currentStory?.currentBranchId ?? null
+      const bgStoryId = currentStoryRef.id
+      const bgBranchId = currentStoryRef.currentBranchId ?? null
       ui.setBackgroundTasksActive(bgStoryId, bgBranchId, true)
       coordinator
         .runBackgroundTasks(input)
@@ -917,13 +936,6 @@
         entries: story.entries,
         pendingQuests: story.pendingQuests,
         storyMode: story.storyMode,
-        pov: story.pov,
-        tense: story.tense,
-        protagonistName,
-        genre: story.currentStory.genre ?? undefined,
-        settingDescription: story.currentStory.description ?? undefined,
-        tone: story.currentStory.settings?.tone ?? undefined,
-        themes: story.currentStory.settings?.themes ?? undefined,
         lastLorebookRetrieval: ui.lastLorebookRetrieval?.all ?? null,
         translationSettings: settings.translationSettings,
       })

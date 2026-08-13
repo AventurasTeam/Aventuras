@@ -52,6 +52,7 @@ function makeInput(overrides: Partial<PostGenerationInput> = {}): PostGeneration
   return {
     isCreativeMode: false,
     disableSuggestions: false,
+    storyId: 'story-1',
     entries: [],
     activeThreads: [],
     lorebookEntries: [],
@@ -163,6 +164,47 @@ describe('PostGenerationPhase', () => {
       )
 
       expect(result.suggestions).toEqual(suggestions)
+    })
+  })
+
+  describe('storyId forwarding', () => {
+    // Every one of these renders a template from the story's pack. Asserted by position,
+    // not just by presence: the argument is what points them at the right pack, and a
+    // dropped or reordered one is otherwise invisible until a user opens the output.
+    it('hands the story to the action-choice generator and its translation', async () => {
+      const generateActionChoices = vi.fn(async () => ({ choices }))
+      const translateActionChoices = vi.fn(async () => choices)
+
+      await drain(
+        new PostGenerationPhase(
+          makeDeps({ generateActionChoices, translateActionChoices }),
+        ).execute(makeInput({ translationSettings: italian })),
+      )
+
+      expect(generateActionChoices).toHaveBeenCalledWith(
+        [],
+        { characters: [], locations: [], items: [], storyBeats: [] },
+        'The dragon fell.',
+        [],
+        expect.objectContaining({ mode: 'adventure' }),
+        'second',
+        'story-1',
+      )
+      expect(translateActionChoices).toHaveBeenCalledWith(choices, 'it', 'story-1')
+    })
+
+    it('hands the story to the suggestions generator and its translation', async () => {
+      const generateSuggestions = vi.fn(async () => ({ suggestions }))
+      const translateSuggestions = vi.fn(async () => suggestions)
+
+      await drain(
+        new PostGenerationPhase(makeDeps({ generateSuggestions, translateSuggestions })).execute(
+          makeInput({ isCreativeMode: true, translationSettings: italian }),
+        ),
+      )
+
+      expect(generateSuggestions).toHaveBeenCalledWith([], [], [], 'The dragon fell.', 'story-1')
+      expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1')
     })
   })
 

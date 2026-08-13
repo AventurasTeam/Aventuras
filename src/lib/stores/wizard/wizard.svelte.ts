@@ -26,10 +26,10 @@ import { SvelteSet } from 'svelte/reactivity'
 
 export class WizardStore {
   // Sub-stores
-  narrative = new NarrativeStore()
-  setting = new SettingStore()
-  character = new CharacterStore()
-  image = new ImageStore()
+  narrative = new NarrativeStore(() => this.selectedPackId)
+  setting = new SettingStore(() => this.selectedPackId)
+  character = new CharacterStore(() => this.selectedPackId)
+  image = new ImageStore(() => this.selectedPackId)
 
   // Wizard State
   currentStep = $state(1)
@@ -489,6 +489,7 @@ export class WizardStore {
                 const translated = await aiService.translateWizardBatch(
                   { visualDescriptors: visualDescriptorsArray.join(', ') },
                   targetLanguage,
+                  this.selectedPackId,
                 )
                 if (translated.visualDescriptors) {
                   protagonistVisualDescriptorsTranslated = translated.visualDescriptors
@@ -539,6 +540,7 @@ export class WizardStore {
                     const translatedVD = await aiService.translateWizardBatch(
                       { visualDescriptors: visualDescriptorsArray.join(', ') },
                       targetLanguage,
+                      this.selectedPackId,
                     )
                     if (translatedVD.visualDescriptors) {
                       charVisualDescriptorsTranslated = translatedVD.visualDescriptors

@@ -45,10 +45,13 @@ export interface WorldStateTranslationDependencies {
   translateUIElements: (
     items: UITranslationItem[],
     targetLanguage: string,
+    storyId: string | undefined,
   ) => Promise<UITranslationItem[]>
 }
 
 export interface WorldStateTranslationInput {
+  /** Story whose pack supplies the translation template. */
+  storyId: string
   classificationResult: ClassificationNewEntities
   worldState: WorldStateEntities
   targetLanguage: string
@@ -73,7 +76,7 @@ export class WorldStateTranslationService {
     input: WorldStateTranslationInput,
     callbacks: WorldStateTranslationCallbacks,
   ): Promise<WorldStateTranslationResult> {
-    const { classificationResult, worldState, targetLanguage } = input
+    const { storyId, classificationResult, worldState, targetLanguage } = input
     const items: TranslationItem[] = []
 
     // Collect character fields
@@ -191,6 +194,7 @@ export class WorldStateTranslationService {
     const translated = await this.deps.translateUIElements(
       items.map(({ id, text, type }) => ({ id, text, type })),
       targetLanguage,
+      storyId,
     )
 
     // Apply translations

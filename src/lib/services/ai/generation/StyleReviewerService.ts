@@ -69,6 +69,7 @@ export class StyleReviewerService extends BaseAIService {
    * @param recentEntriesCount - Max number of most recent narration entries to analyze
    */
   async analyzeStyle(
+    storyId: string | undefined,
     entries: StoryEntry[],
     mode: StoryMode = 'adventure',
     pov: POV = 'second',
@@ -95,7 +96,7 @@ export class StyleReviewerService extends BaseAIService {
       .map((e, i) => `--- Passage ${i + 1} ---\n${e.content}`)
       .join('\n\n')
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({
       mode,
       pov,

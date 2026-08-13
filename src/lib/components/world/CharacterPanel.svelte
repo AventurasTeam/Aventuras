@@ -42,7 +42,7 @@
   import { Label } from '$lib/components/ui/label'
   import { cn } from '$lib/utils/cn'
   import IconRow from '$lib/components/ui/icon-row.svelte'
-  import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
+  import { resolveStylePrompt } from '$lib/services/ai/image'
 
   let showAddForm = $state(false)
   let newName = $state('')
@@ -404,20 +404,16 @@
     generatingPortraitId = character.id
     portraitError = null
 
+    // Captured before the awaits below: the style and the template have to come from the
+    // same story's pack even if the user switches stories mid-generation.
+    const storyId = story.currentStory?.id
+
     try {
       // Get the style prompt from database (external template)
-      const styleId = imageSettings.portraitStyleId
-
-      let stylePrompt = ''
-      try {
-        const template = await database.getPackTemplate('default-pack', styleId)
-        stylePrompt = template?.content || ''
-      } catch {
-        stylePrompt = DEFAULT_FALLBACK_STYLE_PROMPT
-      }
+      const stylePrompt = await resolveStylePrompt(storyId, imageSettings.portraitStyleId)
 
       // Build the portrait generation prompt using ContextBuilder
-      const ctx = new ContextBuilder()
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({
         mode: 'adventure',
         pov: 'second',

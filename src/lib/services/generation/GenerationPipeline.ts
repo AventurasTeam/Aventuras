@@ -174,6 +174,7 @@ export class GenerationPipeline {
         postGeneration: this.postPhase.execute({
           isCreativeMode: cfg.storyMode === 'creative-writing',
           disableSuggestions: cfg.disableSuggestions,
+          storyId: ctx.story.id,
           entries: ctx.visibleEntries,
           activeThreads: cfg.activeThreads,
           lorebookEntries: ctx.worldState.lorebookEntries,
@@ -230,6 +231,7 @@ export class GenerationPipeline {
         abortSignal: ctx.abortSignal,
       }),
       translation: this.translationPhase.execute({
+        storyId: ctx.story.id,
         narrativeContent,
         narrativeEntryId: ctx.userAction.entryId,
         isVisualProse,

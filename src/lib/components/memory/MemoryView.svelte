@@ -52,6 +52,7 @@
     try {
       const entries = getChapterEntries(chapter)
       const newSummary = await aiService.resummarizeChapter(
+        story.currentStory?.id,
         chapter,
         entries,
         story.chapters,

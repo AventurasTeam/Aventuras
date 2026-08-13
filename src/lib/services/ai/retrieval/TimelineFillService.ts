@@ -72,6 +72,7 @@ export class TimelineFillService extends BaseAIService {
    * Generate queries to fill gaps in timeline knowledge.
    */
   async generateQueries(
+    storyId: string | undefined,
     visibleEntries: StoryEntry[],
     chapters: Chapter[],
     alreadyInContext?: string,
@@ -99,7 +100,7 @@ export class TimelineFillService extends BaseAIService {
 
     // Knowing who is present, where, and which threads are open makes the difference
     // between "what happened before" and a question worth an LLM call.
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ chapterHistory, timeline, alreadyInContext: alreadyInContext ?? '' })
     const { system, user: prompt } = await ctx.render('timeline-fill')
 
@@ -219,6 +220,7 @@ export class TimelineFillService extends BaseAIService {
    * @param maxChapterTokens Budget for the chapter text; see `chapterReadBudget`.
    */
   async answerQuestion(
+    storyId: string | undefined,
     query: string,
     chapters: Chapter[],
     chapterNumbers?: number[],
@@ -239,6 +241,7 @@ export class TimelineFillService extends BaseAIService {
     }
 
     return this.answerQuestionWithContent(
+      storyId,
       query,
       this.buildContent(targetChapters, maxChapterTokens, getChapterEntries),
     )
@@ -251,10 +254,11 @@ export class TimelineFillService extends BaseAIService {
    * story is a large, repeated allocation on the generation hot path.
    */
   private async answerQuestionWithContent(
+    storyId: string | undefined,
     query: string,
     chapterContent: string,
   ): Promise<TimelineAnswer> {
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ chapterContent, query })
     const { system, user: prompt } = await ctx.render('timeline-fill-answer')
 
@@ -287,12 +291,13 @@ export class TimelineFillService extends BaseAIService {
    * rather than reported as unanswerable.
    */
   private async answerQuestionsWithContent(
+    storyId: string | undefined,
     queries: string[],
     chapterContent: string,
   ): Promise<{ answers: TimelineAnswer[]; llmCalls: number }> {
     const questionsList = queries.map((q, index) => `${index}. ${q}`).join('\n')
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(storyId)
     ctx.add({ chapterContent, questionsList })
     const { system, user: prompt } = await ctx.render('timeline-fill-batch-answer')
 
@@ -328,7 +333,9 @@ export class TimelineFillService extends BaseAIService {
         of: queries.length,
       })
       const retried = await Promise.all(
-        missing.map((index) => this.answerQuestionWithContent(queries[index], chapterContent)),
+        missing.map((index) =>
+          this.answerQuestionWithContent(storyId, queries[index], chapterContent),
+        ),
       )
       missing.forEach((index, i) => {
         answers[index] = retried[i]
@@ -345,6 +352,7 @@ export class TimelineFillService extends BaseAIService {
    * @param maxChapterTokens Budget for each answer prompt's chapter text; see `chapterReadBudget`.
    */
   async runTimelineFill(
+    storyId: string | undefined,
     visibleEntries: StoryEntry[],
     chapters: Chapter[],
     getChapterEntries?: (chapter: Chapter) => StoryEntry[],
@@ -362,7 +370,7 @@ export class TimelineFillService extends BaseAIService {
       return { queries: [], responses: [] }
     }
 
-    const queries = await this.generateQueries(visibleEntries, chapters, alreadyInContext)
+    const queries = await this.generateQueries(storyId, visibleEntries, chapters, alreadyInContext)
     if (queries.length === 0) {
       return { queries: [], responses: [] }
     }
@@ -414,10 +422,13 @@ export class TimelineFillService extends BaseAIService {
         const { answers, llmCalls } =
           group.items.length === 1
             ? {
-                answers: [await this.answerQuestionWithContent(group.items[0].query, content)],
+                answers: [
+                  await this.answerQuestionWithContent(storyId, group.items[0].query, content),
+                ],
                 llmCalls: 1,
               }
             : await this.answerQuestionsWithContent(
+                storyId,
                 group.items.map((i) => i.query),
                 content,
               )

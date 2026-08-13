@@ -54,11 +54,15 @@ export interface PostGenerationDependencies {
   generateSuggestions: (
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
-    lorebookEntries?: Entry[],
-    promptContext?: PromptContext,
-    latestNarrativeResponse?: string,
+    lorebookEntries: Entry[] | undefined,
+    latestNarrativeResponse: string | undefined,
+    storyId: string | undefined,
   ) => Promise<{ suggestions: Suggestion[] }>
-  translateSuggestions: (suggestions: Suggestion[], targetLanguage: string) => Promise<Suggestion[]>
+  translateSuggestions: (
+    suggestions: Suggestion[],
+    targetLanguage: string,
+    storyId: string | undefined,
+  ) => Promise<Suggestion[]>
   generateActionChoices: (
     entries: StoryEntry[],
     worldState: PostWorldState,
@@ -66,10 +70,12 @@ export interface PostGenerationDependencies {
     lorebookEntries: Entry[],
     promptContext: PromptContext,
     pov: 'first' | 'second' | 'third',
+    storyId: string | undefined,
   ) => Promise<{ choices: ActionChoice[] }>
   translateActionChoices: (
     choices: ActionChoice[],
     targetLanguage: string,
+    storyId: string | undefined,
   ) => Promise<ActionChoice[]>
 }
 
@@ -77,6 +83,8 @@ export interface PostGenerationDependencies {
 export interface PostGenerationInput {
   isCreativeMode: boolean
   disableSuggestions: boolean
+  /** Story whose pack supplies the suggestion and action-choice templates. */
+  storyId: string
   entries: StoryEntry[]
   activeThreads: StoryBeat[]
   lorebookEntries: Entry[]
@@ -138,10 +146,10 @@ export class PostGenerationPhase {
 
   private async generateSuggestions(input: PostGenerationInput): Promise<Suggestion[]> {
     const {
+      storyId,
       entries,
       activeThreads,
       lorebookEntries,
-      promptContext,
       narrativeResponse,
       translationSettings,
     } = input
@@ -149,13 +157,17 @@ export class PostGenerationPhase {
       entries,
       activeThreads,
       lorebookEntries,
-      promptContext,
       narrativeResponse,
+      storyId,
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateSuggestions(suggestions, translationSettings.targetLanguage)
+        return await this.deps.translateSuggestions(
+          suggestions,
+          translationSettings.targetLanguage,
+          storyId,
+        )
       } catch {
         return suggestions
       }
@@ -165,6 +177,7 @@ export class PostGenerationPhase {
 
   private async generateActionChoices(input: PostGenerationInput): Promise<ActionChoice[]> {
     const {
+      storyId,
       entries,
       lorebookEntries,
       promptContext,
@@ -180,11 +193,16 @@ export class PostGenerationPhase {
       lorebookEntries,
       promptContext,
       pov,
+      storyId,
     )
 
     if (TranslationService.shouldTranslate(translationSettings)) {
       try {
-        return await this.deps.translateActionChoices(choices, translationSettings.targetLanguage)
+        return await this.deps.translateActionChoices(
+          choices,
+          translationSettings.targetLanguage,
+          storyId,
+        )
       } catch {
         return choices
       }

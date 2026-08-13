@@ -41,6 +41,9 @@ export {
   generatePortrait,
 } from './imageUtils'
 
+// Style template resolution
+export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'
+
 // Constants
 export {
   DEFAULT_FALLBACK_STYLE_PROMPT,

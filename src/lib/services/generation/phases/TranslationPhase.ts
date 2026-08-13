@@ -27,11 +27,14 @@ export interface TranslationDependencies {
     content: string,
     targetLanguage: string,
     isVisualProse: boolean,
+    storyId: string | undefined,
   ) => Promise<TranslationResult>
 }
 
 /** Input for the translation phase */
 export interface TranslationInput {
+  /** Story whose pack supplies the translation template. */
+  storyId: string
   narrativeContent: string
   narrativeEntryId: string
   isVisualProse: boolean
@@ -58,7 +61,7 @@ export class TranslationPhase {
   async *execute(input: TranslationInput): AsyncGenerator<GenerationEvent, TranslationResult2> {
     yield { type: 'phase_start', phase: 'translation' } satisfies PhaseStartEvent
 
-    const { narrativeContent, isVisualProse, translationSettings, abortSignal } = input
+    const { storyId, narrativeContent, isVisualProse, translationSettings, abortSignal } = input
 
     // Check if translation should be skipped
     if (!TranslationService.shouldTranslateNarration(translationSettings)) {
@@ -93,6 +96,7 @@ export class TranslationPhase {
         narrativeContent,
         targetLanguage,
         isVisualProse,
+        storyId,
       )
 
       if (abortSignal?.aborted) {

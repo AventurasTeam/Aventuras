@@ -79,6 +79,8 @@ export interface RetrievalResult {
  * Context for running agentic retrieval.
  */
 export interface RetrievalContext {
+  /** Story whose pack supplies the template; undefined only outside a story. */
+  storyId: string | undefined
   userInput: string
   recentNarrative: string
   availableEntries: Entry[]
@@ -271,7 +273,7 @@ export class AgenticRetrievalService extends BaseAIService {
       availableEntries.map((e) => `- [${e.type}] ${e.name}`).join('\n') || 'No entries available.'
 
     // Render prompts through unified pipeline
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
       userInput: context.userInput,
       recentContext,

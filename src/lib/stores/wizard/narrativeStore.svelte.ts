@@ -55,7 +55,11 @@ export class NarrativeStore {
 
   generatedOpeningDisplay = $derived(this.generatedOpeningTranslated ?? this.generatedOpening)
 
-  constructor() {
+  /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
+  private packId: () => string | undefined
+
+  constructor(packId: () => string | undefined) {
+    this.packId = packId
     // Update default POV and tense when mode changes
     // $effect(() => {
     //   if (this.selectedMode === "creative-writing") {
@@ -163,6 +167,7 @@ export class NarrativeStore {
 
     try {
       this.generatedOpening = await scenarioService.generateOpening(
+        this.packId(),
         wizardData,
         settings.servicePresetAssignments['wizard:openingGeneration'],
         lorebookContext,
@@ -199,6 +204,7 @@ export class NarrativeStore {
         : this.generatedOpening
 
       this.generatedOpening = await scenarioService.refineOpening(
+        this.packId(),
         wizardData,
         currentOpening,
         settings.servicePresetAssignments['wizard:openingRefinement'],
@@ -232,6 +238,7 @@ export class NarrativeStore {
         const translated = await aiService.translateWizardBatch(
           fields,
           translationSettings.targetLanguage,
+          this.packId(),
         )
 
         this.generatedOpeningTranslated = {

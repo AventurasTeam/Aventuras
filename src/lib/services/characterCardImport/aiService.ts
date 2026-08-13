@@ -43,11 +43,15 @@ class AIService extends BaseAIService {
     super(serviceId)
   }
 
-  async convertCardToScenario(parsedCard: ParsedCard, genre: Genre): Promise<CardImportResult> {
+  async convertCardToScenario(
+    packId: string | undefined,
+    parsedCard: ParsedCard,
+    genre: Genre,
+  ): Promise<CardImportResult> {
     const cardTitle = parsedCard.name
     const cardContent = buildCardContext(parsedCard)
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({ title: cardTitle, genre, cardContent })
     const { system, user: prompt } = await ctx.render('character-card-import')
 
@@ -86,10 +90,13 @@ class AIService extends BaseAIService {
     }
   }
 
-  async sanitizeCharacterCard(parsedCard: ParsedCard): Promise<SanitizedCharacter> {
+  async sanitizeCharacterCard(
+    packId: string | undefined,
+    parsedCard: ParsedCard,
+  ): Promise<SanitizedCharacter> {
     const cardContent = buildCardContext(parsedCard)
 
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPackId(packId)
     ctx.add({ cardContent })
     const { system, user: prompt } = await ctx.render('vault-character-import')
 
@@ -117,6 +124,7 @@ const aiService = new AIService()
  * Convert a parsed character card into a clean character card using LLM.
  */
 export async function clean(
+  packId: string | undefined,
   jsonString: string,
   genre: Genre = 'fantasy',
 ): Promise<CardImportResult> {
@@ -138,18 +146,21 @@ export async function clean(
 
   log('Parsed card:', { name: card.name, version: card.version })
 
-  return await aiService.convertCardToScenario(card, genre)
+  return await aiService.convertCardToScenario(packId, card, genre)
 }
 
 /**
  * Sanitize a character card using LLM to extract clean character data.
  */
-export async function sanitize(jsonString: string): Promise<SanitizedCharacter | null> {
+export async function sanitize(
+  packId: string | undefined,
+  jsonString: string,
+): Promise<SanitizedCharacter | null> {
   const card = parseJson(jsonString)
   if (!card) {
     log('Failed to parse card for sanitization')
     return null
   }
 
-  return await aiService.sanitizeCharacterCard(card)
+  return await aiService.sanitizeCharacterCard(packId, card)
 }

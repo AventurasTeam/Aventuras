@@ -19,6 +19,36 @@ stored under the id `<template-id>-user`, and `ContextBuilder.render(id)` return
 resolving both. A service that destructures only `system` silently drops the user half — every service
 except the two whose templates deliberately have none.
 
+### Which pack is "the active pack"
+
+There is no ambient one. A pack is chosen per story (`stories.pack_id`), and the wizard holds its own
+selection until the story it is building exists. A `ContextBuilder` therefore has to be told, and there
+are three ways to build one:
+
+| Factory                          | Use when                                                             |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `ContextBuilder.forStory(id)`    | the template also wants story variables (mode, pov, protagonist, …)   |
+| `ContextBuilder.forPack(id)`     | the service populates its own context and needs only the pack         |
+| `ContextBuilder.forPackId(pack)` | the wizard and the Vault, which hold a pack but no story              |
+
+`forPack` skips `forStory`'s entity loads but still resolves pack variables and per-story overrides, so
+a user's custom variable works in any template. Neither factory throws: several callers build their
+context outside the `try` guarding the model call, and losing a customization must not cost the turn.
+
+**The `storyId` argument is required, never optional.** `undefined` is a legitimate value — outside a
+story — but it has to be passed. This is the whole defence: an optional trailing `storyId?: string` type-
+checks when omitted, and every prompt rendered without one silently resolves against `default-pack` while
+the user's chosen pack sits unused. Nothing in the output says so. Where the parameter would otherwise
+land behind an optional one, it goes **first** rather than becoming optional itself.
+
+Image style templates and the interactive-lorebook tool template are external — raw text spliced into a
+prompt, never rendered through Liquid — but they live in a pack, so they call `resolveTemplate` directly
+rather than reimplementing the chain: `resolveStylePrompt(storyId, styleId)` /
+`resolveStylePromptForPack(packId, styleId)` in `services/ai/image/stylePrompt.ts` wrap it, adding only
+the built-in style for the case where the id resolves to nothing. A second chain would drift, and did:
+skipping the code baseline meant a pack missing `image-style-photorealistic` silently rendered soft
+anime. The Vault is global and has no story, so it resolves against `default-pack` by design.
+
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 
 - **`refreshDefaultPackTemplates`** updates `default-pack` when the code baseline changes, so shipped

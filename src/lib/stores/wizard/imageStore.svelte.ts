@@ -3,40 +3,24 @@ import {
   hasRequiredCredentials,
   getProviderDisplayName,
   generatePortrait as sdkGeneratePortrait,
+  resolveStylePromptForPack,
 } from '$lib/services/ai/image'
-import { database } from '$lib/services/database'
 import { ContextBuilder } from '$lib/services/context'
-import { DEFAULT_FALLBACK_STYLE_PROMPT } from '$lib/services/ai/image/constants'
 import { createLogger } from '$lib/log'
 import type { GeneratedCharacter, GeneratedProtagonist } from '$lib/services/ai/sdk'
 
 const log = createLogger('WizardPortrait')
 
 /**
- * Get the style prompt for the selected style ID.
- * Image style templates are external (raw text) -- fetched directly from the database.
- */
-async function getStylePrompt(styleId: string): Promise<string> {
-  try {
-    const template = await database.getPackTemplate('default-pack', styleId)
-    if (template?.content) {
-      return template.content
-    }
-  } catch {
-    // Template not found, use fallback
-  }
-  return DEFAULT_FALLBACK_STYLE_PROMPT
-}
-
-/**
  * Build a portrait generation prompt using ContextBuilder pipeline.
  */
 async function buildPortraitPrompt(
+  packId: string | undefined,
   stylePrompt: string,
   visualDescriptors: string,
   characterName: string,
 ): Promise<string> {
-  const ctx = new ContextBuilder()
+  const ctx = await ContextBuilder.forPackId(packId)
   ctx.add({
     mode: 'adventure',
     pov: 'second',
@@ -51,6 +35,13 @@ async function buildPortraitPrompt(
 }
 
 export class ImageStore {
+  /** The pack the wizard has selected; read live, since the user can change it mid-wizard. */
+  private packId: () => string | undefined
+
+  constructor(packId: () => string | undefined) {
+    this.packId = packId
+  }
+
   protagonistVisualDescriptors = $state('')
   protagonistPortrait = $state<string | null>(null)
   isGeneratingProtagonistPortrait = $state(false)
@@ -92,8 +83,14 @@ export class ImageStore {
     this.portraitError = null
 
     try {
-      const stylePrompt = await getStylePrompt(imageSettings.styleId)
-      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, protagonist.name)
+      const packId = this.packId()
+      const stylePrompt = await resolveStylePromptForPack(packId, imageSettings.portraitStyleId)
+      const portraitPrompt = await buildPortraitPrompt(
+        packId,
+        stylePrompt,
+        descriptors,
+        protagonist.name,
+      )
 
       log('Sending protagonist portrait request', {
         promptLength: portraitPrompt.length,
@@ -151,8 +148,9 @@ export class ImageStore {
     this.portraitError = null
 
     try {
-      const stylePrompt = await getStylePrompt(imageSettings.portraitStyleId)
-      const portraitPrompt = await buildPortraitPrompt(stylePrompt, descriptors, char.name)
+      const packId = this.packId()
+      const stylePrompt = await resolveStylePromptForPack(packId, imageSettings.portraitStyleId)
+      const portraitPrompt = await buildPortraitPrompt(packId, stylePrompt, descriptors, char.name)
 
       log('Sending supporting character portrait request', {
         characterName: charName,

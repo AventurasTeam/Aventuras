@@ -26,6 +26,8 @@ const log = createLogger('ImageAnalysis')
  * Context needed to analyze narrative for imageable scenes.
  */
 export interface ImageAnalysisContext {
+  /** Story whose pack supplies the analysis template. */
+  storyId: string
   /** The narrative text to analyze (English original) */
   narrativeResponse: string
   /** The user action that triggered this narrative */
@@ -109,7 +111,7 @@ ${context.translatedNarrative}`
       : 'image-prompt-analysis'
 
     // Build context and render
-    const ctx = new ContextBuilder()
+    const ctx = await ContextBuilder.forPack(context.storyId)
     ctx.add({
       imageStylePrompt: context.stylePrompt,
       characterDescriptors: characterDescriptors || 'No character visual descriptors available.',

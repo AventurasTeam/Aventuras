@@ -32,7 +32,10 @@ vi.mock('../sdk/generate', () => ({
 // tests are about, but `chapterContent` is — so it is captured on the way through.
 const rendered: Record<string, string>[] = []
 vi.mock('$lib/services/context', () => ({
-  ContextBuilder: class {
+  ContextBuilder: class ContextBuilderMock {
+    static async forPack() {
+      return new ContextBuilderMock()
+    }
     private vars: Record<string, string> = {}
     add(vars: Record<string, string>) {
       Object.assign(this.vars, vars)
@@ -78,6 +81,7 @@ describe('TimelineFillService', () => {
 
   it('returns empty queries if no chapters exist', async () => {
     const queries = await new TimelineFillService('timelineFill', 3).generateQueries(
+      undefined,
       mockEntries,
       [],
     )
@@ -98,7 +102,7 @@ describe('runTimelineFill - unanswered questions', () => {
       .mockRejectedValueOnce(new Error('context overflow'))
       .mockResolvedValueOnce('Sera was at the gate.')
 
-    const result = await service.runTimelineFill(mockEntries, [chapter(1), chapter(2)])
+    const result = await service.runTimelineFill(undefined, mockEntries, [chapter(1), chapter(2)])
 
     expect(result.queries).toHaveLength(2)
     expect(result.responses).toHaveLength(1)
@@ -112,7 +116,7 @@ describe('runTimelineFill - unanswered questions', () => {
       queries: [{ query: 'What happened in chapter 99?', chapters: [99] }],
     })
 
-    const result = await service.runTimelineFill(mockEntries, [chapter(1)])
+    const result = await service.runTimelineFill(undefined, mockEntries, [chapter(1)])
 
     expect(result.responses).toEqual([])
     expect(generatePlainText).not.toHaveBeenCalled()
@@ -128,6 +132,7 @@ describe('runTimelineFill - chapter text budget', () => {
     generatePlainText.mockResolvedValue('An answer.')
 
     await service.runTimelineFill(
+      undefined,
       mockEntries,
       chapters.map((n) => chapter(n)),
       (c) => fatEntries(c.number),
@@ -182,7 +187,7 @@ describe('runTimelineFill - chapter text budget', () => {
           }) as unknown as StoryEntry,
       )
 
-    await service.runTimelineFill(mockEntries, [chapter(1)], cheap, undefined, 20)
+    await service.runTimelineFill(undefined, mockEntries, [chapter(1)], cheap, undefined, 20)
 
     const content = rendered.find((v) => 'chapterContent' in v)?.chapterContent ?? ''
     expect(content).toContain('CHEAP-0')
@@ -209,6 +214,7 @@ describe('runTimelineFill - subset grouping', () => {
       })
 
     const result = await service.runTimelineFill(
+      undefined,
       mockEntries,
       [chapter(1), chapter(2), chapter(3)],
       (c) => fatEntries(c.number),
@@ -245,6 +251,7 @@ describe('runTimelineFill - subset grouping', () => {
     // 3 down -- exactly the chapter the narrow question is about. {3} alone fits. Folded,
     // the narrow question would be answered from a text that stops inside chapter 1.
     await service.runTimelineFill(
+      undefined,
       mockEntries,
       [chapter(1), chapter(2), chapter(3)],
       (c) => fatEntries(c.number),
@@ -271,8 +278,11 @@ describe('runTimelineFill - subset grouping', () => {
     })
     generatePlainText.mockResolvedValue('An answer.')
 
-    await service.runTimelineFill(mockEntries, [chapter(1), chapter(2), chapter(3)], (c) =>
-      fatEntries(c.number),
+    await service.runTimelineFill(
+      undefined,
+      mockEntries,
+      [chapter(1), chapter(2), chapter(3)],
+      (c) => fatEntries(c.number),
     )
 
     // Neither is a subset of the other, so they stay separate rather than both paying for

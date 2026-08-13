@@ -18,7 +18,8 @@ import { actionChoicesResultSchema, type ActionChoice } from '../sdk/schemas/act
 const log = createLogger('ActionChoices')
 
 export interface ActionChoicesContext {
-  storyId?: string
+  /** Story whose pack supplies the template; undefined only outside a story. */
+  storyId: string | undefined
   narrativeResponse: string
   userAction: string
   recentEntries: StoryEntry[]
