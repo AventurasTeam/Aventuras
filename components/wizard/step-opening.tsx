@@ -56,8 +56,7 @@ export type StepOpeningProps = {
 export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const definition = wizardStore.useWizard((s) => s.state.definition)
   const opening = wizardStore.useWizard((s) => s.state.opening)
-  const leadName = wizardStore.useWizard((s) => s.state.leadName)
-  const leadEntityId = wizardStore.useWizard((s) => s.state.leadEntityId)
+  const cast = wizardStore.useWizard((s) => s.state.cast)
 
   const hasContent = opening.content.trim().length > 0
   // wizard.md → Replace-on-existing: a candidate accepted over authored prose
@@ -68,13 +67,22 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const handleSetup = onSetupAssist ?? (() => {})
   const resolveModelId = assist?.resolveModelId ?? (() => resolveWizardAssistModelId())
 
-  const sceneName =
-    leadEntityId != null &&
-    opening.sceneEntities.includes(leadEntityId) &&
-    leadName.trim().length > 0
-      ? leadName
+  // Resolved live against the current cast, not snapshotted at generation
+  // time (wizard.md → Committed prose: refs stay intact across cast edits;
+  // the user regenerates via ✨ for fresh metadata rather than this label
+  // silently going stale-but-blank).
+  const sceneNames = opening.sceneEntities
+    .map((id) => cast.find((r) => r.id === id)?.name.trim())
+    .filter((name): name is string => name != null && name.length > 0)
+  const locationName =
+    opening.currentLocationId != null
+      ? (cast.find((r) => r.id === opening.currentLocationId)?.name.trim() ?? null)
       : null
-  const metadataLabel = isAiGenerated && hasContent && sceneName != null ? sceneName : null
+  const parts = [
+    ...sceneNames,
+    ...(locationName != null && locationName.length > 0 ? [locationName] : []),
+  ]
+  const metadataLabel = isAiGenerated && hasContent && parts.length > 0 ? parts.join(' · ') : null
 
   // An absent default-story-setting tracks the code default, which is 'local'.
   const embeddingBackend =

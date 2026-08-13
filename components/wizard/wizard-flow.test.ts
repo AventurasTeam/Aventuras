@@ -55,6 +55,7 @@ type MakeStateInput = {
   title?: string
   leadName?: string
   leadEntityId?: string | null
+  cast?: WizardWorkingState['cast']
   opening?: Partial<WizardWorkingState['opening']>
 }
 
@@ -65,6 +66,7 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
     step: 5,
     leadName: input.leadName ?? base.leadName,
     leadEntityId: input.leadEntityId ?? base.leadEntityId,
+    cast: input.cast ?? base.cast,
     definition: {
       ...base.definition,
       mode: input.mode ?? base.definition.mode,
@@ -130,8 +132,13 @@ describe('wizard full-flow integration', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Aria Rising',
+        // leadName stays populated alongside the matching cast row: finishWizard's
+        // lead gate still reads only leadName (pre-cast field, see the pinned gap
+        // test below), so a fixture exercising the real post-3.6b shape needs both
+        // until that gate is migrated to read cast.
         leadName: 'Aria',
         leadEntityId: leadId,
+        cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
         opening: { content: 'You wake at dawn.', sceneEntities: [leadId], model: 'test-model' },
       }),
       ctx,
@@ -156,6 +163,35 @@ describe('wizard full-flow integration', () => {
     expect(entityRows[0].id).toBe(leadId)
     expect(storyRow.definition!.leadEntityId).toBe(leadId)
     expect(entryRows[0].metadata!.sceneEntities).toEqual([leadId])
+  })
+
+  // Pinned gap: since Slice 3.6b moved lead authoring into Cast, nothing in the
+  // app ever calls setLeadName anymore — a real wizard walkthrough leaves it
+  // blank while the lead lives in cast + leadEntityId. finishWizard's lead gate
+  // hasn't been migrated to read cast yet, so this fixture (the actual shape a
+  // fresh adventure-mode session now produces) fails Finish on the stale field.
+  // Flip this to `status: 'ok'` the day that gate starts reading cast instead.
+  it('a cast-only lead with no legacy leadName still fails Finish on the lead reason', async () => {
+    const { ctx } = await setup()
+    const leadId = generateId('char')
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Cast-Only Lead',
+        leadEntityId: leadId,
+        cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
+        opening: { content: 'You wake at dawn.', sceneEntities: [leadId], model: 'test-model' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2500,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['lead'] })
   })
 
   describe('AC3: AI opening idMap round-trip (simulated model output, no live provider)', () => {
@@ -184,6 +220,7 @@ describe('wizard full-flow integration', () => {
           title: 'Dawn Patrol',
           leadName: 'Aria',
           leadEntityId: leadId,
+          cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
           opening: {
             content: parsed.prose,
             sceneEntities: resolvedSceneEntities,

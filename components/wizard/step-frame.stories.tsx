@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen } from 'storybook/test'
 
 import { wizardStore } from '@/lib/stores'
 
@@ -52,9 +52,7 @@ export const AdventureFirst: Story = {
     expect(
       await screen.findByText('This combination will require a lead character in Cast.'),
     ).toBeInTheDocument()
-
-    const leadInput = screen.getByPlaceholderText('e.g. Aria Stoneheart')
-    await userEvent.type(leadInput, 'Aria')
-    await waitFor(() => expect(wizardStore.getWizard().state.leadName).toBe('Aria'))
+    // The lead moved to Cast (Slice 3.6b) — no input renders on this step anymore.
+    expect(screen.queryByPlaceholderText('e.g. Aria Stoneheart')).not.toBeInTheDocument()
   },
 }

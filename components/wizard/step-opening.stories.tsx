@@ -3,6 +3,7 @@ import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import type { GenerateStructuredResult } from '@/lib/ai'
+import { emptyCastDraft } from '@/lib/db'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 
 import { StepOpening } from './step-opening'
@@ -76,7 +77,9 @@ export const OpeningAssistCommits: Story = {
     wizardStore.reset()
     appSettingsStore.__reset()
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Aria')
+    // importCast (not addCast) so the row lands on the fixed LEAD_ID the
+    // assist mock's sceneEntities reference, instead of a minted one.
+    wizardStore.importCast([{ ...emptyCastDraft('character', LEAD_ID), name: 'Aria' }])
     wizardStore.setLeadEntityId(LEAD_ID)
   },
   render: () => (
@@ -118,7 +121,9 @@ export const OpeningAssistOverExistingProseConfirms: Story = {
     wizardStore.reset()
     appSettingsStore.__reset()
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Aria')
+    // importCast (not addCast) so the row lands on the fixed LEAD_ID the
+    // assist mock's sceneEntities reference, instead of a minted one.
+    wizardStore.importCast([{ ...emptyCastDraft('character', LEAD_ID), name: 'Aria' }])
     wizardStore.setLeadEntityId(LEAD_ID)
     wizardStore.patchOpening({ content: EXISTING_OPENING })
   },

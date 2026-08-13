@@ -3,7 +3,6 @@ import { Platform, View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Heading } from '@/components/ui/heading'
-import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
@@ -105,7 +104,6 @@ function FrameSegment({
 export function StepFrame() {
   const mode = wizardStore.useWizard((s) => s.state.definition.mode)
   const narration = wizardStore.useWizard((s) => s.state.definition.narration)
-  const leadName = wizardStore.useWizard((s) => s.state.leadName)
 
   const lead = needsLead(mode, narration)
 
@@ -133,18 +131,7 @@ export function StepFrame() {
         />
       </FormRow>
 
-      {lead ? (
-        <>
-          <StepNotice message={t('wizard:frame.leadNotice')} />
-          <FormRow label={t('wizard:frame.leadName.label')}>
-            <Input
-              value={leadName}
-              onChangeText={wizardStore.setLeadName}
-              placeholder={t('wizard:frame.leadName.placeholder')}
-            />
-          </FormRow>
-        </>
-      ) : null}
+      {lead ? <StepNotice message={t('wizard:frame.leadNotice')} /> : null}
     </View>
   )
 }

@@ -133,11 +133,7 @@
         "description": "\"Aria drew…\""
       }
     },
-    "leadNotice": "This combination will require a lead character in Cast.",
-    "leadName": {
-      "label": "Lead character name",
-      "placeholder": "e.g. Aria Stoneheart"
-    }
+    "leadNotice": "This combination will require a lead character in Cast."
   },
   "calendarStep": {
     "originError": "Enter a value between {{min}} and {{max}}.",

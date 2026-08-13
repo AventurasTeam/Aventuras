@@ -14,11 +14,11 @@ export type NewCreativeStory = { title: string; opening: string }
 // Drive the wizard end-to-end to create an adventure story with a lead entity —
 // the path create-story.ts embeds the lead through the local embedder. Assumes
 // the wizard is already open (past the embedder gate) on step 1. Steps run
-// 1 → 2 → 3 → 5; the calendar step self-populates a valid origin on mount.
+// 1 → 2 → 3 → 4 → 5; the calendar step self-populates a valid origin on mount.
 export async function createAdventureStory(page: Page, story: NewAdventureStory): Promise<void> {
-  // Step 1 — adventure mode surfaces the lead-name field (needsLead).
+  // Step 1 — adventure mode surfaces the lead-required notice (needsLead); the
+  // lead itself is authored in Cast (step 4).
   await wizard.modeOption(page, 'adventure').click()
-  await wizard.leadName(page).fill(story.lead)
   await wizard.next(page).click()
 
   // Step 2 — calendar defaults are valid; advance.
@@ -31,6 +31,13 @@ export async function createAdventureStory(page: Page, story: NewAdventureStory)
     await wizard.loreTitle(page, i).fill(row.title)
     await wizard.loreBody(page, i).fill(row.body)
   }
+  await wizard.next(page).click()
+
+  // Step 4 — Cast. A single active character marked lead satisfies the gate.
+  await wizard.addCast(page).click()
+  await wizard.addCastKind(page, 'character').click()
+  await wizard.castName(page).fill(story.lead)
+  await wizard.setAsLead(page).click()
   await wizard.next(page).click()
 
   // Step 5 — opening + title are the remaining Finish requirements.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { DEFAULT_CALENDAR_ID, getCalendar, type CalendarSystem } from '@/lib/calendar'
+import { emptyCastDraft } from '@/lib/db'
 
 import {
   ACTIVE_STEP_ORDER,
@@ -22,7 +23,8 @@ function mkParams(o: Partial<StepValidityParams> = {}): StepValidityParams {
   return {
     mode: 'creative',
     narration: 'third',
-    leadName: '',
+    cast: [],
+    leadEntityId: null,
     worldTimeOrigin: validOrigin(calendar),
     calendar,
     lore: [],
@@ -31,17 +33,29 @@ function mkParams(o: Partial<StepValidityParams> = {}): StepValidityParams {
 }
 
 describe('stepForwardValid', () => {
-  it('step 1 needs no lead for creative+third', () => {
+  it('step 1 has no forward gate — the lead moved to step 4', () => {
     expect(stepForwardValid(1, mkParams())).toBe(true)
-  })
-  it('step 1 requires a non-blank lead name when the mode needs a lead', () => {
-    expect(stepForwardValid(1, mkParams({ mode: 'adventure', leadName: '  ' }))).toBe(false)
-    expect(stepForwardValid(1, mkParams({ mode: 'adventure', leadName: 'Aria' }))).toBe(true)
+    expect(stepForwardValid(1, mkParams({ mode: 'adventure', cast: [], leadEntityId: null }))).toBe(
+      true,
+    )
   })
   it('step 2 requires a calendar and an in-range origin', () => {
     expect(stepForwardValid(2, mkParams())).toBe(true)
     expect(stepForwardValid(2, mkParams({ calendar: null }))).toBe(false)
     expect(stepForwardValid(2, mkParams({ worldTimeOrigin: {} }))).toBe(false)
+  })
+  it('step 4 gates on named rows and the lead requirement', () => {
+    const base = {
+      mode: 'adventure' as const,
+      narration: 'third' as const,
+      worldTimeOrigin: {},
+      calendar,
+      lore: [],
+    }
+    const lead = { ...emptyCastDraft('character', 'char_a'), name: 'Aria' }
+    expect(stepForwardValid(4, { ...base, cast: [lead], leadEntityId: 'char_a' })).toBe(true)
+    expect(stepForwardValid(4, { ...base, cast: [lead], leadEntityId: null })).toBe(false)
+    expect(stepForwardValid(1, { ...base, cast: [], leadEntityId: null })).toBe(true)
   })
   it('step 5 has no forward gate', () => {
     expect(stepForwardValid(5, mkParams({ worldTimeOrigin: {} }))).toBe(true)
@@ -49,7 +63,8 @@ describe('stepForwardValid', () => {
 })
 
 describe('canJumpToStep', () => {
-  const valid = mkParams({ mode: 'adventure', leadName: 'Aria' })
+  const leadRow = { ...emptyCastDraft('character', 'char_a'), name: 'Aria' }
+  const valid = mkParams({ mode: 'adventure', cast: [leadRow], leadEntityId: 'char_a' })
 
   it('never jumps to the active step', () => {
     expect(canJumpToStep(2, 2, 5, valid)).toBe(false)
@@ -66,13 +81,19 @@ describe('canJumpToStep', () => {
   })
   it('blocks a forward jump when a gating step before the target is now invalid', () => {
     // Visited step 5, but the calendar origin has since been cleared → can't
-    // land on 5 by skipping the now-invalid step 2.
+    // land on 5 by skipping the now-invalid step 2. Cast (step 4) stays
+    // satisfied so this isolates step 2 as the sole blocker.
     expect(
       canJumpToStep(
         5,
         1,
         5,
-        mkParams({ mode: 'adventure', leadName: 'Aria', worldTimeOrigin: {} }),
+        mkParams({
+          mode: 'adventure',
+          cast: [leadRow],
+          leadEntityId: 'char_a',
+          worldTimeOrigin: {},
+        }),
       ),
     ).toBe(false)
   })
@@ -82,14 +103,15 @@ describe('step 3 in the sequence', () => {
   const clean: StepValidityParams = {
     mode: 'creative',
     narration: 'third',
-    leadName: '',
+    cast: [],
+    leadEntityId: null,
     worldTimeOrigin: {},
     calendar: null,
     lore: [],
   }
 
-  it('includes World in the active order', () => {
-    expect(ACTIVE_STEP_ORDER).toEqual([1, 2, 3, 5])
+  it('is part of the five-step active order', () => {
+    expect(ACTIVE_STEP_ORDER).toEqual([1, 2, 3, 4, 5])
   })
 
   it('advances past step 3 when no lore is authored', () => {
@@ -140,14 +162,18 @@ describe('step 3 in the sequence', () => {
 })
 
 describe('nextActiveStep / prevActiveStep', () => {
-  it('advances to the next entry in ACTIVE_STEP_ORDER, skipping disabled steps', () => {
+  it('advances to the next entry in ACTIVE_STEP_ORDER', () => {
     expect(nextActiveStep(1)).toBe(2)
     expect(nextActiveStep(2)).toBe(3)
-    expect(nextActiveStep(3)).toBe(5)
+    // Cast is live: step 3 advances to 4, not straight to 5 — the failure
+    // mode a hardcoded "3 -> 5" pivot would reintroduce.
+    expect(nextActiveStep(3)).toBe(4)
+    expect(nextActiveStep(4)).toBe(5)
   })
 
   it('steps back to the previous entry in ACTIVE_STEP_ORDER', () => {
-    expect(prevActiveStep(5)).toBe(3)
+    expect(prevActiveStep(5)).toBe(4)
+    expect(prevActiveStep(4)).toBe(3)
     expect(prevActiveStep(3)).toBe(2)
     expect(prevActiveStep(2)).toBe(1)
   })
@@ -155,14 +181,5 @@ describe('nextActiveStep / prevActiveStep', () => {
   it('holds at the first/last entry rather than falling off the sequence', () => {
     expect(prevActiveStep(1)).toBe(1)
     expect(nextActiveStep(5)).toBe(5)
-  })
-
-  it('regression guard: enabling a step in the order is enough — no hardcoded pivot to update', () => {
-    // The exact failure mode Slice 3.6b would hit if goNext/goBack still hardcoded
-    // "3 -> 5" / "5 -> 3": with Cast (4) added to the order, step 3 must advance to
-    // 4, not jump straight to 5.
-    const orderWithCast = [1, 2, 3, 4, 5]
-    expect(nextActiveStep(3, orderWithCast)).toBe(4)
-    expect(prevActiveStep(5, orderWithCast)).toBe(4)
   })
 })

@@ -6,11 +6,20 @@ import { t } from '../harness/i18n'
 // (docs/testing.md → Selector strategy, Tier 2).
 export const wizard = {
   // Step 1 (Frame): mode is a radio segment; its accessible name carries the
-  // option label. `adventure` makes needsLead true, surfacing the lead input.
+  // option label. `adventure` makes needsLead true, surfacing the lead-required
+  // notice — the lead itself is authored in Cast (step 4).
   modeOption: (page: Page, mode: 'adventure' | 'creative'): Locator =>
     page.getByRole('radio', { name: t(`wizard:frame.mode.${mode}.label`), exact: false }),
 
-  leadName: (page: Page): Locator => page.getByPlaceholder(t('wizard:frame.leadName.placeholder')),
+  // Step 4 (Cast): adding a row opens it expanded (cast-list.tsx → expandAdded),
+  // so Name is immediately visible with no separate "Expand" click needed.
+  addCast: (page: Page): Locator => page.getByRole('button', { name: t('wizard:cast.add') }),
+  addCastKind: (page: Page, kind: 'character' | 'location' | 'item' | 'faction'): Locator =>
+    page.getByRole('menuitem', { name: t(`wizard:cast.kinds.${kind}`) }),
+  castName: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('wizard:cast.editor.name') }),
+  setAsLead: (page: Page): Locator =>
+    page.getByRole('button', { name: t('wizard:cast.setAsLead') }),
 
   // Step 3 (World): lore rows repeat, so Title/Body need an index — each new
   // row is appended (wizardStore.addLore) and stays expanded once opened, so

@@ -604,6 +604,13 @@ prose does **not** clear metadata refs — refs stay intact (user
 might tweak prose without invalidating cast/location grounding).
 For fresh metadata, user regenerates via `✨`.
 
+The same rule covers a back-jump to Cast that reassigns the lead
+after generation: `sceneEntities` isn't re-derived, so the metadata
+line keeps resolving names from whoever it already references (the
+prior lead included) rather than going blank or auto-clearing. It's
+model-authored scene metadata, not an authored field — same
+resolution path as any other stale ref, regenerate via `✨`.
+
 `✨` stays available in the committed state as the regenerate /
 refine entry point, per
 [Committed prose as the base](#committed-prose-as-the-base).
