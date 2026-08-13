@@ -35,6 +35,7 @@ export interface RetrievalCacheKey {
   actionContent: string
 }
 import type { SyncMode } from '$lib/types/sync'
+import { DESKTOP_BREAKPOINT } from '$lib/constants/layout'
 import { SimpleActivationTracker } from '$lib/services/ai/retrieval/EntryRetrievalService'
 import { database } from '$lib/services/database'
 import { eventBus, type EventType } from '$lib/services/events'
@@ -377,6 +378,40 @@ class UIStore {
       // No DB persist — this is a layout constraint, not a user preference.
       // Persisting here would overwrite the desktop sidebar preference.
     }
+  }
+
+  /**
+   * Get the sidebar out of the way when a sidebar control acts on the main content.
+   * Below DESKTOP_BREAKPOINT the sidebar is a near-fullscreen overlay (see AppShell's
+   * `@media (max-width: 768px)`), so the result of such an action would be invisible.
+   * Not persisted, for the same reason as setMobileDefaults: a mobile layout constraint
+   * must not overwrite the desktop sidebar preference.
+   */
+  closeSidebarOnMobile() {
+    if (typeof window !== 'undefined' && window.innerWidth <= DESKTOP_BREAKPOINT) {
+      this.sidebarOpen = false
+    }
+  }
+
+  /**
+   * A pending request for the story view to bring one entry into view.
+   *
+   * Deliberately durable state rather than an event: the requester is typically another
+   * panel (the Branches sidebar), and AppShell destroys StoryView whenever activePanel
+   * isn't 'story'. An event emitted while switching back would reach nobody, because the
+   * subscriber remounts a tick later. StoryView consumes this once it has a container.
+   */
+  pendingEntryScrollId = $state<string | null>(null)
+
+  requestEntryScroll(entryId: string) {
+    this.pendingEntryScrollId = entryId
+  }
+
+  /** Take the pending request, if any, and clear it. */
+  consumeEntryScroll(): string | null {
+    const entryId = this.pendingEntryScrollId
+    this.pendingEntryScrollId = null
+    return entryId
   }
 
   openSettings() {

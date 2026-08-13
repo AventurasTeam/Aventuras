@@ -11,3 +11,14 @@ export function isAndroid(): boolean {
   if (typeof navigator === 'undefined') return false
   return /Android/i.test(navigator.userAgent)
 }
+
+/**
+ * Returns `true` when the primary input can hover, i.e. when a `title` tooltip can
+ * actually explain a control. This is a capability, not a screen size: a desktop window
+ * dragged narrow still hovers, a tablet at 1024px never does.
+ */
+export function supportsHover(): boolean {
+  if (typeof window === 'undefined') return true
+  if (typeof window.matchMedia !== 'function') return !isAndroid()
+  return !window.matchMedia('(hover: none)').matches
+}

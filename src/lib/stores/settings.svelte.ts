@@ -886,8 +886,6 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
-    branchSwitchLanding: false,
-    branchSwitchLandingTarget: 'last-entry',
   }
 }
 

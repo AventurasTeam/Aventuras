@@ -88,10 +88,15 @@
     const currentStoryId = story.currentStory?.id ?? null
 
     if (currentStoryId !== lastStoryId) {
+      const isRemount = lastStoryId === null
       lastStoryId = currentStoryId
       prevEntryCount = story.entries.length
-      // Drop any deferred landing: its branch belongs to the story we just left
-      pendingBranchLanding = null
+      // Drop any deferred landing: its branch or entry belongs to the story we just left
+      pendingBranchLanding = false
+      // Only when we actually left a story. This component is destroyed whenever another
+      // panel is up, so every mount arrives here with lastStoryId still null and would
+      // otherwise discard the very request that brought the panel back.
+      if (!isRemount) ui.consumeEntryScroll()
       anchorToBottom(story.entries.length)
       tick().then(() => performScroll())
     }
@@ -203,22 +208,42 @@
     })
   }
 
-  // ===== Branch switch landing (Labs: branchSwitchLanding) =====
+  // ===== Branch navigation =====
 
-  // Entries kept above the fork entry so the checkpoint has a little context
+  // How many entries before the fork point stay in the render window. This is about what
+  // exists in the DOM, not what is on screen — the visible context above the fork entry is
+  // decided by the lift in scrollEntryIntoView. Keeping a few rendered means scrolling up
+  // from the fork point doesn't immediately hit the "earlier entries hidden" divider.
   const FORK_CONTEXT_BEFORE = 5
 
-  // Landing requested while the story panel was hidden; consumed when it returns
-  let pendingBranchLanding: { branchId: string | null } | null = null
+  // Most of the viewport the preceding entry may take when lifted into view. A tall entry
+  // shows a slice; a short one shows in full, and the fork entry stays near the top either way.
+  const CONTEXT_LIFT_MAX_RATIO = 0.3
 
-  // Scroll a specific entry to the top of the viewport. Falls back to the container
-  // bottom when the element isn't in the DOM (entry outside the virtual window).
-  function scrollEntryIntoView(entryId: string) {
+  // A branch switch happened while the story panel was hidden; consumed when it returns
+  let pendingBranchLanding = false
+
+  // Scroll an entry to the top of the viewport. When `liftForContext` is set, the scroll is
+  // then pulled up so the preceding entry is partly visible, which is what makes a fork
+  // point read as a divergence from something rather than as the start of the story.
+  // Falls back to the container bottom when the element isn't in the DOM.
+  function scrollEntryIntoView(entryId: string, liftForContext = false) {
     const release = suppressScrollFor()
     requestAnimationFrame(() => {
       const el = storyContainer?.querySelector(`[data-entry-id="${entryId}"]`)
       if (el) {
         el.scrollIntoView({ block: 'start' })
+        if (liftForContext && storyContainer) {
+          const prevEl = el.previousElementSibling
+          if (prevEl) {
+            // Cap the lift so a long preceding entry can't push the fork entry off the bottom
+            const lift = Math.min(
+              prevEl.getBoundingClientRect().height,
+              CONTEXT_LIFT_MAX_RATIO * storyContainer.clientHeight,
+            )
+            storyContainer.scrollTop -= lift
+          }
+        }
       } else {
         performScroll()
       }
@@ -233,7 +258,10 @@
     })
   }
 
-  async function landOnLastEntry() {
+  // Where a branch switch leaves the reader: at the very end of the switched-to branch.
+  // The window is recomputed for this branch's own length — inheriting it from the branch
+  // being left is what clamps it to an empty slice when switching to a shorter one.
+  async function performBranchLanding() {
     const total = story.entries.length
     // Claim the current count so the auto-scroll effect doesn't see this as "entries added"
     prevEntryCount = total
@@ -241,59 +269,45 @@
     anchorToBottom(total)
     await tick()
 
-    // Land on the last entry itself, not the container bottom — action choices and
-    // padding sit below it, which would otherwise push the entry off the top.
-    const lastEntry = story.entries[story.entries.length - 1]
-    if (!lastEntry) {
-      performScroll()
-      return
-    }
-    scrollEntryIntoView(lastEntry.id)
+    // The container bottom, not the last entry's top edge: past the entry and the action
+    // choices below it is where writing continues.
+    performScroll()
   }
 
-  async function landOnForkEntry(branchId: string | null) {
+  // Window the virtual list around one entry and scroll to it. Returns false, having
+  // changed nothing, when the entry isn't in the current branch's view — the view can
+  // only scroll to what it can render, and the caller decides what to do instead.
+  async function landOnEntry(entryId: string): Promise<boolean> {
     const entries = story.entries
-    const forkEntryId = branchId
-      ? (story.branches.find((b) => b.id === branchId)?.forkEntryId ?? null)
-      : null
-    const idx = forkEntryId ? entries.findIndex((e) => e.id === forkEntryId) : -1
-
-    // Main branch, or fork entry not in this branch's entries → land on the last entry
-    if (!forkEntryId || idx === -1) {
-      await landOnLastEntry()
-      return
-    }
+    const idx = entries.findIndex((e) => e.id === entryId)
+    if (idx === -1) return false
 
     const total = entries.length
     prevEntryCount = total
+    // Landing away from the end is a scroll break: the next narration must not yank
+    // the view back to the bottom while the user reads where they asked to be.
     ui.setScrollBreak(true)
     windowStart = Math.max(0, idx - FORK_CONTEXT_BEFORE)
     windowEnd = Math.min(total, idx + DEFAULT_VISIBLE_ENTRIES)
     await tick()
 
-    scrollEntryIntoView(forkEntryId)
+    // Lift the scroll so the preceding entry stays partly visible: a fork point should
+    // read as a departure from something, not as the start of the story.
+    scrollEntryIntoView(entryId, true)
+    return true
   }
 
-  function performBranchLanding(branchId: string | null) {
-    if (settings.experimentalFeatures.branchSwitchLandingTarget === 'fork-entry') {
-      void landOnForkEntry(branchId)
-    } else {
-      void landOnLastEntry()
-    }
-  }
-
-  // No reactive reads in the effect body — subscribe once, unsubscribe on teardown
+  // No reactive reads in the effect bodies — subscribe once, unsubscribe on teardown
   $effect(() => {
-    return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', (event) => {
-      if (!settings.experimentalFeatures.branchSwitchLanding) return
-
+    // The payload is unread: landing resolves everything from the store when it runs
+    return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', () => {
       // Panel hidden: defer until the story panel comes back (see panel effect below)
       if (ui.activePanel !== 'story' || !storyContainer) {
-        pendingBranchLanding = { branchId: event.branchId }
+        pendingBranchLanding = true
         return
       }
 
-      performBranchLanding(event.branchId)
+      void performBranchLanding()
     })
   })
 
@@ -403,14 +417,41 @@
       untrack(() => {
         // A branch switch that happened while the panel was hidden lands now instead
         const pending = pendingBranchLanding
-        pendingBranchLanding = null
+        pendingBranchLanding = false
+        // …as does a jump-to-entry request made from another panel, which is why the
+        // request lives on the ui store: this component is destroyed while another
+        // panel is up, so it cannot be waiting on an event when the request is made.
+        // Read untracked — consuming it must not re-run this effect and undo the
+        // landing with the scrollToBottom below.
+        // Consumed before the branch-landing return, so a request that can no longer be
+        // honoured — one made for a story that was closed before the panel came back, or
+        // one a branch landing takes precedence over — doesn't linger and get picked up
+        // by the trailing effect as a second landing competing with this one.
+        const entryId = ui.consumeEntryScroll()
         if (pending) {
-          performBranchLanding(pending.branchId)
-        } else {
-          scrollToBottom()
+          void performBranchLanding()
+          return
         }
+        if (entryId && story.entries.some((e) => e.id === entryId)) {
+          void landOnEntry(entryId)
+          return
+        }
+        scrollToBottom()
       })
     }
+  })
+
+  // The same request, arriving while the story panel is already up — the effect above
+  // won't re-run, since neither activePanel nor storyContainer changed. Declared after
+  // it so that on a remount the panel effect takes the request first and this one finds
+  // nothing; consumeEntryScroll is atomic, so exactly one of the two ever lands it.
+  $effect(() => {
+    const entryId = ui.pendingEntryScrollId
+    if (!entryId || ui.activePanel !== 'story' || !storyContainer) return
+    untrack(() => {
+      ui.consumeEntryScroll()
+      void landOnEntry(entryId)
+    })
   })
 
   // Format background image URL (handling raw base64 vs data URL)

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
+  import { ui } from '$lib/stores/ui.svelte'
   import { ask } from '@tauri-apps/plugin-dialog'
   import {
     GitBranch,
@@ -10,9 +11,11 @@
     Edit2,
     Check,
     X,
+    LayerArrowUp,
   } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
+  import { supportsHover } from '$lib/utils/platform'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
@@ -174,24 +177,79 @@
   function isCurrent(branchId: string | null): boolean {
     return story.currentStory?.currentBranchId === branchId
   }
+
+  // The action targets the branch being read. A per-branch control would be disabled on
+  // most rows anyway: `story.entries` is the ACTIVE branch's view — main + ancestors up
+  // to their forks + the branch itself — so any branch outside that lineage has its fork
+  // entry nowhere in it. The active branch always has its own, so this is enabled
+  // whenever there is a branching point at all, i.e. everywhere except main.
+  const activeBranch = $derived.by(() => {
+    const branchId = story.currentStory?.currentBranchId ?? null
+    if (!branchId) return null
+    return story.branches.find((b) => b.id === branchId) ?? null
+  })
+
+  const visibleEntryIds = $derived(new Set(story.entries.map((e) => e.id)))
+  const canGoToForkPoint = $derived(
+    !!activeBranch?.forkEntryId && visibleEntryIds.has(activeBranch.forkEntryId),
+  )
+
+  // Each way the button can be unavailable says so in its own words: claiming "no
+  // branching point" while entries are still loading, or "not loaded yet" for a branch
+  // that records no fork at all, would both send the reader looking for the wrong thing.
+  const forkPointTitle = $derived.by(() => {
+    if (canGoToForkPoint) return 'Jump to where this branch began'
+    if (!story.currentStory?.currentBranchId) return 'The main branch has no branching point'
+    if (!activeBranch?.forkEntryId) return 'This branch has no recorded branching point'
+    return "This branch's starting point isn't loaded yet"
+  })
+
+  function goToForkPoint() {
+    if (!canGoToForkPoint || !activeBranch) return
+
+    // Fork points live in the story, which may not be the panel that's up — and while
+    // it isn't, StoryView is destroyed rather than hidden (see AppShell). So the request
+    // is left on the ui store for it to pick up on mount, not emitted at it.
+    ui.requestEntryScroll(activeBranch.forkEntryId)
+    ui.setActivePanel('story')
+    ui.closeSidebarOnMobile()
+
+    // Where the platform can't hover, the button's tooltip can never explain itself and
+    // the panel may have just closed — so confirm the jump the way copying an entry does.
+    if (!supportsHover()) {
+      ui.showToast('Jumped to where this branch began', 'info', 2000)
+    }
+  }
 </script>
 
 <div class="space-y-3">
   <!-- Header -->
   <div class="flex items-center justify-between">
     <h3 class="text-surface-200 font-medium">Branches</h3>
-    <button
-      class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
-        ? 'text-surface-400 hover:text-surface-200'
-        : 'text-surface-600 cursor-not-allowed'}"
-      onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
-      disabled={!canCreateBranch}
-      title={canCreateBranch
-        ? 'Create new branch from latest checkpoint'
-        : 'No checkpoints available - checkpoints are created at chapter boundaries'}
-    >
-      <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
-    </button>
+    <div class="flex items-center">
+      <button
+        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canGoToForkPoint
+          ? 'text-surface-400 hover:text-surface-200'
+          : 'text-surface-600 cursor-not-allowed'}"
+        onclick={goToForkPoint}
+        disabled={!canGoToForkPoint}
+        title={forkPointTitle}
+      >
+        <LayerArrowUp class="h-5 w-5 sm:h-4 sm:w-4" />
+      </button>
+      <button
+        class="btn-ghost flex min-h-[40px] min-w-[40px] items-center justify-center rounded p-2 sm:min-h-0 sm:min-w-0 sm:p-1.5 {canCreateBranch
+          ? 'text-surface-400 hover:text-surface-200'
+          : 'text-surface-600 cursor-not-allowed'}"
+        onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
+        disabled={!canCreateBranch}
+        title={canCreateBranch
+          ? 'Create new branch from latest checkpoint'
+          : 'No checkpoints available - checkpoints are created at chapter boundaries'}
+      >
+        <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
+      </button>
+    </div>
   </div>
 
   <!-- Create Branch Form -->
