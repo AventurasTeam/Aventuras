@@ -62,6 +62,26 @@ describe('schemaToTypeScriptBlock', () => {
     )
     expect(block).toContain('tags: (string | null)[];')
   })
+
+  it('renders a discriminated union (oneOf) with its per-member fields, not unknown', () => {
+    // zod v4 compiles z.discriminatedUnion to JSON Schema `oneOf`, not `anyOf`;
+    // this must go through the real z.toJSONSchema conversion, not a hand-written
+    // oneOf literal, so a change to zod's emission shape would be caught here too.
+    const entitySchema = z.object({
+      entities: z.array(
+        z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('character'), faction_name: z.string().optional() }),
+          z.object({ kind: z.literal('location'), parent_location_name: z.string().optional() }),
+        ]),
+      ),
+    })
+    const block = schemaToTypeScriptBlock(z.toJSONSchema(entitySchema) as JsonSchema)
+    expect(block).not.toContain('unknown')
+    expect(block).toContain('kind: "character"')
+    expect(block).toContain('faction_name?: string')
+    expect(block).toContain('kind: "location"')
+    expect(block).toContain('parent_location_name?: string')
+  })
 })
 
 describe('promptSchemaMiddleware', () => {
