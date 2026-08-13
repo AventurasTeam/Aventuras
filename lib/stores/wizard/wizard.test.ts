@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { emptyWorkingState } from '@/lib/db'
+import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
 
 import { wizardStore } from './wizard'
 
@@ -149,5 +149,71 @@ describe('lore mutators', () => {
     expect(rows).toHaveLength(3)
     expect(rows.map((r) => r.title)).toEqual(['', 'A', 'B'])
     expect(new Set(rows.map((r) => r.id)).size, 'imported ids are distinct').toBe(3)
+  })
+})
+
+describe('cast mutators', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('addCast mints a kind-prefixed id and appends an empty draft', () => {
+    const id = wizardStore.addCast('location')
+    expect(id).toMatch(/^loc_/)
+    const cast = wizardStore.getWizard().state.cast
+    expect(cast).toHaveLength(1)
+    expect(cast[0]).toMatchObject({ id, kind: 'location', name: '', status: 'active' })
+  })
+
+  it('patchCast patches by id and leaves other rows alone', () => {
+    const a = wizardStore.addCast('character')
+    const b = wizardStore.addCast('character')
+    wizardStore.patchCast(a, { name: 'Aria' })
+    const cast = wizardStore.getWizard().state.cast
+    expect(cast.find((r) => r.id === a)?.name).toBe('Aria')
+    expect(cast.find((r) => r.id === b)?.name).toBe('')
+  })
+
+  it('importCast appends fully-built drafts unchanged', () => {
+    const draft = emptyCastDraft('faction', 'fact_x')
+    wizardStore.importCast([{ ...draft, name: 'Ashfall Pact' }])
+    expect(wizardStore.getWizard().state.cast[0]).toMatchObject({
+      id: 'fact_x',
+      name: 'Ashfall Pact',
+    })
+  })
+
+  it('setCastStatus to staged on the lead unsets the lead and reports it', () => {
+    const id = wizardStore.addCast('character')
+    wizardStore.setLeadEntityId(id)
+    expect(wizardStore.setCastStatus(id, 'staged')).toBe(true)
+    const s = wizardStore.getWizard().state
+    expect(s.leadEntityId).toBeNull()
+    expect(s.cast[0].status).toBe('staged')
+  })
+
+  it('setCastStatus on a non-lead reports no cascade', () => {
+    const id = wizardStore.addCast('character')
+    expect(wizardStore.setCastStatus(id, 'staged')).toBe(false)
+  })
+
+  it('removeCast on the lead unsets the lead and reports it', () => {
+    const id = wizardStore.addCast('character')
+    wizardStore.setLeadEntityId(id)
+    expect(wizardStore.removeCast(id)).toBe(true)
+    expect(wizardStore.getWizard().state.leadEntityId).toBeNull()
+    expect(wizardStore.getWizard().state.cast).toHaveLength(0)
+  })
+
+  it('removeCast prunes factionId and parentLocationId refs to the removed row', () => {
+    const fac = wizardStore.addCast('faction')
+    const parent = wizardStore.addCast('location')
+    const char = wizardStore.addCast('character')
+    const child = wizardStore.addCast('location')
+    wizardStore.patchCast(char, { factionId: fac })
+    wizardStore.patchCast(child, { parentLocationId: parent })
+    wizardStore.removeCast(fac)
+    wizardStore.removeCast(parent)
+    const cast = wizardStore.getWizard().state.cast
+    expect(cast.find((r) => r.id === char)).toMatchObject({ factionId: null })
+    expect(cast.find((r) => r.id === child)).toMatchObject({ parentLocationId: null })
   })
 })
