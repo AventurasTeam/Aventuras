@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
+import { ID_PATTERN } from '@/lib/ids'
 
 import { wizardStore } from './wizard'
 
@@ -155,12 +156,16 @@ describe('lore mutators', () => {
 describe('cast mutators', () => {
   beforeEach(() => wizardStore.reset())
 
-  it('addCast mints a kind-prefixed id and appends an empty draft', () => {
-    const id = wizardStore.addCast('location')
-    expect(id).toMatch(/^loc_/)
-    const cast = wizardStore.getWizard().state.cast
-    expect(cast).toHaveLength(1)
-    expect(cast[0]).toMatchObject({ id, kind: 'location', name: '', status: 'active' })
+  it.each([
+    ['character', /^char_/],
+    ['location', /^loc_/],
+    ['item', /^item_/],
+    ['faction', /^fact_/],
+  ] as const)('addCast(%s) mints a substitutable, kind-prefixed id', (kind, prefix) => {
+    const id = wizardStore.addCast(kind)
+    expect(id).toMatch(prefix)
+    expect(id).toMatch(ID_PATTERN)
+    expect(wizardStore.getWizard().state.cast[0]).toMatchObject({ id, kind, status: 'active' })
   })
 
   it('patchCast patches by id and leaves other rows alone', () => {
@@ -190,9 +195,24 @@ describe('cast mutators', () => {
     expect(s.cast[0].status).toBe('staged')
   })
 
-  it('setCastStatus on a non-lead reports no cascade', () => {
-    const id = wizardStore.addCast('character')
-    expect(wizardStore.setCastStatus(id, 'staged')).toBe(false)
+  it('setCastStatus on a non-lead stages only that row and leaves the lead set', () => {
+    const lead = wizardStore.addCast('character')
+    const other = wizardStore.addCast('character')
+    wizardStore.setLeadEntityId(lead)
+    expect(wizardStore.setCastStatus(other, 'staged')).toBe(false)
+    const s = wizardStore.getWizard().state
+    expect(s.leadEntityId).toBe(lead)
+    expect(s.cast.find((r) => r.id === other)?.status).toBe('staged')
+    expect(s.cast.find((r) => r.id === lead)?.status).toBe('active')
+  })
+
+  it("setCastStatus back to 'active' on the lead keeps the lead", () => {
+    const lead = wizardStore.addCast('character')
+    wizardStore.setLeadEntityId(lead)
+    expect(wizardStore.setCastStatus(lead, 'active')).toBe(false)
+    const s = wizardStore.getWizard().state
+    expect(s.leadEntityId).toBe(lead)
+    expect(s.cast[0].status).toBe('active')
   })
 
   it('removeCast on the lead unsets the lead and reports it', () => {
@@ -203,17 +223,28 @@ describe('cast mutators', () => {
     expect(wizardStore.getWizard().state.cast).toHaveLength(0)
   })
 
-  it('removeCast prunes factionId and parentLocationId refs to the removed row', () => {
-    const fac = wizardStore.addCast('faction')
-    const parent = wizardStore.addCast('location')
-    const char = wizardStore.addCast('character')
-    const child = wizardStore.addCast('location')
-    wizardStore.patchCast(char, { factionId: fac })
-    wizardStore.patchCast(child, { parentLocationId: parent })
-    wizardStore.removeCast(fac)
-    wizardStore.removeCast(parent)
+  it('removeCast prunes only the refs that pointed at the removed row', () => {
+    const doomedFac = wizardStore.addCast('faction')
+    const keeperFac = wizardStore.addCast('faction')
+    const doomedLoc = wizardStore.addCast('location')
+    const keeperLoc = wizardStore.addCast('location')
+    const orphaned = wizardStore.addCast('character')
+    const attached = wizardStore.addCast('character')
+    const childOrphaned = wizardStore.addCast('location')
+    const childAttached = wizardStore.addCast('location')
+    wizardStore.patchCast(orphaned, { factionId: doomedFac })
+    wizardStore.patchCast(attached, { factionId: keeperFac })
+    wizardStore.patchCast(childOrphaned, { parentLocationId: doomedLoc })
+    wizardStore.patchCast(childAttached, { parentLocationId: keeperLoc })
+    const attachedBefore = wizardStore.getWizard().state.cast.find((r) => r.id === attached)
+    wizardStore.removeCast(doomedFac)
+    wizardStore.removeCast(doomedLoc)
     const cast = wizardStore.getWizard().state.cast
-    expect(cast.find((r) => r.id === char)).toMatchObject({ factionId: null })
-    expect(cast.find((r) => r.id === child)).toMatchObject({ parentLocationId: null })
+    const by = (id: string) => cast.find((r) => r.id === id)
+    expect(by(orphaned)).toMatchObject({ factionId: null })
+    expect(by(childOrphaned)).toMatchObject({ parentLocationId: null })
+    expect(by(attached)).toMatchObject({ factionId: keeperFac })
+    expect(by(childAttached)).toMatchObject({ parentLocationId: keeperLoc })
+    expect(by(attached), 'untouched rows keep identity').toBe(attachedBefore)
   })
 })

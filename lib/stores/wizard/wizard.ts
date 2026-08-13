@@ -9,14 +9,14 @@ import {
   type WizardWorkingState,
   type WizardLoreDraft,
 } from '@/lib/db'
-import { generateId } from '@/lib/ids'
+import { generateId, type SubstitutablePrefix } from '@/lib/ids'
 
 export const CAST_ID_PREFIX = {
   character: 'char',
   location: 'loc',
   item: 'item',
   faction: 'fact',
-} as const
+} as const satisfies Record<WizardCastDraft['kind'], SubstitutablePrefix>
 
 type WizardSnapshot = {
   state: WizardWorkingState
@@ -67,15 +67,23 @@ function emptyLoreDraft(): WizardLoreDraft {
   }
 }
 
-type CollectionKey = 'lore' | 'cast'
+// Every array-shaped field of the working state qualifies as a collection —
+// derived from WizardWorkingState itself so a factory call can never target a
+// key whose element type doesn't match the generic it's instantiated with.
+type CollectionKey = {
+  [K in keyof WizardWorkingState]: WizardWorkingState[K] extends readonly { id: string }[]
+    ? K
+    : never
+}[keyof WizardWorkingState]
 
 const store = createStore<WizardState>()((set) => {
   const fresh = emptyWorkingState()
 
-  // CRUD over one working-state array; cascades that also touch leadEntityId
-  // stay bespoke below because they must read+write in one set() call.
-  function collectionMutators<T extends { id: string }>(key: CollectionKey) {
-    const rows = (state: WizardWorkingState) => state[key] as unknown as readonly T[]
+  // Cascades that also touch leadEntityId stay bespoke below because they must
+  // read+write in one set() call.
+  function collectionMutators<K extends CollectionKey>(key: K) {
+    type T = WizardWorkingState[K][number]
+    const rows = (state: WizardWorkingState): readonly T[] => state[key]
     const withRows = (state: WizardWorkingState, next: readonly T[]): WizardWorkingState => ({
       ...state,
       [key]: next,
@@ -100,8 +108,8 @@ const store = createStore<WizardState>()((set) => {
     }
   }
 
-  const loreOps = collectionMutators<WizardLoreDraft>('lore')
-  const castOps = collectionMutators<WizardCastDraft>('cast')
+  const loreOps = collectionMutators('lore')
+  const castOps = collectionMutators('cast')
 
   return {
     state: fresh,
@@ -134,7 +142,12 @@ const store = createStore<WizardState>()((set) => {
       castOps.append([row])
       return row.id
     },
-    patchCast: (id, patch) => castOps.patch(id, patch as Partial<WizardCastDraft>),
+    // An id-keyed patch can't discriminate kind, so a cross-kind field would land
+    // at runtime; the schema re-parse on load is the backstop.
+    patchCast: (id, patch) => castOps.patch(id, patch),
+    // Caller owns id uniqueness — unlike importLore, this can't re-mint ids
+    // because the resolver's minted ids carry cross-references; a duplicate
+    // would make one patchCast mutate both rows.
     importCast: (rows) => castOps.append(rows),
     // Cascades read leadEntityId in the same set() the row change lands in, so the
     // two can never be observed half-applied. The boolean tells the CALLER to
@@ -142,7 +155,8 @@ const store = createStore<WizardState>()((set) => {
     setCastStatus: (id, status) => {
       let leadUnset = false
       set((s) => {
-        leadUnset = status === 'staged' && s.state.leadEntityId === id
+        const found = s.state.cast.some((r) => r.id === id)
+        leadUnset = found && status === 'staged' && s.state.leadEntityId === id
         return {
           state: {
             ...s.state,
@@ -157,8 +171,11 @@ const store = createStore<WizardState>()((set) => {
       let leadUnset = false
       set((s) => {
         leadUnset = s.state.leadEntityId === id
-        // Prune inbound refs so a removed faction/parent can't resurrect through a
-        // stale pointer once the id reappears (no-harmless-id-leaks).
+        // Prunes the two inbound-ref sites this array owns (factionId,
+        // parentLocationId) so a removed faction/parent doesn't leave a dangling
+        // pointer at commit time (no-harmless-id-leaks). opening.sceneEntities and
+        // opening.currentLocationId are the other two inbound-ref sites — Finish's
+        // active-row filter handles those.
         const cast = s.state.cast
           .filter((r) => r.id !== id)
           .map((r) => {
