@@ -210,5 +210,18 @@ export {
   vecTableName,
   vectorsByIdQuery,
 } from './embeddings'
-export { emptyWorkingState, wizardWorkingStateSchema } from './wizard-sessions/working-state'
-export type { WizardWorkingState, WizardLoreDraft } from './wizard-sessions/working-state'
+export {
+  emptyCastDraft,
+  emptyWorkingState,
+  wizardCastDraftSchema,
+  wizardWorkingStateSchema,
+} from './wizard-sessions/working-state'
+export type {
+  WizardWorkingState,
+  WizardLoreDraft,
+  WizardCastDraft,
+  WizardCharacterDraft,
+  WizardLocationDraft,
+  WizardItemDraft,
+  WizardFactionDraft,
+} from './wizard-sessions/working-state'

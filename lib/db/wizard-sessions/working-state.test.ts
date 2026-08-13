@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { emptyWorkingState, wizardWorkingStateSchema } from './working-state'
+import {
+  emptyCastDraft,
+  emptyWorkingState,
+  wizardCastDraftSchema,
+  wizardWorkingStateSchema,
+} from './working-state'
 
 describe('wizardWorkingStateSchema', () => {
   it('emptyWorkingState parses and starts on step 1 with creative/third defaults', () => {
@@ -72,5 +77,43 @@ describe('lore drafts', () => {
       injectionMode: 'auto',
       priority: 0,
     })
+  })
+})
+
+describe('cast drafts', () => {
+  it('defaults a pre-3.6b blob to an empty cast array', () => {
+    expect(wizardWorkingStateSchema.parse({}).cast).toEqual([])
+  })
+
+  it('emptyCastDraft fills per-kind defaults', () => {
+    const char = emptyCastDraft('character', 'char_1')
+    expect(char).toMatchObject({
+      kind: 'character',
+      id: 'char_1',
+      name: '',
+      status: 'active',
+      traits: [],
+      drives: [],
+      visual: { physique: '', distinguishing: '' },
+      factionId: null,
+      tags: [],
+    })
+    expect(emptyCastDraft('location', 'loc_1')).toMatchObject({
+      kind: 'location',
+      parentLocationId: null,
+      condition: '',
+    })
+    expect(emptyCastDraft('item', 'item_1')).toMatchObject({ kind: 'item', condition: '' })
+    expect(emptyCastDraft('faction', 'fact_1')).toMatchObject({
+      kind: 'faction',
+      agenda: [],
+      standing: '',
+    })
+  })
+
+  it('rejects a status outside active|staged', () => {
+    expect(
+      wizardCastDraftSchema.safeParse({ kind: 'character', id: 'x', status: 'retired' }).success,
+    ).toBe(false)
   })
 })
