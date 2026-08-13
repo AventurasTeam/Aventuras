@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+
+import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 
 import {
   castSuggestionsSchema,
@@ -114,7 +117,7 @@ describe('settingOutputSchema', () => {
 })
 
 describe('castSuggestionsSchema', () => {
-  it('parses a mixed batch and defaults omitted status to active', () => {
+  it('parses a mixed batch across all four kinds and trims every padded field', () => {
     const parsed = castSuggestionsSchema.parse({
       entities: [
         {
@@ -122,12 +125,23 @@ describe('castSuggestionsSchema', () => {
           name: ' Aria ',
           description: '  A blacksmith.  ',
           faction_name: '  Ashfall Pact  ',
+          traits: ['  brave  '],
+          drives: ['  protect the forge  '],
+          visual: {
+            physique: '  stocky  ',
+            face: '  scarred  ',
+            hair: '  black  ',
+            eyes: '  grey  ',
+            attire: '  leather apron  ',
+            distinguishing: '  soot-stained hands  ',
+          },
         },
         {
           kind: 'location',
           name: 'Mornstone Keep',
           description: 'A fortress.',
           parent_location_name: '  The Vale  ',
+          condition: '  war-damaged  ',
         },
         { kind: 'item', name: 'Silver Coin', description: 'Old currency.', condition: 'worn' },
         {
@@ -135,6 +149,7 @@ describe('castSuggestionsSchema', () => {
           name: 'Ashfall Pact',
           description: 'A cult.',
           agenda: ['  expand  '],
+          standing: '  fractured  ',
           status: 'staged',
         },
       ],
@@ -146,9 +161,38 @@ describe('castSuggestionsSchema', () => {
       description: 'A blacksmith.',
       status: 'active',
       faction_name: 'Ashfall Pact',
+      traits: ['brave'],
+      drives: ['protect the forge'],
+      visual: {
+        physique: 'stocky',
+        face: 'scarred',
+        hair: 'black',
+        eyes: 'grey',
+        attire: 'leather apron',
+        distinguishing: 'soot-stained hands',
+      },
     })
-    expect(parsed.entities[1]).toMatchObject({ parent_location_name: 'The Vale' })
-    expect(parsed.entities[3]).toMatchObject({ agenda: ['expand'], status: 'staged' })
+    expect(parsed.entities[1]).toMatchObject({
+      parent_location_name: 'The Vale',
+      condition: 'war-damaged',
+    })
+    expect(parsed.entities[2]).toMatchObject({ condition: 'worn' })
+    expect(parsed.entities[3]).toMatchObject({
+      agenda: ['expand'],
+      standing: 'fractured',
+      status: 'staged',
+    })
+  })
+
+  it('renders through the real prompt-schema path without degrading to unknown', () => {
+    // castSuggestionsSchema is the schema that motivated fixing the renderer's
+    // oneOf blind spot; this must render the actual schema, not a synthetic
+    // stand-in, so a regression here is caught at the source.
+    const block = schemaToTypeScriptBlock(z.toJSONSchema(castSuggestionsSchema) as JsonSchema)
+    expect(block).not.toContain('unknown')
+    expect(block).toContain('faction_name')
+    expect(block).toContain('physique')
+    expect(block).toContain('agenda')
   })
 
   it('rejects an unknown kind', () => {

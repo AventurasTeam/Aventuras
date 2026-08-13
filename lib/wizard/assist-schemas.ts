@@ -80,8 +80,8 @@ const castSuggestionShared = {
 }
 
 const characterSuggestionSchema = z.object({
-  kind: z.literal('character'),
   ...castSuggestionShared,
+  kind: z.literal('character'),
   voice: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
   traits: z.array(z.string().trim()).optional().describe('personality/skill traits, at most 8'),
   drives: z.array(z.string().trim()).optional().describe('goals, fears, sore spots, at most 6'),
@@ -106,8 +106,8 @@ const characterSuggestionSchema = z.object({
 })
 
 const locationSuggestionSchema = z.object({
-  kind: z.literal('location'),
   ...castSuggestionShared,
+  kind: z.literal('location'),
   parent_location_name: z
     .string()
     .trim()
@@ -117,14 +117,14 @@ const locationSuggestionSchema = z.object({
 })
 
 const itemSuggestionSchema = z.object({
-  kind: z.literal('item'),
   ...castSuggestionShared,
+  kind: z.literal('item'),
   condition: z.string().trim().optional().describe('dynamic state, e.g. "intact", "cursed"'),
 })
 
 const factionSuggestionSchema = z.object({
-  kind: z.literal('faction'),
   ...castSuggestionShared,
+  kind: z.literal('faction'),
   agenda: z.array(z.string().trim()).optional().describe('current goals, at most 4'),
   standing: z.string().trim().optional().describe('dynamic power/situation'),
 })

@@ -23,10 +23,8 @@ function jsonSchemaToTypeScript(schema: JsonSchemaNode, indent = 0): string {
   const pad = '  '.repeat(indent)
   const padInner = '  '.repeat(indent + 1)
 
-  // zod v4 emits literals as `const`, `anyOf [T, null]` for nullables, and
-  // `oneOf` for discriminated unions. Both render as the same TS union here —
-  // TypeScript has no exclusive-union syntax to tell them apart, so there's
-  // nothing to gain by treating them differently.
+  // zod v4 emits literals as `const`, nullables as `anyOf [T, null]`, and
+  // discriminated unions as `oneOf`; both keywords render as one TS union.
   if (schema.const !== undefined) return JSON.stringify(schema.const)
   const unionMembers = schema.anyOf ?? schema.oneOf
   if (unionMembers) {

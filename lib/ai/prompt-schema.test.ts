@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { classifierExtractionSchema } from '@/lib/classifier'
+import {
+  castSuggestionsSchema,
+  descriptionOutputSchema,
+  labeledPromptOutputSchema,
+  loreSuggestionsSchema,
+  openingOutputSchema,
+  settingOutputSchema,
+  titleChipsSchema,
+} from '@/lib/wizard'
+
 import {
   jsonResponseFormatMiddleware,
   promptSchemaMiddleware,
@@ -82,6 +93,30 @@ describe('schemaToTypeScriptBlock', () => {
     expect(block).toContain('kind: "location"')
     expect(block).toContain('parent_location_name?: string')
   })
+})
+
+describe('structured-output schema net', () => {
+  // Every schema actually passed to generateStructured (lib/wizard/assist-schemas.ts,
+  // lib/classifier/schema.ts). None legitimately renders `unknown` — verified by this
+  // test itself — so an occurrence here is a renderer regression, not an expected shape.
+  const structuredOutputSchemas = {
+    openingOutputSchema,
+    titleChipsSchema,
+    descriptionOutputSchema,
+    loreSuggestionsSchema,
+    labeledPromptOutputSchema,
+    settingOutputSchema,
+    castSuggestionsSchema,
+    classifierExtractionSchema,
+  }
+
+  it.each(Object.entries(structuredOutputSchemas))(
+    'renders %s without degrading to unknown',
+    (name, schema) => {
+      const block = schemaToTypeScriptBlock(z.toJSONSchema(schema) as JsonSchema, name)
+      expect(block).not.toContain('unknown')
+    },
+  )
 })
 
 describe('promptSchemaMiddleware', () => {
