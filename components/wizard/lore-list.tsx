@@ -1,8 +1,8 @@
-import { ChevronDown, Trash2 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Pressable, View } from 'react-native'
+import { useMemo, useState, type ReactNode } from 'react'
+import { View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
+import { RowListRow, useRowExpansion } from '@/components/compounds/row-list-shell'
 import { TagInput } from '@/components/compounds/tag-input'
 import {
   Accordion,
@@ -12,8 +12,6 @@ import {
 } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Heading } from '@/components/ui/heading'
-import { Icon } from '@/components/ui/icon'
-import { IconAction } from '@/components/ui/icon-action'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Tag } from '@/components/ui/tag'
@@ -22,7 +20,6 @@ import { Textarea } from '@/components/ui/textarea'
 import type { InjectionMode, WizardLoreDraft } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
-import { cn } from '@/lib/utils'
 
 import { loreRowErrors, parsePriorityInput, PRIORITY_MAX, PRIORITY_MIN } from './step-world-logic'
 
@@ -41,8 +38,6 @@ export type LoreListProps = {
    */
   headerAction?: ReactNode
 }
-
-const CARET_FLIPPED = { transform: [{ rotate: '180deg' }] } as const
 
 const INJECTION_MODE_OPTIONS: SelectOption[] = [
   { value: 'always', label: t('wizard:world.lore.modes.always') },
@@ -101,74 +96,46 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
   const errorMessages = fieldErrors.map((field) => t(`wizard:world.lore.errors.${field}`))
 
   return (
-    <View
-      className={cn('rounded-md border bg-bg-base', invalid ? 'border-danger' : 'border-border')}
-    >
-      <View className="flex-row items-start gap-1">
-        <Pressable
-          accessibilityRole="button"
-          aria-expanded={expanded}
-          aria-label={t(expanded ? 'wizard:world.lore.collapse' : 'wizard:world.lore.expand')}
-          onPress={() => onToggleExpanded(row.id)}
-          className="flex-1 flex-row items-start gap-2 py-row-y-lg pl-3"
-        >
-          <View className="min-w-0 flex-1 gap-1">
-            <Text className="font-medium" numberOfLines={1}>
-              {row.title.trim() || t('wizard:world.lore.untitled')}
-            </Text>
-            {!expanded ? (
-              <>
-                {!blank(row.body) ? (
-                  <Text variant="muted" size="sm" numberOfLines={2}>
-                    {row.body}
-                  </Text>
-                ) : null}
-                {chips.length > 0 ? (
-                  <View className="flex-row flex-wrap gap-1">
-                    {chips.map((chip) => (
-                      <Tag key={chip.key} tone="soft">
-                        {chip.label}
-                      </Tag>
-                    ))}
-                  </View>
-                ) : null}
-                {errorMessages.length > 0 ? (
-                  <Text size="xs" className="text-danger">
-                    {errorMessages.join(' ')}
-                  </Text>
-                ) : null}
-              </>
-            ) : null}
-          </View>
-        </Pressable>
-        <View className="flex-row items-start gap-1 pr-3 pt-row-y-lg">
-          <IconAction
-            icon={Trash2}
-            label={t('wizard:world.lore.remove')}
-            size="sm"
-            variant="destructive"
-            onPress={() => wizardStore.removeLore(row.id)}
-          />
-          {/* Redundant pointer affordance for the row-wide Pressable above, which
-              stays the single control assistive tech sees — two buttons carrying
-              one action would read as a duplicate. RN derives both platforms'
-              hiding from `aria-hidden` alone. The flip is a plain RN transform:
-              it must reach neither react-native-svg (which can't resolve it) nor
-              NativeWind (whose native output for it is unverified here). */}
-          <Pressable
-            aria-hidden
-            focusable={false}
-            onPress={() => onToggleExpanded(row.id)}
-            className="h-icon-action-sm w-icon-action-sm items-center justify-center"
-          >
-            <View style={expanded ? CARET_FLIPPED : undefined}>
-              <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
-            </View>
-          </Pressable>
-        </View>
-      </View>
-      {expanded ? (
-        <View className="gap-4 px-3 pb-3">
+    <RowListRow
+      invalid={invalid}
+      expanded={expanded}
+      onToggle={() => onToggleExpanded(row.id)}
+      onRemove={() => wizardStore.removeLore(row.id)}
+      removeLabel={t('wizard:world.lore.remove')}
+      expandLabel={t('wizard:world.lore.expand')}
+      collapseLabel={t('wizard:world.lore.collapse')}
+      compact={
+        <>
+          <Text className="font-medium" numberOfLines={1}>
+            {row.title.trim() || t('wizard:world.lore.untitled')}
+          </Text>
+          {!expanded ? (
+            <>
+              {!blank(row.body) ? (
+                <Text variant="muted" size="sm" numberOfLines={2}>
+                  {row.body}
+                </Text>
+              ) : null}
+              {chips.length > 0 ? (
+                <View className="flex-row flex-wrap gap-1">
+                  {chips.map((chip) => (
+                    <Tag key={chip.key} tone="soft">
+                      {chip.label}
+                    </Tag>
+                  ))}
+                </View>
+              ) : null}
+              {errorMessages.length > 0 ? (
+                <Text size="xs" className="text-danger">
+                  {errorMessages.join(' ')}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      }
+      editor={
+        <>
           <FormRow
             label={t('wizard:world.lore.title')}
             error={titleBlank ? t('wizard:world.lore.errors.title') : undefined}
@@ -242,48 +209,20 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
               </AccordionContent>
             </AccordionItem>
           </Accordion>
-        </View>
-      ) : null}
-    </View>
+        </>
+      }
+    />
   )
 }
 
 export function LoreList({ rows, invalidIds, headerAction }: LoreListProps) {
-  // Ephemeral, component-local — never reaches the persisted blob. Keyed by id
-  // and pruned below; a stale id would re-expand a recycled row (no-harmless-id-leaks.md).
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-
-  // Prunes only — new-id auto-expand lives in handleAdd, not here, so a
-  // hydrated resume or importLore batch never pops an editor open unasked.
-  useEffect(() => {
-    const currentIds = new Set(rows.map((r) => r.id))
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      let changed = false
-      for (const id of prev) {
-        if (!currentIds.has(id)) {
-          next.delete(id)
-          changed = true
-        }
-      }
-      return changed ? next : prev
-    })
-  }, [rows])
+  const { expanded, toggle, expandAdded } = useRowExpansion(rows)
 
   const invalidSet = useMemo(() => new Set(invalidIds), [invalidIds])
 
-  function toggleExpanded(id: string) {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   function handleAdd() {
     const id = wizardStore.addLore()
-    setExpanded((prev) => new Set(prev).add(id))
+    expandAdded(id)
   }
 
   return (
@@ -309,7 +248,7 @@ export function LoreList({ rows, invalidIds, headerAction }: LoreListProps) {
               row={row}
               invalid={invalidSet.has(row.id)}
               expanded={expanded.has(row.id)}
-              onToggleExpanded={toggleExpanded}
+              onToggleExpanded={toggle}
             />
           ))}
         </View>
