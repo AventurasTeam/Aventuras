@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { emptyWorkingState, stories, wizardSessions } from '@/lib/db'
+import { emptyCastDraft, emptyWorkingState, stories, wizardSessions } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { storiesStore } from '@/lib/stores'
 import { toastStore } from '@/lib/toast'
@@ -10,6 +10,7 @@ import {
   clearLiveSession,
   loadDraft,
   loadLiveSession,
+  migrateLegacyLead,
   saveLiveSession,
   saveStoryDraft,
   sessionExists,
@@ -183,5 +184,38 @@ describe('wizard session/draft actions', () => {
       .values({ id: 'story_x', storyId: 'story_x', state: { step: 99 } as never, updatedAt: 1 })
 
     expect(await loadDraft('story_x', ctx)).toEqual(emptyWorkingState())
+  })
+})
+
+describe('migrateLegacyLead', () => {
+  it('converts a bare lead name into a character cast row and points the lead at it', () => {
+    const legacy = { ...emptyWorkingState(), leadName: 'Wren Calloway', leadEntityId: null }
+    const migrated = migrateLegacyLead(legacy)
+    expect(migrated.cast).toHaveLength(1)
+    expect(migrated.cast[0]).toMatchObject({
+      kind: 'character',
+      name: 'Wren Calloway',
+      status: 'active',
+    })
+    expect(migrated.leadEntityId).toBe(migrated.cast[0].id)
+  })
+
+  it('reuses an already-minted leadEntityId so opening refs stay valid', () => {
+    const legacy = { ...emptyWorkingState(), leadName: 'Wren', leadEntityId: 'char_existing' }
+    expect(migrateLegacyLead(legacy).cast[0].id).toBe('char_existing')
+  })
+
+  it('is a no-op when the cast already has rows', () => {
+    const withCast = {
+      ...emptyWorkingState(),
+      leadName: 'Stale Name',
+      cast: [emptyCastDraft('character', 'char_a')],
+    }
+    expect(migrateLegacyLead(withCast)).toBe(withCast)
+  })
+
+  it('is a no-op on a blank lead name', () => {
+    const state = emptyWorkingState()
+    expect(migrateLegacyLead(state)).toBe(state)
   })
 })

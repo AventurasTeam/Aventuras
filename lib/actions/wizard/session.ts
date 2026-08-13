@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm'
 
 import {
+  emptyCastDraft,
   emptyWorkingState,
   stories,
   wizardSessions,
@@ -98,6 +99,17 @@ export async function saveStoryDraft(
   return { storyId }
 }
 
+// Pre-3.6b working states carried the lead as a bare name (M2's step-1 input).
+// Convert it to a real character cast row at the parse boundary so both load
+// paths (draft resume, live-session continue) see the modern shape and the
+// opening's sceneEntities refs keep resolving to the same id.
+export function migrateLegacyLead(state: WizardWorkingState): WizardWorkingState {
+  if (state.cast.length > 0 || state.leadName.trim().length === 0) return state
+  const id = state.leadEntityId ?? generateId('char')
+  const lead = { ...emptyCastDraft('character', id), name: state.leadName }
+  return { ...state, cast: [lead], leadEntityId: id }
+}
+
 // Persisted rows predate the current schema: a field the wizard now reads may
 // be missing or the wrong shape after an app upgrade, and returning the raw
 // blob would surface that as a crash deep in the wizard. Re-validate on load and
@@ -108,7 +120,7 @@ function parsePersistedState(
   source: string,
 ): { state: WizardWorkingState; ok: boolean } {
   const parsed = wizardWorkingStateSchema.safeParse(raw)
-  if (parsed.success) return { state: parsed.data, ok: true }
+  if (parsed.success) return { state: migrateLegacyLead(parsed.data), ok: true }
   logger.warn('action_layer.wizard_session_parse_failed', {
     source,
     issues: parsed.error.issues.length,
