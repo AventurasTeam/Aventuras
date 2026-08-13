@@ -120,31 +120,35 @@ describe('castSuggestionsSchema', () => {
         {
           kind: 'character',
           name: ' Aria ',
-          description: 'A blacksmith.',
-          faction_name: 'Ashfall Pact',
+          description: '  A blacksmith.  ',
+          faction_name: '  Ashfall Pact  ',
         },
         {
           kind: 'location',
           name: 'Mornstone Keep',
           description: 'A fortress.',
-          parent_location_name: 'The Vale',
+          parent_location_name: '  The Vale  ',
         },
         { kind: 'item', name: 'Silver Coin', description: 'Old currency.', condition: 'worn' },
         {
           kind: 'faction',
           name: 'Ashfall Pact',
           description: 'A cult.',
-          agenda: ['expand'],
+          agenda: ['  expand  '],
           status: 'staged',
         },
       ],
     })
+    // Reference-name fields (faction_name, parent_location_name) must trim: Task 9's
+    // import resolver matches them case-insensitively against authored cast names.
     expect(parsed.entities[0]).toMatchObject({
       name: 'Aria',
+      description: 'A blacksmith.',
       status: 'active',
       faction_name: 'Ashfall Pact',
     })
-    expect(parsed.entities[3].status).toBe('staged')
+    expect(parsed.entities[1]).toMatchObject({ parent_location_name: 'The Vale' })
+    expect(parsed.entities[3]).toMatchObject({ agenda: ['expand'], status: 'staged' })
   })
 
   it('rejects an unknown kind', () => {
@@ -153,5 +157,25 @@ describe('castSuggestionsSchema', () => {
         entities: [{ kind: 'deity', name: 'X', description: 'Y' }],
       }).success,
     ).toBe(false)
+  })
+
+  it('rejects an empty entities array', () => {
+    expect(castSuggestionsSchema.safeParse({ entities: [] }).success).toBe(false)
+  })
+
+  it('silently strips a field that belongs to a different kind', () => {
+    // Cross-kind fields aren't rejected — plain z.object() members strip unknown
+    // keys rather than erroring, so a model that misfiles a field just loses it.
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: 'Aria',
+          description: 'A blacksmith.',
+          parent_location_name: 'The Vale',
+        },
+      ],
+    })
+    expect(parsed.entities[0]).not.toHaveProperty('parent_location_name')
   })
 })
