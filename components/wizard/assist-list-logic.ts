@@ -5,9 +5,11 @@ export type AssistListItem<P = unknown> = {
   /** Condensed one-line preview under the heading. */
   detail: string
   /**
-   * Dedupe/selection identity when name alone is ambiguous — cast spans four
-   * kinds, so a location and a faction may legitimately share a name. Falls
-   * back to the normalized name; compared trimmed + case-insensitive either way.
+   * Dedupe/selection identity for callers whose rows are only unique within a
+   * scope (name alone is ambiguous). Normalized as a whole string — trimmed +
+   * lowercased — not per-component, so composing one from parts (e.g. a scope
+   * and a name) must normalize each part itself; use `composeKey`. Falls back
+   * to the normalized name when omitted.
    */
   dedupeKey?: string
   /**
@@ -30,6 +32,15 @@ function normalizeKey(value: string): string {
   return value.trim().toLowerCase()
 }
 
+/**
+ * Build a `dedupeKey` for rows whose name is only unique within a scope (e.g. a
+ * cast kind). Both sides of a comparison must be built with this — normalizing
+ * the joined string only would leave a padded name as interior whitespace.
+ */
+export function composeKey(scope: string, name: string): string {
+  return `${normalizeKey(scope)}:${normalizeKey(name)}`
+}
+
 /** The identity a list row dedupes, selects, and keys on. */
 export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): string {
   return normalizeKey(item.dedupeKey ?? item.name)
@@ -41,9 +52,9 @@ export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): strin
  */
 export function markExisting<P>(
   items: readonly AssistListItem<P>[],
-  existingNames: readonly string[],
+  existingKeys: readonly string[],
 ): MarkedAssistListItem<P>[] {
-  const taken = new Set(existingNames.map(normalizeKey))
+  const taken = new Set(existingKeys.map(normalizeKey))
   return items.map((item) => ({
     ...item,
     name: item.name.trim(),

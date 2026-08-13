@@ -114,10 +114,13 @@ type AiAssistListProps<T, P> = AiAssistCommonProps & {
   /** Flattens one model reply into renderable rows. */
   getItems: (value: T) => AssistListItem<P>[]
   /**
-   * Names (or kind-qualified keys matching the items' `dedupeKey` shape)
-   * already in the wizard's own list — drives the `(already exists)` mark.
+   * Identities already in the wizard's own list — drives the `(already
+   * exists)` mark. Must match whatever identity the rows carry: plain names
+   * when items have no `dedupeKey`, or the same scope-qualified keys (built
+   * with `composeKey`) when they do — nothing enforces the two agree, and a
+   * mismatch fails silently (nothing matches, duplicates import).
    */
-  existingNames: readonly string[]
+  existingKeys: readonly string[]
   /** Fires once with the payload of every checked row when `Import selected` is pressed. */
   onImport: (payloads: P[]) => void
 }
@@ -142,8 +145,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const [refineText, setRefineText] = useState('')
   const [open, setOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
-  // itemKey (dedupeKey, falling back to trimmed name) rather than index so a
-  // later page cannot shift what is checked.
+  // itemKey rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -263,8 +265,11 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
     lastGuidanceRef.current = guidance
     // Only an append needs exclusions; a replace is meant to re-roll the same
-    // prompt, and listItems is about to be discarded anyway.
-    const exclude = appendRef.current ? listItems.map((item) => item.name) : []
+    // prompt, and listItems is about to be discarded anyway. Deduped on trimmed
+    // name: mergePages no longer guarantees name-uniqueness once dedupeKey is in
+    // play, so two same-named rows (e.g. different cast kinds) would otherwise
+    // send the model the same exclusion twice.
+    const exclude = appendRef.current ? [...new Set(listItems.map((item) => item.name.trim()))] : []
     const call =
       props.result === 'list'
         ? (signal: AbortSignal) => props.run(guidance, signal, exclude)
@@ -333,7 +338,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
   function renderListResult(): ReactNode {
     if (props.result !== 'list') return null
-    const marked = markExisting(listItems, props.existingNames)
+    const marked = markExisting(listItems, props.existingKeys)
     const selectable = marked.filter((row) => !row.exists)
     const allSelected =
       selectable.length > 0 && selectable.every((row) => selected.has(itemKey(row)))
@@ -385,63 +390,64 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <View className={isPhone ? 'flex-1' : 'max-h-96'}>
               <Scroller>
                 <View className="gap-2">
-                  {marked.map((row) => (
-                    <Pressable
-                      key={itemKey(row)}
-                      accessibilityRole="checkbox"
-                      accessibilityLabel={row.name}
-                      accessibilityState={{
-                        checked: selected.has(itemKey(row)),
-                        disabled: row.exists,
-                      }}
-                      aria-checked={selected.has(itemKey(row))}
-                      disabled={row.exists}
-                      onPress={() => toggleRow(itemKey(row))}
-                      className={cn(
-                        'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
-                        // Press tint is touch feedback; on desktop the hover
-                        // border already signals interactivity and the sunken→
-                        // tint flash reads as loud.
-                        !row.exists &&
-                          Platform.select({
-                            web: 'cursor-pointer hover:border-border-strong',
-                            native: 'active:bg-tint-press',
-                          }),
-                      )}
-                    >
-                      {/* The row is the single interactive surface; the checkbox is
-                          decorative (pointer-shielded, AT-hidden, out of tab order).
-                          A nested interactive checkbox would double-fire on web,
-                          where its click bubbles to the row Pressable and the two
-                          toggles cancel out. */}
-                      <View
-                        pointerEvents="none"
-                        aria-hidden={Platform.OS === 'web' ? true : undefined}
-                        accessibilityElementsHidden
-                        importantForAccessibility="no-hide-descendants"
+                  {marked.map((row) => {
+                    const key = itemKey(row)
+                    const checked = selected.has(key)
+                    return (
+                      <Pressable
+                        key={key}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={row.name}
+                        accessibilityState={{ checked, disabled: row.exists }}
+                        aria-checked={checked}
+                        disabled={row.exists}
+                        onPress={() => toggleRow(key)}
+                        className={cn(
+                          'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
+                          // Press tint is touch feedback; on desktop the hover
+                          // border already signals interactivity and the sunken→
+                          // tint flash reads as loud.
+                          !row.exists &&
+                            Platform.select({
+                              web: 'cursor-pointer hover:border-border-strong',
+                              native: 'active:bg-tint-press',
+                            }),
+                        )}
                       >
-                        <Checkbox
-                          checked={selected.has(itemKey(row))}
-                          disabled={row.exists}
-                          onCheckedChange={() => toggleRow(itemKey(row))}
-                          tabIndex={-1}
-                        />
-                      </View>
-                      <View className="min-w-0 flex-1 gap-0.5">
-                        <Text size="sm" className="font-medium">
-                          {row.name}
-                        </Text>
-                        <Text size="xs" variant="muted" numberOfLines={2}>
-                          {row.detail}
-                        </Text>
-                        {row.exists ? (
-                          <Text size="xs" variant="muted">
-                            {t('wizard:aiAssist.list.alreadyExists')}
+                        {/* The row is the single interactive surface; the checkbox is
+                            decorative (pointer-shielded, AT-hidden, out of tab order).
+                            A nested interactive checkbox would double-fire on web,
+                            where its click bubbles to the row Pressable and the two
+                            toggles cancel out. */}
+                        <View
+                          pointerEvents="none"
+                          aria-hidden={Platform.OS === 'web' ? true : undefined}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={row.exists}
+                            onCheckedChange={() => toggleRow(key)}
+                            tabIndex={-1}
+                          />
+                        </View>
+                        <View className="min-w-0 flex-1 gap-0.5">
+                          <Text size="sm" className="font-medium">
+                            {row.name}
                           </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  ))}
+                          <Text size="xs" variant="muted" numberOfLines={2}>
+                            {row.detail}
+                          </Text>
+                          {row.exists ? (
+                            <Text size="xs" variant="muted">
+                              {t('wizard:aiAssist.list.alreadyExists')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    )
+                  })}
                 </View>
               </Scroller>
             </View>

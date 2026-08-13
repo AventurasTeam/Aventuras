@@ -241,7 +241,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             getItems={(v) =>
               v.lore.map((row) => ({ name: row.title, detail: row.body, payload: row }))
             }
-            existingNames={lore.map((row) => row.title)}
+            existingKeys={lore.map((row) => row.title)}
             onImport={wizardStore.importLore}
             onSetup={handleSetup}
           />

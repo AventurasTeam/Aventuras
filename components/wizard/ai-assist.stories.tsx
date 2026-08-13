@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
-import type { AssistListItem } from './assist-list-logic'
+import { composeKey, type AssistListItem } from './assist-list-logic'
 
 // AiAssist drives the overlay state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).
@@ -210,12 +210,12 @@ type ListItemValue = { items: AssistListItem<ListPayload>[] }
 type ListDemoProps = {
   resolveModelId: () => string | null
   run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
-  existingNames?: string[]
+  existingKeys?: string[]
   onSetup: () => void
   onImport: (payloads: ListPayload[]) => void
 }
 
-function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }: ListDemoProps) {
+function ListDemo({ resolveModelId, run, existingKeys = [], onSetup, onImport }: ListDemoProps) {
   const [imported, setImported] = useState<string[]>([])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -229,7 +229,7 @@ function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }
         resolveModelId={resolveModelId}
         result="list"
         getItems={(v) => v.items}
-        existingNames={existingNames}
+        existingKeys={existingKeys}
         onImport={(payloads) => {
           setImported(payloads.map((p) => p.name))
           onImport(payloads)
@@ -247,16 +247,16 @@ type ListDemoWithLiveExistingProps = {
   // button would sit outside DialogContent's DOM, and clicking it would
   // register as an outside-interaction and dismiss the overlay through
   // handleOpenChange before the play function could observe anything.
-  onReady: (setExistingNames: (names: string[]) => void) => void
+  onReady: (setExistingKeys: (keys: string[]) => void) => void
 }
 
-// `existingNames` toggles live (unlike ListDemo's fixed prop) so a play
+// `existingKeys` toggles live (unlike ListDemo's fixed prop) so a play
 // function can check a row, THEN mark it existing — reaching the
-// checked+disabled combination a static existingNames prop can't produce.
+// checked+disabled combination a static existingKeys prop can't produce.
 function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWithLiveExistingProps) {
-  const [existingNames, setExistingNames] = useState<string[]>([])
+  const [existingKeys, setExistingKeys] = useState<string[]>([])
   useEffect(() => {
-    onReady(setExistingNames)
+    onReady(setExistingKeys)
   }, [onReady])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -266,7 +266,7 @@ function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWith
         resolveModelId={resolveModelId}
         result="list"
         getItems={(v) => v.items}
-        existingNames={existingNames}
+        existingKeys={existingKeys}
         onImport={fn()}
         onSetup={fn()}
       />
@@ -915,6 +915,48 @@ export const ListResult_DedupesWhitespaceVariantWithinOnePage: Story = {
   },
 }
 
+const ASHFALL_LOCATION_ITEM: AssistListItem<ListPayload> = {
+  name: 'Ashfall',
+  detail: 'A city built on a dead volcano.',
+  dedupeKey: composeKey('location', 'Ashfall'),
+  payload: { name: 'Ashfall', category: 'location' },
+}
+const ASHFALL_FACTION_ITEM: AssistListItem<ListPayload> = {
+  name: 'Ashfall',
+  detail: 'A cult that worships the volcano.',
+  dedupeKey: composeKey('faction', 'Ashfall'),
+  payload: { name: 'Ashfall', category: 'faction' },
+}
+
+export const ListResult_SameNameDistinctDedupeKeysBothSelectable: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [ASHFALL_LOCATION_ITEM, ASHFALL_FACTION_ITEM] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findAllByText('Ashfall')
+
+    // A location and a faction sharing a name are distinct rows once each
+    // carries its own dedupeKey — unlike ListResult_DedupesWhitespaceVariant-
+    // WithinOnePage above, this pair must NOT collapse to one. Both rows share
+    // an accessible name (`accessibilityLabel={row.name}`), so they cannot be
+    // addressed individually via getByRole(..., { name }); order is the only
+    // available handle, matching `getItems`' emission order.
+    const checkboxes = screen.getAllByRole('checkbox', { name: 'Ashfall' })
+    expect(checkboxes).toHaveLength(2)
+
+    await userEvent.click(checkboxes[0])
+    expect(checkboxes[0]).toBeChecked()
+    expect(checkboxes[1]).not.toBeChecked()
+  },
+}
+
 export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
   render: () => (
     <ListDemo
@@ -947,7 +989,7 @@ export const ListResult_ExistingNameDisabled: Story = {
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
-      existingNames={['sunken archive']}
+      existingKeys={['sunken archive']}
       onSetup={fn()}
       onImport={fn()}
     />
@@ -1181,14 +1223,14 @@ export const ListResult_CancelledGenerateMoreThenRegenerateReplaces: Story = {
   },
 }
 
-let setLiveExistingNames: (names: string[]) => void = () => {}
+let setLiveExistingKeys: (keys: string[]) => void = () => {}
 export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
   render: () => (
     <ListDemoWithLiveExisting
       resolveModelId={() => MODEL_ID}
       run={okRun<ListItemValue>({ items: [RUIN_ITEM] })}
       onReady={(setter) => {
-        setLiveExistingNames = setter
+        setLiveExistingKeys = setter
       }}
     />
   ),
@@ -1199,12 +1241,12 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
 
     // Marking it existing WHILE checked reaches a combination a static
-    // existingNames prop never produces: checked AND disabled together, with
+    // existingKeys prop never produces: checked AND disabled together, with
     // the Indicator wrapper actually rendered. Driven directly through the
     // setter (not a click) — a button outside DialogContent would register
     // as an outside interaction and dismiss the overlay before this
     // assertion ever ran.
-    setLiveExistingNames(['Sunken Archive'])
+    setLiveExistingKeys(['Sunken Archive'])
     const checkbox = await screen.findByRole('checkbox', { name: 'Sunken Archive' })
     expect(checkbox).toBeChecked()
     expect(checkbox).toHaveStyle({ pointerEvents: 'none' })

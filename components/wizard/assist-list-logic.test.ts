@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 
-import { itemKey, mergePages, markExisting, type AssistListItem } from './assist-list-logic'
+import {
+  composeKey,
+  itemKey,
+  mergePages,
+  markExisting,
+  type AssistListItem,
+} from './assist-list-logic'
 
 const item = (name: string): AssistListItem => ({ name, detail: `${name} detail`, payload: null })
 
@@ -65,5 +71,23 @@ describe('dedupeKey', () => {
   it('itemKey normalizes whichever identity it uses', () => {
     expect(itemKey({ name: ' The Wells ' })).toBe('the wells')
     expect(itemKey({ name: 'x', dedupeKey: ' Location:Ashfall ' })).toBe('location:ashfall')
+  })
+})
+
+describe('composeKey', () => {
+  it('normalizes each part, so a padded name still matches a clean key built the same way', () => {
+    const paddedRow = {
+      name: 'x',
+      detail: '',
+      dedupeKey: composeKey('location', '  Ashfall  '),
+      payload: 1,
+    }
+    const cleanExistingKey = composeKey('location', 'Ashfall')
+    expect(itemKey(paddedRow)).toBe(cleanExistingKey)
+
+    // Naive interpolation — normalizing the JOINED string rather than each part
+    // — would leave the padding as interior whitespace and miss this match.
+    const naiveKey = 'location:  Ashfall  '.trim().toLowerCase()
+    expect(naiveKey).not.toBe(cleanExistingKey)
   })
 })
