@@ -96,9 +96,11 @@ describe('schemaToTypeScriptBlock', () => {
 })
 
 describe('structured-output schema net', () => {
-  // Every schema actually passed to generateStructured (lib/wizard/assist-schemas.ts,
-  // lib/classifier/schema.ts). None legitimately renders `unknown` — verified by this
-  // test itself — so an occurrence here is a renderer regression, not an expected shape.
+  // The generateStructured schemas reachable from a module root — lib/wizard and
+  // lib/classifier. The three in lib/pipeline/definitions aren't re-exported from
+  // lib/pipeline, so they stay uncovered rather than widening that module's API.
+  // None here legitimately renders `unknown`, so an occurrence is a renderer
+  // regression rather than an expected shape.
   const structuredOutputSchemas = {
     openingOutputSchema,
     titleChipsSchema,
