@@ -366,8 +366,9 @@ A wandering wizard, gray of cloak and white of beard…
 
 - Kind icon + name + chips (`⭐ lead` / `STAGED` non-default).
 - Truncated description.
-- `⭐ Set as lead` button on character rows when no other
-  character is the lead AND status is `active`.
+- `⭐ Set as lead` button on every character row that is
+  `active` and isn't already the lead — clicking it reassigns
+  the lead, demoting the incumbent.
 - `STAGED` chip + muted row content for staged entities.
 - `✕` deletes (no confirm — wizard-time, no entries depend yet).
 
@@ -389,15 +390,15 @@ Drives      [chip input — soft cap 6]
   Hair           [_____________________________]
   Eyes           [_____________________________]
   Attire         [_____________________________]
-  Distinguishing [chip input]
+  Distinguishing [_____________________________]
 
 ▼ More options
   Tags          [chip input]
   Faction       [pick from cast ▾]
 
 ⭐ Set as lead   (button outside disclosure, character-only,
-                 visible when no other character is the lead
-                 AND status='active')
+                 visible on any active character that isn't
+                 already the lead — click reassigns)
 ```
 
 Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
@@ -534,7 +535,10 @@ Cross-batch reference resolution: location's
 import time to entity ids — matching case-insensitively by name
 against same-kind rows in the imported selection + the existing
 cast. Unresolved names (including a suggested parent or faction
-left unchecked at import) fall back to `null`.
+left unchecked at import) fall back to `null`; a blank name never
+resolves. When an imported row and an existing cast row share a
+kind and a name, the imported row wins for references inside that
+batch.
 
 ### Lead-required gating
 
