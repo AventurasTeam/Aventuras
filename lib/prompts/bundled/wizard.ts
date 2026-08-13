@@ -20,6 +20,11 @@
 // sceneEntities/currentLocationId (canon), and gating the header on the
 // unfiltered array would leave a dangling "Cast —" label when everything
 // authored so far is staged (architecture.md's conditional-section-header rule).
+//
+// The lead line also checks leadRows.first, not just leadEntityId != blank:
+// this macro doesn't own how leadEntityId got set, and naming an id as the
+// lead while the cast block above excludes that same id (staged, or simply
+// absent from cast) would contradict the prompt in the same breath.
 export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
@@ -27,7 +32,7 @@ export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %
 {% for row in lore %}- {{ row.title }}: {{ row.body }}
 {% endfor %}{% endif %}{% assign activeCast = cast | active %}{% if activeCast.size > 0 %}Cast — sceneEntities and currentLocationId must reference only these cast ids:
 {% for row in activeCast %}- {{ row.name }} ({{ row.kind }}, cast id: {{ row.id }}){% if row.description != blank %}: {{ row.description }}{% endif %}
-{% endfor %}{% endif %}{% if leadEntityId != blank %}The lead character's cast id is {{ leadEntityId }}.
+{% endfor %}{% endif %}{% assign leadRows = activeCast | where: 'id', leadEntityId %}{% if leadEntityId != blank and leadRows.first %}The lead character's cast id is {{ leadEntityId }}.
 {% endif %}`
 
 export const WIZARD_OPENING = `Write the opening passage of this {{ definition.mode }} story.
@@ -52,7 +57,10 @@ export const WIZARD_LORE = `Suggest five reference entries for this story's worl
 {% endfor %}{% endif %}{% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 
-export const WIZARD_CAST = `Suggest five cast entries for this story — a mix of characters, locations, items and factions unless the guidance below directs otherwise.
+// Raw cast, not activeCast: unlike the opening macro above, the exclusion
+// list must keep staged rows too — a staged row is still "already suggested"
+// and re-offering it on `Generate more` is a repeat regardless of status.
+export const WIZARD_CAST = `Suggest five cast entries for this story — a mix of characters, locations, items and factions{% if guidance != blank %} — unless the guidance below directs otherwise{% endif %}.
 {% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
@@ -61,7 +69,7 @@ export const WIZARD_CAST = `Suggest five cast entries for this story — a mix o
 {% endfor %}{% endif %}{% if cast.size > 0 or suggested.size > 0 %}Already in the cast (do not repeat these):
 {% for row in cast %}- {{ row.name }} ({{ row.kind }})
 {% endfor %}{% for name in suggested %}- {{ name }}
-{% endfor %}{% endif %}A character's faction_name and a location's parent_location_name may reference a faction or location from this batch or from the existing cast, by exact name.
+{% endfor %}{% endif %}A character's faction_name and a location's parent_location_name may reference a faction or location from this batch{% if cast.size > 0 %} or from the existing cast{% endif %}, by exact name.
 {% if guidance != blank %}Additional guidance: {{ guidance }}
 {% endif %}`
 

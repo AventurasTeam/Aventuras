@@ -11,9 +11,7 @@ const leadCtx = {
     tone: { promptBody: '' },
   },
   leadEntityId: 'c1',
-  // The opening context now names the lead through its cast row, not `leadName`
-  // (dropped — see templateContextMap.ts); the row must be present for the
-  // lead's name to reach the prompt at all.
+  // The row must be present for the lead's name to reach the prompt at all.
   cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
 }
 const leadlessCtx = {
@@ -274,6 +272,42 @@ describe('WIZARD_OPENING cast block', () => {
     expect(out).not.toContain('Gandalf')
     expect(out).toContain("The lead character's cast id is c1")
   })
+
+  it('omits the cast header entirely when every authored row is staged', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
+      cast: [
+        {
+          id: 'c2',
+          kind: 'character',
+          name: 'Gandalf',
+          description: 'A wizard.',
+          status: 'staged',
+        },
+      ],
+      leadEntityId: '',
+      guidance: '',
+    })
+    expect(out).not.toContain('Cast —')
+  })
+
+  it('drops the lead line when the lead id points at a staged row', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
+      cast: [
+        { id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'staged' },
+        { id: 'c2', kind: 'character', name: 'Bo', description: '', status: 'active' },
+      ],
+      // Staging the lead is only reachable through setCastStatus in the shipped
+      // UI, which nulls leadEntityId in the same write — but the template can't
+      // assume every caller of this context routes through that store, so it
+      // must not name a lead the cast block simultaneously excludes.
+      leadEntityId: 'c1',
+      guidance: '',
+    })
+    expect(out).not.toContain('lead character')
+    expect(out).not.toContain('Aria')
+  })
 })
 
 describe('WIZARD_CAST', () => {
@@ -281,15 +315,34 @@ describe('WIZARD_CAST', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardCast, {
       definition: { genre: { promptBody: 'Grim fantasy.' }, tone: { promptBody: '' }, setting: '' },
       lore: [],
-      cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
+      cast: [
+        { id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' },
+        // Staged rows are still "already suggested" — the exclusion list must
+        // not filter by status the way the opening's cast block does.
+        { id: 'c2', kind: 'character', name: 'Bo', description: '', status: 'staged' },
+      ],
       suggested: ['Old Jorin'],
       guidance: 'more factions',
     })
     expect(out).toContain('Suggest five cast entries')
     expect(out).toContain('- Aria (character)')
+    expect(out).toContain('- Bo (character)')
     expect(out).toContain('- Old Jorin')
     expect(out).toContain('faction_name')
+    expect(out).toContain('parent_location_name')
     expect(out).toContain('Additional guidance: more factions')
+  })
+
+  it('omits the "below" and "existing cast" clauses when there is no guidance and no cast', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardCast, {
+      definition: { genre: {}, tone: {}, setting: '' },
+      guidance: '',
+    })
+    expect(out).not.toContain('below')
+    expect(out).not.toContain('existing cast')
+    expect(out).toContain(
+      'Suggest five cast entries for this story — a mix of characters, locations, items and factions.',
+    )
   })
 })
 
