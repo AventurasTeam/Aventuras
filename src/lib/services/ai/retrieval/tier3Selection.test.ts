@@ -15,9 +15,11 @@ vi.mock('../sdk/generate', () => ({
 }))
 
 const rendered: Record<string, string>[] = []
+const packedFor: (string | undefined)[] = []
 vi.mock('$lib/services/context', () => ({
   ContextBuilder: class ContextBuilderMock {
-    static async forPack() {
+    static async forPack(storyId: string | undefined) {
+      packedFor.push(storyId)
       return new ContextBuilderMock()
     }
     add(vars: Record<string, string>) {
@@ -51,6 +53,7 @@ const selection = (...ids: string[]): Tier3SelectionResult => ({ selectedIndices
 beforeEach(() => {
   generateStructured.mockReset()
   rendered.length = 0
+  packedFor.length = 0
   clearTier3SelectionCache()
 })
 
@@ -124,7 +127,7 @@ describe('countWholesaleWords', () => {
 
 describe('runTier3Selection', () => {
   const request = {
-    storyId: undefined,
+    storyId: 'story-1',
     candidates: [
       { id: 'a-uuid', type: 'character', name: 'Aria', description: 'A swordswoman.' },
       { id: 'b-uuid', type: 'location', name: 'The Tower', description: null },
@@ -202,6 +205,14 @@ describe('runTier3Selection', () => {
     expect(summaries).not.toContain('The Tower:')
   })
 
+  it("renders the template from the story's pack, not the default one", async () => {
+    generateStructured.mockResolvedValue({ selectedIndices: [] })
+
+    await runTier3Selection(request)
+
+    expect(packedFor).toEqual(['story-1'])
+  })
+
   it('returns null when the call fails, rather than throwing into the turn', async () => {
     // Both callers read null as "no Tier 3 entries". Throwing would take down a retrieval
     // stage whose other tiers succeeded.
@@ -213,7 +224,7 @@ describe('runTier3Selection', () => {
 
 describe('runTier3Selection caching', () => {
   const cachedRequest = {
-    storyId: undefined,
+    storyId: 'story-1',
     candidates: [
       { id: 'a-uuid', type: 'character', name: 'Aria', description: 'A swordswoman.' },
       { id: 'b-uuid', type: 'location', name: 'The Tower', description: null },
@@ -242,6 +253,16 @@ describe('runTier3Selection caching', () => {
     await runTier3Selection({ ...cachedRequest, currentPosition: 99 })
 
     expect(generateStructured).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks again for another story, which renders the question from a different pack', async () => {
+    generateStructured.mockResolvedValue({ selectedIndices: [] })
+
+    await runTier3Selection({ ...cachedRequest, currentPosition: 100 })
+    await runTier3Selection({ ...cachedRequest, storyId: 'story-2', currentPosition: 100 })
+
+    expect(generateStructured).toHaveBeenCalledTimes(2)
+    expect(packedFor).toEqual(['story-1', 'story-2'])
   })
 
   it('asks again for a new player action, even on an unchanged pool', async () => {

@@ -404,14 +404,16 @@
     generatingPortraitId = character.id
     portraitError = null
 
+    // Captured before the awaits below: the style and the template have to come from the
+    // same story's pack even if the user switches stories mid-generation.
+    const storyId = story.currentStory?.id
+
     try {
       // Get the style prompt from database (external template)
-      const styleId = imageSettings.portraitStyleId
-
-      const stylePrompt = await resolveStylePrompt(story.currentStory?.id, styleId)
+      const stylePrompt = await resolveStylePrompt(storyId, imageSettings.portraitStyleId)
 
       // Build the portrait generation prompt using ContextBuilder
-      const ctx = await ContextBuilder.forPack(story.currentStory?.id)
+      const ctx = await ContextBuilder.forPack(storyId)
       ctx.add({
         mode: 'adventure',
         pov: 'second',

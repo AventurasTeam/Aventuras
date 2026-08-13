@@ -84,7 +84,7 @@ export class ImageStore {
 
     try {
       const packId = this.packId()
-      const stylePrompt = await resolveStylePromptForPack(packId, imageSettings.styleId)
+      const stylePrompt = await resolveStylePromptForPack(packId, imageSettings.portraitStyleId)
       const portraitPrompt = await buildPortraitPrompt(
         packId,
         stylePrompt,

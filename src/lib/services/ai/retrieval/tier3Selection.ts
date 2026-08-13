@@ -92,8 +92,11 @@ interface CachedSelection {
 const selectionCache = new Map<string, CachedSelection>()
 
 /**
- * What a cached answer is an answer *to*: this caller, this pool, in this order, for this
- * player action.
+ * What a cached answer is an answer *to*: this caller, in this story, for this pool, in this
+ * order, for this player action.
+ *
+ * The story matters because it picks the prompt pack, so two stories can ask the same
+ * question of the same pool and get it phrased by different templates.
  *
  * Order matters because the answer is in index space — `"3"` means "the fourth candidate
  * in the list the prompt numbered". An order-independent key would resolve those indices
@@ -119,6 +122,7 @@ const selectionCache = new Map<string, CachedSelection>()
  */
 function cacheKeyFor(
   serviceLabel: string,
+  storyId: string | undefined,
   candidates: Tier3Candidate[],
   userInput: string,
   recentEntries: StoryEntry[],
@@ -126,6 +130,7 @@ function cacheKeyFor(
 ): string {
   return [
     serviceLabel,
+    storyId ?? '',
     userInput,
     // The same slice the prompt is built from, so the key moves exactly when the prompt does.
     ...recentEntries.slice(-recentEntriesCount).map((e) => e.id),
@@ -163,6 +168,7 @@ export async function runTier3Selection({
 
   const cacheKey = cacheKeyFor(
     serviceLabel,
+    storyId,
     candidates,
     userInput,
     recentEntries,
