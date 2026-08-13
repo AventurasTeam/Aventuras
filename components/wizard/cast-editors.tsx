@@ -72,7 +72,12 @@ function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolea
           aria-invalid={nameError}
         />
       </FormRow>
-      <FormRow label={t('wizard:cast.editor.status')}>
+      {/* FormRow's root is `w-full`, which in this row claims the whole width
+          and refuses to shrink — the flex-1 name beside it then resolves to a
+          one-character column. An explicit width is what twMerge needs to
+          drop `w-full`; it also holds the two-segment control at a readable
+          size instead of letting it stretch. */}
+      <FormRow className="w-44" label={t('wizard:cast.editor.status')}>
         <Select
           options={STATUS_OPTIONS}
           value={row.status}
@@ -156,7 +161,7 @@ type SetAsLeadButtonProps = {
 // direct, expected result of the button just pressed, unlike the staged/
 // removed lead-unset paths (which toast because the lead vanishes as a side
 // effect of an unrelated action, with no local chip left to show it).
-function SetAsLeadButton({ row, leadEntityId }: SetAsLeadButtonProps) {
+export function SetAsLeadButton({ row, leadEntityId }: SetAsLeadButtonProps) {
   if (!canSetLead(row, leadEntityId)) return null
   return (
     // RN's default alignItems: stretch would span the Button full-width

@@ -1,6 +1,6 @@
 import { ChevronDown, Trash2 } from 'lucide-react-native'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Pressable, View } from 'react-native'
+import { Pressable, View, type ViewProps } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
@@ -72,6 +72,14 @@ export type ExpandableRowProps = {
   editor: ReactNode
   /** Extra compact-row action (e.g. a compact secondary action), left of remove. */
   compactAction?: ReactNode
+  /**
+   * E2E scope anchor on the row container (docs/testing.md → Selector
+   * strategy). Rows carry identical expand / remove / field names and several
+   * can be open at once, so a locator has no other way to say "inside row X".
+   * `testID` renders as `data-testid`; `dataSet` as hyphenated `data-*`.
+   */
+  testID?: string
+  dataSet?: Record<string, string>
 }
 
 /** Bordered row chrome: row-wide expand Pressable, remove action, aria-hidden caret. */
@@ -86,9 +94,13 @@ export function ExpandableRow({
   compact,
   editor,
   compactAction,
+  testID,
+  dataSet,
 }: ExpandableRowProps) {
   return (
     <View
+      // `dataSet` is RN-Web-only and absent from RN's ViewProps; native drops it.
+      {...({ testID, dataSet } as ViewProps)}
       className={cn('rounded-md border bg-bg-base', invalid ? 'border-danger' : 'border-border')}
     >
       <View className="flex-row items-start gap-1">
