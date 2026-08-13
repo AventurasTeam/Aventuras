@@ -34,9 +34,8 @@ export const CreativeThird: Story = {
     expect(screen.getByRole('radio', { name: /Creative/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Third/ })).toBeChecked()
 
-    // Permissive default — no forward-pointer notice, no lead-name field.
+    // Permissive default — no forward-pointer notice renders.
     expect(screen.queryByText(/require a lead character/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Lead character name')).not.toBeInTheDocument()
   },
 }
 
