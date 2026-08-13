@@ -9,13 +9,17 @@ import { cn } from '@/lib/utils'
 const CARET_FLIPPED = { transform: [{ rotate: '180deg' }] } as const
 
 /**
- * Expand-state machinery for id-keyed editable row lists (lore, cast).
+ * Expand-state machinery for id-keyed editable row lists.
  * Prunes ids whose rows disappeared — a stale id would re-expand a recycled
  * row (no-harmless-id-leaks.md). Pruning ONLY: new-id auto-expand belongs to
  * the caller's add handler via `expandAdded`, so a hydrated resume or an
  * import batch never pops an editor open unasked.
  */
-export function useRowExpansion(rows: readonly { id: string }[]) {
+export function useRowExpansion(rows: readonly { id: string }[]): {
+  expanded: ReadonlySet<string>
+  toggle: (id: string) => void
+  expandAdded: (id: string) => void
+} {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -42,6 +46,10 @@ export function useRowExpansion(rows: readonly { id: string }[]) {
     })
   }
 
+  // Must run in the same commit as the row's insertion into `rows` — it works
+  // in wizard callers only because their add mutators commit synchronously.
+  // An async add would have this id pruned on the next unrelated `rows`
+  // change (the effect above sees no matching row yet) and render collapsed.
   function expandAdded(id: string) {
     setExpanded((prev) => new Set(prev).add(id))
   }
@@ -49,7 +57,8 @@ export function useRowExpansion(rows: readonly { id: string }[]) {
   return { expanded, toggle, expandAdded }
 }
 
-export type RowListRowProps = {
+export type ExpandableRowProps = {
+  /** Visual only — swaps the border to `border-danger`. Sets no `aria-invalid`; that's each field's own job. */
   invalid: boolean
   expanded: boolean
   onToggle: () => void
@@ -61,12 +70,12 @@ export type RowListRowProps = {
   compact: ReactNode
   /** Inline editor body, rendered only while expanded. */
   editor: ReactNode
-  /** Extra compact-row action (e.g. cast's compact `Set as lead`), left of remove. */
+  /** Extra compact-row action (e.g. a compact secondary action), left of remove. */
   compactAction?: ReactNode
 }
 
 /** Bordered row chrome: row-wide expand Pressable, remove action, aria-hidden caret. */
-export function RowListRow({
+export function ExpandableRow({
   invalid,
   expanded,
   onToggle,
@@ -77,7 +86,7 @@ export function RowListRow({
   compact,
   editor,
   compactAction,
-}: RowListRowProps) {
+}: ExpandableRowProps) {
   return (
     <View
       className={cn('rounded-md border bg-bg-base', invalid ? 'border-danger' : 'border-border')}

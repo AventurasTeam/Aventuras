@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { View } from 'react-native'
 
+import { ExpandableRow, useRowExpansion } from '@/components/compounds/expandable-row'
 import { FormRow } from '@/components/compounds/form-row'
-import { RowListRow, useRowExpansion } from '@/components/compounds/row-list-shell'
 import { TagInput } from '@/components/compounds/tag-input'
 import {
   Accordion,
@@ -96,7 +96,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
   const errorMessages = fieldErrors.map((field) => t(`wizard:world.lore.errors.${field}`))
 
   return (
-    <RowListRow
+    <ExpandableRow
       invalid={invalid}
       expanded={expanded}
       onToggle={() => onToggleExpanded(row.id)}
