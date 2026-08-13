@@ -116,8 +116,7 @@ function resolveOpening(
 
 // Generate and refine share the opening's id round-trip: real ids go into the
 // prompt as placeholders, and the reply's refs are resolved back. Only the
-// template and the extra context differ. The lead's cast id already exists by
-// this point — it's minted when the lead is added to the cast, not here.
+// template and the extra context differ.
 async function openingCall(
   templateId: TemplateId,
   guidance: string,

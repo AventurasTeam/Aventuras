@@ -80,9 +80,12 @@ describe('runOpeningAssist', () => {
     expect(res.value.model).toBe(MODEL_ID)
   })
 
-  it('falls back to user-written (drops metadata) when a placeholder cannot resolve', async () => {
-    // Lead-less path → empty idMap → the returned placeholder is unresolvable.
-    wizardStore.patchDefinition({ mode: 'creative', narration: 'third' })
+  it('falls back to user-written (drops metadata) on a lead-required path with no minted lead id', async () => {
+    // No id is minted here anymore — even on a lead-required path, the idMap
+    // stays empty until the lead is added as a cast row, so the returned
+    // placeholder is unresolvable.
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.setLeadName('Kade')
     const res = await runOpeningAssist(
       '',
       signal,
@@ -163,9 +166,17 @@ describe('runCastAssist', () => {
 
   it('renders the cast template and returns the parsed batch', async () => {
     let capturedPrompt = ''
+    let capturedSignal: AbortSignal | undefined
     const entities = [{ kind: 'item', name: 'Coin', description: 'Old.' }]
-    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+    const generate: WizardAssistDeps['generate'] = (async (
+      _target,
+      prompt,
+      _schema,
+      _config,
+      sig,
+    ) => {
       capturedPrompt = prompt as string
+      capturedSignal = sig as AbortSignal
       return { status: 'ok', value: { entities } }
     }) as WizardAssistDeps['generate']
 
@@ -174,6 +185,22 @@ describe('runCastAssist', () => {
     expect(capturedPrompt).toContain('Suggest five cast entries')
     // Nothing on screen yet, so the exclusion block must not render at all.
     expect(capturedPrompt).not.toContain('Already in the cast')
+    // A wizard "Cancel" must abort the in-flight call, not just the UI.
+    expect(capturedSignal).toBe(signal)
+  })
+
+  it('renders the authored cast rows from wizard state, not just the suggested exclusions', async () => {
+    let capturedPrompt = ''
+    const id = wizardStore.addCast('character')
+    wizardStore.patchCast(id, { name: 'Rook' })
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { entities: [] } }
+    }) as WizardAssistDeps['generate']
+
+    await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(capturedPrompt).toContain('Already in the cast (do not repeat these):')
+    expect(capturedPrompt).toContain('- Rook (character)')
   })
 
   it('excludes the names already on screen so a further page is not a re-roll', async () => {

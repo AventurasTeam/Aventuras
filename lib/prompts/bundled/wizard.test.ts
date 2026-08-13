@@ -330,6 +330,7 @@ describe('WIZARD_CAST', () => {
     expect(out).toContain('- Old Jorin')
     expect(out).toContain('faction_name')
     expect(out).toContain('parent_location_name')
+    expect(out).toContain('unless the guidance below directs otherwise')
     expect(out).toContain('Additional guidance: more factions')
   })
 
