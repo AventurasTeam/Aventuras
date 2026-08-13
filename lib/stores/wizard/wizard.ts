@@ -46,6 +46,10 @@ type WizardState = WizardSnapshot & {
   /** Returns the minted row's id — same rationale as addLore. */
   addCast: (kind: WizardCastDraft['kind']) => string
   patchCast: (id: string, patch: WizardCastDraftPatch) => void
+  /**
+   * Caller owns id uniqueness — unlike importLore this can't re-mint, because
+   * the resolver's minted ids carry cross-references between the imported rows.
+   */
   importCast: (rows: readonly WizardCastDraft[]) => void
   /** Returns whether the lead was cascaded off (staged can't hold the lead) — caller toasts. */
   setCastStatus: (id: string, status: 'active' | 'staged') => boolean
@@ -67,7 +71,7 @@ function emptyLoreDraft(): WizardLoreDraft {
   }
 }
 
-// Every array-shaped field of the working state qualifies as a collection —
+// Every id-keyed array field of the working state qualifies as a collection —
 // derived from WizardWorkingState itself so a factory call can never target a
 // key whose element type doesn't match the generic it's instantiated with.
 type CollectionKey = {
@@ -145,9 +149,6 @@ const store = createStore<WizardState>()((set) => {
     // An id-keyed patch can't discriminate kind, so a cross-kind field would land
     // at runtime; the schema re-parse on load is the backstop.
     patchCast: (id, patch) => castOps.patch(id, patch),
-    // Caller owns id uniqueness — unlike importLore, this can't re-mint ids
-    // because the resolver's minted ids carry cross-references; a duplicate
-    // would make one patchCast mutate both rows.
     importCast: (rows) => castOps.append(rows),
     // Cascades read leadEntityId in the same set() the row change lands in, so the
     // two can never be observed half-applied. The boolean tells the CALLER to
@@ -155,6 +156,8 @@ const store = createStore<WizardState>()((set) => {
     setCastStatus: (id, status) => {
       let leadUnset = false
       set((s) => {
+        // Guarded here but deliberately not in removeCast: there, nulling a
+        // dangling lead pointer is the contract rather than a false report.
         const found = s.state.cast.some((r) => r.id === id)
         leadUnset = found && status === 'staged' && s.state.leadEntityId === id
         return {
