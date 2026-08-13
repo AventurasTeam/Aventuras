@@ -5,15 +5,20 @@
   import { Input } from '$lib/components/ui/input'
   import { Switch } from '$lib/components/ui/switch'
   import { BookOpen, User, Eye, AlignLeft } from '@lucide/svelte'
-  import type { POV, Tense, TargetLength } from '$lib/types'
+  import type { POV, Tense, TargetLength, ImageGenerationMode } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
     selectedTense: Tense
     tone: string
     visualProseMode: boolean
+    /** Standard image slot is usable — gates the image mode choice. */
     imageGenerationEnabled: boolean
-    imageGenerationMode: 'none' | 'agentic' | 'inline'
+    /** Background slot is usable. Defaults to `imageGenerationEnabled`. */
+    backgroundImagesAvailable?: boolean
+    /** Portrait or reference slot is usable. Defaults to `imageGenerationEnabled`. */
+    portraitReferenceAvailable?: boolean
+    imageGenerationMode: ImageGenerationMode
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
@@ -25,7 +30,7 @@
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
     onVisualProseModeChange: (v: boolean) => void
-    onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
+    onImageGenerationModeChange: (v: ImageGenerationMode) => void
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
     onTargetLengthChange?: (v: TargetLength) => void
@@ -43,6 +48,8 @@
     tone,
     visualProseMode,
     imageGenerationEnabled,
+    backgroundImagesAvailable,
+    portraitReferenceAvailable,
     imageGenerationMode,
     backgroundImagesEnabled,
     referenceMode,
@@ -60,6 +67,36 @@
     disabledFields,
     disabledReason,
   }: Props = $props()
+
+  const IMAGE_MODES: { value: ImageGenerationMode; label: string; description: string }[] = [
+    {
+      value: 'none',
+      label: 'Text Only',
+      description: 'Pure text adventure. No images will be generated.',
+    },
+    {
+      value: 'agentic',
+      label: 'Agent Mode',
+      description: 'AI decides when to generate images based on the story.',
+    },
+    {
+      value: 'inline',
+      label: 'Inline Mode',
+      description: 'Images are embedded directly in the text flow.',
+    },
+  ]
+
+  const backgroundAvailable = $derived(backgroundImagesAvailable ?? imageGenerationEnabled)
+  const portraitAvailable = $derived(portraitReferenceAvailable ?? imageGenerationEnabled)
+
+  // An unconfigured option can still be turned off, never on: the current selection stays
+  // reachable so a story set up on another machine isn't stuck with it.
+  function modeLocked(value: ImageGenerationMode): boolean {
+    return !imageGenerationEnabled && value !== 'none' && value !== imageGenerationMode
+  }
+  const imageProfileMissing = $derived(
+    !imageGenerationEnabled || !backgroundAvailable || !portraitAvailable,
+  )
 
   /** Must match the ranges `formatLengthInstruction` asks for, which differ per mode. */
   const LENGTH_RANGES = {
@@ -258,99 +295,85 @@
   {/if}
 
   <!-- Visuals Configuration -->
-  {#if imageGenerationEnabled}
-    <section class="space-y-2 pt-1">
-      <Label class="flex items-center gap-2 text-base font-semibold">
-        <Eye class="h-4 w-4" />
-        Visual Experience
-      </Label>
+  <section class="space-y-2 pt-1">
+    <Label class="flex items-center gap-2 text-base font-semibold">
+      <Eye class="h-4 w-4" />
+      Visual Experience
+    </Label>
 
-      <RadioGroup.Root
-        value={imageGenerationMode}
-        onValueChange={(v) => onImageGenerationModeChange(v as 'none' | 'agentic' | 'inline')}
-        class="grid grid-cols-1 gap-4 md:grid-cols-3"
+    {#if imageProfileMissing}
+      <p class="text-muted-foreground text-xs">
+        Options without a configured image profile can only be turned off. Set one up in Settings →
+        Images.
+      </p>
+    {/if}
+
+    <RadioGroup.Root
+      value={imageGenerationMode}
+      onValueChange={(v) => onImageGenerationModeChange(v as ImageGenerationMode)}
+      class="grid grid-cols-1 gap-4 md:grid-cols-3"
+    >
+      {#each IMAGE_MODES as option (option.value)}
+        {@const locked = modeLocked(option.value)}
+        <div class="relative" class:opacity-50={locked}>
+          <Label
+            for="img-{option.value}"
+            class="border-muted bg-popover has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2 {locked
+              ? 'cursor-not-allowed'
+              : 'hover:bg-accent cursor-pointer'}"
+          >
+            <div class="mb-2 flex w-full items-start justify-between">
+              <span class="font-semibold">{option.label}</span>
+              <RadioGroup.Item
+                value={option.value}
+                id="img-{option.value}"
+                disabled={locked}
+                class="sr-only"
+              />
+            </div>
+            <div class="text-muted-foreground text-xs font-normal">{option.description}</div>
+          </Label>
+        </div>
+      {/each}
+    </RadioGroup.Root>
+
+    <!-- Extra Image Toggles -->
+    <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
+      <div
+        class="flex items-center space-x-2"
+        class:opacity-50={!backgroundAvailable && !backgroundImagesEnabled}
       >
-        <!-- No Images -->
-        <div class="relative">
-          <Label
-            for="img-none"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
-          >
-            <div class="mb-2 flex w-full items-start justify-between">
-              <span class="font-semibold">Text Only</span>
-              <RadioGroup.Item value="none" id="img-none" class="sr-only" />
-            </div>
-            <div class="text-muted-foreground text-xs font-normal">
-              Pure text adventure. No images will be generated.
-            </div>
-          </Label>
-        </div>
-
-        <!-- Agent Mode -->
-        <div class="relative">
-          <Label
-            for="img-auto"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
-          >
-            <div class="mb-2 flex w-full items-start justify-between">
-              <span class="font-semibold">Agent Mode</span>
-              <RadioGroup.Item value="agentic" id="img-auto" class="sr-only" />
-            </div>
-            <div class="text-muted-foreground text-xs font-normal">
-              AI decides when to generate images based on the story.
-            </div>
-          </Label>
-        </div>
-
-        <!-- Inline Mode -->
-        <div class="relative">
-          <Label
-            for="img-inline"
-            class="border-muted bg-popover hover:bg-accent has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[:focus-visible]:ring-ring flex h-full cursor-pointer flex-col justify-between rounded-xl border-2 p-4 has-[:focus-visible]:ring-2"
-          >
-            <div class="mb-2 flex w-full items-start justify-between">
-              <span class="font-semibold">Inline Mode</span>
-              <RadioGroup.Item value="inline" id="img-inline" class="sr-only" />
-            </div>
-            <div class="text-muted-foreground text-xs font-normal">
-              Images are embedded directly in the text flow.
-            </div>
-          </Label>
-        </div>
-      </RadioGroup.Root>
-
-      <!-- Extra Image Toggles -->
-      <div class="grid grid-cols-1 gap-4 pt-2 md:grid-cols-2">
-        <div class="flex items-center space-x-2">
-          <Switch
-            id="bg-images"
-            checked={backgroundImagesEnabled}
-            onCheckedChange={onBackgroundImagesEnabledChange}
-          />
-          <div class="grid gap-1.5 leading-none">
-            <Label for="bg-images">Background Images</Label>
-            <p class="text-muted-foreground text-xs">
-              Generate immersive background images for scenes.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center space-x-2">
-          <Switch
-            id="reference-mode"
-            checked={referenceMode}
-            onCheckedChange={onReferenceModeChange}
-          />
-          <div class="grid gap-1.5 leading-none">
-            <Label for="reference-mode">Portrait Reference Mode</Label>
-            <p class="text-muted-foreground text-xs">
-              Use character portraits as visual references.
-            </p>
-          </div>
+        <Switch
+          id="bg-images"
+          checked={backgroundImagesEnabled}
+          disabled={!backgroundAvailable && !backgroundImagesEnabled}
+          onCheckedChange={onBackgroundImagesEnabledChange}
+        />
+        <div class="grid gap-1.5 leading-none">
+          <Label for="bg-images">Background Images</Label>
+          <p class="text-muted-foreground text-xs">
+            Generate immersive background images for scenes.
+          </p>
         </div>
       </div>
-    </section>
-  {/if}
+
+      <div
+        class="flex items-center space-x-2"
+        class:opacity-50={!portraitAvailable && !referenceMode}
+      >
+        <Switch
+          id="reference-mode"
+          checked={referenceMode}
+          disabled={!portraitAvailable && !referenceMode}
+          onCheckedChange={onReferenceModeChange}
+        />
+        <div class="grid gap-1.5 leading-none">
+          <Label for="reference-mode">Portrait Reference Mode</Label>
+          <p class="text-muted-foreground text-xs">Use character portraits as visual references.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <!-- Visual Prose Styling -->
   <section class="space-y-2 pt-1">

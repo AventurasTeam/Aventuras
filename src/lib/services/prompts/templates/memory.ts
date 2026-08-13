@@ -140,11 +140,12 @@ An entry is pulled into the narrator's prompt when its **name**, one of its **al
 
 ## Tools
 
-- **The two lists below are complete.** Every chapter is there with its full summary — there is no tool that lists chapters, and there is nothing else to see. Every lorebook entry is there with the index the tools take; \`read_entry\` gives you one entry's full text, and \`list_entries\` is only worth calling *after* you have merged or deleted something, to see the list as it then stands.
+- **The two lists below are complete.** Every chapter is there with its full summary, and every lorebook entry is there with the index the tools take. There is no tool that lists either of them: what you have is all there is, and \`read_entry\` gives you one entry's full text when its one-line summary is not enough.
+- **Your own results tell you where things moved.** A merge reports the index its result landed at and which indices it consumed; a creation reports its index too. An index you have already merged or deleted is refused by every tool, and that refusal is not a reason to look for the entry elsewhere — it means that work is done.
 {% if hasChapters %}- Use query_chapter when a summary is not enough, and ask a specific question ("What did [character] reveal?", never "Give me the full content"). Each call reads a whole chapter with a second model, there are a few per session, and asking the same question twice returns the first answer rather than reading again.
 {% else %}- There are no chapters, so query_chapter has nothing to read. Do not spend steps on it.
 {% endif %}
-When every duplicate group is closed and your changes are made, call finish_lore_management with a summary.`,
+**Consolidating is the first step, not the whole job.**{% if hasStoryMaterial %} Once the groups are closed, go back over the chapter summaries and the recent story: entries the events have outdated are step 2, a subject that matters and has no entry at all is step 3. That is what those two lists are in front of you for, and a session that only merged duplicates has done a third of its work.{% endif %} Call finish_lore_management with a summary of what you changed when all of it is done.`,
   // Stable material first, volatile material last: with prefix KV caching everything up to
   // the first differing token is reused. The chapter summaries change only when a chapter
   // is written, the entry list only when the lorebook changes, and the duplicate worklist

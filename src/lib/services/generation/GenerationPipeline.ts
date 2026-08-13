@@ -42,6 +42,7 @@ import {
   type BackgroundImageSettings,
 } from './phases/BackgroundImagePhase'
 import { mergeGenerators } from '$lib/utils/async'
+import { sameEntityName } from '$lib/utils/text'
 
 export interface PipelineDependencies
   extends
@@ -271,9 +272,15 @@ export class GenerationPipeline {
     classification: ClassificationPhaseResult | null,
     translation: TranslationResult2,
   ) {
+    // Matched the way presence is matched everywhere else: an exact-string compare here
+    // dropped the portrait reference for any name the model spelled differently.
+    //
+    // The protagonist is added rather than looked for. They are in every scene by
+    // definition, so whether the classifier remembered to name them says nothing — and
+    // leaving them out costs the image prompt its `isProtagonist` reference.
     const names = classification?.classificationResult?.scene?.presentCharacterNames ?? []
-    const presentCharacters: Character[] = ctx.worldState.characters.filter((c) =>
-      names.includes(c.name),
+    const presentCharacters: Character[] = ctx.worldState.characters.filter(
+      (c) => c.relationship === 'self' || names.some((name) => sameEntityName(c.name, name)),
     )
     return {
       storyId: ctx.story.id,

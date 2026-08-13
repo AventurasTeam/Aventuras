@@ -47,6 +47,7 @@ export interface LoreManagementUICallbacks {
    * `onComplete` two seconds later — and this is the only record of what a run did.
    */
   onSummary?: (summary: string, changeCount: number) => void
+  onError?: (error: string) => void
   onComplete: () => void
 }
 
@@ -219,6 +220,8 @@ export class LoreManagementCoordinator {
       }
     } catch (error) {
       log('Lore management failed', error)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      uiCallbacks?.onError?.(errorMessage)
 
       // Still clear the UI state: a failed run must not leave the lorebook read-only.
       finishUI()

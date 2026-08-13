@@ -26,6 +26,8 @@ import { ContextBuilder } from '$lib/services/context'
 import { database } from '$lib/services/database'
 import { createLogger } from '$lib/log'
 import { stripPicTags } from '$lib/utils/inlineImageParser'
+import { stripNarratorMarkup } from '$lib/utils/text'
+import { recentContent, AS_PROSE } from '$lib/utils/recentContent'
 import {
   classificationResultSchema,
   clampNumber,
@@ -59,11 +61,11 @@ export interface ClassificationContext {
  * Service that classifies narrative responses to extract world state changes.
  */
 export class ClassifierService extends BaseAIService {
-  private chatHistoryTruncation: number
+  private recentEntriesWindow: number
 
-  constructor(serviceId: ServiceId, chatHistoryTruncation: number = 100) {
+  constructor(serviceId: ServiceId, recentEntriesWindow: number = 7) {
     super(serviceId)
-    this.chatHistoryTruncation = chatHistoryTruncation
+    this.recentEntriesWindow = recentEntriesWindow
   }
 
   /**
@@ -103,14 +105,12 @@ export class ClassifierService extends BaseAIService {
 
     // Format existing entities for the prompt
     const existingCharacters = this.formatExistingCharacters(context.existingCharacters)
-    const existingLocations = context.existingLocations.map((l) => l.name).join(', ') || '(none)'
-    const existingItems = context.existingItems.map((i) => i.name).join(', ') || '(none)'
+    const existingLocations = this.formatExistingLocations(context.existingLocations)
+    const existingItems = this.formatExistingItems(context.existingItems)
     const existingBeats = this.formatExistingBeats(context.existingStoryBeats)
 
     // Build chat history block if entries provided
-    const chatHistoryBlock = visibleEntries
-      ? this.buildChatHistoryBlock(visibleEntries, currentStoryTime)
-      : ''
+    const chatHistoryBlock = visibleEntries ? this.buildChatHistoryBlock(visibleEntries) : ''
 
     // Build time info
     const currentTimeInfo = currentStoryTime
@@ -128,16 +128,16 @@ export class ClassifierService extends BaseAIService {
     ctx.add({
       genre: context.story.genre ? `Genre: ${context.story.genre}` : '',
       mode,
-      entityCounts: `${context.existingCharacters.length} characters, ${context.existingLocations.length} locations, ${context.existingItems.length} items`,
       currentTimeInfo,
       chatHistoryBlock,
       inputLabel: mode === 'creative-writing' ? 'Author Direction' : 'Player Action',
-      userAction: stripPicTags(context.userAction),
-      narrativeResponse: stripPicTags(context.narrativeResponse),
+      userAction: cleanForClassification(context.userAction),
+      narrativeResponse: cleanForClassification(context.narrativeResponse),
       existingCharacters,
       existingLocations,
       existingItems,
       existingBeats,
+      hasStoryBeats: existingBeats !== '(none)',
       storyBeatTypes: 'milestone, quest, revelation, event, plot_point',
       itemLocationOptions: 'inventory, worn, ground, or specific location name',
       defaultItemLocation: 'inventory',
@@ -403,24 +403,31 @@ export class ClassifierService extends BaseAIService {
    * Format existing characters for the prompt.
    *
    * **The name is the whole of its line.** The model reads this list and writes names back,
-   * so a rendered suffix — `- Ada (claimed as a consort) [inactive]` — came back as the
-   * name and minted a second character: four of thirty-eight on a measured save. Attributes
-   * are indented `label: value` lines instead, which a name containing parentheses cannot
-   * be confused with.
+   * so a rendered suffix — `- Ada (claimed as a consort) [inactive]` — comes back as the
+   * name and mints a second character. Attributes are indented `label: value` lines
+   * instead, which a name containing parentheses cannot be confused with.
+   *
+   * `appearance` is sent only for characters in the scene. It is there to be rewritten, and
+   * only someone present can have their look updated; on a large cast it is also most of
+   * the prompt. The template forbids rewriting an appearance that is not shown, so a
+   * returning character keeps the descriptors it accumulated.
    */
   private formatExistingCharacters(characters: Character[]): string {
     if (characters.length === 0) return '(none)'
 
     return characters
       .map((c) => {
+        const status = c.status ?? 'active'
         let entry = `- ${c.name}`
         if (c.relationship) entry += `\n  relationship: ${c.relationship}`
-        // `active` is printed too. Hiding it made the list asymmetric: the model was
-        // reminded to reactivate someone who returned and never that anyone was marked
-        // present, so nobody was ever marked away and the narrator's [PRESENT] section grew
-        // to every character in the story.
-        entry += `\n  status: ${c.status ?? 'active'}`
-        if (c.visualDescriptors && Object.keys(c.visualDescriptors).length > 0) {
+        // `active` is printed too, or the list is asymmetric: the model would be reminded to
+        // report a return and never a departure.
+        entry += `\n  status: ${status}`
+        if (
+          status === 'active' &&
+          c.visualDescriptors &&
+          Object.keys(c.visualDescriptors).length > 0
+        ) {
           entry += `\n  appearance: ${this.formatVisualDescriptors(c.visualDescriptors)}`
         }
         return entry
@@ -447,6 +454,51 @@ export class ClassifierService extends BaseAIService {
   }
 
   /**
+   * Format existing locations for the prompt.
+   *
+   * One name per line, as with characters: a comma-separated list cannot hold a name that
+   * contains a comma, and this list is copied back verbatim.
+   *
+   * Only the current location carries its description. A passage can re-describe the place
+   * it happens in and no other, and `description` is a whole-value replacement — the model
+   * must not rewrite one it was never shown.
+   */
+  private formatExistingLocations(locations: Location[]): string {
+    if (locations.length === 0) return '(none)'
+
+    return locations
+      .map((l) => {
+        let entry = `- ${l.name}`
+        if (l.current) {
+          entry += `\n  current: true`
+          if (l.description) entry += `\n  description: ${l.description}`
+        }
+        return entry
+      })
+      .join('\n')
+  }
+
+  /**
+   * Format existing items for the prompt.
+   *
+   * State is printed only where it differs from the default, so the list stays short: an
+   * unequipped single item sitting in the inventory is just its name.
+   */
+  private formatExistingItems(items: Item[]): string {
+    if (items.length === 0) return '(none)'
+
+    return items
+      .map((i) => {
+        let entry = `- ${i.name}`
+        if (i.quantity > 1) entry += `\n  quantity: ${i.quantity}`
+        if (i.equipped) entry += `\n  equipped: true`
+        if (i.location && i.location !== 'inventory') entry += `\n  location: ${i.location}`
+        return entry
+      })
+      .join('\n')
+  }
+
+  /**
    * Format existing story beats for the prompt.
    */
   private formatExistingBeats(beats: StoryBeat[]): string {
@@ -468,27 +520,24 @@ export class ClassifierService extends BaseAIService {
   }
 
   /**
-   * Build chat history block for context.
+   * Recent turns, whole. The window is short because these entries carry the scene the
+   * classifier reports on -- who is present, what changed -- and that lives at the end of
+   * a narration, which any per-entry truncation cuts off first.
    */
-  private buildChatHistoryBlock(entries: StoryEntry[], _currentTime?: TimeTracker | null): string {
+  private buildChatHistoryBlock(entries: StoryEntry[]): string {
     if (entries.length === 0) return ''
 
-    const recentEntries = entries.slice(-this.chatHistoryTruncation)
-
-    const formatted = recentEntries
-      .map((e) => {
-        const prefix = e.type === 'user_action' ? '[ACTION]' : '[NARRATIVE]'
-        let timeInfo = ''
-        if (e.metadata?.timeStart) {
-          const t = e.metadata.timeStart
-          timeInfo = ` (at Y${t.years}D${t.days} ${String(t.hours).padStart(2, '0')}:${String(t.minutes).padStart(2, '0')})`
-        }
-        // Always strip pic tags for classification to avoid confusion
-        const cleanContent = stripPicTags(e.content)
-        return `${prefix}${timeInfo} ${cleanContent.slice(0, 500)}${cleanContent.length > 500 ? '...' : ''}`
-      })
-      .join('\n\n')
+    const formatted = recentContent(entries, this.recentEntriesWindow, AS_PROSE, {
+      roles: true,
+      time: true,
+      transform: cleanForClassification,
+    })
 
     return `## Recent Chat History\n${formatted}\n`
   }
+}
+
+/** Neither the image markup nor the narrator's layout is part of the passage to classify. */
+function cleanForClassification(content: string): string {
+  return stripNarratorMarkup(stripPicTags(content))
 }

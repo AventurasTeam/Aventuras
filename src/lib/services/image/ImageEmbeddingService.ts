@@ -20,6 +20,7 @@ import {
   picTagRegex,
   renderSinglePicTag,
   type ImageReplacementInfo,
+  type PicTagRenderOptions,
 } from '$lib/utils/inlineImageParser'
 import { createFuzzyTextRegex } from '$lib/utils/text'
 
@@ -58,6 +59,51 @@ function buildAgenticMarkers(
   images: EmbeddedImage[],
   snapToDialogue: boolean,
 ): ImageMarker[] {
+  const snapped = snapToDialogue
+    ? snapMarkersToDialogue(content, rawMarkers(content, images))
+    : rawMarkers(content, images)
+  return [...snapped].sort((a, b) => b.start - a.start)
+}
+
+/**
+ * Raw-marker runs, keyed by the narration they were found in.
+ *
+ * Both readers — the renderer and the orphan gallery — ask the same question about the
+ * same entry, and the answer costs a fuzzy regex pass per image over the whole narration.
+ * Only the snapping differs between them, and that runs on the result. They are reached
+ * from different reactive contexts, so a single slot would be evicted by the next entry
+ * before the second reader arrives.
+ */
+const RAW_MARKER_CACHE_LIMIT = 32
+const rawMarkerCache = new Map<string, { signature: string; markers: ImageMarker[] }>()
+
+/**
+ * Keyed on the narration itself, so entries of the story being left never come up again.
+ * Called where the story or the branch changes, next to `clearTier3SelectionCache`.
+ */
+export function clearImageMarkerCache(): void {
+  rawMarkerCache.clear()
+}
+
+function markerSignature(images: EmbeddedImage[]): string {
+  return images.map((img) => `${img.id}:${img.status}:${img.sourceText}`).join('\u0000')
+}
+
+function rawMarkers(content: string, images: EmbeddedImage[]): ImageMarker[] {
+  const signature = markerSignature(images)
+  const cached = rawMarkerCache.get(content)
+  if (cached?.signature === signature) return cached.markers
+
+  const markers = findAgenticMarkers(content, images)
+  rawMarkerCache.set(content, { signature, markers })
+  if (rawMarkerCache.size > RAW_MARKER_CACHE_LIMIT) {
+    const oldest = rawMarkerCache.keys().next().value
+    if (oldest !== undefined) rawMarkerCache.delete(oldest)
+  }
+  return markers
+}
+
+function findAgenticMarkers(content: string, images: EmbeddedImage[]): ImageMarker[] {
   const displayable = getDisplayableAgenticImages(images)
   const sortedImages = [...displayable].sort((a, b) => b.sourceText.length - a.sourceText.length)
   const markers: ImageMarker[] = []
@@ -83,8 +129,7 @@ function buildAgenticMarkers(
     }
   }
 
-  const snapped = snapToDialogue ? snapMarkersToDialogue(content, markers) : markers
-  return snapped.sort((a, b) => b.start - a.start)
+  return markers
 }
 
 /**
@@ -166,6 +211,7 @@ function processUnified(
   render: (text: string) => string,
   renderMarkerText: (text: string) => string,
   snapToDialogue: boolean,
+  picOptions: PicTagRenderOptions,
 ): string {
   if (images.length === 0 && !content.includes('<pic')) {
     return render(content)
@@ -182,7 +228,7 @@ function processUnified(
     let picIndex = 0
     text = text.replace(picTagRegex(), (match) => {
       const placeholder = `PICPH${picIndex++}PICPH`
-      const html = renderSinglePicTag(match, imageMap, regeneratingIds)
+      const html = renderSinglePicTag(match, imageMap, { ...picOptions, regeneratingIds })
       placeholderMap.set(placeholder, html)
       return placeholder
     })
@@ -269,6 +315,7 @@ export function processStoryContent(
   content: string,
   images: EmbeddedImage[],
   regeneratingIds: Set<string> = new Set(),
+  picOptions: Omit<PicTagRenderOptions, 'regeneratingIds'> = {},
 ): string {
   return processUnified(
     content,
@@ -277,6 +324,7 @@ export function processStoryContent(
     parseStoryMarkdown,
     parseStoryMarkdownInline,
     true,
+    picOptions,
   )
 }
 
@@ -289,6 +337,7 @@ export function processVisualProseStoryContent(
   images: EmbeddedImage[],
   entryId: string,
   regeneratingIds: Set<string> = new Set(),
+  picOptions: Omit<PicTagRenderOptions, 'regeneratingIds'> = {},
 ): string {
   // Marker text stays raw here: in this mode it is already HTML, and running it
   // through a markdown renderer would mangle the tags it is made of.
@@ -299,33 +348,6 @@ export function processVisualProseStoryContent(
     (t) => sanitizeVisualProse(t, entryId),
     (t) => t,
     false,
+    picOptions,
   )
-}
-
-// Keep old functions as aliases for backward compatibility (used by StreamingEntry)
-export const processContentWithImages = processStoryContent
-export const processVisualProseWithImages = processVisualProseStoryContent
-export function processContentWithInlineImages(
-  content: string,
-  images: EmbeddedImage[],
-  regeneratingIds: Set<string> = new Set(),
-): string {
-  return processStoryContent(content, images, regeneratingIds)
-}
-export function processVisualProseWithInlineImages(
-  content: string,
-  images: EmbeddedImage[],
-  entryId: string,
-  regeneratingIds: Set<string> = new Set(),
-): string {
-  return processVisualProseStoryContent(content, images, entryId, regeneratingIds)
-}
-
-export const imageEmbeddingService = {
-  processStoryContent,
-  processVisualProseStoryContent,
-  processContentWithImages,
-  processVisualProseWithImages,
-  processContentWithInlineImages,
-  processVisualProseWithInlineImages,
 }

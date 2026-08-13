@@ -21,11 +21,9 @@
  * overlap: a lorebook Entry is authored lore that does not change unless someone edits
  * it, while these are records the classifier rewrites every turn.
  *
- * Runs in full on every narrator turn, in every Memory Retrieval mode -- as does
- * EntryRetrievalService now. Agentic Retrieval stands in for neither: its tools reach
- * Lorebook entries and chapters, it is never shown live WorldState, and it no longer selects
- * anything. It used to suppress this service's Tier 3 on the reasoning that "the agent
- * already did LLM selection"; that conflated two disjoint candidate pools and is gone.
+ * Runs in full on every narrator turn, in every Memory Retrieval mode, as does
+ * EntryRetrievalService. Agentic Retrieval stands in for neither: its tools reach Lorebook
+ * entries and chapters, and it is never shown live WorldState.
  *
  * Called from `RetrievalPhase`, in the same stage as EntryRetrievalService and before memory
  * retrieval -- which is what lets the memory step be told what the narrator already has.
@@ -285,20 +283,25 @@ export class WorldStateInjector extends BaseAIService {
       })
     }
 
-    // Record Tier 2 and Tier 3 activations for stickiness (mirrors EntryRetrievalService).
+    // Record activations for stickiness (mirrors EntryRetrievalService).
     //
     // After Tier 3, not between the tiers: an entity the LLM *picked* is as much "relevant
-    // this turn" as one matched by name, and recording only Tier 2 made the expensive
-    // signal the shorter-lived one.
+    // this turn" as one matched by name.
     //
     // A *wholesale* Tier 3 is excluded, exactly as in `EntryRetrievalService`. It means the
     // leftover was small, which says nothing about relevance — and since every uncovered
     // entity is in it, recording it would make the entire world state sticky on every turn
     // of any story under the budget, i.e. on most stories. Stickiness would then never
     // expire and Tier 1 would absorb the whole pool.
+    //
+    // Characters are the one Tier 1 type recorded here, and the exception is the point: an
+    // active character *is* a character in the scene, so Tier 1 membership is the presence
+    // signal. Without it a character has no activation to fade from, and the turn the
+    // classifier marks them away they leave the prompt outright instead of receding.
     const activated = tier3IsWholesale ? tier2 : [...tier2, ...tier3]
     if (activationTracker) {
-      for (const entry of activated) {
+      const present = tier1.filter((e) => e.type === 'character' && !e.metadata?.sticky)
+      for (const entry of [...present, ...activated]) {
         activationTracker.recordActivation(entry.id, currentPosition)
       }
     }
@@ -753,7 +756,31 @@ export class WorldStateInjector extends BaseAIService {
    * cannot drift -- and so the appearance fallback for the pre-object `visualDescriptors`
    * format is maintained once.
    */
-  private renderCharacterDetail(char: WorldStateContextEntry, relationship?: unknown): string {
+  /** One heading and its bullets, or nothing at all when there is no one to list. */
+  private renderCharacterSection(
+    heading: string,
+    chars: WorldStateContextEntry[],
+    withAppearance: boolean,
+  ): string {
+    if (chars.length === 0) return ''
+
+    let block = `\n\n${heading}`
+    for (const char of chars) {
+      // Name, then a separator that is not a parenthesis. This block reaches the narrator,
+      // whose prose the classifier reads back, and `Name (relationship)` is a form the
+      // classifier returns as a name — see `ClassifierService.formatExistingCharacters`.
+      block += `\n• ${char.name}`
+      if (char.description) block += ` - ${char.description}`
+      block += this.renderCharacterDetail(char, char.metadata?.relationship, withAppearance)
+    }
+    return block
+  }
+
+  private renderCharacterDetail(
+    char: WorldStateContextEntry,
+    relationship?: unknown,
+    withAppearance = true,
+  ): string {
     let out = ''
 
     const traits = char.metadata?.traits
@@ -766,7 +793,7 @@ export class WorldStateInjector extends BaseAIService {
     }
 
     let appearanceStr = ''
-    if (vd) {
+    if (vd && withAppearance) {
       if (Array.isArray(vd) && vd.length > 0) {
         appearanceStr = vd.join(', ')
       } else if (typeof vd === 'object') {
@@ -806,21 +833,12 @@ export class WorldStateInjector extends BaseAIService {
    * World state only. Whatever memory retrieval produced is concatenated by the caller --
    * see `buildContext`.
    *
-   * The sections split along two axes at once, and conflating them is what went wrong when
-   * stickiness was added to Tier 1. `[INVENTORY]` and `[ACTIVE THREADS]` are *claims about
-   * current state*; `[RELEVANT ...]` are claims about relevance only. Tier 1 used to
-   * contain nothing but the former, so reading "tier 1" as "current state" was safe. It is
-   * not any more: a sticky entry is in Tier 1 precisely *because* its state condition
-   * stopped holding -- an item that left the inventory, a beat that just completed. Sending
-   * those through the state sections told the narrator the protagonist carries an item they
-   * dropped and is pursuing a quest they finished.
-   *
-   * So the state sections take Tier 1 minus the sticky carry-over, and the sticky entries
-   * join Tier 2 and Tier 3 in the relevance sections, which is what they are. That also
-   * gives sticky locations somewhere to go: they matched neither `metadata.current` nor
-   * "tier 2 or 3", so they were rendered nowhere at all -- while still being counted in
-   * `all`, and so announced to the retrieval agent, via `formatAlreadyInContext`, as
-   * already in a prompt they never reached.
+   * The sections split along two axes at once, and tier is not one of them. `[CHARACTERS
+   * PRESENT]`, `[INVENTORY]` and `[ACTIVE THREADS]` are *claims about current state*;
+   * `[RECENTLY DEPARTED]` and `[RELEVANT ...]` are claims about relevance only. A sticky
+   * entry sits in Tier 1 precisely *because* its state condition stopped holding — an item
+   * that left the inventory, a character who left the room — so the state sections take
+   * Tier 1 minus the sticky carry-over, and the carry-over is rendered as what it is.
    */
   private buildContextBlock(
     tier1: WorldStateContextEntry[],
@@ -847,31 +865,28 @@ export class WorldStateInjector extends BaseAIService {
     // The protagonist, on their own. Rendered with the same detail as an NPC -- traits and
     // appearance matter more here than anywhere, since image generation and second-person
     // narration both lean on them -- but never in the list of people in the scene.
-    const you = tier1.find((e) => e.type === 'character' && e.metadata?.protagonist)
-    if (you) {
-      block += `\n\n[PROTAGONIST]\n${you.name}`
-      if (you.description) block += ` - ${you.description}`
-      block += this.renderCharacterDetail(you)
+    const protagonist = tier1.find((e) => e.type === 'character' && e.metadata?.protagonist)
+    if (protagonist) {
+      block += `\n\n[PROTAGONIST]\n${protagonist.name}`
+      if (protagonist.description) block += ` - ${protagonist.description}`
+      block += this.renderCharacterDetail(protagonist)
     }
 
-    // Characters (combine from all tiers)
-    const allChars = [...tier1, ...tier2, ...tier3].filter(
-      (e) => e.type === 'character' && !e.metadata?.protagonist,
-    )
-    if (allChars.length > 0) {
-      block += '\n\n[KNOWN CHARACTERS]'
-      for (const char of allChars) {
-        // Name, then a separator that is not a parenthesis. This block reaches the
-        // narrator, whose prose the classifier reads back, and `Name (relationship)` is a
-        // form the classifier has been observed to return as a name — see
-        // `ClassifierService.formatExistingCharacters`.
-        block += `\n• ${char.name}`
-        if (char.description) {
-          block += ` - ${char.description}`
-        }
-        block += this.renderCharacterDetail(char, char.metadata?.relationship)
-      }
-    }
+    // Characters, split along the same axis as everything else here: who is in the scene is
+    // state, who was in it recently is relevance. Merging the three told the narrator that
+    // someone who walked out two turns ago is standing in the room.
+    const isCharacter = (e: WorldStateContextEntry) =>
+      e.type === 'character' && !e.metadata?.protagonist
+
+    const present = current.filter(isCharacter)
+    const departed = tier1.filter(isSticky).filter(isCharacter)
+    const known = [...tier2, ...tier3].filter(isCharacter)
+
+    // Appearance is dropped for the departed: it is there for the image prompt, and nothing
+    // is drawn of someone off-screen.
+    block += this.renderCharacterSection('[CHARACTERS PRESENT]', present, true)
+    block += this.renderCharacterSection('[RECENTLY DEPARTED]', departed, false)
+    block += this.renderCharacterSection('[KNOWN CHARACTERS]', known, true)
 
     // Inventory: state, so Tier 1 minus the sticky carry-over.
     const inventoryItems = current.filter((e) => e.type === 'item')

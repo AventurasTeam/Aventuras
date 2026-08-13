@@ -3,6 +3,8 @@ use tauri_plugin_sql::{Migration, MigrationKind};
 
 mod avt_import;
 mod backup;
+mod db;
+mod db_tx;
 mod migration_patch;
 mod sync;
 
@@ -296,6 +298,7 @@ pub fn run() {
             import_saf_to_temp,
             avt_import::avt_read_light,
             avt_import::avt_import_images,
+            db_tx::db_transaction,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

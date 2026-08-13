@@ -349,11 +349,14 @@ describe('WorldStateInjector', () => {
       const block = result.contextBlock
 
       expect(block).toContain('[PROTAGONIST]')
-      expect(block.indexOf('Kestrel')).toBeLessThan(block.indexOf('[KNOWN CHARACTERS]'))
+      expect(block.indexOf('Kestrel')).toBeLessThan(block.indexOf('[CHARACTERS PRESENT]'))
 
-      const known = block.slice(block.indexOf('[KNOWN CHARACTERS]'), block.indexOf('[INVENTORY]'))
-      expect(known).not.toContain('Kestrel')
-      expect(known).toContain('Aria')
+      const present = block.slice(
+        block.indexOf('[CHARACTERS PRESENT]'),
+        block.indexOf('[INVENTORY]'),
+      )
+      expect(present).not.toContain('Kestrel')
+      expect(present).toContain('Aria')
     })
 
     it('carries traits and appearance, which image generation depends on', async () => {
@@ -368,6 +371,66 @@ describe('WorldStateInjector', () => {
 
       expect(result.tier2.map((e) => e.name)).not.toContain('Kestrel')
       expect(result.tier3.map((e) => e.name)).not.toContain('Kestrel')
+    })
+  })
+
+  describe('characters leaving the scene', () => {
+    const tracked = () => {
+      const positions = new Map<string, number>()
+      return {
+        getLastActivation: (id: string) => positions.get(id) ?? null,
+        recordActivation: (id: string, p: number) => positions.set(id, p),
+        currentPosition: 0,
+      }
+    }
+
+    const seen = {
+      ...worldState,
+      characters: [
+        { ...characters[0], visualDescriptors: { hair: 'silver braid' } },
+        characters[1],
+      ] as Character[],
+    }
+    const away = {
+      ...seen,
+      characters: [{ ...seen.characters[0], status: 'inactive' }, characters[1]] as Character[],
+    }
+
+    it('records an activation for a character in the scene', async () => {
+      // Tier 1 is the presence signal: without this there is nothing for the carry-over to
+      // fade from, and a character who leaves drops out of the prompt in one turn.
+      const tracker = tracked()
+      await injector.buildContext(seen, '', [], { activationTracker: tracker, storyId: undefined })
+
+      expect(tracker.getLastActivation('c1')).toBe(0)
+    })
+
+    it('carries a character who just left, under its own heading', async () => {
+      const tracker = tracked()
+      await injector.buildContext(seen, '', [], { activationTracker: tracker, storyId: undefined })
+      const result = await injector.buildContext(away, '', [], {
+        activationTracker: tracker,
+        storyId: undefined,
+      })
+
+      expect(result.tier1.find((e) => e.name === 'Aria')?.metadata?.sticky).toBe(true)
+      expect(result.contextBlock).toContain('[RECENTLY DEPARTED]')
+      expect(result.contextBlock).not.toContain('[CHARACTERS PRESENT]')
+    })
+
+    it('stops sending the appearance of someone who is no longer in the scene', async () => {
+      const tracker = tracked()
+      const present = await injector.buildContext(seen, '', [], {
+        activationTracker: tracker,
+        storyId: undefined,
+      })
+      const departed = await injector.buildContext(away, '', [], {
+        activationTracker: tracker,
+        storyId: undefined,
+      })
+
+      expect(present.contextBlock).toContain('silver braid')
+      expect(departed.contextBlock).not.toContain('silver braid')
     })
   })
 

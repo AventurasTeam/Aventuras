@@ -26,7 +26,6 @@ import {
   emitImageAnalysisComplete,
   emitImageAnalysisFailed,
   emitImageQueued,
-  emitImageReady,
   emitBackgroundImageAnalysisStarted,
   emitBackgroundImageAnalysisComplete,
   emitBackgroundImageAnalysisFailed,
@@ -63,9 +62,9 @@ import {
   inlineImageService,
   isImageGenerationEnabled as isImageGenerationEnabledUtil,
   resolveStylePrompt,
+  runImageGeneration,
 } from './image'
 import type { InlineImageContext, ImageAnalysisContext } from './image'
-import { generateImage as registryGenerateImage } from './image/providers/registry'
 import {
   MemoryService,
   NarrativeService,
@@ -1141,10 +1140,7 @@ class AIService {
     referenceImageUrls?: string[],
   ): Promise<void> {
     try {
-      // Update status to generating
-      await database.updateEmbeddedImage(imageId, { status: 'generating' })
-
-      log('Generating analyzed image via SDK', {
+      log('Generating analyzed image', {
         imageId,
         profileId,
         model,
@@ -1152,24 +1148,17 @@ class AIService {
         hasReference: !!referenceImageUrls?.length,
       })
 
-      // Generate image using SDK
-      const result = await registryGenerateImage({
+      const base64 = await runImageGeneration({
+        imageId,
+        entryId,
+        prompt,
         profileId,
         model,
-        prompt,
         size,
         referenceImages: referenceImageUrls,
       })
 
-      if (!result.base64) {
-        throw new Error('No image data returned')
-      }
-
-      // Update record with image data
-      await database.updateEmbeddedImage(imageId, {
-        imageData: result.base64,
-        status: 'complete',
-      })
+      if (!base64) return
 
       // If this was a portrait generation, save to character
       if (scene.generatePortrait && scene.characters.length > 0) {
@@ -1179,28 +1168,17 @@ class AIService {
         )
         if (character) {
           await database.updateCharacter(character.id, {
-            portrait: result.base64,
+            portrait: base64,
           })
           log('Saved portrait to character', { characterId: character.id, name: charName })
         }
       }
 
       log('Analyzed image generated successfully', { imageId })
-      emitImageReady(imageId, entryId, true)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      log('Analyzed image generation failed', { imageId, error: errorMessage })
-
-      try {
-        await database.updateEmbeddedImage(imageId, {
-          status: 'failed',
-          errorMessage,
-        })
-      } finally {
-        // Balances the `ImageQueued` emitted when this was scheduled, even if recording
-        // the failure is itself what failed.
-        emitImageReady(imageId, entryId, false)
-      }
+      // `runImageGeneration` records its own outcome and balances the queued count, so
+      // anything thrown past it comes from saving the portrait onto its character.
+      log('Saving the generated portrait failed', { imageId, error })
     }
   }
 

@@ -39,6 +39,30 @@ export function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+/**
+ * Whether `needle` occurs in `haystack` as a whole unit — bounded by anything that is not a
+ * letter or a digit, so "Gatto" is not found inside "Cattedrale".
+ *
+ * Both sides are lowercased here; no caller has to do it first. Scripts written without
+ * spaces have no boundary to anchor on, so `entityNameMatches` answers for those before it
+ * gets here.
+ */
+export function containsWholeUnit(haystack: string, needle: string): boolean {
+  const text = haystack.toLowerCase()
+  const unit = needle.toLowerCase().trim()
+  if (!unit) return false
+  if (text.trim() === unit) return true
+
+  let pattern = escapeRegex(unit)
+  if (/^[\p{L}\p{N}]/u.test(unit)) {
+    pattern = '(?<![\\p{L}\\p{N}])' + pattern
+  }
+  if (/[\p{L}\p{N}]$/u.test(unit)) {
+    pattern = pattern + '(?![\\p{L}\\p{N}])'
+  }
+  return new RegExp(pattern, 'u').test(text)
+}
+
 export interface EntityNameMatchOptions {
   /**
    * Also match when a word in `searchText` merely *starts with* the name ("ren" ->
@@ -105,14 +129,7 @@ export function entityNameMatches(
     return haystack.includes(normalizedName)
   }
 
-  let patternStr = escapeRegex(normalizedName)
-  if (/^[\p{L}\p{N}]/u.test(normalizedName)) {
-    patternStr = '(?<![\\p{L}\\p{N}])' + patternStr
-  }
-  if (/[\p{L}\p{N}]$/u.test(normalizedName)) {
-    patternStr = patternStr + '(?![\\p{L}\\p{N}])'
-  }
-  if (new RegExp(patternStr, 'iu').test(haystack)) {
+  if (containsWholeUnit(haystack, normalizedName)) {
     return true
   }
 
@@ -531,10 +548,12 @@ export function createFuzzyTextRegex(text: string): RegExp {
     return new RegExp(escapeRegex(text), 'giu')
   }
 
-  // 3. Escape words and handle variants
-  const patternParts = words.map((word) => {
-    return escapeRegex(word).replace(/'/g, "[\\'’‘‚]").replace(/"/g, '[\\"“”„‟]')
-  })
+  // 3. Escape words and handle variants. Only the apostrophe needs a class of its own:
+  // the split above keeps it inside a word, while every other quotation mark is a
+  // separator and is already covered by the fuzzy separator below. It is not
+  // backslash-escaped inside the class — `\'` is an invalid identity escape under the
+  // `u` flag, which made the constructor throw for every text carrying an apostrophe.
+  const patternParts = words.map((word) => escapeRegex(word).replace(/'/g, "['’‘‚]"))
 
   // 4. Join with a "super-fuzzy" separator
   // We strictly forbid newlines that are part of a paragraph break (\\n\\n), on either side,
@@ -656,4 +675,21 @@ export function sameEntityName(a: string, b: string): boolean {
   const folded = foldName(a)
   if (!folded) return false
   return folded === foldName(b)
+}
+
+/**
+ * Strip the narrator's layout markers from a passage, keeping every word.
+ *
+ * The markers are for a reader; a model asked what happened in the passage only has to
+ * parse them. The text under them is not decoration — a heading like
+ * `### Late Morning | The Grotto Pool` carries the hour and the place, which is exactly
+ * what the scene fields are for. Only a horizontal rule goes entirely, having no text.
+ */
+export function stripNarratorMarkup(content: string): string {
+  return content
+    .replace(/^[ \t]*([*\-_])(?:[ \t]*\1){2,}[ \t]*$/gm, '')
+    .replace(/^#{1,6}[ \t]+(.*)$/gm, '$1')
+    .replace(/^[ \t]*\*\*(.+?)\*\*[ \t]*$/gm, '$1')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }

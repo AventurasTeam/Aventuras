@@ -129,7 +129,7 @@ const openingGenerationAdventurePromptTemplate: PromptTemplate = {
 1. **NEVER write what {{ protagonistName }} does** - no actions, movements, or gestures
 2. **NEVER write what {{ protagonistName }} says** - no dialogue or speech
 3. **NEVER write what {{ protagonistName }} thinks or feels** - no internal states, emotions, or reactions
-4. **NEVER write what {{ protagonistName }} perceives** - avoid "you see", "you notice", "you hear" constructions
+4. **NEVER write what {{ protagonistName }} perceives** - no seeing, noticing or hearing attributed to them, in any person
 5. **Only describe the environment, NPCs, and situation** - let {{ protagonistName }} decide how to engage
 </critical_constraints>
 
@@ -143,7 +143,7 @@ Write ONLY:
 
 Do NOT write:
 - "{{ protagonistName }} walks into..." / "{{ protagonistName }} looks at..." / "{{ protagonistName }} feels..."
-- "You notice..." / "You see..." / "You sense..."
+- The same in second person, whatever pronoun the point of view uses
 - Any action, perception, or internal state belonging to {{ protagonistName }}
 </what_to_write>
 
@@ -173,7 +173,7 @@ End by presenting a situation that naturally invites {{ protagonistName }} to ac
 - An object of interest within reach
 - A choice point or moment of tension
 
-NO questions. NO "What do you do?" Just the pregnant moment.
+NO questions. Never ask the player what they do. Just the pregnant moment.
 </ending>
 
 <prohibited_patterns>
@@ -296,7 +296,7 @@ const openingRefinementAdventurePromptTemplate: PromptTemplate = {
 1. **NEVER write what {{ protagonistName }} does** - no actions, movements, or gestures
 2. **NEVER write what {{ protagonistName }} says** - no dialogue or speech
 3. **NEVER write what {{ protagonistName }} thinks or feels** - no internal states, emotions, or reactions
-4. **NEVER write what {{ protagonistName }} perceives** - avoid "you see", "you notice", "you hear" constructions
+4. **NEVER write what {{ protagonistName }} perceives** - no seeing, noticing or hearing attributed to them, in any person
 5. **Only describe the environment, NPCs, and situation** - let {{ protagonistName }} decide how to engage
 </critical_constraints>
 
@@ -334,7 +334,7 @@ End by presenting a situation that naturally invites {{ protagonistName }} to ac
 - An object of interest within reach
 - A choice point or moment of tension
 
-NO questions. NO "What do you do?" Just the pregnant moment.
+NO questions. Never ask the player what they do. Just the pregnant moment.
 </ending>
 
 <prohibited_patterns>

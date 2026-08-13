@@ -29,13 +29,6 @@ export enum ComfyMode {
   UnetTxt2Img = 'unet-txt2img',
 }
 
-export const ComfyModes: Record<ComfyMode, any> = {
-  [ComfyMode.CustomWorkflow]: null,
-  [ComfyMode.BasicTxt2Img]: BasicTxt2ImgWorkflow,
-  [ComfyMode.LoraTxt2Img]: LoraTxt2ImgWorkflow,
-  [ComfyMode.UnetTxt2Img]: UnetTxt2ImgWorkflow,
-}
-
 // Tracks which model names came from diffusion_models/, keyed by baseUrl.
 // Values are Promises to prevent parallel fetches for the same baseUrl.
 const unetModelNames = new Map<string, Promise<Set<string>>>()

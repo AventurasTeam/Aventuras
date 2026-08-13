@@ -20,6 +20,7 @@ import type {
   LocationBeforeState,
   ItemBeforeState,
   StoryBeatBeforeState,
+  ImageGenerationMode,
 } from '$lib/types'
 import { database } from '$lib/services/database'
 import { rollbackService } from '$lib/services/rollbackService'
@@ -49,12 +50,14 @@ import {
   ChapterBatchService,
   buildLoreManagementCallbacks,
   buildLoreManagementUICallbacks,
+  resolveCharacterPresence,
   type WorldState,
 } from '$lib/services/generation'
 import { createLogger } from '$lib/log'
 import { sameEntityName } from '$lib/utils/text'
 import { grammarService } from '$lib/services/grammar'
 import { clearTier3SelectionCache } from '$lib/services/ai'
+import { clearImageMarkerCache } from '$lib/services/image'
 
 const log = createLogger('StoryStore')
 
@@ -518,6 +521,7 @@ class StoryStore {
     this.invalidateChapterCache()
     grammarService.clearEntityWords()
     clearTier3SelectionCache()
+    clearImageMarkerCache()
   }
 
   // Close the current story and reset state
@@ -551,6 +555,7 @@ class StoryStore {
 
     // Whatever the previous story left cached is about a pool this one does not have.
     clearTier3SelectionCache()
+    clearImageMarkerCache()
 
     this.currentStory = story
     this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
@@ -2354,7 +2359,8 @@ class StoryStore {
             name: newLocData?.name ?? update.name,
             description: newLocData?.description ?? null,
             visited: newLocData?.visited ?? false,
-            current: newLocData?.current ?? false,
+            // Only `scene.currentLocationName` moves the scene.
+            current: false,
             connections: [],
             metadata: locMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
@@ -2393,49 +2399,6 @@ class StoryStore {
           // COW: ensure entity is owned by current branch before updating
           const { entity: ownedLoc, wasCowed: locWasCowed } = await this.cowLocation(existing)
 
-          if (update.changes.current === true) {
-            changes.visited = true
-            if (this.isCowBranch()) {
-              // COW-aware: targeted updates instead of blanket clear
-              const prevCurrent = this.locations.find((l) => l.current && l.id !== ownedLoc.id)
-              if (prevCurrent) {
-                const { entity: ownedPrev, wasCowed: prevWasCowed } =
-                  await this.cowLocation(prevCurrent)
-                await database.updateLocation(ownedPrev.id, { current: false })
-                this.locations = this.locations.map((l) =>
-                  l.id === ownedPrev.id ? { ...l, current: false } : l,
-                )
-                if (prevWasCowed && trackingEnabled) {
-                  createdLocationIds.push(ownedPrev.id)
-                  const prevIdx = locationsBefore.findIndex((lb) => lb.id === prevCurrent.id)
-                  if (prevIdx !== -1) locationsBefore.splice(prevIdx, 1)
-                }
-              }
-              await database.updateLocation(ownedLoc.id, { ...changes, current: true })
-              this.locations = this.locations.map((l) =>
-                l.id === ownedLoc.id ? { ...l, ...changes, current: true, visited: true } : l,
-              )
-            } else {
-              await database.setCurrentLocation(storyId, ownedLoc.id)
-              if (Object.keys(changes).length > 0) {
-                await database.updateLocation(ownedLoc.id, changes)
-              }
-              this.locations = this.locations.map((l) => {
-                if (l.id === ownedLoc.id) {
-                  return { ...l, ...changes, current: true, visited: true }
-                }
-                return { ...l, current: false }
-              })
-            }
-            if (locWasCowed && trackingEnabled) {
-              createdLocationIds.push(ownedLoc.id)
-              const idx = locationsBefore.findIndex((lb) => lb.id === existing.id)
-              if (idx !== -1) locationsBefore.splice(idx, 1)
-            }
-            return
-          }
-
-          if (update.changes.current === false) changes.current = false
           if (Object.keys(changes).length === 0) {
             // Even if no changes, track COW if it happened
             if (locWasCowed && trackingEnabled) {
@@ -2715,10 +2678,6 @@ class StoryStore {
           if (newLoc.visited !== undefined && newLoc.visited !== existing.visited) {
             changes.visited = newLoc.visited
           }
-          if (newLoc.current && !existing.current) {
-            changes.current = true
-            changes.visited = true
-          }
           // Merge inline runtime variable values into metadata if present
           const newLocInlineVars = extractInlineCustomVars(
             newLoc as unknown as Record<string, unknown>,
@@ -2735,25 +2694,6 @@ class StoryStore {
           }
         } else if (!existing) {
           log('Adding new location:', newLoc.name)
-          // If this is the current location, unset others first
-          if (newLoc.current) {
-            if (this.isCowBranch()) {
-              // COW-aware: targeted unset of previous current
-              const prevCurrent = this.locations.find((l) => l.current)
-              if (prevCurrent) {
-                const { entity: ownedPrev } = await this.cowLocation(prevCurrent)
-                await database.updateLocation(ownedPrev.id, { current: false })
-                this.locations = this.locations.map((l) =>
-                  l.id === ownedPrev.id ? { ...l, current: false } : l,
-                )
-              }
-            } else {
-              this.locations = this.locations.map((l) => ({ ...l, current: false }))
-              for (const l of this.locations) {
-                await database.updateLocation(l.id, { current: false })
-              }
-            }
-          }
           const locMetadata: Record<string, unknown> = { source: 'classifier' }
           const newLocInlineVars = extractInlineCustomVars(
             newLoc as unknown as Record<string, unknown>,
@@ -2768,7 +2708,8 @@ class StoryStore {
             name: newLoc.name,
             description: newLoc.description ?? null,
             visited: newLoc.visited ?? false,
-            current: newLoc.current ?? false,
+            // Only `scene.currentLocationName` moves the scene, and it runs before this.
+            current: false,
             connections: [],
             metadata: locMetadata,
             branchId: this.currentStory?.currentBranchId ?? null,
@@ -2844,6 +2785,53 @@ class StoryStore {
       })
     }
 
+    // Reconcile who is in the scene. Last, so the characters this classification created
+    // are already in `this.characters` and the explicit updates above have had their say.
+    const presenceChanges = resolveCharacterPresence({
+      characters: this.characters,
+      presentNames: result.scene.presentCharacterNames ?? [],
+      newNames: result.entryUpdates.newCharacters.map((c) => c.name),
+      explicitStatusNames: result.entryUpdates.characterUpdates
+        .filter((u) => u.changes.status !== undefined)
+        .map((u) => u.name),
+      hadError: !!result._error,
+    })
+
+    for (const change of presenceChanges) {
+      const char = this.characters.find((c) => c.id === change.id)
+      if (!char) continue
+
+      await this.wrapUpdate(
+        change.to === 'active' ? 'Character enters scene' : 'Character leaves scene',
+        char.name,
+        async () => {
+          if (trackingEnabled && !charactersBefore.some((cb) => cb.id === char.id)) {
+            charactersBefore.push({
+              id: char.id,
+              name: char.name,
+              status: char.status,
+              relationship: char.relationship,
+              traits: [...char.traits],
+              visualDescriptors: { ...char.visualDescriptors },
+              metadata: char.metadata ? { ...char.metadata } : null,
+            })
+          }
+
+          const { entity: ownedChar, wasCowed } = await this.cowCharacter(char)
+          await database.updateCharacter(ownedChar.id, { status: change.to })
+          this.characters = this.characters.map((c) =>
+            c.id === ownedChar.id ? { ...c, status: change.to } : c,
+          )
+
+          if (wasCowed && trackingEnabled) {
+            createdCharacterIds.push(ownedChar.id)
+            const idx = charactersBefore.findIndex((cb) => cb.id === char.id)
+            if (idx !== -1) charactersBefore.splice(idx, 1)
+          }
+        },
+      )
+    }
+
     // Apply time progression from scene data
     if (result.scene.timeProgression && result.scene.timeProgression !== 'none') {
       await this.applyTimeProgression(result.scene.timeProgression)
@@ -2912,12 +2900,17 @@ class StoryStore {
       result.entryUpdates.characterUpdates.length > 0 ||
       result.entryUpdates.locationUpdates.length > 0 ||
       result.entryUpdates.itemUpdates.length > 0 ||
-      result.entryUpdates.storyBeatUpdates.length > 0
+      result.entryUpdates.storyBeatUpdates.length > 0 ||
+      // Presence is inferred from `scene`, not from `entryUpdates`, so a turn whose only
+      // effect is someone walking out wrote statuses and announced nothing.
+      presenceChanges.length > 0
 
     if (hasChanges) {
       emitStateUpdated({
         characters:
-          result.entryUpdates.newCharacters.length + result.entryUpdates.characterUpdates.length,
+          result.entryUpdates.newCharacters.length +
+          result.entryUpdates.characterUpdates.length +
+          presenceChanges.length,
         locations:
           result.entryUpdates.newLocations.length + result.entryUpdates.locationUpdates.length,
         items: result.entryUpdates.newItems.length + result.entryUpdates.itemUpdates.length,
@@ -3908,6 +3901,7 @@ class StoryStore {
     // verdict. The key covers this on its own now; clearing keeps the cache from
     // depending on that alone, as it already does on story switch.
     clearTier3SelectionCache()
+    clearImageMarkerCache()
 
     // Announce once entries and caches are correct. Emitted before the
     // background/suggestion restores below so a failure in either can't
@@ -4494,7 +4488,7 @@ class StoryStore {
       tone?: string
       themes?: string[]
       visualProseMode?: boolean
-      imageGenerationMode?: 'none' | 'agentic' | 'inline'
+      imageGenerationMode?: ImageGenerationMode
       backgroundImagesEnabled?: boolean
       referenceMode?: boolean
     }

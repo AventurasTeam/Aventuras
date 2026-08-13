@@ -11,7 +11,8 @@
   import LorebookImportModal from './LorebookImportModal.svelte'
   import LorebookExportModal from './LorebookExportModal.svelte'
   import LorebookVaultImportModal from './LorebookVaultImportModal.svelte'
-  import { BookOpen, Plus, ArrowLeft, Loader2, Bot } from '@lucide/svelte'
+  import { BookOpen, Plus, ArrowLeft, Loader2, Bot, AlertCircle, RotateCcw } from '@lucide/svelte'
+  import { runManualLoreManagement } from '$lib/services/generation'
 
   import { Button } from '$lib/components/ui/button'
   import { Alert, AlertDescription, AlertTitle } from '$lib/components/ui/alert'
@@ -147,6 +148,49 @@
             </span>
           {/if}
         </AlertDescription>
+      </Alert>
+    </div>
+  {/if}
+
+  <!-- Lore Management Error Banner with Retry -->
+  {#if ui.loreManagementError}
+    <div class="bg-destructive/10 border-destructive/20 border-b p-4">
+      <Alert variant="destructive" class="border-none bg-transparent p-0">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex items-start gap-2.5">
+            <AlertCircle class="text-destructive mt-0.5 h-5 w-5 flex-shrink-0" />
+            <div>
+              <AlertTitle class="text-destructive mb-0 text-sm font-semibold"
+                >Lore Management Failed</AlertTitle
+              >
+              <AlertDescription class="text-destructive/90 mt-0.5 text-xs">
+                {ui.loreManagementError}
+              </AlertDescription>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 self-end sm:self-auto">
+            <!-- Retry does not dismiss the banner: `startLoreManagement` clears it once a run
+                 actually begins, and one that cannot start — no story loaded, or a session
+                 already going — would otherwise look like it worked. -->
+            <Button
+              variant="outline"
+              size="sm"
+              class="border-destructive/30 text-destructive hover:bg-destructive/10 h-8 text-xs"
+              onclick={() => void runManualLoreManagement()}
+            >
+              <RotateCcw class="mr-1.5 h-3.5 w-3.5" />
+              Retry
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground h-8 text-xs"
+              onclick={() => ui.clearLoreManagementError()}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
       </Alert>
     </div>
   {/if}

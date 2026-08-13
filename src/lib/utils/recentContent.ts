@@ -3,24 +3,26 @@ import type { StoryEntry } from '$lib/types'
 /**
  * The last `count` story entries, flattened into one string.
  *
- * Six call sites built this by hand, and the separator is the reason it looks like a
- * pointless wrapper until you compare them:
+ * The separator says what the result is for, and every call site states it:
  *
- * - `' '` when the result is a **haystack**, fed to `entityNameMatches` to find out which
- *   entities are mentioned. The separator only has to stop the last word of one entry
- *   fusing with the first word of the next.
- * - `'\n\n'` when the result is **prose in a prompt**, read by a model. Paragraph breaks
- *   are the difference between a scene and a wall of text.
- *
- * Passing it explicitly makes that choice visible at every call site, which repeating the
- * three-line chain did not: the two spellings sat in different files and read as an
- * inconsistency rather than a decision.
+ * - `' '` for a **haystack**, fed to `entityNameMatches`. It only has to stop the last word
+ *   of one entry fusing with the first of the next.
+ * - `'\n\n'` for **prose in a prompt**, read by a model.
  */
+export interface RecentContentOptions {
+  /** Prefix each entry with who produced it. */
+  roles?: boolean
+  /** Stamp each entry with the in-story time it began, when it carries one. */
+  time?: boolean
+  /** Applied to each entry's content before it is labelled and joined. */
+  transform?: (content: string) => string
+}
+
 export function recentContent(
   entries: StoryEntry[],
   count: number,
   separator: ' ' | '\n\n',
-  withRoles = false,
+  options: RecentContentOptions = {},
 ): string {
   // `slice(-0)` is `slice(0)` -- the whole array, not none of it. Every caller today is
   // bounded by a slider with a minimum of 2, or passes `entries.length`, so this never
@@ -28,12 +30,28 @@ export function recentContent(
   // which is the worst possible direction for an off-by-nothing to go.
   if (count <= 0) return ''
 
-  const sliced = entries.slice(-count)
-  if (!withRoles) {
-    return sliced.map((e) => e.content).join(separator)
-  }
+  const { roles = false, time = false, transform } = options
 
-  return sliced.map((e) => `${roleLabel(e.type)}: ${e.content}`).join(separator)
+  return entries
+    .slice(-count)
+    .map((e) => {
+      const content = transform ? transform(e.content) : e.content
+      // Joined rather than concatenated: the time alone must not open the line on a space.
+      const prefix = [roles ? roleLabel(e.type) : '', time ? entryTime(e) : '']
+        .filter(Boolean)
+        .join(' ')
+      return prefix ? `${prefix}: ${content}` : content
+    })
+    .join(separator)
+}
+
+/** The in-story clock an entry started at, as a parenthetical, or nothing if it has none. */
+function entryTime(entry: StoryEntry): string {
+  const t = entry.metadata?.timeStart
+  if (!t) return ''
+  const hh = String(t.hours).padStart(2, '0')
+  const mm = String(t.minutes).padStart(2, '0')
+  return `(at Y${t.years}D${t.days} ${hh}:${mm})`
 }
 
 /**

@@ -109,23 +109,33 @@ export class LoreSessionLedger {
     }
   }
 
-  apply(change: LorebookEntryPendingChangeSchema): void {
+  /**
+   * Apply the change, and for the two that append, return the index it landed at.
+   *
+   * The caller hands that index back to the agent in the tool result: the entry it just
+   * created or merged is addressable from that moment, and knowing where means it never
+   * has to re-read the list to find out what its own work did.
+   */
+  apply(change: LorebookEntryPendingChangeSchema): number | undefined {
     switch (change.type) {
       case 'create':
         return this.create(change)
       case 'update':
-        return this.update(change)
+        this.update(change)
+        return undefined
       case 'delete':
-        return this.delete(change)
+        this.delete(change)
+        return undefined
       case 'merge':
         return this.merge(change)
     }
   }
 
-  private create(change: LorebookEntryPendingChangeSchema): void {
-    if (!change.entry) return
+  private create(change: LorebookEntryPendingChangeSchema): number | undefined {
+    if (!change.entry) return undefined
     this.slots.push({ kind: 'created', entry: this.entryFromVault(change.entry) })
     this.vaultEntries.push(change.entry)
+    return this.slots.length - 1
   }
 
   private update(change: LorebookEntryPendingChangeSchema): void {
@@ -179,12 +189,12 @@ export class LoreSessionLedger {
     this.removedIndices.add(change.index)
   }
 
-  private merge(change: LorebookEntryPendingChangeSchema): void {
-    if (!change.entry) return
+  private merge(change: LorebookEntryPendingChangeSchema): number | undefined {
+    if (!change.entry) return undefined
     const indices = [...new Set(change.indices ?? [])].filter(
       (i) => this.slots[i] && this.slots[i].kind !== 'gone',
     )
-    if (indices.length < 2) return
+    if (indices.length < 2) return undefined
 
     // The rows this merge consumes. A member created earlier in the session has no row of
     // its own: it is folded in by simply never being created.
@@ -210,6 +220,7 @@ export class LoreSessionLedger {
         : { kind: 'created', entry: merged },
     )
     this.vaultEntries.push(change.entry)
+    return this.slots.length - 1
   }
 
   /**

@@ -107,6 +107,11 @@
     { value: 'microsoft', label: 'Windows System TTS (Microsoft SAPI)' },
   ] as const
 
+  const audioFormats = [
+    { value: 'mp3', label: 'MP3 (smaller)' },
+    { value: 'wav', label: 'WAV (widest support)' },
+  ] as const
+
   /**
    * Validate TTS settings before preview
    */
@@ -352,6 +357,36 @@
           }}
           placeholder="tts-1"
         />
+      </div>
+
+      <!-- Audio format -->
+      <div>
+        <Label class="mb-2 block">Audio Format</Label>
+        <Select.Root
+          type="single"
+          value={settings.systemServicesSettings.tts.responseFormat}
+          onValueChange={(v) => {
+            settings.systemServicesSettings.tts.responseFormat = v as 'mp3' | 'wav'
+            settings.saveSystemServicesSettings()
+          }}
+        >
+          <Select.Trigger class="h-10 w-full">
+            {audioFormats.find(
+              (f) => f.value === settings.systemServicesSettings.tts.responseFormat,
+            )?.label ?? 'Select format'}
+          </Select.Trigger>
+          <Select.Content>
+            {#each audioFormats as format (format.value)}
+              <Select.Item value={format.value} label={format.label}>
+                {format.label}
+              </Select.Item>
+            {/each}
+          </Select.Content>
+        </Select.Root>
+        <p class="text-muted-foreground mt-1 text-xs">
+          Switch to WAV if the endpoint answers with "response_format must be wav or pcm" — a local
+          runtime built without an MP3 encoder will.
+        </p>
       </div>
     {/if}
 

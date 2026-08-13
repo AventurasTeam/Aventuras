@@ -1,4 +1,5 @@
 import Database from '@tauri-apps/plugin-sql'
+import { invoke } from '@tauri-apps/api/core'
 import type {
   Story,
   StoryEntry,
@@ -37,6 +38,21 @@ import type {
   EnumOption,
 } from '$lib/services/packs/types'
 import { hashContent } from '$lib/services/packs/hash'
+
+/**
+ * A runtime variable's slot in an entity's metadata JSON.
+ *
+ * The key is quoted rather than spliced bare: SQLite reads an unquoted path segment up to
+ * the next `.` or `[`, so an id carrying either would address a different slot and the
+ * UPDATE would match nothing — silently, since a path that finds no key is not an error.
+ */
+function runtimeVarPath(defId: string, field?: string): string {
+  const key = `$."runtimeVars"."${defId.replace(/"/g, '""')}"`
+  return field ? `${key}."${field}"` : key
+}
+
+/** Entity tables that can carry runtime-variable values in their metadata JSON. */
+const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
 
 /**
  * Migrate visual descriptors from old string array format to new structured object format.
@@ -156,20 +172,19 @@ class DatabaseService {
   }
 
   /**
-   * Run a callback inside a BEGIN/COMMIT transaction.
-   * Automatically rolls back on error.
+   * Run statements atomically, on one connection, through the Rust side.
+   *
+   * Returns the rows affected by each, in order. The whole batch rolls back on the first
+   * error, and the rejection carries the failing statement's message.
    */
-  async withTransaction<T>(fn: () => Promise<T>): Promise<T> {
-    const db = await this.getDb()
-    await db.execute('BEGIN')
-    try {
-      const result = await fn()
-      await db.execute('COMMIT')
-      return result
-    } catch (error) {
-      await db.execute('ROLLBACK')
-      throw error
-    }
+  async transaction(statements: { sql: string; params?: unknown[] }[]): Promise<number[]> {
+    if (statements.length === 0) return []
+    // The command opens the file itself with `create_if_missing(false)`, so the plugin has
+    // to have been through load and migrations first.
+    await this.getDb()
+    return invoke<number[]>('db_transaction', {
+      statements: statements.map(({ sql, params }) => ({ sql, params: params ?? [] })),
+    })
   }
 
   /**
@@ -2320,6 +2335,22 @@ class DatabaseService {
   }
 
   /**
+   * The `<pic>` tags of an entry that already have a record, and nothing else.
+   *
+   * The question is only "which of these tags is already covered", so it does not go
+   * through `getEmbeddedImagesForEntry`: that reads `*`, and the base64 of every image in
+   * the entry is what `getEmbeddedImageMetaForStory` below exists to keep off the bridge.
+   */
+  async getEmbeddedImageSourceTextsForEntry(entryId: string): Promise<string[]> {
+    const db = await this.getDb()
+    const results = await db.select<{ source_text: string | null }[]>(
+      'SELECT source_text FROM embedded_images WHERE entry_id = ?',
+      [entryId],
+    )
+    return results.map((r) => r.source_text ?? '').filter(Boolean)
+  }
+
+  /**
    * Like getEmbeddedImagesForStory but WITHOUT the base64 `image_data` column.
    *
    * Used on hot paths (message send, retry backup) that only need metadata. Avoids
@@ -3696,15 +3727,16 @@ class DatabaseService {
     const db = await this.getDb()
     const now = Date.now()
     const branch = this.keptSeparateBranch(branchId)
-    await this.withTransaction(async () => {
-      for (const pairKey of pairKeys) {
-        await db.execute(
-          `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
-           VALUES (?, ?, ?, ?, ?)`,
-          [storyId, branch, pool, pairKey, now],
-        )
-      }
-    })
+    // A single INSERT is atomic on its own, which is the most this layer can get.
+    const chunkSize = 100
+    for (let start = 0; start < pairKeys.length; start += chunkSize) {
+      const chunk = pairKeys.slice(start, start + chunkSize)
+      await db.execute(
+        `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
+         VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')}`,
+        chunk.flatMap((pairKey) => [storyId, branch, pool, pairKey, now]),
+      )
+    }
   }
 
   /** Forget every dismissal for a story branch, so the full worklist comes back. */
@@ -3954,9 +3986,108 @@ class DatabaseService {
     )
   }
 
-  async deleteRuntimeVariable(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM pack_runtime_variables WHERE id = ?', [id])
+  /**
+   * The stories on a pack, as a subquery rather than a list of ids.
+   *
+   * Reading them first and then writing is a round trip the transaction cannot cover: a
+   * story assigned to the pack in between keeps a variable the pack no longer has.
+   */
+  private static readonly STORIES_ON_PACK = 'SELECT id FROM stories WHERE pack_id = ?'
+
+  /**
+   * The statements that take a runtime variable's values out of every entity that carries
+   * them, across the stories on this pack.
+   */
+  private clearRuntimeVarStatements(
+    packId: string,
+    defId: string,
+  ): { sql: string; params: unknown[] }[] {
+    const jsonPath = runtimeVarPath(defId)
+
+    return RUNTIME_VAR_ENTITY_TABLES.map((table) => ({
+      sql: `UPDATE ${table} SET metadata = json_remove(metadata, ?) WHERE story_id IN (${DatabaseService.STORIES_ON_PACK}) AND json_extract(metadata, ?) IS NOT NULL`,
+      params: [jsonPath, packId, jsonPath],
+    }))
+  }
+
+  /** The same, for a rename. */
+  private renameRuntimeVarStatements(
+    packId: string,
+    defId: string,
+    newVariableName: string,
+  ): { sql: string; params: unknown[] }[] {
+    const jsonPath = runtimeVarPath(defId)
+    const varNamePath = runtimeVarPath(defId, 'variableName')
+
+    return RUNTIME_VAR_ENTITY_TABLES.map((table) => ({
+      sql: `UPDATE ${table} SET metadata = json_set(metadata, ?, ?) WHERE story_id IN (${DatabaseService.STORIES_ON_PACK}) AND json_extract(metadata, ?) IS NOT NULL`,
+      params: [varNamePath, newVariableName, packId, jsonPath],
+    }))
+  }
+
+  /**
+   * Delete a runtime variable and the values entities hold for it, atomically.
+   *
+   * Half of this landing is a definition without its values or values without their
+   * definition, which the editor cannot show and the user cannot clean up.
+   */
+  async deleteRuntimeVariableEverywhere(packId: string, id: string): Promise<void> {
+    await this.transaction([
+      { sql: 'DELETE FROM pack_runtime_variables WHERE id = ?', params: [id] },
+      ...this.clearRuntimeVarStatements(packId, id),
+    ])
+  }
+
+  /** Rename a runtime variable and every stored copy of its name, atomically. */
+  async renameRuntimeVariableEverywhere(
+    packId: string,
+    id: string,
+    newVariableName: string,
+  ): Promise<void> {
+    await this.transaction([
+      {
+        sql: 'UPDATE pack_runtime_variables SET variable_name = ? WHERE id = ?',
+        params: [newVariableName, id],
+      },
+      ...this.renameRuntimeVarStatements(packId, id, newVariableName),
+    ])
+  }
+
+  /**
+   * Change a runtime variable's type, dropping the values typed under the old one.
+   *
+   * The constraints go with the type, so they are cleared in the same statement rather
+   * than left describing a range the new type has no use for.
+   */
+  async changeRuntimeVariableTypeEverywhere(
+    packId: string,
+    id: string,
+    variableType: RuntimeVariableType,
+  ): Promise<void> {
+    await this.transaction([
+      {
+        sql: 'UPDATE pack_runtime_variables SET variable_type = ?, default_value = NULL, min_value = NULL, max_value = NULL, enum_options = NULL WHERE id = ?',
+        params: [variableType, id],
+      },
+      ...this.clearRuntimeVarStatements(packId, id),
+    ])
+  }
+
+  /** Write two sort orders as one, so a reorder cannot leave both rows on the same slot. */
+  async swapRuntimeVariableOrder(
+    first: { id: string; sortOrder: number },
+    second: { id: string; sortOrder: number },
+  ): Promise<void> {
+    await this.transaction([
+      {
+        sql: 'UPDATE pack_runtime_variables SET sort_order = ? WHERE id = ?',
+        params: [first.sortOrder, first.id],
+      },
+      {
+        sql: 'UPDATE pack_runtime_variables SET sort_order = ? WHERE id = ?',
+        params: [second.sortOrder, second.id],
+      },
+    ])
   }
 
   // ===== Runtime Variable Entity Value Operations =====
@@ -3973,12 +4104,11 @@ class DatabaseService {
 
     const db = await this.getDb()
     const placeholders = storyIds.map(() => '?').join(', ')
-    const jsonPath = `$.runtimeVars.${defId}`
+    const jsonPath = runtimeVarPath(defId)
 
-    const tables = ['characters', 'locations', 'items', 'story_beats']
     let total = 0
 
-    for (const table of tables) {
+    for (const table of RUNTIME_VAR_ENTITY_TABLES) {
       const results = await db.select<any[]>(
         `SELECT COUNT(*) as cnt FROM ${table} WHERE story_id IN (${placeholders}) AND json_extract(metadata, ?) IS NOT NULL`,
         [...storyIds, jsonPath],
@@ -3987,45 +4117,6 @@ class DatabaseService {
     }
 
     return total
-  }
-
-  async clearRuntimeVarFromEntities(packId: string, defId: string): Promise<void> {
-    const storyIds = await this.getStoriesUsingPack(packId)
-    if (storyIds.length === 0) return
-
-    const db = await this.getDb()
-    const placeholders = storyIds.map(() => '?').join(', ')
-    const jsonPath = `$.runtimeVars.${defId}`
-
-    const tables = ['characters', 'locations', 'items', 'story_beats']
-    for (const table of tables) {
-      await db.execute(
-        `UPDATE ${table} SET metadata = json_remove(metadata, ?) WHERE story_id IN (${placeholders}) AND json_extract(metadata, ?) IS NOT NULL`,
-        [jsonPath, ...storyIds, jsonPath],
-      )
-    }
-  }
-
-  async renameRuntimeVarInEntities(
-    packId: string,
-    defId: string,
-    newVariableName: string,
-  ): Promise<void> {
-    const storyIds = await this.getStoriesUsingPack(packId)
-    if (storyIds.length === 0) return
-
-    const db = await this.getDb()
-    const placeholders = storyIds.map(() => '?').join(', ')
-    const jsonPath = `$.runtimeVars.${defId}`
-    const varNamePath = `$.runtimeVars.${defId}.variableName`
-
-    const tables = ['characters', 'locations', 'items', 'story_beats']
-    for (const table of tables) {
-      await db.execute(
-        `UPDATE ${table} SET metadata = json_set(metadata, ?, ?) WHERE story_id IN (${placeholders}) AND json_extract(metadata, ?) IS NOT NULL`,
-        [varNamePath, newVariableName, ...storyIds, jsonPath],
-      )
-    }
   }
 
   // ===== Story-Pack Assignment =====

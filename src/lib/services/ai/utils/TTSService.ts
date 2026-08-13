@@ -27,6 +27,7 @@ export interface TTSSettings {
   removeAllHtmlContent: boolean
   htmlTagsToRemoveContent: string
   provider: 'openai' | 'google' | 'microsoft'
+  responseFormat: 'mp3' | 'wav'
   volume: number
   volumeOverride: boolean
   providerVoices: Record<string, string>
@@ -835,7 +836,7 @@ export class OpenAICompatibleTTSProvider extends TTSProvider {
         model: this.settings.model,
         input: text,
         voice: voice,
-        response_format: 'mp3',
+        response_format: this.settings.responseFormat,
       }),
     })
 

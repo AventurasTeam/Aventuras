@@ -113,6 +113,9 @@ export interface MemoryConfig {
 /** Target narration length for a turn. Drives `{{ lengthInstruction }}` in the prompt. */
 export type TargetLength = 'short' | 'medium' | 'long' | 'dynamic'
 
+/** How a story generates images: not at all, on the model's initiative, or embedded in the prose. */
+export type ImageGenerationMode = 'none' | 'agentic' | 'inline'
+
 export interface StorySettings {
   model?: string
   temperature?: number
@@ -122,7 +125,7 @@ export interface StorySettings {
   tone?: string
   themes?: string[]
   visualProseMode?: boolean // Enable HTML/CSS visual output mode
-  imageGenerationMode?: 'none' | 'agentic' | 'inline' // Image generation strategy
+  imageGenerationMode?: ImageGenerationMode
   backgroundImagesEnabled?: boolean
   referenceMode?: boolean
   targetLength?: TargetLength

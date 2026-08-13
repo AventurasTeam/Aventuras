@@ -16,7 +16,7 @@ vi.mock('$lib/stores/debug.svelte', () => ({
   },
 }))
 
-import { supportsImageGeneration, generateImage } from './registry'
+import { supportsImageGeneration, requiresApiKey, generateImage } from './registry'
 import { settings } from '$lib/stores/settings.svelte'
 import type { ImageProviderType } from '$lib/types'
 
@@ -50,6 +50,32 @@ describe('Image Provider Registry', () => {
 
     it('returns false for unknown providers', () => {
       expect(supportsImageGeneration('unknown-provider')).toBe(false)
+    })
+  })
+
+  describe('requiresApiKey', () => {
+    it.each(['comfyui', 'a1111'] as ImageProviderType[])(
+      'returns false for the self-hosted provider %s',
+      (providerType) => {
+        expect(requiresApiKey(providerType)).toBe(false)
+      },
+    )
+
+    it.each([
+      'nanogpt',
+      'openai',
+      'openrouter',
+      'chutes',
+      'google',
+      'zhipu',
+      // Its model list is open, its generation is not.
+      'pollinations',
+    ] as ImageProviderType[])('returns true for the hosted provider %s', (providerType) => {
+      expect(requiresApiKey(providerType)).toBe(true)
+    })
+
+    it('assumes an unknown provider needs a key', () => {
+      expect(requiresApiKey('unknown-provider')).toBe(true)
     })
   })
 

@@ -44,8 +44,8 @@
   } from '$lib/services/events'
   import {
     inlineImageService,
-    retryImageGeneration,
     resolveStylePrompt,
+    retryImageGeneration,
   } from '$lib/services/ai/image'
   import { database } from '$lib/services/database'
   import { onMount } from 'svelte'
@@ -56,8 +56,8 @@
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
-  import { IMAGE_STUCK_THRESHOLD_MS } from '$lib/services/ai/image/constants'
-  import { SvelteSet } from 'svelte/reactivity'
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity'
+  import { escapeHtml } from '$lib/utils/inlineImageParser'
   import { extractSentenceAt, expandRangeBidirectional } from '$lib/utils/text'
 
   let { entry }: { entry: StoryEntry } = $props()
@@ -257,17 +257,8 @@
 
   // Inline image edit state
 
-  // Timer for checking stuck images
+  // Clock for the stuck-image affordance, moved only when that affordance can change.
   let now = $state(Date.now())
-
-  onMount(() => {
-    const interval = setInterval(() => {
-      now = Date.now()
-    }, 1000)
-    return () => {
-      clearInterval(interval)
-    }
-  })
 
   // Helper to get which branch a checkpoint belongs to (by checking its last entry's branchId)
   function getCheckpointBranchId(checkpoint: {
@@ -361,13 +352,68 @@
     checkpointName = ''
   }
 
-  // Load embedded images for narration entries
+  // Reads of this entry's images race each other: five callers fire the full load without
+  // awaiting it, and the single-row refreshes below run alongside them. Every read takes a
+  // ticket when it leaves, so an arriving snapshot can be told which rows were read after
+  // it and keep those instead of reinstating its own older copy — dropping the snapshot
+  // outright would leave the entry holding only the rows a refresh happened to bring in.
+  let readTicket = 0
+  let loadTicket = 0
+  let loadsInFlight = 0
+  const refreshedRows = new SvelteMap<string, { ticket: number; image: EmbeddedImage }>()
+
   async function loadEmbeddedImages() {
     if (entry.type !== 'narration') return
+    const ticket = ++readTicket
+    loadTicket = ticket
+    loadsInFlight++
     try {
-      embeddedImages = await database.getEmbeddedImagesForEntry(entry.id)
+      const loaded = await database.getEmbeddedImagesForEntry(entry.id)
+      if (loadTicket !== ticket) return
+
+      // What is left is newer than this snapshot; the rest is the snapshot's to supply.
+      for (const [id, row] of refreshedRows) {
+        if (row.ticket < ticket) refreshedRows.delete(id)
+      }
+
+      const merged = loaded.map((img) => refreshedRows.get(img.id)?.image ?? img)
+      const loadedIds = new Set(loaded.map((img) => img.id))
+      for (const [id, row] of refreshedRows) {
+        if (!loadedIds.has(id)) merged.push(row.image)
+      }
+      embeddedImages = merged
     } catch (err) {
       console.error('[StoryEntry] Failed to load embedded images:', err)
+    } finally {
+      loadsInFlight--
+      if (loadsInFlight === 0) refreshedRows.clear()
+    }
+  }
+
+  /**
+   * Refresh one image rather than the whole entry.
+   *
+   * A full reload pulls every image's base64 back through the IPC bridge, and a burst of
+   * four generations raises eight of these — the payload that `getEmbeddedImageMetaForStory`
+   * exists to keep off Android's heap.
+   */
+  async function refreshEmbeddedImage(imageId: string) {
+    if (entry.type !== 'narration') return
+    const ticket = ++readTicket
+    try {
+      const image = await database.getEmbeddedImage(imageId)
+      if (!image || image.entryId !== entry.id) return
+
+      // Only a load that is still out needs to be told about this row; with none in
+      // flight the map would just hold a second copy of every payload.
+      if (loadsInFlight > 0) refreshedRows.set(imageId, { ticket, image })
+      const index = embeddedImages.findIndex((img) => img.id === imageId)
+      embeddedImages =
+        index === -1
+          ? [...embeddedImages, image]
+          : embeddedImages.map((img) => (img.id === imageId ? image : img))
+    } catch (err) {
+      console.error('[StoryEntry] Failed to refresh embedded image:', err)
     }
   }
 
@@ -385,8 +431,13 @@
       referenceMode: story.currentStory.settings?.referenceMode ?? false,
     }
 
-    await inlineImageService.processNarrativeForInlineImages(context)
-    await loadEmbeddedImages()
+    try {
+      await inlineImageService.processNarrativeForInlineImages(context)
+      await loadEmbeddedImages()
+    } catch (err) {
+      console.error('[StoryEntry] Failed to recreate missing images:', err)
+      ui.showToast('Could not recreate the missing image', 'error')
+    }
   }
 
   // State for inline image view modal
@@ -827,9 +878,9 @@
 
   // Manage inline image display
   $effect(() => {
-    // Clean up any existing inline image displays
-    const existingDisplays = document.querySelectorAll('.inline-image-display')
-    existingDisplays.forEach((el) => el.remove())
+    // Scoped to this entry: a document-wide query would tear the open display out of
+    // every other entry while leaving their expandedImageId set.
+    storyTextContainer?.querySelectorAll('.inline-image-display').forEach((el) => el.remove())
 
     if (!expandedImageId || !clickedElement || !expandedImage) return
 
@@ -847,7 +898,7 @@
       if (isRegenerating) {
         innerHtml += `
           <div class="inline-image-content-wrapper">
-            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${expandedImage.sourceText}" class="inline-image-content regenerating-image" />
+            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content regenerating-image" />
             <div class="regenerating-overlay">
               <div class="regenerating-content">
                 <svg class="regenerating-spinner" viewBox="0 0 50 50">
@@ -861,18 +912,18 @@
         // Clickable image - opens modal
         innerHtml += `
           <div class="inline-image-content-wrapper clickable-image" data-image-id="${expandedImage.id}">
-            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${expandedImage.sourceText}" class="inline-image-content" />
+            <img src="data:image/png;base64,${expandedImage.imageData}" alt="${escapeHtml(expandedImage.sourceText)}" class="inline-image-content" />
           </div>`
       }
     } else if (expandedImage.status === 'generating') {
-      const isStuck = now - expandedImage.createdAt > IMAGE_STUCK_THRESHOLD_MS
+      const isStuck = now - expandedImage.createdAt >= stuckThresholdMs
       innerHtml += `<div class="inline-image-placeholder generating">
         <div class="placeholder-spinner"></div>
         <span class="placeholder-status">Generating...</span>
         ${isStuck ? `<button class="inline-image-retry" data-image-id="${expandedImage.id}">Force Retry</button>` : ''}
       </div>`
     } else if (expandedImage.status === 'pending') {
-      const isStuck = now - expandedImage.createdAt > IMAGE_STUCK_THRESHOLD_MS
+      const isStuck = now - expandedImage.createdAt >= stuckThresholdMs
       innerHtml += `<div class="inline-image-placeholder pending">
         <div class="placeholder-icon">⏳</div>
         <span class="placeholder-status">Queued...</span>
@@ -934,19 +985,79 @@
     expandedImageId ? embeddedImages.find((img) => img.id === expandedImageId) : null,
   )
 
+  /**
+   * How long an image may sit before the retry is offered: the same wait the user set for
+   * a generation request on the Generation tab, since it is the same question — how long
+   * before this is not coming back.
+   */
+  const stuckThresholdMs = $derived(settings.apiSettings.llmTimeoutMs)
+
+  const unfinishedImages = $derived(
+    embeddedImages.filter((img) => img.status === 'pending' || img.status === 'generating'),
+  )
+
+  /**
+   * Images waiting long enough that the retry affordance is worth offering.
+   *
+   * An image being retried is excluded: the retry does not move `createdAt`, so the row
+   * would keep the button through its own second attempt and every click would start
+   * another generation over the same record.
+   */
+  const stuckImageIds = $derived(
+    new Set(
+      unfinishedImages
+        .filter(
+          (img) => now - img.createdAt >= stuckThresholdMs && !regeneratingImageIds.has(img.id),
+        )
+        .map((img) => img.id),
+    ),
+  )
+
+  /**
+   * A `<pic>` tag whose record is missing is only worth reporting once the entry has had
+   * time to write them: they are created after the entry itself, so for the first moments
+   * of a fresh narration every tag is legitimately without one.
+   */
+  const MISSING_RECORD_GRACE_MS = 5000
+  const picOptions = $derived({
+    stuckIds: stuckImageIds,
+    offerMissingRecovery: now - entry.createdAt >= MISSING_RECORD_GRACE_MS,
+  })
+
+  // `now` decides two things — which unfinished images are old enough to offer a retry,
+  // and whether a tag without a record counts as lost — and each crosses its line once.
+  // Wake for the nearest crossing rather than every second: one timer per entry with
+  // something outstanding, instead of one per entry forever. Reading `now` re-arms this
+  // for the crossing after the one it just served.
+  $effect(() => {
+    const deadlines = [
+      ...unfinishedImages.map((img) => img.createdAt + stuckThresholdMs - now),
+      entry.createdAt + MISSING_RECORD_GRACE_MS - now,
+    ].filter((remaining) => remaining > 0)
+    if (deadlines.length === 0) return
+
+    const timer = setTimeout(
+      () => {
+        now = Date.now()
+      },
+      Math.min(...deadlines),
+    )
+    return () => clearTimeout(timer)
+  })
+
   // Subscribe to ImageReady, ImageQueued, and TTS events
   onMount(() => {
     // Subscribe to ImageQueued events to reload images when new records are created during streaming
     const unsubImageQueued = eventBus.subscribe<ImageQueuedEvent>('ImageQueued', (event) => {
       if (event.entryId === entry.id) {
-        loadEmbeddedImages()
+        refreshEmbeddedImage(event.imageId)
       }
     })
 
     // Subscribe to ImageReady events to reload images when one completes
     const unsubImageReady = eventBus.subscribe<ImageReadyEvent>('ImageReady', (event) => {
       if (event.entryId === entry.id) {
-        loadEmbeddedImages()
+        refreshEmbeddedImage(event.imageId)
       }
     })
 
@@ -1563,10 +1674,16 @@
               embeddedImages,
               entry.id,
               regeneratingImageIds,
+              picOptions,
             )}
           {:else}
             <!-- Standard mode (handles both agentic and inline images) -->
-            {@html processStoryContent(displayContent, embeddedImages, regeneratingImageIds)}
+            {@html processStoryContent(
+              displayContent,
+              embeddedImages,
+              regeneratingImageIds,
+              picOptions,
+            )}
           {/if}
         {:else if entry.type === 'user_action'}
           <!-- User action: show original input (before translation).

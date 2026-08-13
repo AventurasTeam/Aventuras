@@ -87,18 +87,20 @@
    * every prompt until someone changes it, a carry-over leaves on its own in a few turns,
    * and live state comes and goes with the scene. Only the first is a standing cost.
    */
-  const groupLabels: Record<string, { label: string; description: string }> = {
+  const protagonistName = $derived(story.protagonist?.name ?? 'the protagonist')
+
+  const groupLabels = $derived<Record<string, { label: string; description: string }>>({
     always: {
       label: 'Always Inject',
       description: 'Pinned by the author — in every prompt until the mode is changed',
     },
     carried: {
       label: 'Carried Over',
-      description: 'Recently relevant; leaves on its own when the countdown runs out',
+      description: `Was live state until recently — a character who left the scene, an item ${protagonistName} dropped. Fades out on its own when the countdown runs out`,
     },
     state: {
       label: 'Live State',
-      description: "Where you are, who's present, what you're carrying, active quests",
+      description: `Where ${protagonistName} is, who is in the scene now, what they are carrying, what's still open`,
     },
     matched: { label: 'Keyword Matched', description: 'Named directly by the scene' },
     viaScene: {
@@ -113,7 +115,7 @@
       label: 'LLM Selected',
       description: 'The leftover was over budget, so the LLM picked from it',
     },
-  }
+  })
 
   /** Tiers 1 and 3 each cover more than one behaviour, so both are shown split. */
   function groupsOf(entries: RetrievalSnapshotEntry[]) {

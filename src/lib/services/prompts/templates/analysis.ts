@@ -38,24 +38,18 @@ Visual descriptors enable consistent character visualization. The goal is to bui
 - A traveler might have weathered features, travel-worn clothes, a pack
 Never leave a character without complete visual descriptors - invent plausible details to fill gaps.
 
-**For EXISTING characters - USE replaceVisualDescriptors:**
-When updating a character's appearance, use \`replaceVisualDescriptors\` to provide the COMPLETE, FINAL list of descriptors. This REPLACES all existing descriptors entirely. Look at their current "Appearance:" in the entity list and output a cleaned-up, consolidated version with any updates applied.
+**For EXISTING characters:** \`visualDescriptors\` REPLACES every category at once. Only send it for a character listed \`status: active\`. The others are listed without their \`appearance:\` because it is withheld, not because it is empty, and rewriting one you cannot see discards everything already recorded about how that character looks.
 
-When to use \`replaceVisualDescriptors\`:
-- ANY visual change (new outfit, new accessory, injury, etc.)
-- Existing descriptors are bloated/redundant (consolidate them!)
-- Character was missing descriptors (fill them in now)
+When to send it:
+- ANY visual change (new outfit, new accessory, injury)
+- The listed appearance is bloated or self-contradictory (consolidate it)
+- An active character is listed with no \`appearance:\` at all — they have none yet, so invent one now, on the same terms as a new character
 
-The replacement list should:
-- Include ALL categories: face, hair, eyes, build, clothing, accessories, distinguishing marks
-- Be ~5-10 concise descriptors (one phrase per feature)
-- Merge redundant entries (e.g., multiple "Face:" entries → one)
-- Update changed details (new clothes replace old clothes)
-- Keep unchanged details from the original
-
-Example: If character has bloated appearance with duplicate Face/Hair/Eyes entries, output a single clean \`replaceVisualDescriptors\` array with one entry per category.
-
-**Goal:** Descriptors should be CONCISE but COMPLETE - detailed enough to draw the character, but without redundancy. Always output ~5-10 descriptors, never 20+.
+Your version must:
+- Cover ALL categories: face, hair, eyes, build, clothing, accessories, distinguishing
+- Keep every unchanged detail from the listed appearance, where one is listed
+- Merge duplicates into one phrase per category
+- Stay concise: detailed enough to draw the character, never a paragraph per category
 
 ### Locations - ONLY extract if:
 - The scene takes place there or characters travel there
@@ -63,11 +57,23 @@ Example: If character has bloated appearance with duplicate Face/Hair/Eyes entri
 - Example: "The scene shifts to the Thornwood Tavern" = YES
 - Example: "Mountains visible in the distance" = NO
 
+### Current Location - \`currentLocationName\`:
+The name of the place the passage ENDS in. This is what moves the scene, so treat it as a move order:
+- Repeat the location marked \`current: true\` in the list whenever the scene has not moved. Leaving it out changes nothing, but a different name moves the story
+- A name that is not in the list creates a new location, so spell an existing one exactly as listed
+- Only somewhere the characters actually are — not a place they discuss, remember, or can see in the distance
+- \`null\` if the passage genuinely gives no place
+
+Its description is a **whole-value replacement**, so send \`description\` only for the location whose current text you can see above, and only when this passage genuinely changes what the place is. To add a detail without touching the rest, use \`descriptionAddition\`.
+
 ### Items - ONLY extract if:
 - A character explicitly acquires, picks up, or is given the item
 - The item has narrative significance (plot item, weapon, key, etc.)
 - Example: "She hands over an ancient amulet" = YES
 - Example: "There's a bottle on the shelf" = NO
+
+### Item Updates - what the listed state means:
+Anything not printed under an item is at its default: one of it, not equipped, in {{ protagonistName }}'s inventory. Send \`quantity\`, \`equipped\` or \`location\` only when the passage changes one of them.
 
 ### Story Beats - ONLY extract if:
 - A task, quest, or plot thread is introduced or resolved
@@ -84,13 +90,17 @@ Example: If character has bloated appearance with duplicate Face/Hair/Eyes entri
 - This prevents story beats from stacking up indefinitely
 - Example: If "Find the missing brother" was active and the brother is found, mark it completed
 
-### Character Status - who is in the scene right now:
-- \`active\` means present in the current scene. It does not mean important, and it does not mean alive
-- Set \`inactive\` for any character listed above as \`active\` who is no longer in the scene, and \`active\` again when they return
-- The text will rarely state that someone left, so do not wait to read it — compare the list against the scene yourself
-- Silence is not absence: a character who is in the scene but says nothing stays \`active\`
-- Example: the party leaves the tavern and the innkeeper stays behind = mark the innkeeper \`inactive\`
-- This prevents every character in the story from being reported to the narrator as present
+### Scene Presence - \`presentCharacterNames\`:
+This is the list of who is in the scene at the END of the passage. It is the only place you report presence, and everyone you leave out is treated as away — so it has to be complete.
+- Include every character physically there, whether or not they speak. Leave out {{ protagonistName }}, who is in every scene by definition
+- Silence is not absence: someone who is present but says nothing still belongs on the list
+- Leave out anyone who left, stayed behind, or is only being talked about
+- Copy names **exactly** as they appear in the character list; a name you spell differently is a different character
+- A character who returns simply reappears on the list — nothing else is needed
+- Never return an empty list while anyone is in the scene. An empty list means "no answer", not "an empty room"
+- Example: the party leaves the tavern and the innkeeper stays behind = the innkeeper is not on the list
+
+Use \`characterUpdates.status\` only for a change the scene itself states: \`deceased\` when a character dies. Leaving someone off \`presentCharacterNames\` already handles walking out of the room.
 
 ### Time Progression - ALWAYS assess how much time passed:
 Determine how much narrative time elapsed during this passage. Consider what activities occurred and how long they would realistically take.
@@ -100,7 +110,6 @@ Determine how much narrative time elapsed during this passage. Consider what act
 - Quick actions (drawing a weapon, opening a door, picking something up)
 - Immediate reactions or observations
 - Example: "She nodded and replied, 'I understand.'" = none
-- Example: "He drew his sword and faced the enemy." = none
 
 **"minutes"** - A short period passes (will add ~15 minutes):
 - Extended conversations or negotiations
@@ -109,7 +118,6 @@ Determine how much narrative time elapsed during this passage. Consider what act
 - Eating a quick meal, getting dressed
 - Walking a short distance within the same location
 - Example: "They discussed the plan in detail, weighing each option." = minutes
-- Example: "She searched the study, checking every drawer." = minutes
 
 **"hours"** - A moderate period passes (will add ~2 hours):
 - Traveling between locations (walking across town, riding to a nearby village)
@@ -117,7 +125,6 @@ Determine how much narrative time elapsed during this passage. Consider what act
 - Waiting for something or someone
 - A complex task requiring sustained effort
 - Example: "They rode through the forest until reaching the crossroads." = hours
-- Example: "He spent the afternoon studying the ancient texts." = hours
 
 **"days"** - Significant time passes (will add 1 day):
 - Sleeping, resting overnight, or waking up the next day
@@ -125,16 +132,17 @@ Determine how much narrative time elapsed during this passage. Consider what act
 - Explicit time skips ("days later", "the following week")
 - Extended recovery from injury or illness
 - Example: "She slept through the night and woke at dawn." = days
-- Example: "After three days of travel, they finally arrived." = days
 
 **When uncertain:** Lean toward incrementing time rather than "none" - stories feel more dynamic when time progresses. If any notable activity occurred beyond immediate dialogue/reactions, choose at least "minutes".
 
 ## Critical Rules
 1. When in doubt, DO NOT extract - false positives pollute the world state
 2. Only extract what ACTUALLY HAPPENED, not what might happen
-3. Use the exact names from the text, don't invent or embellish
-4. ALWAYS check if active story beats should be marked completed or failed
-5. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur`,
+3. Never invent an entity, an event, or a name. Visual descriptors are the one exception: those you fill in
+4. Use names exactly as the text and the entity list spell them
+5. ALWAYS check if active story beats should be marked completed or failed
+6. ALWAYS assess timeProgression - prefer incrementing time over "none" when activities occur
+7. ALWAYS list who is in the scene in \`presentCharacterNames\` - it is never optional`,
   // Ordered by how often each block changes, not by how the task reads.
   //
   // With prefix KV caching, everything up to the first token that differs from the previous
@@ -155,7 +163,10 @@ Determine how much narrative time elapsed during this passage. Consider what act
 ## Setting
 {{ genre }}
 Mode: {{ mode }}
-
+{% if settingDescription != blank %}{{ settingDescription }}
+{% endif %}{% if tone != blank %}Tone: {{ tone }}
+{% endif %}{% if themes != blank %}Themes: {{ themes }}
+{% endif %}
 ## Already Known Entities (check before adding duplicates)
 A name is the whole of its bullet line. Anything indented under it is that entity's current
 state, never part of its name. When you refer to an entity that is already listed, copy its
@@ -171,14 +182,13 @@ appended to it creates a second copy of the same character.
 ### Items
 {{ existingItems }}
 
-## Active Story Beats (update these when resolved!)
+{% if hasStoryBeats %}## Active Story Beats (update these when resolved!)
 {{ existingBeats }}
 
-{% if customVariableInstructions != blank %}
+{% endif %}{% if customVariableInstructions != blank %}
 {{ customVariableInstructions }}
 {% endif %}
 ## Context
-Already tracking: {{ entityCounts }}
 {{ currentTimeInfo }}
 {{ chatHistoryBlock }}
 ## {{ inputLabel }}
@@ -190,12 +200,12 @@ Already tracking: {{ entityCounts }}
 """
 
 ## Your Task
-1. Check if any EXISTING entities need updates (status change, new info learned, etc.)
-2. **IMPORTANT**: Check if any active story beats have been COMPLETED or FAILED in this passage - mark them accordingly to keep the list clean
-3. Identify any NEW significant entities introduced (apply the extraction rules strictly)
-4. Determine the current scene state
+1. Check if any EXISTING entities need updates (new info learned, a death, an appearance that changed)
+{% if hasStoryBeats %}2. **IMPORTANT**: Check if any active story beats have been COMPLETED or FAILED in this passage - mark them accordingly to keep the list clean
+{% endif %}3. Identify any NEW significant entities introduced (apply the extraction rules strictly)
+4. Set \`presentCharacterNames\`, \`currentLocationName\` and \`timeProgression\`
 
-Empty arrays are fine - don't invent entities that aren't clearly in the text.`,
+Empty arrays are fine everywhere except \`presentCharacterNames\` - don't invent entities that aren't clearly in the text.`,
 }
 
 const styleReviewerPromptTemplate: PromptTemplate = {
@@ -212,7 +222,7 @@ Identify overused phrases, sentence patterns, structural repetition, and stylist
 
 ### Phrase-Level Repetition
 - Repeated descriptive phrases (e.g., "eyes widening", "heart pounding")
-- Overused sentence openers (e.g., "You see", "There is")
+- Overused sentence openers (e.g., "There is", "It was")
 - Cliche expressions and purple prose patterns
 - Repetitive dialogue tags or action beats
 - Word echoes within close proximity

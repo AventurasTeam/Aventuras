@@ -14,6 +14,7 @@
     getProviderSamplerInfo,
     listLoras,
     generateImage,
+    requiresApiKey,
     ComfyMode,
     type ImageModelInfo,
   } from '$lib/services/ai/image'
@@ -1133,8 +1134,7 @@
       />
     </div>
 
-    <!-- comfy and a1111 don't require API keys -->
-    {#if profileProviderType !== 'comfyui' && profileProviderType !== 'a1111'}
+    {#if requiresApiKey(profileProviderType)}
       <div class="space-y-2">
         <Label>API Key</Label>
         <div class="flex gap-2">

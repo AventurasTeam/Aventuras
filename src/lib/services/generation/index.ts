@@ -143,6 +143,10 @@ export type {
   SuggestionsRefreshResult,
 } from './SuggestionsRefreshService'
 
+// Character presence
+export { resolveCharacterPresence } from './characterPresence'
+export type { PresenceInput, PresenceChange } from './characterPresence'
+
 // Pipeline event handler
 export { handleEvent } from './PipelineEventHandler'
 export type { PipelineUICallbacks, PipelineEventState } from './PipelineEventHandler'

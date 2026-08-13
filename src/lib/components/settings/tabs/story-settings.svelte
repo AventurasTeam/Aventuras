@@ -90,6 +90,10 @@
 
   const storySettings = $derived(story.currentStory?.settings ?? {})
   const imageGenEnabled = $derived(hasRequiredCredentials())
+  const backgroundImagesAvailable = $derived(hasRequiredCredentials('background'))
+  const portraitReferenceAvailable = $derived(
+    hasRequiredCredentials('portrait') || hasRequiredCredentials('reference'),
+  )
 
   // Track only customSystemPrompt so the effect below doesn't fire on unrelated
   // setting changes (tone, pov, etc.) and overwrite an unsaved draft.
@@ -212,6 +216,8 @@
     tone={storySettings.tone ?? ''}
     visualProseMode={storySettings.visualProseMode ?? false}
     imageGenerationEnabled={imageGenEnabled}
+    {backgroundImagesAvailable}
+    {portraitReferenceAvailable}
     imageGenerationMode={storySettings.imageGenerationMode ?? 'none'}
     backgroundImagesEnabled={storySettings.backgroundImagesEnabled ?? false}
     referenceMode={storySettings.referenceMode ?? false}

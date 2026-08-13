@@ -9,15 +9,18 @@ Two independent services select what gets injected into the narrator prompt each
 - **Entry Retrieval** (`src/lib/services/ai/retrieval/EntryRetrievalService.ts`) — operates on static, authored **Lorebook** `Entry[]` records (characters, locations, items, factions, concepts, events).
 - **World State Injection** (`src/lib/services/ai/generation/WorldStateInjector.ts`) — operates on **live-tracked** `Character[]`/`Location[]`/`Item[]`/`StoryBeat[]` entities that the classifier updates dynamically after every turn (present characters, current location, inventory, active quests/milestones). Runs on every narrator call regardless of retrieval mode.
 
-The world-state block's sections split on **two different axes**, and conflating them is a live hazard.
-`[PROTAGONIST]`, `[CURRENT LOCATION]`, `[INVENTORY]` and `[ACTIVE THREADS]` are claims about _current
-state_; `[RELEVANT ...]` are claims about _relevance only_. Tier 1 once held nothing but the former, so
-reading "tier 1" as "current state" was safe — until stickiness was added, at which point Tier 1 also
-held entities carried forward _because_ their state condition stopped holding. Routing those through the
-state sections told the narrator the player carries a dropped item and is pursuing a finished quest, and
-left sticky locations rendered nowhere at all while `formatAlreadyInContext` still announced them.
-The rule is now explicit: state sections take Tier 1 **minus** the sticky carry-over, and sticky entries
-join Tier 2/3 in the relevance sections.
+The world-state block's sections split on **two different axes**, and tier is not one of them.
+`[PROTAGONIST]`, `[CURRENT LOCATION]`, `[CHARACTERS PRESENT]`, `[INVENTORY]` and `[ACTIVE THREADS]`
+are claims about _current state_; `[RECENTLY DEPARTED]` and `[RELEVANT ...]` are claims about
+_relevance only_. A sticky entry sits in Tier 1 precisely _because_ its state condition stopped
+holding, so routing it through a state section tells the narrator the player carries a dropped item,
+is pursuing a finished quest, or is talking to someone who walked out. State sections therefore take
+Tier 1 **minus** the sticky carry-over, and the carry-over is rendered as what it is.
+
+Characters get three headings rather than two: `[CHARACTERS PRESENT]` (Tier 1, in the scene),
+`[RECENTLY DEPARTED]` (the sticky carry-over) and `[KNOWN CHARACTERS]` (Tier 2/3 — named or chosen,
+but not there). The departed are rendered without their appearance: descriptors exist for the image
+prompt, and nothing is drawn of someone off-screen.
 
 Anything in the result's `all` must be renderable somewhere in the block, because `all` is what the
 retrieval agent is told the narrator already has. `WorldStateInjector.test.ts` pins that invariant.
@@ -38,8 +41,12 @@ the call, not the tier: a leftover under the budget still goes in.
 **Only a leftover the model _chose_ counts as an activation.** Wholesale inclusion means "there was
 little of it", which says nothing about relevance — and since the branch holds every uncovered
 record, recording it would make the entire pool sticky on every turn of any story under the budget,
-so Tier 1 would absorb it and stickiness would never expire. Both services exclude it; the world
-state side once claimed to and did not.
+so Tier 1 would absorb it and stickiness would never expire. Both services exclude it.
+
+**World-state characters are the one Tier 1 type that records an activation**, and the exception is
+the point: an `active` character _is_ a character in the scene, so Tier 1 membership is the presence
+signal. Without it a character has no activation to fade from, and the turn the classifier marks them
+away they leave the prompt outright instead of receding through `[RECENTLY DEPARTED]`.
 
 **Tier 2 runs twice, and the second pass is where indirect relevance lives.** The first pass matches
 what the scene _says_ — the player's action and the recent story. The second matches whatever is
@@ -248,9 +255,10 @@ turn appends both an action and a narration, so a duration of N covers roughly N
 converts for display; the services stay in positions because that is what they measure.
 Activations are persisted per story under `lorebook_activation_<storyId>` and restored on load.
 
-What creates an activation is Tier 2 and a _chosen_ Tier 3 — see the Tier 3 note above for why the
-wholesale branch does not. The timer is **not** refreshed while an entry is sticky, and cannot be: a
-sticky entry sits in Tier 1, Tier 1 is excluded from the candidate pool, and only Tier 2/3 record.
+What creates an activation is Tier 2, a _chosen_ Tier 3, and — in World State Injection only —
+a character in Tier 1. See the Tier 3 note above for why the wholesale branch does not, and the
+Tier 1 note for why characters do. The timer is **not** refreshed while an entry is sticky, and
+cannot be: a sticky entry sits in Tier 1 and is excluded from the candidate pool.
 So an entry named every single turn still drops out when its window expires and is re-matched the
 turn after. That is deliberate — it is what stops a once-relevant entry pinning itself in the prompt
 forever — but it makes the duration a hard ceiling on continuous presence, not a sliding one.

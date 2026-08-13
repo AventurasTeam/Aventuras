@@ -147,6 +147,7 @@ export function findEntityDuplicates(
 export {
   findDuplicateGroups,
   formatDuplicateGroup,
+  groupIsSettledBy,
   normalizeName,
   editDistance,
   type DuplicateGroup,

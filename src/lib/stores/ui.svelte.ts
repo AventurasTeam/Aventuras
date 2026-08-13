@@ -143,7 +143,15 @@ class UIStore {
   isStreaming = $state(false)
   private htmlRenderer: StreamingHtmlRenderer | null = null
   private visualProseEntryId: string | null = null
-  private tokenCountInterval: ReturnType<typeof setInterval> | null = null
+  /**
+   * When the streaming token count was last recomputed.
+   *
+   * Counting is a full BPE pass over everything received so far, so a timer re-tokenizes
+   * the whole response several times a second for as long as it runs — and keeps doing it
+   * while the stream is stalled. Throttling the appends instead keeps the same cadence on
+   * screen and does the work only when there is new text.
+   */
+  private lastTokenCountAt = 0
 
   // Scroll break state - persists until user sends a new message
   userScrolledUp = $state(false)
@@ -284,6 +292,7 @@ class UIStore {
    */
   lastLoreManagementSummary = $state<string | null>(null)
   lastLoreManagementChanges = $state<number>(0)
+  loreManagementError = $state<string | null>(null)
 
   // Lorebook activation tracking for stickiness
   // Maps entry ID -> last activation position (story entry index)
@@ -487,12 +496,7 @@ class UIStore {
 
   // Streaming methods
   startStreaming(visualProseMode = false, entryId?: string) {
-    // Ensure any existing interval is cleared to prevent leaks
-    if (this.tokenCountInterval) {
-      clearInterval(this.tokenCountInterval)
-      this.tokenCountInterval = null
-    }
-
+    this.lastTokenCountAt = 0
     this.isStreaming = true
     this.streamingContent = ''
     this.streamingReasoning = ''
@@ -505,10 +509,14 @@ class UIStore {
       this.htmlRenderer = null
       this.visualProseEntryId = null
     }
-    // Start periodic token counting (every 500ms to avoid performance issues)
-    this.tokenCountInterval = setInterval(() => {
-      this.updateStreamingTokenCount()
-    }, 500)
+  }
+
+  /** Recount at most twice a second, and only when a chunk has just landed. */
+  private countStreamingTokensThrottled() {
+    const now = Date.now()
+    if (now - this.lastTokenCountAt < 500) return
+    this.lastTokenCountAt = now
+    this.updateStreamingTokenCount()
   }
 
   private updateStreamingTokenCount() {
@@ -525,18 +533,15 @@ class UIStore {
     } else {
       this.streamingContent += content
     }
+    this.countStreamingTokensThrottled()
   }
 
   appendReasoningContent(content: string) {
     this.streamingReasoning += content
+    this.countStreamingTokensThrottled()
   }
 
   endStreaming(): string {
-    // Clear token count interval
-    if (this.tokenCountInterval) {
-      clearInterval(this.tokenCountInterval)
-      this.tokenCountInterval = null
-    }
     // Final token count update
     this.updateStreamingTokenCount()
 
@@ -1489,6 +1494,7 @@ class UIStore {
     this.loreManagementActive = true
     this.loreManagementProgress = 'Analyzing story content...'
     this.loreManagementChanges = 0
+    this.loreManagementError = null
     // The previous run's account stops being true the moment a new one starts writing.
     this.lastLoreManagementSummary = null
     // Close any open modals/edit modes since user can't edit during lore management
@@ -1508,6 +1514,14 @@ class UIStore {
   setLoreManagementSummary(summary: string, changeCount: number) {
     this.lastLoreManagementSummary = summary
     this.lastLoreManagementChanges = changeCount
+  }
+
+  setLoreManagementError(error: string | null) {
+    this.loreManagementError = error
+  }
+
+  clearLoreManagementError() {
+    this.loreManagementError = null
   }
 
   finishLoreManagement() {

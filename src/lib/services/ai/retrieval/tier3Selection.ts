@@ -208,7 +208,7 @@ export async function runTier3Selection({
 
   const ctx = await ContextBuilder.forPack(storyId)
   ctx.add({
-    recentContent: recentContent(filteredRecent, recentEntriesCount, AS_PROSE, true),
+    recentContent: recentContent(filteredRecent, recentEntriesCount, AS_PROSE, { roles: true }),
     userInput,
     entrySummaries,
   })

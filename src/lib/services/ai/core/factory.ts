@@ -45,7 +45,7 @@ export class ServiceFactory {
   createClassifierService(): ClassifierService {
     return new ClassifierService(
       'classifier',
-      settings.systemServicesSettings.classifier.chatHistoryTruncation,
+      settings.systemServicesSettings.classifier.recentEntriesWindow,
     )
   }
 

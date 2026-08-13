@@ -11,7 +11,14 @@ import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { replaceUserPlaceholders } from '$lib/components/wizard/wizardTypes'
 import type { ImportedLorebookItem } from '$lib/components/wizard/wizardTypes'
-import type { StoryMode, POV, VaultCharacter, VaultLorebook, VaultLorebookEntry } from '$lib/types'
+import type {
+  StoryMode,
+  POV,
+  VaultCharacter,
+  VaultLorebook,
+  VaultLorebookEntry,
+  ImageGenerationMode,
+} from '$lib/types'
 import type {
   ExpandedSetting,
   GeneratedCharacter,
@@ -121,7 +128,7 @@ export class STImportWizardStore {
   selectedTense = $state<Tense>('present')
   tone = $state('immersive and engaging')
   visualProseMode = $state(false)
-  imageGenerationMode = $state<'none' | 'agentic' | 'inline'>('none')
+  imageGenerationMode = $state<ImageGenerationMode>('none')
   backgroundImagesEnabled = $state(false)
   referenceMode = $state(false)
   importChatAsEntries = $state(false) // true = import chat, false = fresh start with card opening

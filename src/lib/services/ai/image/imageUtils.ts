@@ -4,13 +4,13 @@
  * Helper functions for image generation using the standalone provider registry.
  */
 
-import { generateImage, supportsImageGeneration } from './providers/registry'
+import { generateImage, supportsImageGeneration, requiresApiKey } from './providers/registry'
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
-import type { StorySettings } from '$lib/types'
+import type { EmbeddedImage, StorySettings } from '$lib/types'
 import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
 import { createLogger } from '$lib/log'
-import { expectedPixels, defaultImageSpec } from '$lib/utils/image'
+import { expectedPixels, defaultImageSpec, type ImageSpec } from '$lib/utils/image'
 
 const log = createLogger('ImageUtils')
 
@@ -44,12 +44,22 @@ export function isImageGenerationEnabled(
   return supportsImageGeneration(profile.providerType)
 }
 
+export type ImageProfileSlot = 'standard' | 'background' | 'portrait' | 'reference'
+
+const SLOT_PROFILE_KEYS = {
+  standard: 'profileId',
+  background: 'backgroundProfileId',
+  portrait: 'portraitProfileId',
+  reference: 'referenceProfileId',
+} as const satisfies Record<ImageProfileSlot, string>
+
 /**
- * Check if required credentials are configured for image generation.
+ * Check if required credentials are configured for a given image slot.
+ * Slots other than `standard` fall back to it, matching the Images settings tab.
  */
-export function hasRequiredCredentials(): boolean {
+export function hasRequiredCredentials(slot: ImageProfileSlot = 'standard'): boolean {
   const imageSettings = settings.systemServicesSettings.imageGeneration
-  const profileId = imageSettings?.profileId
+  const profileId = imageSettings?.[SLOT_PROFILE_KEYS[slot]] || imageSettings?.profileId
   if (!profileId) return false
 
   const profile = settings.getImageProfile(profileId)
@@ -57,11 +67,7 @@ export function hasRequiredCredentials(): boolean {
 
   if (!supportsImageGeneration(profile.providerType)) return false
 
-  return (
-    !!profile.apiKey ||
-    profile.providerType === 'pollinations' ||
-    profile.providerType === 'comfyui'
-  )
+  return !requiresApiKey(profile.providerType) || !!profile.apiKey
 }
 
 /**
@@ -90,7 +96,104 @@ export function getProviderDisplayName(): string {
 }
 
 /**
- * Retry image generation for a failed/existing image using current settings.
+ * Write a finished generation onto its record.
+ *
+ * `ImageReady` goes out in a `finally`: it balances the `ImageQueued` the caller emitted
+ * when it scheduled the work, and the header's in-flight count has to come back down even
+ * when recording the outcome is itself what failed.
+ */
+export async function recordImageResult(
+  imageId: string,
+  entryId: string,
+  result: { base64: string | null; error?: string },
+): Promise<void> {
+  try {
+    if (result.base64) {
+      await database.updateEmbeddedImage(imageId, {
+        imageData: result.base64,
+        status: 'complete',
+      })
+    } else {
+      await database.updateEmbeddedImage(imageId, {
+        status: 'failed',
+        errorMessage: result.error ?? 'Image generation failed',
+      })
+    }
+  } catch (error) {
+    log('Failed to record image result', { imageId, error })
+  } finally {
+    emitImageReady(imageId, entryId, !!result.base64)
+  }
+}
+
+export interface ImageGenerationRequest {
+  imageId: string
+  entryId: string
+  prompt: string
+  profileId: string
+  model: string
+  size: ImageSpec
+  referenceImages?: string[]
+  /** Also raise the user-facing failure notice. Off for analyzed scenes, which report
+   *  their failures through the analysis phase instead. */
+  notifyFailure?: boolean
+  /** Written with the flip to `generating`, so a caller resetting the row for a fresh
+   *  attempt spends one round trip and not two. */
+  recordUpdates?: Partial<EmbeddedImage>
+}
+
+/**
+ * Run one generation against an existing record and record what came back.
+ *
+ * Returns the base64 payload so a caller with a further use for it — saving a portrait
+ * onto its character — does not have to read the row back.
+ */
+export async function runImageGeneration(request: ImageGenerationRequest): Promise<string | null> {
+  const { imageId, entryId, prompt, profileId, model, size, referenceImages } = request
+
+  let base64: string | null = null
+  let failure: string | undefined
+
+  // Its own try: a failed status flip is a database problem, not a generation failure, and
+  // reporting it as one raises a user-facing notice for the wrong thing. The generation goes
+  // ahead regardless — `recordImageResult` writes the terminal status either way.
+  try {
+    await database.updateEmbeddedImage(imageId, {
+      ...request.recordUpdates,
+      status: 'generating',
+    })
+  } catch (error) {
+    log('Failed to mark the image generating', { imageId, error })
+  }
+
+  try {
+    log('Generating image', { imageId, profileId, model, hasReference: !!referenceImages?.length })
+    const result = await generateImage({ profileId, model, prompt, size, referenceImages })
+
+    if (!result.base64) throw new Error('No image data returned')
+    base64 = result.base64
+  } catch (error) {
+    failure = error instanceof Error ? error.message : 'Unknown error'
+    log('Image generation failed', { imageId, error: failure })
+  }
+
+  await recordImageResult(imageId, entryId, { base64, error: failure })
+
+  if (failure && request.notifyFailure) {
+    emitImageAnalysisFailed(entryId, failure)
+  }
+
+  return base64
+}
+
+/**
+ * Retry a failed or stuck image, as a regular scene image at the current settings.
+ *
+ * Deliberately regular, whatever the row was generated as. An img2img reference cannot be
+ * reproduced at all — the references are the portraits of the characters the analysis
+ * named, and that list is not kept on the row — and a portrait is not worth reproducing:
+ * a retry only rewrites the row, never `characters.portrait`, so the entry gets a picture
+ * and the character keeps the one it has.
  */
 export async function retryImageGeneration(imageId: string, prompt: string): Promise<void> {
   if (!isImageGenerationEnabled()) {
@@ -117,48 +220,23 @@ export async function retryImageGeneration(imageId: string, prompt: string): Pro
   const size = imageSettings.size
   const { width, height } = expectedPixels(size)
 
-  await database.updateEmbeddedImage(imageId, {
-    prompt,
-    model,
-    status: 'generating',
-    errorMessage: undefined,
-    width,
-    height,
-  })
-
   log('Retrying image generation', { imageId, profileId, model, size })
 
-  // Both branches below emit `ImageReady`, which decrements the header's in-flight count —
+  // `runImageGeneration` emits `ImageReady`, which decrements the header's in-flight count —
   // so the retry has to announce itself, or it spends another image's increment and the
   // indicator disappears while that one is still generating.
   emitImageQueued(imageId, image.entryId)
 
-  try {
-    const result = await generateImage({ profileId, model, prompt, size })
-
-    if (!result.base64) {
-      throw new Error('No image data returned')
-    }
-
-    await database.updateEmbeddedImage(imageId, {
-      imageData: result.base64,
-      status: 'complete',
-    })
-
-    log('Image retry successful', { imageId })
-    emitImageReady(imageId, image.entryId, true)
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    log('Image retry failed', { imageId, error: errorMessage })
-
-    await database.updateEmbeddedImage(imageId, {
-      status: 'failed',
-      errorMessage,
-    })
-
-    emitImageReady(imageId, image.entryId, false)
-    emitImageAnalysisFailed(image.entryId, errorMessage)
-  }
+  await runImageGeneration({
+    imageId,
+    entryId: image.entryId,
+    prompt,
+    profileId,
+    model,
+    size,
+    notifyFailure: true,
+    recordUpdates: { prompt, model, width, height },
+  })
 }
 
 /**

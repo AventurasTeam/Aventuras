@@ -118,6 +118,7 @@ export function buildLoreManagementUICallbacks(
       onStart: ui.startLoreManagement.bind(ui),
       onProgress: ui.updateLoreManagementProgress.bind(ui),
       onSummary: ui.setLoreManagementSummary.bind(ui),
+      onError: ui.setLoreManagementError.bind(ui),
       onComplete: ui.finishLoreManagement.bind(ui),
     }
   }
@@ -126,6 +127,14 @@ export function buildLoreManagementUICallbacks(
     onStart: () => target.onStatus('Updating lorebook...'),
     onProgress: (message) => target.onStatus(message),
     onSummary: ui.setLoreManagementSummary.bind(ui),
+    // The status line and not only the status line: the coordinator clears the UI right
+    // after this, and `onComplete` sets the status back to null in the same tick — so a
+    // failure written only there is erased before anyone reads it. The stored error
+    // outlives the run and is what the lorebook view shows.
+    onError: (err) => {
+      target.onStatus(`Lore management failed: ${err}`)
+      ui.setLoreManagementError(err)
+    },
     onComplete: () => target.onStatus(null),
   }
 }

@@ -61,9 +61,36 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
 [inactive]` came back as the name, missed `sameEntityName`, and created a second
   character — four of thirty-eight on a measured 41-chapter save, two carrying the
   subject's own `relationship` verbatim. Name and attributes are now separate lines
-  (`relationship:`, `status:`, `appearance:`), in
-  `ClassifierService.formatExistingCharacters`, in the story-beat list beside it, and in
-  `WorldStateInjector`'s narrator block, whose prose the classifier also reads.
+  (`relationship:`, `status:`, `appearance:`), in every list `ClassifierService` renders —
+  characters, locations, items, story beats — and in `WorldStateInjector`'s narrator block,
+  whose prose the classifier also reads. One name per line also holds names a
+  comma-separated list could not: locations and items were CSV until they carried state.
+
+  **State reaches the classifier only where it can act on it.** `appearance:` goes with a
+  character in the scene, `description:` with the current location, and an item's
+  `quantity`/`equipped`/`location` only when they differ from the default — because each of
+  those is a whole-value replacement, and a model cannot rewrite what it was not shown. The
+  same rule sizes the prompt: on a large cast the omitted halves are most of it.
+
+  **`scene.currentLocationName` is the only thing that moves the scene.** It creates the
+  location if the name is new, marks it `current` and `visited`, and clears the previous
+  one. `locationUpdates.changes.current` and `newLocations[].current` did the same job from
+  two other places, applied in an order the model could not see, so a response naming two
+  places kept whichever ran last — and the merge path set a second `current` without
+  clearing the first. Both are gone from the schema.
+
+  **Presence is reported, departure is inferred.** The classifier answers one question about the
+  cast — `scene.presentCharacterNames`, every *other* character in the scene at the end of the
+  passage; the protagonist is in every scene by definition and is added by the consumers — and
+  `resolveCharacterPresence` (`services/generation/characterPresence.ts`) turns the complement into
+  `inactive`. Asking a model to name thirty absent characters produces nothing; asking it to name
+  the three in front of it is the question the passage answers. The inference is refused whenever
+  the list carries no signal: a salvaged or failed classification, or an empty array — which the
+  schema defaults, so "the model said nobody" and "the model did not answer" arrive identically.
+  `characterUpdates.status` stays for what the scene states outright, `deceased` above all, and
+  wins over the inference. `appearance:` is sent to the classifier only for characters in the
+  scene, and the template forbids rewriting an appearance it was not shown, so a returning
+  character keeps the descriptors it accumulated.
 
 - **`worldStateDelta`** on an entry records what its classification changed, which is what makes
   retry, time-travel delete and regenerate reversible (`rollbackService`).
