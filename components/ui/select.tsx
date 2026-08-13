@@ -522,7 +522,9 @@ export type SelectProps = {
   renderRow?: (args: { option: SelectOption; selected: boolean }) => ReactNode
 
   /**
-   * Custom trigger content for `dropdown` mode.
+   * Custom trigger content for `dropdown` mode. Supplying it hands the
+   * caller the trigger's accessible name — `label` is not applied as
+   * `aria-label` — so icon-only content must carry its own.
    */
   renderTrigger?: (args: {
     selected: SelectOption | undefined

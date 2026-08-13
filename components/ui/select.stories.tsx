@@ -10,6 +10,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState, type ComponentProps } from 'react'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
@@ -65,6 +66,8 @@ function Stateful({
   placeholder?: string
   disabled?: boolean
   className?: string
+  label?: string
+  renderTrigger?: ComponentProps<typeof Select>['renderTrigger']
 }) {
   const [value, setValue] = useState(initial)
   return <Select {...rest} value={value} onValueChange={setValue} />
@@ -138,6 +141,37 @@ export const States: Story = {
       </View>
     </View>
   ),
+}
+
+// Without `label` every branch falls back to naming itself by its own current
+// value, so the control an assistive-tech user hears renames itself on every
+// pick. One assertion per branch: each render mode carries its own
+// `aria-label`, and nothing downstream pins them.
+export const LabelNamesEveryRenderMode: Story = {
+  render: () => (
+    <View className="w-72 flex-col gap-6 p-4">
+      <Stateful initial="two" mode="segment" options={SHORT_OPTIONS} label="Segment field" />
+      <Stateful initial="collaborate" mode="radio" options={RADIO_OPTIONS} label="Radio field" />
+      <Stateful initial="opt-1" mode="dropdown" options={LONG_OPTIONS} label="Dropdown field" />
+      {/* A renderTrigger owns its own (richer) accessible content, so the
+          dropdown must NOT overwrite it with the flat `label`. */}
+      <Stateful
+        initial="opt-2"
+        mode="dropdown"
+        options={LONG_OPTIONS}
+        label="Custom trigger field"
+        renderTrigger={({ selected }) => <Text>Currently: {selected?.label}</Text>}
+      />
+    </View>
+  ),
+  play: async () => {
+    expect(await screen.findByRole('radiogroup', { name: 'Segment field' })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Radio field' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Dropdown field' })).toBeInTheDocument()
+
+    expect(screen.getByRole('button', { name: 'Currently: Option 2' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Custom trigger field' })).not.toBeInTheDocument()
+  },
 }
 
 export const ThemeMatrix: Story = {

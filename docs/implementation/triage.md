@@ -1221,3 +1221,18 @@ on hover`; the shipped rows render label and tagline only, so the
   restore them on reopen, or block the swipe once a result has
   landed. Applies to `AiAssist` first but the same reset pattern will
   reach 3.6b's cast suggestions. Raised 2026-08-11.
+- **`Select`'s dropdown trigger drops the current value from its
+  accessible name once `label` is set.** `@rn-primitives/select`
+  forces `role="button"` on the web trigger, overriding Radix's
+  `combobox`, so the element carries no value semantic at all — the
+  selected option reaches assistive tech only as the trigger's text
+  content. Adding `aria-label` (the fix for triggers that renamed
+  themselves on every pick) then suppresses that content: the month
+  picker in `tier-tuple-input.tsx` announces "Month, button,
+  collapsed" and never "January". Neither state is complete —
+  before the label there was a value and no field identity, after it
+  there is identity and no value. The real fix is a `combobox` role
+  on the trigger, where content is read as the value beside the
+  label; decide whether to override the primitive's role, compose
+  the value into the name, or accept identity-only. Applies to every
+  `dropdown`-mode `Select` that carries a `label`. Raised 2026-08-13.

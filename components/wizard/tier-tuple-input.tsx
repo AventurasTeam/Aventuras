@@ -70,6 +70,7 @@ export function TierTupleInput({ calendar, value, onChange, className }: TierTup
                     markTouched(tier.name)
                     onChange({ ...value, [tier.name]: Number(v) })
                   }}
+                  label={tierLabel(tier.name)}
                 />
               ) : (
                 <Input

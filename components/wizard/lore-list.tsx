@@ -188,6 +188,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
                         injectionMode: injectionMode as InjectionMode,
                       })
                     }
+                    label={t('wizard:world.lore.injectionMode')}
                   />
                 </FormRow>
                 <FormRow

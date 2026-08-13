@@ -59,7 +59,10 @@ export const EarthGregorianValid: Story = {
     expect(screen.getByText('Second')).toBeInTheDocument()
 
     // Month is a labeled tier — dropdown shows the label, not the raw index.
-    expect(screen.getByRole('button', { name: /January/ })).toBeInTheDocument()
+    // The trigger is named for the tier, not for whichever label it currently
+    // holds, so the displayed value is asserted separately from the name.
+    expect(screen.getByRole('button', { name: 'Month' })).toBeInTheDocument()
+    expect(screen.getByText('January')).toBeInTheDocument()
     expect(screen.getByLabelText('Year')).toHaveValue('2024')
 
     // No error surfaces before any interaction.
