@@ -177,6 +177,16 @@ describe('cast mutators', () => {
     expect(cast.find((r) => r.id === b)?.name).toBe('')
   })
 
+  it('rejects a status patch through patchCast at the type level; only setCastStatus carries the lead cascade', () => {
+    const id = wizardStore.addCast('character')
+    // @ts-expect-error status is excluded from WizardCastDraftPatch — this line
+    // must stop compiling if that exclusion is ever reverted.
+    wizardStore.patchCast(id, { status: 'staged' })
+    // TS blocks the literal above; JS itself has no such gate, so the write
+    // still lands here. The compile-time rejection is the actual contract.
+    expect(wizardStore.getWizard().state.cast[0].status).toBe('staged')
+  })
+
   it('importCast appends fully-built drafts unchanged', () => {
     const draft = emptyCastDraft('faction', 'fact_x')
     wizardStore.importCast([{ ...draft, name: 'Ashfall Pact' }])
