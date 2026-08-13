@@ -270,5 +270,63 @@
       },
       "empty": "No lore yet. Add an entry or let AI suggest some."
     }
+  },
+  "cast": {
+    "heading": "Who's in this story?",
+    "suggest": "Suggest cast",
+    "add": "Add",
+    "kinds": {
+      "character": "Character",
+      "location": "Location",
+      "item": "Item",
+      "faction": "Faction"
+    },
+    "empty": "No cast yet. Add someone, or let ✨ suggest a few.",
+    "remove": "Remove cast entry",
+    "expand": "Expand cast entry",
+    "collapse": "Collapse cast entry",
+    "unnamed": "Unnamed entry",
+    "leadChip": "Lead",
+    "stagedChip": "Staged",
+    "setAsLead": "Set as lead",
+    "leadUnsetToast": "Lead unset — staged characters can't be lead.",
+    "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
+    "leadNotice": {
+      "mode": "Adventure mode needs a lead character. Mark one active character as lead to continue.",
+      "narration": "First- and second-person narration need a lead character. Mark one active character as lead to continue."
+    },
+    "editor": {
+      "name": "Name",
+      "status": "Status",
+      "statusActive": "Active",
+      "statusStaged": "Staged",
+      "description": "Description",
+      "voice": "Voice",
+      "voicePlaceholder": "e.g. \"clipped, formal\"",
+      "traits": "Traits",
+      "drives": "Drives",
+      "visual": "Visual",
+      "physique": "Physique",
+      "face": "Face",
+      "hair": "Hair",
+      "eyes": "Eyes",
+      "attire": "Attire",
+      "distinguishing": "Distinguishing",
+      "moreOptions": "More options",
+      "tags": "Tags",
+      "faction": "Faction",
+      "noFactionsYet": "(no factions yet — add one with + Add)",
+      "unaffiliated": "Unaffiliated",
+      "parentLocation": "Parent location",
+      "noLocationsYet": "(no locations yet — add one with + Add)",
+      "noParent": "None",
+      "condition": "Condition",
+      "agenda": "Agenda",
+      "standing": "Standing",
+      "errors": {
+        "name": "Name is required."
+      }
+    },
+    "guidance": "e.g. \"6 characters; 2 introduced later\""
   }
 }
