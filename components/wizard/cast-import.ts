@@ -53,9 +53,20 @@ export function resolveCastImports(
     if (key.length > 0) idByKey.set(`${suggestion.kind}:${key}`, id)
   }
 
-  const ref = (kind: 'faction' | 'location', name: string | undefined): string | null => {
+  // Excludes selfId: idByKey is indexed before refs resolve (above), so a
+  // suggested location naming itself as parent_location_name would otherwise
+  // bind to its own freshly-minted id (finish.ts's castRef self-exclusion
+  // guards this at commit time; resolving it here means the store never
+  // carries the dangling self-pointer in the first place).
+  const ref = (
+    kind: 'faction' | 'location',
+    name: string | undefined,
+    selfId: string,
+  ): string | null => {
     const key = name == null ? '' : norm(name)
-    return key.length === 0 ? null : (idByKey.get(`${kind}:${key}`) ?? null)
+    if (key.length === 0) return null
+    const found = idByKey.get(`${kind}:${key}`) ?? null
+    return found === selfId ? null : found
   }
 
   return minted.map(({ suggestion: s, id }) => {
@@ -78,7 +89,7 @@ export function resolveCastImports(
             attire: clampStr(s.visual?.attire ?? '', FIELD_MAX),
             distinguishing: clampStr(s.visual?.distinguishing ?? '', FIELD_MAX),
           },
-          factionId: ref('faction', s.faction_name),
+          factionId: ref('faction', s.faction_name, id),
         })
       case 'location':
         return wizardCastDraftSchema.parse({
@@ -87,7 +98,7 @@ export function resolveCastImports(
           name: s.name,
           description: s.description,
           status: s.status,
-          parentLocationId: ref('location', s.parent_location_name),
+          parentLocationId: ref('location', s.parent_location_name, id),
           condition: clampStr(s.condition ?? '', FIELD_MAX),
         })
       case 'item':

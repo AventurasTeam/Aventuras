@@ -236,14 +236,6 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
-      name: 'leadName',
-      type: 'string',
-      category: 'Entities',
-      description:
-        'Lead character display name; blank on lead-less paths (creative + third-person). Legacy — pre-3.6b drafts only; bundled templates no longer read it.',
-      required: false,
-    },
-    {
       name: 'leadEntityId',
       type: 'string',
       category: 'Entities',
@@ -335,7 +327,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries', 'turns'],
-  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId', 'cast'],
+  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadEntityId', 'cast'],
   Plot: ['happenings'],
   Retrieval: [
     'retrievedEntities',

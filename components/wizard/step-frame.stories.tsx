@@ -51,7 +51,5 @@ export const AdventureFirst: Story = {
     expect(
       await screen.findByText('This combination will require a lead character in Cast.'),
     ).toBeInTheDocument()
-    // The lead moved to Cast (Slice 3.6b) — no input renders on this step anymore.
-    expect(screen.queryByPlaceholderText('e.g. Aria Stoneheart')).not.toBeInTheDocument()
   },
 }

@@ -176,6 +176,26 @@ describe('resolveCastImports', () => {
     expect(gatehouse).toMatchObject({ parentLocationId: newKeep.id })
   })
 
+  // idByKey indexes every minted row's own kind:name before refs are resolved
+  // (cast-import.ts), so a suggested location naming itself as its own parent
+  // must not bind parentLocationId to its own freshly-minted id.
+  it('never binds a location parent reference to itself', () => {
+    const [keep] = resolveCastImports(
+      [
+        {
+          kind: 'location',
+          name: 'Mornstone Keep',
+          description: 'A fortress.',
+          status: 'active',
+          parent_location_name: 'Mornstone Keep',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(keep).toMatchObject({ parentLocationId: null })
+  })
+
   it('never attaches factionId or parentLocationId to an item row', () => {
     const [item] = resolveCastImports(
       [

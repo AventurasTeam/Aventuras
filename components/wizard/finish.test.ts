@@ -124,7 +124,6 @@ type MakeStateInput = {
   genre?: WizardWorkingState['definition']['genre']
   tone?: WizardWorkingState['definition']['tone']
   setting?: string
-  leadName?: string
   leadEntityId?: string | null
   cast?: WizardCastDraft[]
   opening?: Partial<WizardWorkingState['opening']>
@@ -137,7 +136,6 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
   return {
     ...base,
     step: 5,
-    leadName: input.leadName ?? base.leadName,
     leadEntityId: input.leadEntityId ?? base.leadEntityId,
     effectiveDim: input.effectiveDim ?? base.effectiveDim,
     definition: {
