@@ -68,8 +68,9 @@
     "missing": {
       "title": "a title",
       "opening": "an opening",
-      "lead": "a lead character name",
+      "lead": "a lead character",
       "effectiveDim": "a valid effective dim",
+      "cast": "cast (every entry needs a name)",
       "lore": "lore (every entry needs a title and a body)"
     },
     "failed": "Couldn't create the story.",

@@ -62,7 +62,11 @@ export {
   upsertProfile,
 } from './settings'
 export type { SettingsActionCtx } from './settings'
-export { createStoryWithBranch, type CreateStoryInput } from './stories/create-story'
+export {
+  createStoryWithBranch,
+  type CreateStoryInput,
+  type WizardCastEntityInput,
+} from './stories/create-story'
 export { deleteStory } from './stories/delete-story'
 export { resetStorySettings } from './stories/reset-settings'
 export {

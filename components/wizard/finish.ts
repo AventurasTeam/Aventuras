@@ -1,12 +1,22 @@
-import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
+import {
+  clearLiveSession,
+  createStoryWithBranch,
+  openStory,
+  type DbCtx,
+  type WizardCastEntityInput,
+} from '@/lib/actions'
 import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/ai'
 import {
   buildStorySettings,
+  type CharacterState,
+  type EntityState,
   type EntryMetadata,
   type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
   type SuggestionCategory,
+  type WizardCastDraft,
+  type WizardCharacterDraft,
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -17,9 +27,9 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
-import { generateId } from '@/lib/ids'
 
 import { clampEffectiveDim } from './memory-cost-logic'
+import { activeLead, invalidCastRowIds } from './step-cast-logic'
 import { needsLead } from './step-frame-logic'
 import { invalidLoreRowIds } from './step-world-logic'
 
@@ -53,6 +63,61 @@ export type FinishEmbedCtx = {
   resolveProvider: (providerId: string) => ProviderInstanceWithStub | undefined
 }
 
+// An intra-cast pointer only commits when it still resolves to a row of the
+// expected kind: the store prunes factionId / parentLocationId as their target
+// is removed, and this is the backstop for a working state that reached Finish
+// some other way (a hydrated draft, an import).
+function castRef(
+  cast: readonly WizardCastDraft[],
+  id: string | null,
+  kind: WizardCastDraft['kind'],
+): string | null {
+  return id != null && cast.some((r) => r.id === id && r.kind === kind) ? id : null
+}
+
+function characterVisual(draft: WizardCharacterDraft): CharacterState['visual'] {
+  const visual: CharacterState['visual'] = {}
+  for (const key of Object.keys(draft.visual) as (keyof WizardCharacterDraft['visual'])[]) {
+    if (draft.visual[key].trim().length > 0) visual[key] = draft.visual[key]
+  }
+  return visual
+}
+
+// data-model.md → Authorship contract: wizard-authored identity seeds the state
+// at its first write; every classifier-owned slot commits empty so the first
+// classifier pass writes into a clean field rather than over an invented value.
+function castDraftState(draft: WizardCastDraft, cast: readonly WizardCastDraft[]): EntityState {
+  switch (draft.kind) {
+    case 'character':
+      return {
+        visual: characterVisual(draft),
+        traits: [...draft.traits],
+        drives: [...draft.drives],
+        ...(draft.voice.trim().length > 0 ? { voice: draft.voice } : {}),
+        current_location_id: null,
+        equipped_items: [],
+        inventory: [],
+        faction_id: castRef(cast, draft.factionId, 'faction'),
+        lastSeenAt: null,
+      }
+    case 'location':
+      return {
+        parent_location_id: castRef(cast, draft.parentLocationId, 'location'),
+        ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+      }
+    case 'item':
+      return {
+        at_location_id: null,
+        ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+      }
+    case 'faction':
+      return {
+        ...(draft.standing.trim().length > 0 ? { standing: draft.standing } : {}),
+        ...(draft.agenda.length > 0 ? { agenda: [...draft.agenda] } : {}),
+      }
+  }
+}
+
 export async function finishWizard(
   s: WizardWorkingState,
   ctx: DbCtx,
@@ -69,11 +134,14 @@ export async function finishWizard(
   if (s.definition.title.trim().length === 0) reasons.push('title')
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
-  if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
-  // In-session nav re-validates every gating step, so this can't be reached by
-  // clicking through. hydrate() sets furthestStep = state.step with no
+  const lead = activeLead(s.cast, s.leadEntityId)
+  if (requiresLead && lead == null) reasons.push('lead')
+  // In-session nav re-validates every gating step, so neither of these can be
+  // reached by clicking through. hydrate() sets furthestStep = state.step with no
   // re-validation, so a persisted draft resumed straight at step 5 (the zod
-  // schema defaults title/body to '') skips step 3's gate entirely — re-check here.
+  // schema defaults every name/title/body to '') skips steps 3 and 4's gates
+  // entirely — re-check both here.
+  if (invalidCastRowIds(s.cast).length > 0) reasons.push('cast')
   if (invalidLoreRowIds(s.lore).length > 0) reasons.push('lore')
 
   // effectiveDim only means something for a provider-backed Matryoshka model; if
@@ -105,9 +173,15 @@ export async function finishWizard(
     reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
-  const lead = requiresLead
-    ? { id: s.leadEntityId ?? generateId('char'), name: s.leadName }
-    : undefined
+  const castRows: WizardCastEntityInput[] = s.cast.map((draft) => ({
+    id: draft.id,
+    kind: draft.kind,
+    name: draft.name,
+    description: draft.description.trim().length > 0 ? draft.description : null,
+    status: draft.status,
+    tags: [...draft.tags],
+    state: castDraftState(draft, s.cast),
+  }))
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
@@ -122,13 +196,20 @@ export async function finishWizard(
 
   const settings = buildStorySettings(definition.mode, appDefaults, effectiveDim)
 
-  // The lead is the only entity the M2 commit materializes, so it's the only id
-  // opening refs can legitimately point at: keep the lead in sceneEntities, drop
-  // everything else (a back-jump clearing the lead requirement, or a hallucinated
-  // location id, would otherwise commit a dangling ref to a never-created row).
+  // Opening refs commit only when they resolve to a row this transaction
+  // materializes AND that row is active: a staged entity can't appear in scene
+  // metadata (wizard.md → Status field), and a ref left behind by a deleted row
+  // or hallucinated by the model would otherwise persist as a dangling id.
+  const activeIds = new Set(s.cast.filter((r) => r.status === 'active').map((r) => r.id))
+  const activeLocationIds = new Set(
+    s.cast.filter((r) => r.status === 'active' && r.kind === 'location').map((r) => r.id),
+  )
   const openingMetadata: EntryMetadata = {
-    sceneEntities: lead ? s.opening.sceneEntities.filter((id) => id === lead.id) : [],
-    currentLocationId: null,
+    sceneEntities: s.opening.sceneEntities.filter((id) => activeIds.has(id)),
+    currentLocationId:
+      s.opening.currentLocationId != null && activeLocationIds.has(s.opening.currentLocationId)
+        ? s.opening.currentLocationId
+        : null,
     worldTime: 0,
     ...(s.opening.model ? { model: s.opening.model } : {}),
   }
@@ -183,7 +264,7 @@ export async function finishWizard(
         settings,
         openingContent: s.opening.content,
         openingMetadata,
-        lead,
+        cast: castRows,
         lore: s.lore,
         embed: {
           config: embedConfig,

@@ -132,11 +132,6 @@ describe('wizard full-flow integration', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Aria Rising',
-        // leadName stays populated alongside the matching cast row: finishWizard's
-        // lead gate still reads only leadName (pre-cast field, see the pinned gap
-        // test below), so a fixture exercising the real post-3.6b shape needs both
-        // until that gate is migrated to read cast.
-        leadName: 'Aria',
         leadEntityId: leadId,
         cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
         opening: { content: 'You wake at dawn.', sceneEntities: [leadId], model: 'test-model' },
@@ -165,14 +160,11 @@ describe('wizard full-flow integration', () => {
     expect(entryRows[0].metadata!.sceneEntities).toEqual([leadId])
   })
 
-  // Pinned gap: since Slice 3.6b moved lead authoring into Cast, nothing in the
-  // app ever calls setLeadName anymore — a real wizard walkthrough leaves it
-  // blank while the lead lives in cast + leadEntityId. finishWizard's lead gate
-  // hasn't been migrated to read cast yet, so this fixture (the actual shape a
-  // fresh adventure-mode session now produces) fails Finish on the stale field.
-  // Flip this to `status: 'ok'` the day that gate starts reading cast instead.
-  it('a cast-only lead with no legacy leadName still fails Finish on the lead reason', async () => {
-    const { ctx } = await setup()
+  // The shape a fresh post-3.6b adventure session actually produces: the lead
+  // lives in cast + leadEntityId and `leadName` is never written at all. This
+  // was pinned as a KNOWN-BROKEN gap while Finish's gate still read leadName.
+  it('a cast-only lead with no legacy leadName finishes', async () => {
+    const { db, ctx } = await setup()
     const leadId = generateId('char')
 
     const result = await finishWizard(
@@ -191,7 +183,54 @@ describe('wizard full-flow integration', () => {
       2500,
     )
 
-    expect(result).toEqual({ status: 'invalid', reasons: ['lead'] })
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.leadEntityId).toBe(leadId)
+
+    const entityRows = await db.select().from(entities)
+    expect(entityRows).toHaveLength(1)
+    expect(entityRows[0]).toMatchObject({ id: leadId, name: 'Aria', kind: 'character' })
+  })
+
+  // AC: "a pre-3.6b draft session reopens without data loss and completes
+  // through the new step". The blob predates `cast`, so after migrateLegacyLead
+  // its leadName is '' and the lead is a cast row — the exact shape that failed
+  // Finish while the gate still read leadName.
+  it('a legacy bare-lead draft blob loads, migrates, and finishes as an adventure story', async () => {
+    const { db, ctx } = await setup()
+    const draftId = 'story_legacy_adventure'
+
+    await db
+      .insert(stories)
+      .values({ id: draftId, title: 'Salt Road', status: 'draft', createdAt: 1, updatedAt: 1 })
+    await db.insert(wizardSessions).values({
+      id: draftId,
+      storyId: draftId,
+      state: {
+        step: 5,
+        leadName: 'Wren Calloway',
+        definition: { title: 'Salt Road', mode: 'adventure', narration: 'first' },
+        opening: { content: 'The tide went out and did not come back.' },
+      } as never,
+      updatedAt: 1,
+    })
+
+    const loaded = await loadDraft(draftId, ctx)
+    expect(loaded).not.toBeNull()
+    expect(loaded!.leadName).toBe('')
+    expect(loaded!.cast).toHaveLength(1)
+
+    const result = await finishWizard(loaded!, ctx, vi.fn(), APP_DEFAULTS, EMBED_CTX, 2600, draftId)
+
+    expect(result).toEqual({ status: 'ok', storyId: draftId })
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, draftId)))[0]
+    expect(storyRow.status).toBe('active')
+
+    const entityRows = await db.select().from(entities)
+    expect(entityRows).toHaveLength(1)
+    expect(entityRows[0]).toMatchObject({ name: 'Wren Calloway', kind: 'character' })
+    expect(storyRow.definition!.leadEntityId).toBe(entityRows[0].id)
   })
 
   describe('AC3: AI opening idMap round-trip (simulated model output, no live provider)', () => {

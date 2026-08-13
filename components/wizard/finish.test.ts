@@ -5,6 +5,7 @@ import type { ProviderInstanceWithStub } from '@/lib/ai'
 import {
   branches,
   deltas,
+  emptyCastDraft,
   emptyEntityState,
   emptyWorkingState,
   entities,
@@ -13,6 +14,8 @@ import {
   storyEntries,
   wizardSessions,
   type SqlOp,
+  type WizardCastDraft,
+  type WizardCharacterDraft,
   type WizardLoreDraft,
   type WizardWorkingState,
 } from '@/lib/db'
@@ -90,6 +93,14 @@ const NON_MATRYOSHKA_PROVIDER_DEFAULTS: FinishAppDefaults = {
 }
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
+const LOCATION_ID = 'loc_33333333-3333-3333-3333-333333333333'
+const FACTION_ID = 'fact_44444444-4444-4444-4444-444444444444'
+const ITEM_ID = 'item_55555555-5555-5555-5555-555555555555'
+
+/** The post-3.6b lead: an active character row in `cast`, starred by leadEntityId. */
+function leadCast(name = 'Aria', id = LEAD_ID): WizardCharacterDraft {
+  return { ...emptyCastDraft('character', id), name }
+}
 
 function loreRow(overrides: Partial<WizardLoreDraft> = {}): WizardLoreDraft {
   return {
@@ -114,6 +125,7 @@ type MakeStateInput = {
   setting?: string
   leadName?: string
   leadEntityId?: string | null
+  cast?: WizardCastDraft[]
   opening?: Partial<WizardWorkingState['opening']>
   effectiveDim?: number | null
   lore?: WizardLoreDraft[]
@@ -139,6 +151,7 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
     },
     opening: { ...base.opening, ...input.opening },
     lore: input.lore ?? base.lore,
+    cast: input.cast ?? base.cast,
   }
 }
 
@@ -237,8 +250,8 @@ describe('finishWizard', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Aria Rising',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
+        cast: [leadCast()],
         opening: {
           content: 'You wake at dawn.',
           sceneEntities: [LEAD_ID],
@@ -276,8 +289,8 @@ describe('finishWizard', () => {
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
     expect(entryRows[0].metadata!.model).toBe('gpt-x')
-    // M2 never materializes a location entity — currentLocationId is always
-    // nulled, even when the working-state opening carried one.
+    // The opening carried a location id that no cast row materializes — it must
+    // not commit as a ref to a row that will never exist.
     expect(entryRows[0].metadata!.currentLocationId).toBeNull()
 
     // The load-bearing id-consistency invariant: the committed opening ref, the
@@ -289,16 +302,19 @@ describe('finishWizard', () => {
     expect(navigate).toHaveBeenCalledWith(branchRows[0].id)
   })
 
-  it('mints a lead id when the path needs one but the wizard never ran opening-assist', async () => {
+  it('never mints a lead: a lead-requiring path with an unstarred cast character blocks', async () => {
     const { db, ctx } = await setup()
 
+    // The character exists in cast but nothing ⭐-starred it. Pre-3.6b, Finish
+    // minted an id off the bare leadName; now the star IS the lead, so an
+    // unresolved pointer must block rather than invent a second character.
     const result = await finishWizard(
       makeState({
         mode: 'adventure',
         narration: 'first',
         title: 'Untold',
-        leadName: 'Bran',
         leadEntityId: null,
+        cast: [leadCast('Bran')],
         opening: { content: 'The gate opened.' },
       }),
       ctx,
@@ -308,25 +324,45 @@ describe('finishWizard', () => {
       2500,
     )
 
-    expect(result.status).toBe('ok')
-    const storyId = result.status === 'ok' ? result.storyId : ''
-    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
-    const entityRows = await db.select().from(entities)
-    expect(entityRows).toHaveLength(1)
-    expect(entityRows[0].name).toBe('Bran')
-    expect(storyRow.definition!.leadEntityId).toBe(entityRows[0].id)
-    expect(entityRows[0].id).toMatch(/^char_/)
+    expect(result).toEqual({ status: 'invalid', reasons: ['lead'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
   })
 
-  it('drops stale opening refs when the lead requirement was cleared by a back-jump', async () => {
+  it('a staged character cannot hold the lead: Finish blocks on the lead reason', async () => {
     const { db, ctx } = await setup()
 
-    // creative+third (no lead) but opening carries a ref minted on an earlier
-    // adventure+first pass — the commit must not persist a dangling entity ref.
+    // setCastStatus cascades the lead off when a row is staged in-session, but a
+    // hydrated draft can carry the stale pointer past it (wizard.md → Status field).
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Not Yet On Stage',
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), status: 'staged' }],
+        opening: { content: 'The gate opened.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2600,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['lead'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+  })
+
+  it('drops opening refs pointing at rows the commit never materializes', async () => {
+    const { db, ctx } = await setup()
+
+    // creative+third with an empty cast, but the opening carries a ref minted on
+    // an earlier pass — the commit must not persist a dangling entity ref, and
+    // the unresolvable leadEntityId must not reach stories.definition.
     const result = await finishWizard(
       makeState({
         title: 'Reframed',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
         opening: { content: 'Once.', sceneEntities: [LEAD_ID], model: 'gpt-x' },
       }),
@@ -349,6 +385,329 @@ describe('finishWizard', () => {
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.sceneEntities).toEqual([])
+  })
+
+  it('maps each cast kind onto its authored EntityState, leaving classifier slots empty', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Mixed Cast',
+        leadEntityId: LEAD_ID,
+        cast: [
+          {
+            ...leadCast(),
+            description: '  ',
+            tags: ['protagonist'],
+            voice: 'Clipped, salt-dry.',
+            traits: ['wary'],
+            drives: ['find the wells'],
+            visual: {
+              physique: 'wiry',
+              face: '',
+              hair: '   ',
+              eyes: 'grey',
+              attire: '',
+              distinguishing: '',
+            },
+            factionId: FACTION_ID,
+          },
+          {
+            ...emptyCastDraft('location', LOCATION_ID),
+            name: 'The Salt Wells',
+            description: 'Nine wells ring the coast.',
+            condition: 'drowned',
+          },
+          { ...emptyCastDraft('item', ITEM_ID), name: 'Tide Charter', condition: '  ' },
+          {
+            ...emptyCastDraft('faction', FACTION_ID),
+            name: 'The Charterhouse',
+            standing: 'feared',
+            agenda: ['keep the wells'],
+          },
+        ],
+        opening: { content: 'You wake at dawn.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2700,
+    )
+
+    expect(result.status).toBe('ok')
+    const entityRows = await db.select().from(entities)
+    expect(entityRows).toHaveLength(4)
+
+    const lead = entityRows.find((r) => r.id === LEAD_ID)
+    // A blank description commits as NULL, not ''; tags ride along verbatim.
+    expect(lead).toMatchObject({ kind: 'character', name: 'Aria', description: null })
+    expect(lead?.tags).toEqual(['protagonist'])
+    // Authorship contract: wizard-authored identity seeds the state, blank
+    // sub-fields are absent rather than '', and every classifier-owned slot
+    // (current_location_id / equipped_items / inventory / lastSeenAt) is empty.
+    expect(lead?.state).toEqual({
+      visual: { physique: 'wiry', eyes: 'grey' },
+      traits: ['wary'],
+      drives: ['find the wells'],
+      voice: 'Clipped, salt-dry.',
+      current_location_id: null,
+      equipped_items: [],
+      inventory: [],
+      faction_id: FACTION_ID,
+      lastSeenAt: null,
+    })
+
+    expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
+      parent_location_id: null,
+      condition: 'drowned',
+    })
+    // Blank condition is omitted, and at_location_id is classifier-owned.
+    expect(entityRows.find((r) => r.id === ITEM_ID)?.state).toEqual({ at_location_id: null })
+    expect(entityRows.find((r) => r.id === FACTION_ID)?.state).toEqual({
+      standing: 'feared',
+      agenda: ['keep the wells'],
+    })
+  })
+
+  it('re-guards intra-cast refs whose target row is gone by the time Finish runs', async () => {
+    const { db, ctx } = await setup()
+
+    // The store prunes factionId / parentLocationId on removeCast; this is the
+    // backstop for a working state that reached step 5 some other way.
+    const result = await finishWizard(
+      makeState({
+        title: 'Orphaned Refs',
+        cast: [
+          { ...leadCast(), factionId: FACTION_ID },
+          {
+            ...emptyCastDraft('location', LOCATION_ID),
+            name: 'The Salt Wells',
+            parentLocationId: 'loc_66666666-6666-6666-6666-666666666666',
+          },
+        ],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2800,
+    )
+
+    expect(result.status).toBe('ok')
+    const entityRows = await db.select().from(entities)
+    expect(entityRows.find((r) => r.id === LEAD_ID)?.state).toMatchObject({ faction_id: null })
+    expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
+      parent_location_id: null,
+    })
+  })
+
+  it('embeds every cast row and the lore rows in ONE call, cast first', async () => {
+    const { ctx } = await setup()
+    const row = loreRow({ title: 'Magic', body: 'Wells.' })
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'One Call',
+        leadEntityId: LEAD_ID,
+        cast: [
+          { ...leadCast(), description: 'A tide-reader.' },
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells', status: 'staged' },
+        ],
+        lore: [row],
+        opening: { content: 'You wake.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2900,
+    )
+
+    expect(result.status).toBe('ok')
+    // Contract C5 — one batched call for the whole commit, never one per row or
+    // one per collection; the full array pins the order too.
+    expect(mockedEmbed).toHaveBeenCalledTimes(1)
+    expect(mockedEmbed.mock.calls[0][1]).toEqual([
+      {
+        kind: 'entity',
+        id: LEAD_ID,
+        branchId: expect.any(String),
+        fields: ['Aria', 'A tide-reader.'],
+      },
+      {
+        kind: 'entity',
+        id: LOCATION_ID,
+        branchId: expect.any(String),
+        fields: ['The Salt Wells', null],
+      },
+      { kind: 'lore', id: row.id, branchId: expect.any(String), fields: ['Magic', 'Wells.'] },
+    ])
+  })
+
+  it('opening refs: keeps active ids, drops staged ones and unknown ids', async () => {
+    const { db, ctx } = await setup()
+    const unknownId = 'char_77777777-7777-7777-7777-777777777777'
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Scene Metadata',
+        leadEntityId: LEAD_ID,
+        cast: [
+          leadCast(),
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells' },
+          { ...emptyCastDraft('item', ITEM_ID), name: 'Tide Charter', status: 'staged' },
+        ],
+        opening: {
+          content: 'You wake at dawn.',
+          // Staged rows can't appear in scene metadata (canon); the unknown id is
+          // a model hallucination that survived reverse-substitution.
+          sceneEntities: [LEAD_ID, ITEM_ID, unknownId],
+          currentLocationId: LOCATION_ID,
+          model: 'gpt-x',
+        },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3100,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
+    // An active location the commit materializes now rides into the opening.
+    expect(entryRows[0].metadata!.currentLocationId).toBe(LOCATION_ID)
+  })
+
+  it('drops a currentLocationId whose target is staged or not a location', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Wrong Location Ref',
+        cast: [
+          leadCast(),
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells', status: 'staged' },
+        ],
+        // A character id in the location slot: resolveOpening's reverse
+        // substitution never checks kind, so the guard has to.
+        opening: { content: 'Once.', currentLocationId: LEAD_ID, model: 'gpt-x' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3200,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.currentLocationId).toBeNull()
+  })
+
+  it('a one-click lead reassignment leaves the ex-lead in sceneEntities: still an active row', async () => {
+    const { db, ctx } = await setup()
+    const newLeadId = 'char_88888888-8888-8888-8888-888888888888'
+
+    // wizard.md → Compact row presentation: `⭐ Set as lead` moves the lead in one
+    // click and deliberately does NOT rewrite the opening's sceneEntities. That
+    // is only safe because the ex-lead is still an ACTIVE cast row, so this
+    // commit materializes it and the ref resolves — pinned here because the
+    // active-row filter is what makes the decision safe.
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Reassigned',
+        leadEntityId: newLeadId,
+        cast: [leadCast(), leadCast('Kade', newLeadId)],
+        opening: { content: 'You wake at dawn.', sceneEntities: [LEAD_ID], model: 'gpt-x' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3300,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.leadEntityId).toBe(newLeadId)
+
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
+  })
+
+  it('blocks Finish when a cast row carries an empty name; DB untouched', async () => {
+    const { db, ctx } = await setup()
+
+    // Same persistence hole as the lore re-check below: hydrate() sets
+    // furthestStep = state.step with no re-validation, so a draft resumed at
+    // step 5 never passed step 4's gate.
+    const result = await finishWizard(
+      makeState({
+        title: 'A title',
+        opening: { content: 'Once.' },
+        cast: [{ ...emptyCastDraft('location', LOCATION_ID), name: '   ' }],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3400,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['cast'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('rejects a dirty cast row before the embedder gate runs, even with no usable embedder', async () => {
+    const { ctx } = await setup()
+    const execd: string[] = []
+
+    const result = await finishWizard(
+      makeState({
+        title: 'A title',
+        opening: { content: 'Once.' },
+        cast: [{ ...leadCast(''), status: 'staged' }],
+      }),
+      ctx,
+      vi.fn(),
+      // Deliberately unusable embedder: if the gate ran before the cast check,
+      // this would surface as embed-blocked instead of invalid/cast.
+      { ...APP_DEFAULTS, embeddingModelId: null, installedLocalIds: [] },
+      { exec: async (sql) => void execd.push(sql), resolveProvider: () => undefined },
+      3500,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['cast'] })
+    expect(mockedEmbed).not.toHaveBeenCalled()
+    expect(execd).toHaveLength(0)
   })
 
   it('threads a chosen effectiveDim into stories.settings.effectiveDim', async () => {
@@ -417,8 +776,8 @@ describe('finishWizard', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Truncated Lead',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
+        cast: [leadCast()],
         opening: { content: 'Once.', sceneEntities: [LEAD_ID] },
         effectiveDim: 512,
       }),
@@ -530,7 +889,7 @@ describe('finishWizard', () => {
     expect(await db.select().from(stories)).toHaveLength(0)
   })
 
-  it('blocks Finish when a lead is required but the name is empty', async () => {
+  it('blocks Finish when a lead is required but the cast holds none', async () => {
     const { db, ctx } = await setup()
 
     const result = await finishWizard(
@@ -538,7 +897,6 @@ describe('finishWizard', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'A title',
-        leadName: '',
         opening: { content: 'Once.' },
       }),
       ctx,
@@ -747,8 +1105,8 @@ describe('finishWizard — embedder hard gate', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Doomed',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
+        cast: [leadCast()],
         opening: { content: 'You wake.' },
       }),
       ctx,
@@ -776,8 +1134,8 @@ describe('finishWizard — embedder hard gate', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Doomed',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
+        cast: [leadCast()],
         opening: { content: 'You wake.' },
       }),
       ctx,
@@ -807,8 +1165,8 @@ describe('finishWizard — embedder hard gate', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Provider',
-        leadName: 'Aria',
         leadEntityId: LEAD_ID,
+        cast: [leadCast()],
         opening: { content: 'You wake.' },
       }),
       ctx,

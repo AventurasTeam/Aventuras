@@ -24,11 +24,6 @@ describe('wizardStore', () => {
     expect(wizardStore.getWizard().state.opening.content).toBe('Once.')
   })
 
-  it('setLeadName updates leadName', () => {
-    wizardStore.setLeadName('Aria')
-    expect(wizardStore.getWizard().state.leadName).toBe('Aria')
-  })
-
   it('setEffectiveDim stores the dim and marks it touched (incl. Native/null)', () => {
     wizardStore.setEffectiveDim(1024)
     expect(wizardStore.getWizard().state.effectiveDim).toBe(1024)
@@ -57,6 +52,8 @@ describe('wizardStore', () => {
     wizardStore.setStep(3)
     wizardStore.patchDefinition({ mode: 'adventure' })
 
+    // `leadName` has no mutator any more (the lead lives in `cast`), so hydrate
+    // is the only way it ever gets a value — a resumed pre-3.6b draft.
     const draft = { ...emptyWorkingState(), leadName: 'Aria', step: 5 }
     wizardStore.hydrate(draft)
 
@@ -66,12 +63,12 @@ describe('wizardStore', () => {
   })
 
   it('reset returns to empty', () => {
-    wizardStore.setLeadName('X')
+    wizardStore.setLeadEntityId('char_x')
     wizardStore.setStep(2)
     const before = wizardStore.getWizard().state.definition
     wizardStore.reset()
     const after = wizardStore.getWizard().state.definition
-    expect(wizardStore.getWizard().state.leadName).toBe('')
+    expect(wizardStore.getWizard().state.leadEntityId).toBeNull()
     expect(wizardStore.getWizard().state.step).toBe(1)
     expect(before).not.toBe(after)
   })

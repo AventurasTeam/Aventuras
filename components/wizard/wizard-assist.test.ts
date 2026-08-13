@@ -60,7 +60,6 @@ describe('runOpeningAssist', () => {
 
   it('round-trips a returned lead placeholder back to the real lead id', async () => {
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Aria')
     wizardStore.setLeadEntityId(LEAD_ID)
     // leadEntityId is the only id in state, so substituteIds allocates it 'c1'.
     const res = await runOpeningAssist(
@@ -85,7 +84,6 @@ describe('runOpeningAssist', () => {
     // stays empty until the lead is added as a cast row, so the returned
     // placeholder is unresolvable.
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Kade')
     const res = await runOpeningAssist(
       '',
       signal,

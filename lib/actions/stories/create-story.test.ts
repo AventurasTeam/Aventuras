@@ -25,7 +25,7 @@ import type { StoryDefinition } from '@/lib/db/stories/story-config-schema'
 import { buildStorySettings } from '@/lib/db/stories/story-settings-defaults'
 import { EmbedderCallError, EmbedderInitError, type EmbedderConfig } from '@/lib/embedder'
 
-import { createStoryWithBranch } from './create-story'
+import { createStoryWithBranch, type WizardCastEntityInput } from './create-story'
 
 // Mock only the embed helper at the module boundary; the real ops builders
 // (upsertVecOps / clearEmbeddingStaleOp from @/lib/db) run against the harness.
@@ -67,6 +67,19 @@ function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefiniti
 }
 
 const metadata = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
+
+function castRow(overrides: Partial<WizardCastEntityInput> = {}): WizardCastEntityInput {
+  return {
+    id: LEAD_ID,
+    kind: 'character',
+    name: 'Aria',
+    description: null,
+    status: 'active',
+    tags: [],
+    state: emptyEntityState('character'),
+    ...overrides,
+  }
+}
 
 function loreRow(overrides: Partial<WizardLoreDraft> = {}): WizardLoreDraft {
   return {
@@ -144,7 +157,7 @@ describe('createStoryWithBranch', () => {
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
-        lead: { id: LEAD_ID, name: 'Aria' },
+        cast: [castRow()],
       },
       ctx,
       2000,
@@ -164,6 +177,89 @@ describe('createStoryWithBranch', () => {
       embeddingStale: 1,
     })
     expect(entityRows[0].state).toEqual(emptyEntityState('character'))
+
+    expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('commits every cast kind with its own state, status, description, and tags', async () => {
+    const { db, ctx } = await setup()
+
+    const rows: WizardCastEntityInput[] = [
+      castRow({
+        description: 'A tide-reader.',
+        tags: ['protagonist'],
+        state: {
+          visual: { hair: 'salt-white' },
+          traits: ['wary'],
+          drives: ['find the wells'],
+          voice: 'clipped',
+          current_location_id: null,
+          equipped_items: [],
+          inventory: [],
+          faction_id: 'fact_22222222-2222-2222-2222-222222222222',
+          lastSeenAt: null,
+        },
+      }),
+      castRow({
+        id: 'loc_33333333-3333-3333-3333-333333333333',
+        kind: 'location',
+        name: 'The Salt Wells',
+        status: 'staged',
+        state: { parent_location_id: null, condition: 'drowned' },
+      }),
+      castRow({
+        id: 'item_44444444-4444-4444-4444-444444444444',
+        kind: 'item',
+        name: 'Tide Charter',
+        state: { at_location_id: null },
+      }),
+      castRow({
+        id: 'fact_22222222-2222-2222-2222-222222222222',
+        kind: 'faction',
+        name: 'The Charterhouse',
+        state: { standing: 'feared', agenda: ['keep the wells'] },
+      }),
+    ]
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Mixed Cast',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake at dawn.',
+        openingMetadata: metadata,
+        cast: rows,
+      },
+      ctx,
+      2100,
+    )
+
+    const entityRows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(entityRows).toHaveLength(4)
+
+    const lead = entityRows.find((r) => r.id === LEAD_ID)
+    expect(lead).toMatchObject({
+      kind: 'character',
+      description: 'A tide-reader.',
+      status: 'active',
+    })
+    expect(lead?.tags).toEqual(['protagonist'])
+    expect(lead?.state).toEqual(rows[0].state)
+
+    const location = entityRows.find((r) => r.kind === 'location')
+    // Staged rows commit as staged — the narrative promotes them later.
+    expect(location).toMatchObject({ status: 'staged', description: null })
+    expect(location?.state).toEqual({ parent_location_id: null, condition: 'drowned' })
+
+    expect(entityRows.find((r) => r.kind === 'item')?.state).toEqual({ at_location_id: null })
+    expect(entityRows.find((r) => r.kind === 'faction')?.state).toEqual({
+      standing: 'feared',
+      agenda: ['keep the wells'],
+    })
 
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
@@ -198,7 +294,7 @@ describe('createStoryWithBranch', () => {
     expect(await db.select().from(entities)).toHaveLength(0)
   })
 
-  it('rejects a definition whose leadEntityId has no matching lead entity', async () => {
+  it('rejects a definition whose leadEntityId matches no cast row', async () => {
     const { db, ctx } = await setup()
 
     await expect(
@@ -213,6 +309,11 @@ describe('createStoryWithBranch', () => {
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'x',
           openingMetadata: metadata,
+          // A cast that carries rows but not THIS id: the guard must resolve the
+          // pointer, not just check that some cast was supplied.
+          cast: [
+            castRow({ id: 'char_99999999-9999-9999-9999-999999999999', name: 'Someone else' }),
+          ],
         },
         ctx,
         5000,
@@ -223,6 +324,54 @@ describe('createStoryWithBranch', () => {
     expect(await db.select().from(branches)).toHaveLength(0)
     expect(await db.select().from(storyEntries)).toHaveLength(0)
     expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('rejects a leadEntityId pointing at a non-character cast row', async () => {
+    const { db, ctx } = await setup()
+    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
+
+    await expect(
+      createStoryWithBranch(
+        {
+          title: 'A place cannot lead',
+          definition: makeDefinition({
+            mode: 'adventure',
+            narration: 'first',
+            leadEntityId: locationId,
+          }),
+          settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+          openingContent: 'x',
+          openingMetadata: metadata,
+          cast: [castRow({ id: locationId, kind: 'location', name: 'The Salt Wells' })],
+        },
+        ctx,
+        5100,
+      ),
+    ).rejects.toThrow()
+
+    expect(await db.select().from(stories)).toHaveLength(0)
+    expect(await db.select().from(entities)).toHaveLength(0)
+  })
+
+  it('accepts a cast character that is not the lead when no lead is declared', async () => {
+    const { db, ctx } = await setup()
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Supporting cast only',
+        definition: makeDefinition(),
+        settings: buildStorySettings('creative', NO_APP_DEFAULTS),
+        openingContent: 'Once.',
+        openingMetadata: metadata,
+        cast: [castRow()],
+      },
+      ctx,
+      5200,
+    )
+
+    const entityRows = await db.select().from(entities).where(eq(entities.branchId, branchId))
+    expect(entityRows).toHaveLength(1)
+    expect(entityRows[0].id).toBe(LEAD_ID)
   })
 
   it('adventure with null leadEntityId is rejected by the definition schema', async () => {
@@ -370,9 +519,10 @@ describe('createStoryWithBranch — embed step', () => {
     })
   }
 
-  it('embeds the lead: vec ops land after the entity insert and clear its stale flag', async () => {
+  it('embeds the cast: every entity insert precedes the vec ops and each stale flag clears', async () => {
     const { db, sqlite, ctx } = await setup()
     realVecOps()
+    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
 
     const captured: SqlOp[] = []
     const capturingCtx = {
@@ -394,7 +544,7 @@ describe('createStoryWithBranch — embed step', () => {
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
-        lead: { id: LEAD_ID, name: 'Aria' },
+        cast: [castRow(), castRow({ id: locationId, kind: 'location', name: 'The Wells' })],
         embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
       },
       capturingCtx,
@@ -402,21 +552,24 @@ describe('createStoryWithBranch — embed step', () => {
     )
 
     expect(mockedEmbed).toHaveBeenCalledTimes(1)
-    const entityInsertIdx = captured.findIndex((op) => /insert into "entities"/i.test(op.sql))
+    // The LAST entity insert, not the first: a splice moved inside the per-row
+    // loop would still put a vec op after row 1's insert but before row 2's.
+    const lastEntityInsertIdx = captured.findLastIndex((op) =>
+      /insert into "entities"/i.test(op.sql),
+    )
     const vecInsertIdx = captured.findIndex((op) => /entities_vec_384/i.test(op.sql))
-    expect(entityInsertIdx).toBeGreaterThanOrEqual(0)
-    expect(vecInsertIdx).toBeGreaterThan(entityInsertIdx)
+    expect(lastEntityInsertIdx).toBeGreaterThanOrEqual(0)
+    expect(vecInsertIdx).toBeGreaterThan(lastEntityInsertIdx)
 
     const vecRows = sqlite
-      .prepare('select id from entities_vec_384 where branch_id = ?')
+      .prepare('select id from entities_vec_384 where branch_id = ? order by id')
       .all(branchId) as { id: string }[]
-    expect(vecRows).toHaveLength(1)
-    expect(vecRows[0].id).toBe(LEAD_ID)
+    expect(vecRows.map((r) => r.id)).toEqual([LEAD_ID, locationId])
 
-    const entityRow = sqlite
-      .prepare('select embedding_stale from entities where id = ?')
-      .get(LEAD_ID) as { embedding_stale: number }
-    expect(entityRow.embedding_stale).toBe(0)
+    const staleRows = sqlite
+      .prepare('select embedding_stale from entities where branch_id = ?')
+      .all(branchId) as { embedding_stale: number }[]
+    expect(staleRows.map((r) => r.embedding_stale)).toEqual([0, 0])
   })
 
   it('rolls back everything when the embed throws: no rows persist', async () => {
@@ -435,7 +588,7 @@ describe('createStoryWithBranch — embed step', () => {
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'You wake.',
           openingMetadata: metadata,
-          lead: { id: LEAD_ID, name: 'Aria' },
+          cast: [castRow()],
           embed: { config: LOCAL_CONFIG, exec: async () => {} },
         },
         ctx,
@@ -508,9 +661,10 @@ describe('createStoryWithBranch — embed step', () => {
     expect(b?.embeddingStale).toBe(1)
   })
 
-  it('embeds the lead and lore in one batched call, not one per row', async () => {
+  it('embeds the whole cast and lore in one batched call, not one per row', async () => {
     const { ctx } = await setup()
     const row = loreRow({ title: 'Magic', body: 'Wells.' })
+    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
 
     const { branchId } = await createStoryWithBranch(
       {
@@ -523,7 +677,12 @@ describe('createStoryWithBranch — embed step', () => {
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
-        lead: { id: LEAD_ID, name: 'Aria' },
+        cast: [
+          castRow({ description: 'A tide-reader.' }),
+          // Staged rows embed too: retrieval must be able to surface them the
+          // moment the narrative promotes one.
+          castRow({ id: locationId, kind: 'location', name: 'The Wells', status: 'staged' }),
+        ],
         lore: [row],
         embed: { config: LOCAL_CONFIG, exec: async () => {} },
       },
@@ -531,9 +690,12 @@ describe('createStoryWithBranch — embed step', () => {
       9100,
     )
 
+    // Contract C5 — one call, cast rows ahead of lore, and the row order is
+    // asserted whole so a split into two calls or a reordering both fail here.
     expect(mockedEmbed).toHaveBeenCalledTimes(1)
     expect(mockedEmbed.mock.calls[0][1]).toEqual([
-      { kind: 'entity', id: LEAD_ID, branchId, fields: ['Aria', null] },
+      { kind: 'entity', id: LEAD_ID, branchId, fields: ['Aria', 'A tide-reader.'] },
+      { kind: 'entity', id: locationId, branchId, fields: ['The Wells', null] },
       { kind: 'lore', id: row.id, branchId, fields: ['Magic', 'Wells.'] },
     ])
   })
@@ -602,7 +764,7 @@ describe('createStoryWithBranch — embed step', () => {
     expect(await db.select().from(lore)).toHaveLength(0)
   })
 
-  it('embed supplied but no lead and no lore: the helper is skipped, no vec DDL runs', async () => {
+  it('embed supplied but no cast and no lore: the helper is skipped, no vec DDL runs', async () => {
     const { sqlite, ctx } = await setup()
     const execd: string[] = []
 

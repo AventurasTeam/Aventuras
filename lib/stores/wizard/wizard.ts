@@ -34,7 +34,9 @@ type WizardState = WizardSnapshot & {
   setStep: (step: number) => void
   patchDefinition: (patch: Partial<WizardWorkingState['definition']>) => void
   patchOpening: (patch: Partial<WizardWorkingState['opening']>) => void
-  setLeadName: (leadName: string) => void
+  // No setter for `leadName`: since the lead moved into `cast`, nothing may
+  // write that field again. It survives on the working state only so a
+  // pre-3.6b draft still parses, and migrateLegacyLead blanks it on load.
   setLeadEntityId: (leadEntityId: string | null) => void
   setEffectiveDim: (effectiveDim: number | null) => void
   setCustomDimInvalid: (invalid: boolean) => void
@@ -125,7 +127,6 @@ const store = createStore<WizardState>()((set) => {
       set((s) => ({ state: { ...s.state, definition: { ...s.state.definition, ...patch } } })),
     patchOpening: (patch) =>
       set((s) => ({ state: { ...s.state, opening: { ...s.state.opening, ...patch } } })),
-    setLeadName: (leadName) => set((s) => ({ state: { ...s.state, leadName } })),
     setLeadEntityId: (leadEntityId) => set((s) => ({ state: { ...s.state, leadEntityId } })),
     setEffectiveDim: (effectiveDim) =>
       set((s) => ({
@@ -217,7 +218,6 @@ export const wizardStore = {
   setStep: api.setStep,
   patchDefinition: api.patchDefinition,
   patchOpening: api.patchOpening,
-  setLeadName: api.setLeadName,
   setLeadEntityId: api.setLeadEntityId,
   setEffectiveDim: api.setEffectiveDim,
   setCustomDimInvalid: api.setCustomDimInvalid,
