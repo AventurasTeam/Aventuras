@@ -484,10 +484,14 @@ cast roster is known but only some enter the opening scene.
   `Lead unset — staged characters can't be lead.`
 - **Lead-required gate tightens** — "at least one **active**
   character marked as lead." Staged characters don't satisfy.
-- **Opening generation enum-list filters to active.** Wizard-assist's
-  structured-output schema for opening generation passes only
-  `status='active'` cast as the enum for `sceneEntities`. Staged
-  characters can't appear in opening scene metadata.
+- **Opening generation filters to active, kind-aware.** The
+  structured-output schema for opening generation is unconstrained
+  (a bare string array for `sceneEntities`, a nullable string for
+  `currentLocationId`) — the prompt lists only active cast,
+  kind-qualified (`sceneEntities` draws character/item ids,
+  `currentLocationId` draws location ids), and Finish re-filters the
+  model's refs against that same active + kind rule at commit.
+  Staged characters can't appear in opening scene metadata.
 - **Stage promotion is classifier-per-turn.** When prose introduces
   a staged entity (it appears in `metadata.sceneEntities` of a
   new entry), the classifier promotes status `staged` → `active`
@@ -626,7 +630,7 @@ Wizard-assist emits:
 ```ts
 {
   prose: string,
-  sceneEntities: string[],          // subset of active cast entity ids
+  sceneEntities: string[],          // subset of active character/item cast entity ids
   currentLocationId: string | null, // one of the active location ids
   worldTime: 0                      // story start; always 0
 }
@@ -940,7 +944,8 @@ surface per-call cost.
 ### Pagination on list results
 
 `Generate more` after import preserves already-imported rows;
-case-insensitive name dedupe applies (collisions show
+case-insensitive dedupe applies, scoped by kind — a name collision
+across different kinds is not a match (collisions show
 `(already exists)` muted; checkbox auto-disabled).
 
 ### Context-shaping
@@ -981,8 +986,8 @@ setting/lore/cast/opening).
   `Untitled story` placeholder; rename when resumed.
 - **Replace-on-existing on genre/tone.** Confirm modal fires when
   preset OR AI-suggest accept would overwrite non-empty content.
-- **Lead unset cascade.** Multiple paths can unmark lead (kind
-  change, status flip to staged, row deletion). Same
+- **Lead unset cascade.** Two paths can unmark lead (status flip to
+  staged, row deletion). Same
   [toast](../../patterns/toast.md) copy ("Lead unset — ...") on each.
 
 ## Mobile expression
