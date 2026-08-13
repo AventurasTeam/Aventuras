@@ -593,16 +593,13 @@ describe('finishWizard', () => {
     expect(entryRows[0].metadata!.currentLocationId).toBe(LOCATION_ID)
   })
 
-  it('drops a currentLocationId whose target is staged or not a location', async () => {
+  it('drops a currentLocationId pointing at a row that is not a location', async () => {
     const { db, ctx } = await setup()
 
     const result = await finishWizard(
       makeState({
-        title: 'Wrong Location Ref',
-        cast: [
-          leadCast(),
-          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells', status: 'staged' },
-        ],
+        title: 'Wrong Kind Ref',
+        cast: [leadCast(), { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells' }],
         // A character id in the location slot: resolveOpening's reverse
         // substitution never checks kind, so the guard has to.
         opening: { content: 'Once.', currentLocationId: LEAD_ID, model: 'gpt-x' },
@@ -622,6 +619,40 @@ describe('finishWizard', () => {
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchRows[0].id))
     expect(entryRows[0].metadata!.currentLocationId).toBeNull()
+  })
+
+  it('drops a currentLocationId pointing at a staged location', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Staged Location Ref',
+        // The location IS materialized by this commit, so a dangling-ref check
+        // alone would let it through — wizard.md → Status field keeps staged
+        // entities out of scene metadata, and currentLocationId is part of it.
+        cast: [
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells', status: 'staged' },
+        ],
+        opening: { content: 'Once.', currentLocationId: LOCATION_ID, model: 'gpt-x' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3250,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.currentLocationId).toBeNull()
+    // The row itself still commits — staged is a scene-metadata rule, not a
+    // "don't create it" rule.
+    expect(await db.select().from(entities)).toHaveLength(1)
   })
 
   it('a one-click lead reassignment leaves the ex-lead in sceneEntities: still an active row', async () => {
