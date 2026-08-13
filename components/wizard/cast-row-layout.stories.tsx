@@ -98,6 +98,9 @@ export const WideContainerKeepsBothFieldsStacked: Story = {
     await screen.findByLabelText('Name')
     const { container, name, status } = measure()
     expect(container).toBe(1400)
+    // Bound status independently: every term on the right below is derived from
+    // the same measurement, so a collapsed status would satisfy it trivially.
+    expect(status).toBeLessThan(container / 2)
     expect(name).toBeGreaterThan(container - status - 40)
   },
 }

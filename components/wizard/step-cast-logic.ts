@@ -1,5 +1,10 @@
 import type { WizardCastDraft, WizardCharacterDraft } from '@/lib/db'
 
+/**
+ * Single-member today, and callers lean on that: both the compact row and the
+ * editor render the name error from the row-level `invalid` flag alone. Adding
+ * a second field means teaching them to attribute the error per-field.
+ */
 export type CastRowField = 'name'
 
 export function castRowErrors(row: WizardCastDraft): CastRowField[] {
