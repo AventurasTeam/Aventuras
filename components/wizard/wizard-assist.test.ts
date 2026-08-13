@@ -81,7 +81,7 @@ describe('runOpeningAssist', () => {
   })
 
   it('falls back to user-written (drops metadata) on a lead-required path with no minted lead id', async () => {
-    // No id is minted here anymore — even on a lead-required path, the idMap
+    // No id is minted here — even on a lead-required path, the idMap
     // stays empty until the lead is added as a cast row, so the returned
     // placeholder is unresolvable.
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
