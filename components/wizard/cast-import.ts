@@ -3,14 +3,16 @@ import { generateId } from '@/lib/ids'
 import { CAST_ID_PREFIX } from '@/lib/stores'
 import type { CastSuggestion } from '@/lib/wizard'
 
-// docs/data-model.md → Zod degradation bounds, enforced at the DB write
-// boundary (lib/db/entities/entity-state-schema.ts): voice ≤ 2000 chars,
+// docs/data-model.md → Zod degradation bounds: voice ≤ 2000 chars,
 // traits/drives/agenda arrays ≤ 50 elements, every visual sub-field and
-// condition/standing ≤ 500 chars. Clamping here means acceptance can never
-// surface a raw per-entity Zod rejection after the user already committed.
-const VOICE_MAX = 2000
-const ARRAY_MAX = 50
-const FIELD_MAX = 500
+// condition/standing ≤ 500 chars. Wizard rows land in entities.state via a
+// raw insert (lib/actions/stories/create-story.ts) that never runs
+// entityStateSchemaForKind — register.ts only validates state on an update
+// patch, which no Finish path sends — so clamping here is the only place
+// these bounds get enforced for an imported row.
+export const VOICE_MAX = 2000
+export const ARRAY_MAX = 50
+export const FIELD_MAX = 500
 
 function clampStr(value: string, max: number): string {
   return value.slice(0, max)
@@ -36,16 +38,24 @@ export function resolveCastImports(
   mintId: (kind: WizardCastDraft['kind']) => string = (kind) => generateId(CAST_ID_PREFIX[kind]),
 ): WizardCastDraft[] {
   const idByKey = new Map<string, string>()
-  for (const row of existingCast) idByKey.set(`${row.kind}:${norm(row.name)}`, row.id)
+  // A blank name (an "Add faction" row nobody has typed into yet) must never
+  // be indexed — otherwise a blank/whitespace-only reference on another row
+  // would silently bind to it instead of resolving to null.
+  for (const row of existingCast) {
+    const key = norm(row.name)
+    if (key.length > 0) idByKey.set(`${row.kind}:${key}`, row.id)
+  }
   const minted = suggestions.map((suggestion) => ({ suggestion, id: mintId(suggestion.kind) }))
-  // Minting runs after the existing cast is indexed, so a same-kind/same-name
-  // batch row overwrites the existing row's map entry — the freshest import
-  // wins for reference-resolution purposes within this call.
-  for (const { suggestion, id } of minted)
-    idByKey.set(`${suggestion.kind}:${norm(suggestion.name)}`, id)
+  // Batch rows overwrite existing-cast entries: the freshest import wins.
+  for (const { suggestion, id } of minted) {
+    const key = norm(suggestion.name)
+    if (key.length > 0) idByKey.set(`${suggestion.kind}:${key}`, id)
+  }
 
-  const ref = (kind: 'faction' | 'location', name: string | undefined): string | null =>
-    name == null ? null : (idByKey.get(`${kind}:${norm(name)}`) ?? null)
+  const ref = (kind: 'faction' | 'location', name: string | undefined): string | null => {
+    const key = name == null ? '' : norm(name)
+    return key.length === 0 ? null : (idByKey.get(`${kind}:${key}`) ?? null)
+  }
 
   return minted.map(({ suggestion: s, id }) => {
     switch (s.kind) {

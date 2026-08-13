@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
 
-import { emptyCastDraft } from '@/lib/db'
+import { emptyCastDraft, entityStateSchemaForKind } from '@/lib/db'
 
-import { resolveCastImports } from './cast-import'
+import { ARRAY_MAX, FIELD_MAX, resolveCastImports, VOICE_MAX } from './cast-import'
 
 let n = 0
+/** Test seam — production mints real prefixed ids. */
 const mintId = (kind: string) => `${kind}_${++n}`
 
 describe('resolveCastImports', () => {
@@ -27,7 +29,7 @@ describe('resolveCastImports', () => {
           status: 'active',
           faction_name: 'Ashfall Pact',
           traits: ['stubborn'],
-          visual: { hair: 'black' },
+          visual: { hair: 'black', attire: 'leather apron' },
         },
       ],
       [],
@@ -38,12 +40,20 @@ describe('resolveCastImports', () => {
     const pact = drafts.find((d) => d.name === 'Ashfall Pact')!
     const aria = drafts.find((d) => d.name === 'Aria')!
     expect(under).toMatchObject({ kind: 'location', parentLocationId: keep.id })
-    expect(aria).toMatchObject({ kind: 'character', factionId: pact.id, traits: ['stubborn'] })
+    expect(aria).toMatchObject({
+      kind: 'character',
+      description: 'A blacksmith.',
+      factionId: pact.id,
+      traits: ['stubborn'],
+    })
     expect(aria.kind === 'character' && aria.visual.hair).toBe('black')
+    expect(aria.kind === 'character' && aria.visual.attire).toBe('leather apron')
   })
 
   it('resolves against the existing authored cast', () => {
-    const existing = [{ ...emptyCastDraft('location', 'loc_home'), name: 'Mornstone Keep' }]
+    // Untrimmed on purpose: castDraftShared.name carries no .trim(), so an
+    // authored row with padding whitespace is realistic, not a fixture typo.
+    const existing = [{ ...emptyCastDraft('location', 'loc_home'), name: '  Mornstone Keep  ' }]
     const [row] = resolveCastImports(
       [
         {
@@ -104,12 +114,9 @@ describe('resolveCastImports', () => {
     expect(fac).toMatchObject({ status: 'staged', agenda: ['expand'], standing: 'ascendant' })
   })
 
-  // Canon (wizard.md → AI-suggest): resolution scope is the imported selection
-  // plus the existing cast — never the whole suggested page. resolveCastImports
-  // only ever sees what's passed as `suggestions`, so a batch-mate the user left
-  // unchecked (never part of that argument) must resolve null exactly like a
-  // name that never existed — proven here by the same reference resolving once
-  // its batch-mate is actually included.
+  // Scope constraint: see resolveCastImports' docblock in cast-import.ts.
+  // Proven here by the same reference resolving once its batch-mate is
+  // actually part of the call.
   it('does not resolve a name whose batch-mate was left out of the imported selection', () => {
     const withoutFaction = resolveCastImports(
       [
@@ -145,9 +152,8 @@ describe('resolveCastImports', () => {
     expect(kessa).toMatchObject({ factionId: pact.id })
   })
 
-  // The minted-batch pass runs after the existing-cast pass is indexed, so a
-  // same-kind/same-name batch row overwrites the existing row's map entry —
-  // the freshest import wins for reference purposes within this call.
+  // Shadowing semantics documented on the indexing loop in cast-import.ts —
+  // endorsed behavior, not a bug.
   it('lets a same-name batch row shadow an existing-cast row of the same kind', () => {
     const existing = [{ ...emptyCastDraft('location', 'loc_old'), name: 'Mornstone Keep' }]
     const drafts = resolveCastImports(
@@ -188,9 +194,57 @@ describe('resolveCastImports', () => {
     expect(item).not.toHaveProperty('parentLocationId')
   })
 
-  // docs/data-model.md → Zod degradation bounds, enforced at the DB write
-  // boundary by lib/db/entities/entity-state-schema.ts. Clamped at import so
-  // acceptance never turns into a raw per-entity Zod rejection after the fact.
+  it('resolves a reference to a batch-mate that appears later in the batch', () => {
+    const drafts = resolveCastImports(
+      [
+        {
+          kind: 'character',
+          name: 'Aria',
+          description: '',
+          status: 'active',
+          faction_name: 'Ashfall Pact',
+        },
+        { kind: 'faction', name: 'Ashfall Pact', description: '', status: 'active' },
+      ],
+      [],
+      mintId,
+    )
+    const pact = drafts.find((d) => d.name === 'Ashfall Pact')!
+    expect(drafts[0]).toMatchObject({ factionId: pact.id })
+  })
+
+  // A blank/whitespace-only name is what an unedited "Add faction" row
+  // carries — it must never become a match target, or a blank reference on
+  // another row would silently bind to it instead of resolving to null.
+  it('treats a blank reference as unresolved, not a match against a nameless existing-cast row', () => {
+    const existing = [emptyCastDraft('faction', 'fact_blank')] // name defaults to ''
+    const [char] = resolveCastImports(
+      [{ kind: 'character', name: 'Nyra', description: '', status: 'active', faction_name: '   ' }],
+      existing,
+      mintId,
+    )
+    expect(char).toMatchObject({ factionId: null })
+  })
+
+  it('treats a blank reference as unresolved, not a match against a nameless batch row', () => {
+    const [, gatehouse] = resolveCastImports(
+      [
+        { kind: 'location', name: '', description: '', status: 'active' },
+        {
+          kind: 'location',
+          name: 'Gatehouse',
+          description: '',
+          status: 'active',
+          parent_location_name: '  ',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(gatehouse).toMatchObject({ parentLocationId: null })
+  })
+
+  // Bounds documented on the clamp constants in cast-import.ts.
   it('clamps character voice/traits/drives/visual fields to the degradation bounds', () => {
     const [char] = resolveCastImports(
       [
@@ -247,5 +301,43 @@ describe('resolveCastImports', () => {
     expect(fac.kind === 'faction' && fac.standing.length).toBe(500)
     expect(loc.kind === 'location' && loc.condition.length).toBe(500)
     expect(item.kind === 'item' && item.condition.length).toBe(500)
+  })
+})
+
+type JsonSchemaNode = {
+  properties?: Record<string, JsonSchemaNode>
+  maxLength?: number
+  maxItems?: number
+}
+
+function boundAt(schema: z.ZodType, path: readonly string[]) {
+  let node = z.toJSONSchema(schema) as unknown as JsonSchemaNode
+  for (const key of path) node = node.properties?.[key] ?? {}
+  return node.maxLength ?? node.maxItems
+}
+
+// Pins VOICE_MAX/ARRAY_MAX/FIELD_MAX to entity-state-schema.ts's actual .max()
+// calls (read via zod's public toJSONSchema, not its internal `_zod.def`
+// shape) so a bump there fails this test until the clamp constants catch up.
+describe('clamp constants track the entity-state-schema degradation bounds', () => {
+  it('character: voice, traits, drives, every visual.* sub-field', () => {
+    const schema = entityStateSchemaForKind('character')
+    expect(boundAt(schema, ['voice'])).toBe(VOICE_MAX)
+    expect(boundAt(schema, ['traits'])).toBe(ARRAY_MAX)
+    expect(boundAt(schema, ['drives'])).toBe(ARRAY_MAX)
+    for (const field of ['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing']) {
+      expect(boundAt(schema, ['visual', field])).toBe(FIELD_MAX)
+    }
+  })
+
+  it('location / item: condition', () => {
+    expect(boundAt(entityStateSchemaForKind('location'), ['condition'])).toBe(FIELD_MAX)
+    expect(boundAt(entityStateSchemaForKind('item'), ['condition'])).toBe(FIELD_MAX)
+  })
+
+  it('faction: agenda, standing', () => {
+    const schema = entityStateSchemaForKind('faction')
+    expect(boundAt(schema, ['agenda'])).toBe(ARRAY_MAX)
+    expect(boundAt(schema, ['standing'])).toBe(FIELD_MAX)
   })
 })
