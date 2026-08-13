@@ -203,14 +203,7 @@ describe('PostGenerationPhase', () => {
         ),
       )
 
-      expect(generateSuggestions).toHaveBeenCalledWith(
-        [],
-        [],
-        [],
-        expect.objectContaining({ mode: 'adventure' }),
-        'The dragon fell.',
-        'story-1',
-      )
+      expect(generateSuggestions).toHaveBeenCalledWith([], [], [], 'The dragon fell.', 'story-1')
       expect(translateSuggestions).toHaveBeenCalledWith(suggestions, 'it', 'story-1')
     })
   })

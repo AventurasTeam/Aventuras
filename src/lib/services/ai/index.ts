@@ -337,14 +337,12 @@ class AIService {
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries: Entry[] | undefined,
-    promptContext: PromptContext | undefined,
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
   ): Promise<SuggestionsResult> {
     log('generateSuggestions called', {
       entriesCount: entries.length,
       threadsCount: activeThreads.length,
-      hasPromptContext: !!promptContext,
       lorebookEntriesCount: lorebookEntries?.length ?? 0,
       latestNarrativeLength: latestNarrativeResponse?.length ?? 0,
     })

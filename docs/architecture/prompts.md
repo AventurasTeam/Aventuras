@@ -41,11 +41,13 @@ checks when omitted, and every prompt rendered without one silently resolves aga
 the user's chosen pack sits unused. Nothing in the output says so. Where the parameter would otherwise
 land behind an optional one, it goes **first** rather than becoming optional itself.
 
-Image style templates and the interactive-lorebook tool template are external — raw text, never rendered
-through `ContextBuilder` — but they live in a pack and resolve the same way, through
-`resolveStylePrompt(storyId, styleId)` / `resolveStylePromptForPack(packId, styleId)` in
-`services/ai/image/stylePrompt.ts`. The Vault is global and has no story, so it resolves against
-`default-pack` by design.
+Image style templates and the interactive-lorebook tool template are external — raw text spliced into a
+prompt, never rendered through Liquid — but they live in a pack, so they call `resolveTemplate` directly
+rather than reimplementing the chain: `resolveStylePrompt(storyId, styleId)` /
+`resolveStylePromptForPack(packId, styleId)` in `services/ai/image/stylePrompt.ts` wrap it, adding only
+the built-in style for the case where the id resolves to nothing. A second chain would drift, and did:
+skipping the code baseline meant a pack missing `image-style-photorealistic` silently rendered soft
+anime. The Vault is global and has no story, so it resolves against `default-pack` by design.
 
 `PackService.initialize()` does two distinct things on startup, and they are not interchangeable:
 

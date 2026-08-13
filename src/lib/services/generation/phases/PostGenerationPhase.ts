@@ -55,7 +55,6 @@ export interface PostGenerationDependencies {
     entries: StoryEntry[],
     activeThreads: StoryBeat[],
     lorebookEntries: Entry[] | undefined,
-    promptContext: PromptContext | undefined,
     latestNarrativeResponse: string | undefined,
     storyId: string | undefined,
   ) => Promise<{ suggestions: Suggestion[] }>
@@ -151,7 +150,6 @@ export class PostGenerationPhase {
       entries,
       activeThreads,
       lorebookEntries,
-      promptContext,
       narrativeResponse,
       translationSettings,
     } = input
@@ -159,7 +157,6 @@ export class PostGenerationPhase {
       entries,
       activeThreads,
       lorebookEntries,
-      promptContext,
       narrativeResponse,
       storyId,
     )

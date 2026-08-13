@@ -936,13 +936,6 @@
         entries: story.entries,
         pendingQuests: story.pendingQuests,
         storyMode: story.storyMode,
-        pov: story.pov,
-        tense: story.tense,
-        protagonistName,
-        genre: story.currentStory.genre ?? undefined,
-        settingDescription: story.currentStory.description ?? undefined,
-        tone: story.currentStory.settings?.tone ?? undefined,
-        themes: story.currentStory.settings?.themes ?? undefined,
         lastLorebookRetrieval: ui.lastLorebookRetrieval?.all ?? null,
         translationSettings: settings.translationSettings,
       })

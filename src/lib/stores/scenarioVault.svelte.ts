@@ -280,7 +280,7 @@ class ScenarioVaultStore {
     file: File,
     options: { sourceUrl?: string; tags?: string[]; genre?: Genre },
   ): Promise<void> {
-    // Parse and convert
+    // Parse and convert. No pack: the Vault is global, so it renders from `default-pack`.
     const jsonString = await CharacterCardImport.readFile(file)
     const result = await CharacterCardImport.clean(undefined, jsonString, options.genre)
 

@@ -337,7 +337,7 @@ class CharacterVaultStore {
       const parsed = CharacterCardImport.parseJson(jsonString)
       if (!parsed) throw new Error('Failed to parse character card')
 
-      // Sanitize
+      // Sanitize. No pack: the Vault is global, so it renders from `default-pack`.
       const sanitized = await CharacterCardImport.sanitize(undefined, jsonString)
 
       // Convert image if needed
