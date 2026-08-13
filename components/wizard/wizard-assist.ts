@@ -6,19 +6,19 @@ import {
   type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
-import { generateId, IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
+import { IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 import {
+  castSuggestionsSchema,
   descriptionOutputSchema,
   labeledPromptOutputSchema,
   loreSuggestionsSchema,
   openingOutputSchema,
   settingOutputSchema,
   titleChipsSchema,
+  type CastSuggestions,
 } from '@/lib/wizard'
-
-import { needsLead } from './step-frame-logic'
 
 const ASSIST_TARGET = 'wizard-assist'
 
@@ -55,6 +55,7 @@ export type OpeningAssistValue = {
 export type TitleAssistValue = { titles: string[] }
 export type DescriptionAssistValue = { description: string }
 export type LoreAssistValue = { lore: { title: string; body: string; category: string }[] }
+export type CastAssistValue = CastSuggestions
 export type GenreAssistValue = { label: string; promptBody: string }
 export type ToneAssistValue = { label: string; promptBody: string }
 export type SettingAssistValue = { setting: string }
@@ -93,15 +94,6 @@ function generateFromState<T>(
   return call(ASSIST_TARGET, prompt, schema, config(deps), signal)
 }
 
-// The opening template addresses the lead by its cast id, so the id must exist
-// before rendering. Finish carries the same safety-net mint for paths that never
-// ran opening-assist.
-function ensureLeadId(): void {
-  const { definition, leadEntityId } = wizardStore.getWizard().state
-  if (!needsLead(definition.mode, definition.narration)) return
-  if (leadEntityId == null) wizardStore.setLeadEntityId(generateId('char'))
-}
-
 function resolveOpening(
   value: { prose: string; sceneEntities: string[]; currentLocationId: string | null },
   idMap: IdBiMap,
@@ -122,9 +114,10 @@ function resolveOpening(
   }
 }
 
-// Generate and refine share the opening's id round-trip: the lead id is minted
-// before render, real ids go into the prompt as placeholders, and the reply's
-// refs are resolved back. Only the template and the extra context differ.
+// Generate and refine share the opening's id round-trip: real ids go into the
+// prompt as placeholders, and the reply's refs are resolved back. Only the
+// template and the extra context differ. The lead's cast id already exists by
+// this point — it's minted when the lead is added to the cast, not here.
 async function openingCall(
   templateId: TemplateId,
   guidance: string,
@@ -132,7 +125,6 @@ async function openingCall(
   deps?: WizardAssistDeps,
   extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<OpeningAssistValue>> {
-  ensureLeadId()
   const idMap = new IdBiMap()
   const result = await generateFromState(
     templateId,
@@ -199,6 +191,28 @@ export function runLoreAssist(
   return generateFromState(
     TEMPLATE_IDS.wizardLore,
     loreSuggestionsSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+    { suggested: [...suggested] },
+  )
+}
+
+/**
+ * @param suggested Names already on screen from earlier pages — excluded
+ * alongside the authored cast so `Generate more` is additive (same contract
+ * as runLoreAssist).
+ */
+export function runCastAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+  suggested: readonly string[] = [],
+): Promise<GenerateStructuredResult<CastAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardCast,
+    castSuggestionsSchema,
     guidance,
     new IdBiMap(),
     signal,

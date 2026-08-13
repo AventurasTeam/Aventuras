@@ -10,6 +10,7 @@ import {
   refineSettingAssist,
   refineToneAssist,
   resolveWizardAssistModelId,
+  runCastAssist,
   runDescriptionAssist,
   runGenreAssist,
   runLoreAssist,
@@ -77,19 +78,6 @@ describe('runOpeningAssist', () => {
     expect(res.value.content).toBe('Aria stood ready.')
     expect(res.value.sceneEntities).toEqual([LEAD_ID])
     expect(res.value.model).toBe(MODEL_ID)
-  })
-
-  it('mints a lead id when the path needs one and none exists yet', async () => {
-    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Kade')
-    expect(wizardStore.getWizard().state.leadEntityId).toBeNull()
-
-    await runOpeningAssist(
-      '',
-      signal,
-      deps({ prose: 'x', sceneEntities: [], currentLocationId: null, worldTime: 0 }),
-    )
-    expect(wizardStore.getWizard().state.leadEntityId).not.toBeNull()
   })
 
   it('falls back to user-written (drops metadata) when a placeholder cannot resolve', async () => {
@@ -167,6 +155,43 @@ describe('runLoreAssist', () => {
     expect(capturedPrompt).toContain('Already written (do not repeat these):')
     expect(capturedPrompt).toContain('- The Salt Wells')
     expect(capturedPrompt).toContain('- The Hollow King')
+  })
+})
+
+describe('runCastAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the cast template and returns the parsed batch', async () => {
+    let capturedPrompt = ''
+    const entities = [{ kind: 'item', name: 'Coin', description: 'Old.' }]
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { entities } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value: { entities } })
+    expect(capturedPrompt).toContain('Suggest five cast entries')
+    // Nothing on screen yet, so the exclusion block must not render at all.
+    expect(capturedPrompt).not.toContain('Already in the cast')
+  })
+
+  it('excludes the names already on screen so a further page is not a re-roll', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { entities: [] } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runCastAssist(
+      'more items',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+      ['Old Jorin'],
+    )
+    expect(res.status).toBe('ok')
+    expect(capturedPrompt).toContain('Already in the cast (do not repeat these):')
+    expect(capturedPrompt).toContain('- Old Jorin')
   })
 })
 
