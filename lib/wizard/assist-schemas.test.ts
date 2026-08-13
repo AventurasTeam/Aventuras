@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  castSuggestionsSchema,
   descriptionOutputSchema,
   labeledPromptOutputSchema,
   loreSuggestionsSchema,
@@ -109,5 +110,48 @@ describe('settingOutputSchema', () => {
 
   it('rejects a reply with no setting field', () => {
     expect(() => settingOutputSchema.parse({})).toThrow()
+  })
+})
+
+describe('castSuggestionsSchema', () => {
+  it('parses a mixed batch and defaults omitted status to active', () => {
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: ' Aria ',
+          description: 'A blacksmith.',
+          faction_name: 'Ashfall Pact',
+        },
+        {
+          kind: 'location',
+          name: 'Mornstone Keep',
+          description: 'A fortress.',
+          parent_location_name: 'The Vale',
+        },
+        { kind: 'item', name: 'Silver Coin', description: 'Old currency.', condition: 'worn' },
+        {
+          kind: 'faction',
+          name: 'Ashfall Pact',
+          description: 'A cult.',
+          agenda: ['expand'],
+          status: 'staged',
+        },
+      ],
+    })
+    expect(parsed.entities[0]).toMatchObject({
+      name: 'Aria',
+      status: 'active',
+      faction_name: 'Ashfall Pact',
+    })
+    expect(parsed.entities[3].status).toBe('staged')
+  })
+
+  it('rejects an unknown kind', () => {
+    expect(
+      castSuggestionsSchema.safeParse({
+        entities: [{ kind: 'deity', name: 'X', description: 'Y' }],
+      }).success,
+    ).toBe(false)
   })
 })
