@@ -574,12 +574,13 @@ function groupOptions(options: SelectOption[]): {
   return groups
 }
 
-function SegmentBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+function SegmentBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
+      aria-label={label}
       className={cn(
         'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
@@ -616,12 +617,13 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
   )
 }
 
-function RadioBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+function RadioBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
+      aria-label={label}
       className={cn('flex-col gap-2', className)}
     >
       {options.map((opt) => {
@@ -694,7 +696,16 @@ function DropdownBranch({
       }}
       disabled={disabled}
     >
-      <Trigger className={className} disabled={disabled} size={size}>
+      {/* Only the default Value trigger needs the static fallback name — its
+          content is just the current value, which mutates as the user picks.
+          A caller-supplied renderTrigger has already composed its own
+          (often richer) accessible content and owns that name. */}
+      <Trigger
+        className={className}
+        disabled={disabled}
+        size={size}
+        aria-label={renderTrigger != null ? undefined : label}
+      >
         {renderTrigger != null ? (
           renderTrigger({ selected, placeholder })
         ) : (

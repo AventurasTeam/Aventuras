@@ -33,9 +33,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 
 // docs/data-model.md → Soft caps + compaction discipline: prompt-discipline
 // ceilings, not Zod-enforced. Applied here as `maxCount` so wizard-authored
-// rows start under the same ceiling the classifier is held to. An
-// over-cap hydrated row (e.g. an AI-suggest import) still shows every
-// chip with its own ×, so it stays pruneable rather than stuck.
+// rows start under the same ceiling the classifier is held to.
 const TRAITS_CAP = 8
 const DRIVES_CAP = 6
 const AGENDA_CAP = 4
@@ -52,7 +50,7 @@ function handleStatusChange(id: string, status: 'active' | 'staged') {
 
 export type CommonEditorProps<T extends WizardCastDraft> = {
   row: T
-  /** Gates the name field's error state — mirrors LoreList's `invalidIds` split (see cast-editors.stories.tsx). */
+  /** Gates the name field's error state — same `invalidIds` split as `LoreListProps` in lore-list.tsx. */
   invalid: boolean
   cast: readonly WizardCastDraft[]
   leadEntityId: string | null
@@ -74,13 +72,14 @@ function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolea
           aria-invalid={nameError}
         />
       </FormRow>
-      <View className="pt-2">
+      <FormRow label={t('wizard:cast.editor.status')}>
         <Select
           options={STATUS_OPTIONS}
           value={row.status}
           onValueChange={(status) => handleStatusChange(row.id, status as 'active' | 'staged')}
+          label={t('wizard:cast.editor.status')}
         />
-      </View>
+      </FormRow>
     </View>
   )
 }
@@ -160,9 +159,13 @@ type SetAsLeadButtonProps = {
 function SetAsLeadButton({ row, leadEntityId }: SetAsLeadButtonProps) {
   if (!canSetLead(row, leadEntityId)) return null
   return (
-    <Button variant="secondary" size="sm" onPress={() => wizardStore.setLeadEntityId(row.id)}>
-      <Text>{t('wizard:cast.setAsLead')}</Text>
-    </Button>
+    // RN's default alignItems: stretch would span the Button full-width
+    // across the editor column otherwise.
+    <View className="items-start">
+      <Button variant="secondary" size="sm" onPress={() => wizardStore.setLeadEntityId(row.id)}>
+        <Text>{t('wizard:cast.setAsLead')}</Text>
+      </Button>
+    </View>
   )
 }
 

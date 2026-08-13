@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import {
   emptyCastDraft,
@@ -153,8 +153,9 @@ export const Character: Story = {
       ),
     )
 
-    // Status renders as a two-option radio segment; each option is its own
-    // accessible name (Select accepts no aria-label of its own).
+    // Status renders as a two-option radio segment: the group itself carries
+    // `label` as its accessible name, and each option is separately named.
+    expect(screen.getByRole('radiogroup', { name: 'Status' })).toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Active' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Staged' })).not.toBeChecked()
 
@@ -173,10 +174,6 @@ export const Character: Story = {
       expect(row.drives).toEqual(['protect the forge'])
     })
 
-    // Visual disclosure — six plain text inputs. `distinguishing` in
-    // particular must be a plain Input, not a chip input: data-model.md
-    // flattened it to a single string, and data-model.md owns state shapes
-    // over the wizard screen sketch's stale `[chip input]` annotation.
     await userEvent.click(screen.getByRole('button', { name: 'Visual' }))
     await userEvent.type(await screen.findByLabelText('Physique'), 'Tall, broad-shouldered')
     await userEvent.type(screen.getByLabelText('Distinguishing'), 'A burn scar across one forearm')
@@ -459,5 +456,119 @@ export const Faction: Story = {
     await waitFor(() =>
       expect((castRowById('fact-1') as WizardFactionDraft).standing).toBe('Respected but feared'),
     )
+  },
+}
+
+export const CharacterFactionPickerRendersAsDropdownAtThreeCandidates: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([
+      characterRow({ id: 'char-1', name: 'Aria Stoneheart' }),
+      factionRow({ id: 'fact-1', name: 'The Iron Guild' }),
+      factionRow({ id: 'fact-2', name: 'The Ashfall Circle' }),
+      factionRow({ id: 'fact-3', name: 'The Sunken Court' }),
+    ])
+  },
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    await userEvent.click(await screen.findByRole('button', { name: 'More options' }))
+    // 3 candidates + the null sentinel = 4 options, over segmentMax at every
+    // tier (2 on phone, 3 elsewhere) — this is the branch every other
+    // PickFromCast story skips by staying at 1 candidate.
+    const trigger = screen.getByRole('button', { name: 'Faction' })
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'The Ashfall Circle' }))
+    await waitFor(() =>
+      expect((castRowById('char-1') as WizardCharacterDraft).factionId).toBe('fact-2'),
+    )
+
+    // The trigger's accessible name is the static `label`, not the current
+    // value, so the same query still finds it after a selection.
+    await userEvent.click(trigger)
+    await userEvent.click(await screen.findByRole('option', { name: 'Unaffiliated' }))
+    await waitFor(() =>
+      expect((castRowById('char-1') as WizardCharacterDraft).factionId).toBeNull(),
+    )
+  },
+}
+
+export const BlankNameShowsInlineErrorThatClearsOnFix: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([characterRow({ id: 'char-1', name: '' })])
+  },
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    const nameInput = await screen.findByLabelText('Name')
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText('Name is required.')).toBeInTheDocument()
+
+    await userEvent.type(nameInput, 'Aria Stoneheart')
+    await waitFor(() => expect(castRowById('char-1').name).toBe('Aria Stoneheart'))
+    expect(screen.queryByText('Name is required.')).not.toBeInTheDocument()
+  },
+}
+
+export const EditorRespectsInvalidPropRatherThanRecomputingLocally: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([characterRow({ id: 'char-1', name: '' })])
+  },
+  // Renders CharacterEditor directly with invalid={false} — bypassing
+  // CharacterEditorDemo's own invalidCastRowIds derivation — even though the
+  // row's name IS blank, to prove the editor defers to the caller-supplied
+  // `invalid` prop instead of recomputing castRowErrors itself.
+  render: () => {
+    const { cast } = wizardStore.getWizard().state
+    return (
+      <CharacterEditor
+        row={cast[0] as WizardCharacterDraft}
+        invalid={false}
+        cast={cast}
+        leadEntityId={null}
+      />
+    )
+  },
+  play: async () => {
+    const nameInput = await screen.findByLabelText('Name')
+    expect(nameInput).not.toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Name is required.')).not.toBeInTheDocument()
+  },
+}
+
+export const TraitsCapAtEightButAnExistingChipStaysRemovable: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    seedCast([characterRow({ id: 'char-1', name: 'Aria Stoneheart' })])
+  },
+  render: () => <CharacterEditorDemo id="char-1" />,
+  play: async () => {
+    const [traitsInput] = unlabeledTextboxes()
+    for (let i = 1; i <= 9; i++) {
+      await userEvent.type(traitsInput!, `trait${i}{Enter}`)
+    }
+    await waitFor(() => {
+      const row = castRowById('char-1') as WizardCharacterDraft
+      expect(row.traits).toEqual([
+        'trait1',
+        'trait2',
+        'trait3',
+        'trait4',
+        'trait5',
+        'trait6',
+        'trait7',
+        'trait8',
+      ])
+    })
+
+    // TRAITS_CAP only blocks new additions — an existing chip still removes
+    // via its own × once the row is at cap.
+    const trait1Chip = screen.getByText('trait1').parentElement!
+    await userEvent.click(within(trait1Chip).getByRole('button', { name: 'Remove' }))
+    await waitFor(() => {
+      const row = castRowById('char-1') as WizardCharacterDraft
+      expect(row.traits).toHaveLength(7)
+      expect(row.traits).not.toContain('trait1')
+    })
   },
 }
