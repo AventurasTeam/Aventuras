@@ -70,17 +70,31 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   // Resolved live against the current cast, not snapshotted at generation
   // time (wizard.md → Committed prose: refs stay intact across cast edits;
   // the user regenerates via ✨ for fresh metadata rather than this label
-  // silently going stale-but-blank).
+  // silently going stale-but-blank). Active-only: wizard.md → Status field
+  // says staged entities can't appear in scene metadata, the same rule
+  // Finish's active-row filter enforces at commit time.
   const sceneNames = opening.sceneEntities
-    .map((id) => cast.find((r) => r.id === id)?.name.trim())
+    .map((id) => cast.find((r) => r.id === id && r.status === 'active')?.name.trim())
     .filter((name): name is string => name != null && name.length > 0)
+  // Kind-guarded: resolveOpening's reverse substitution doesn't validate kind,
+  // so a non-placeholder id that survives it must not render a character's
+  // name in the location slot.
   const locationName =
     opening.currentLocationId != null
-      ? (cast.find((r) => r.id === opening.currentLocationId)?.name.trim() ?? null)
+      ? (cast
+          .find(
+            (r) =>
+              r.id === opening.currentLocationId && r.kind === 'location' && r.status === 'active',
+          )
+          ?.name.trim() ?? null)
       : null
+  // De-duped: a repeated id, two rows sharing a name, or the location id also
+  // present in sceneEntities would otherwise render "Aria · Aria".
   const parts = [
-    ...sceneNames,
-    ...(locationName != null && locationName.length > 0 ? [locationName] : []),
+    ...new Set([
+      ...sceneNames,
+      ...(locationName != null && locationName.length > 0 ? [locationName] : []),
+    ]),
   ]
   const metadataLabel = isAiGenerated && hasContent && parts.length > 0 ? parts.join(' · ') : null
 

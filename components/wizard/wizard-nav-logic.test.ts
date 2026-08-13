@@ -79,6 +79,13 @@ describe('canJumpToStep', () => {
   it('allows a forward jump to a visited step when the path is valid', () => {
     expect(canJumpToStep(5, 1, 5, valid)).toBe(true)
   })
+  it('blocks a forward jump to Opening when Cast is now unsatisfied', () => {
+    // wizard.md → Lead-required gating: a back-jump that re-triggers the lead
+    // requirement demotes step 4's pill, so a forward jump past it to 5 blocks.
+    expect(
+      canJumpToStep(5, 1, 5, mkParams({ mode: 'adventure', cast: [], leadEntityId: null })),
+    ).toBe(false)
+  })
   it('blocks a forward jump when a gating step before the target is now invalid', () => {
     // Visited step 5, but the calendar origin has since been cleared → can't
     // land on 5 by skipping the now-invalid step 2. Cast (step 4) stays

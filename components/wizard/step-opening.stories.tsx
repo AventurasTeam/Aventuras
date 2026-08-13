@@ -10,6 +10,9 @@ import { StepOpening } from './step-opening'
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
 const LOCATION_ID = 'loc_22222222-2222-2222-2222-222222222222'
+const STAGED_ID = 'char_33333333-3333-3333-3333-333333333333'
+const MISKIND_ID = 'char_44444444-4444-4444-4444-444444444444'
+const STAGED_LOCATION_ID = 'loc_55555555-5555-5555-5555-555555555555'
 const MODEL_ID = 'gpt-4o-mini'
 
 function okRun<T>(value: T) {
@@ -146,6 +149,125 @@ export const SceneMetadataJoinsCastAndLocation: Story = {
 
     // wizard.md → Committed prose: cast names and the resolved location join
     // with the canon separator ("Aria Stoneheart · Mornstone Keep").
+    expect(await screen.findByText('Scene metadata: Aria · Mornstone Keep')).toBeInTheDocument()
+  },
+}
+
+export const SceneMetadataDropsStagedAndKindMismatchedLocation: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.importCast([
+      { ...emptyCastDraft('character', LEAD_ID), name: 'Aria' },
+      { ...emptyCastDraft('character', STAGED_ID), name: 'Gandalf', status: 'staged' },
+      // Active but not in sceneEntities, so it can only surface through the
+      // (mis-typed) location slot — a distinguishable name for the kind guard,
+      // unlike reusing the lead's id, whose name would collide via dedupe.
+      { ...emptyCastDraft('character', MISKIND_ID), name: 'Bran' },
+    ])
+    wizardStore.setLeadEntityId(LEAD_ID)
+  },
+  render: () => (
+    <StepOpening
+      onSetupAssist={fn()}
+      assist={{
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: 'Aria drew her blade as the storm broke.',
+          sceneEntities: [LEAD_ID, STAGED_ID],
+          // An active CHARACTER id in the location slot — resolveOpening's
+          // reverse substitution doesn't validate kind, so this must render
+          // as absent rather than showing a character's name as a location.
+          currentLocationId: MISKIND_ID,
+          model: MODEL_ID,
+        }),
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+
+    // Staged Gandalf is dropped (wizard.md → Status field: staged entities
+    // can't appear in scene metadata); the kind-mismatched location ref
+    // (Bran, a character) is dropped too — only the active lead surfaces.
+    expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+    expect(screen.queryByText(/Gandalf/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Bran/)).not.toBeInTheDocument()
+  },
+}
+
+export const SceneMetadataDropsStagedLocation: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.importCast([
+      { ...emptyCastDraft('character', LEAD_ID), name: 'Aria' },
+      { ...emptyCastDraft('location', STAGED_LOCATION_ID), name: 'Shadowfen', status: 'staged' },
+    ])
+    wizardStore.setLeadEntityId(LEAD_ID)
+  },
+  render: () => (
+    <StepOpening
+      onSetupAssist={fn()}
+      assist={{
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: 'Aria drew her blade as the storm broke.',
+          sceneEntities: [LEAD_ID],
+          // A staged location — active-only applies to the location slot too,
+          // not just cast rows (wizard.md → Status field).
+          currentLocationId: STAGED_LOCATION_ID,
+          model: MODEL_ID,
+        }),
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+
+    expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+    expect(screen.queryByText(/Shadowfen/)).not.toBeInTheDocument()
+  },
+}
+
+export const SceneMetadataDedupesRepeatedNames: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.importCast([
+      { ...emptyCastDraft('character', LEAD_ID), name: 'Aria' },
+      { ...emptyCastDraft('location', LOCATION_ID), name: 'Mornstone Keep' },
+    ])
+    wizardStore.setLeadEntityId(LEAD_ID)
+  },
+  render: () => (
+    <StepOpening
+      onSetupAssist={fn()}
+      assist={{
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: 'Aria drew her blade as the storm broke over Mornstone Keep.',
+          // The location also appears in sceneEntities alongside the lead —
+          // the joined label must not repeat "Mornstone Keep".
+          sceneEntities: [LEAD_ID, LOCATION_ID],
+          currentLocationId: LOCATION_ID,
+          model: MODEL_ID,
+        }),
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+
     expect(await screen.findByText('Scene metadata: Aria · Mornstone Keep')).toBeInTheDocument()
   },
 }

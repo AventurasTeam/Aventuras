@@ -51,9 +51,10 @@ export async function createAdventureStory(page: Page, story: NewAdventureStory)
   await page.waitForURL(/\/reader-composer\//, { timeout: 30_000 })
 }
 
-// Creative mode has no lead (needsLead false), so Finish never embeds. Steps
-// run 1 → 2 → 3 → 5, same as the adventure flow minus the lead field. Assumes
-// the wizard is open on step 1 (past the embedder gate).
+// Creative mode has no lead (needsLead false), so Finish never embeds and Cast
+// can stay empty. Steps run 1 → 2 → 3 → 4 → 5, same as the adventure flow minus
+// authoring a cast row. Assumes the wizard is open on step 1 (past the
+// embedder gate).
 export async function createCreativeStory(page: Page, story: NewCreativeStory): Promise<void> {
   await wizard.modeOption(page, 'creative').click()
   await wizard.next(page).click()
@@ -62,6 +63,9 @@ export async function createCreativeStory(page: Page, story: NewCreativeStory): 
   await wizard.next(page).click()
 
   // Step 3 — World. No lore authored; an empty row set passes `Next`.
+  await wizard.next(page).click()
+
+  // Step 4 — Cast. No lead required; an empty cast passes `Next`.
   await wizard.next(page).click()
 
   // Step 5 — opening + title are the remaining Finish requirements.

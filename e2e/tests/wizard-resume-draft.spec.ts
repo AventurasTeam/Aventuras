@@ -41,6 +41,7 @@ test.describe('create-story wizard — resume a draft', () => {
     await wizard.next(app.window).click()
     await wizard.next(app.window).click()
     await wizard.next(app.window).click()
+    await wizard.next(app.window).click()
     await expect(wizard.opening(app.window)).toBeVisible()
     await wizard.opening(app.window).fill(STORY.opening)
     await wizard.title(app.window).fill(STORY.title)
