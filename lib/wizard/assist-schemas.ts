@@ -143,7 +143,9 @@ export const castSuggestionsSchema = z.object({
       ]),
     )
     .min(1)
-    .describe('five suggested cast entries — a mix of kinds unless the guidance directs otherwise'),
+    .describe(
+      'five suggested cast entries — a mix of kinds — unless the guidance directs otherwise',
+    ),
 })
 
 export type CastSuggestions = z.infer<typeof castSuggestionsSchema>

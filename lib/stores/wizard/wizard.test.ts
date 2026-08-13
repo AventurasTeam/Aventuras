@@ -182,9 +182,10 @@ describe('cast mutators', () => {
     // @ts-expect-error status is excluded from WizardCastDraftPatch — this line
     // must stop compiling if that exclusion is ever reverted.
     wizardStore.patchCast(id, { status: 'staged' })
-    // TS blocks the literal above; JS itself has no such gate, so the write
-    // still lands here. The compile-time rejection is the actual contract.
-    expect(wizardStore.getWizard().state.cast[0].status).toBe('staged')
+    // The directive above is the assertion. Nothing is asserted about the
+    // runtime write: JS has no gate today, but hardening one would be a fix,
+    // not a regression, so pinning the current behavior would fight that.
+    expect(wizardStore.getWizard().state.cast).toHaveLength(1)
   })
 
   it('importCast appends fully-built drafts unchanged', () => {
