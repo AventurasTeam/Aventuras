@@ -71,17 +71,20 @@ const castSuggestionStatus = z
   .describe("'active' if present from the opening scene; 'staged' for cast introduced later")
 
 // Trimmed at the parse boundary like loreSuggestionsSchema above: these payloads
-// bypass the render-layer trim, and the reference-name fields feed Task 9's
-// case-insensitive name matching, so an untrimmed name would mismatch.
+// bypass the render-layer trim, and the reference-name fields are matched
+// case-insensitively at import, so an untrimmed name would mismatch.
 const castSuggestionShared = {
   name: z.string().trim().describe('entity name'),
   description: z.string().trim().describe('two or three sentences of who or what this is'),
   status: castSuggestionStatus,
 }
 
+// Discriminant first in every member: key order survives into the rendered
+// prompt, and a union whose members all open with the same three lines is
+// harder for the model to tell apart.
 const characterSuggestionSchema = z.object({
-  ...castSuggestionShared,
   kind: z.literal('character'),
+  ...castSuggestionShared,
   voice: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
   traits: z.array(z.string().trim()).optional().describe('personality/skill traits, at most 8'),
   drives: z.array(z.string().trim()).optional().describe('goals, fears, sore spots, at most 6'),
@@ -106,8 +109,8 @@ const characterSuggestionSchema = z.object({
 })
 
 const locationSuggestionSchema = z.object({
-  ...castSuggestionShared,
   kind: z.literal('location'),
+  ...castSuggestionShared,
   parent_location_name: z
     .string()
     .trim()
@@ -117,14 +120,14 @@ const locationSuggestionSchema = z.object({
 })
 
 const itemSuggestionSchema = z.object({
-  ...castSuggestionShared,
   kind: z.literal('item'),
+  ...castSuggestionShared,
   condition: z.string().trim().optional().describe('dynamic state, e.g. "intact", "cursed"'),
 })
 
 const factionSuggestionSchema = z.object({
-  ...castSuggestionShared,
   kind: z.literal('faction'),
+  ...castSuggestionShared,
   agenda: z.array(z.string().trim()).optional().describe('current goals, at most 4'),
   standing: z.string().trim().optional().describe('dynamic power/situation'),
 })
