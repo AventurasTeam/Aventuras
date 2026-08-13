@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { mergePages, markExisting, type AssistListItem } from './assist-list-logic'
+import { itemKey, mergePages, markExisting, type AssistListItem } from './assist-list-logic'
 
 const item = (name: string): AssistListItem => ({ name, detail: `${name} detail`, payload: null })
 
@@ -35,5 +35,35 @@ describe('mergePages', () => {
   it('keeps the first occurrence when a single page repeats itself', () => {
     const merged = mergePages([], [item('A'), item('A')])
     expect(merged).toHaveLength(1)
+  })
+})
+
+describe('dedupeKey', () => {
+  const loc = { name: 'Ashfall', detail: 'a city', dedupeKey: 'location:Ashfall', payload: 1 }
+  const fac = { name: 'Ashfall', detail: 'a cult', dedupeKey: 'faction:Ashfall', payload: 2 }
+
+  it('mergePages keeps same-named items with distinct dedupeKeys', () => {
+    expect(mergePages([loc], [fac])).toHaveLength(2)
+  })
+
+  it('mergePages still dedupes on dedupeKey case-insensitively', () => {
+    expect(mergePages([loc], [{ ...loc, dedupeKey: 'location:ASHFALL ' }])).toHaveLength(1)
+  })
+
+  it('markExisting matches kind-qualified existing keys against dedupeKey', () => {
+    const marked = markExisting([loc, fac], ['faction:ashfall'])
+    expect(marked[0].exists).toBe(false)
+    expect(marked[1].exists).toBe(true)
+  })
+
+  it('falls back to the normalized name when dedupeKey is absent (lore path unchanged)', () => {
+    const a = { name: 'The Wells', detail: '', payload: 1 }
+    expect(mergePages([a], [{ ...a, name: ' the wells' }])).toHaveLength(1)
+    expect(markExisting([a], ['THE WELLS'])[0].exists).toBe(true)
+  })
+
+  it('itemKey normalizes whichever identity it uses', () => {
+    expect(itemKey({ name: ' The Wells ' })).toBe('the wells')
+    expect(itemKey({ name: 'x', dedupeKey: ' Location:Ashfall ' })).toBe('location:ashfall')
   })
 })

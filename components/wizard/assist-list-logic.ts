@@ -1,9 +1,15 @@
 /** The shape every list-result row renders as, regardless of what produced it. */
 export type AssistListItem<P = unknown> = {
-  /** Dedupe key and card heading. */
+  /** Card heading; also the prompt-facing exclusion string on `Generate more`. */
   name: string
   /** Condensed one-line preview under the heading. */
   detail: string
+  /**
+   * Dedupe/selection identity when name alone is ambiguous — cast spans four
+   * kinds, so a location and a faction may legitimately share a name. Falls
+   * back to the normalized name; compared trimmed + case-insensitive either way.
+   */
+  dedupeKey?: string
   /**
    * The producing call site's own row, carried through untouched so importing
    * does not have to reconstruct it from `name` / `detail` — those two are for
@@ -20,8 +26,13 @@ export type MarkedAssistListItem<P = unknown> = AssistListItem<P> & {
   exists: boolean
 }
 
-function key(name: string): string {
-  return name.trim().toLowerCase()
+function normalizeKey(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+/** The identity a list row dedupes, selects, and keys on. */
+export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): string {
+  return normalizeKey(item.dedupeKey ?? item.name)
 }
 
 /**
@@ -32,11 +43,11 @@ export function markExisting<P>(
   items: readonly AssistListItem<P>[],
   existingNames: readonly string[],
 ): MarkedAssistListItem<P>[] {
-  const taken = new Set(existingNames.map(key))
+  const taken = new Set(existingNames.map(normalizeKey))
   return items.map((item) => ({
     ...item,
     name: item.name.trim(),
-    exists: taken.has(key(item.name)),
+    exists: taken.has(itemKey(item)),
   }))
 }
 
@@ -45,10 +56,10 @@ export function mergePages<P>(
   accumulated: readonly AssistListItem<P>[],
   page: readonly AssistListItem<P>[],
 ): AssistListItem<P>[] {
-  const seen = new Set(accumulated.map((i) => key(i.name)))
+  const seen = new Set(accumulated.map(itemKey))
   const merged = [...accumulated]
   for (const item of page) {
-    const k = key(item.name)
+    const k = itemKey(item)
     if (seen.has(k)) continue
     seen.add(k)
     merged.push(item)

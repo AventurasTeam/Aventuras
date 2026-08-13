@@ -25,7 +25,7 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-import { markExisting, mergePages, type AssistListItem } from './assist-list-logic'
+import { itemKey, markExisting, mergePages, type AssistListItem } from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -113,7 +113,10 @@ type AiAssistListProps<T, P> = AiAssistCommonProps & {
   ) => Promise<GenerateStructuredResult<T>>
   /** Flattens one model reply into renderable rows. */
   getItems: (value: T) => AssistListItem<P>[]
-  /** Names already in the wizard's own list — drives the `(already exists)` mark. */
+  /**
+   * Names (or kind-qualified keys matching the items' `dedupeKey` shape)
+   * already in the wizard's own list — drives the `(already exists)` mark.
+   */
   existingNames: readonly string[]
   /** Fires once with the payload of every checked row when `Import selected` is pressed. */
   onImport: (payloads: P[]) => void
@@ -139,7 +142,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const [refineText, setRefineText] = useState('')
   const [open, setOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
-  // trimmed name rather than index so a later page cannot shift what is checked.
+  // itemKey (dedupeKey, falling back to trimmed name) rather than index so a
+  // later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -331,12 +335,13 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (props.result !== 'list') return null
     const marked = markExisting(listItems, props.existingNames)
     const selectable = marked.filter((row) => !row.exists)
-    const allSelected = selectable.length > 0 && selectable.every((row) => selected.has(row.name))
-    const toggleRow = (name: string) =>
+    const allSelected =
+      selectable.length > 0 && selectable.every((row) => selected.has(itemKey(row)))
+    const toggleRow = (key: string) =>
       setSelected((prev) => {
         const draft = new Set(prev)
-        if (draft.has(name)) draft.delete(name)
-        else draft.add(name)
+        if (draft.has(key)) draft.delete(key)
+        else draft.add(key)
         return draft
       })
     return (
@@ -352,7 +357,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <View className="flex-row items-center gap-3">
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setSelected(new Set(selectable.map((row) => row.name)))}
+                onPress={() => setSelected(new Set(selectable.map(itemKey)))}
                 disabled={allSelected || selectable.length === 0}
                 className={cn(
                   'h-control-xs justify-center px-2',
@@ -382,13 +387,16 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                 <View className="gap-2">
                   {marked.map((row) => (
                     <Pressable
-                      key={row.name}
+                      key={itemKey(row)}
                       accessibilityRole="checkbox"
                       accessibilityLabel={row.name}
-                      accessibilityState={{ checked: selected.has(row.name), disabled: row.exists }}
-                      aria-checked={selected.has(row.name)}
+                      accessibilityState={{
+                        checked: selected.has(itemKey(row)),
+                        disabled: row.exists,
+                      }}
+                      aria-checked={selected.has(itemKey(row))}
                       disabled={row.exists}
-                      onPress={() => toggleRow(row.name)}
+                      onPress={() => toggleRow(itemKey(row))}
                       className={cn(
                         'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
                         // Press tint is touch feedback; on desktop the hover
@@ -413,9 +421,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                         importantForAccessibility="no-hide-descendants"
                       >
                         <Checkbox
-                          checked={selected.has(row.name)}
+                          checked={selected.has(itemKey(row))}
                           disabled={row.exists}
-                          onCheckedChange={() => toggleRow(row.name)}
+                          onCheckedChange={() => toggleRow(itemKey(row))}
                           tabIndex={-1}
                         />
                       </View>
@@ -466,7 +474,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             onPress={() => {
               props.onImport(
                 marked
-                  .filter((row) => selected.has(row.name) && !row.exists)
+                  .filter((row) => selected.has(itemKey(row)) && !row.exists)
                   .map((row) => row.payload),
               )
               closeOverlay()
