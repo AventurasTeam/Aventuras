@@ -2,6 +2,8 @@ import type { Locator, Page } from '@playwright/test'
 
 import { t } from '../harness/i18n'
 
+export type CastKind = 'character' | 'location' | 'item' | 'faction'
+
 // Wizard locators resolved through the app's own i18n keys
 // (docs/testing.md → Selector strategy, Tier 2).
 export const wizard = {
@@ -14,12 +16,31 @@ export const wizard = {
   // Step 4 (Cast): adding a row opens it expanded (cast-list.tsx → expandAdded),
   // so Name is immediately visible with no separate "Expand" click needed.
   addCast: (page: Page): Locator => page.getByRole('button', { name: t('wizard:cast.add') }),
-  addCastKind: (page: Page, kind: 'character' | 'location' | 'item' | 'faction'): Locator =>
+  addCastKind: (page: Page, kind: CastKind): Locator =>
     page.getByRole('menuitem', { name: t(`wizard:cast.kinds.${kind}`) }),
-  castName: (page: Page): Locator =>
-    page.getByRole('textbox', { name: t('wizard:cast.editor.name') }),
-  setAsLead: (page: Page): Locator =>
-    page.getByRole('button', { name: t('wizard:cast.setAsLead') }),
+
+  // Rows repeat every field/button name (Name, Status, Set as lead, …), and
+  // `useRowExpansion` never auto-collapses a row that's already open, so with
+  // several rows authored a page-wide role query is strict-mode-unique only by
+  // accident. Scope through the row's `data-cast-id` anchor — ExpandableRow's
+  // testID="cast-row" + dataSet={{ castId }} (cast-list.tsx) — the sanctioned
+  // Tier-3 "repeated-row scope anchor" case (docs/testing.md → Selector
+  // strategy). Mirrors reader.ts's `data-entry-row` anchor and the
+  // component's own Storybook interaction tests (step-cast.stories.tsx).
+  castRows: (page: Page): Locator => page.getByTestId('cast-row'),
+  castRow: (page: Page, castId: string): Locator => page.locator(`[data-cast-id="${castId}"]`),
+  castName: (page: Page, castId: string): Locator =>
+    wizard.castRow(page, castId).getByRole('textbox', { name: t('wizard:cast.editor.name') }),
+  // Status is a 2-option Select; resolveMode picks 'segment' at ≤3 options
+  // (select.tsx), which still renders RadioGroupBase items under the hood —
+  // role="radio" in a role="radiogroup" named "Status" (the `label` prop) —
+  // not a listbox, so there is no role="option" to match here.
+  castStatusOption: (page: Page, castId: string, status: 'active' | 'staged'): Locator =>
+    wizard.castRow(page, castId).getByRole('radio', {
+      name: t(`wizard:cast.editor.status${status === 'active' ? 'Active' : 'Staged'}`),
+    }),
+  setAsLead: (page: Page, castId: string): Locator =>
+    wizard.castRow(page, castId).getByRole('button', { name: t('wizard:cast.setAsLead') }),
 
   // Step 3 (World): lore rows repeat, so Title/Body need an index — each new
   // row is appended (wizardStore.addLore) and stays expanded once opened, so

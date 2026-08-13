@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test'
 
+import { addCastRow } from './wizard-cast'
 import { wizard } from '../locators/wizard'
 
 export type NewAdventureStory = {
@@ -34,10 +35,9 @@ export async function createAdventureStory(page: Page, story: NewAdventureStory)
   await wizard.next(page).click()
 
   // Step 4 — Cast. A single active character marked lead satisfies the gate.
-  await wizard.addCast(page).click()
-  await wizard.addCastKind(page, 'character').click()
-  await wizard.castName(page).fill(story.lead)
-  await wizard.setAsLead(page).click()
+  const leadId = await addCastRow(page, 'character')
+  await wizard.castName(page, leadId).fill(story.lead)
+  await wizard.setAsLead(page, leadId).click()
   await wizard.next(page).click()
 
   // Step 5 — opening + title are the remaining Finish requirements.
