@@ -9,14 +9,19 @@ import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/a
 import {
   buildStorySettings,
   type CharacterState,
-  type EntityState,
   type EntryMetadata,
+  type FactionState,
+  type ItemState,
+  type LocationState,
   type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
   type SuggestionCategory,
   type WizardCastDraft,
   type WizardCharacterDraft,
+  type WizardFactionDraft,
+  type WizardItemDraft,
+  type WizardLocationDraft,
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -63,16 +68,21 @@ export type FinishEmbedCtx = {
   resolveProvider: (providerId: string) => ProviderInstanceWithStub | undefined
 }
 
-// An intra-cast pointer only commits when it still resolves to a row of the
-// expected kind: the store prunes factionId / parentLocationId as their target
-// is removed, and this is the backstop for a working state that reached Finish
-// some other way (a hydrated draft, an import).
+// An intra-cast pointer only commits when it still resolves to some OTHER row of
+// the expected kind: the store prunes factionId / parentLocationId as their
+// target is removed, and this is the backstop for a working state that reached
+// Finish some other way. Self-exclusion is load-bearing, not paranoia —
+// resolveCastImports indexes each minted row's own name before resolving refs,
+// so a suggested location naming itself as parent_location_name binds to itself.
 function castRef(
   cast: readonly WizardCastDraft[],
+  self: WizardCastDraft,
   id: string | null,
   kind: WizardCastDraft['kind'],
 ): string | null {
-  return id != null && cast.some((r) => r.id === id && r.kind === kind) ? id : null
+  return id != null && id !== self.id && cast.some((r) => r.id === id && r.kind === kind)
+    ? id
+    : null
 }
 
 function characterVisual(draft: WizardCharacterDraft): CharacterState['visual'] {
@@ -86,35 +96,70 @@ function characterVisual(draft: WizardCharacterDraft): CharacterState['visual'] 
 // data-model.md → Authorship contract: wizard-authored identity seeds the state
 // at its first write; every classifier-owned slot commits empty so the first
 // classifier pass writes into a clean field rather than over an invented value.
-function castDraftState(draft: WizardCastDraft, cast: readonly WizardCastDraft[]): EntityState {
+// One builder per kind rather than one switch returning the wide EntityState —
+// that union is undiscriminated, so a single function could return a location's
+// shape from the item branch and still compile.
+function characterState(
+  draft: WizardCharacterDraft,
+  cast: readonly WizardCastDraft[],
+): CharacterState {
+  return {
+    visual: characterVisual(draft),
+    traits: [...draft.traits],
+    drives: [...draft.drives],
+    ...(draft.voice.trim().length > 0 ? { voice: draft.voice } : {}),
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: castRef(cast, draft, draft.factionId, 'faction'),
+    lastSeenAt: null,
+  }
+}
+
+function locationState(
+  draft: WizardLocationDraft,
+  cast: readonly WizardCastDraft[],
+): LocationState {
+  return {
+    parent_location_id: castRef(cast, draft, draft.parentLocationId, 'location'),
+    ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+  }
+}
+
+function itemState(draft: WizardItemDraft): ItemState {
+  return {
+    at_location_id: null,
+    ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+  }
+}
+
+function factionState(draft: WizardFactionDraft): FactionState {
+  return {
+    ...(draft.standing.trim().length > 0 ? { standing: draft.standing } : {}),
+    ...(draft.agenda.length > 0 ? { agenda: [...draft.agenda] } : {}),
+  }
+}
+
+function castEntityInput(
+  draft: WizardCastDraft,
+  cast: readonly WizardCastDraft[],
+): WizardCastEntityInput {
+  const shared = {
+    id: draft.id,
+    name: draft.name,
+    description: draft.description.trim().length > 0 ? draft.description : null,
+    status: draft.status,
+    tags: [...draft.tags],
+  }
   switch (draft.kind) {
     case 'character':
-      return {
-        visual: characterVisual(draft),
-        traits: [...draft.traits],
-        drives: [...draft.drives],
-        ...(draft.voice.trim().length > 0 ? { voice: draft.voice } : {}),
-        current_location_id: null,
-        equipped_items: [],
-        inventory: [],
-        faction_id: castRef(cast, draft.factionId, 'faction'),
-        lastSeenAt: null,
-      }
+      return { ...shared, kind: 'character', state: characterState(draft, cast) }
     case 'location':
-      return {
-        parent_location_id: castRef(cast, draft.parentLocationId, 'location'),
-        ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
-      }
+      return { ...shared, kind: 'location', state: locationState(draft, cast) }
     case 'item':
-      return {
-        at_location_id: null,
-        ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
-      }
+      return { ...shared, kind: 'item', state: itemState(draft) }
     case 'faction':
-      return {
-        ...(draft.standing.trim().length > 0 ? { standing: draft.standing } : {}),
-        ...(draft.agenda.length > 0 ? { agenda: [...draft.agenda] } : {}),
-      }
+      return { ...shared, kind: 'faction', state: factionState(draft) }
   }
 }
 
@@ -173,15 +218,7 @@ export async function finishWizard(
     reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
-  const castRows: WizardCastEntityInput[] = s.cast.map((draft) => ({
-    id: draft.id,
-    kind: draft.kind,
-    name: draft.name,
-    description: draft.description.trim().length > 0 ? draft.description : null,
-    status: draft.status,
-    tags: [...draft.tags],
-    state: castDraftState(draft, s.cast),
-  }))
+  const castRows: WizardCastEntityInput[] = s.cast.map((draft) => castEntityInput(draft, s.cast))
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
@@ -197,15 +234,25 @@ export async function finishWizard(
   const settings = buildStorySettings(definition.mode, appDefaults, effectiveDim)
 
   // Opening refs commit only when they resolve to a row this transaction
-  // materializes AND that row is active: a staged entity can't appear in scene
-  // metadata (wizard.md → Status field), and a ref left behind by a deleted row
-  // or hallucinated by the model would otherwise persist as a dangling id.
-  const activeIds = new Set(s.cast.filter((r) => r.status === 'active').map((r) => r.id))
+  // materializes, that row is active, and its kind belongs in that field: a
+  // staged entity can't appear in scene metadata (wizard.md → Status field), and
+  // scene presence is kind-aware (data-model.md) — sceneEntities carries the
+  // characters and items that come and go, currentLocationId is the singleton
+  // "we are here" pointer, and a faction is never scene-tagged. Committing one
+  // anyway is not cosmetic: entities in sceneEntities are ALWAYS injected
+  // regardless of injection_mode, and the classifier promotes staged rows that
+  // appear there. openingOutputSchema is a bare string array, so this is the
+  // only gate between a model naming a faction and that becoming true.
+  const sceneTaggableIds = new Set(
+    s.cast
+      .filter((r) => r.status === 'active' && (r.kind === 'character' || r.kind === 'item'))
+      .map((r) => r.id),
+  )
   const activeLocationIds = new Set(
     s.cast.filter((r) => r.status === 'active' && r.kind === 'location').map((r) => r.id),
   )
   const openingMetadata: EntryMetadata = {
-    sceneEntities: s.opening.sceneEntities.filter((id) => activeIds.has(id)),
+    sceneEntities: s.opening.sceneEntities.filter((id) => sceneTaggableIds.has(id)),
     currentLocationId:
       s.opening.currentLocationId != null && activeLocationIds.has(s.opening.currentLocationId)
         ? s.opening.currentLocationId

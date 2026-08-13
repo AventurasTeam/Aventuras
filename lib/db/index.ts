@@ -7,6 +7,7 @@ export {
 export type {
   EntityId,
   EntityState,
+  EntityStateByKind,
   CharacterState,
   LocationState,
   ItemState,

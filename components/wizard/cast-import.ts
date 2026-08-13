@@ -5,10 +5,11 @@ import type { CastSuggestion } from '@/lib/wizard'
 
 // docs/data-model.md → Zod degradation bounds: voice ≤ 2000 chars,
 // traits/drives/agenda arrays ≤ 50 elements, every visual sub-field and
-// condition/standing ≤ 500 chars. Wizard rows land in entities.state via a
-// raw insert (lib/actions/stories/create-story.ts) that never runs
-// entityStateSchemaForKind, and Finish routes through neither of register.ts's
-// validating handlers — so clamping here is the only enforcement point.
+// condition/standing ≤ 500 chars. Nothing downstream re-checks them: wizard rows
+// land in entities.state via a raw insert (lib/actions/stories/create-story.ts)
+// that never runs entityStateSchemaForKind, and Finish routes through neither of
+// register.ts's validating handlers. This clamps the AI-import path only — the
+// hand-typed editors and migrateLegacyLead enforce no string bounds at all.
 export const VOICE_MAX = 2000
 export const ARRAY_MAX = 50
 export const FIELD_MAX = 500

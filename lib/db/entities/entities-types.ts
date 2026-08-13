@@ -35,5 +35,15 @@ export type FactionState = {
   agenda?: string[]
 }
 
-// `entities.kind` is its own column; `state` holds the per-kind shape without an inline discriminant.
-export type EntityState = CharacterState | LocationState | ItemState | FactionState
+// `entities.kind` is its own column; `state` holds the per-kind shape without an
+// inline discriminant. Callers that still know the kind should pair the two
+// through this map — `EntityState` alone is undiscriminated, so a character's
+// state is assignable to a faction row's `state` field.
+export type EntityStateByKind = {
+  character: CharacterState
+  location: LocationState
+  item: ItemState
+  faction: FactionState
+}
+
+export type EntityState = EntityStateByKind[keyof EntityStateByKind]

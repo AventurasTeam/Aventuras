@@ -273,6 +273,26 @@ describe('WIZARD_OPENING cast block', () => {
     expect(out).toContain("The lead character's cast id is c1")
   })
 
+  it('tells the model which kinds belong in which metadata field', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
+      cast: [
+        { id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' },
+        { id: 'f1', kind: 'faction', name: 'The Charterhouse', description: '', status: 'active' },
+      ],
+      leadEntityId: '',
+      guidance: '',
+    })
+    // data-model.md → Scene presence is kind-aware. Every active row is listed
+    // (a faction grounds the prose) but openingOutputSchema.sceneEntities is a
+    // bare string array, so the header is the model's only signal about which
+    // of those ids may be echoed into which field.
+    expect(out).toContain('The Charterhouse (faction, cast id: f1)')
+    expect(out).toMatch(/sceneEntities[^\n]*character[^\n]*item/)
+    expect(out).toMatch(/currentLocationId[^\n]*location/)
+    expect(out).toMatch(/factions are never scene-tagged/i)
+  })
+
   it('omits the cast header entirely when every authored row is staged', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },

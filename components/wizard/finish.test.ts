@@ -9,6 +9,7 @@ import {
   emptyEntityState,
   emptyWorkingState,
   entities,
+  entityStateSchemaForKind,
   lore,
   stories,
   storyEntries,
@@ -470,6 +471,15 @@ describe('finishWizard', () => {
       standing: 'feared',
       agenda: ['keep the wells'],
     })
+
+    // castDraftState is the ONLY thing between a draft and a raw insert —
+    // create-story runs no schema on the way in. Assert against the real
+    // per-kind schema, so a mapping that pairs the wrong shape with a kind, or
+    // a string past its degradation bound, fails here rather than in the DB.
+    for (const row of entityRows) {
+      const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
+      expect(parsed.success, `${row.kind} state must satisfy its own schema`).toBe(true)
+    }
   })
 
   it('re-guards intra-cast refs whose target row is gone by the time Finish runs', async () => {
@@ -500,6 +510,40 @@ describe('finishWizard', () => {
     expect(result.status).toBe('ok')
     const entityRows = await db.select().from(entities)
     expect(entityRows.find((r) => r.id === LEAD_ID)?.state).toMatchObject({ faction_id: null })
+    expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
+      parent_location_id: null,
+    })
+  })
+
+  it('drops a location that names itself as its own parent', async () => {
+    const { db, ctx } = await setup()
+
+    // Reachable through ✨ Suggest cast, not just a corrupt blob:
+    // resolveCastImports indexes every minted row's own name before resolving
+    // refs, so a suggested location whose parent_location_name is its own name
+    // binds to itself. The editor's candidate list excludes self; the import
+    // path does not.
+    const result = await finishWizard(
+      makeState({
+        title: 'Self-Parented',
+        cast: [
+          {
+            ...emptyCastDraft('location', LOCATION_ID),
+            name: 'The Salt Wells',
+            parentLocationId: LOCATION_ID,
+          },
+        ],
+        opening: { content: 'Once.' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2850,
+    )
+
+    expect(result.status).toBe('ok')
+    const entityRows = await db.select().from(entities)
     expect(entityRows.find((r) => r.id === LOCATION_ID)?.state).toEqual({
       parent_location_id: null,
     })
@@ -553,6 +597,7 @@ describe('finishWizard', () => {
   it('opening refs: keeps active ids, drops staged ones and unknown ids', async () => {
     const { db, ctx } = await setup()
     const unknownId = 'char_77777777-7777-7777-7777-777777777777'
+    const activeItemId = 'item_66666666-6666-6666-6666-666666666666'
 
     const result = await finishWizard(
       makeState({
@@ -562,14 +607,15 @@ describe('finishWizard', () => {
         leadEntityId: LEAD_ID,
         cast: [
           leadCast(),
+          { ...emptyCastDraft('item', activeItemId), name: 'Tide Charter' },
           { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells' },
-          { ...emptyCastDraft('item', ITEM_ID), name: 'Tide Charter', status: 'staged' },
+          { ...emptyCastDraft('item', ITEM_ID), name: 'Salt Lantern', status: 'staged' },
         ],
         opening: {
           content: 'You wake at dawn.',
           // Staged rows can't appear in scene metadata (canon); the unknown id is
           // a model hallucination that survived reverse-substitution.
-          sceneEntities: [LEAD_ID, ITEM_ID, unknownId],
+          sceneEntities: [LEAD_ID, activeItemId, ITEM_ID, unknownId],
           currentLocationId: LOCATION_ID,
           model: 'gpt-x',
         },
@@ -588,9 +634,60 @@ describe('finishWizard', () => {
       .select()
       .from(storyEntries)
       .where(eq(storyEntries.branchId, branchRows[0].id))
-    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
+    // Characters and items only, in the order the model gave them.
+    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID, activeItemId])
     // An active location the commit materializes now rides into the opening.
     expect(entryRows[0].metadata!.currentLocationId).toBe(LOCATION_ID)
+  })
+
+  it('drops an active faction or location from sceneEntities: scene presence is kind-aware', async () => {
+    const { db, ctx } = await setup()
+
+    // data-model.md → Scene presence is kind-aware: sceneEntities carries the
+    // characters and items that come and go, never a faction or a location.
+    // Reachable, not theoretical — the opening macro lists every active cast row
+    // as a referenceable id and openingOutputSchema.sceneEntities is a bare
+    // string array with no enum. And it is not cosmetic: an entity in
+    // sceneEntities is ALWAYS injected regardless of injection_mode, and the
+    // per-turn classifier promotes staged rows that appear there.
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Kind-Aware Scene Tags',
+        leadEntityId: LEAD_ID,
+        cast: [
+          leadCast(),
+          { ...emptyCastDraft('faction', FACTION_ID), name: 'The Charterhouse' },
+          { ...emptyCastDraft('location', LOCATION_ID), name: 'The Salt Wells' },
+        ],
+        opening: {
+          content: 'You wake at dawn.',
+          sceneEntities: [LEAD_ID, FACTION_ID, LOCATION_ID],
+          currentLocationId: LOCATION_ID,
+          model: 'gpt-x',
+        },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3150,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
+    // The location still belongs in its own slot — dropping it from
+    // sceneEntities is a field rule, not a "this row isn't in the scene" rule.
+    expect(entryRows[0].metadata!.currentLocationId).toBe(LOCATION_ID)
+    // Both rows still commit; only the scene tag is filtered.
+    expect(await db.select().from(entities)).toHaveLength(3)
   })
 
   it('drops a currentLocationId pointing at a row that is not a location', async () => {
@@ -684,6 +781,41 @@ describe('finishWizard', () => {
     const storyId = result.status === 'ok' ? result.storyId : ''
     const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
     expect(storyRow.definition!.leadEntityId).toBe(newLeadId)
+
+    const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
+    const entryRows = await db
+      .select()
+      .from(storyEntries)
+      .where(eq(storyEntries.branchId, branchRows[0].id))
+    expect(entryRows[0].metadata!.sceneEntities).toEqual([LEAD_ID])
+  })
+
+  it('creative+third commits a starred lead even though the path does not require one', async () => {
+    const { db, ctx } = await setup()
+
+    // Deliberate: `⭐ Set as lead` gates on canSetLead (kind + status), not on
+    // needsLead, so a creative-mode author can star a character and Finish must
+    // honor it. storyDefinitionSchema permits a lead on a lead-less path, and
+    // definition.leadEntityId feeds the opening prompt's lead line.
+    const result = await finishWizard(
+      makeState({
+        title: 'Creative With A Lead',
+        leadEntityId: LEAD_ID,
+        cast: [leadCast()],
+        opening: { content: 'Once.', sceneEntities: [LEAD_ID], model: 'gpt-x' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      3350,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.mode).toBe('creative')
+    expect(storyRow.definition!.leadEntityId).toBe(LEAD_ID)
 
     const branchRows = await db.select().from(branches).where(eq(branches.storyId, storyId))
     const entryRows = await db

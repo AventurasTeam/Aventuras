@@ -13,7 +13,7 @@ import {
   wizardSessions,
   type EmbeddedFieldRow,
   type EntityKind,
-  type EntityState,
+  type EntityStateByKind,
   type EntryMetadata,
   type SqlOp,
   type StoryDefinition,
@@ -25,17 +25,24 @@ import { generateId } from '@/lib/ids'
 
 import type { DbCtx } from '../types'
 
-/** One wizard-authored entity row, already mapped to its per-kind `state` shape. */
+/**
+ * One wizard-authored entity row, already mapped to its per-kind `state` shape.
+ * Discriminated on `kind` because the insert below is raw — nothing runs
+ * `entityStateSchemaForKind` on the way in, so pairing a kind with another
+ * kind's state has to fail at compile time or it never fails at all.
+ */
 export type WizardCastEntityInput = {
-  id: string
-  kind: EntityKind
-  name: string
-  description: string | null
-  /** `retired` is unreachable at wizard time (canon). */
-  status: 'active' | 'staged'
-  tags: readonly string[]
-  state: EntityState
-}
+  [K in EntityKind]: {
+    id: string
+    kind: K
+    name: string
+    description: string | null
+    /** `retired` is unreachable at wizard time (canon). */
+    status: 'active' | 'staged'
+    tags: readonly string[]
+    state: EntityStateByKind[K]
+  }
+}[EntityKind]
 
 export type CreateStoryInput = {
   storyId?: string

@@ -10,6 +10,7 @@ import {
   emptyWorkingState,
   ensureVecTables,
   entities,
+  entityStateSchemaForKind,
   lore,
   packFloat32,
   sourceHash,
@@ -17,6 +18,7 @@ import {
   storyEntries,
   upsertVecOps,
   wizardSessions,
+  type EntityKind,
   type SqlOp,
   type WizardLoreDraft,
 } from '@/lib/db'
@@ -44,6 +46,9 @@ const LOCAL_CONFIG: EmbedderConfig = {
 }
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
+const LOCATION_ID = 'loc_33333333-3333-3333-3333-333333333333'
+const ITEM_ID = 'item_44444444-4444-4444-4444-444444444444'
+const FACTION_ID = 'fact_22222222-2222-2222-2222-222222222222'
 
 const NO_APP_DEFAULTS = {
   defaultStorySettings: {},
@@ -68,7 +73,13 @@ function makeDefinition(overrides: Partial<StoryDefinition> = {}): StoryDefiniti
 
 const metadata = { sceneEntities: [], currentLocationId: null, worldTime: 0 }
 
-function castRow(overrides: Partial<WizardCastEntityInput> = {}): WizardCastEntityInput {
+type CastRowOf<K extends EntityKind> = Extract<WizardCastEntityInput, { kind: K }>
+type CastRowOverrides<K extends EntityKind> = Partial<Omit<CastRowOf<K>, 'kind'>>
+
+// One builder per kind, not a single `Partial<union>` one: WizardCastEntityInput
+// is discriminated so a kind can't be paired with another kind's state, and a
+// union-typed builder would hand that hole straight back.
+function characterRow(o: CastRowOverrides<'character'> = {}): CastRowOf<'character'> {
   return {
     id: LEAD_ID,
     kind: 'character',
@@ -77,7 +88,46 @@ function castRow(overrides: Partial<WizardCastEntityInput> = {}): WizardCastEnti
     status: 'active',
     tags: [],
     state: emptyEntityState('character'),
-    ...overrides,
+    ...o,
+  }
+}
+
+function locationRow(o: CastRowOverrides<'location'> = {}): CastRowOf<'location'> {
+  return {
+    id: LOCATION_ID,
+    kind: 'location',
+    name: 'The Salt Wells',
+    description: null,
+    status: 'active',
+    tags: [],
+    state: emptyEntityState('location'),
+    ...o,
+  }
+}
+
+function itemRow(o: CastRowOverrides<'item'> = {}): CastRowOf<'item'> {
+  return {
+    id: ITEM_ID,
+    kind: 'item',
+    name: 'Tide Charter',
+    description: null,
+    status: 'active',
+    tags: [],
+    state: emptyEntityState('item'),
+    ...o,
+  }
+}
+
+function factionRow(o: CastRowOverrides<'faction'> = {}): CastRowOf<'faction'> {
+  return {
+    id: FACTION_ID,
+    kind: 'faction',
+    name: 'The Charterhouse',
+    description: null,
+    status: 'active',
+    tags: [],
+    state: emptyEntityState('faction'),
+    ...o,
   }
 }
 
@@ -102,6 +152,42 @@ async function setup() {
 beforeEach(() => {
   mockedEmbed.mockReset()
   mockedEmbed.mockResolvedValue([])
+})
+
+describe('WizardCastEntityInput', () => {
+  // The directives ARE the assertions. createStoryWithBranch inserts `state`
+  // raw — it never runs entityStateSchemaForKind — so nothing at runtime
+  // notices a kind paired with another kind's state shape. If any of these
+  // start compiling, tsc fails on the unused directive and this is the only
+  // warning the codebase gets.
+  it('rejects a kind paired with another kind’s state at the type level', () => {
+    // FactionState is all-optional, so this one only fails on TS's weak-type
+    // rule ("no properties in common") — it is the fragile direction.
+    // @ts-expect-error a faction row must carry FactionState, not CharacterState.
+    const factionWithCharacterState: WizardCastEntityInput = {
+      id: FACTION_ID,
+      kind: 'faction',
+      name: 'The Charterhouse',
+      description: null,
+      status: 'active',
+      tags: [],
+      state: emptyEntityState('character'),
+    }
+    // @ts-expect-error an item row must carry ItemState, not LocationState.
+    const itemWithLocationState: WizardCastEntityInput = {
+      id: ITEM_ID,
+      kind: 'item',
+      name: 'Tide Charter',
+      description: null,
+      status: 'active',
+      tags: [],
+      state: emptyEntityState('location'),
+    }
+    // @ts-expect-error the per-kind builders narrow their overrides the same way.
+    const builderMismatch = locationRow({ state: emptyEntityState('item') })
+
+    expect([factionWithCharacterState, itemWithLocationState, builderMismatch]).toHaveLength(3)
+  })
 })
 
 describe('createStoryWithBranch', () => {
@@ -157,7 +243,7 @@ describe('createStoryWithBranch', () => {
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake at dawn.',
         openingMetadata: metadata,
-        cast: [castRow()],
+        cast: [characterRow()],
       },
       ctx,
       2000,
@@ -185,7 +271,7 @@ describe('createStoryWithBranch', () => {
     const { db, ctx } = await setup()
 
     const rows: WizardCastEntityInput[] = [
-      castRow({
+      characterRow({
         description: 'A tide-reader.',
         tags: ['protagonist'],
         state: {
@@ -196,29 +282,13 @@ describe('createStoryWithBranch', () => {
           current_location_id: null,
           equipped_items: [],
           inventory: [],
-          faction_id: 'fact_22222222-2222-2222-2222-222222222222',
+          faction_id: FACTION_ID,
           lastSeenAt: null,
         },
       }),
-      castRow({
-        id: 'loc_33333333-3333-3333-3333-333333333333',
-        kind: 'location',
-        name: 'The Salt Wells',
-        status: 'staged',
-        state: { parent_location_id: null, condition: 'drowned' },
-      }),
-      castRow({
-        id: 'item_44444444-4444-4444-4444-444444444444',
-        kind: 'item',
-        name: 'Tide Charter',
-        state: { at_location_id: null },
-      }),
-      castRow({
-        id: 'fact_22222222-2222-2222-2222-222222222222',
-        kind: 'faction',
-        name: 'The Charterhouse',
-        state: { standing: 'feared', agenda: ['keep the wells'] },
-      }),
+      locationRow({ status: 'staged', state: { parent_location_id: null, condition: 'drowned' } }),
+      itemRow(),
+      factionRow({ state: { standing: 'feared', agenda: ['keep the wells'] } }),
     ]
 
     const { branchId } = await createStoryWithBranch(
@@ -260,6 +330,14 @@ describe('createStoryWithBranch', () => {
       standing: 'feared',
       agenda: ['keep the wells'],
     })
+
+    // The insert is raw — nothing on the write path runs the per-kind schema, so
+    // this is the only place a kind/state mismatch or an out-of-bounds string
+    // gets caught at all.
+    for (const row of entityRows) {
+      const parsed = entityStateSchemaForKind(row.kind).safeParse(row.state)
+      expect(parsed.success, `${row.kind} state must satisfy its own schema`).toBe(true)
+    }
 
     expect(await db.select().from(deltas)).toHaveLength(0)
   })
@@ -311,9 +389,7 @@ describe('createStoryWithBranch', () => {
           openingMetadata: metadata,
           // A cast that carries rows but not THIS id: the guard must resolve the
           // pointer, not just check that some cast was supplied.
-          cast: [
-            castRow({ id: 'char_99999999-9999-9999-9999-999999999999', name: 'Someone else' }),
-          ],
+          cast: [characterRow({ id: 'char_99999999-9999-9999-9999-999999999999', name: 'Nobody' })],
         },
         ctx,
         5000,
@@ -328,7 +404,6 @@ describe('createStoryWithBranch', () => {
 
   it('rejects a leadEntityId pointing at a non-character cast row', async () => {
     const { db, ctx } = await setup()
-    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
 
     await expect(
       createStoryWithBranch(
@@ -337,12 +412,12 @@ describe('createStoryWithBranch', () => {
           definition: makeDefinition({
             mode: 'adventure',
             narration: 'first',
-            leadEntityId: locationId,
+            leadEntityId: LOCATION_ID,
           }),
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'x',
           openingMetadata: metadata,
-          cast: [castRow({ id: locationId, kind: 'location', name: 'The Salt Wells' })],
+          cast: [locationRow()],
         },
         ctx,
         5100,
@@ -363,7 +438,7 @@ describe('createStoryWithBranch', () => {
         settings: buildStorySettings('creative', NO_APP_DEFAULTS),
         openingContent: 'Once.',
         openingMetadata: metadata,
-        cast: [castRow()],
+        cast: [characterRow()],
       },
       ctx,
       5200,
@@ -522,7 +597,6 @@ describe('createStoryWithBranch — embed step', () => {
   it('embeds the cast: every entity insert precedes the vec ops and each stale flag clears', async () => {
     const { db, sqlite, ctx } = await setup()
     realVecOps()
-    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
 
     const captured: SqlOp[] = []
     const capturingCtx = {
@@ -544,7 +618,7 @@ describe('createStoryWithBranch — embed step', () => {
         settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
         openingContent: 'You wake.',
         openingMetadata: metadata,
-        cast: [castRow(), castRow({ id: locationId, kind: 'location', name: 'The Wells' })],
+        cast: [characterRow(), locationRow({ name: 'The Wells' })],
         embed: { config: LOCAL_CONFIG, exec: async (sql) => sqlite.exec(sql) },
       },
       capturingCtx,
@@ -564,7 +638,7 @@ describe('createStoryWithBranch — embed step', () => {
     const vecRows = sqlite
       .prepare('select id from entities_vec_384 where branch_id = ? order by id')
       .all(branchId) as { id: string }[]
-    expect(vecRows.map((r) => r.id)).toEqual([LEAD_ID, locationId])
+    expect(vecRows.map((r) => r.id)).toEqual([LEAD_ID, LOCATION_ID])
 
     const staleRows = sqlite
       .prepare('select embedding_stale from entities where branch_id = ?')
@@ -588,7 +662,7 @@ describe('createStoryWithBranch — embed step', () => {
           settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
           openingContent: 'You wake.',
           openingMetadata: metadata,
-          cast: [castRow()],
+          cast: [characterRow()],
           embed: { config: LOCAL_CONFIG, exec: async () => {} },
         },
         ctx,
@@ -664,7 +738,6 @@ describe('createStoryWithBranch — embed step', () => {
   it('embeds the whole cast and lore in one batched call, not one per row', async () => {
     const { ctx } = await setup()
     const row = loreRow({ title: 'Magic', body: 'Wells.' })
-    const locationId = 'loc_33333333-3333-3333-3333-333333333333'
 
     const { branchId } = await createStoryWithBranch(
       {
@@ -678,10 +751,10 @@ describe('createStoryWithBranch — embed step', () => {
         openingContent: 'You wake.',
         openingMetadata: metadata,
         cast: [
-          castRow({ description: 'A tide-reader.' }),
+          characterRow({ description: 'A tide-reader.' }),
           // Staged rows embed too: retrieval must be able to surface them the
           // moment the narrative promotes one.
-          castRow({ id: locationId, kind: 'location', name: 'The Wells', status: 'staged' }),
+          locationRow({ name: 'The Wells', status: 'staged' }),
         ],
         lore: [row],
         embed: { config: LOCAL_CONFIG, exec: async () => {} },
@@ -695,7 +768,7 @@ describe('createStoryWithBranch — embed step', () => {
     expect(mockedEmbed).toHaveBeenCalledTimes(1)
     expect(mockedEmbed.mock.calls[0][1]).toEqual([
       { kind: 'entity', id: LEAD_ID, branchId, fields: ['Aria', 'A tide-reader.'] },
-      { kind: 'entity', id: locationId, branchId, fields: ['The Wells', null] },
+      { kind: 'entity', id: LOCATION_ID, branchId, fields: ['The Wells', null] },
       { kind: 'lore', id: row.id, branchId, fields: ['Magic', 'Wells.'] },
     ])
   })
