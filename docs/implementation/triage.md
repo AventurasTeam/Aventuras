@@ -1231,8 +1231,15 @@ on hover`; the shipped rows render label and tagline only, so the
   picker in `tier-tuple-input.tsx` announces "Month, button,
   collapsed" and never "January". Neither state is complete —
   before the label there was a value and no field identity, after it
-  there is identity and no value. The real fix is a `combobox` role
-  on the trigger, where content is read as the value beside the
-  label; decide whether to override the primitive's role, compose
-  the value into the name, or accept identity-only. Applies to every
-  `dropdown`-mode `Select` that carries a `label`. Raised 2026-08-13.
+  there is identity and no value. Reviewed and deliberately kept as
+  identity-only: the value is one open away (Radix renders options
+  with `role="option"` / `aria-selected` and focuses the selected one),
+  while identity is unrecoverable because `FormRow` renders its label
+  as plain `Text` with no `htmlFor` / `aria-labelledby`. The real fix
+  is a `combobox` role on the trigger, where content is read as the
+  value beside the label. Plausible-but-unverified path: the web build
+  destructures `role: _role` out of the trigger's props and hardcodes
+  `role='button'`, so a `patches/` one-liner deleting that destructure
+  would let a caller-supplied `role="combobox"` through — nobody has
+  applied or tested it. Applies to every `dropdown`-mode `Select` that
+  carries a `label`. Raised 2026-08-13.

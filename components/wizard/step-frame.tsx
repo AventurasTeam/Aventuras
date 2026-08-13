@@ -1,10 +1,8 @@
 import * as RadioGroupBase from '@rn-primitives/radio-group'
-import { Info } from 'lucide-react-native'
 import { Platform, View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
 import { Heading } from '@/components/ui/heading'
-import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -12,6 +10,7 @@ import { wizardStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 import { needsLead } from './step-frame-logic'
+import { StepNotice } from './step-notice'
 
 type FrameOption = { value: string; label: string; description: string }
 
@@ -103,21 +102,6 @@ function FrameSegment({
   )
 }
 
-function LeadRequirementNotice() {
-  return (
-    <View
-      role="status"
-      aria-live="polite"
-      className="flex-row items-start gap-2 rounded-r-md border-l-4 border-l-border-strong bg-bg-sunken px-3 py-2.5"
-    >
-      <Icon as={Info} size="sm" className="mt-0.5 shrink-0 text-fg-muted" />
-      <Text size="sm" className="flex-1 text-fg-primary">
-        {t('wizard:frame.leadNotice')}
-      </Text>
-    </View>
-  )
-}
-
 export function StepFrame() {
   const mode = wizardStore.useWizard((s) => s.state.definition.mode)
   const narration = wizardStore.useWizard((s) => s.state.definition.narration)
@@ -151,7 +135,7 @@ export function StepFrame() {
 
       {lead ? (
         <>
-          <LeadRequirementNotice />
+          <StepNotice message={t('wizard:frame.leadNotice')} />
           <FormRow label={t('wizard:frame.leadName.label')}>
             <Input
               value={leadName}

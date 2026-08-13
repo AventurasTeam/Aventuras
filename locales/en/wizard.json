@@ -282,9 +282,9 @@
       "faction": "Faction"
     },
     "empty": "No cast yet. Add someone, or let ✨ suggest a few.",
-    "remove": "Remove cast entry",
-    "expand": "Expand cast entry",
-    "collapse": "Collapse cast entry",
+    "remove": "Remove {{name}}",
+    "expand": "Expand {{name}}",
+    "collapse": "Collapse {{name}}",
     "unnamed": "Unnamed entry",
     "leadChip": "Lead",
     "stagedChip": "Staged",

@@ -68,9 +68,10 @@ function seed({ cast = [], leadEntityId = null, mode, narration }: SeedOptions =
   })
 }
 
-// Every row repeats "Expand cast entry" / "Set as lead" / "Name", and more than
-// one row can be open at once, so per-row queries scope through the row's
-// `dataSet` anchor (docs/testing.md → Selector strategy, tier 3).
+// Row names disambiguate expand / collapse / remove, but "Set as lead" and
+// every editor field label still repeat across rows, and more than one row can
+// be open at once — per-row queries scope through the row's `dataSet` anchor
+// (docs/testing.md → Selector strategy, tier 3).
 function castRow(id: string): HTMLElement {
   const el = document.querySelector(`[data-cast-id="${id}"]`)
   if (el == null) throw new Error(`no cast row rendered for id ${id}`)
@@ -134,7 +135,11 @@ export const MixedCastRendersLeadAndStagedMarkers: Story = {
   beforeEach: () => seed({ cast: MIXED_CAST, leadEntityId: 'char_aria' }),
   play: async () => {
     expect(await screen.findByText('Aria Stoneheart')).toBeInTheDocument()
-    expect(within(castRow('char_aria')).getByText('Lead')).toBeInTheDocument()
+    const leadChip = within(castRow('char_aria')).getByText('Lead')
+    expect(leadChip).toBeInTheDocument()
+    // iconography.md maps the wireframe's ⭐ to Lucide `Star`; the badge renders
+    // it through Tag's `leading` slot rather than an emoji in the copy.
+    expect(leadChip.parentElement?.querySelector('svg')).not.toBeNull()
     expect(within(castRow('char_aria')).getByText(/A young blacksmith/)).toBeInTheDocument()
 
     expect(within(castRow('char_gandalf')).getByText('Staged')).toBeInTheDocument()
@@ -143,6 +148,18 @@ export const MixedCastRendersLeadAndStagedMarkers: Story = {
     // A location is neither lead-able nor staged here — no marker, no compact
     // "Set as lead", and the kind is carried by the icon rather than a chip.
     expect(within(castRow('loc_keep')).queryByRole('button', { name: 'Set as lead' })).toBeNull()
+
+    // `aria-label` on the row Pressable suppresses the row's own text, so the
+    // name has to be interpolated in or all three rows — including all three
+    // DESTRUCTIVE removes — announce identically.
+    const names = (pattern: RegExp) =>
+      new Set(screen.getAllByRole('button', { name: pattern }).map((el) => el.ariaLabel))
+    expect(names(/^Expand /)).toEqual(
+      new Set(['Expand Aria Stoneheart', 'Expand Mornstone Keep', 'Expand Gandalf']),
+    )
+    expect(names(/^Remove /)).toEqual(
+      new Set(['Remove Aria Stoneheart', 'Remove Mornstone Keep', 'Remove Gandalf']),
+    )
   },
 }
 
@@ -160,6 +177,9 @@ export const AddMenuAppendsAnExpandedRowOfThePickedKind: Story = {
     // import batch — the row is blank and there is nothing else to do with it.
     expect(within(castRow(added.id)).getByLabelText('Name')).toBeInTheDocument()
     expect(screen.getByText('Unnamed entry')).toBeInTheDocument()
+    // A blank row is still addressable: the name falls back rather than
+    // interpolating an empty string into the label.
+    expect(screen.getByRole('button', { name: 'Collapse Unnamed entry' })).toBeInTheDocument()
   },
 }
 
@@ -184,10 +204,12 @@ export const SetAsLeadFromTheCompactRowClearsTheNoticeWithoutExpanding: Story = 
     // renders outside the row-wide expand Pressable. Nested in `compact` it
     // would be a button inside a button — RN-Web still swallows the press
     // rather than bubbling it, so only the DOM nesting catches that.
-    const expandJorin = within(jorin).getByRole('button', { name: 'Expand cast entry' })
+    const expandJorin = within(jorin).getByRole('button', { name: 'Expand Old Jorin' })
     expect(within(expandJorin).queryByRole('button', { name: 'Set as lead' })).toBeNull()
 
-    await userEvent.click(within(jorin).getByRole('button', { name: 'Set as lead' }))
+    const setLead = within(jorin).getByRole('button', { name: 'Set as lead' })
+    expect(setLead.querySelector('svg')).not.toBeNull()
+    await userEvent.click(setLead)
 
     await waitFor(() => expect(wizardStore.getWizard().state.leadEntityId).toBe('char_jorin'))
     await waitFor(() =>
@@ -218,7 +240,7 @@ export const RemovingTheLeadToastsAndDropsTheBadge: Story = {
       expect(screen.queryByText(/needs a lead character/)).not.toBeInTheDocument()
 
       await userEvent.click(
-        within(castRow('char_aria')).getByRole('button', { name: 'Remove cast entry' }),
+        within(castRow('char_aria')).getByRole('button', { name: 'Remove Aria Stoneheart' }),
       )
 
       await waitFor(() => expect(wizardStore.getWizard().state.cast).toHaveLength(1))
@@ -371,7 +393,7 @@ export const ExpandedCharacterPicksAFactionFromTheCast: Story = {
     }),
   play: async () => {
     await userEvent.click(
-      within(castRow('char_aria')).getByRole('button', { name: 'Expand cast entry' }),
+      within(castRow('char_aria')).getByRole('button', { name: 'Expand Aria Stoneheart' }),
     )
     const aria = within(castRow('char_aria'))
     await userEvent.click(await aria.findByText('More options'))

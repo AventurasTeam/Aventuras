@@ -3,7 +3,6 @@ import { View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
-import { cn } from '@/lib/utils'
 
 type FormRowProps = {
   /** Field label. Always rendered; shape depends on layout mode. */
@@ -53,10 +52,10 @@ export function FormRow({
   const requiredMark = required ? <Text className="text-danger"> *</Text> : null
 
   return (
-    <View
-      className={cn('w-full', className)}
-      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
-    >
+    // No `w-full`: RN's default `alignItems: 'stretch'` already fills a column
+    // parent, so it bought nothing there and made the row unusable in a
+    // `flex-row` — 100 % width with RN's `flexShrink: 0` starves every sibling.
+    <View className={className} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
       {stacked ? (
         <View className="gap-1.5">
           <Text className="text-sm font-medium text-fg-primary">

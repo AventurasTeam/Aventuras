@@ -1,35 +1,22 @@
-import { TriangleAlert } from 'lucide-react-native'
 import { View } from 'react-native'
 
 import { Heading } from '@/components/ui/heading'
-import { Icon } from '@/components/ui/icon'
-import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 
 import { CastList, type CastAssistSeams } from './cast-list'
 import { activeLead } from './step-cast-logic'
 import { needsLead } from './step-frame-logic'
+import { StepNotice } from './step-notice'
+
+// Re-exported so a route wires the step's seam from the step's own module
+// rather than reaching past it into the list.
+export type { CastAssistSeams }
 
 export type StepCastProps = {
   /** "Set up in Settings" from the assist's not-configured state. */
   onSetupAssist?: () => void
   assist?: CastAssistSeams
-}
-
-function LeadRequiredNotice({ reason }: { reason: 'mode' | 'narration' }) {
-  return (
-    <View
-      role="status"
-      aria-live="polite"
-      className="flex-row items-start gap-2 rounded-r-md border-l-4 border-l-warning bg-bg-sunken px-3 py-2.5"
-    >
-      <Icon as={TriangleAlert} size="sm" className="mt-0.5 shrink-0 text-warning" />
-      <Text size="sm" className="flex-1 text-fg-primary">
-        {t(`wizard:cast.leadNotice.${reason}`)}
-      </Text>
-    </View>
-  )
 }
 
 export function StepCast({ onSetupAssist, assist }: StepCastProps) {
@@ -49,7 +36,13 @@ export function StepCast({ onSetupAssist, assist }: StepCastProps) {
       {leadMissing ? (
         // Both triggers can fire at once (adventure + first-person). Mode is the
         // stronger constraint and names the whole play pattern, so it wins.
-        <LeadRequiredNotice reason={definition.mode === 'adventure' ? 'mode' : 'narration'} />
+        <StepNotice
+          message={t(
+            definition.mode === 'adventure'
+              ? 'wizard:cast.leadNotice.mode'
+              : 'wizard:cast.leadNotice.narration',
+          )}
+        />
       ) : null}
       <CastList onSetupAssist={onSetupAssist} assist={assist} />
     </View>

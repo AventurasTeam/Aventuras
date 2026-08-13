@@ -1,3 +1,4 @@
+import { Star } from 'lucide-react-native'
 import { View } from 'react-native'
 
 import { FormRow } from '@/components/compounds/form-row'
@@ -9,10 +10,12 @@ import {
   AccordionTrigger,
 } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
+import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
+import { useTier } from '@/hooks/use-tier'
 import type {
   WizardCastDraft,
   WizardCharacterDraft,
@@ -23,6 +26,7 @@ import type {
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
+import { cn } from '@/lib/utils'
 
 import { canSetLead, castRowErrors } from './step-cast-logic'
 
@@ -57,11 +61,18 @@ export type CommonEditorProps<T extends WizardCastDraft> = {
 }
 
 function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolean }) {
+  const isPhone = useTier() === 'phone'
   const nameError = invalid && castRowErrors(row).includes('name')
   return (
-    <View className="flex-row items-start gap-3">
+    // Phone stacks: the status column can't shrink below its two segments, and
+    // taking that off a 320 px screen leaves the name field unusable.
+    // Both rows are pinned `stacked` because the status column sizes to its
+    // control and can never host FormRow's 120/180 px label column — left to
+    // auto-derive, a wide window puts two label treatments in one visual row.
+    <View className={cn('gap-3', isPhone ? 'flex-col' : 'flex-row items-start')}>
       <FormRow
-        className="flex-1"
+        className={isPhone ? undefined : 'flex-1'}
+        stacked
         label={t('wizard:cast.editor.name')}
         error={nameError ? t('wizard:cast.editor.errors.name') : undefined}
       >
@@ -72,12 +83,7 @@ function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolea
           aria-invalid={nameError}
         />
       </FormRow>
-      {/* FormRow's root is `w-full`, which in this row claims the whole width
-          and refuses to shrink — the flex-1 name beside it then resolves to a
-          one-character column. An explicit width is what twMerge needs to
-          drop `w-full`; it also holds the two-segment control at a readable
-          size instead of letting it stretch. */}
-      <FormRow className="w-44" label={t('wizard:cast.editor.status')}>
+      <FormRow stacked label={t('wizard:cast.editor.status')}>
         <Select
           options={STATUS_OPTIONS}
           value={row.status}
@@ -168,6 +174,7 @@ export function SetAsLeadButton({ row, leadEntityId }: SetAsLeadButtonProps) {
     // across the editor column otherwise.
     <View className="items-start">
       <Button variant="secondary" size="sm" onPress={() => wizardStore.setLeadEntityId(row.id)}>
+        <Icon as={Star} aria-hidden size="sm" className="fill-fg-secondary" />
         <Text>{t('wizard:cast.setAsLead')}</Text>
       </Button>
     </View>

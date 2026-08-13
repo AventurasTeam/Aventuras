@@ -502,6 +502,13 @@ export type SelectProps = {
   /**
    * Field label. On phone (when `mode` resolves to `'dropdown'`),
    * it's a visible title at the top of the bottom Sheet.
+   *
+   * Also the control's `aria-label` in every mode, which on `dropdown`
+   * REPLACES the trigger's text content as the accessible name — the
+   * selected option is then announced only from the open listbox, not
+   * from the closed trigger. Deliberate: identity is unrecoverable
+   * otherwise (`FormRow` labels are plain `Text`, with no association),
+   * whereas the value is one open away.
    */
   label?: string
   disabled?: boolean
