@@ -9,6 +9,7 @@ import { appSettingsStore, wizardStore } from '@/lib/stores'
 import { StepOpening } from './step-opening'
 
 const LEAD_ID = 'char_11111111-1111-1111-1111-111111111111'
+const LOCATION_ID = 'loc_22222222-2222-2222-2222-222222222222'
 const MODEL_ID = 'gpt-4o-mini'
 
 function okRun<T>(value: T) {
@@ -110,6 +111,42 @@ export const OpeningAssistCommits: Story = {
     })
     // Committed state surfaces the resolved cast name in the metadata line.
     expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+  },
+}
+
+export const SceneMetadataJoinsCastAndLocation: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
+    wizardStore.importCast([
+      { ...emptyCastDraft('character', LEAD_ID), name: 'Aria' },
+      { ...emptyCastDraft('location', LOCATION_ID), name: 'Mornstone Keep' },
+    ])
+    wizardStore.setLeadEntityId(LEAD_ID)
+  },
+  render: () => (
+    <StepOpening
+      onSetupAssist={fn()}
+      assist={{
+        resolveModelId: () => MODEL_ID,
+        opening: okRun({
+          content: 'Aria drew her blade as the storm broke over Mornstone Keep.',
+          sceneEntities: [LEAD_ID],
+          currentLocationId: LOCATION_ID,
+          model: MODEL_ID,
+        }),
+      }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+
+    // wizard.md → Committed prose: cast names and the resolved location join
+    // with the canon separator ("Aria Stoneheart · Mornstone Keep").
+    expect(await screen.findByText('Scene metadata: Aria · Mornstone Keep')).toBeInTheDocument()
   },
 }
 
