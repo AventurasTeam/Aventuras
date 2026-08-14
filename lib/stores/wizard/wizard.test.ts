@@ -52,13 +52,12 @@ describe('wizardStore', () => {
     wizardStore.setStep(3)
     wizardStore.patchDefinition({ mode: 'adventure' })
 
-    // `leadName` has no mutator any more (the lead lives in `cast`), so hydrate
-    // is the only way it ever gets a value — a resumed pre-3.6b draft.
-    const draft = { ...emptyWorkingState(), leadName: 'Aria', step: 5 }
+    const draft = { ...emptyWorkingState(), leadEntityId: 'char_resumed', step: 5 }
     wizardStore.hydrate(draft)
 
-    expect(wizardStore.getWizard().state.leadName).toBe('Aria')
+    expect(wizardStore.getWizard().state.leadEntityId).toBe('char_resumed')
     expect(wizardStore.getWizard().state.step).toBe(5)
+    // Replaced wholesale, not merged — the local patchDefinition above is gone.
     expect(wizardStore.getWizard().state.definition.mode).toBe('creative')
   })
 

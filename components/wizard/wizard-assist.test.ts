@@ -423,7 +423,6 @@ describe('wizardTemplateContext', () => {
     const state = {
       ...emptyWorkingState(),
       step: 4,
-      leadName: 'legacy',
       effectiveDim: 512,
       effectiveDimTouched: true,
     }

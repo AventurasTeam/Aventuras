@@ -77,9 +77,9 @@ without this slice knowing its internals (C5).
 - **Lead relocation:** the M2 minimal lead input leaves step 1 in
   favor of the real cast editor; step 1 keeps only the
   forward-pointer chip, and the lead-required gate moves to step
-  4's `Next` and to Finish. Draft-session compatibility preserved —
-  an old draft's bare lead name opens into step 4 as a character
-  row without data loss.
+  4's `Next` and to Finish. `leadName` leaves the working state with
+  it: the field had no writer left, and pre-ship there is no
+  persisted draft worth migrating.
 - **Step indicator:** the Cast pill enables and the active step
   sequence becomes 1-2-3-4-5; back-jump pill demotion for the lead
   rule stays correct across five live steps.
@@ -118,15 +118,18 @@ without this slice knowing its internals (C5).
 - AI-suggest cast: a structured fixture carrying
   `parent_location_name` and faction cross-references resolves ids
   within the batch; unresolved names fall back to null (vitest).
-- A pre-3.6b draft session (bare lead name, no cast array) reopens
-  without data loss and completes through the new step.
+- A pre-3.6b draft session (no `cast` key) reopens with an empty
+  cast rather than crashing, and completes through the new step.
+  The bare `leadName` it carried is **not** migrated: v1 has not
+  shipped, the wizard draft is a per-machine singleton, and the
+  field's only remaining reader was the migration itself.
 - Every new chrome string routes through `t()`; new compounds have
   stories.
 
 ## Tests
 
 - Vitest: cascade rules (lead / staged), suggest-cast resolution,
-  draft-session migration, commit composition, validation gates.
+  commit composition, validation gates.
 - Storybook: step-4 body, the per-kind editors, pick-from-cast
   pickers, the lead-required notice.
 - E2E (`pnpm test:e2e`): create-story flows updated for the lead

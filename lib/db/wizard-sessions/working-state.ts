@@ -126,9 +126,7 @@ export function emptyCastDraft<K extends WizardCastDraft['kind']>(
 export const wizardWorkingStateSchema = z.object({
   step: z.number().int().min(1).max(5).default(1),
   definition: wizardDefinitionDraftSchema.default(() => wizardDefinitionDraftSchema.parse({})),
-  leadName: z.string().default(''),
-  // Set by setLeadEntityId (the ⭐ button) or migrateLegacyLead's one-time
-  // upgrade of a pre-3.6b session; always points at an existing active
+  // Set by setLeadEntityId (the ⭐ button); always points at an existing active
   // character row in `cast`, or null. Nulled by the same cast mutators that
   // remove or stage the row it points at (status flip to staged, deletion).
   leadEntityId: z.string().nullable().default(null),

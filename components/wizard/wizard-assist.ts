@@ -88,7 +88,7 @@ function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<stri
 
 /**
  * The exact variables templateContextMap documents for the `wizard` group.
- * Projected, not spread: the working state also carries `step` / `leadName` /
+ * Projected, not spread: the working state also carries `step` and
  * `effectiveDim*`, which are wizard mechanics no prompt has business reading.
  */
 export function wizardTemplateContext(

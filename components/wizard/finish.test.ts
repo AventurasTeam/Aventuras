@@ -304,9 +304,9 @@ describe('finishWizard', () => {
   it('never mints a lead: a lead-requiring path with an unstarred cast character blocks', async () => {
     const { db, ctx } = await setup()
 
-    // The character exists in cast but nothing ⭐-starred it. Pre-3.6b, Finish
-    // minted an id off the bare leadName; now the star IS the lead, so an
-    // unresolved pointer must block rather than invent a second character.
+    // The character exists in cast but nothing ⭐-starred it. The star IS the
+    // lead, so an unresolved pointer must block rather than invent a second
+    // character.
     const result = await finishWizard(
       makeState({
         mode: 'adventure',

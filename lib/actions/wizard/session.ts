@@ -1,7 +1,6 @@
 import { eq } from 'drizzle-orm'
 
 import {
-  emptyCastDraft,
   emptyWorkingState,
   stories,
   wizardSessions,
@@ -12,7 +11,7 @@ import {
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { generateId } from '@/lib/ids'
-import { CAST_ID_PREFIX, rehydrateStories } from '@/lib/stores'
+import { rehydrateStories } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 
 import type { DbCtx } from '../types'
@@ -99,15 +98,6 @@ export async function saveStoryDraft(
   return { storyId }
 }
 
-// Pre-3.6b working states carried the lead as a bare `leadName` string.
-export function migrateLegacyLead(state: WizardWorkingState): WizardWorkingState {
-  if (state.cast.length > 0 || state.leadName.trim().length === 0) return state
-  // Reuse, don't mint: the opening's sceneEntities already reference this id.
-  const id = state.leadEntityId ?? generateId(CAST_ID_PREFIX.character)
-  const lead = { ...emptyCastDraft('character', id), name: state.leadName.trim() }
-  return { ...state, cast: [lead], leadEntityId: id, leadName: '' }
-}
-
 // Persisted rows predate the current schema: a field the wizard now reads may
 // be missing or the wrong shape after an app upgrade, and returning the raw
 // blob would surface that as a crash deep in the wizard. Re-validate on load and
@@ -118,7 +108,7 @@ function parsePersistedState(
   source: string,
 ): { state: WizardWorkingState; ok: boolean } {
   const parsed = wizardWorkingStateSchema.safeParse(raw)
-  if (parsed.success) return { state: migrateLegacyLead(parsed.data), ok: true }
+  if (parsed.success) return { state: parsed.data, ok: true }
   logger.warn('action_layer.wizard_session_parse_failed', {
     source,
     issues: parsed.error.issues.length,

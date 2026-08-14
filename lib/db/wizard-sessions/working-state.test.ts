@@ -14,7 +14,6 @@ describe('wizardWorkingStateSchema', () => {
     expect(s.step).toBe(1)
     expect(s.definition.mode).toBe('creative')
     expect(s.definition.narration).toBe('third')
-    expect(s.leadName).toBe('')
     expect(s.opening.content).toBe('')
   })
   it('round-trips a fully-populated state', () => {
@@ -58,11 +57,21 @@ describe('lore drafts', () => {
 
   it('parses a pre-3.6a blob that has no lore key at all', () => {
     // A session saved before this slice; must reopen without data loss.
-    const legacy = { step: 5, leadName: 'Wren', definition: { title: 'Salt Road' } }
+    const legacy = { step: 5, definition: { title: 'Salt Road' } }
     const parsed = wizardWorkingStateSchema.parse(legacy)
     expect(parsed.lore).toEqual([])
-    expect(parsed.leadName).toBe('Wren')
     expect(parsed.definition.title).toBe('Salt Road')
+  })
+
+  // The bare lead name is deliberately NOT migrated (06b acceptance criteria);
+  // what must hold is that its presence doesn't fail the parse and strand the
+  // whole draft on the corrupt-state path.
+  it("strips a pre-3.6b blob's bare lead name instead of rejecting the draft", () => {
+    const legacy = { step: 5, leadName: 'Wren', definition: { title: 'Salt Road' } }
+    const parsed = wizardWorkingStateSchema.parse(legacy)
+    expect(parsed).not.toHaveProperty('leadName')
+    expect(parsed.cast).toEqual([])
+    expect(parsed.step).toBe(5)
   })
 
   it('round-trips every More-options field', () => {

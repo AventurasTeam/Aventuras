@@ -34,9 +34,6 @@ type WizardState = WizardSnapshot & {
   setStep: (step: number) => void
   patchDefinition: (patch: Partial<WizardWorkingState['definition']>) => void
   patchOpening: (patch: Partial<WizardWorkingState['opening']>) => void
-  // No setter for `leadName`: since the lead moved into `cast`, nothing may
-  // write that field again. It survives on the working state only so a
-  // pre-3.6b draft still parses, and migrateLegacyLead blanks it on load.
   setLeadEntityId: (leadEntityId: string | null) => void
   setEffectiveDim: (effectiveDim: number | null) => void
   setCustomDimInvalid: (invalid: boolean) => void

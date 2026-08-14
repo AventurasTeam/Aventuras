@@ -92,7 +92,6 @@ describe('WIZARD_OPENING lore block', () => {
       definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
       lore: rows,
       leadEntityId: '',
-      leadName: '',
       guidance: '',
     })
     expect(out).toContain('World reference:')
@@ -105,7 +104,6 @@ describe('WIZARD_OPENING lore block', () => {
       definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
       lore: [],
       leadEntityId: '',
-      leadName: '',
       guidance: '',
     })
     expect(out).not.toContain('World reference:')
@@ -115,7 +113,6 @@ describe('WIZARD_OPENING lore block', () => {
     const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
       definition: { mode: 'creative', setting: '', genre: {}, tone: {} },
       leadEntityId: '',
-      leadName: '',
       guidance: '',
     })
     expect(out).not.toContain('World reference:')

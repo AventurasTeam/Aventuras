@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { emptyCastDraft, emptyWorkingState, stories, wizardSessions } from '@/lib/db'
+import { emptyWorkingState, stories, wizardSessions } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { storiesStore } from '@/lib/stores'
 import { toastStore } from '@/lib/toast'
@@ -10,7 +10,6 @@ import {
   clearLiveSession,
   loadDraft,
   loadLiveSession,
-  migrateLegacyLead,
   saveLiveSession,
   saveStoryDraft,
   sessionExists,
@@ -184,76 +183,5 @@ describe('wizard session/draft actions', () => {
       .values({ id: 'story_x', storyId: 'story_x', state: { step: 99 } as never, updatedAt: 1 })
 
     expect(await loadDraft('story_x', ctx)).toEqual(emptyWorkingState())
-  })
-})
-
-describe('migrateLegacyLead', () => {
-  it('converts a bare lead name into a character cast row and points the lead at it', () => {
-    const legacy = { ...emptyWorkingState(), leadName: 'Wren Calloway', leadEntityId: null }
-    const migrated = migrateLegacyLead(legacy)
-    expect(migrated.cast).toHaveLength(1)
-    expect(migrated.cast[0]).toMatchObject({
-      kind: 'character',
-      name: 'Wren Calloway',
-      status: 'active',
-    })
-    expect(migrated.leadEntityId).toBe(migrated.cast[0].id)
-    // Left populated, a stale leadName would re-trigger migration and resurrect
-    // a phantom cast row after the author later removes the migrated one.
-    expect(migrated.leadName).toBe('')
-  })
-
-  it('reuses an already-minted leadEntityId so opening refs stay valid', () => {
-    const legacy = { ...emptyWorkingState(), leadName: 'Wren', leadEntityId: 'char_existing' }
-    expect(migrateLegacyLead(legacy).cast[0].id).toBe('char_existing')
-  })
-
-  it('trims the legacy name into the cast row', () => {
-    const legacy = { ...emptyWorkingState(), leadName: '  Wren Calloway  ' }
-    expect(migrateLegacyLead(legacy).cast[0].name).toBe('Wren Calloway')
-  })
-
-  it('is a no-op when the cast already has rows', () => {
-    const withCast = {
-      ...emptyWorkingState(),
-      leadName: 'Stale Name',
-      cast: [emptyCastDraft('character', 'char_a')],
-    }
-    expect(migrateLegacyLead(withCast)).toBe(withCast)
-  })
-
-  it('is a no-op on a blank lead name', () => {
-    const state = emptyWorkingState()
-    expect(migrateLegacyLead(state)).toBe(state)
-  })
-})
-
-describe('migrateLegacyLead wiring at the parse boundary', () => {
-  it('loadDraft migrates a pre-3.6b bare-lead blob into a cast row', async () => {
-    await ctx.db.insert(wizardSessions).values({
-      id: 'story_legacy',
-      storyId: 'story_legacy',
-      state: { step: 5, leadName: 'Wren Calloway', definition: { title: 'Salt Road' } } as never,
-      updatedAt: 1,
-    })
-    const loaded = await loadDraft('story_legacy', ctx)
-    expect(loaded?.cast).toHaveLength(1)
-    expect(loaded?.cast[0]?.name).toBe('Wren Calloway')
-    expect(loaded?.leadEntityId).toBe(loaded?.cast[0]?.id)
-    expect(loaded?.leadName).toBe('')
-  })
-
-  it('loadLiveSession migrates a pre-3.6b bare-lead blob into a cast row', async () => {
-    await ctx.db.insert(wizardSessions).values({
-      id: 'live',
-      storyId: null,
-      state: { step: 5, leadName: 'Wren Calloway', definition: { title: 'Salt Road' } } as never,
-      updatedAt: 1,
-    })
-    const loaded = await loadLiveSession(ctx)
-    expect(loaded?.state.cast).toHaveLength(1)
-    expect(loaded?.state.cast[0]?.name).toBe('Wren Calloway')
-    expect(loaded?.state.leadEntityId).toBe(loaded?.state.cast[0]?.id)
-    expect(loaded?.state.leadName).toBe('')
   })
 })

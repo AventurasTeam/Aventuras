@@ -9,7 +9,7 @@ import type { CastSuggestion } from '@/lib/wizard'
 // land in entities.state via a raw insert (lib/actions/stories/create-story.ts)
 // that never runs entityStateSchemaForKind, and Finish routes through neither of
 // register.ts's validating handlers. This clamps the AI-import path only — the
-// hand-typed editors and migrateLegacyLead enforce no string bounds at all.
+// hand-typed editors enforce no string bounds at all.
 export const VOICE_MAX = 2000
 export const ARRAY_MAX = 50
 export const FIELD_MAX = 500
