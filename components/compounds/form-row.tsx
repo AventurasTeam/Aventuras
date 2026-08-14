@@ -8,11 +8,13 @@ type FormRowProps = {
   /** Field label. Always rendered; shape depends on layout mode. */
   label: string
   /**
-   * Inline help text below the field. Replaced by `error` when an error is set.
+   * Inline help text. Sits between label and control when stacked, below the
+   * control when 2-col. Suppressed while `error` is set.
    */
   hint?: string
   /**
-   * Validation error string.
+   * Validation error string. Always renders directly below the control, in
+   * both layouts.
    */
   error?: string
   /** Renders a `*` indicator next to the label. Visual only. */
@@ -57,17 +59,20 @@ export function FormRow({
     // `flex-row` — 100 % width with RN's `flexShrink: 0` starves every sibling.
     <View className={className} onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}>
       {stacked ? (
+        // The hint reads before the control (what to type); the error reads
+        // after it (why what you typed was rejected), matching the 2-col
+        // branch's position rather than displacing the control on every
+        // keystroke that toggles validity.
         <View className="gap-1.5">
           <Text className="text-sm font-medium text-fg-primary">
             {label}
             {requiredMark}
           </Text>
-          {error != null ? (
-            <Text className="text-xs text-danger">{error}</Text>
-          ) : hint != null ? (
+          {error == null && hint != null ? (
             <Text className="text-xs text-fg-secondary">{hint}</Text>
           ) : null}
           {children}
+          {error != null ? <Text className="text-xs text-danger">{error}</Text> : null}
         </View>
       ) : (
         <View className="flex-row items-start gap-3">
