@@ -111,7 +111,11 @@ function DescriptionRow({ row }: { row: WizardCastDraft }) {
 function TagsRow({ row }: { row: WizardCastDraft }) {
   return (
     <FormRow label={t('wizard:cast.editor.tags')}>
-      <TagInput value={row.tags} onChange={(tags) => wizardStore.patchCast(row.id, { tags })} />
+      <TagInput
+        value={row.tags}
+        onChange={(tags) => wizardStore.patchCast(row.id, { tags })}
+        placeholder={t('wizard:cast.editor.tagsPlaceholder')}
+      />
     </FormRow>
   )
 }
@@ -230,6 +234,7 @@ export function CharacterEditor({
                   onChangeText={(text) =>
                     wizardStore.patchCast(row.id, { visual: { ...row.visual, [field]: text } })
                   }
+                  placeholder={t(`wizard:cast.editor.${field}Placeholder`)}
                   aria-label={t(`wizard:cast.editor.${field}`)}
                 />
               </FormRow>
@@ -285,6 +290,7 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               <Input
                 value={row.condition}
                 onChangeText={(condition) => wizardStore.patchCast(row.id, { condition })}
+                placeholder={t('wizard:cast.editor.conditionPlaceholderLocation')}
                 aria-label={t('wizard:cast.editor.condition')}
               />
             </FormRow>
@@ -311,6 +317,7 @@ export function ItemEditor({ row, invalid }: CommonEditorProps<WizardItemDraft>)
               <Input
                 value={row.condition}
                 onChangeText={(condition) => wizardStore.patchCast(row.id, { condition })}
+                placeholder={t('wizard:cast.editor.conditionPlaceholderItem')}
                 aria-label={t('wizard:cast.editor.condition')}
               />
             </FormRow>
@@ -330,6 +337,7 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
         <TagInput
           value={row.agenda}
           onChange={(agenda) => wizardStore.patchCast(row.id, { agenda })}
+          placeholder={t('wizard:cast.editor.agendaPlaceholder')}
           maxCount={AGENDA_CAP}
         />
       </FormRow>
@@ -344,6 +352,7 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
               <Input
                 value={row.standing}
                 onChangeText={(standing) => wizardStore.patchCast(row.id, { standing })}
+                placeholder={t('wizard:cast.editor.standingPlaceholder')}
                 aria-label={t('wizard:cast.editor.standing')}
               />
             </FormRow>

@@ -51,13 +51,15 @@ function castRowById(id: string): WizardCastDraft {
 }
 
 // TagInput exposes no aria-label (its inner TextInput only forwards a fixed
-// prop set — see lore-list.stories.tsx), so Agenda/Tags — the two with no
-// placeholder to match on either — are picked out by process of elimination:
-// every OTHER textbox in these editors carries an aria-label, so filtering it
-// out isolates the TagInputs in render order.
-function unlabeledTextboxes(): HTMLElement[] {
-  return screen.getAllByRole('textbox').filter((el) => !el.hasAttribute('aria-label'))
-}
+// prop set — see lore-list.stories.tsx), so its placeholder is the only handle
+// these four have. It renders while the chip list is empty, which is when a
+// test needs to find them; capture the element before typing into it.
+const PLACEHOLDER = {
+  traits: 'e.g. "methodical, guarded"',
+  drives: 'e.g. "find her sister, clear the family name"',
+  tags: 'e.g. "ally, nobility"',
+  agenda: 'e.g. "seize the docks, discredit the guild"',
+} as const
 
 function CharacterEditorDemo({ id }: { id: string }) {
   const cast = wizardStore.useWizard((s) => s.state.cast)
@@ -165,11 +167,11 @@ export const Character: Story = {
       expect((castRowById('char-1') as WizardCharacterDraft).voice).toBe('clipped, formal'),
     )
 
-    // Their placeholders are the only accessible handle these two TagInputs
-    // have — they show while the chip list is empty, which is when a test
-    // needs to find them.
-    await userEvent.type(screen.getByPlaceholderText('Add trait…'), 'stubborn{Enter}')
-    await userEvent.type(screen.getByPlaceholderText('Add drive…'), 'protect the forge{Enter}')
+    await userEvent.type(screen.getByPlaceholderText(PLACEHOLDER.traits), 'stubborn{Enter}')
+    await userEvent.type(
+      screen.getByPlaceholderText(PLACEHOLDER.drives),
+      'protect the forge{Enter}',
+    )
     await waitFor(() => {
       const row = castRowById('char-1') as WizardCharacterDraft
       expect(row.traits).toEqual(['stubborn'])
@@ -185,15 +187,9 @@ export const Character: Story = {
       expect(row.visual.distinguishing).toBe('A burn scar across one forearm')
     })
 
-    // More options — Tags (a third unlabeled TagInput) + the faction picker.
-    const beforeMoreOptions = unlabeledTextboxes().length
+    // More options — Tags + the faction picker.
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
-    const tagsInput = await waitFor(() => {
-      const all = unlabeledTextboxes()
-      expect(all.length).toBeGreaterThan(beforeMoreOptions)
-      return all[beforeMoreOptions]!
-    })
-    await userEvent.type(tagsInput, 'blacksmith{Enter}')
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'blacksmith{Enter}')
     await waitFor(() =>
       expect((castRowById('char-1') as WizardCharacterDraft).tags).toEqual(['blacksmith']),
     )
@@ -335,14 +331,8 @@ export const Location: Story = {
       ),
     )
 
-    const beforeMoreOptions = unlabeledTextboxes().length
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
-    const tagsInput = await waitFor(() => {
-      const all = unlabeledTextboxes()
-      expect(all.length).toBeGreaterThan(beforeMoreOptions)
-      return all[beforeMoreOptions]!
-    })
-    await userEvent.type(tagsInput, 'fortress{Enter}')
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'fortress{Enter}')
     await waitFor(() =>
       expect((castRowById('loc-1') as WizardLocationDraft).tags).toEqual(['fortress']),
     )
@@ -397,14 +387,8 @@ export const Item: Story = {
       ),
     )
 
-    const beforeMoreOptions = unlabeledTextboxes().length
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
-    const tagsInput = await waitFor(() => {
-      const all = unlabeledTextboxes()
-      expect(all.length).toBeGreaterThan(beforeMoreOptions)
-      return all[beforeMoreOptions]!
-    })
-    await userEvent.type(tagsInput, 'weapon{Enter}')
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'weapon{Enter}')
     await waitFor(() => expect((castRowById('item-1') as WizardItemDraft).tags).toEqual(['weapon']))
 
     await userEvent.type(screen.getByLabelText('Condition'), 'Nicked but sharp')
@@ -433,23 +417,18 @@ export const Faction: Story = {
       ),
     )
 
-    // Agenda is always-visible — the sole unlabeled TagInput before More options opens.
-    const [agendaInput] = unlabeledTextboxes()
-    await userEvent.type(agendaInput!, 'control the trade routes{Enter}')
+    await userEvent.type(
+      screen.getByPlaceholderText(PLACEHOLDER.agenda),
+      'control the trade routes{Enter}',
+    )
     await waitFor(() =>
       expect((castRowById('fact-1') as WizardFactionDraft).agenda).toEqual([
         'control the trade routes',
       ]),
     )
 
-    const beforeMoreOptions = unlabeledTextboxes().length
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
-    const tagsInput = await waitFor(() => {
-      const all = unlabeledTextboxes()
-      expect(all.length).toBeGreaterThan(beforeMoreOptions)
-      return all[beforeMoreOptions]!
-    })
-    await userEvent.type(tagsInput, 'guild{Enter}')
+    await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'guild{Enter}')
     await waitFor(() =>
       expect((castRowById('fact-1') as WizardFactionDraft).tags).toEqual(['guild']),
     )
@@ -545,9 +524,10 @@ export const TraitsCapAtEightButAnExistingChipStaysRemovable: Story = {
   },
   render: () => <CharacterEditorDemo id="char-1" />,
   play: async () => {
-    const [traitsInput] = unlabeledTextboxes()
+    // Captured once: the placeholder disappears as soon as the first chip lands.
+    const traitsInput = screen.getByPlaceholderText(PLACEHOLDER.traits)
     for (let i = 1; i <= 9; i++) {
-      await userEvent.type(traitsInput!, `trait${i}{Enter}`)
+      await userEvent.type(traitsInput, `trait${i}{Enter}`)
     }
     await waitFor(() => {
       const row = castRowById('char-1') as WizardCharacterDraft

@@ -471,6 +471,20 @@ Maps to [`FactionState`](../../../data-model.md#factionstate-shape).
 `agenda` is identity-shaped (always visible); `standing` is
 dynamic-state (under More options).
 
+### Editor placeholders
+
+Every state field across the four editors carries an **example**
+placeholder in `e.g. "…"` form — `Speech`, `Traits`, `Drives`, each
+`Visual` sub-field, `Tags`, `Condition` (worded per kind), `Agenda`,
+`Standing`. A placeholder's job here is to show what belongs in a
+field the user has never filled before, so it names a plausible value
+rather than restating the label; on the chip inputs the two-item
+example also demonstrates that a comma commits a chip.
+
+`Name` and `Description` are the exceptions — their labels already
+say everything a placeholder could, and `Name` carries the step's
+only validation error, which a placeholder would compete with.
+
 ### Status field — `active` / `staged`
 
 Default `active`. User can flip to `staged` for entities-not-yet-
