@@ -76,7 +76,8 @@
     "failed": "Couldn't create the story.",
     "createdNotOpened": "Your story was created, but it couldn't be opened. Find it on your story list.",
     "embedFailed": {
-      "title": "Couldn't initialize the embedder",
+      "initTitle": "Couldn't initialize the embedder",
+      "callTitle": "Couldn't index the story",
       "retry": "Retry",
       "openSettings": "Open Memory settings",
       "cancel": "Cancel",

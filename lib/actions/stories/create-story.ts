@@ -57,9 +57,9 @@ export type CreateStoryInput = {
   settings: StorySettings
   openingContent: string
   openingMetadata: EntryMetadata
-  /** Wizard-authored cast (Slice 3.6b). Each row embeds name + description. */
+  /** Wizard-authored cast. Each row embeds name + description. */
   cast?: readonly WizardCastEntityInput[]
-  /** Wizard-authored initial lore (Slice 3.6a). Each row embeds title + body. */
+  /** Wizard-authored initial lore. Each row embeds title + body. */
   lore?: readonly WizardLoreDraft[]
   // Embed step (wizard Finish hard gate): when present, the cast's and lore rows'
   // vec ops are spliced into the atomic batch as ONE batched call (Contract C5 —

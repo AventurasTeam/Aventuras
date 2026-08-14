@@ -395,7 +395,7 @@ export default function WizardRoute() {
           {embedFailure && (
             <View className="mt-4 gap-3 rounded-md border border-danger bg-bg-base p-4">
               <Text className="text-sm font-medium text-danger">
-                {t('wizard:finish.embedFailed.title')}
+                {t(`wizard:finish.embedFailed.${embedFailure.kind}Title` as const)}
               </Text>
               <Text className="text-sm text-fg-secondary">
                 {t(`wizard:finish.embedFailed.${embedFailure.kind}` as const)}

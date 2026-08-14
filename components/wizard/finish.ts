@@ -71,9 +71,10 @@ export type FinishEmbedCtx = {
 // An intra-cast pointer only commits when it still resolves to some OTHER row of
 // the expected kind: the store prunes factionId / parentLocationId as their
 // target is removed, and this is the backstop for a working state that reached
-// Finish some other way. Self-exclusion is load-bearing, not paranoia —
-// resolveCastImports indexes each minted row's own name before resolving refs,
-// so a suggested location naming itself as parent_location_name binds to itself.
+// Finish some other way. Self-exclusion is part of that backstop rather than a
+// guard against a reachable producer: both authoring paths already reject a
+// self-reference (the editor's picker excludes self, cast-import.ts excludes
+// selfId before resolving refs).
 function castRef(
   cast: readonly WizardCastDraft[],
   self: WizardCastDraft,

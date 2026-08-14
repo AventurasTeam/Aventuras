@@ -98,7 +98,7 @@ const LOCATION_ID = 'loc_33333333-3333-3333-3333-333333333333'
 const FACTION_ID = 'fact_44444444-4444-4444-4444-444444444444'
 const ITEM_ID = 'item_55555555-5555-5555-5555-555555555555'
 
-/** The post-3.6b lead: an active character row in `cast`, starred by leadEntityId. */
+/** The lead: an active character row in `cast`, starred by leadEntityId. */
 function leadCast(name = 'Aria', id = LEAD_ID): WizardCharacterDraft {
   return { ...emptyCastDraft('character', id), name }
 }
@@ -516,11 +516,9 @@ describe('finishWizard', () => {
   it('drops a location that names itself as its own parent', async () => {
     const { db, ctx } = await setup()
 
-    // Reachable through ✨ Suggest cast, not just a corrupt blob:
-    // resolveCastImports indexes every minted row's own name before resolving
-    // refs, so a suggested location whose parent_location_name is its own name
-    // binds to itself. The editor's candidate list excludes self; the import
-    // path does not.
+    // Both authoring paths reject a self-parent (the editor's candidate list
+    // excludes self, cast-import.ts excludes selfId), so this shape only
+    // arrives on a corrupt working state — which is what castRef must survive.
     const result = await finishWizard(
       makeState({
         title: 'Self-Parented',

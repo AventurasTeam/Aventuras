@@ -264,8 +264,14 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       }
       setAssist({ kind: 'result', value: result.value })
     } else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
-    else if (result.status === 'failed')
+    else if (result.status === 'failed') {
+      // Where the real failures land — provider errors, timeouts, and every
+      // structured-output parse failure. The sync-throw branch above is the
+      // rare one, so logging only there left diagnostics empty for exactly the
+      // reports users file.
+      logger.error('provider.wizard_assist_failed', { modelId, ariaLabel, detail: result.detail })
       setAssist({ kind: 'failure', detail: result.detail, retry })
+    }
     // 'aborted' — whichever action triggered the abort already set its own state.
   }
 

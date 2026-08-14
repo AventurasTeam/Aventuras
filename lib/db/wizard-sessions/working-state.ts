@@ -126,9 +126,10 @@ export function emptyCastDraft<K extends WizardCastDraft['kind']>(
 export const wizardWorkingStateSchema = z.object({
   step: z.number().int().min(1).max(5).default(1),
   definition: wizardDefinitionDraftSchema.default(() => wizardDefinitionDraftSchema.parse({})),
-  // Set by setLeadEntityId (the ⭐ button); always points at an existing active
-  // character row in `cast`, or null. Nulled by the same cast mutators that
-  // remove or stage the row it points at (status flip to staged, deletion).
+  // Set by setLeadEntityId (the ⭐ button) and nulled by the cast mutators that
+  // stage or remove its target — but only on live edits. A hydrated draft can
+  // still carry a pointer at a staged, non-character, or absent row, so read it
+  // through activeLead (step-cast-logic.ts) rather than raw.
   leadEntityId: z.string().nullable().default(null),
   opening: wizardOpeningDraftSchema.default(() => wizardOpeningDraftSchema.parse({})),
   // null = model native dim; a positive int truncates to that Matryoshka dim.

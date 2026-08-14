@@ -23,7 +23,7 @@ export type AssistListItem<P = unknown> = {
    * The producing call site's own row, carried through untouched so importing
    * does not have to reconstruct it from `name` / `detail` — those two are for
    * rendering and deduping only, and would silently drop any third field
-   * (lore's `category`, and every per-kind field 3.6b's cast rows carry).
+   * (lore's `category`, and every per-kind field a cast row carries).
    * Required rather than optional: an omitted payload used to type-check and
    * only fail at import time, spreading `undefined` into the committed row.
    */

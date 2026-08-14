@@ -154,8 +154,8 @@ describe('castSuggestionsSchema', () => {
         },
       ],
     })
-    // Reference-name fields (faction_name, parent_location_name) must trim: Task 9's
-    // import resolver matches them case-insensitively against authored cast names.
+    // Reference-name fields (faction_name, parent_location_name) must trim:
+    // resolveCastImports matches them case-insensitively against cast names.
     expect(parsed.entities[0]).toMatchObject({
       name: 'Aria',
       description: 'A blacksmith.',

@@ -41,8 +41,8 @@ export const Step1Frame: Story = {
     expect(canvas.queryByRole('button', { name: '← Back' })).toBeNull()
 
     // Neither pill is interactive here — this story's canJumpTo stub returns
-    // false for every step, not because either step is disabled (no step is,
-    // as of Slice 3.6b).
+    // false for every step, not because either step is disabled (DISABLED_STEPS
+    // is currently empty).
     const world = await canvas.findByRole('button', { name: 'World' })
     const cast = await canvas.findByRole('button', { name: 'Cast' })
     expect(world).toBeDisabled()
@@ -104,7 +104,7 @@ export const ForwardJumpToVisited: Story = {
     await userEvent.click(world)
     await waitFor(() => expect(args.onJump).toHaveBeenCalledWith(3))
 
-    // Cast is live too (Slice 3.6b) — same jump behavior as any other step.
+    // Cast is live too — same jump behavior as any other step.
     const cast = await canvas.findByRole('button', { name: 'Cast' })
     await userEvent.click(cast)
     await waitFor(() => expect(args.onJump).toHaveBeenCalledWith(4))
