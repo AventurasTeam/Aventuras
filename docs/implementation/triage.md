@@ -1243,3 +1243,28 @@ on hover`; the shipped rows render label and tagline only, so the
   would let a caller-supplied `role="combobox"` through — nobody has
   applied or tested it. Applies to every `dropdown`-mode `Select` that
   carries a `label`. Raised 2026-08-13.
+- **The wizard commits `parent_location_id` without the documented
+  cycle guard.**
+  [`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)
+  assigns cycle prevention to the action-layer mutator that writes
+  the field: walk the proposed parent chain, depth-cap 100, reject
+  with `reason: 'parent-cycle'`. Finish is such a writer and does no
+  walk, and neither authoring path blocks it — the editor's picker
+  and `cast-import.ts` each exclude only self, so `A → B` plus
+  `B → A` authors and commits cleanly. Inert today: nothing walks the
+  chain, and the only reader canon names is M4's prompt rendering
+  (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
+  shared guard rather than writing a wizard-local copy of it. Raised
+  2026-08-14.
+- **A single malformed row resets the whole wizard draft.**
+  `parsePersistedState` (`lib/actions/wizard/session.ts`) runs one
+  `safeParse` over the entire working state, so one bad `cast` or
+  `lore` row discards the title, description, genre, tone, setting,
+  calendar, opening prose, and every healthy sibling row — reported
+  via toast and `logger.warn`, so not silent, but all-or-nothing. Not
+  reachable today: every writer is typed and the schema strips unknown
+  keys rather than rejecting them, so the realistic triggers are a
+  future schema tightening or a hand-edited database. The
+  element-wise salvage pattern to copy already exists at
+  `decodeCaptures` in `lib/probe/read.ts`, which isolates a corrupt
+  row instead of failing the list. Raised 2026-08-14.

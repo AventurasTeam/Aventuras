@@ -63,8 +63,11 @@ Horizontal pill row below the top-bar:
 - **Hollow dot (○)** = pending.
 - **Active step** gets accent treatment.
 - **Backward-jump clickable** on completed pills.
-- **Forward-jump disabled** — must advance via `Next →` (which
-  validates current step).
+- **Forward-jump** re-enters an already-visited step only. A pill
+  past the furthest step reached stays inert, and a visited pill
+  goes inert again if a gating step before it has since been
+  invalidated. `Next →` (which validates the current step) is the
+  only way to reach a step for the first time.
 - **Auto-save** fires on any nav (Next / Back / pill click).
 
 Named-not-numbered: 5 steps fit comfortably; names give spatial
@@ -591,8 +594,9 @@ batch.
   character marked lead. Copy varies by reason.
 - **`Next →` validation** blocks until satisfied when required.
 - **Cascading from back-jump.** If user revisits step 1 and
-  changes mode/narration, step 4's pill demotes from `✓` to `○`
-  if the new rule isn't satisfied.
+  changes mode/narration, the new rule re-gates step 4's `Next →`
+  and forward-jump eligibility. Pills track position, not
+  validity, so the pill itself does not change state.
 
 ### Validation gates on `Next` (Cast)
 
@@ -1017,17 +1021,18 @@ setting/lore/cast/opening).
 - **Concurrent draft + session.** Mutually exclusive; user
   resolves via the [concurrent-state prompts](../story-list/story-list.md#unfinished-wizard-session-automatic-safety-net).
 - **Mode/narration change via back-jump that adds the lead
-  requirement.** Step 4's pill demotes; user walks forward to
-  satisfy.
+  requirement.** Forward-jump past step 4 goes inert; user walks
+  forward to satisfy.
 - **AI-assist call mid-flight on Cancel.** Call cancels; session
   preserves at last committed state.
 - **Save-as-draft with no title.** Draft card renders
   `Untitled story` placeholder; rename when resumed.
 - **Replace-on-existing on genre/tone.** Confirm modal fires when
   preset OR AI-suggest accept would overwrite non-empty content.
-- **Lead unset cascade.** Two paths can unmark lead (status flip to
-  staged, row deletion). Same
-  [toast](../../patterns/toast.md) copy ("Lead unset — ...") on each.
+- **Lead unset cascade.** Two paths unmark the lead, each with its
+  own [toast](../../patterns/toast.md): status flip to staged →
+  `Lead unset — staged characters can't be lead.`; row deletion →
+  `Lead unset — the lead was removed from the cast.`
 
 ## Mobile expression
 
