@@ -1406,7 +1406,7 @@
         <Textarea
           bind:value={editContent}
           onkeydown={handleKeydown}
-          class="min-h-25 w-full resize-y text-base"
+          class="min-h-25 w-full text-base"
           rows={4}
         />
         <div class="flex gap-2">

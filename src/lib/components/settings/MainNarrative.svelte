@@ -146,7 +146,7 @@
         <Textarea
           bind:value={settings.apiSettings.manualBody}
           onblur={() => settings.setMainManualBody(settings.apiSettings.manualBody)}
-          class="min-h-[100px] w-full resize-y font-mono"
+          class="min-h-[100px] w-full font-mono"
           rows={4}
         />
         <p class="text-muted-foreground mt-1 text-xs">

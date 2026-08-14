@@ -10,11 +10,19 @@
   type Props = {
     open: boolean
     onOpenChange?: OnChangeFn<boolean>
+    /** Drawer-only: `false` stops the swipe-down gesture. The desktop dialog has no equivalent. */
+    dismissible?: boolean
     children: Snippet
     [key: string]: unknown
   }
 
-  let { open = $bindable(false), onOpenChange, children, ...props }: Props = $props()
+  let {
+    open = $bindable(false),
+    onOpenChange,
+    dismissible = true,
+    children,
+    ...props
+  }: Props = $props()
 
   const isMobile = createIsMobile()
   setResponsiveModalContext({ isMobile })
@@ -26,7 +34,7 @@
 </script>
 
 {#if isMobile.current}
-  <Drawer.Root bind:open onOpenChange={handleOpenChange} {...props}>
+  <Drawer.Root bind:open {dismissible} onOpenChange={handleOpenChange} {...props}>
     {@render children?.()}
   </Drawer.Root>
 {:else}

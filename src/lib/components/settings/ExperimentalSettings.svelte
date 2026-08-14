@@ -36,6 +36,7 @@
   import * as Dialog from '$lib/components/ui/dialog'
   import { database } from '$lib/services/database'
   import { isAndroid } from '$lib/utils/platform'
+  import { autosize } from '$lib/utils/autosize'
   import { ask, open } from '@tauri-apps/plugin-dialog'
   import { openFilters } from '$lib/utils/dialogFilters'
   import { invoke } from '@tauri-apps/api/core'
@@ -615,10 +616,11 @@
       <!-- Query Input -->
       <textarea
         bind:value={sqlQuery}
+        use:autosize={{ enabled: true, value: sqlQuery }}
         onkeydown={handleQueryKeydown}
         placeholder="SELECT * FROM stories LIMIT 10;"
         spellcheck={false}
-        class="bg-surface-950 border-surface-700 text-foreground placeholder:text-muted-foreground w-full rounded-md border p-3 font-mono text-xs leading-relaxed focus:ring-1 focus:ring-amber-500/50 focus:outline-none"
+        class="bg-surface-950 border-surface-700 text-foreground placeholder:text-muted-foreground max-h-[50dvh] w-full resize-none rounded-md border p-3 font-mono text-xs leading-relaxed focus:ring-1 focus:ring-amber-500/50 focus:outline-none"
         rows={4}></textarea>
 
       <!-- Actions -->
