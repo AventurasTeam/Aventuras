@@ -101,16 +101,6 @@ export type WizardLocationDraft = z.infer<typeof locationCastDraftSchema>
 export type WizardItemDraft = z.infer<typeof itemCastDraftSchema>
 export type WizardFactionDraft = z.infer<typeof factionCastDraftSchema>
 
-// `Omit` isn't distributive over a union by itself; the `T extends unknown`
-// clause forces per-member distribution so each kind's own fields survive.
-// `status` is excluded too: only setCastStatus may write it, because staging
-// the lead must null leadEntityId in the same set() call — a generic by-id
-// collection patch has no lead awareness and would leave that pointer stale.
-type CastDraftPatchOf<T> = T extends unknown ? Partial<Omit<T, 'id' | 'kind' | 'status'>> : never
-
-/** Patch accepted by a by-id cast mutator: any one kind's editable fields (status goes through setCastStatus). */
-export type WizardCastDraftPatch = CastDraftPatchOf<WizardCastDraft>
-
 export type WizardCastDraftByKind<K extends WizardCastDraft['kind']> = Extract<
   WizardCastDraft,
   { kind: K }

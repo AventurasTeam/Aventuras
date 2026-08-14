@@ -78,7 +78,7 @@ function NameStatusRow({ row, invalid }: { row: WizardCastDraft; invalid: boolea
       >
         <Input
           value={row.name}
-          onChangeText={(name) => wizardStore.patchCast(row.id, { name })}
+          onChangeText={(name) => wizardStore.patchCast(row, { name })}
           aria-label={t('wizard:cast.editor.name')}
           aria-invalid={nameError}
         />
@@ -100,7 +100,7 @@ function DescriptionRow({ row }: { row: WizardCastDraft }) {
     <FormRow label={t('wizard:cast.editor.description')}>
       <Textarea
         value={row.description}
-        onChangeText={(description) => wizardStore.patchCast(row.id, { description })}
+        onChangeText={(description) => wizardStore.patchCast(row, { description })}
         aria-label={t('wizard:cast.editor.description')}
         rows={3}
       />
@@ -113,7 +113,7 @@ function TagsRow({ row }: { row: WizardCastDraft }) {
     <FormRow label={t('wizard:cast.editor.tags')} hint={t('wizard:cast.editor.tagsHint')}>
       <TagInput
         value={row.tags}
-        onChange={(tags) => wizardStore.patchCast(row.id, { tags })}
+        onChange={(tags) => wizardStore.patchCast(row, { tags })}
         placeholder={t('wizard:cast.editor.tagsPlaceholder')}
       />
     </FormRow>
@@ -200,7 +200,7 @@ export function CharacterEditor({
       <FormRow label={t('wizard:cast.editor.speech')}>
         <Input
           value={row.voice}
-          onChangeText={(voice) => wizardStore.patchCast(row.id, { voice })}
+          onChangeText={(voice) => wizardStore.patchCast(row, { voice })}
           placeholder={t('wizard:cast.editor.speechPlaceholder')}
           aria-label={t('wizard:cast.editor.speech')}
         />
@@ -208,7 +208,7 @@ export function CharacterEditor({
       <FormRow label={t('wizard:cast.editor.traits')}>
         <TagInput
           value={row.traits}
-          onChange={(traits) => wizardStore.patchCast(row.id, { traits })}
+          onChange={(traits) => wizardStore.patchCast(row, { traits })}
           placeholder={t('wizard:cast.editor.traitsPlaceholder')}
           maxCount={TRAITS_CAP}
         />
@@ -216,7 +216,7 @@ export function CharacterEditor({
       <FormRow label={t('wizard:cast.editor.drives')}>
         <TagInput
           value={row.drives}
-          onChange={(drives) => wizardStore.patchCast(row.id, { drives })}
+          onChange={(drives) => wizardStore.patchCast(row, { drives })}
           placeholder={t('wizard:cast.editor.drivesPlaceholder')}
           maxCount={DRIVES_CAP}
         />
@@ -232,7 +232,7 @@ export function CharacterEditor({
                 <Input
                   value={row.visual[field]}
                   onChangeText={(text) =>
-                    wizardStore.patchCast(row.id, { visual: { ...row.visual, [field]: text } })
+                    wizardStore.patchCast(row, { visual: { ...row.visual, [field]: text } })
                   }
                   placeholder={t(`wizard:cast.editor.${field}Placeholder`)}
                   aria-label={t(`wizard:cast.editor.${field}`)}
@@ -253,7 +253,7 @@ export function CharacterEditor({
               nullLabel={t('wizard:cast.editor.unaffiliated')}
               candidates={factionCandidates}
               value={row.factionId}
-              onChange={(factionId) => wizardStore.patchCast(row.id, { factionId })}
+              onChange={(factionId) => wizardStore.patchCast(row, { factionId })}
             />
           </AccordionContent>
         </AccordionItem>
@@ -284,12 +284,12 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               nullLabel={t('wizard:cast.editor.noParent')}
               candidates={locationCandidates}
               value={row.parentLocationId}
-              onChange={(parentLocationId) => wizardStore.patchCast(row.id, { parentLocationId })}
+              onChange={(parentLocationId) => wizardStore.patchCast(row, { parentLocationId })}
             />
             <FormRow label={t('wizard:cast.editor.condition')}>
               <Input
                 value={row.condition}
-                onChangeText={(condition) => wizardStore.patchCast(row.id, { condition })}
+                onChangeText={(condition) => wizardStore.patchCast(row, { condition })}
                 placeholder={t('wizard:cast.editor.conditionPlaceholderLocation')}
                 aria-label={t('wizard:cast.editor.condition')}
               />
@@ -316,7 +316,7 @@ export function ItemEditor({ row, invalid }: CommonEditorProps<WizardItemDraft>)
             <FormRow label={t('wizard:cast.editor.condition')}>
               <Input
                 value={row.condition}
-                onChangeText={(condition) => wizardStore.patchCast(row.id, { condition })}
+                onChangeText={(condition) => wizardStore.patchCast(row, { condition })}
                 placeholder={t('wizard:cast.editor.conditionPlaceholderItem')}
                 aria-label={t('wizard:cast.editor.condition')}
               />
@@ -336,7 +336,7 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
       <FormRow label={t('wizard:cast.editor.agenda')}>
         <TagInput
           value={row.agenda}
-          onChange={(agenda) => wizardStore.patchCast(row.id, { agenda })}
+          onChange={(agenda) => wizardStore.patchCast(row, { agenda })}
           placeholder={t('wizard:cast.editor.agendaPlaceholder')}
           maxCount={AGENDA_CAP}
         />
@@ -351,7 +351,7 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
             <FormRow label={t('wizard:cast.editor.standing')}>
               <Input
                 value={row.standing}
-                onChangeText={(standing) => wizardStore.patchCast(row.id, { standing })}
+                onChangeText={(standing) => wizardStore.patchCast(row, { standing })}
                 placeholder={t('wizard:cast.editor.standingPlaceholder')}
                 aria-label={t('wizard:cast.editor.standing')}
               />

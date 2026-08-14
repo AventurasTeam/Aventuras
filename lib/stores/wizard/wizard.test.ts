@@ -1,9 +1,24 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
+import {
+  emptyCastDraft,
+  emptyWorkingState,
+  type WizardCastDraft,
+  type WizardCastDraftByKind,
+} from '@/lib/db'
 import { ID_PATTERN } from '@/lib/ids'
 
 import { wizardStore } from './wizard'
+
+// addCast returns the minted id; patchCast wants the row. Returning it narrowed
+// to the concrete kind is what makes the cross-kind @ts-expect-error cases fire
+// — a union-typed row would widen T straight back to the bag being guarded.
+function addCastRow<K extends WizardCastDraft['kind']>(kind: K): WizardCastDraftByKind<K> {
+  const id = wizardStore.addCast(kind)
+  const row = wizardStore.getWizard().state.cast.find((r) => r.id === id)
+  if (row?.kind !== kind) throw new Error(`no ${kind} row ${id}`)
+  return row as WizardCastDraftByKind<K>
+}
 
 describe('wizardStore', () => {
   beforeEach(() => wizardStore.reset())
@@ -164,24 +179,36 @@ describe('cast mutators', () => {
     expect(wizardStore.getWizard().state.cast[0]).toMatchObject({ id, kind, status: 'active' })
   })
 
-  it('patchCast patches by id and leaves other rows alone', () => {
-    const a = wizardStore.addCast('character')
-    const b = wizardStore.addCast('character')
+  it('patchCast patches the given row and leaves other rows alone', () => {
+    const a = addCastRow('character')
+    const b = addCastRow('character')
     wizardStore.patchCast(a, { name: 'Aria' })
     const cast = wizardStore.getWizard().state.cast
-    expect(cast.find((r) => r.id === a)?.name).toBe('Aria')
-    expect(cast.find((r) => r.id === b)?.name).toBe('')
+    expect(cast.find((r) => r.id === a.id)?.name).toBe('Aria')
+    expect(cast.find((r) => r.id === b.id)?.name).toBe('')
   })
 
   it('rejects a status patch through patchCast at the type level; only setCastStatus carries the lead cascade', () => {
-    const id = wizardStore.addCast('character')
-    // @ts-expect-error status is excluded from WizardCastDraftPatch — this line
-    // must stop compiling if that exclusion is ever reverted.
-    wizardStore.patchCast(id, { status: 'staged' })
+    const row = addCastRow('character')
+    // @ts-expect-error status is excluded from the patch type — this line must
+    // stop compiling if that exclusion is ever reverted.
+    wizardStore.patchCast(row, { status: 'staged' })
     // The directive above is the assertion. Nothing is asserted about the
     // runtime write: JS has no gate today, but hardening one would be a fix,
     // not a regression, so pinning the current behavior would fight that.
     expect(wizardStore.getWizard().state.cast).toHaveLength(1)
+  })
+
+  it('rejects a cross-kind patch at the type level', () => {
+    const character = addCastRow('character')
+    const location = addCastRow('location')
+    // @ts-expect-error parentLocationId belongs to a location, not a character.
+    // Taking the ROW rather than its id is what lets T infer per-kind here; an
+    // id-keyed patch typed as a union of Partials accepts any kind's field.
+    wizardStore.patchCast(character, { parentLocationId: location.id })
+    // @ts-expect-error voice belongs to a character, not a location.
+    wizardStore.patchCast(location, { voice: 'clipped' })
+    expect(wizardStore.getWizard().state.cast).toHaveLength(2)
   })
 
   it('importCast appends fully-built drafts unchanged', () => {
@@ -235,14 +262,18 @@ describe('cast mutators', () => {
     const keeperFac = wizardStore.addCast('faction')
     const doomedLoc = wizardStore.addCast('location')
     const keeperLoc = wizardStore.addCast('location')
-    const orphaned = wizardStore.addCast('character')
-    const attached = wizardStore.addCast('character')
-    const childOrphaned = wizardStore.addCast('location')
-    const childAttached = wizardStore.addCast('location')
-    wizardStore.patchCast(orphaned, { factionId: doomedFac })
-    wizardStore.patchCast(attached, { factionId: keeperFac })
-    wizardStore.patchCast(childOrphaned, { parentLocationId: doomedLoc })
-    wizardStore.patchCast(childAttached, { parentLocationId: keeperLoc })
+    const orphanedRow = addCastRow('character')
+    const attachedRow = addCastRow('character')
+    const childOrphanedRow = addCastRow('location')
+    const childAttachedRow = addCastRow('location')
+    const { id: orphaned } = orphanedRow
+    const { id: attached } = attachedRow
+    const { id: childOrphaned } = childOrphanedRow
+    const { id: childAttached } = childAttachedRow
+    wizardStore.patchCast(orphanedRow, { factionId: doomedFac })
+    wizardStore.patchCast(attachedRow, { factionId: keeperFac })
+    wizardStore.patchCast(childOrphanedRow, { parentLocationId: doomedLoc })
+    wizardStore.patchCast(childAttachedRow, { parentLocationId: keeperLoc })
     const attachedBefore = wizardStore.getWizard().state.cast.find((r) => r.id === attached)
     wizardStore.removeCast(doomedFac)
     wizardStore.removeCast(doomedLoc)

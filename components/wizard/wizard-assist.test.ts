@@ -269,7 +269,9 @@ describe('runCastAssist', () => {
   it('renders the authored cast rows from wizard state, not just the suggested exclusions', async () => {
     let capturedPrompt = ''
     const id = wizardStore.addCast('character')
-    wizardStore.patchCast(id, { name: 'Rook' })
+    const row = wizardStore.getWizard().state.cast.find((r) => r.id === id)
+    if (row?.kind !== 'character') throw new Error('expected a character row')
+    wizardStore.patchCast(row, { name: 'Rook' })
     const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
       capturedPrompt = prompt as string
       return { status: 'ok', value: { entities: [] } }

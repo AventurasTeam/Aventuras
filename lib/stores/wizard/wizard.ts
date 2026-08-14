@@ -5,7 +5,6 @@ import {
   emptyCastDraft,
   emptyWorkingState,
   type WizardCastDraft,
-  type WizardCastDraftPatch,
   type WizardWorkingState,
   type WizardLoreDraft,
 } from '@/lib/db'
@@ -44,7 +43,16 @@ type WizardState = WizardSnapshot & {
   importLore: (rows: readonly Partial<Omit<WizardLoreDraft, 'id'>>[]) => void
   /** Returns the minted row's id — same rationale as addLore. */
   addCast: (kind: WizardCastDraft['kind']) => string
-  patchCast: (id: string, patch: WizardCastDraftPatch) => void
+  /**
+   * Takes the row, not its id: an id-keyed patch can't discriminate kind, so a
+   * character could be handed a location's field and only lose it on the next
+   * load-time re-parse. `T` infers from the row the caller already holds, which
+   * makes the cross-kind patch a compile error instead.
+   */
+  patchCast: <T extends WizardCastDraft>(
+    row: T,
+    patch: Partial<Omit<T, 'id' | 'kind' | 'status'>>,
+  ) => void
   /**
    * Caller owns id uniqueness — unlike importLore this can't re-mint, because
    * the resolver's minted ids carry cross-references between the imported rows.
@@ -144,9 +152,7 @@ const store = createStore<WizardState>()((set) => {
       castOps.append([row])
       return row.id
     },
-    // An id-keyed patch can't discriminate kind, so a cross-kind field would land
-    // at runtime; the schema re-parse on load is the backstop.
-    patchCast: (id, patch) => castOps.patch(id, patch),
+    patchCast: (row, patch) => castOps.patch(row.id, patch),
     importCast: (rows) => castOps.append(rows),
     // Cascades read leadEntityId in the same set() the row change lands in, so the
     // two can never be observed half-applied. The boolean tells the CALLER to
