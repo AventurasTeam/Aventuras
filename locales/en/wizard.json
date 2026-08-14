@@ -253,6 +253,7 @@
       "categoryPlaceholder": "e.g. cosmology",
       "moreOptions": "More options",
       "tags": "Tags",
+      "tagsPlaceholder": "e.g. \"faith, ritual\"",
       "injectionMode": "Injection mode",
       "priority": "Priority",
       "priorityHint": "{{min}}–{{max}}. Higher makes this more likely to be recalled.",

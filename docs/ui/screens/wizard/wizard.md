@@ -308,6 +308,11 @@ Category        [_____________________________]
 Defaults sensible (`auto`, priority `0`, no tags / category).
 80%+ skip the disclosure.
 
+`Category` and `Tags` carry example placeholders on the same rule the
+cast editors follow ([Editor placeholders](#editor-placeholders));
+`Title` and `Body` go bare for the same reason `Name` and
+`Description` do.
+
 **Long scroll** — no pagination chrome on the lore list, per the
 [lists pattern](../../patterns/lists.md). Virtualization library
 is settled (`@tanstack/react-virtual` on web, FlatList on native);
