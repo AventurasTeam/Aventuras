@@ -1,3 +1,13 @@
+declare const DedupeKeyBrand: unique symbol
+
+/**
+ * Normalized identity for list dedupe, selection, and the `(already exists)`
+ * mark. Branded so the suggestion side and the already-authored side cannot be
+ * built by different rules and silently stop matching — the only ways in are
+ * `nameKey` and `composeKey`, both of which normalize.
+ */
+export type DedupeKey = string & { readonly [DedupeKeyBrand]: true }
+
 /** The shape every list-result row renders as, regardless of what produced it. */
 export type AssistListItem<P = unknown> = {
   /** Card heading; also the prompt-facing exclusion string on `Generate more`. */
@@ -6,12 +16,9 @@ export type AssistListItem<P = unknown> = {
   detail: string
   /**
    * Dedupe/selection identity for callers whose rows are only unique within a
-   * scope (name alone is ambiguous). Normalized as a whole string — trimmed +
-   * lowercased — not per-component, so composing one from parts (e.g. a scope
-   * and a name) must normalize each part itself; use `composeKey`. Falls back
-   * to the normalized name when omitted.
+   * scope (name alone is ambiguous). Falls back to the row's name when omitted.
    */
-  dedupeKey?: string
+  dedupeKey?: DedupeKey
   /**
    * The producing call site's own row, carried through untouched so importing
    * does not have to reconstruct it from `name` / `detail` — those two are for
@@ -32,18 +39,23 @@ function normalizeKey(value: string): string {
   return value.trim().toLowerCase()
 }
 
+/** Identity for rows whose name alone is unique. */
+export function nameKey(name: string): DedupeKey {
+  return normalizeKey(name) as DedupeKey
+}
+
 /**
  * Build a `dedupeKey` for rows whose name is only unique within a scope (e.g. a
- * cast kind). Both sides of a comparison must be built with this — normalizing
- * the joined string only would leave a padded name as interior whitespace.
+ * cast kind). Each half is normalized separately — normalizing the joined string
+ * only would leave a padded name as interior whitespace.
  */
-export function composeKey(scope: string, name: string): string {
-  return `${normalizeKey(scope)}:${normalizeKey(name)}`
+export function composeKey(scope: string, name: string): DedupeKey {
+  return `${normalizeKey(scope)}:${normalizeKey(name)}` as DedupeKey
 }
 
 /** The identity a list row dedupes, selects, and keys on. */
-export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): string {
-  return normalizeKey(item.dedupeKey ?? item.name)
+export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): DedupeKey {
+  return normalizeKey(item.dedupeKey ?? item.name) as DedupeKey
 }
 
 /**
@@ -52,9 +64,9 @@ export function itemKey(item: Pick<AssistListItem, 'name' | 'dedupeKey'>): strin
  */
 export function markExisting<P>(
   items: readonly AssistListItem<P>[],
-  existingKeys: readonly string[],
+  existingKeys: readonly DedupeKey[],
 ): MarkedAssistListItem<P>[] {
-  const taken = new Set(existingKeys.map(normalizeKey))
+  const taken = new Set<string>(existingKeys.map(normalizeKey))
   return items.map((item) => ({
     ...item,
     name: item.name.trim(),

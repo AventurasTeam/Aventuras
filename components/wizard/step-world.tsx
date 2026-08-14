@@ -20,6 +20,7 @@ import { wizardStore } from '@/lib/stores'
 import { GENRE_PRESETS, presetValue, TONE_PRESETS } from '@/lib/wizard'
 
 import { AiAssist } from './ai-assist'
+import { nameKey } from './assist-list-logic'
 import { LoreList } from './lore-list'
 import { PresetBrowser } from './preset-browser'
 import {
@@ -241,7 +242,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             getItems={(v) =>
               v.lore.map((row) => ({ name: row.title, detail: row.body, payload: row }))
             }
-            existingKeys={lore.map((row) => row.title)}
+            existingKeys={lore.map((row) => nameKey(row.title))}
             onImport={wizardStore.importLore}
             onSetup={handleSetup}
           />

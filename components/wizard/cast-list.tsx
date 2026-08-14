@@ -223,6 +223,11 @@ export function CastList({ onSetupAssist, assist }: CastListProps) {
             }))
           }
           existingKeys={cast.map((row) => composeKey(row.kind, row.name))}
+          // Kind-qualified to match the "Already in the cast" block, which
+          // renders `name (kind)`. A bare name here would tell the model to
+          // suppress an Ashfall of ANY kind, which is exactly the collision
+          // the kind-scoped dedupe deliberately allows.
+          excludeLabel={(item) => `${item.name.trim()} (${item.payload.kind})`}
           onImport={(payloads) => wizardStore.importCast(resolveCastImports(payloads, cast))}
           onSetup={handleSetup}
         />

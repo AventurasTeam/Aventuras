@@ -25,7 +25,13 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-import { itemKey, markExisting, mergePages, type AssistListItem } from './assist-list-logic'
+import {
+  itemKey,
+  markExisting,
+  mergePages,
+  type AssistListItem,
+  type DedupeKey,
+} from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -115,12 +121,18 @@ type AiAssistListProps<T, P> = AiAssistCommonProps & {
   getItems: (value: T) => AssistListItem<P>[]
   /**
    * Identities already in the wizard's own list — drives the `(already
-   * exists)` mark. Must match whatever identity the rows carry: plain names
-   * when items have no `dedupeKey`, or the same scope-qualified keys (built
-   * with `composeKey`) when they do — nothing enforces the two agree, and a
-   * mismatch fails silently (nothing matches, duplicates import).
+   * exists)` mark. Build with the same constructor the rows' `dedupeKey` uses
+   * (`nameKey` or `composeKey`); the `DedupeKey` brand is what stops the two
+   * sides drifting into different rules and silently never matching.
    */
-  existingKeys: readonly string[]
+  existingKeys: readonly DedupeKey[]
+  /**
+   * Prompt-facing exclusion label for a row already on screen, sent on
+   * `Generate more`. Defaults to the trimmed name. Callers whose identity is
+   * scope-qualified must qualify here too, or the model is told to suppress a
+   * name the dedupe would have allowed back under a different scope.
+   */
+  excludeLabel?: (item: AssistListItem<P>) => string
   /** Fires once with the payload of every checked row when `Import selected` is pressed. */
   onImport: (payloads: P[]) => void
 }
@@ -269,7 +281,10 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     // name: mergePages no longer guarantees name-uniqueness once dedupeKey is in
     // play, so two same-named rows (e.g. different cast kinds) would otherwise
     // send the model the same exclusion twice.
-    const exclude = appendRef.current ? [...new Set(listItems.map((item) => item.name.trim()))] : []
+    const label =
+      (props.result === 'list' ? props.excludeLabel : undefined) ??
+      ((item: AssistListItem<P>) => item.name.trim())
+    const exclude = appendRef.current ? [...new Set(listItems.map(label))] : []
     const call =
       props.result === 'list'
         ? (signal: AbortSignal) => props.run(guidance, signal, exclude)

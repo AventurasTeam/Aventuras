@@ -5,19 +5,29 @@ import {
   itemKey,
   mergePages,
   markExisting,
+  nameKey,
   type AssistListItem,
+  type DedupeKey,
 } from './assist-list-logic'
 
 const item = (name: string): AssistListItem => ({ name, detail: `${name} detail`, payload: null })
 
+// The DedupeKey brand makes an un-normalized key unconstructable through the
+// public constructors, which is the point — but itemKey/markExisting still
+// normalize defensively, and that behavior needs a way in to stay pinned.
+const rawKey = (value: string) => value as DedupeKey
+
 describe('markExisting', () => {
   it('flags a case-insensitive collision with already-imported content', () => {
-    const marked = markExisting([item('The Old Empire'), item('Magic wells')], ['the old empire'])
+    const marked = markExisting(
+      [item('The Old Empire'), item('Magic wells')],
+      [nameKey('the old empire')],
+    )
     expect(marked.map((m) => m.exists)).toEqual([true, false])
   })
 
   it('ignores surrounding whitespace when comparing', () => {
-    expect(markExisting([item('  Noir  ')], ['noir'])[0].exists).toBe(true)
+    expect(markExisting([item('  Noir  ')], [nameKey('noir')])[0].exists).toBe(true)
   })
 
   it('leaves everything importable when nothing exists yet', () => {
@@ -45,19 +55,29 @@ describe('mergePages', () => {
 })
 
 describe('dedupeKey', () => {
-  const loc = { name: 'Ashfall', detail: 'a city', dedupeKey: 'location:Ashfall', payload: 1 }
-  const fac = { name: 'Ashfall', detail: 'a cult', dedupeKey: 'faction:Ashfall', payload: 2 }
+  const loc = {
+    name: 'Ashfall',
+    detail: 'a city',
+    dedupeKey: composeKey('location', 'Ashfall'),
+    payload: 1,
+  }
+  const fac = {
+    name: 'Ashfall',
+    detail: 'a cult',
+    dedupeKey: composeKey('faction', 'Ashfall'),
+    payload: 2,
+  }
 
   it('mergePages keeps same-named items with distinct dedupeKeys', () => {
     expect(mergePages([loc], [fac])).toHaveLength(2)
   })
 
   it('mergePages still dedupes on dedupeKey case-insensitively', () => {
-    expect(mergePages([loc], [{ ...loc, dedupeKey: 'location:ASHFALL ' }])).toHaveLength(1)
+    expect(mergePages([loc], [{ ...loc, dedupeKey: rawKey('location:ASHFALL ') }])).toHaveLength(1)
   })
 
   it('markExisting matches kind-qualified existing keys against dedupeKey', () => {
-    const marked = markExisting([loc, fac], ['faction:ashfall'])
+    const marked = markExisting([loc, fac], [composeKey('faction', 'ashfall')])
     expect(marked[0].exists).toBe(false)
     expect(marked[1].exists).toBe(true)
   })
@@ -65,12 +85,12 @@ describe('dedupeKey', () => {
   it('falls back to the normalized name when dedupeKey is absent (lore path unchanged)', () => {
     const a = { name: 'The Wells', detail: '', payload: 1 }
     expect(mergePages([a], [{ ...a, name: ' the wells' }])).toHaveLength(1)
-    expect(markExisting([a], ['THE WELLS'])[0].exists).toBe(true)
+    expect(markExisting([a], [nameKey('THE WELLS')])[0].exists).toBe(true)
   })
 
   it('itemKey normalizes whichever identity it uses', () => {
     expect(itemKey({ name: ' The Wells ' })).toBe('the wells')
-    expect(itemKey({ name: 'x', dedupeKey: ' Location:Ashfall ' })).toBe('location:ashfall')
+    expect(itemKey({ name: 'x', dedupeKey: rawKey(' Location:Ashfall ') })).toBe('location:ashfall')
   })
 })
 
@@ -87,6 +107,8 @@ describe('composeKey', () => {
 
     // Naive interpolation — normalizing the JOINED string rather than each part
     // — would leave the padding as interior whitespace and miss this match.
-    expect(itemKey({ name: 'x', dedupeKey: 'location:  Ashfall  ' })).not.toBe(cleanExistingKey)
+    expect(itemKey({ name: 'x', dedupeKey: rawKey('location:  Ashfall  ') })).not.toBe(
+      cleanExistingKey,
+    )
   })
 })

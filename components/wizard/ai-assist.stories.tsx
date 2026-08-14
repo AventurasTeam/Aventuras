@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
-import { composeKey, type AssistListItem } from './assist-list-logic'
+import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './assist-list-logic'
 
 // AiAssist drives the overlay state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).
@@ -112,6 +112,23 @@ function guidanceCapturingRun<T>(value: T, calls: string[]) {
   }
 }
 
+// Records the exclusion list `run` was called with on each page — the only
+// thing that proves `Generate more` asks the model for something new instead
+// of re-rolling the prompt that produced page one.
+function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
+  let call = 0
+  return async (
+    _guidance: string,
+    _signal: AbortSignal,
+    exclude: readonly string[],
+  ): Promise<GenerateStructuredResult<T>> => {
+    calls.push(exclude)
+    const value = pages[Math.min(call, pages.length - 1)]
+    call += 1
+    return { status: 'ok', value }
+  }
+}
+
 type DescriptionValue = { description: string }
 type TitlesValue = { titles: string[] }
 
@@ -209,13 +226,25 @@ type ListItemValue = { items: AssistListItem<ListPayload>[] }
 
 type ListDemoProps = {
   resolveModelId: () => string | null
-  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
-  existingKeys?: string[]
+  run: (
+    guidance: string,
+    signal: AbortSignal,
+    exclude: readonly string[],
+  ) => Promise<GenerateStructuredResult<ListItemValue>>
+  existingKeys?: DedupeKey[]
+  excludeLabel?: (item: AssistListItem<ListPayload>) => string
   onSetup: () => void
   onImport: (payloads: ListPayload[]) => void
 }
 
-function ListDemo({ resolveModelId, run, existingKeys = [], onSetup, onImport }: ListDemoProps) {
+function ListDemo({
+  resolveModelId,
+  run,
+  existingKeys = [],
+  excludeLabel,
+  onSetup,
+  onImport,
+}: ListDemoProps) {
   const [imported, setImported] = useState<string[]>([])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -230,6 +259,7 @@ function ListDemo({ resolveModelId, run, existingKeys = [], onSetup, onImport }:
         result="list"
         getItems={(v) => v.items}
         existingKeys={existingKeys}
+        excludeLabel={excludeLabel}
         onImport={(payloads) => {
           setImported(payloads.map((p) => p.name))
           onImport(payloads)
@@ -247,14 +277,14 @@ type ListDemoWithLiveExistingProps = {
   // button would sit outside DialogContent's DOM, and clicking it would
   // register as an outside-interaction and dismiss the overlay through
   // handleOpenChange before the play function could observe anything.
-  onReady: (setExistingKeys: (keys: string[]) => void) => void
+  onReady: (setExistingKeys: (keys: DedupeKey[]) => void) => void
 }
 
 // `existingKeys` toggles live (unlike ListDemo's fixed prop) so a play
 // function can check a row, THEN mark it existing — reaching the
 // checked+disabled combination a static existingKeys prop can't produce.
 function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWithLiveExistingProps) {
-  const [existingKeys, setExistingKeys] = useState<string[]>([])
+  const [existingKeys, setExistingKeys] = useState<DedupeKey[]>([])
   useEffect(() => {
     onReady(setExistingKeys)
   }, [onReady])
@@ -984,12 +1014,84 @@ export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
   },
 }
 
+const generateMoreExcludeCalls: (readonly string[])[] = []
+export const ListResult_GenerateMoreExcludesRowsOnScreen: Story = {
+  render: () => {
+    generateMoreExcludeCalls.length = 0
+    return (
+      <ListDemo
+        resolveModelId={() => MODEL_ID}
+        run={excludeCapturingRun<ListItemValue>(
+          [{ items: [RUIN_ITEM] }, { items: [PAGE_TWO_ITEM] }, { items: [FACTION_ITEM] }],
+          generateMoreExcludeCalls,
+        )}
+        onSetup={fn()}
+        onImport={fn()}
+      />
+    )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Sunken Archive')
+    // A fresh Generate is meant to re-roll, so it excludes nothing.
+    expect(generateMoreExcludeCalls[0]).toEqual([])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('Old Jorin')
+    // Without this the call re-sends page one's prompt verbatim and the reply
+    // is deduped away — a wasted round-trip the user pays for.
+    expect(generateMoreExcludeCalls[1]).toEqual(['Sunken Archive'])
+
+    // Accumulates across pages rather than carrying only the newest one.
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('Ashfall Cartel')
+    expect(generateMoreExcludeCalls[2]).toEqual(['Sunken Archive', 'Old Jorin'])
+
+    // Regenerate replaces rather than appends, so it re-rolls unconstrained.
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await waitFor(() => expect(generateMoreExcludeCalls).toHaveLength(4))
+    expect(generateMoreExcludeCalls[3]).toEqual([])
+  },
+}
+
+const kindScopedExcludeCalls: (readonly string[])[] = []
+export const ListResult_ExcludeLabelCarriesTheScope: Story = {
+  render: () => {
+    kindScopedExcludeCalls.length = 0
+    return (
+      <ListDemo
+        resolveModelId={() => MODEL_ID}
+        run={excludeCapturingRun<ListItemValue>(
+          [{ items: [ASHFALL_LOCATION_ITEM] }, { items: [ASHFALL_FACTION_ITEM] }],
+          kindScopedExcludeCalls,
+        )}
+        excludeLabel={(item) => `${item.name.trim()} (${item.payload.category})`}
+        onSetup={fn()}
+        onImport={fn()}
+      />
+    )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('A city built on a dead volcano.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('A cult that worships the volcano.')
+    // Scope-qualified: a bare "Ashfall" would tell the model to suppress an
+    // Ashfall of ANY kind — the exact collision the kind-scoped dedupeKey
+    // exists to allow, so the two channels have to agree.
+    expect(kindScopedExcludeCalls[1]).toEqual(['Ashfall (location)'])
+  },
+}
+
 export const ListResult_ExistingNameDisabled: Story = {
   render: () => (
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
-      existingKeys={['sunken archive']}
+      existingKeys={[nameKey('sunken archive')]}
       onSetup={fn()}
       onImport={fn()}
     />
@@ -1223,7 +1325,7 @@ export const ListResult_CancelledGenerateMoreThenRegenerateReplaces: Story = {
   },
 }
 
-let setLiveExistingKeys: (keys: string[]) => void = () => {}
+let setLiveExistingKeys: (keys: DedupeKey[]) => void = () => {}
 export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
   render: () => (
     <ListDemoWithLiveExisting
@@ -1246,7 +1348,7 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     // setter (not a click) — a button outside DialogContent would register
     // as an outside interaction and dismiss the overlay before this
     // assertion ever ran.
-    setLiveExistingKeys(['Sunken Archive'])
+    setLiveExistingKeys([nameKey('Sunken Archive')])
     const checkbox = await screen.findByRole('checkbox', { name: 'Sunken Archive' })
     expect(checkbox).toBeChecked()
     expect(checkbox).toHaveStyle({ pointerEvents: 'none' })
