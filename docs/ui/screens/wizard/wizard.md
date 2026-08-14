@@ -490,6 +490,23 @@ example also demonstrates that a comma commits a chip.
 say everything a placeholder could, and `Name` carries the step's
 only validation error, which a placeholder would compete with.
 
+### Tags are not prompt-facing
+
+`tags`, on cast rows and lore rows alike, is a user-only search and
+filter axis
+([Story identity fields](../../../data-model.md#story-identity-fields)).
+It reaches no prompt, is absent from the embedded text (entities embed
+`name` + `description`, lore embeds `title` + `body`), and the
+classifier never reads or writes it. The wizard's template context
+projects it out for the same reason the runtime `PROMPT_ENTITY_FIELDS`
+does: prompt packs are user-authored, and a field reachable from one
+cannot be withdrawn later without breaking it.
+
+Both Tags fields carry that as an inline hint — `Not sent to the AI —
+for your own search and filtering.` A field that looks like free-text
+steering and silently isn't is otherwise discovered only by not getting
+what you expected.
+
 ### Status field — `active` / `staged`
 
 Default `active`. User can flip to `staged` for entities-not-yet-

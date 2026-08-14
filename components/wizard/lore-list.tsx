@@ -173,7 +173,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
                 <Text>{t('wizard:world.lore.moreOptions')}</Text>
               </AccordionTrigger>
               <AccordionContent className="gap-4">
-                <FormRow label={t('wizard:world.lore.tags')}>
+                <FormRow label={t('wizard:world.lore.tags')} hint={t('wizard:world.lore.tagsHint')}>
                   <TagInput
                     value={row.tags}
                     onChange={(tags) => wizardStore.patchLore(row.id, { tags })}

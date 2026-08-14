@@ -110,7 +110,7 @@ function DescriptionRow({ row }: { row: WizardCastDraft }) {
 
 function TagsRow({ row }: { row: WizardCastDraft }) {
   return (
-    <FormRow label={t('wizard:cast.editor.tags')}>
+    <FormRow label={t('wizard:cast.editor.tags')} hint={t('wizard:cast.editor.tagsHint')}>
       <TagInput
         value={row.tags}
         onChange={(tags) => wizardStore.patchCast(row.id, { tags })}
