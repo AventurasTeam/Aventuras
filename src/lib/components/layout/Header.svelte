@@ -9,6 +9,7 @@
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import {
     PanelRight,
+    PanelLeft,
     Settings,
     Library,
     ArrowUpDown,
@@ -318,6 +319,10 @@
           <DropdownMenu.Separator />
           <!-- The toolbar button beside this menu is desktop-only; on a narrow screen the
                menu is where it lives instead. -->
+          <DropdownMenu.Item class="sm:hidden" onclick={() => ui.toggleNavPanel()}>
+            <PanelLeft class="text-muted-foreground h-4 w-4" />
+            Go to an entry
+          </DropdownMenu.Item>
           <DropdownMenu.Item class="sm:hidden" onclick={() => ui.toggleLorebookDebug()}>
             <Bug class="text-muted-foreground h-4 w-4" />
             Active Context
@@ -389,6 +394,15 @@
     {@render settingsButton('hidden sm:block')}
 
     {#if story.currentStory}
+      <!-- Desktop-only, like the Active Context button above: on a narrow screen the mobile
+           menu carries it instead, and the swipe gesture reaches it without either. -->
+      <Button
+        icon={PanelLeft}
+        variant="text"
+        class="text-muted-foreground hover:text-primary hidden min-h-11 min-w-11 sm:flex"
+        onclick={() => ui.toggleNavPanel()}
+        title={ui.navPanelOpen ? 'Hide story navigation' : 'Go to an entry'}
+      />
       <Button
         icon={PanelRight}
         variant="text"

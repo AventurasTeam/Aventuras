@@ -30,6 +30,7 @@
   } from '$lib/services/ai/utils/ttsText'
   import { parseMarkdown, parseStoryMarkdown } from '$lib/utils/markdown'
   import { findPrecedingUserAction } from '$lib/utils/storyEntries'
+  import { entryNumber } from '$lib/utils/storyNavigation'
   import { sanitizeTextForTTS } from '$lib/utils/htmlSanitize'
   import {
     processStoryContent,
@@ -1458,6 +1459,14 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
+              <!-- Where the entry sits in the story, not how it was generated — so it is
+                   outside the Response info block rather than a row in it. -->
+              <div class="border-border mb-2 flex justify-between gap-3 border-b pb-2">
+                <span class="text-muted-foreground shrink-0">Entry number</span>
+                <span class="text-foreground text-right font-medium tabular-nums">
+                  {entryNumber(entry)}
+                </span>
+              </div>
               <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
               {@render responseInfoRows()}
             </Popover.Content>

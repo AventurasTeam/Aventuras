@@ -114,6 +114,9 @@ class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
+  // Not persisted, unlike `sidebarOpen`: opened to make one jump and dismissed again, so a
+  // remembered state would only ever be stale. Cleared by `story.closeStory()`.
+  navPanelOpen = $state(false)
   settingsModalOpen = $state(false)
   isGenerating = $state(false)
   isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
@@ -399,6 +402,21 @@ class UIStore {
   closeSidebarOnMobile() {
     if (typeof window !== 'undefined' && window.innerWidth <= DESKTOP_BREAKPOINT) {
       this.sidebarOpen = false
+    }
+  }
+
+  toggleNavPanel() {
+    this.navPanelOpen = !this.navPanelOpen
+  }
+
+  closeNavPanel() {
+    this.navPanelOpen = false
+  }
+
+  /** The story navigation panel's twin of `closeSidebarOnMobile`, for the same reason. */
+  closeNavPanelOnMobile() {
+    if (typeof window !== 'undefined' && window.innerWidth <= DESKTOP_BREAKPOINT) {
+      this.navPanelOpen = false
     }
   }
 

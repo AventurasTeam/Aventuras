@@ -4,6 +4,7 @@
   import { story } from '$lib/stores/story.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import Sidebar from './Sidebar.svelte'
+  import StoryNavPanel from './StoryNavPanel.svelte'
   import Header from './Header.svelte'
   import ProfileWarningBanner from './ProfileWarningBanner.svelte'
   import StoryView from '$lib/components/story/StoryView.svelte'
@@ -225,27 +226,54 @@
       ></div>
     {/if}
 
+    <!-- Left edge swipe zone for opening the nav panel — a region-owning gesture, the mirror
+         of the right-edge zone above. Mounted only while neither panel is open, so a
+         right-swipe that belongs to the sidebar's tab strip or to dismissing a panel cannot
+         also open this one. -->
+    {#if !ui.sidebarOpen && !ui.navPanelOpen && story.currentStory}
+      <div
+        class="swipe-edge-zone swipe-edge-zone-left"
+        use:swipe={{ onSwipeRight: () => ui.toggleNavPanel(), threshold: 30 }}
+      ></div>
+    {/if}
+
     <!-- Main content area -->
     <div class="flex flex-1 flex-col overflow-hidden">
       <Header />
 
-      <main class="flex-1 overflow-hidden">
-        {#if ui.activePanel === 'story' && story.currentStory}
-          <StoryView />
-        {:else if ui.activePanel === 'gallery' && story.currentStory}
-          <GalleryTab />
-        {:else if ui.activePanel === 'lorebook' && story.currentStory}
-          <LorebookView />
-        {:else if ui.activePanel === 'memory' && story.currentStory}
-          <MemoryView />
-        {:else if ui.activePanel === 'vault'}
-          <VaultPanel />
-        {:else if ui.activePanel === 'library' || !story.currentStory}
-          <LibraryView />
-        {:else if children}
-          {@render children()}
+      <!-- `relative` so the navigation panel can overlay the content area without the header:
+           it must take no layout space, or opening it would narrow the story column and
+           reflow the text the reader is looking at. -->
+      <div class="relative min-h-0 flex-1">
+        {#if ui.navPanelOpen && story.currentStory}
+          <button
+            class="nav-panel-scrim"
+            onclick={() => ui.closeNavPanel()}
+            aria-label="Close story navigation"
+          ></button>
+          <div class="nav-panel-container">
+            <StoryNavPanel />
+          </div>
         {/if}
-      </main>
+
+        <main class="h-full overflow-hidden">
+          {#if ui.activePanel === 'story' && story.currentStory}
+            <StoryView />
+          {:else if ui.activePanel === 'gallery' && story.currentStory}
+            <GalleryTab />
+          {:else if ui.activePanel === 'lorebook' && story.currentStory}
+            <LorebookView />
+          {:else if ui.activePanel === 'memory' && story.currentStory}
+            <MemoryView />
+          {:else if ui.activePanel === 'vault'}
+            <VaultPanel />
+          {:else if ui.activePanel === 'library' || !story.currentStory}
+            <LibraryView />
+          {:else if children}
+            {@render children()}
+          {/if}
+        </main>
+      </div>
     </div>
 
     <!-- Sidebar (Right aligned) -->
@@ -395,6 +423,32 @@
     outline-offset: -2px;
   }
 
+  /*
+   * Story navigation panel — an overlay at every width, unlike the right sidebar. Taking
+   * layout space would narrow the story column and reflow its text, moving the reader's
+   * place before they have navigated anywhere.
+   */
+  .nav-panel-container {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 16rem;
+    z-index: 45;
+  }
+
+  /* Desktop keeps the story visible and interactive behind the panel: the reader jumps,
+     looks at where they landed, and jumps again without reopening anything. */
+  .nav-panel-scrim {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 44;
+    border: none;
+    cursor: pointer;
+  }
+
   /* Right edge swipe zone */
   .swipe-edge-zone {
     position: fixed;
@@ -403,6 +457,11 @@
     width: 20px;
     height: 100%;
     z-index: 30;
+  }
+
+  .swipe-edge-zone-left {
+    right: auto;
+    left: 0;
   }
 
   /* Mobile styles */
@@ -424,11 +483,30 @@
       width: 30px;
       top: max(var(--safe-top), 28px);
     }
+
+    .nav-panel-scrim {
+      display: block;
+    }
+
+    .nav-panel-container {
+      width: calc(100vw - 3rem);
+      max-width: 288px;
+      animation: slide-in-left 0.2s ease-out;
+    }
   }
 
   @keyframes slide-in {
     from {
       transform: translateX(100%);
+    }
+    to {
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slide-in-left {
+    from {
+      transform: translateX(-100%);
     }
     to {
       transform: translateX(0);
