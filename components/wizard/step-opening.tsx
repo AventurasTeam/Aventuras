@@ -70,11 +70,19 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   // Resolved live against the current cast, not snapshotted at generation
   // time (wizard.md → Committed prose: refs stay intact across cast edits;
   // the user regenerates via ✨ for fresh metadata rather than this label
-  // silently going stale-but-blank). Active-only: wizard.md → Status field
-  // says staged entities can't appear in scene metadata, the same rule
-  // Finish's active-row filter enforces at commit time.
+  // silently going stale-but-blank). Active AND character/item, matching the
+  // filter Finish commits through (data-model.md → Scene presence is
+  // kind-aware): previewing a ref that Finish then drops would promise the
+  // user scene state the story never gets.
   const sceneNames = opening.sceneEntities
-    .map((id) => cast.find((r) => r.id === id && r.status === 'active')?.name.trim())
+    .map((id) =>
+      cast
+        .find(
+          (r) =>
+            r.id === id && r.status === 'active' && (r.kind === 'character' || r.kind === 'item'),
+        )
+        ?.name.trim(),
+    )
     .filter((name): name is string => name != null && name.length > 0)
   // Kind-guarded: resolveOpening's reverse substitution doesn't validate kind,
   // so a non-placeholder id that survives it must not render a character's

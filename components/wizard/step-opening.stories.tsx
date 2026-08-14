@@ -13,6 +13,7 @@ const LOCATION_ID = 'loc_22222222-2222-2222-2222-222222222222'
 const STAGED_ID = 'char_33333333-3333-3333-3333-333333333333'
 const MISKIND_ID = 'char_44444444-4444-4444-4444-444444444444'
 const STAGED_LOCATION_ID = 'loc_55555555-5555-5555-5555-555555555555'
+const FACTION_ID = 'fact_66666666-6666-6666-6666-666666666666'
 const MODEL_ID = 'gpt-4o-mini'
 
 function okRun<T>(value: T) {
@@ -153,7 +154,7 @@ export const SceneMetadataJoinsCastAndLocation: Story = {
   },
 }
 
-export const SceneMetadataDropsStagedAndKindMismatchedLocation: Story = {
+export const SceneMetadataDropsStagedAndKindMismatchedRefs: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -165,6 +166,7 @@ export const SceneMetadataDropsStagedAndKindMismatchedLocation: Story = {
       // (mis-typed) location slot — a distinguishable name for the kind guard,
       // unlike reusing the lead's id, whose name would collide via dedupe.
       { ...emptyCastDraft('character', MISKIND_ID), name: 'Bran' },
+      { ...emptyCastDraft('faction', FACTION_ID), name: 'The Ashen Court' },
     ])
     wizardStore.setLeadEntityId(LEAD_ID)
   },
@@ -175,7 +177,7 @@ export const SceneMetadataDropsStagedAndKindMismatchedLocation: Story = {
         resolveModelId: () => MODEL_ID,
         opening: okRun({
           content: 'Aria drew her blade as the storm broke.',
-          sceneEntities: [LEAD_ID, STAGED_ID],
+          sceneEntities: [LEAD_ID, STAGED_ID, FACTION_ID],
           // An active CHARACTER id in the location slot — resolveOpening's
           // reverse substitution doesn't validate kind, so this must render
           // as absent rather than showing a character's name as a location.
@@ -192,10 +194,14 @@ export const SceneMetadataDropsStagedAndKindMismatchedLocation: Story = {
 
     // Staged Gandalf is dropped (wizard.md → Status field: staged entities
     // can't appear in scene metadata); the kind-mismatched location ref
-    // (Bran, a character) is dropped too — only the active lead surfaces.
+    // (Bran, a character) is dropped too; and the active faction is dropped
+    // because factions are never scene-tagged (data-model.md → Scene presence
+    // is kind-aware) — the same filter Finish commits through, so the preview
+    // can't promise scene state the story never gets.
     expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
     expect(screen.queryByText(/Gandalf/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Bran/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Ashen Court/)).not.toBeInTheDocument()
   },
 }
 
