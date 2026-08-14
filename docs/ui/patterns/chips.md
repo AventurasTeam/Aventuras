@@ -153,7 +153,7 @@ API (all orthogonal):
 Visual contract:
 
 - `border-radius: var(--radius-full)` (9999px).
-- `px-2.5 py-0.5`, `text-xs` (no `font-medium`; tags are content, not chrome).
+- `px-2.5 py-0.5`, `text-xs` (no `font-medium`; tags are content, not chrome). **Fixed, not density-scaled** — the `--row-px-*` / `--row-py-*` pair converges on a single step at regular and comfortable (8×8, 10×10), and equal padding on a `rounded-full` shape reads as a square with rounded ends rather than a pill. Tag is excluded from density coupling for the same reason it's excluded from the control-h system: it's content, and the × already carries its own touch target.
 - All tones use the same geometry — only color tokens differ. No tone changes padding or radius.
 - Dashed: `border-dashed`.
 - Removable × button: small `text-fg-faint`, hover `text-fg-primary`, separate Pressable for dedicated touch target.

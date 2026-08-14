@@ -86,8 +86,11 @@ export function Tag({
 }: TagProps) {
   const interactive = onPress != null
   const toneClasses = TONE_CLASSES[tone]
+  // Fixed pill geometry, not the density `row-x/row-y` tokens: those scale on a
+  // single step (8×8, 10×10), which reads as a square on a `rounded-full` shape.
+  // Tag is content, not a row-shaped tap target — the × carries its own target.
   const baseClass = cn(
-    'group flex-row items-center gap-1 rounded-full border px-row-x-xs py-row-y-xs',
+    'group flex-row items-center gap-1 rounded-full border px-2.5 py-0.5',
     toneClasses.container,
     dashed && 'border-dashed',
     interactive && (toneClasses.filled ? 'active:opacity-90' : 'active:bg-tint-press'),
