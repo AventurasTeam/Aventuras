@@ -291,6 +291,8 @@
     "setAsLead": "Set as lead",
     "leadUnsetToast": "Lead unset — staged characters can't be lead.",
     "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
+    "importRefsDropped_one": "1 reference couldn't be matched and was left blank.",
+    "importRefsDropped_other": "{{count}} references couldn't be matched and were left blank.",
     "leadNotice": {
       "mode": "Adventure mode needs a lead character. Mark one active character as lead to continue.",
       "narration": "First- and second-person narration need a lead character. Mark one active character as lead to continue."

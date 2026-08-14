@@ -586,6 +586,15 @@ resolves. When an imported row and an existing cast row share a
 kind and a name, the imported row wins for references inside that
 batch.
 
+A non-blank reference that resolves to nothing is counted and
+reported on import via [toast](../../patterns/toast.md)
+(`N references couldn't be matched and were left blank.`). Without
+it the discard is invisible: the row imports unaffiliated and the
+editor's picker reads `No factions yet`, which the user takes to
+mean they have none rather than that the AI's answer was dropped.
+A reference the model simply omitted is not counted — only one it
+supplied and the wizard could not honour.
+
 ### Lead-required gating
 
 - **Trigger** (set in step 1): `mode='adventure'` OR

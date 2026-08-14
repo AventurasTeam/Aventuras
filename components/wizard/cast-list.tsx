@@ -228,7 +228,14 @@ export function CastList({ onSetupAssist, assist }: CastListProps) {
           // suppress an Ashfall of ANY kind, which is exactly the collision
           // the kind-scoped dedupe deliberately allows.
           excludeLabel={(item) => `${item.name.trim()} (${item.payload.kind})`}
-          onImport={(payloads) => wizardStore.importCast(resolveCastImports(payloads, cast))}
+          onImport={(payloads) => {
+            const { rows, unresolved } = resolveCastImports(payloads, cast)
+            wizardStore.importCast(rows)
+            // Otherwise the discard is invisible: the editors render a missing
+            // faction as "No factions yet", which reads as "you have none".
+            if (unresolved.length > 0)
+              toast.info(t('wizard:cast.importRefsDropped', { count: unresolved.length }))
+          }}
           onSetup={handleSetup}
         />
         <AddCastMenu onAdd={handleAdd} />

@@ -331,6 +331,40 @@ export const ImportingSuggestedCastResolvesCrossBatchRefs: Story = {
   },
 }
 
+export const ImportingWithoutTheReferencedFactionToastsTheDrop: Story = {
+  beforeEach: () => seed(),
+  render: () => (
+    <StepCast
+      onSetupAssist={fn()}
+      assist={{ resolveModelId: () => MODEL_ID, cast: okListRun(CAST_SUGGESTIONS) }}
+    />
+  ),
+  play: async () => {
+    const toasts = collectToasts()
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest cast' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    // The character alone: resolution scopes to the imported SELECTION, so the
+    // faction it names is out of scope and its factionId lands null.
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Aria Stoneheart' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import selected' }))
+
+    await waitFor(() => expect(wizardStore.getWizard().state.cast).toHaveLength(1))
+    const [character] = wizardStore.getWizard().state.cast
+    expect(character.kind === 'character' && character.factionId).toBeNull()
+
+    // Without this the discard is invisible — the Faction picker just says
+    // "No factions yet", which reads as "you have none".
+    await waitFor(() =>
+      expect(
+        toasts
+          .items()
+          .some((item) => item.message === "1 reference couldn't be matched and was left blank."),
+      ).toBe(true),
+    )
+    toasts.stop()
+  },
+}
+
 const SAME_NAME_ACROSS_KINDS: CastAssistValue = {
   entities: [
     {

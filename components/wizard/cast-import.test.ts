@@ -9,9 +9,15 @@ let n = 0
 /** Test seam — production mints real prefixed ids. */
 const mintId = (kind: string) => `${kind}_${++n}`
 
+// Most cases here only care about the resolved rows; the unresolved-reference
+// report has its own block at the bottom.
+function importRows(...args: Parameters<typeof resolveCastImports>) {
+  return resolveCastImports(...args).rows
+}
+
 describe('resolveCastImports', () => {
   it('resolves parent_location_name and faction_name within the imported batch', () => {
-    const drafts = resolveCastImports(
+    const drafts = importRows(
       [
         { kind: 'faction', name: 'Ashfall Pact', description: 'A cult.', status: 'active' },
         { kind: 'location', name: 'Mornstone Keep', description: 'A fortress.', status: 'active' },
@@ -54,7 +60,7 @@ describe('resolveCastImports', () => {
     // Untrimmed on purpose: castDraftShared.name carries no .trim(), so an
     // authored row with padding whitespace is realistic, not a fixture typo.
     const existing = [{ ...emptyCastDraft('location', 'loc_home'), name: '  Mornstone Keep  ' }]
-    const [row] = resolveCastImports(
+    const [row] = importRows(
       [
         {
           kind: 'location',
@@ -72,7 +78,7 @@ describe('resolveCastImports', () => {
 
   it('falls back to null for unresolved names and wrong-kind matches', () => {
     const existing = [{ ...emptyCastDraft('faction', 'fact_x'), name: 'Mornstone Keep' }] // faction, not location
-    const [row, char] = resolveCastImports(
+    const [row, char] = importRows(
       [
         {
           kind: 'location',
@@ -97,7 +103,7 @@ describe('resolveCastImports', () => {
   })
 
   it('carries staged status and per-kind fields into drafts', () => {
-    const [fac] = resolveCastImports(
+    const [fac] = importRows(
       [
         {
           kind: 'faction',
@@ -118,7 +124,7 @@ describe('resolveCastImports', () => {
   // Proven here by the same reference resolving once its batch-mate is
   // actually part of the call.
   it('does not resolve a name whose batch-mate was left out of the imported selection', () => {
-    const withoutFaction = resolveCastImports(
+    const withoutFaction = importRows(
       [
         {
           kind: 'character',
@@ -133,7 +139,7 @@ describe('resolveCastImports', () => {
     )
     expect(withoutFaction[0]).toMatchObject({ factionId: null })
 
-    const withFaction = resolveCastImports(
+    const withFaction = importRows(
       [
         { kind: 'faction', name: 'Unchecked Pact', description: '', status: 'active' },
         {
@@ -156,7 +162,7 @@ describe('resolveCastImports', () => {
   // endorsed behavior, not a bug.
   it('lets a same-name batch row shadow an existing-cast row of the same kind', () => {
     const existing = [{ ...emptyCastDraft('location', 'loc_old'), name: 'Mornstone Keep' }]
-    const drafts = resolveCastImports(
+    const drafts = importRows(
       [
         { kind: 'location', name: 'Mornstone Keep', description: 'Rebuilt.', status: 'active' },
         {
@@ -180,7 +186,7 @@ describe('resolveCastImports', () => {
   // (cast-import.ts), so a suggested location naming itself as its own parent
   // must not bind parentLocationId to its own freshly-minted id.
   it('never binds a location parent reference to itself', () => {
-    const [keep] = resolveCastImports(
+    const [keep] = importRows(
       [
         {
           kind: 'location',
@@ -197,7 +203,7 @@ describe('resolveCastImports', () => {
   })
 
   it('never attaches factionId or parentLocationId to an item row', () => {
-    const [item] = resolveCastImports(
+    const [item] = importRows(
       [
         {
           kind: 'item',
@@ -215,7 +221,7 @@ describe('resolveCastImports', () => {
   })
 
   it('resolves a reference to a batch-mate that appears later in the batch', () => {
-    const drafts = resolveCastImports(
+    const drafts = importRows(
       [
         {
           kind: 'character',
@@ -238,7 +244,7 @@ describe('resolveCastImports', () => {
   // another row would silently bind to it instead of resolving to null.
   it('treats a blank reference as unresolved, not a match against a nameless existing-cast row', () => {
     const existing = [emptyCastDraft('faction', 'fact_blank')] // name defaults to ''
-    const [char] = resolveCastImports(
+    const [char] = importRows(
       [{ kind: 'character', name: 'Nyra', description: '', status: 'active', faction_name: '   ' }],
       existing,
       mintId,
@@ -247,7 +253,7 @@ describe('resolveCastImports', () => {
   })
 
   it('treats a blank reference as unresolved, not a match against a nameless batch row', () => {
-    const [, gatehouse] = resolveCastImports(
+    const [, gatehouse] = importRows(
       [
         { kind: 'location', name: '', description: '', status: 'active' },
         {
@@ -266,7 +272,7 @@ describe('resolveCastImports', () => {
 
   // Bounds documented on the clamp constants in cast-import.ts.
   it('clamps character speech/traits/drives/visual fields to the degradation bounds', () => {
-    const [char] = resolveCastImports(
+    const [char] = importRows(
       [
         {
           kind: 'character',
@@ -289,7 +295,7 @@ describe('resolveCastImports', () => {
   })
 
   it('clamps faction agenda/standing and location/item condition to the degradation bounds', () => {
-    const [fac, loc, item] = resolveCastImports(
+    const [fac, loc, item] = importRows(
       [
         {
           kind: 'faction',
@@ -335,6 +341,112 @@ function boundAt(schema: z.ZodType, path: readonly string[]) {
   for (const key of path) node = node.properties?.[key] ?? {}
   return node.maxLength ?? node.maxItems
 }
+
+describe('unresolved reference reporting', () => {
+  it('reports a faction the user left unchecked, naming the row that lost it', () => {
+    // The scope rule: resolution runs against the imported SELECTION plus the
+    // existing cast, so checking the characters but not the faction they all
+    // name drops three references with nothing on screen to say so.
+    const { rows, unresolved } = resolveCastImports(
+      [
+        {
+          kind: 'character',
+          name: 'Kael',
+          description: '.',
+          status: 'active',
+          faction_name: 'The Ashen Court',
+        },
+        {
+          kind: 'character',
+          name: 'Sera',
+          description: '.',
+          status: 'active',
+          faction_name: 'The Ashen Court',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(rows.every((r) => r.kind === 'character' && r.factionId === null)).toBe(true)
+    expect(unresolved).toEqual([
+      { rowName: 'Kael', field: 'faction', wantedName: 'The Ashen Court' },
+      { rowName: 'Sera', field: 'faction', wantedName: 'The Ashen Court' },
+    ])
+  })
+
+  it('stays empty when every reference resolves', () => {
+    const { unresolved } = resolveCastImports(
+      [
+        { kind: 'faction', name: 'The Ashen Court', description: '.', status: 'active' },
+        {
+          kind: 'character',
+          name: 'Kael',
+          description: '.',
+          status: 'active',
+          faction_name: 'The Ashen Court',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(unresolved).toEqual([])
+  })
+
+  it('does not report a reference the model simply omitted', () => {
+    const { unresolved } = resolveCastImports(
+      [
+        { kind: 'character', name: 'Kael', description: '.', status: 'active' },
+        {
+          kind: 'location',
+          name: 'Ashfall',
+          description: '.',
+          status: 'active',
+          parent_location_name: '   ',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(unresolved).toEqual([])
+  })
+
+  it('reports a self-referential parent, which imports without its pointer', () => {
+    const { rows, unresolved } = resolveCastImports(
+      [
+        {
+          kind: 'location',
+          name: 'The Salt Wells',
+          description: '.',
+          status: 'active',
+          parent_location_name: 'The Salt Wells',
+        },
+      ],
+      [],
+      mintId,
+    )
+    expect(rows[0]).toMatchObject({ kind: 'location', parentLocationId: null })
+    expect(unresolved).toEqual([
+      { rowName: 'The Salt Wells', field: 'parentLocation', wantedName: 'The Salt Wells' },
+    ])
+  })
+
+  it('does not report a reference that resolves against the already-authored cast', () => {
+    const { unresolved } = resolveCastImports(
+      [
+        {
+          kind: 'character',
+          name: 'Kael',
+          description: '.',
+          status: 'active',
+          faction_name: 'Ashfall Pact',
+        },
+      ],
+      [{ ...emptyCastDraft('faction', 'fact_existing'), name: 'Ashfall Pact' }],
+      mintId,
+    )
+    expect(unresolved).toEqual([])
+  })
+})
 
 // Pins VOICE_MAX/ARRAY_MAX/FIELD_MAX to entity-state-schema.ts's actual .max()
 // calls (read via zod's public toJSONSchema, not its internal `_zod.def`

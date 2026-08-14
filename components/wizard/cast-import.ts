@@ -26,6 +26,27 @@ function norm(name: string): string {
   return name.trim().toLowerCase()
 }
 
+/** A reference the model supplied that resolved to no id, so the row imported without it. */
+export type UnresolvedCastRef = {
+  /** The importing row's own name — what the user sees missing an affiliation. */
+  rowName: string
+  field: 'faction' | 'parentLocation'
+  /** The name the model asked for. */
+  wantedName: string
+}
+
+export type CastImportResult = {
+  rows: WizardCastDraft[]
+  /**
+   * Reported so the caller can tell the user a reference was discarded. The
+   * scope rule below makes this reachable through ordinary use — importing
+   * three characters but not the faction they all name drops three references —
+   * and the editors render that as "No factions yet", which reads as "you have
+   * none" rather than "yours were thrown away".
+   */
+  unresolved: UnresolvedCastRef[]
+}
+
 /**
  * wizard.md → AI-suggest: cross-batch references resolve by name against
  * same-kind rows in the IMPORTED SELECTION plus the existing cast — never the
@@ -37,7 +58,7 @@ export function resolveCastImports(
   existingCast: readonly WizardCastDraft[],
   /** Test seam — production mints real prefixed ids. */
   mintId: (kind: WizardCastDraft['kind']) => string = (kind) => generateId(CAST_ID_PREFIX[kind]),
-): WizardCastDraft[] {
+): CastImportResult {
   const idByKey = new Map<string, string>()
   // A blank name (an "Add faction" row nobody has typed into yet) must never
   // be indexed — otherwise a blank/whitespace-only reference on another row
@@ -58,18 +79,30 @@ export function resolveCastImports(
   // bind to its own freshly-minted id (finish.ts's castRef self-exclusion
   // guards this at commit time; resolving it here means the store never
   // carries the dangling self-pointer in the first place).
+  const unresolved: UnresolvedCastRef[] = []
   const ref = (
     kind: 'faction' | 'location',
     name: string | undefined,
     selfId: string,
+    rowName: string,
   ): string | null => {
     const key = name == null ? '' : norm(name)
+    // A blank reference is the model declining to name one, not a miss.
     if (key.length === 0) return null
     const found = idByKey.get(`${kind}:${key}`) ?? null
-    return found === selfId ? null : found
+    const resolved = found === selfId ? null : found
+    // A self-reference counts: the row still imports without the pointer it
+    // asked for, which is the thing worth telling the user about.
+    if (resolved === null)
+      unresolved.push({
+        rowName,
+        field: kind === 'faction' ? 'faction' : 'parentLocation',
+        wantedName: name ?? '',
+      })
+    return resolved
   }
 
-  return minted.map(({ suggestion: s, id }) => {
+  const rows = minted.map(({ suggestion: s, id }) => {
     switch (s.kind) {
       case 'character':
         return wizardCastDraftSchema.parse({
@@ -89,7 +122,7 @@ export function resolveCastImports(
             attire: clampStr(s.visual?.attire ?? '', FIELD_MAX),
             distinguishing: clampStr(s.visual?.distinguishing ?? '', FIELD_MAX),
           },
-          factionId: ref('faction', s.faction_name, id),
+          factionId: ref('faction', s.faction_name, id, s.name),
         })
       case 'location':
         return wizardCastDraftSchema.parse({
@@ -98,7 +131,7 @@ export function resolveCastImports(
           name: s.name,
           description: s.description,
           status: s.status,
-          parentLocationId: ref('location', s.parent_location_name, id),
+          parentLocationId: ref('location', s.parent_location_name, id, s.name),
           condition: clampStr(s.condition ?? '', FIELD_MAX),
         })
       case 'item':
@@ -122,4 +155,6 @@ export function resolveCastImports(
         })
     }
   })
+
+  return { rows, unresolved }
 }
