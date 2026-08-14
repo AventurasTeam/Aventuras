@@ -58,6 +58,28 @@ function deps(value: unknown): WizardAssistDeps {
   return { resolveConfig: () => CONFIGURED, generate: okGenerate(value) }
 }
 
+/**
+ * Generate seam that builds its reply from the placeholders substituteIds
+ * actually allocated, read back out of the rendered prompt — hardcoding 'c1'
+ * would pass even if the substitution stopped running. Keyed by real cast id:
+ * the opening macro renders active rows in store order, so the Nth rendered id
+ * belongs to the Nth active row.
+ */
+function echoGenerate(
+  sink: { prompt: string },
+  reply: (placeholders: Record<string, string>) => unknown,
+): WizardAssistDeps['generate'] {
+  return (async (_target: unknown, prompt: string) => {
+    sink.prompt = prompt
+    const rendered = [...prompt.matchAll(/cast id: ([^)]+)\)/g)].map((m) => m[1])
+    const active = wizardStore.getWizard().state.cast.filter((r) => r.status === 'active')
+    return {
+      status: 'ok',
+      value: reply(Object.fromEntries(active.map((row, i) => [row.id, rendered[i]]))),
+    }
+  }) as WizardAssistDeps['generate']
+}
+
 describe('runOpeningAssist', () => {
   beforeEach(() => wizardStore.reset())
 
@@ -82,7 +104,7 @@ describe('runOpeningAssist', () => {
     expect(res.value.model).toBe(MODEL_ID)
   })
 
-  it('falls back to user-written (drops metadata) on a lead-required path with no minted lead id', async () => {
+  it('drops an unresolvable ref but keeps the prose and its provenance', async () => {
     // No id is minted here — even on a lead-required path, the idMap
     // stays empty until the lead is added as a cast row, so the returned
     // placeholder is unresolvable.
@@ -101,7 +123,61 @@ describe('runOpeningAssist', () => {
     if (res.status !== 'ok') return
     expect(res.value.content).toBe('The map unrolled.')
     expect(res.value.sceneEntities).toEqual([])
-    expect(res.value.model).toBeNull()
+    // Not null: the prose came from the model regardless of whether its refs
+    // resolved, and finish.ts omits `model` when null — committing an AI
+    // opening as hand-written.
+    expect(res.value.model).toBe(MODEL_ID)
+  })
+
+  it('keeps every resolvable ref when a sibling in the same reply is unresolvable', async () => {
+    const charId = wizardStore.addCast('character')
+    const locId = wizardStore.addCast('location')
+    wizardStore.setLeadEntityId(charId)
+
+    const sink: { prompt: string } = { prompt: '' }
+    const res = await runOpeningAssist('', signal, {
+      resolveConfig: () => CONFIGURED,
+      generate: echoGenerate(sink, (placeholders) => ({
+        prose: 'Smoke over the ridge.',
+        // 'c9' is never allocated — the shape a model produces when it invents
+        // a cast member the wizard never authored.
+        sceneEntities: [placeholders[charId], 'c9'],
+        currentLocationId: placeholders[locId],
+        worldTime: 0,
+      })),
+    })
+
+    expect(res.status).toBe('ok')
+    if (res.status !== 'ok') return
+    expect(res.value.sceneEntities).toEqual([charId])
+    expect(res.value.currentLocationId).toBe(locId)
+    expect(res.value.model).toBe(MODEL_ID)
+  })
+
+  it('round-trips non-lead cast ids and the location pointer through the prompt', async () => {
+    const charId = wizardStore.addCast('character')
+    const itemId = wizardStore.addCast('item')
+    const locId = wizardStore.addCast('location')
+    wizardStore.setLeadEntityId(charId)
+
+    const sink: { prompt: string } = { prompt: '' }
+    const res = await runOpeningAssist('', signal, {
+      resolveConfig: () => CONFIGURED,
+      generate: echoGenerate(sink, (placeholders) => ({
+        prose: 'The lantern guttered.',
+        sceneEntities: [placeholders[charId], placeholders[itemId]],
+        currentLocationId: placeholders[locId],
+        worldTime: 0,
+      })),
+    })
+
+    expect(res.status).toBe('ok')
+    if (res.status !== 'ok') return
+    // Real ids never reach the model; every one of these came back as a
+    // placeholder and was resolved by the reverse substitution.
+    expect(sink.prompt).not.toContain(charId)
+    expect(res.value.sceneEntities).toEqual([charId, itemId])
+    expect(res.value.currentLocationId).toBe(locId)
   })
 
   it('propagates a non-ok result unchanged', async () => {

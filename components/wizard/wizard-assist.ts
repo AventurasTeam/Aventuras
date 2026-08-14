@@ -7,6 +7,7 @@ import {
   type ResolveModelConfig,
 } from '@/lib/ai'
 import type { WizardWorkingState } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
@@ -133,18 +134,37 @@ function resolveOpening(
   idMap: IdBiMap,
   deps?: WizardAssistDeps,
 ): OpeningAssistValue {
-  try {
-    return {
-      content: value.prose,
-      sceneEntities: parseAndSubstitute(value.sceneEntities, idMap),
-      currentLocationId:
-        value.currentLocationId == null ? null : parseAndSubstitute(value.currentLocationId, idMap),
-      model: resolveWizardAssistModelId(deps) ?? ASSIST_TARGET,
+  // Per-ref, not one try around the whole object: a model that hallucinates one
+  // id would otherwise cost every OTHER resolvable ref too. `model` stays set
+  // regardless — the prose came from the model whether or not its refs resolved,
+  // and nulling it here would commit an AI opening as hand-written (finish.ts
+  // omits `model` when it is null).
+  const dropped: string[] = []
+  const resolveRef = (ref: string): string | null => {
+    try {
+      return parseAndSubstitute(ref, idMap)
+    } catch {
+      dropped.push(ref)
+      return null
     }
-  } catch {
-    // Unresolvable placeholder → treat the prose as user-written: keep it, drop
-    // the metadata (a later classifier pass recovers refs).
-    return { content: value.prose, sceneEntities: [], currentLocationId: null, model: null }
+  }
+
+  const sceneEntities = value.sceneEntities.map(resolveRef).filter((id): id is string => id != null)
+  const currentLocationId =
+    value.currentLocationId == null ? null : resolveRef(value.currentLocationId)
+
+  if (dropped.length > 0) {
+    logger.warn('provider.wizard_opening_unresolved_refs', {
+      dropped,
+      kept: sceneEntities.length,
+    })
+  }
+
+  return {
+    content: value.prose,
+    sceneEntities,
+    currentLocationId,
+    model: resolveWizardAssistModelId(deps) ?? ASSIST_TARGET,
   }
 }
 
