@@ -33,8 +33,15 @@ export const wizard = {
   // scene-tag chip on step 5).
   castRow: (page: Page, castId: string): Locator =>
     page.locator(`[data-testid="cast-row"][data-cast-id="${castId}"]`),
+  // `exact` matters here: Playwright's default name match is a case-insensitive
+  // SUBSTRING, and an expanded character row also renders the drives chip input,
+  // whose placeholder ("…clear the family name") becomes its accessible name and
+  // contains "Name". Any placeholder added to a cast field can re-collide with a
+  // field label this way — prefer exact for row-scoped names.
   castName: (page: Page, castId: string): Locator =>
-    wizard.castRow(page, castId).getByRole('textbox', { name: t('wizard:cast.editor.name') }),
+    wizard
+      .castRow(page, castId)
+      .getByRole('textbox', { name: t('wizard:cast.editor.name'), exact: true }),
   // Status is a 2-option Select; resolveMode picks 'segment' at ≤3 options
   // (select.tsx), which still renders RadioGroupBase items under the hood —
   // role="radio" in a role="radiogroup" named "Status" (the `label` prop) —
