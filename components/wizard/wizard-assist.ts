@@ -6,6 +6,7 @@ import {
   type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
+import type { WizardWorkingState } from '@/lib/db'
 import { IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
@@ -76,9 +77,39 @@ export function resolveWizardAssistModelId(deps?: WizardAssistDeps): string | nu
   return resolved.ok ? resolved.modelId : null
 }
 
-// Render a wizard template from the full working-state (+ guidance) and call the
-// model. Ids in the state are swapped to placeholders through `idMap` first, so a
-// caller that reverse-substitutes the reply reads real ids back out.
+// `tags` are a user-only search/filter axis (data-model.md → `tags json`), so
+// they stay off the template surface for the same reason PROMPT_ENTITY_FIELDS
+// projects runtime entity rows: packs are user-authored, and anything reachable
+// from one can't be withdrawn later without breaking it.
+function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<string, unknown> {
+  const { tags, ...rest } = row
+  return rest
+}
+
+/**
+ * The exact variables templateContextMap documents for the `wizard` group.
+ * Projected, not spread: the working state also carries `step` / `leadName` /
+ * `effectiveDim*`, which are wizard mechanics no prompt has business reading.
+ */
+export function wizardTemplateContext(
+  state: WizardWorkingState,
+  guidance: string,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    definition: state.definition,
+    leadEntityId: state.leadEntityId,
+    opening: state.opening,
+    lore: state.lore.map(withoutTags),
+    cast: state.cast.map(withoutTags),
+    guidance,
+    ...extra,
+  }
+}
+
+// Render a wizard template from the working-state projection (+ guidance) and
+// call the model. Ids in the state are swapped to placeholders through `idMap`
+// first, so a caller that reverse-substitutes the reply reads real ids back out.
 function generateFromState<T>(
   templateId: TemplateId,
   schema: ZodType<T>,
@@ -88,7 +119,10 @@ function generateFromState<T>(
   deps?: WizardAssistDeps,
   extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<T>> {
-  const context = substituteIds({ ...wizardStore.getWizard().state, guidance, ...extra }, idMap)
+  const context = substituteIds(
+    wizardTemplateContext(wizardStore.getWizard().state, guidance, extra),
+    idMap,
+  )
   const prompt = renderTemplate(templateId, context)
   const call = deps?.generate ?? generateStructured
   return call(ASSIST_TARGET, prompt, schema, config(deps), signal)

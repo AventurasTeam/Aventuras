@@ -248,7 +248,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'WizardCastDraft[]',
       category: 'Entities',
       description:
-        'Wizard-authored cast rows: id/kind/name/description/status/tags shared by every row, plus per-kind fields — character: voice/traits/drives/visual.{physique,face,hair,eyes,attire,distinguishing}/factionId; location: parentLocationId/condition; item: condition; faction: agenda/standing. factionId/parentLocationId are ids, not the faction_name/parent_location_name names the cast-suggestion prompt asks the model for — those names resolve to ids at import time. Ids are placeholders after substitution, so the opening can echo them in sceneEntities.',
+        'Wizard-authored cast rows: id/kind/name/description/status shared by every row, plus per-kind fields — character: voice/traits/drives/visual.{physique,face,hair,eyes,attire,distinguishing}/factionId; location: parentLocationId/condition; item: condition; faction: agenda/standing. `tags` is projected out: it is a user-only search/filter axis, matching the runtime entity rows, which drop it for the same reason. factionId/parentLocationId are ids, not the faction_name/parent_location_name names the cast-suggestion prompt asks the model for — those names resolve to ids at import time. Ids are placeholders after substitution, so the opening can echo them in sceneEntities.',
       required: false,
     },
     {
@@ -286,7 +286,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'WizardLoreDraft[]',
       category: 'Retrieval',
       description:
-        'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates.',
+        'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates. `tags` is projected out, same as on `cast`.',
       required: false,
     },
     {

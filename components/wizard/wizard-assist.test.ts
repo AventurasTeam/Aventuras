@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { ResolveModelConfig } from '@/lib/ai'
+import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
+import { VARIABLES } from '@/lib/prompts'
 import { wizardStore } from '@/lib/stores'
 
 import {
@@ -18,6 +20,7 @@ import {
   runSettingAssist,
   runTitleAssist,
   runToneAssist,
+  wizardTemplateContext,
   type WizardAssistDeps,
 } from './wizard-assist'
 
@@ -410,5 +413,77 @@ describe('resolveWizardAssistModelId', () => {
   })
   it('returns null when unconfigured', () => {
     expect(resolveWizardAssistModelId({ resolveConfig: () => UNCONFIGURED })).toBeNull()
+  })
+})
+
+describe('wizardTemplateContext', () => {
+  // The leak direction the generationContext parity test doesn't cover: that
+  // one asserts every declared variable is present, not that nothing else is.
+  it('emits no variable the wizard registry does not declare', () => {
+    const state = {
+      ...emptyWorkingState(),
+      step: 4,
+      leadName: 'legacy',
+      effectiveDim: 512,
+      effectiveDimTouched: true,
+    }
+    const declared = new Set(VARIABLES.wizard.map((v) => v.name))
+    // `current` / `instruction` / `suggested` are declared but arrive per-call.
+    const ctx = wizardTemplateContext(state, '', {
+      current: {},
+      instruction: 'darker',
+      suggested: [],
+    })
+    expect(Object.keys(ctx).filter((k) => !declared.has(k))).toEqual([])
+  })
+
+  it('emits every registry variable a generate call carries', () => {
+    const keys = Object.keys(wizardTemplateContext(emptyWorkingState(), ''))
+    for (const name of ['definition', 'leadEntityId', 'cast', 'opening', 'lore', 'guidance']) {
+      expect(keys).toContain(name)
+    }
+  })
+
+  it('drops tags from cast and lore rows, keeping every other field', () => {
+    const state = {
+      ...emptyWorkingState(),
+      cast: [
+        {
+          ...emptyCastDraft('character', 'char_1'),
+          name: 'Aria',
+          voice: 'clipped',
+          tags: ['antagonist'],
+        },
+      ],
+      lore: [
+        {
+          id: 'lore_1',
+          title: 'Sealed Wells',
+          body: 'Magic flows from sealed wells.',
+          category: 'cosmology',
+          tags: ['faith'],
+          injectionMode: 'auto' as const,
+          priority: 0,
+        },
+      ],
+    }
+    const ctx = wizardTemplateContext(state, '')
+    const [castRow] = ctx.cast as Record<string, unknown>[]
+    const [loreRow] = ctx.lore as Record<string, unknown>[]
+    expect(castRow).not.toHaveProperty('tags')
+    expect(loreRow).not.toHaveProperty('tags')
+    expect(castRow).toMatchObject({
+      id: 'char_1',
+      kind: 'character',
+      name: 'Aria',
+      voice: 'clipped',
+    })
+    expect(loreRow).toMatchObject({ id: 'lore_1', title: 'Sealed Wells', category: 'cosmology' })
+  })
+
+  it('lets extra keys through — refine passes `current` / `instruction` that way', () => {
+    const ctx = wizardTemplateContext(emptyWorkingState(), 'steer', { instruction: 'darker' })
+    expect(ctx.guidance).toBe('steer')
+    expect(ctx.instruction).toBe('darker')
   })
 })
