@@ -380,7 +380,7 @@ Click row → expand to inline editor.
 Name        [_________________________________]  [Active ▾]
 Description [textarea — user-authoritative who]
 
-Voice       [optional, e.g. "clipped, formal"]
+Speech      [optional, e.g. "clipped, formal"]
 Traits      [chip input — soft cap 8]
 Drives      [chip input — soft cap 6]
 
@@ -405,10 +405,13 @@ Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
 
 **Tier rationale:**
 
-- **Always-visible identity** (`Voice` / `Traits` / `Drives`) —
-  personality essentials, compact. Wizard-authored values seed
-  `CharacterState` at first-write per the
-  [authorship contract](../../../data-model.md#authorship-contract);
+- **Always-visible identity** (`Speech` / `Traits` / `Drives`) —
+  personality essentials, compact. `Speech` is the user-facing name
+  for `CharacterState.voice`: how the character talks, not how they
+  sound. The state key keeps its original name, and so does the
+  World panel, which labels state fields by their raw key.
+  Wizard-authored values seed `CharacterState` at first-write per
+  the [authorship contract](../../../data-model.md#authorship-contract);
   classifier extracts incrementally at runtime.
 - **`▼ Visual` disclosure** — six sub-fields would dwarf the editor
   expanded. Defaulted closed.
@@ -510,7 +513,7 @@ cast roster is known but only some enter the opening scene.
         name
         description
         status?: 'active' | 'staged'
-        voice?
+        speech?
         traits?
         drives?
         faction_name?

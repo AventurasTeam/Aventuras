@@ -192,18 +192,20 @@ export function CharacterEditor({
     <>
       <NameStatusRow row={row} invalid={invalid} />
       <DescriptionRow row={row} />
-      <FormRow label={t('wizard:cast.editor.voice')}>
+      {/* Labelled "Speech" — the state key it writes stays `voice`. */}
+      <FormRow label={t('wizard:cast.editor.speech')}>
         <Input
           value={row.voice}
           onChangeText={(voice) => wizardStore.patchCast(row.id, { voice })}
-          placeholder={t('wizard:cast.editor.voicePlaceholder')}
-          aria-label={t('wizard:cast.editor.voice')}
+          placeholder={t('wizard:cast.editor.speechPlaceholder')}
+          aria-label={t('wizard:cast.editor.speech')}
         />
       </FormRow>
       <FormRow label={t('wizard:cast.editor.traits')}>
         <TagInput
           value={row.traits}
           onChange={(traits) => wizardStore.patchCast(row.id, { traits })}
+          placeholder={t('wizard:cast.editor.traitsPlaceholder')}
           maxCount={TRAITS_CAP}
         />
       </FormRow>
@@ -211,6 +213,7 @@ export function CharacterEditor({
         <TagInput
           value={row.drives}
           onChange={(drives) => wizardStore.patchCast(row.id, { drives })}
+          placeholder={t('wizard:cast.editor.drivesPlaceholder')}
           maxCount={DRIVES_CAP}
         />
       </FormRow>

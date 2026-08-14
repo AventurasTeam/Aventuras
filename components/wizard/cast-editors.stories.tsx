@@ -51,10 +51,10 @@ function castRowById(id: string): WizardCastDraft {
 }
 
 // TagInput exposes no aria-label (its inner TextInput only forwards a fixed
-// prop set — see lore-list.stories.tsx), so Traits/Drives/Agenda/Tags are
-// picked out by process of elimination: every OTHER textbox in these editors
-// carries an aria-label, so filtering it out isolates the TagInputs in
-// render order.
+// prop set — see lore-list.stories.tsx), so Agenda/Tags — the two with no
+// placeholder to match on either — are picked out by process of elimination:
+// every OTHER textbox in these editors carries an aria-label, so filtering it
+// out isolates the TagInputs in render order.
 function unlabeledTextboxes(): HTMLElement[] {
   return screen.getAllByRole('textbox').filter((el) => !el.hasAttribute('aria-label'))
 }
@@ -159,15 +159,17 @@ export const Character: Story = {
     expect(screen.getByRole('radio', { name: 'Active' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Staged' })).not.toBeChecked()
 
-    await userEvent.type(screen.getByLabelText('Voice'), 'clipped, formal')
+    // Labelled "Speech"; the state key it writes is still `voice`.
+    await userEvent.type(screen.getByLabelText('Speech'), 'clipped, formal')
     await waitFor(() =>
       expect((castRowById('char-1') as WizardCharacterDraft).voice).toBe('clipped, formal'),
     )
 
-    // Traits then Drives are the two always-visible unlabeled TagInputs, in that order.
-    const [traitsInput, drivesInput] = unlabeledTextboxes()
-    await userEvent.type(traitsInput!, 'stubborn{Enter}')
-    await userEvent.type(drivesInput!, 'protect the forge{Enter}')
+    // Their placeholders are the only accessible handle these two TagInputs
+    // have — they show while the chip list is empty, which is when a test
+    // needs to find them.
+    await userEvent.type(screen.getByPlaceholderText('Add trait…'), 'stubborn{Enter}')
+    await userEvent.type(screen.getByPlaceholderText('Add drive…'), 'protect the forge{Enter}')
     await waitFor(() => {
       const row = castRowById('char-1') as WizardCharacterDraft
       expect(row.traits).toEqual(['stubborn'])

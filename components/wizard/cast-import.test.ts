@@ -265,7 +265,7 @@ describe('resolveCastImports', () => {
   })
 
   // Bounds documented on the clamp constants in cast-import.ts.
-  it('clamps character voice/traits/drives/visual fields to the degradation bounds', () => {
+  it('clamps character speech/traits/drives/visual fields to the degradation bounds', () => {
     const [char] = resolveCastImports(
       [
         {
@@ -273,7 +273,7 @@ describe('resolveCastImports', () => {
           name: 'Overloaded',
           description: '',
           status: 'active',
-          voice: 'v'.repeat(2500),
+          speech: 'v'.repeat(2500),
           traits: Array.from({ length: 60 }, (_, i) => `trait-${i}`),
           drives: Array.from({ length: 60 }, (_, i) => `drive-${i}`),
           visual: { hair: 'h'.repeat(600) },

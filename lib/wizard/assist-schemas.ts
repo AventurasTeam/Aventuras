@@ -85,7 +85,9 @@ const castSuggestionShared = {
 const characterSuggestionSchema = z.object({
   kind: z.literal('character'),
   ...castSuggestionShared,
-  voice: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
+  // Named for how the character talks, not how they sound; lands in the
+  // `voice` state key at import.
+  speech: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
   traits: z.array(z.string().trim()).optional().describe('personality/skill traits, at most 8'),
   drives: z.array(z.string().trim()).optional().describe('goals, fears, sore spots, at most 6'),
   faction_name: z

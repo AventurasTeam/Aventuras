@@ -78,7 +78,7 @@ export function resolveCastImports(
           name: s.name,
           description: s.description,
           status: s.status,
-          voice: clampStr(s.voice ?? '', VOICE_MAX),
+          voice: clampStr(s.speech ?? '', VOICE_MAX),
           traits: clampArr(s.traits ?? []),
           drives: clampArr(s.drives ?? []),
           visual: {
