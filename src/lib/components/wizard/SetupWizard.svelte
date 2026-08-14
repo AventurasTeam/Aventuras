@@ -6,12 +6,14 @@
   import { MODAL_CLOSE_TRANSITION_MS } from '$lib/constants/layout'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import { Button } from '$lib/components/ui/button'
-  import { ChevronLeft, ChevronRight, Play } from '@lucide/svelte'
+  import { ChevronLeft, ChevronRight, Play, X } from '@lucide/svelte'
   import { ui } from '$lib/stores/ui.svelte'
   import { lorebookVault } from '$lib/stores/lorebookVault.svelte'
   import { characterVault } from '$lib/stores/characterVault.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
   import type { VaultCharacter } from '$lib/types'
+
+  import WizardExitConfirm from './WizardExitConfirm.svelte'
 
   // Step components
   import {
@@ -35,6 +37,7 @@
   const isMobile = createIsMobile()
 
   let isOpen = $state(true)
+  let showExitConfirm = $state(false)
 
   /**
    * A close driven from this side never reaches `vaul`'s restore, and `onClose()` unmounts
@@ -53,6 +56,23 @@
 
   // Initialize Wizard Store
   const wizard = new WizardStore(() => handleClose())
+
+  /**
+   * Past the first step the wizard holds answers that exist nowhere else, so a stray tap on
+   * the backdrop has to be confirmed instead of silently discarding them.
+   */
+  const guardDismiss = $derived(wizard.currentStep > 1 && !wizard.isCreatingStory)
+
+  /**
+   * A drawer swipe has no event to intercept, so it is switched off rather than confirmed;
+   * the header's close button is the deliberate way out on mobile.
+   */
+  const allowSwipeDismiss = $derived(!guardDismiss && !wizard.isCreatingStory)
+
+  function requestDismiss() {
+    if (guardDismiss) showExitConfirm = true
+    else handleClose()
+  }
 
   // Auto-link embedded lorebook when selecting a vault character
   function autoLinkCharacterLorebook(char: VaultCharacter, isProtagonist = false) {
@@ -103,22 +123,41 @@
 
 <ResponsiveModal.Root
   open={isOpen}
+  dismissible={allowSwipeDismiss}
   onOpenChange={(open) => !open && !wizard.isCreatingStory && handleClose()}
 >
   <ResponsiveModal.Content
     class="flex h-full flex-col gap-0 p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-3xl"
     interactOutsideBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
     escapeKeydownBehavior={wizard.isCreatingStory ? 'ignore' : 'close'}
+    onInteractOutside={(e: PointerEvent) => {
+      e.preventDefault()
+      requestDismiss()
+    }}
+    onEscapeKeydown={(e: KeyboardEvent) => {
+      e.preventDefault()
+      if (showExitConfirm) showExitConfirm = false
+      else requestDismiss()
+    }}
   >
     <!-- Header -->
-    <div class="flex flex-col border-b p-4 pb-4">
-      <div class="mb-4 flex items-center justify-between">
-        <div>
+    <div class="flex flex-col border-b p-4 pb-4" inert={showExitConfirm}>
+      <div class="mb-4 flex items-center justify-between gap-2">
+        <div class="min-w-0">
           <ResponsiveModal.Title class="text-xl">Create New Story</ResponsiveModal.Title>
           <ResponsiveModal.Description>
             Step {wizard.currentStep} of {wizard.totalSteps}: {stepTitles[wizard.currentStep - 1]}
           </ResponsiveModal.Description>
         </div>
+        <Button
+          variant="ghost"
+          class="text-muted-foreground hover:text-foreground h-9 w-9 shrink-0 p-0"
+          title="Close wizard"
+          disabled={wizard.isCreatingStory}
+          onclick={requestDismiss}
+        >
+          <X class="h-5 w-5" />
+        </Button>
       </div>
 
       <!-- Progress Bar -->
@@ -136,7 +175,7 @@
     </div>
 
     <!-- Content -->
-    <div class="min-h-0 flex-1 overflow-y-auto p-4">
+    <div class="min-h-0 flex-1 overflow-y-auto p-4" inert={showExitConfirm}>
       {#if wizard.currentStep === 1}
         <Step1Mode
           selectedMode={wizard.narrative.selectedMode}
@@ -448,7 +487,7 @@
     </div>
 
     <!-- Footer Navigation -->
-    <div class="flex shrink-0 justify-between border-t p-4">
+    <div class="flex shrink-0 justify-between border-t p-4" inert={showExitConfirm}>
       {#if wizard.currentStep > 1}
         <Button variant="secondary" class="gap-1 pl-2" onclick={() => wizard.prevStep()}>
           <ChevronLeft class="h-4 w-4" />
@@ -486,5 +525,14 @@
         </Button>
       {/if}
     </div>
+
+    <WizardExitConfirm
+      open={showExitConfirm}
+      onCancel={() => (showExitConfirm = false)}
+      onDiscard={() => {
+        showExitConfirm = false
+        handleClose()
+      }}
+    />
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>

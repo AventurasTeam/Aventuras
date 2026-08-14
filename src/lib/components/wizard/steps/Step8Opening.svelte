@@ -222,7 +222,7 @@
             value={manualOpeningText}
             oninput={(e) => onManualOpeningChange(e.currentTarget.value)}
             placeholder="Write the opening scene of your story here... Describe the setting, introduce your character, set the mood. This will be the first entry in your adventure."
-            class="min-h-[140px] resize-y text-sm"
+            class="min-h-[140px] text-sm"
             rows={6}
             disabled={isGeneratingOpening || isRefiningOpening || generatedOpening !== null}
           />
@@ -355,7 +355,7 @@
           <Textarea
             value={openingDraft ?? ''}
             oninput={(e) => onDraftChange(e.currentTarget.value)}
-            class="min-h-[140px] resize-y text-sm"
+            class="min-h-[140px] text-sm"
             rows={6}
           />
           <div class="flex justify-end gap-2">

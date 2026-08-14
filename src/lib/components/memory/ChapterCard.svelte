@@ -177,7 +177,7 @@
     <!-- Summary -->
     <div class="px-3 py-3">
       {#if isEditing}
-        <Textarea bind:value={editedSummary} class="min-h-[80px] resize-y text-sm" rows={4} />
+        <Textarea bind:value={editedSummary} class="min-h-[80px] text-sm" rows={4} />
       {:else}
         <div class="bg-muted/30 text-muted-foreground rounded p-2 text-sm leading-relaxed">
           {chapter.summary}

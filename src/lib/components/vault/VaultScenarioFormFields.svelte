@@ -172,7 +172,7 @@
                 bind:value={data.settingSeed}
                 oninput={handleInput}
                 rows={10}
-                class="min-h-[200px] resize-y font-mono text-sm leading-relaxed"
+                class="min-h-[200px] font-mono text-sm leading-relaxed"
                 placeholder="Detailed world setting..."
               />
               <div
