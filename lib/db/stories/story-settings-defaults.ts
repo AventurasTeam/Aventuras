@@ -76,9 +76,9 @@ export function buildStorySettings(
   return storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
     ...app.defaultStorySettings,
-    // An empty stored palette means "not configured" — a row written before the
-    // per-mode seed landed, or one whose Zod default filled in empty arrays —
-    // not "the user wants none".
+    // An empty stored palette means "not configured", not "the user wants
+    // none": the Zod default fills in empty arrays, so emptiness is exactly
+    // what an unset palette looks like.
     suggestionCategories: appPalette.length > 0 ? appPalette : DEFAULT_SUGGESTION_CATEGORIES[mode],
     // Both halves override unconditionally: defaultStorySettings is a template
     // for the other fields, but the embedder selection has its own app-level
