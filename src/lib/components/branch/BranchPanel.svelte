@@ -15,10 +15,41 @@
   } from '@lucide/svelte'
   import type { Branch, Checkpoint } from '$lib/types'
   import { SvelteSet } from 'svelte/reactivity'
+  import { untrack } from 'svelte'
   import { supportsHover } from '$lib/utils/platform'
 
   // Track expanded branches in tree view
   let expandedBranches = $state<Set<string>>(new Set(['main']))
+
+  /**
+   * Unfold the path down to the branch being read, so the tree never opens with the current
+   * branch hidden inside a collapsed ancestor.
+   *
+   * Only its ancestors are expanded — a node's own state controls its children, not whether
+   * its row is visible. Done once per branch, so a node collapsed afterwards stays collapsed.
+   */
+  let revealedFor: string | null | undefined = undefined
+
+  $effect(() => {
+    const branchId = story.currentStory?.currentBranchId ?? null
+    const branches = story.branches
+    if (branchId === revealedFor) return
+    // Branches load after the story, so wait for the one we are asked to reveal.
+    if (branchId && !branches.some((b) => b.id === branchId)) return
+    revealedFor = branchId
+
+    untrack(() => {
+      const next = new SvelteSet(expandedBranches)
+      next.add('main')
+      let current = branches.find((b) => b.id === branchId)
+      while (current?.parentBranchId) {
+        const parentId: string = current.parentBranchId
+        next.add(parentId)
+        current = branches.find((b) => b.id === parentId)
+      }
+      expandedBranches = next
+    })
+  })
 
   // Track which branch is being renamed
   let renamingBranchId = $state<string | null>(null)
