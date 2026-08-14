@@ -84,6 +84,14 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
   }
   if (!Array.isArray(payload.queries) || payload.queries.length !== 3)
     throw new CaptureShapeError('queries', 'must be a three-query stack')
+  // Required-and-nullable, so `undefined` is rejected rather than defaulted:
+  // replayType never sees the row, and an absent marker reads there as a
+  // failure. A payload predating the field is refused, not silently replayed.
+  if (payload.failure_reason !== null && typeof payload.failure_reason !== 'string')
+    throw new CaptureShapeError(
+      'failure_reason',
+      `must be a string or null, got ${typeOf(payload.failure_reason)}`,
+    )
 }
 
 /**
