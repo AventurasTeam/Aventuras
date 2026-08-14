@@ -103,7 +103,7 @@
           <button
             class="hover:bg-surface-700/50 flex min-h-[40px] w-full items-start gap-2 rounded-lg p-2 text-left transition-colors sm:min-h-0"
             onclick={() => goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)}
-            title="Go to entry {landmark.number}"
+            title="Go to entry {landmark.number}:&#10;{landmark.label}"
           >
             {#if landmark.kind === 'origin'}
               <GitBranch class="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
@@ -114,9 +114,10 @@
               {landmark.number}
             </span>
             <span class="min-w-0 flex-1">
-              <span class="text-surface-200 block truncate text-sm">
-                {landmark.kind === 'origin' ? `${landmark.label} starts here` : landmark.label}
-              </span>
+              <!-- Wrapped rather than truncated: a name the reader chose is the only thing
+                   telling these rows apart, and a touch device has no tooltip to fall back
+                   on. The list is a handful of rows, so the vertical space is affordable. -->
+              <span class="text-surface-200 block text-sm break-words">{landmark.label}</span>
               {#if landmark.preview}
                 <span class="text-surface-500 block truncate text-xs">{landmark.preview}</span>
               {/if}

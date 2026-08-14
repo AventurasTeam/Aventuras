@@ -34,14 +34,19 @@ function checkpoint(id: string, lastEntryId: string, name = id): Checkpoint {
   }
 }
 
-function branch(id: string, forkEntryId: string, name = id): Branch {
+function branch(
+  id: string,
+  forkEntryId: string,
+  name = id,
+  checkpointId: string | null = null,
+): Branch {
   return {
     id,
     storyId: 's1',
     name,
     parentBranchId: null,
     forkEntryId,
-    checkpointId: null,
+    checkpointId,
     createdAt: 0,
   }
 }
@@ -113,7 +118,7 @@ describe('buildLandmarks', () => {
     entry('b3', 3, 'br1'),
     entry('b4', 4, 'br1'),
   ]
-  const br1 = branch('br1', 'm1', 'Betrayal')
+  const br1 = branch('br1', 'm1', 'Betrayal', 'cp-origin')
 
   it('puts the origin first, followed by the branch checkpoints in number order', () => {
     const landmarks = buildLandmarks(
@@ -126,7 +131,23 @@ describe('buildLandmarks', () => {
       ['checkpoint', 3],
       ['checkpoint', 5],
     ])
-    expect(landmarks[0].label).toBe('Betrayal')
+  })
+
+  it('names the origin after the checkpoint the branch was forked from, not the branch', () => {
+    const landmarks = buildLandmarks(
+      branchView,
+      [checkpoint('cp-origin', 'm1', 'Council of five')],
+      br1,
+    )
+    expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
+    expect(landmarks[0].preview).toBe('Council of five preview')
+  })
+
+  it('falls back to a generic origin label when that checkpoint is gone', () => {
+    // `checkpointId` is nullable for imported and legacy branches, and a checkpoint can be
+    // deleted after the branch that came from it.
+    const orphaned = buildLandmarks(branchView, [], branch('br1', 'm1', 'Betrayal', 'deleted-cp'))
+    expect(orphaned.map((l) => [l.kind, l.label])).toEqual([['origin', 'Branch origin']])
   })
 
   it('omits the origin row on the main branch', () => {

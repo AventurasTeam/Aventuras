@@ -1194,6 +1194,7 @@ export function getDefaultUISettings(): UISettings {
     disableActionPrefixes: false,
     showReasoning: true,
     sidebarWidth: 288,
+    navPanelWidth: 256,
     autoScroll: true,
     showScrollToTop: false,
     showScrollToBottom: true,
@@ -1594,6 +1595,9 @@ class SettingsStore {
 
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
+
+      const navPanelWidth = await database.getSetting('nav_panel_width')
+      if (navPanelWidth) this.uiSettings.navPanelWidth = parseInt(navPanelWidth, 10)
 
       const sidebarOpen = await database.getSetting('sidebar_open')
       if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
@@ -2703,6 +2707,11 @@ class SettingsStore {
   async setSidebarWidth(width: number) {
     this.uiSettings.sidebarWidth = width
     await database.setSetting('sidebar_width', width.toString())
+  }
+
+  async setNavPanelWidth(width: number) {
+    this.uiSettings.navPanelWidth = width
+    await database.setSetting('nav_panel_width', width.toString())
   }
 
   async setDebugMode(enabled: boolean) {

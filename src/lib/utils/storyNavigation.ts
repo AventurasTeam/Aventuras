@@ -80,12 +80,17 @@ export function buildLandmarks(
   if (activeBranch) {
     const forkEntry = byId.get(activeBranch.forkEntryId)
     if (forkEntry) {
+      // The branch was forked from a checkpoint on its parent, and that checkpoint's entry is
+      // this fork entry. Naming the row after it keeps every row in the list a checkpoint name.
+      // It is not among the checkpoint rows below: it belongs to the parent branch, so nothing
+      // here is listed twice.
+      const origin = checkpoints.find((c) => c.id === activeBranch.checkpointId)
       landmarks.push({
         entryId: forkEntry.id,
         number: entryNumber(forkEntry),
         kind: 'origin',
-        label: activeBranch.name,
-        preview: null,
+        label: origin?.name ?? 'Branch origin',
+        preview: origin?.lastEntryPreview ?? null,
       })
     }
   }

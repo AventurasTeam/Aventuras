@@ -727,6 +727,7 @@ export interface UISettings {
   disableActionPrefixes: boolean
   showReasoning: boolean
   sidebarWidth: number
+  navPanelWidth: number
   autoScroll: boolean
   showScrollToTop: boolean
   showScrollToBottom: boolean

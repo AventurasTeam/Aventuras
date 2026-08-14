@@ -123,26 +123,37 @@
     clampDebugButtonToViewport()
   }
 
-  // Resizing logic
-  let isResizing = $state(false)
+  // Resizing logic — two panels, one drag at a time
+  let resizing = $state<'sidebar' | 'navPanel' | null>(null)
+  const isResizing = $derived(resizing !== null)
+  let navPanelEl = $state<HTMLDivElement | null>(null)
 
-  function startResizing(e: MouseEvent) {
-    isResizing = true
+  function startResizing(target: 'sidebar' | 'navPanel', e: MouseEvent) {
+    resizing = target
     e.preventDefault()
   }
 
   function stopResizing() {
-    if (!isResizing) return
-    isResizing = false
+    if (!resizing) return
+    const target = resizing
+    resizing = null
     // Persist the final width to the database now that resizing is complete.
-    settings.setSidebarWidth(settings.uiSettings.sidebarWidth)
+    if (target === 'sidebar') {
+      settings.setSidebarWidth(settings.uiSettings.sidebarWidth)
+    } else {
+      settings.setNavPanelWidth(settings.uiSettings.navPanelWidth)
+    }
   }
 
   function handleMouseMove(e: MouseEvent) {
-    if (!isResizing) return
+    if (!resizing) return
 
-    // Sidebar is on the right, so width is window.innerWidth - mouseX
-    const newWidth = window.innerWidth - e.clientX
+    // The sidebar is flush to the right edge; the nav panel starts wherever the content
+    // area does, which is not the window edge once a safe-area inset is in play.
+    const newWidth =
+      resizing === 'sidebar'
+        ? window.innerWidth - e.clientX
+        : e.clientX - (navPanelEl?.getBoundingClientRect().left ?? 0)
 
     // Constraints
     if (
@@ -150,7 +161,11 @@
       newWidth <= Math.min(MAX_SIDEBAR_WIDTH, window.innerWidth * MAX_SIDEBAR_RATIO)
     ) {
       // For performance, update the reactive state directly without saving to the database on every mouse movement.
-      settings.uiSettings.sidebarWidth = newWidth
+      if (resizing === 'sidebar') {
+        settings.uiSettings.sidebarWidth = newWidth
+      } else {
+        settings.uiSettings.navPanelWidth = newWidth
+      }
     }
   }
 
@@ -241,22 +256,34 @@
     <div class="flex flex-1 flex-col overflow-hidden">
       <Header />
 
-      <!-- `relative` so the navigation panel can overlay the content area without the header:
-           it must take no layout space, or opening it would narrow the story column and
-           reflow the text the reader is looking at. -->
-      <div class="relative min-h-0 flex-1">
+      <!-- The navigation panel is a flex sibling of the content, so on desktop it pushes.
+           `relative` is for the mobile case, where it overlays this area instead — below
+           the header, so the control that opened it stays reachable. -->
+      <div class="relative flex min-h-0 flex-1">
         {#if ui.navPanelOpen && story.currentStory}
           <button
             class="nav-panel-scrim"
             onclick={() => ui.closeNavPanel()}
             aria-label="Close story navigation"
           ></button>
-          <div class="nav-panel-container">
+          <div
+            bind:this={navPanelEl}
+            class="nav-panel-container relative flex"
+            style:width="{settings.uiSettings.navPanelWidth}px"
+          >
             <StoryNavPanel />
+            <!-- Desktop only: on mobile the panel overlays at a fixed width, so there is
+                 nothing to resize. -->
+            <button
+              type="button"
+              class="resizer-handle nav-panel-resizer hidden h-full sm:block"
+              onmousedown={(e) => startResizing('navPanel', e)}
+              aria-label="Story Navigation Resizer"
+            ></button>
           </div>
         {/if}
 
-        <main class="h-full overflow-hidden">
+        <main class="min-w-0 flex-1 overflow-hidden">
           {#if ui.activePanel === 'story' && story.currentStory}
             <StoryView />
           {:else if ui.activePanel === 'gallery' && story.currentStory}
@@ -283,7 +310,7 @@
         <button
           type="button"
           class="resizer-handle hidden h-full sm:block"
-          onmousedown={startResizing}
+          onmousedown={(e) => startResizing('sidebar', e)}
           aria-label="Sidebar Resizer"
         ></button>
         <Sidebar />
@@ -423,22 +450,20 @@
     outline-offset: -2px;
   }
 
-  /*
-   * Story navigation panel — an overlay at every width, unlike the right sidebar. Taking
-   * layout space would narrow the story column and reflow its text, moving the reader's
-   * place before they have navigated anywhere.
-   */
+  /* Story navigation panel — in flow on desktop, so it pushes the content the way the
+     right sidebar does. It overlays only on mobile, where there is no room to push. */
   .nav-panel-container {
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 16rem;
-    z-index: 45;
+    flex-shrink: 0;
   }
 
-  /* Desktop keeps the story visible and interactive behind the panel: the reader jumps,
-     looks at where they landed, and jumps again without reopening anything. */
+  /* The shared resizer sits on the panel's right edge, not its left. */
+  .nav-panel-resizer {
+    left: auto;
+    right: 0;
+  }
+
+  /* No scrim on desktop: the story stays visible and interactive beside the panel, so the
+     reader can jump, look at where they landed, and jump again. */
   .nav-panel-scrim {
     display: none;
     position: absolute;
@@ -489,7 +514,13 @@
     }
 
     .nav-panel-container {
-      width: calc(100vw - 3rem);
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 45;
+      /* Overrides the inline width the desktop resizer sets. */
+      width: calc(100vw - 3rem) !important;
       max-width: 288px;
       animation: slide-in-left 0.2s ease-out;
     }
