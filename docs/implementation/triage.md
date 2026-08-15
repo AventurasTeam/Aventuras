@@ -383,7 +383,23 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   match literals: `e2e/locators/reader.ts` centralizes them so the eventual
   i18n pass is a one-line locator change. Fix is to move the strings into
   the `reader` / `common` namespaces and swap the locators to `t()`.
-  Surfaced by the coverage-expansion pass (2026-07-24).
+  Surfaced by the coverage-expansion pass (2026-07-24). **Grew in Slice
+  3.8 (2026-08-15):** the world-time edit overlay's strings — the
+  monotonicity banner, the below-origin and out-of-range messages, and
+  the footer's `Edit time` control — follow the same hardcoded pattern,
+  in `components/compounds/world-time-edit-form.tsx` as well as
+  `entry-card.tsx`. That slice considered converting just the new
+  component and decided against it: the monotonicity sentence renders
+  from both files, so a partial migration would split one string across
+  two sources and invite drift. Two corrections for whoever does the
+  pass, because 3.8's planning recorded both wrongly and nearly
+  propagated them: this entry is a **defect**, not a sanctioned
+  exception to cite, and the reader document bundle **can** reach
+  `t()` — `components/reader/jump-buttons.tsx`, `composer.tsx` and
+  `suggestion-strip.tsx` all render inside the document and call it. The
+  overlay is the sharpest case for fixing this, since its host chrome
+  (Sheet `aria-label`, failure toast) is already `t()`-routed, leaving
+  one overlay half-translated.
 - **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
   `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
   `{{ entry.content }}` (inside the `recentEntries` loop) renders the
