@@ -359,3 +359,56 @@ describe('AC6 — undo floor in a wizard-created story', () => {
     expect(entriesStore.getById('e_opening')).toBeDefined()
   })
 })
+
+describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
+  it('aborts the run and holds the sweep until its terminal resolves', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const entries = [entry('e_opening', 1, 'opening'), entry('e_t1', 2, 'ai_reply')]
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values(entries)
+    await db
+      .insert(deltas)
+      .values(delta('d_t1', 1, 'act_t1', 'ai_classifier', 'story_entries', 'e_t1', 'create'))
+    entriesStore.hydrate('b1', entries)
+
+    let resolveTerminal!: () => void
+    const terminal = new Promise<void>((r) => {
+      resolveTerminal = r
+    })
+    const abortController = new AbortController()
+    let aborted = false
+    abortController.signal.addEventListener('abort', () => {
+      aborted = true
+    })
+    // A no-gate classifier run: does not block user edits, so undo proceeds
+    // and must drain it via the C3 bracket.
+    generationStore.startRun({
+      runId: 'run_c',
+      kind: 'periodic-classifier',
+      gateBehavior: 'no-gate',
+      actionId: 'act_c',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController,
+      currentPhase: '',
+      intermediates: {},
+      terminal,
+      resolveTerminal,
+    })
+
+    const done = undoLastAction('b1', ctx)
+    // The bracket aborts the doomed run synchronously, before any sweep work…
+    expect(aborted).toBe(true)
+    // …and the sweep waits for the terminal, not merely a microtask turn: an
+    // unbracketed sweep would have finished within this flush (in-memory SQLite,
+    // no real I/O), so the entry still standing is the barrier's own evidence.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(entriesStore.getById('e_t1')).toBeDefined()
+
+    resolveTerminal()
+    expect((await done).status).toBe('ok')
+    expect(entriesStore.getById('e_t1')).toBeUndefined()
+  })
+})
