@@ -542,6 +542,9 @@ export default function ReaderComposerRoute() {
           error: err instanceof Error ? err.message : String(err),
         })
         toast.error(t('reader:regenerateFailed'))
+        // A DeltaReplayError can commit its transaction and fail the store sync,
+        // leaving entriesStore holding rows the sweep already deleted.
+        await reload()
       }
     },
     [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
