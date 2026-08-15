@@ -134,8 +134,13 @@ see Implementation notes.
   test would let an untouched save silently rewrite `worldTime` to the
   truncated value. A second, independent guard lives in the action
   (exact seconds equality) because the form is not structurally the
-  only caller. Both are covered; the coarse-calendar story is the only
-  test that distinguishes the two predicates.
+  only caller. **The two are not interchangeable and neither is
+  redundant:** the action compares seconds, so it would sail straight
+  past a truncated value that a form-level seconds check had already
+  let through. The form's tuple check is the only thing standing
+  between a coarse-grain calendar and silent remainder loss. The
+  coarse-calendar story is the only test that distinguishes the two
+  predicates.
 - **The monotonicity walk is window-local.** Head-of-window entries
   stay unflagged until their predecessor loads; no DB reach. The flag
   is soft advisory UI and self-heals on scroll-up.
