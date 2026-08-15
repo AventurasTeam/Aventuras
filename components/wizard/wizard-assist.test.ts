@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import type { ResolveModelConfig } from '@/lib/ai'
+import { emptyCastDraft, emptyWorkingState } from '@/lib/db'
+import { VARIABLES } from '@/lib/prompts'
 import { wizardStore } from '@/lib/stores'
 
 import {
@@ -10,6 +12,7 @@ import {
   refineSettingAssist,
   refineToneAssist,
   resolveWizardAssistModelId,
+  runCastAssist,
   runDescriptionAssist,
   runGenreAssist,
   runLoreAssist,
@@ -17,6 +20,7 @@ import {
   runSettingAssist,
   runTitleAssist,
   runToneAssist,
+  wizardTemplateContext,
   type WizardAssistDeps,
 } from './wizard-assist'
 
@@ -54,12 +58,33 @@ function deps(value: unknown): WizardAssistDeps {
   return { resolveConfig: () => CONFIGURED, generate: okGenerate(value) }
 }
 
+/**
+ * Generate seam that builds its reply from the placeholders substituteIds
+ * actually allocated, read back out of the rendered prompt — hardcoding 'c1'
+ * would pass even if the substitution stopped running. Keyed by real cast id:
+ * the opening macro renders active rows in store order, so the Nth rendered id
+ * belongs to the Nth active row.
+ */
+function echoGenerate(
+  sink: { prompt: string },
+  reply: (placeholders: Record<string, string>) => unknown,
+): WizardAssistDeps['generate'] {
+  return (async (_target: unknown, prompt: string) => {
+    sink.prompt = prompt
+    const rendered = [...prompt.matchAll(/cast id: ([^)]+)\)/g)].map((m) => m[1])
+    const active = wizardStore.getWizard().state.cast.filter((r) => r.status === 'active')
+    return {
+      status: 'ok',
+      value: reply(Object.fromEntries(active.map((row, i) => [row.id, rendered[i]]))),
+    }
+  }) as WizardAssistDeps['generate']
+}
+
 describe('runOpeningAssist', () => {
   beforeEach(() => wizardStore.reset())
 
   it('round-trips a returned lead placeholder back to the real lead id', async () => {
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Aria')
     wizardStore.setLeadEntityId(LEAD_ID)
     // leadEntityId is the only id in state, so substituteIds allocates it 'c1'.
     const res = await runOpeningAssist(
@@ -79,22 +104,11 @@ describe('runOpeningAssist', () => {
     expect(res.value.model).toBe(MODEL_ID)
   })
 
-  it('mints a lead id when the path needs one and none exists yet', async () => {
+  it('drops an unresolvable ref but keeps the prose and its provenance', async () => {
+    // No id is minted here — even on a lead-required path, the idMap
+    // stays empty until the lead is added as a cast row, so the returned
+    // placeholder is unresolvable.
     wizardStore.patchDefinition({ mode: 'adventure', narration: 'first' })
-    wizardStore.setLeadName('Kade')
-    expect(wizardStore.getWizard().state.leadEntityId).toBeNull()
-
-    await runOpeningAssist(
-      '',
-      signal,
-      deps({ prose: 'x', sceneEntities: [], currentLocationId: null, worldTime: 0 }),
-    )
-    expect(wizardStore.getWizard().state.leadEntityId).not.toBeNull()
-  })
-
-  it('falls back to user-written (drops metadata) when a placeholder cannot resolve', async () => {
-    // Lead-less path → empty idMap → the returned placeholder is unresolvable.
-    wizardStore.patchDefinition({ mode: 'creative', narration: 'third' })
     const res = await runOpeningAssist(
       '',
       signal,
@@ -109,7 +123,61 @@ describe('runOpeningAssist', () => {
     if (res.status !== 'ok') return
     expect(res.value.content).toBe('The map unrolled.')
     expect(res.value.sceneEntities).toEqual([])
-    expect(res.value.model).toBeNull()
+    // Not null: the prose came from the model regardless of whether its refs
+    // resolved, and finish.ts omits `model` when null — committing an AI
+    // opening as hand-written.
+    expect(res.value.model).toBe(MODEL_ID)
+  })
+
+  it('keeps every resolvable ref when a sibling in the same reply is unresolvable', async () => {
+    const charId = wizardStore.addCast('character')
+    const locId = wizardStore.addCast('location')
+    wizardStore.setLeadEntityId(charId)
+
+    const sink: { prompt: string } = { prompt: '' }
+    const res = await runOpeningAssist('', signal, {
+      resolveConfig: () => CONFIGURED,
+      generate: echoGenerate(sink, (placeholders) => ({
+        prose: 'Smoke over the ridge.',
+        // 'c9' is never allocated — the shape a model produces when it invents
+        // a cast member the wizard never authored.
+        sceneEntities: [placeholders[charId], 'c9'],
+        currentLocationId: placeholders[locId],
+        worldTime: 0,
+      })),
+    })
+
+    expect(res.status).toBe('ok')
+    if (res.status !== 'ok') return
+    expect(res.value.sceneEntities).toEqual([charId])
+    expect(res.value.currentLocationId).toBe(locId)
+    expect(res.value.model).toBe(MODEL_ID)
+  })
+
+  it('round-trips non-lead cast ids and the location pointer through the prompt', async () => {
+    const charId = wizardStore.addCast('character')
+    const itemId = wizardStore.addCast('item')
+    const locId = wizardStore.addCast('location')
+    wizardStore.setLeadEntityId(charId)
+
+    const sink: { prompt: string } = { prompt: '' }
+    const res = await runOpeningAssist('', signal, {
+      resolveConfig: () => CONFIGURED,
+      generate: echoGenerate(sink, (placeholders) => ({
+        prose: 'The lantern guttered.',
+        sceneEntities: [placeholders[charId], placeholders[itemId]],
+        currentLocationId: placeholders[locId],
+        worldTime: 0,
+      })),
+    })
+
+    expect(res.status).toBe('ok')
+    if (res.status !== 'ok') return
+    // Real ids never reach the model; every one of these came back as a
+    // placeholder and was resolved by the reverse substitution.
+    expect(sink.prompt).not.toContain(charId)
+    expect(res.value.sceneEntities).toEqual([charId, itemId])
+    expect(res.value.currentLocationId).toBe(locId)
   })
 
   it('propagates a non-ok result unchanged', async () => {
@@ -167,6 +235,69 @@ describe('runLoreAssist', () => {
     expect(capturedPrompt).toContain('Already written (do not repeat these):')
     expect(capturedPrompt).toContain('- The Salt Wells')
     expect(capturedPrompt).toContain('- The Hollow King')
+  })
+})
+
+describe('runCastAssist', () => {
+  beforeEach(() => wizardStore.reset())
+
+  it('renders the cast template and returns the parsed batch', async () => {
+    let capturedPrompt = ''
+    let capturedSignal: AbortSignal | undefined
+    const entities = [{ kind: 'item', name: 'Coin', description: 'Old.' }]
+    const generate: WizardAssistDeps['generate'] = (async (
+      _target,
+      prompt,
+      _schema,
+      _config,
+      sig,
+    ) => {
+      capturedPrompt = prompt as string
+      capturedSignal = sig as AbortSignal
+      return { status: 'ok', value: { entities } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(res).toEqual({ status: 'ok', value: { entities } })
+    expect(capturedPrompt).toContain('Suggest five cast entries')
+    // Nothing on screen yet, so the exclusion block must not render at all.
+    expect(capturedPrompt).not.toContain('Already in the cast')
+    // A wizard "Cancel" must abort the in-flight call, not just the UI.
+    expect(capturedSignal).toBe(signal)
+  })
+
+  it('renders the authored cast rows from wizard state, not just the suggested exclusions', async () => {
+    let capturedPrompt = ''
+    const id = wizardStore.addCast('character')
+    const row = wizardStore.getWizard().state.cast.find((r) => r.id === id)
+    if (row?.kind !== 'character') throw new Error('expected a character row')
+    wizardStore.patchCast(row, { name: 'Rook' })
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { entities: [] } }
+    }) as WizardAssistDeps['generate']
+
+    await runCastAssist('', signal, { resolveConfig: () => CONFIGURED, generate })
+    expect(capturedPrompt).toContain('Already in the cast (do not repeat these):')
+    expect(capturedPrompt).toContain('- Rook (character)')
+  })
+
+  it('excludes the names already on screen so a further page is not a re-roll', async () => {
+    let capturedPrompt = ''
+    const generate: WizardAssistDeps['generate'] = (async (_target, prompt) => {
+      capturedPrompt = prompt as string
+      return { status: 'ok', value: { entities: [] } }
+    }) as WizardAssistDeps['generate']
+
+    const res = await runCastAssist(
+      'more items',
+      signal,
+      { resolveConfig: () => CONFIGURED, generate },
+      ['Old Jorin'],
+    )
+    expect(res.status).toBe('ok')
+    expect(capturedPrompt).toContain('Already in the cast (do not repeat these):')
+    expect(capturedPrompt).toContain('- Old Jorin')
   })
 })
 
@@ -360,5 +491,76 @@ describe('resolveWizardAssistModelId', () => {
   })
   it('returns null when unconfigured', () => {
     expect(resolveWizardAssistModelId({ resolveConfig: () => UNCONFIGURED })).toBeNull()
+  })
+})
+
+describe('wizardTemplateContext', () => {
+  // The leak direction the generationContext parity test doesn't cover: that
+  // one asserts every declared variable is present, not that nothing else is.
+  it('emits no variable the wizard registry does not declare', () => {
+    const state = {
+      ...emptyWorkingState(),
+      step: 4,
+      effectiveDim: 512,
+      effectiveDimTouched: true,
+    }
+    const declared = new Set(VARIABLES.wizard.map((v) => v.name))
+    // `current` / `instruction` / `suggested` are declared but arrive per-call.
+    const ctx = wizardTemplateContext(state, '', {
+      current: {},
+      instruction: 'darker',
+      suggested: [],
+    })
+    expect(Object.keys(ctx).filter((k) => !declared.has(k))).toEqual([])
+  })
+
+  it('emits every registry variable a generate call carries', () => {
+    const keys = Object.keys(wizardTemplateContext(emptyWorkingState(), ''))
+    for (const name of ['definition', 'leadEntityId', 'cast', 'opening', 'lore', 'guidance']) {
+      expect(keys).toContain(name)
+    }
+  })
+
+  it('drops tags from cast and lore rows, keeping every other field', () => {
+    const state = {
+      ...emptyWorkingState(),
+      cast: [
+        {
+          ...emptyCastDraft('character', 'char_1'),
+          name: 'Aria',
+          voice: 'clipped',
+          tags: ['antagonist'],
+        },
+      ],
+      lore: [
+        {
+          id: 'lore_1',
+          title: 'Sealed Wells',
+          body: 'Magic flows from sealed wells.',
+          category: 'cosmology',
+          tags: ['faith'],
+          injectionMode: 'auto' as const,
+          priority: 0,
+        },
+      ],
+    }
+    const ctx = wizardTemplateContext(state, '')
+    const [castRow] = ctx.cast as Record<string, unknown>[]
+    const [loreRow] = ctx.lore as Record<string, unknown>[]
+    expect(castRow).not.toHaveProperty('tags')
+    expect(loreRow).not.toHaveProperty('tags')
+    expect(castRow).toMatchObject({
+      id: 'char_1',
+      kind: 'character',
+      name: 'Aria',
+      voice: 'clipped',
+    })
+    expect(loreRow).toMatchObject({ id: 'lore_1', title: 'Sealed Wells', category: 'cosmology' })
+  })
+
+  it('lets extra keys through — refine passes `current` / `instruction` that way', () => {
+    const ctx = wizardTemplateContext(emptyWorkingState(), 'steer', { instruction: 'darker' })
+    expect(ctx.guidance).toBe('steer')
+    expect(ctx.instruction).toBe('darker')
   })
 })

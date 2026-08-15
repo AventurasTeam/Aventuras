@@ -25,7 +25,13 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-import { markExisting, mergePages, type AssistListItem } from './assist-list-logic'
+import {
+  itemKey,
+  markExisting,
+  mergePages,
+  type AssistListItem,
+  type DedupeKey,
+} from './assist-list-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 
@@ -113,8 +119,20 @@ type AiAssistListProps<T, P> = AiAssistCommonProps & {
   ) => Promise<GenerateStructuredResult<T>>
   /** Flattens one model reply into renderable rows. */
   getItems: (value: T) => AssistListItem<P>[]
-  /** Names already in the wizard's own list — drives the `(already exists)` mark. */
-  existingNames: readonly string[]
+  /**
+   * Identities already in the wizard's own list — drives the `(already
+   * exists)` mark. Build with the same constructor the rows' `dedupeKey` uses
+   * (`nameKey` or `composeKey`); the `DedupeKey` brand is what stops the two
+   * sides drifting into different rules and silently never matching.
+   */
+  existingKeys: readonly DedupeKey[]
+  /**
+   * Prompt-facing exclusion label for a row already on screen, sent on
+   * `Generate more`. Defaults to the trimmed name. Callers whose identity is
+   * scope-qualified must qualify here too, or the model is told to suppress a
+   * name the dedupe would have allowed back under a different scope.
+   */
+  excludeLabel?: (item: AssistListItem<P>) => string
   /** Fires once with the payload of every checked row when `Import selected` is pressed. */
   onImport: (payloads: P[]) => void
 }
@@ -139,7 +157,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   const [refineText, setRefineText] = useState('')
   const [open, setOpen] = useState(false)
   // List results accumulate across `Generate more` pages; selection is by
-  // trimmed name rather than index so a later page cannot shift what is checked.
+  // itemKey rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -246,8 +264,14 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
       }
       setAssist({ kind: 'result', value: result.value })
     } else if (result.status === 'not-configured') setAssist({ kind: 'not-configured' })
-    else if (result.status === 'failed')
+    else if (result.status === 'failed') {
+      // Where the real failures land — provider errors, timeouts, and every
+      // structured-output parse failure. The sync-throw branch above is the
+      // rare one, so logging only there left diagnostics empty for exactly the
+      // reports users file.
+      logger.error('provider.wizard_assist_failed', { modelId, ariaLabel, detail: result.detail })
       setAssist({ kind: 'failure', detail: result.detail, retry })
+    }
     // 'aborted' — whichever action triggered the abort already set its own state.
   }
 
@@ -259,8 +283,14 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
     lastGuidanceRef.current = guidance
     // Only an append needs exclusions; a replace is meant to re-roll the same
-    // prompt, and listItems is about to be discarded anyway.
-    const exclude = appendRef.current ? listItems.map((item) => item.name) : []
+    // prompt, and listItems is about to be discarded anyway. Deduped on trimmed
+    // name: mergePages no longer guarantees name-uniqueness once dedupeKey is in
+    // play, so two same-named rows (e.g. different cast kinds) would otherwise
+    // send the model the same exclusion twice.
+    const label =
+      (props.result === 'list' ? props.excludeLabel : undefined) ??
+      ((item: AssistListItem<P>) => item.name.trim())
+    const exclude = appendRef.current ? [...new Set(listItems.map(label))] : []
     const call =
       props.result === 'list'
         ? (signal: AbortSignal) => props.run(guidance, signal, exclude)
@@ -329,14 +359,19 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
 
   function renderListResult(): ReactNode {
     if (props.result !== 'list') return null
-    const marked = markExisting(listItems, props.existingNames)
+    const marked = markExisting(listItems, props.existingKeys)
     const selectable = marked.filter((row) => !row.exists)
-    const allSelected = selectable.length > 0 && selectable.every((row) => selected.has(row.name))
-    const toggleRow = (name: string) =>
+    // `existingKeys` is live: a row can go from selected to already-existing
+    // while the overlay is open, so a non-empty selection is not proof there is
+    // anything left to import — importing none of it would close as a silent no-op.
+    const importable = selectable.filter((row) => selected.has(itemKey(row)))
+    const allSelected =
+      selectable.length > 0 && selectable.every((row) => selected.has(itemKey(row)))
+    const toggleRow = (key: string) =>
       setSelected((prev) => {
         const draft = new Set(prev)
-        if (draft.has(name)) draft.delete(name)
-        else draft.add(name)
+        if (draft.has(key)) draft.delete(key)
+        else draft.add(key)
         return draft
       })
     return (
@@ -352,7 +387,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <View className="flex-row items-center gap-3">
               <Pressable
                 accessibilityRole="button"
-                onPress={() => setSelected(new Set(selectable.map((row) => row.name)))}
+                onPress={() => setSelected(new Set(selectable.map(itemKey)))}
                 disabled={allSelected || selectable.length === 0}
                 className={cn(
                   'h-control-xs justify-center px-2',
@@ -380,60 +415,64 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <View className={isPhone ? 'flex-1' : 'max-h-96'}>
               <Scroller>
                 <View className="gap-2">
-                  {marked.map((row) => (
-                    <Pressable
-                      key={row.name}
-                      accessibilityRole="checkbox"
-                      accessibilityLabel={row.name}
-                      accessibilityState={{ checked: selected.has(row.name), disabled: row.exists }}
-                      aria-checked={selected.has(row.name)}
-                      disabled={row.exists}
-                      onPress={() => toggleRow(row.name)}
-                      className={cn(
-                        'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
-                        // Press tint is touch feedback; on desktop the hover
-                        // border already signals interactivity and the sunken→
-                        // tint flash reads as loud.
-                        !row.exists &&
-                          Platform.select({
-                            web: 'cursor-pointer hover:border-border-strong',
-                            native: 'active:bg-tint-press',
-                          }),
-                      )}
-                    >
-                      {/* The row is the single interactive surface; the checkbox is
-                          decorative (pointer-shielded, AT-hidden, out of tab order).
-                          A nested interactive checkbox would double-fire on web,
-                          where its click bubbles to the row Pressable and the two
-                          toggles cancel out. */}
-                      <View
-                        pointerEvents="none"
-                        aria-hidden={Platform.OS === 'web' ? true : undefined}
-                        accessibilityElementsHidden
-                        importantForAccessibility="no-hide-descendants"
+                  {marked.map((row) => {
+                    const key = itemKey(row)
+                    const checked = selected.has(key)
+                    return (
+                      <Pressable
+                        key={key}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={row.name}
+                        accessibilityState={{ checked, disabled: row.exists }}
+                        aria-checked={checked}
+                        disabled={row.exists}
+                        onPress={() => toggleRow(key)}
+                        className={cn(
+                          'flex-row items-start gap-2 rounded-md border border-border bg-bg-sunken p-2',
+                          // Press tint is touch feedback; on desktop the hover
+                          // border already signals interactivity and the sunken→
+                          // tint flash reads as loud.
+                          !row.exists &&
+                            Platform.select({
+                              web: 'cursor-pointer hover:border-border-strong',
+                              native: 'active:bg-tint-press',
+                            }),
+                        )}
                       >
-                        <Checkbox
-                          checked={selected.has(row.name)}
-                          disabled={row.exists}
-                          onCheckedChange={() => toggleRow(row.name)}
-                          tabIndex={-1}
-                        />
-                      </View>
-                      <View className="min-w-0 flex-1 gap-0.5">
-                        <Text size="sm" className="font-medium">
-                          {row.name}
-                        </Text>
-                        <Text size="xs" variant="muted" numberOfLines={2}>
-                          {row.detail}
-                        </Text>
-                        {row.exists ? (
-                          <Text size="xs" variant="muted">
-                            {t('wizard:aiAssist.list.alreadyExists')}
+                        {/* The row is the single interactive surface; the checkbox is
+                            decorative (pointer-shielded, AT-hidden, out of tab order).
+                            A nested interactive checkbox would double-fire on web,
+                            where its click bubbles to the row Pressable and the two
+                            toggles cancel out. */}
+                        <View
+                          pointerEvents="none"
+                          aria-hidden={Platform.OS === 'web' ? true : undefined}
+                          accessibilityElementsHidden
+                          importantForAccessibility="no-hide-descendants"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            disabled={row.exists}
+                            onCheckedChange={() => toggleRow(key)}
+                            tabIndex={-1}
+                          />
+                        </View>
+                        <View className="min-w-0 flex-1 gap-0.5">
+                          <Text size="sm" className="font-medium">
+                            {row.name}
                           </Text>
-                        ) : null}
-                      </View>
-                    </Pressable>
-                  ))}
+                          <Text size="xs" variant="muted" numberOfLines={2}>
+                            {row.detail}
+                          </Text>
+                          {row.exists ? (
+                            <Text size="xs" variant="muted">
+                              {t('wizard:aiAssist.list.alreadyExists')}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </Pressable>
+                    )
+                  })}
                 </View>
               </Scroller>
             </View>
@@ -462,13 +501,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <Text>{t('wizard:aiAssist.actions.generateMore')}</Text>
           </Button>
           <Button
-            disabled={selected.size === 0}
+            disabled={importable.length === 0}
             onPress={() => {
-              props.onImport(
-                marked
-                  .filter((row) => selected.has(row.name) && !row.exists)
-                  .map((row) => row.payload),
-              )
+              props.onImport(importable.map((row) => row.payload))
               closeOverlay()
             }}
           >

@@ -72,21 +72,23 @@ without this slice knowing its internals (C5).
   `▼ Visual` and `▼ More options` disclosures and pick-from-cast
   pickers (faction, parent location); status `active` / `staged`
   with the lead cascades (auto-unmark toast, gate tightening,
-  opening enum-list filtering); `⭐ Set as lead` visibility rules;
-  validation gates.
+  active and kind-aware scene-ref filtering at Finish);
+  `⭐ Set as lead` visibility rules; validation gates.
 - **Lead relocation:** the M2 minimal lead input leaves step 1 in
   favor of the real cast editor; step 1 keeps only the
   forward-pointer chip, and the lead-required gate moves to step
-  4's `Next` and to Finish. Draft-session compatibility preserved —
-  an old draft's bare lead name opens into step 4 as a character
-  row without data loss.
+  4's `Next` and to Finish. `leadName` leaves the working state with
+  it: the field had no writer left, and pre-ship there is no
+  persisted draft worth migrating.
 - **Step indicator:** the Cast pill enables and the active step
-  sequence becomes 1-2-3-4-5; back-jump pill demotion for the lead
-  rule stays correct across five live steps.
+  sequence becomes 1-2-3-4-5; the lead rule re-gates `Next →` and
+  forward-jump eligibility across five live steps (pills track
+  position, not validity).
 - **Opening context:** the wizard-group opening template consumes
   the authored cast alongside 3.6a's world; `sceneEntities`
-  constrains to `status='active'`; the empty-cast path keeps
-  working (creative plus third).
+  constrains to active characters and items, `currentLocationId` to
+  an active location; the empty-cast path keeps working (creative
+  plus third).
 - **Working state and commit:** cast drafts in the wizard working
   state with ids minted at add time; Finish inserts the entity rows
   and embeds `name` and `description` into `entities_vec` inside
@@ -112,21 +114,25 @@ without this slice knowing its internals (C5).
   every row in the one transaction and the opening call's context
   contains the authored world and cast (vitest on the commit plus a
   rendered-context assertion).
-- Staged entities never appear in the opening's `sceneEntities`;
+- Staged entities and factions never appear in the opening's
+  `sceneEntities`;
   marking the lead as staged auto-unmarks it with the toast and
   re-blocks `Next` (vitest on the cascade rules).
 - AI-suggest cast: a structured fixture carrying
   `parent_location_name` and faction cross-references resolves ids
   within the batch; unresolved names fall back to null (vitest).
-- A pre-3.6b draft session (bare lead name, no cast array) reopens
-  without data loss and completes through the new step.
+- A pre-3.6b draft session (no `cast` key) reopens with an empty
+  cast rather than crashing, and completes through the new step.
+  The bare `leadName` it carried is **not** migrated: v1 has not
+  shipped, the wizard draft is a per-machine singleton, and the
+  field's only remaining reader was the migration itself.
 - Every new chrome string routes through `t()`; new compounds have
   stories.
 
 ## Tests
 
 - Vitest: cascade rules (lead / staged), suggest-cast resolution,
-  draft-session migration, commit composition, validation gates.
+  commit composition, validation gates.
 - Storybook: step-4 body, the per-kind editors, pick-from-cast
   pickers, the lead-required notice.
 - E2E (`pnpm test:e2e`): create-story flows updated for the lead
@@ -138,60 +144,52 @@ without this slice knowing its internals (C5).
 
 ## Open questions
 
-- **Collapse the per-field assist runners before adding four more.**
-  `runGenreAssist` / `runToneAssist` and their refines are the same
-  function with a different template id and noun, and because
-  `GenreAssistValue` and `ToneAssistValue` are structurally identical
-  the seams accept each other — a swapped pairing compiles clean and
-  produces a plausible-looking result from the wrong prompt. 3.6a
-  covered the risk with tests (`wizard-assist.test.ts` now pins each
-  refine's template line, mutation-verified in both directions) but
-  deliberately left the shape alone, because collapsing to a
-  `runLabeledAssist(field, …)` keyed by a `LabeledField` literal
-  changes `StepWorldAssistSeams`, which this slice consumes. Cast
-  adds four more runners to the same pattern, so decide here: collapse
-  first and build cast on the collapsed shape, or accept eight
-  near-identical runners and keep leaning on the tests. Routed from
-  the 3.6a type-design review (2026-08-11).
-
-- **The list result's identity is name-only, and cast spans four
-  kinds.** 3.6a's `markExisting` / `mergePages` key on
-  `name.trim().toLowerCase()`, the selection Set is keyed by name,
-  and the rendered React key is the name. A cast batch legitimately
-  containing a location `Ashfall` and a faction `Ashfall` therefore
-  loses one row to the dedupe, and `existingNames` has the same
-  limitation against the already-authored cast. This needs a
-  kind-aware key or a caller-supplied key extractor, which is a
-  change to the shape 3.6a published — resolve it in planning rather
-  than discovering it mid-implementation. Surfaced by the 3.6a
-  whole-slice review (2026-08-10).
-- **`LoreList`'s machinery is not liftable as written.** Step 4's
-  four per-kind editors need exactly what it already has — compact
-  row plus expand set, `invalidIds`-driven inline errors, and the
-  prune-without-auto-expand invariant — but it hard-imports
-  `loreRowErrors` and calls the lore mutators directly, so none of
-  it can be reused without a refactor. Decide in planning whether to
-  extract a shared row-list shell first or accept a second copy;
-  copying means re-deriving the prune invariant from a prose note
-  rather than from code, which is how it gets lost.
-- **The working-state and store surface duplicates per collection.**
-  `lore` is a peer array with four bespoke mutators; cast will need
-  four more of the same shape. Worth a generic list-mutator helper
-  before the second copy exists rather than after.
-- **Suggest-cast batch size vs pagination** — canon default is 5
-  mixed; confirm the pagination interaction with per-kind steering.
-- **Should the wizard commit a starting location?** `finish.ts`
-  hardcodes `currentLocationId: null`, and the only writer is the
-  piggyback block, which runs _after_ narrative — so turn 1 can never
-  carry a location, and
-  [`retrieval.md → Cold start`](../../../../memory/retrieval.md#cold-start)
-  records Q2 as correspondingly thin. This slice is where locations get
-  authored, so it is the natural place to decide whether one of them is
-  marked as where the story opens. Not a blocker for retrieval, which
-  re-normalizes an absent Q2 away; it is a question about how much
-  structure turn 1 deserves. Routed here by the M3.4 triage pass
-  (2026-08-08).
+- **Should the wizard commit a starting location?** Finish now commits
+  a `currentLocationId` when the opening names one, filtered to active
+  locations, so turn 1 can carry a location and
+  [`retrieval.md → Cold start`](../../../../memory/retrieval.md#cold-start)'s
+  thin-Q2 note applies only to openings that name none. What stays open
+  is whether the **user** marks a starting location explicitly rather
+  than leaving it to whatever the opening happens to describe. Not a
+  blocker for retrieval, which re-normalizes an absent Q2 away. Routed
+  here by the M3.4 triage pass (2026-08-08); premise corrected after
+  the 3.6b whole-slice review (2026-08-14).
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+- **The per-field assist runners were not collapsed.** The plan
+  assumed cast would add four more `runGenreAssist`-shaped runners;
+  it added one (`runCastAssist`), whose `CastAssistValue` is
+  structurally distinct from every other assist value and so cannot be
+  cross-wired. The swap surface therefore stayed at the original
+  genre/tone pair, which remains structurally identical and is guarded
+  by mutation-verified template assertions in `wizard-assist.test.ts`
+  rather than by the type system. `LabeledField` already exists in
+  `step-world-logic.ts` if a later slice collapses them.
+- **List identity is kind-scoped and now branded.** `composeKey`
+  normalizes each half separately, and `DedupeKey` is a branded type
+  whose only constructors are `nameKey` and `composeKey` — the
+  suggestion side and the already-authored side cannot be built by
+  different rules and silently stop matching. The prompt-facing
+  exclusion list carries the scope too, via `excludeLabel`.
+- **`LoreList`'s row machinery was extracted, not copied.**
+  `components/compounds/expandable-row.tsx` owns the compact-row plus
+  expand-set shell and the prune-without-auto-expand invariant, which
+  is now derivable from code rather than from a prose note. Both lore
+  and cast consume it.
+- **The per-collection store surface was made generic first.**
+  `collectionMutators<K extends CollectionKey>` in the wizard store
+  covers append / patch / remove for both `lore` and `cast`; the
+  lead-touching cascades stay bespoke because they must read and write
+  `leadEntityId` inside one `set()` call.
+- **Suggest-cast batch size.** Five mixed by default, overridable by
+  guidance; pagination excludes the rows already on screen, scoped by
+  kind so a same-named row of a different kind can still be offered.
+- **`patchCast` takes the row, not its id.** A union-of-Partials patch
+  type flattens under TypeScript's excess-property check, so an
+  id-keyed patch accepted any kind's fields. Taking the row lets the
+  generic infer per-kind and makes a cross-kind patch a compile error.
+- **`resolveOpening` resolves refs individually.** One unresolvable
+  placeholder used to discard every other ref and null `model`, which
+  Finish reads as a hand-written opening. Refs now drop one at a time
+  and the provenance survives.

@@ -21,6 +21,7 @@ export const TEMPLATE_IDS = {
   wizardToneRefine: 'tmpl_wizard_tone_refine',
   wizardSetting: 'tmpl_wizard_setting',
   wizardSettingRefine: 'tmpl_wizard_setting_refine',
+  wizardCast: 'tmpl_wizard_cast',
 } as const
 
 export const MACRO_IDS = {

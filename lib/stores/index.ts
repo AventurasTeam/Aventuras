@@ -20,7 +20,7 @@ import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
-import { wizardStore } from './wizard/wizard'
+import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
 
 // Test-harness seam: resets every domain store in one call
 export function resetAllStores(): void {
@@ -50,6 +50,7 @@ export function resetAllStores(): void {
 
 export {
   appSettingsStore,
+  CAST_ID_PREFIX,
   chaptersStore,
   characterRelationshipsStore,
   currentStoryStore,

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
+import { classifierExtractionSchema } from '@/lib/classifier'
+import {
+  castSuggestionsSchema,
+  descriptionOutputSchema,
+  labeledPromptOutputSchema,
+  loreSuggestionsSchema,
+  openingOutputSchema,
+  settingOutputSchema,
+  titleChipsSchema,
+} from '@/lib/wizard'
+
 import {
   jsonResponseFormatMiddleware,
   promptSchemaMiddleware,
@@ -62,6 +73,52 @@ describe('schemaToTypeScriptBlock', () => {
     )
     expect(block).toContain('tags: (string | null)[];')
   })
+
+  it('renders a discriminated union (oneOf) with its per-member fields, not unknown', () => {
+    // zod v4 compiles z.discriminatedUnion to JSON Schema `oneOf`, not `anyOf`;
+    // this must go through the real z.toJSONSchema conversion, not a hand-written
+    // oneOf literal, so a change to zod's emission shape would be caught here too.
+    const entitySchema = z.object({
+      entities: z.array(
+        z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('character'), faction_name: z.string().optional() }),
+          z.object({ kind: z.literal('location'), parent_location_name: z.string().optional() }),
+        ]),
+      ),
+    })
+    const block = schemaToTypeScriptBlock(z.toJSONSchema(entitySchema) as JsonSchema)
+    expect(block).not.toContain('unknown')
+    expect(block).toContain('kind: "character"')
+    expect(block).toContain('faction_name?: string')
+    expect(block).toContain('kind: "location"')
+    expect(block).toContain('parent_location_name?: string')
+  })
+})
+
+describe('structured-output schema net', () => {
+  // The generateStructured schemas reachable from a module root — lib/wizard and
+  // lib/classifier. The three in lib/pipeline/definitions aren't re-exported from
+  // lib/pipeline, so they stay uncovered rather than widening that module's API.
+  // None here legitimately renders `unknown`, so an occurrence is a renderer
+  // regression rather than an expected shape.
+  const structuredOutputSchemas = {
+    openingOutputSchema,
+    titleChipsSchema,
+    descriptionOutputSchema,
+    loreSuggestionsSchema,
+    labeledPromptOutputSchema,
+    settingOutputSchema,
+    castSuggestionsSchema,
+    classifierExtractionSchema,
+  }
+
+  it.each(Object.entries(structuredOutputSchemas))(
+    'renders %s without degrading to unknown',
+    (name, schema) => {
+      const block = schemaToTypeScriptBlock(z.toJSONSchema(schema) as JsonSchema, name)
+      expect(block).not.toContain('unknown')
+    },
+  )
 })
 
 describe('promptSchemaMiddleware', () => {

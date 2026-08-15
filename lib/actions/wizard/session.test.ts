@@ -74,11 +74,11 @@ describe('wizard session/draft actions', () => {
 
   it('loadDraft round-trips the persisted working-state', async () => {
     const s = emptyWorkingState()
-    s.leadName = 'Aria'
+    s.definition.title = 'Aria'
     s.step = 5
     const { storyId } = await saveStoryDraft(s, ctx, 1)
     const loaded = await loadDraft(storyId, ctx)
-    expect(loaded?.leadName).toBe('Aria')
+    expect(loaded?.definition.title).toBe('Aria')
     expect(loaded?.step).toBe(5)
   })
 
@@ -91,11 +91,11 @@ describe('wizard session/draft actions', () => {
   it('loadLiveSession round-trips the persisted live state, and is null once cleared', async () => {
     expect(await loadLiveSession(ctx)).toBeNull()
     const s = emptyWorkingState()
-    s.leadName = 'Bran'
+    s.definition.title = 'Bran'
     s.step = 2
     await saveLiveSession(s, ctx, 1)
     const loaded = await loadLiveSession(ctx)
-    expect(loaded?.state.leadName).toBe('Bran')
+    expect(loaded?.state.definition.title).toBe('Bran')
     expect(loaded?.state.step).toBe(2)
     expect(loaded?.sourceStoryId).toBeNull()
     await clearLiveSession(ctx)

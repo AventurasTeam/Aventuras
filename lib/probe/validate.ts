@@ -66,10 +66,10 @@ const requirePlainObject = (field: string, value: unknown): void => {
  * every container a consumer indexes into has to be proven present before the
  * cast is honest — a truncated payload otherwise reaches replayType as a
  * TypeError on `pools[type]`, too late for the list path to classify the row as
- * corrupt. Field-level drift stays tolerated on purpose (probe.md → Reading an
- * older capture): a capture that cannot be opened cannot be deleted either.
- * `failure_reason` is deliberately absent from the checks — a pre-v2 payload
- * carries the marker only on the row, and read.ts backfills it.
+ * corrupt. Field-level drift stays tolerated on purpose: a capture that cannot
+ * be opened cannot be deleted either. `failure_reason` is the exception —
+ * required-and-nullable, so a payload predating the field is refused rather
+ * than backfilled off the row.
  */
 export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCapturePayload {
   requirePlainObject('root', decoded)
@@ -84,6 +84,14 @@ export function assertCaptureShape(decoded: unknown): asserts decoded is ProbeCa
   }
   if (!Array.isArray(payload.queries) || payload.queries.length !== 3)
     throw new CaptureShapeError('queries', 'must be a three-query stack')
+  // Required-and-nullable, so `undefined` is rejected rather than defaulted:
+  // replayType never sees the row, and an absent marker reads there as a
+  // failure. A payload predating the field is refused, not silently replayed.
+  if (payload.failure_reason !== null && typeof payload.failure_reason !== 'string')
+    throw new CaptureShapeError(
+      'failure_reason',
+      `must be a string or null, got ${typeOf(payload.failure_reason)}`,
+    )
 }
 
 /**

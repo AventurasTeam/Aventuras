@@ -21,8 +21,8 @@ describe('bundled pack', () => {
         genre: { promptBody: '' },
         tone: { promptBody: '' },
       },
-      leadName: 'Aria',
       leadEntityId: 'c1',
+      cast: [{ id: 'c1', kind: 'character', name: 'Aria', description: '', status: 'active' }],
     })
     expect(out).toContain('adventure')
     expect(out).toContain('A frozen coast.')

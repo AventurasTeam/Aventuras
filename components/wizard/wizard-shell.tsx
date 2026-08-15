@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { DISABLED_STEPS, STEP_ORDER } from './wizard-nav-logic'
 
 type WizardShellProps = {
-  /** 1-indexed active step; reaches 1 (Frame), 2 (Calendar), 3 (World), 5 (Opening). */
+  /** 1-indexed active step; reaches 1 (Frame), 2 (Calendar), 3 (World), 4 (Cast), 5 (Opening). */
   step: number
   canGoNext: boolean
   isFinish: boolean

@@ -1,16 +1,17 @@
 import type { CalendarSystem } from '@/lib/calendar'
-import type { WizardLoreDraft, WizardWorkingState } from '@/lib/db'
+import type { WizardCastDraft, WizardLoreDraft, WizardWorkingState } from '@/lib/db'
 
+import { castStepValid } from './step-cast-logic'
 import { needsLead, type Mode, type Narration } from './step-frame-logic'
 import { worldStepValid } from './step-world-logic'
 import { validateOriginTuple } from './tier-tuple-input-logic'
 
 export const STEP_ORDER = [1, 2, 3, 4, 5] as const
 
-// Active step sequence — Cast (4) stays disabled until Slice 3.6b. Single
-// source of truth: DISABLED_STEPS and next/prevActiveStep all derive from
-// this so enabling a step here is enough to wire it into nav everywhere.
-export const ACTIVE_STEP_ORDER = [1, 2, 3, 5] as const
+// Single source of truth: DISABLED_STEPS and next/prevActiveStep both derive
+// from this, so enabling/disabling a step here is enough to wire it into nav
+// everywhere (pills, Next/Back, forward-jump gating) with no other edits.
+export const ACTIVE_STEP_ORDER = [1, 2, 3, 4, 5] as const
 
 export const DISABLED_STEPS = new Set<number>(
   STEP_ORDER.filter((s) => !(ACTIVE_STEP_ORDER as readonly number[]).includes(s)),
@@ -19,7 +20,8 @@ export const DISABLED_STEPS = new Set<number>(
 export type StepValidityParams = {
   mode: Mode
   narration: Narration
-  leadName: string
+  cast: readonly WizardCastDraft[]
+  leadEntityId: string | null
   worldTimeOrigin: WizardWorkingState['definition']['worldTimeOrigin']
   calendar: CalendarSystem | null
   lore: readonly WizardLoreDraft[]
@@ -27,9 +29,9 @@ export type StepValidityParams = {
 
 /** Whether `step` is satisfied enough to advance past it (the Next-button gate). */
 export function stepForwardValid(step: number, p: StepValidityParams): boolean {
-  if (step === 1) return !needsLead(p.mode, p.narration) || p.leadName.trim() !== ''
   if (step === 2) return p.calendar != null && validateOriginTuple(p.worldTimeOrigin, p.calendar).ok
   if (step === 3) return worldStepValid(p.lore)
+  if (step === 4) return castStepValid(needsLead(p.mode, p.narration), p.cast, p.leadEntityId)
   return true
 }
 

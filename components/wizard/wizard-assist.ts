@@ -6,19 +6,21 @@ import {
   type GenerateStructuredResult,
   type ResolveModelConfig,
 } from '@/lib/ai'
-import { generateId, IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
+import type { WizardWorkingState } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { IdBiMap, parseAndSubstitute, substituteIds } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, type TemplateId } from '@/lib/prompts'
 import { appSettingsStore, wizardStore } from '@/lib/stores'
 import {
+  castSuggestionsSchema,
   descriptionOutputSchema,
   labeledPromptOutputSchema,
   loreSuggestionsSchema,
   openingOutputSchema,
   settingOutputSchema,
   titleChipsSchema,
+  type CastSuggestions,
 } from '@/lib/wizard'
-
-import { needsLead } from './step-frame-logic'
 
 const ASSIST_TARGET = 'wizard-assist'
 
@@ -55,6 +57,7 @@ export type OpeningAssistValue = {
 export type TitleAssistValue = { titles: string[] }
 export type DescriptionAssistValue = { description: string }
 export type LoreAssistValue = { lore: { title: string; body: string; category: string }[] }
+export type CastAssistValue = CastSuggestions
 export type GenreAssistValue = { label: string; promptBody: string }
 export type ToneAssistValue = { label: string; promptBody: string }
 export type SettingAssistValue = { setting: string }
@@ -75,9 +78,39 @@ export function resolveWizardAssistModelId(deps?: WizardAssistDeps): string | nu
   return resolved.ok ? resolved.modelId : null
 }
 
-// Render a wizard template from the full working-state (+ guidance) and call the
-// model. Ids in the state are swapped to placeholders through `idMap` first, so a
-// caller that reverse-substitutes the reply reads real ids back out.
+// `tags` are a user-only search/filter axis (data-model.md → `tags json`), so
+// they stay off the template surface for the same reason PROMPT_ENTITY_FIELDS
+// projects runtime entity rows: packs are user-authored, and anything reachable
+// from one can't be withdrawn later without breaking it.
+function withoutTags<T extends { tags: readonly string[] }>(row: T): Record<string, unknown> {
+  const { tags, ...rest } = row
+  return rest
+}
+
+/**
+ * The exact variables templateContextMap documents for the `wizard` group.
+ * Projected, not spread: the working state also carries `step` and
+ * `effectiveDim*`, which are wizard mechanics no prompt has business reading.
+ */
+export function wizardTemplateContext(
+  state: WizardWorkingState,
+  guidance: string,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    definition: state.definition,
+    leadEntityId: state.leadEntityId,
+    opening: state.opening,
+    lore: state.lore.map(withoutTags),
+    cast: state.cast.map(withoutTags),
+    guidance,
+    ...extra,
+  }
+}
+
+// Render a wizard template from the working-state projection (+ guidance) and
+// call the model. Ids in the state are swapped to placeholders through `idMap`
+// first, so a caller that reverse-substitutes the reply reads real ids back out.
 function generateFromState<T>(
   templateId: TemplateId,
   schema: ZodType<T>,
@@ -87,19 +120,13 @@ function generateFromState<T>(
   deps?: WizardAssistDeps,
   extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<T>> {
-  const context = substituteIds({ ...wizardStore.getWizard().state, guidance, ...extra }, idMap)
+  const context = substituteIds(
+    wizardTemplateContext(wizardStore.getWizard().state, guidance, extra),
+    idMap,
+  )
   const prompt = renderTemplate(templateId, context)
   const call = deps?.generate ?? generateStructured
   return call(ASSIST_TARGET, prompt, schema, config(deps), signal)
-}
-
-// The opening template addresses the lead by its cast id, so the id must exist
-// before rendering. Finish carries the same safety-net mint for paths that never
-// ran opening-assist.
-function ensureLeadId(): void {
-  const { definition, leadEntityId } = wizardStore.getWizard().state
-  if (!needsLead(definition.mode, definition.narration)) return
-  if (leadEntityId == null) wizardStore.setLeadEntityId(generateId('char'))
 }
 
 function resolveOpening(
@@ -107,24 +134,43 @@ function resolveOpening(
   idMap: IdBiMap,
   deps?: WizardAssistDeps,
 ): OpeningAssistValue {
-  try {
-    return {
-      content: value.prose,
-      sceneEntities: parseAndSubstitute(value.sceneEntities, idMap),
-      currentLocationId:
-        value.currentLocationId == null ? null : parseAndSubstitute(value.currentLocationId, idMap),
-      model: resolveWizardAssistModelId(deps) ?? ASSIST_TARGET,
+  // Per-ref, not one try around the whole object: a model that hallucinates one
+  // id would otherwise cost every OTHER resolvable ref too. `model` stays set
+  // regardless — the prose came from the model whether or not its refs resolved,
+  // and nulling it here would commit an AI opening as hand-written (finish.ts
+  // omits `model` when it is null).
+  const dropped: string[] = []
+  const resolveRef = (ref: string): string | null => {
+    try {
+      return parseAndSubstitute(ref, idMap)
+    } catch {
+      dropped.push(ref)
+      return null
     }
-  } catch {
-    // Unresolvable placeholder → treat the prose as user-written: keep it, drop
-    // the metadata (a later classifier pass recovers refs).
-    return { content: value.prose, sceneEntities: [], currentLocationId: null, model: null }
+  }
+
+  const sceneEntities = value.sceneEntities.map(resolveRef).filter((id): id is string => id != null)
+  const currentLocationId =
+    value.currentLocationId == null ? null : resolveRef(value.currentLocationId)
+
+  if (dropped.length > 0) {
+    logger.warn('provider.wizard_opening_unresolved_refs', {
+      dropped,
+      kept: sceneEntities.length,
+    })
+  }
+
+  return {
+    content: value.prose,
+    sceneEntities,
+    currentLocationId,
+    model: resolveWizardAssistModelId(deps) ?? ASSIST_TARGET,
   }
 }
 
-// Generate and refine share the opening's id round-trip: the lead id is minted
-// before render, real ids go into the prompt as placeholders, and the reply's
-// refs are resolved back. Only the template and the extra context differ.
+// Generate and refine share the opening's id round-trip: real ids go into the
+// prompt as placeholders, and the reply's refs are resolved back. Only the
+// template and the extra context differ.
 async function openingCall(
   templateId: TemplateId,
   guidance: string,
@@ -132,7 +178,6 @@ async function openingCall(
   deps?: WizardAssistDeps,
   extra?: Record<string, unknown>,
 ): Promise<GenerateStructuredResult<OpeningAssistValue>> {
-  ensureLeadId()
   const idMap = new IdBiMap()
   const result = await generateFromState(
     templateId,
@@ -199,6 +244,28 @@ export function runLoreAssist(
   return generateFromState(
     TEMPLATE_IDS.wizardLore,
     loreSuggestionsSchema,
+    guidance,
+    new IdBiMap(),
+    signal,
+    deps,
+    { suggested: [...suggested] },
+  )
+}
+
+/**
+ * @param suggested Names already on screen from earlier pages — excluded
+ * alongside the authored cast so `Generate more` is additive (same contract
+ * as runLoreAssist).
+ */
+export function runCastAssist(
+  guidance: string,
+  signal: AbortSignal,
+  deps?: WizardAssistDeps,
+  suggested: readonly string[] = [],
+): Promise<GenerateStructuredResult<CastAssistValue>> {
+  return generateFromState(
+    TEMPLATE_IDS.wizardCast,
+    castSuggestionsSchema,
     guidance,
     new IdBiMap(),
     signal,

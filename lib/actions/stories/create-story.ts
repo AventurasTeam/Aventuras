@@ -3,7 +3,6 @@ import { eq } from 'drizzle-orm'
 import type { ProviderInstanceWithStub } from '@/lib/ai'
 import {
   branches,
-  emptyEntityState,
   entities,
   entryMetadataSchema,
   lore,
@@ -13,6 +12,8 @@ import {
   storySettingsSchema,
   wizardSessions,
   type EmbeddedFieldRow,
+  type EntityKind,
+  type EntityStateByKind,
   type EntryMetadata,
   type SqlOp,
   type StoryDefinition,
@@ -23,6 +24,25 @@ import { embedAndBuildVecOps, type EmbedderConfig } from '@/lib/embedder'
 import { generateId } from '@/lib/ids'
 
 import type { DbCtx } from '../types'
+
+/**
+ * One wizard-authored entity row, already mapped to its per-kind `state` shape.
+ * Discriminated on `kind` because the insert below is raw — nothing runs
+ * `entityStateSchemaForKind` on the way in, so pairing a kind with another
+ * kind's state has to fail at compile time or it never fails at all.
+ */
+export type WizardCastEntityInput = {
+  [K in EntityKind]: {
+    id: string
+    kind: K
+    name: string
+    description: string | null
+    /** `retired` is unreachable at wizard time (canon). */
+    status: 'active' | 'staged'
+    tags: readonly string[]
+    state: EntityStateByKind[K]
+  }
+}[EntityKind]
 
 export type CreateStoryInput = {
   storyId?: string
@@ -37,10 +57,11 @@ export type CreateStoryInput = {
   settings: StorySettings
   openingContent: string
   openingMetadata: EntryMetadata
-  lead?: { id: string; name: string }
-  /** Wizard-authored initial lore (Slice 3.6a). Each row embeds title + body. */
+  /** Wizard-authored cast. Each row embeds name + description. */
+  cast?: readonly WizardCastEntityInput[]
+  /** Wizard-authored initial lore. Each row embeds title + body. */
   lore?: readonly WizardLoreDraft[]
-  // Embed step (wizard Finish hard gate): when present, the lead's and lore rows'
+  // Embed step (wizard Finish hard gate): when present, the cast's and lore rows'
   // vec ops are spliced into the atomic batch as ONE batched call (Contract C5 —
   // no second embed path). An embed failure throws OUT of here before
   // runInTransaction runs, so the batch never executes and nothing persists —
@@ -63,8 +84,11 @@ export async function createStoryWithBranch(
 
   // leadEntityId lives in JSON, so no FK guards a definition whose lead is never
   // materialized as an entity row — reject before the write instead of committing a dangling ref.
-  if (definition.leadEntityId != null && input.lead == null) {
-    throw new Error('definition.leadEntityId requires a lead entity')
+  if (
+    definition.leadEntityId != null &&
+    !(input.cast ?? []).some((r) => r.id === definition.leadEntityId && r.kind === 'character')
+  ) {
+    throw new Error('definition.leadEntityId requires a matching cast character')
   }
 
   const storyId = input.storyId ?? generateId('story')
@@ -100,21 +124,20 @@ export async function createStoryWithBranch(
       .toSQL(),
   )
 
-  if (input.lead) {
-    if (definition.leadEntityId !== input.lead.id) {
-      throw new Error('lead.id must equal definition.leadEntityId')
-    }
+  for (const row of input.cast ?? []) {
     ops.push(
       ctx.db
         .insert(entities)
         .values({
-          id: input.lead.id,
+          id: row.id,
           branchId,
-          kind: 'character',
-          name: input.lead.name,
-          status: 'active',
+          kind: row.kind,
+          name: row.name,
+          description: row.description,
+          status: row.status,
           injectionMode: 'auto',
-          state: emptyEntityState('character'),
+          state: row.state,
+          tags: [...row.tags],
           // Dirty by default: the same-batch splice below is what clears it. If a
           // future reorder or a caller that omits `embed` ever skips the splice,
           // the row stays flagged for the sync/drain stage instead of silently
@@ -157,7 +180,7 @@ export async function createStoryWithBranch(
           keywords: [],
           injectionMode: row.injectionMode,
           priority: row.priority,
-          // Dirty by default — see the lead-entity insert above for why.
+          // Dirty by default — see the cast-entity insert above for why.
           embeddingStale: 1,
           createdAt: nowMs,
           updatedAt: nowMs,
@@ -168,12 +191,12 @@ export async function createStoryWithBranch(
 
   // Splice AFTER the entities/lore INSERTs: embedAndBuildVecOps's per-row
   // stale-clear UPDATE assumes its source row already sits earlier in the same
-  // batch. Lead + lore share one call (Contract C5) so lore never costs a
+  // batch. Cast + lore share one call (Contract C5) so neither costs a
   // second provider round-trip.
   if (input.embed) {
     const rows: EmbeddedFieldRow[] = []
-    if (input.lead) {
-      rows.push({ kind: 'entity', id: input.lead.id, branchId, fields: [input.lead.name, null] })
+    for (const row of input.cast ?? []) {
+      rows.push({ kind: 'entity', id: row.id, branchId, fields: [row.name, row.description] })
     }
     for (const row of input.lore ?? []) {
       rows.push({ kind: 'lore', id: row.id, branchId, fields: [row.title, row.body] })

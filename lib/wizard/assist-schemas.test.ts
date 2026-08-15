@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { z } from 'zod'
+
+import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 
 import {
+  CAST_SOFT_CAPS,
+  castSuggestionsSchema,
   descriptionOutputSchema,
   labeledPromptOutputSchema,
   loreSuggestionsSchema,
@@ -109,5 +114,144 @@ describe('settingOutputSchema', () => {
 
   it('rejects a reply with no setting field', () => {
     expect(() => settingOutputSchema.parse({})).toThrow()
+  })
+})
+
+describe('castSuggestionsSchema', () => {
+  it('parses a mixed batch across all four kinds and trims every padded field', () => {
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: ' Aria ',
+          description: '  A blacksmith.  ',
+          faction_name: '  Ashfall Pact  ',
+          traits: ['  brave  '],
+          drives: ['  protect the forge  '],
+          visual: {
+            physique: '  stocky  ',
+            face: '  scarred  ',
+            hair: '  black  ',
+            eyes: '  grey  ',
+            attire: '  leather apron  ',
+            distinguishing: '  soot-stained hands  ',
+          },
+        },
+        {
+          kind: 'location',
+          name: 'Mornstone Keep',
+          description: 'A fortress.',
+          parent_location_name: '  The Vale  ',
+          condition: '  war-damaged  ',
+        },
+        { kind: 'item', name: 'Silver Coin', description: 'Old currency.', condition: 'worn' },
+        {
+          kind: 'faction',
+          name: 'Ashfall Pact',
+          description: 'A cult.',
+          agenda: ['  expand  '],
+          standing: '  fractured  ',
+          status: 'staged',
+        },
+      ],
+    })
+    // Reference-name fields (faction_name, parent_location_name) must trim:
+    // resolveCastImports matches them case-insensitively against cast names.
+    expect(parsed.entities[0]).toMatchObject({
+      name: 'Aria',
+      description: 'A blacksmith.',
+      status: 'active',
+      faction_name: 'Ashfall Pact',
+      traits: ['brave'],
+      drives: ['protect the forge'],
+      visual: {
+        physique: 'stocky',
+        face: 'scarred',
+        hair: 'black',
+        eyes: 'grey',
+        attire: 'leather apron',
+        distinguishing: 'soot-stained hands',
+      },
+    })
+    expect(parsed.entities[1]).toMatchObject({
+      parent_location_name: 'The Vale',
+      condition: 'war-damaged',
+    })
+    expect(parsed.entities[2]).toMatchObject({ condition: 'worn' })
+    expect(parsed.entities[3]).toMatchObject({
+      agenda: ['expand'],
+      standing: 'fractured',
+      status: 'staged',
+    })
+  })
+
+  it('renders through the real prompt-schema path without degrading to unknown', () => {
+    // castSuggestionsSchema is the schema that motivated fixing the renderer's
+    // oneOf blind spot; this must render the actual schema, not a synthetic
+    // stand-in, so a regression here is caught at the source.
+    const block = schemaToTypeScriptBlock(z.toJSONSchema(castSuggestionsSchema) as JsonSchema)
+    expect(block).not.toContain('unknown')
+    expect(block).toContain('faction_name')
+    expect(block).toContain('physique')
+    expect(block).toContain('agenda')
+    expect(block).toContain(`personality/skill traits, at most ${CAST_SOFT_CAPS.traits}`)
+    expect(block).toContain(`goals, fears, sore spots, at most ${CAST_SOFT_CAPS.drives}`)
+    expect(block).toContain(`current goals, at most ${CAST_SOFT_CAPS.agenda}`)
+  })
+
+  it('leaves soft-cap enforcement to import so an oversized batch can be salvaged', () => {
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: 'Aria',
+          description: 'A blacksmith.',
+          traits: Array(CAST_SOFT_CAPS.traits + 1).fill('brave'),
+          drives: Array(CAST_SOFT_CAPS.drives + 1).fill('protect the forge'),
+        },
+        {
+          kind: 'faction',
+          name: 'Ashfall Pact',
+          description: 'A cult.',
+          agenda: Array(CAST_SOFT_CAPS.agenda + 1).fill('expand'),
+        },
+      ],
+    })
+
+    expect(parsed.entities[0]).toMatchObject({
+      traits: Array(CAST_SOFT_CAPS.traits + 1).fill('brave'),
+      drives: Array(CAST_SOFT_CAPS.drives + 1).fill('protect the forge'),
+    })
+    expect(parsed.entities[1]).toMatchObject({
+      agenda: Array(CAST_SOFT_CAPS.agenda + 1).fill('expand'),
+    })
+  })
+
+  it('rejects an unknown kind', () => {
+    expect(
+      castSuggestionsSchema.safeParse({
+        entities: [{ kind: 'deity', name: 'X', description: 'Y' }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an empty entities array', () => {
+    expect(castSuggestionsSchema.safeParse({ entities: [] }).success).toBe(false)
+  })
+
+  it('silently strips a field that belongs to a different kind', () => {
+    // Cross-kind fields aren't rejected — plain z.object() members strip unknown
+    // keys rather than erroring, so a model that misfiles a field just loses it.
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: 'Aria',
+          description: 'A blacksmith.',
+          parent_location_name: 'The Vale',
+        },
+      ],
+    })
+    expect(parsed.entities[0]).not.toHaveProperty('parent_location_name')
   })
 })

@@ -6,6 +6,7 @@ import { parseStructured } from '@/lib/ai'
 import {
   branches,
   deltas,
+  emptyCastDraft,
   emptyWorkingState,
   entities,
   stories,
@@ -52,8 +53,8 @@ type MakeStateInput = {
   mode?: WizardWorkingState['definition']['mode']
   narration?: WizardWorkingState['definition']['narration']
   title?: string
-  leadName?: string
   leadEntityId?: string | null
+  cast?: WizardWorkingState['cast']
   opening?: Partial<WizardWorkingState['opening']>
 }
 
@@ -62,8 +63,8 @@ function makeState(input: MakeStateInput = {}): WizardWorkingState {
   return {
     ...base,
     step: 5,
-    leadName: input.leadName ?? base.leadName,
     leadEntityId: input.leadEntityId ?? base.leadEntityId,
+    cast: input.cast ?? base.cast,
     definition: {
       ...base.definition,
       mode: input.mode ?? base.definition.mode,
@@ -129,8 +130,8 @@ describe('wizard full-flow integration', () => {
         mode: 'adventure',
         narration: 'first',
         title: 'Aria Rising',
-        leadName: 'Aria',
         leadEntityId: leadId,
+        cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
         opening: { content: 'You wake at dawn.', sceneEntities: [leadId], model: 'test-model' },
       }),
       ctx,
@@ -157,6 +158,39 @@ describe('wizard full-flow integration', () => {
     expect(entryRows[0].metadata!.sceneEntities).toEqual([leadId])
   })
 
+  // The shape an adventure session produces: the lead lives in cast +
+  // leadEntityId. Pinned as a KNOWN-BROKEN gap while Finish's gate read a bare
+  // lead name instead.
+  it('a cast-only lead finishes', async () => {
+    const { db, ctx } = await setup()
+    const leadId = generateId('char')
+
+    const result = await finishWizard(
+      makeState({
+        mode: 'adventure',
+        narration: 'first',
+        title: 'Cast-Only Lead',
+        leadEntityId: leadId,
+        cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
+        opening: { content: 'You wake at dawn.', sceneEntities: [leadId], model: 'test-model' },
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      2500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.definition!.leadEntityId).toBe(leadId)
+
+    const entityRows = await db.select().from(entities)
+    expect(entityRows).toHaveLength(1)
+    expect(entityRows[0]).toMatchObject({ id: leadId, name: 'Aria', kind: 'character' })
+  })
+
   describe('AC3: AI opening idMap round-trip (simulated model output, no live provider)', () => {
     it('substitutes a model-returned placeholder back to the real lead UUID and commits it end-to-end', async () => {
       const { db, ctx } = await setup()
@@ -181,8 +215,8 @@ describe('wizard full-flow integration', () => {
           mode: 'adventure',
           narration: 'first',
           title: 'Dawn Patrol',
-          leadName: 'Aria',
           leadEntityId: leadId,
+          cast: [{ ...emptyCastDraft('character', leadId), name: 'Aria' }],
           opening: {
             content: parsed.prose,
             sceneEntities: resolvedSceneEntities,
@@ -270,7 +304,8 @@ describe('wizard full-flow integration', () => {
         setting: 'A war-torn kingdom.',
         worldTimeOrigin: { year: 2024, month: 3, day: 10 },
       },
-      leadName: 'Kade',
+      leadEntityId: 'char_kade',
+      cast: [{ ...emptyCastDraft('character', 'char_kade'), name: 'Kade' }],
       opening: { ...base.opening, content: 'Kade set out at first light.' },
     }
 
@@ -292,7 +327,6 @@ describe('wizard full-flow integration', () => {
     })
     expect(loaded!.definition.setting).toBe('A war-torn kingdom.')
     expect(loaded!.step).toBe(5)
-    expect(loaded!.leadName).toBe('Kade')
     expect(loaded!.opening.content).toBe('Kade set out at first light.')
 
     const [preFinishStory] = await db.select().from(stories).where(eq(stories.id, storyId))
