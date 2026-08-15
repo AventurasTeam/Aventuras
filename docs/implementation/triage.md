@@ -1264,3 +1264,40 @@ on hover`; the shipped rows render label and tagline only, so the
   change). Canonical edit either way, so route through a design pass
   rather than a slice commit. Raised 2026-08-15 by the Slice 3.8
   Task 3 review.
+- **`tupleToBaseUnits` is linear in the top-tier value, and free-text
+  tier inputs make that user-reachable.** Measured on
+  `EARTH_GREGORIAN`, one call, cold: year 2024 → 13 ms, 20245 → 91 ms,
+  202456 → 892 ms, 2024561 → ~11.6 s, all synchronous on the UI
+  thread. `validateOriginTuple` accepts anything up to `tierMax`
+  (10^9 here), so validation does not bound it, and memoizing at the
+  call site does not help typing — every keystroke is a new tuple, so
+  the memo misses every time. Both the wizard's origin picker and
+  Slice 3.8's world-time edit overlay expose this: one stray digit in
+  a year field freezes the UI for ~90 ms, two for ~900 ms. Slice 3.8
+  raises the exposure by moving the field from a once-per-story setup
+  flow into a frequent reader interaction. Fixing it at the call site
+  needs a lexicographic tuple compare, which is NOT safe in general —
+  `baseUnitsToTuple` tolerates zero-length units, so on a degenerate
+  calendar tuple ordering is monotonic but not strictly so, and a
+  below-origin block could flip to allowed. The fix belongs in
+  `lib/calendar`: memoize or restructure the tier walk so cost stops
+  scaling with the year. Raised 2026-08-15 by the Slice 3.8 Task 4
+  implementation.
+- **Storybook play functions may run against a detached tree, turning
+  interaction assertions vacuous.** While building
+  `world-time-edit-form.stories.tsx`, every story after the first was
+  observed remounting roughly one tick into `play`: a field node
+  captured before the remount is detached, keystrokes land on the dead
+  node, and the component keeps its seed state — so a story that
+  "types a value and asserts the result" can pass green having typed
+  nothing. Bisected against `tier-tuple-input.stories.tsx`, which does
+  not exhibit it; autodocs, decorator placement, `component:` in meta,
+  render style, args, shared-vs-per-story `fn()` mocks, and story
+  ordering were all ruled out without finding the trigger. Worked
+  around locally with a helper that polls until the query returns the
+  same connected node twice. This needs a real diagnosis, not a
+  per-file workaround: if it reaches other story files, existing
+  interaction coverage is weaker than it reads. Start by checking
+  whether large existing play-driven files (`entry-card.stories.tsx`)
+  show the same remount. Raised 2026-08-15 by the Slice 3.8 Task 4
+  implementation.
