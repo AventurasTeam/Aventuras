@@ -38,7 +38,12 @@ export const reader = {
     reader.row(page, entryId).getByRole('button', { name: DELETE_ENTRY_LABEL }),
   // "Regenerate" is a substring of the cascade confirm's "Discard and
   // regenerate" (Playwright's `name` match is a case-insensitive substring by
-  // default) — exact:true on both keeps them from resolving each other.
+  // default), but it's the row scope — not exact:true — that actually keeps
+  // this locator from resolving the confirm button: that button portals
+  // outside `[data-entry-row]`, and Radix aria-hides the background while the
+  // modal is open (measured with the modal open: unscoped 'Regenerate'
+  // matches the confirm button, row-scoped matches nothing). exact:true stays
+  // as harmless insurance, not the load-bearing guard.
   regenEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: REGEN_ENTRY_LABEL, exact: true }),
   editTextarea: (page: Page): Locator => page.getByRole('textbox', { name: EDIT_TEXTAREA_LABEL }),

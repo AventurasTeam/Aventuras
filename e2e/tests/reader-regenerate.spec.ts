@@ -16,15 +16,18 @@ import { reader } from '../locators/reader'
 // reversing it also takes later turns with it. Both paths asserted through
 // the DB. See docs/testing.md → Coverage.
 //
-// The two tests below share one running app and DB, the second building on
-// the first's committed state (playwright.config.ts pins workers:1 and
-// fullyParallel:false, and this file makes no test.describe.configure(), so
-// Playwright's default in-file declaration order keeps them serial).
+// Test 2 builds on test 1's committed state, so the describe below forces
+// mode: 'serial' — workers:1 + fullyParallel:false only order the tests;
+// retries:1 starts a *new worker* per attempt (fresh beforeAll → a freshly
+// reseeded DB), and without 'serial' a retried test 1 would leave test 2
+// running against that fresh DB instead of being skipped.
 const REPLY_1 = 'E2E-REGEN-R1 the courier reads the letter twice.'
 const REPLY_2 = 'E2E-REGEN-R2 the courier burns the letter unread.'
 const REPLY_3 = 'E2E-REGEN-R3 the courier hides the letter in a boot.'
 
 test.describe('reader — regenerate a reply', () => {
+  test.describe.configure({ mode: 'serial' })
+
   let app: LaunchedApp
   let mock: MockLlm
   let userDataDir: string | undefined
@@ -55,24 +58,50 @@ test.describe('reader — regenerate a reply', () => {
     )[0][0] as string
   }
 
+  // per-turn.ts yields stream_chunk during streaming and the reader renders it
+  // live, so the DOM text a caller just awaited can resolve off the stream
+  // buffer while the row (and its create delta) are still mid-commit in a
+  // later transaction. Callers poll this rather than reading it once. The
+  // cardinality assert is the other half: no ORDER BY / LIMIT means a
+  // regression that duplicated a row would otherwise still satisfy a bare
+  // presence/absence check.
   async function entryIdByContent(branch: string, marker: string): Promise<string | undefined> {
     const rows = await queryApp(
       app.window,
       `SELECT id FROM story_entries WHERE branch_id = ? AND content LIKE ?`,
       [branch, `%${marker}%`],
     )
+    expect(rows.length, `${marker} row count`).toBeLessThanOrEqual(1)
     return rows[0]?.[0] as string | undefined
   }
 
+  // Poll until the marker's row exists, then hand back its id. The extra read
+  // after the poll settles is safe (no further write can race it — the poll
+  // already proved the row committed) and avoids threading a resolved value
+  // out of expect.poll, which only returns the assertion's pass/fail.
+  async function pollEntryId(branch: string, marker: string): Promise<string> {
+    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 15_000 }).toBeDefined()
+    const id = await entryIdByContent(branch, marker)
+    if (id === undefined) throw new Error(`${marker}: present at the poll, gone on read-back`)
+    return id
+  }
+
+  async function pollEntryGone(branch: string, marker: string): Promise<void> {
+    await expect.poll(() => entryIdByContent(branch, marker), { timeout: 15_000 }).toBeUndefined()
+  }
+
   async function createActionId(branch: string, entryId: string): Promise<string> {
-    return (
-      await queryApp(
-        app.window,
-        `SELECT action_id FROM deltas WHERE branch_id = ? AND target_table = 'story_entries'
-           AND op = 'create' AND target_id = ?`,
-        [branch, entryId],
-      )
-    )[0][0] as string
+    const rows = await queryApp(
+      app.window,
+      `SELECT action_id FROM deltas WHERE branch_id = ? AND target_table = 'story_entries'
+         AND op = 'create' AND target_id = ?`,
+      [branch, entryId],
+    )
+    // A bare rows[0][0] throws TypeError on an empty result — a real miss (or
+    // the same stream-buffer race entryIdByContent guards against) should fail
+    // as a named assertion, not a cryptic "Cannot read properties of undefined".
+    expect(rows.length, `create delta for entry ${entryId}`).toBe(1)
+    return rows[0][0] as string
   }
 
   test('terminal reply regenerates with no confirm: fresh action_id, user action untouched', async () => {
@@ -85,28 +114,26 @@ test.describe('reader — regenerate a reply', () => {
     })
 
     const branch = await branchId()
-    const oldReplyId = await entryIdByContent(branch, 'E2E-REGEN-R1')
-    const userActionId = await entryIdByContent(branch, 'E2E-REGEN-U1')
-    // Proves both rows landed before regenerate acts on them — otherwise the
-    // "gone" / "untouched" assertions below would be vacuous.
-    expect(oldReplyId).toBeDefined()
-    expect(userActionId).toBeDefined()
-    const userActionActionId = await createActionId(branch, userActionId!)
+    // Polled: proves both rows landed (and are singular) before regenerate
+    // acts on them — otherwise the "gone" / "untouched" assertions below
+    // would be vacuous.
+    const oldReplyId = await pollEntryId(branch, 'E2E-REGEN-R1')
+    const userActionId = await pollEntryId(branch, 'E2E-REGEN-U1')
+    const userActionActionId = await createActionId(branch, userActionId)
 
     mock.setNarrative(REPLY_2)
-    await reader.regenEntry(app.window, oldReplyId!).click()
+    await reader.regenEntry(app.window, oldReplyId).click()
     await expect(app.window.getByText('E2E-REGEN-R2', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
 
     // Old take gone; the originating user action untouched (same row id).
-    expect(await entryIdByContent(branch, 'E2E-REGEN-R1')).toBeUndefined()
+    await pollEntryGone(branch, 'E2E-REGEN-R1')
     expect(await entryIdByContent(branch, 'E2E-REGEN-U1')).toBe(userActionId)
 
     // The new take rides a fresh turn action_id, not the original group's.
-    const newReplyId = await entryIdByContent(branch, 'E2E-REGEN-R2')
-    expect(newReplyId).toBeDefined()
-    expect(await createActionId(branch, newReplyId!)).not.toBe(userActionActionId)
+    const newReplyId = await pollEntryId(branch, 'E2E-REGEN-R2')
+    expect(await createActionId(branch, newReplyId)).not.toBe(userActionActionId)
   })
 
   test('older reply surfaces the cascade confirm, then regenerates from that turn', async () => {
@@ -119,17 +146,14 @@ test.describe('reader — regenerate a reply', () => {
       timeout: 30_000,
     })
 
-    // Proves the second turn actually committed before the cascade removes it —
-    // otherwise the U2/R3-gone assertions below would be vacuous.
-    const olderReplyId = await entryIdByContent(branch, 'E2E-REGEN-R2')
-    const userAction2Id = await entryIdByContent(branch, 'E2E-REGEN-U2')
-    const newerReplyId = await entryIdByContent(branch, 'E2E-REGEN-R3')
-    expect(olderReplyId).toBeDefined()
-    expect(userAction2Id).toBeDefined()
-    expect(newerReplyId).toBeDefined()
+    // Polled: proves the second turn actually committed before the cascade
+    // removes it — otherwise the U2/R3-gone assertions below would be vacuous.
+    const olderReplyId = await pollEntryId(branch, 'E2E-REGEN-R2')
+    await pollEntryId(branch, 'E2E-REGEN-U2')
+    await pollEntryId(branch, 'E2E-REGEN-R3')
 
     mock.setNarrative(REPLY_1)
-    await reader.regenEntry(app.window, olderReplyId!).click()
+    await reader.regenEntry(app.window, olderReplyId).click()
 
     // Cascade path: the confirm modal gates the deeper reversal.
     await expect(reader.regenerateConfirm(app.window)).toBeVisible({ timeout: 10_000 })
@@ -138,10 +162,14 @@ test.describe('reader — regenerate a reply', () => {
       timeout: 30_000,
     })
 
+    // The re-dispatch half committed, not just streamed to the DOM — doubles
+    // as a commit barrier for the sweep the negative assertions below rely on.
+    await pollEntryId(branch, 'E2E-REGEN-R1')
+
     // The cascade removed the old take AND the later turn; U1 survives.
-    expect(await entryIdByContent(branch, 'E2E-REGEN-R2')).toBeUndefined()
-    expect(await entryIdByContent(branch, 'E2E-REGEN-U2')).toBeUndefined()
-    expect(await entryIdByContent(branch, 'E2E-REGEN-R3')).toBeUndefined()
+    await pollEntryGone(branch, 'E2E-REGEN-R2')
+    await pollEntryGone(branch, 'E2E-REGEN-U2')
+    await pollEntryGone(branch, 'E2E-REGEN-R3')
     expect(await entryIdByContent(branch, 'E2E-REGEN-U1')).toBeDefined()
   })
 })
