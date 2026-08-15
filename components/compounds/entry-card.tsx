@@ -117,6 +117,103 @@ const WORLD_TIME_TRIGGER_CLASS = cn(
 
 const WORLD_TIME_LABEL_CLASS = Platform.select({ web: 'group-hover/world-time:text-fg-primary' })
 
+type WorldTimeEditTarget = {
+  worldTimeRaw: number
+  calendar: CalendarSystem
+  worldTimeOrigin: TierTuple
+}
+
+function WorldTimeFooter({
+  label,
+  edit,
+  monotonicityBreak,
+  onEditTime,
+  onRequestEditTime,
+}: {
+  label: string
+  /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
+  edit: WorldTimeEditTarget | null
+  monotonicityBreak?: { previousLabel: string }
+  onEditTime?: (nextWorldTime: number) => void
+  onRequestEditTime?: () => void
+}) {
+  const tier = useTier()
+  const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+
+  const breakText =
+    monotonicityBreak != null
+      ? `Earlier than previous entry (${monotonicityBreak.previousLabel})`
+      : null
+
+  // `onEditTime == null` also routes to the request fork: the Popover's Save has
+  // nowhere to land without it, and would drop the edit silently.
+  const usePhoneRequest = onRequestEditTime != null && (tier === 'phone' || onEditTime == null)
+
+  const labelNode = (
+    <Text size="xs" variant="muted" className={edit != null ? WORLD_TIME_LABEL_CLASS : undefined}>
+      {label}
+    </Text>
+  )
+
+  return (
+    <View className="mt-3 flex-row items-center justify-end gap-1.5">
+      {breakText != null ? (
+        <DisabledReasonTooltip reason={breakText}>
+          <View role="img" aria-label={breakText}>
+            <Icon as={AlertTriangle} size="sm" className="text-warning" />
+          </View>
+        </DisabledReasonTooltip>
+      ) : null}
+      {edit == null ? (
+        labelNode
+      ) : usePhoneRequest ? (
+        <Pressable
+          role="button"
+          aria-label="Edit time"
+          onPress={onRequestEditTime}
+          className={WORLD_TIME_TRIGGER_CLASS}
+        >
+          {labelNode}
+        </Pressable>
+      ) : (
+        <Popover
+          ariaLabel="Edit time"
+          // Radix autofocuses the first tabbable field and selects its text.
+          // Land on the content container instead: the selection is one
+          // keystroke from wiping a field, and on touch it flashes the
+          // soft keyboard open and shut.
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            ;(event.currentTarget as HTMLElement | null)?.focus()
+          }}
+        >
+          <PopoverTrigger ref={triggerRef} asChild>
+            <Pressable role="button" aria-label="Edit time" className={WORLD_TIME_TRIGGER_CLASS}>
+              {labelNode}
+            </Pressable>
+          </PopoverTrigger>
+          <PopoverContent side="top" align="end" className="w-auto max-w-xl">
+            {/* Keyed so an external worldTime change (undo, classifier write)
+                reseeds the form, which only reads the prop on mount. */}
+            <WorldTimeEditForm
+              key={edit.worldTimeRaw}
+              calendar={edit.calendar}
+              worldTimeOrigin={edit.worldTimeOrigin}
+              worldTimeRaw={edit.worldTimeRaw}
+              monotonicityBreak={monotonicityBreak}
+              onSave={(next) => {
+                triggerRef.current?.close()
+                onEditTime?.(next)
+              }}
+              onCancel={() => triggerRef.current?.close()}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
+    </View>
+  )
+}
+
 // Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
 // indication loops opacity through Reanimated instead.
 function Pulsing({ children }: { children: ReactNode }) {
@@ -190,11 +287,8 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
 
-  const tier = useTier()
-  const timeTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
-
-  // Carries the narrowed values rather than a bare boolean so the overlay
-  // branch can forward them without a non-null assertion.
+  // Carries the narrowed values rather than a bare boolean so the footer can
+  // forward them without a non-null assertion.
   const timeEdit =
     !editing &&
     disabled !== true &&
@@ -205,20 +299,13 @@ export function EntryCard({
       ? { worldTimeRaw, calendar, worldTimeOrigin }
       : null
 
-  // `onEditTime == null` also routes to the request fork: the Popover's Save has
-  // nowhere to land without it, and would drop the edit silently.
-  const usePhoneRequest = onRequestEditTime != null && (tier === 'phone' || onEditTime == null)
-
-  const breakText =
-    worldTimeMonotonicityBreak != null
-      ? `Earlier than previous entry (${worldTimeMonotonicityBreak.previousLabel})`
-      : null
-
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
   const hasState = stateRaw != null && stateRaw.length > 0
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
-  const showWorldTime = worldTimeLabel != null && kind !== 'system' && kind !== 'streaming'
+  // Holds the label rather than a boolean so the footer receives it narrowed.
+  const worldTimeFooterLabel =
+    kind !== 'system' && kind !== 'streaming' ? worldTimeLabel : undefined
 
   return (
     <View
@@ -426,62 +513,14 @@ export function EntryCard({
         </View>
       ) : null}
 
-      {showWorldTime ? (
-        <View className="mt-3 flex-row items-center justify-end gap-1.5">
-          {breakText != null ? (
-            <DisabledReasonTooltip reason={breakText}>
-              <View role="img" aria-label={breakText}>
-                <Icon as={AlertTriangle} size="sm" className="text-warning" />
-              </View>
-            </DisabledReasonTooltip>
-          ) : null}
-          {timeEdit == null ? (
-            <Text size="xs" variant="muted">
-              {worldTimeLabel}
-            </Text>
-          ) : usePhoneRequest ? (
-            <Pressable
-              role="button"
-              aria-label="Edit time"
-              onPress={onRequestEditTime}
-              className={WORLD_TIME_TRIGGER_CLASS}
-            >
-              <Text size="xs" variant="muted" className={WORLD_TIME_LABEL_CLASS}>
-                {worldTimeLabel}
-              </Text>
-            </Pressable>
-          ) : (
-            <Popover ariaLabel="Edit time">
-              <PopoverTrigger ref={timeTriggerRef} asChild>
-                <Pressable
-                  role="button"
-                  aria-label="Edit time"
-                  className={WORLD_TIME_TRIGGER_CLASS}
-                >
-                  <Text size="xs" variant="muted" className={WORLD_TIME_LABEL_CLASS}>
-                    {worldTimeLabel}
-                  </Text>
-                </Pressable>
-              </PopoverTrigger>
-              <PopoverContent side="top" align="end" className="w-auto max-w-xl">
-                {/* Keyed so an external worldTime change (undo, classifier write)
-                    reseeds the form, which only reads the prop on mount. */}
-                <WorldTimeEditForm
-                  key={timeEdit.worldTimeRaw}
-                  calendar={timeEdit.calendar}
-                  worldTimeOrigin={timeEdit.worldTimeOrigin}
-                  worldTimeRaw={timeEdit.worldTimeRaw}
-                  monotonicityBreak={worldTimeMonotonicityBreak}
-                  onSave={(next) => {
-                    timeTriggerRef.current?.close()
-                    onEditTime?.(next)
-                  }}
-                  onCancel={() => timeTriggerRef.current?.close()}
-                />
-              </PopoverContent>
-            </Popover>
-          )}
-        </View>
+      {worldTimeFooterLabel != null ? (
+        <WorldTimeFooter
+          label={worldTimeFooterLabel}
+          edit={timeEdit}
+          monotonicityBreak={worldTimeMonotonicityBreak}
+          onEditTime={onEditTime}
+          onRequestEditTime={onRequestEditTime}
+        />
       ) : null}
     </View>
   )
