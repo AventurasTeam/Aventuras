@@ -1245,3 +1245,22 @@ on hover`; the shipped rows render label and tagline only, so the
   person to ask "why is this regression not warned about?" finds the
   answer. Revisit if flashbacks ever get their own marker.
   Raised 2026-08-15 by the Slice 3.8 Task 2 review.
+- **`data-model.md` says a user direct edit anchors its delta at
+  `entry_id = null`; Slice 3.8 stamps the edited entry's id.** The
+  `#survival-anchor` section and the delta-column table both list
+  "user direct edit" alongside chapter close as a null-anchor case,
+  i.e. always reverse positionally. Slice 3.8's world-time edit stamps
+  `entryId = <edited entry id>` instead, so rolling back a _later_
+  turn spares a correction made on an entry that survives the
+  rollback — which is what the anchor exists for. With a null anchor
+  the correction would be silently reverted. The doc line cannot mean
+  content edits, since those are exempt from the delta log entirely,
+  so it does contemplate exactly this case and one side is wrong.
+  Confirmed there is no undo-classification hazard either way:
+  `selectUndoTarget` keys on `op === 'create'`, so an `op=update`
+  metadata edit stays a `kind: 'group'` single-CTRL-Z. Decide whether
+  the doc is stale (recommended — it predates a delta-logged metadata
+  edit existing) or the slice's anchor choice is wrong (a one-word
+  change). Canonical edit either way, so route through a design pass
+  rather than a slice commit. Raised 2026-08-15 by the Slice 3.8
+  Task 3 review.
