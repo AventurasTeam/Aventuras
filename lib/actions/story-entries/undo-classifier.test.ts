@@ -25,6 +25,7 @@ import {
 } from '@/lib/stores'
 
 import { redoLastAction, undoLastAction } from './undo'
+import { applyDeltaAction } from '../delta/apply-delta-action'
 
 afterEach(() => {
   entriesStore.__reset()
@@ -410,5 +411,128 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
     resolveTerminal()
     expect((await done).status).toBe('ok')
     expect(entriesStore.getById('e_t1')).toBeUndefined()
+  })
+})
+
+describe('AC5 — redo of a classifier-processed turn tolerates re-derivation', () => {
+  it('keeps the watermark clamped after redo; a re-deriving pass upserts awareness cleanly and only duplicates the happening', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const entries = [entry('e_opening', 1, 'opening'), entry('e_b', 2, 'ai_reply')]
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({
+      id: 'b1',
+      storyId: 's1',
+      name: 'm',
+      createdAt: 1,
+      classifierStatus: status(2),
+    })
+    await db.insert(storyEntries).values(entries)
+    await db.insert(happenings).values(hap('hap_b1', 'fact about B', 'e_b'))
+    await db.insert(happeningAwareness).values(AWARENESS_B)
+    await db
+      .insert(deltas)
+      .values([
+        delta('d_b_create', 1, 'act_b', 'ai_classifier', 'story_entries', 'e_b', 'create'),
+        delta(
+          'd_c_hap',
+          2,
+          'act_c',
+          'periodic_classifier',
+          'happenings',
+          'hap_b1',
+          'create',
+          'e_b',
+        ),
+        delta(
+          'd_c_aw',
+          3,
+          'act_c',
+          'periodic_classifier',
+          'happening_awareness',
+          'haw_b1',
+          'create',
+          'e_b',
+        ),
+      ])
+    entriesStore.hydrate('b1', entries)
+    happeningsStore.hydrate('b1', [hap('hap_b1', 'fact about B', 'e_b')])
+    happeningAwarenessStore.hydrate('b1', [AWARENESS_B])
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+
+    // Redo does NOT restore processedThrough — the clamp survives, so the next
+    // pass re-covers B (data-model.md → Survival anchor, redo tolerance).
+    const [branch] = await db.select().from(branches).where(eq(branches.id, 'b1'))
+    expect(branch.classifierStatus?.processedThrough).toBe(1)
+
+    // The re-deriving pass, at the write-path seam: a fresh happening row for
+    // the same fact is a tolerated duplicate (cleaned at M5 chapter-close dedup)…
+    const dupHap = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappening',
+          source: 'periodic_classifier',
+          payload: {
+            entry: { ...hap('hap_b1_dup', 'fact about B', 'e_b'), createdAt: 9, updatedAt: 9 },
+          },
+        },
+        actionId: 'act_rederive',
+        branchId: 'b1',
+        entryId: 'e_b',
+      },
+      ctx,
+    )
+    expect(dupHap.status).toBe('ok')
+
+    // …while the awareness re-derive hits the natural-key upsert: it merges
+    // into the redo-restored row instead of violating haw_natural_uniq.
+    const mergeAw = await applyDeltaAction(
+      {
+        action: {
+          kind: 'upsertHappeningAwareness',
+          source: 'periodic_classifier',
+          payload: {
+            branchId: 'b1',
+            characterId: 'char_kael',
+            happeningId: 'hap_b1',
+            source: 'retold by Jorin',
+          },
+        },
+        actionId: 'act_rederive',
+        branchId: 'b1',
+        entryId: 'e_b',
+      },
+      ctx,
+    )
+    expect(mergeAw.status).toBe('ok')
+
+    // A field-less re-derive is the other tolerated shape: a rejection, not a throw.
+    const bareAw = await applyDeltaAction(
+      {
+        action: {
+          kind: 'upsertHappeningAwareness',
+          source: 'periodic_classifier',
+          payload: { branchId: 'b1', characterId: 'char_kael', happeningId: 'hap_b1' },
+        },
+        actionId: 'act_rederive',
+        branchId: 'b1',
+        entryId: 'e_b',
+      },
+      ctx,
+    )
+    expect(bareAw.status).toBe('rejected')
+
+    // Exactly one awareness row for the natural key — absorbed, not duplicated.
+    const awRows = await db
+      .select()
+      .from(happeningAwareness)
+      .where(eq(happeningAwareness.happeningId, 'hap_b1'))
+    expect(awRows.length).toBe(1)
+    expect(awRows[0].source).toBe('retold by Jorin')
+    // Two happening rows for the fact — the tolerated duplicate.
+    const hapRows = await db.select().from(happenings).where(eq(happenings.branchId, 'b1'))
+    expect(hapRows.map((h) => h.id).sort()).toEqual(['hap_b1', 'hap_b1_dup'])
   })
 })
