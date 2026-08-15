@@ -19,6 +19,7 @@
     Volume2,
     Image as ImageIcon,
     Copy,
+    MoreVertical,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
@@ -53,6 +54,7 @@
   import { countTokens } from '$lib/services/tokenizer'
   import { Button } from '$lib/components/ui/button'
   import * as Popover from '$lib/components/ui/popover'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -1318,16 +1320,6 @@
       />
     {/if}
 
-    <!-- Token count badge (shows 0 if no tokens) -->
-    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
-      {#if isReasoningEnabled && reasoningTokens > 0}
-        <span class="text-muted-foreground">{reasoningTokens}r</span>
-        <span class="text-muted-foreground/50 mx-0.5">+</span>
-      {/if}
-      <span class="text-muted-foreground">{contentTokens}</span>
-      <span class="text-muted-foreground ml-0.5">tokens</span>
-    </span>
-
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -1348,7 +1340,67 @@
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
-      <div class="flex items-center gap-0.5">
+      <div class="flex shrink-0 items-center gap-0.5">
+        {#snippet responseInfoContent()}
+          <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
+          <dl class="space-y-1.5">
+            {#if isReasoningEnabled && reasoningTokens > 0}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Reasoning tokens</dt>
+                <dd class="text-right">{reasoningTokens}</dd>
+              </div>
+            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Content tokens</dt>
+              <dd class="text-right">{contentTokens}</dd>
+            </div>
+            {#if generationInfo.storyTime}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Story time</dt>
+                <dd class="text-right">{generationInfo.storyTime}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.model}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Model</dt>
+                <dd class="text-right break-all">{generationInfo.model}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.profileName}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Profile</dt>
+                <dd class="text-right break-all">{generationInfo.profileName}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.reasoningEffort}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Thinking</dt>
+                <dd class="text-right">{generationInfo.reasoningEffort}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.temperature !== undefined}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Temperature</dt>
+                <dd class="text-right">{generationInfo.temperature}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.duration}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Duration</dt>
+                <dd class="text-right">{generationInfo.duration}</dd>
+              </div>
+            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Generated at</dt>
+              <dd class="text-right">{generationInfo.timestamp}</dd>
+            </div>
+            {#if !generationInfo.model}
+              <p class="text-muted-foreground pt-1">
+                Model details were not recorded for this response.
+              </p>
+            {/if}
+          </dl>
+        {/snippet}
         {#if showInfo}
           <Popover.Root>
             <Popover.Trigger>
@@ -1356,7 +1408,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground h-7 w-7"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1365,54 +1417,7 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
-              <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
-              <dl class="space-y-1.5">
-                {#if generationInfo.storyTime}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Story time</dt>
-                    <dd class="text-right">{generationInfo.storyTime}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.model}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Model</dt>
-                    <dd class="text-right break-all">{generationInfo.model}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.profileName}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Profile</dt>
-                    <dd class="text-right break-all">{generationInfo.profileName}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.reasoningEffort}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Thinking</dt>
-                    <dd class="text-right">{generationInfo.reasoningEffort}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.temperature !== undefined}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Temperature</dt>
-                    <dd class="text-right">{generationInfo.temperature}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.duration}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Duration</dt>
-                    <dd class="text-right">{generationInfo.duration}</dd>
-                  </div>
-                {/if}
-                <div class="flex justify-between gap-3">
-                  <dt class="text-muted-foreground shrink-0">Generated at</dt>
-                  <dd class="text-right">{generationInfo.timestamp}</dd>
-                </div>
-                {#if !generationInfo.model}
-                  <p class="text-muted-foreground pt-1">
-                    Model details were not recorded for this response.
-                  </p>
-                {/if}
-              </dl>
+              {@render responseInfoContent()}
             </Popover.Content>
           </Popover.Root>
         {/if}
@@ -1442,7 +1447,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="h-7 w-7 text-amber-500 hover:text-amber-600"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 sm:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1453,7 +1458,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="h-7 w-7 text-blue-500 hover:text-blue-600"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 sm:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1464,7 +1469,7 @@
           size="icon"
           onclick={handleTTSToggle}
           disabled={isGeneratingTTS}
-          class="text-muted-foreground hover:text-foreground h-7 w-7"
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
           title={isPlayingTTS ? 'Stop narration' : 'Narrate'}
         >
           {#if isGeneratingTTS}
@@ -1481,7 +1486,7 @@
             size="icon"
             onclick={handleGenerateStoryImages}
             disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
-            class="text-muted-foreground hover:text-foreground h-7 w-7"
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
             title={embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
           >
             {#if isGeneratingStoryImages}
@@ -1525,6 +1530,66 @@
         >
           <Trash2 class="h-4 w-4" />
         </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                variant="text"
+                size="icon"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 sm:hidden"
+                title="More actions"
+                {...props}
+              >
+                <MoreVertical class="h-4 w-4" />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end">
+            {#if canBranch}
+              <DropdownMenu.Item onclick={() => (isBranching = true)}>
+                <GitBranch class="h-4 w-4" />
+                Branch from here
+              </DropdownMenu.Item>
+            {/if}
+            {#if canCreateCheckpoint}
+              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+                <Bookmark class="h-4 w-4" />
+                Create checkpoint
+              </DropdownMenu.Item>
+            {/if}
+            <DropdownMenu.Item onclick={handleTTSToggle} disabled={isGeneratingTTS}>
+              {#if isGeneratingTTS}
+                <Loader2 class="h-4 w-4 animate-spin" />
+              {:else if isPlayingTTS}
+                <X class="h-4 w-4 text-red-500" />
+              {:else}
+                <Volume2 class="h-4 w-4" />
+              {/if}
+              {isPlayingTTS ? 'Stop narration' : 'Narrate'}
+            </DropdownMenu.Item>
+            {#if entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+              <DropdownMenu.Item
+                onclick={handleGenerateStoryImages}
+                disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
+              >
+                {#if isGeneratingStoryImages}
+                  <Loader2 class="h-4 w-4 animate-spin" />
+                {:else}
+                  <ImageIcon class="h-4 w-4" />
+                {/if}
+                {embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
+              </DropdownMenu.Item>
+            {/if}
+            <!-- Rendered inline rather than behind an item: selecting an item closes the
+                 menu, which would unmount any popover anchored to it. -->
+            {#if showInfo}
+              <DropdownMenu.Separator />
+              <div class="w-56 px-2 py-1.5 text-xs">
+                {@render responseInfoContent()}
+              </div>
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       </div>
     {/if}
   </div>
