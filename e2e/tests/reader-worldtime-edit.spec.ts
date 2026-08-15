@@ -66,6 +66,8 @@ test.describe('reader — edit an entry world time', () => {
   // op=update row, source user_edit, anchored on the edited entry. Filtering on
   // source keeps a background classifier pass — which anchors ai_classifier rows
   // on the same entry — out of the count.
+  // Keep the entry_id predicate: it is the only assertion anywhere that pins the
+  // survival anchor, so a regression to a null anchor fails the count below.
   async function editDeltaCount(entryId: string): Promise<number> {
     const rows = await queryApp(
       app.window,
