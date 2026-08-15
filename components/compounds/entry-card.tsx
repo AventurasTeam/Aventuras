@@ -10,8 +10,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { View } from 'react-native'
+import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -20,16 +20,21 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { Button } from '@/components/ui/button'
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
+import { useTier } from '@/hooks/use-tier'
+import type { CalendarSystem, TierTuple } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
+import { WorldTimeEditForm } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
 
@@ -43,6 +48,18 @@ type EntryCardProps = {
   content: string
   /** Pre-formatted by the host's calendar renderer; opaque to the compound. */
   worldTimeLabel?: string
+  /** Raw cumulative seconds; with `calendar` + `worldTimeOrigin` + a handler, makes the footer clickable. */
+  worldTimeRaw?: number
+  /** Desktop/tablet: fired by the in-card Popover's Save with the recomputed seconds. */
+  onEditTime?: (nextWorldTime: number) => void
+  /** Phone: the compound requests; the host presents the native Sheet. */
+  onRequestEditTime?: () => void
+  /** Presence renders the warning indicator; the label feeds the banner/tooltip. */
+  worldTimeMonotonicityBreak?: { previousLabel: string }
+  /** Stable reference required: the edit form's tuple memo keys on identity. */
+  calendar?: CalendarSystem
+  /** Stable reference required: the edit form's tuple memo keys on identity. */
+  worldTimeOrigin?: TierTuple
 
   onEdit?: () => void
   /** Not provided for `opening` (block-delete) or `system`/`streaming`. */
@@ -91,6 +108,15 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   streaming: 'bg-bg-raised border-border',
 }
 
+const WORLD_TIME_TRIGGER_CLASS = cn(
+  'group/world-time rounded-sm',
+  Platform.select({
+    web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+  }),
+)
+
+const WORLD_TIME_LABEL_CLASS = Platform.select({ web: 'group-hover/world-time:text-fg-primary' })
+
 // Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
 // indication loops opacity through Reanimated instead.
 function Pulsing({ children }: { children: ReactNode }) {
@@ -134,6 +160,12 @@ export function EntryCard({
   kind,
   content,
   worldTimeLabel,
+  worldTimeRaw,
+  onEditTime,
+  onRequestEditTime,
+  worldTimeMonotonicityBreak,
+  calendar,
+  worldTimeOrigin,
   onEdit,
   onDelete,
   meta,
@@ -157,6 +189,30 @@ export function EntryCard({
   const [expanded, setExpanded] = useState(false)
   const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
+
+  const tier = useTier()
+  const timeTriggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+
+  // Carries the narrowed values rather than a bare boolean so the overlay
+  // branch can forward them without a non-null assertion.
+  const timeEdit =
+    !editing &&
+    disabled !== true &&
+    worldTimeRaw != null &&
+    calendar != null &&
+    worldTimeOrigin != null &&
+    (onEditTime != null || onRequestEditTime != null)
+      ? { worldTimeRaw, calendar, worldTimeOrigin }
+      : null
+
+  // `onEditTime == null` also routes to the request fork: the Popover's Save has
+  // nowhere to land without it, and would drop the edit silently.
+  const usePhoneRequest = onRequestEditTime != null && (tier === 'phone' || onEditTime == null)
+
+  const breakText =
+    worldTimeMonotonicityBreak != null
+      ? `Earlier than previous entry (${worldTimeMonotonicityBreak.previousLabel})`
+      : null
 
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
   const hasState = stateRaw != null && stateRaw.length > 0
@@ -371,10 +427,60 @@ export function EntryCard({
       ) : null}
 
       {showWorldTime ? (
-        <View className="mt-3 flex-row justify-end">
-          <Text size="xs" variant="muted">
-            {worldTimeLabel}
-          </Text>
+        <View className="mt-3 flex-row items-center justify-end gap-1.5">
+          {breakText != null ? (
+            <DisabledReasonTooltip reason={breakText}>
+              <View role="img" aria-label={breakText}>
+                <Icon as={AlertTriangle} size="sm" className="text-warning" />
+              </View>
+            </DisabledReasonTooltip>
+          ) : null}
+          {timeEdit == null ? (
+            <Text size="xs" variant="muted">
+              {worldTimeLabel}
+            </Text>
+          ) : usePhoneRequest ? (
+            <Pressable
+              role="button"
+              aria-label="Edit time"
+              onPress={onRequestEditTime}
+              className={WORLD_TIME_TRIGGER_CLASS}
+            >
+              <Text size="xs" variant="muted" className={WORLD_TIME_LABEL_CLASS}>
+                {worldTimeLabel}
+              </Text>
+            </Pressable>
+          ) : (
+            <Popover ariaLabel="Edit time">
+              <PopoverTrigger ref={timeTriggerRef} asChild>
+                <Pressable
+                  role="button"
+                  aria-label="Edit time"
+                  className={WORLD_TIME_TRIGGER_CLASS}
+                >
+                  <Text size="xs" variant="muted" className={WORLD_TIME_LABEL_CLASS}>
+                    {worldTimeLabel}
+                  </Text>
+                </Pressable>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="end" className="w-auto max-w-xl">
+                {/* Keyed so an external worldTime change (undo, classifier write)
+                    reseeds the form, which only reads the prop on mount. */}
+                <WorldTimeEditForm
+                  key={timeEdit.worldTimeRaw}
+                  calendar={timeEdit.calendar}
+                  worldTimeOrigin={timeEdit.worldTimeOrigin}
+                  worldTimeRaw={timeEdit.worldTimeRaw}
+                  monotonicityBreak={worldTimeMonotonicityBreak}
+                  onSave={(next) => {
+                    timeTriggerRef.current?.close()
+                    onEditTime?.(next)
+                  }}
+                  onCancel={() => timeTriggerRef.current?.close()}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
         </View>
       ) : null}
     </View>
