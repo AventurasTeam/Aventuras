@@ -15,6 +15,7 @@ import {
   type ReaderSurfaceHandle,
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
+import { classifyRegenerateGate } from '@/components/reader/regenerate-gate'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
@@ -39,6 +40,7 @@ import {
   redoLastAction,
   refreshEmbeddingStatus,
   refreshSuggestions,
+  regenerateTurn,
   rollbackToEntry,
   submitTurn,
   undoLastAction,
@@ -85,7 +87,12 @@ import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
-type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
+type RollbackState = {
+  mode: 'rollback' | 'regenerate'
+  targetId: string
+  targetNumber: number
+  counts: RollbackCounts
+}
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
   | {
@@ -419,7 +426,7 @@ export default function ReaderComposerRoute() {
   const showTurnFailure = useCallback(
     async (
       error: PipelineError | undefined,
-      submission: { content: string; composerMode: string },
+      submission: { content: string; composerMode: string } | undefined,
     ) => {
       // Copy + discriminant + the reversed user_action's text all persist on
       // the entry, so kind-specific recovery survives an app restart.
@@ -486,6 +493,54 @@ export default function ReaderComposerRoute() {
     [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
   )
 
+  const runRegenerate = useCallback(
+    async (targetId: string) => {
+      if (!storyId || !hydrationSucceeded) return
+      // Same pre-dispatch hygiene as runSubmit: a failure singleton at the tail
+      // must not feed the pipeline's prompt/position reads.
+      const hasSystemTail = [...entriesStore.getEntries().values()].some(
+        (e) => e.branchId === branchId && e.kind === 'system',
+      )
+      if (hasSystemTail) {
+        await clearSystemEntry(branchId, ctx)
+        await reload()
+      }
+      try {
+        const regen = await regenerateTurn({ storyId, branchId }, targetId, ctx)
+        if (regen.status === 'rejected') {
+          toast.error(t('reader:regenerateFailed'))
+          return
+        }
+        // The convergence submission: regenerate's non-success paths unwound the
+        // user_action, so Retry re-enters through the normal submit path. Wrapped
+        // text returns under 'free' (no re-wrap on send), same as cancel-restore.
+        const submission = { content: regen.userActionContent, composerMode: 'free' }
+        const { result } = regen
+        if (result.outcome === 'failed') {
+          setLastSubmission(submission)
+          await showTurnFailure(result.error, submission)
+        } else if (result.outcome === 'rejected') {
+          setLastSubmission(submission)
+          await showTurnFailure(
+            {
+              kind: 'orchestrator',
+              detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
+            },
+            submission,
+          )
+        } else if (result.outcome === 'aborted') {
+          composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+        }
+      } catch (err) {
+        await showTurnFailure(
+          { kind: 'orchestrator', detail: err instanceof Error ? err.message : String(err) },
+          undefined,
+        )
+      }
+    },
+    [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
+  )
+
   // Derived from the persisted entry, not React state, so the failure kind,
   // fix action, and retryable submission all survive an app restart.
   const systemFailure = useMemo(
@@ -516,13 +571,20 @@ export default function ReaderComposerRoute() {
         return
       }
       const target = entriesStore.getById(targetId)
-      setRollback({ targetId, targetNumber: target?.position ?? 0, counts })
+      setRollback({ mode: 'rollback', targetId, targetNumber: target?.position ?? 0, counts })
     },
     [branchId],
   )
 
   const confirmRollback = useCallback(async () => {
     if (!rollback) return
+    if (rollback.mode === 'regenerate') {
+      const targetId = rollback.targetId
+      // Close before the stream starts; the streaming card takes over the surface.
+      setRollback(null)
+      await runRegenerate(targetId)
+      return
+    }
     const result = await rollbackToEntry(branchId, rollback.targetId, ctx)
     if (result.status === 'rejected') {
       // Keep the modal open so the user doesn't assume the delete happened.
@@ -530,7 +592,7 @@ export default function ReaderComposerRoute() {
       return
     }
     setRollback(null)
-  }, [branchId, rollback])
+  }, [branchId, rollback, runRegenerate])
 
   const handleCommitEdit = useCallback(
     async (entryId: string, content: string): Promise<EditResult> => {
@@ -550,6 +612,30 @@ export default function ReaderComposerRoute() {
       await openRollback(entryId)
     },
     [openRollback],
+  )
+
+  const handleRequestRegenerate = useCallback(
+    async (entryId: string) => {
+      const counts = await getRollbackCounts(branchId, entryId, ctx)
+      if ('status' in counts) {
+        toast.error(t('reader:regenerateFailed'))
+        return
+      }
+      if (classifyRegenerateGate(counts) === 'immediate') {
+        await runRegenerate(entryId)
+        return
+      }
+      // Both confirm arms open the cascade modal in M3; M5.2 swaps the
+      // chapter-close arm's copy without touching this path.
+      const target = entriesStore.getById(entryId)
+      setRollback({
+        mode: 'regenerate',
+        targetId: entryId,
+        targetNumber: target?.position ?? 0,
+        counts,
+      })
+    },
+    [branchId, runRegenerate],
   )
 
   // Chips are finished prose, so the draft is replaced outright and the mode
@@ -750,6 +836,7 @@ export default function ReaderComposerRoute() {
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: handleRequestRollback,
+    onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
@@ -900,6 +987,7 @@ export default function ReaderComposerRoute() {
           }}
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
+          variant={rollback.mode}
           onConfirm={() => void confirmRollback()}
         />
       ) : null}

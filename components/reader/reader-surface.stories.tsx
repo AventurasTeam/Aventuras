@@ -64,6 +64,7 @@ const noopHandlers = {
   onNearTop: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
+  onRegenerate: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onFixSystemEntry: async () => {},
