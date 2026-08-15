@@ -44,6 +44,7 @@
   },
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
+  "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
   "spellcheckSuggestion": "→ {{text}}",
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",
@@ -56,6 +57,11 @@
     "worldState_other": "{{count}} world-state changes",
     "irreversible": "This cannot be undone.",
     "confirm": "Delete entries"
+  },
+  "regenerateConfirm": {
+    "title": "Regenerate from entry {{entryNumber}}?",
+    "body": "This discards entry {{entryNumber}} and everything after it, then generates a new reply from your last action. The following are removed:",
+    "confirm": "Discard and regenerate"
   },
   "systemEntry": {
     "retry": "Retry",
