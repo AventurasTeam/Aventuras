@@ -45,6 +45,8 @@ export async function updateEntryWorldTime(
   // Nothing to merge onto: synthesizing the sibling fields would invent data.
   if (current.metadata == null)
     return { status: 'rejected', reason: `entry ${id} has no metadata to edit` }
+  // A no-op delta would clear the global (cross-branch) redo stack for nothing.
+  if (current.metadata.worldTime === worldTime) return { status: 'ok' }
 
   const result = await applyDeltaAction(
     {

@@ -116,6 +116,43 @@ describe('updateEntryWorldTime', () => {
     expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(120)
   })
 
+  // 0 is the accept boundary of the storage invariant, not an edge to reject:
+  // openings are always worldTime 0, and resetting an entry back to 0 undoes a
+  // bad classifier advance or re-marks a flashback.
+  it('accepts worldTime 0', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const result = await updateEntryWorldTime('b1', 'e2', 0, ctx)
+    expect(result.status).toBe('ok')
+
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(0)
+    expect((await branchDeltas(db)).length).toBe(1)
+    expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(0)
+  })
+
+  it('suppresses a write that would not change the stored seconds', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    undoRedoStore.pushRedoGroup([])
+
+    const result = await updateEntryWorldTime('b1', 'e2', 120, ctx)
+    expect(result.status).toBe('ok')
+
+    expect((await branchDeltas(db)).length).toBe(0)
+    expect(await storedMetadata(db, 'e2')).toEqual({
+      sceneEntities: ['ent1'],
+      currentLocationId: null,
+      worldTime: 120,
+      summary: 's',
+    })
+    // The harm a no-op delta would do: applyDeltaAction clears the redo stack,
+    // which is global rather than per-branch.
+    expect(undoRedoStore.hasRedo()).toBe(true)
+  })
+
   it('preserves sibling metadata fields on write', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
