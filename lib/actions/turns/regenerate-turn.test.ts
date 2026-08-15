@@ -2,11 +2,21 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, deltas, happenings, storyEntries, type Delta, type StoryEntry } from '@/lib/db'
-import { entriesStore, hydrateAppSettings } from '@/lib/stores'
+import { PER_TURN_KIND } from '@/lib/pipeline'
+import {
+  awaitRunTerminal,
+  currentStoryStore,
+  entriesStore,
+  generationStore,
+  hydrateAppSettings,
+  undoRedoStore,
+} from '@/lib/stores'
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
 import { regenerateTurn } from './regenerate-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
+import { DeltaReplayError, type reverseAndPruneDeltaRows } from '../delta/reverse-replay'
+import { undoLastAction } from '../story-entries/undo'
 
 vi.mock('@/lib/retrieval', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
@@ -16,6 +26,25 @@ vi.mock('@/lib/retrieval', async (importOriginal) => {
 vi.mock('../embedder-swap/engine', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, startSwap: vi.fn(async () => 'completed' as const) }
+})
+
+// A seam into an individual sweep from inside the real regenerateTurn control
+// flow — the only way to observe sweep ordering, or to fail one sweep and not
+// the other, without reimplementing the action. `rows` identifies which sweep
+// is running; abortRun's unwind goes through reverseReplayDeltas, a different
+// export, so it never reaches this one.
+const sweepHook = vi.hoisted(() => ({
+  onSweep: null as ((rows: readonly { id: string }[]) => void) | null,
+}))
+vi.mock('../delta/reverse-replay', async (importOriginal) => {
+  const actual = await importOriginal<
+    Record<string, unknown> & { reverseAndPruneDeltaRows: typeof reverseAndPruneDeltaRows }
+  >()
+  const hooked: typeof reverseAndPruneDeltaRows = (rows, ctx, extraOps) => {
+    sweepHook.onSweep?.(rows)
+    return actual.reverseAndPruneDeltaRows(rows, ctx, extraOps)
+  }
+  return { ...actual, reverseAndPruneDeltaRows: hooked }
 })
 
 const ENTRY = (
@@ -108,6 +137,7 @@ describe('regenerateTurn', () => {
     vi.stubGlobal('fetch', sseFetch(['A new take.']))
   })
   afterEach(() => {
+    sweepHook.onSweep = null
     vi.unstubAllGlobals()
     resetSingletons()
   })
@@ -175,5 +205,254 @@ describe('regenerateTurn', () => {
     expect(await ctx.db.select().from(happenings)).toEqual([])
     // Clamped to position(e_r1) - 1, one turn deeper than the terminal case.
     expect(await watermark(ctx)).toBe(2)
+  })
+
+  it('mid-stream failure: follow-up sweep unwinds the standing user action (M2 contract)', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('failed')
+    expect(regen.userActionContent).toBe('I cross the bridge.')
+
+    // No orphan placeholder, no stranded user action: log at the fully unwound
+    // state — turn 1 intact, its catch-up fact spared.
+    const rows = branchEntries('b1').sort((a, b) => a.position - b.position)
+    expect(rows.map((r) => r.id)).toEqual(['e_opening', 'e_u1', 'e_r1'])
+    const facts = await ctx.db.select().from(happenings)
+    expect(facts.map((f) => f.id)).toEqual(['h_a'])
+    // First sweep clamps to 4 (pos(e_r2)-1); follow-up clamps to 3 (pos(e_u2)-1).
+    expect(await watermark(ctx)).toBe(3)
+  })
+
+  it('cancel mid-regen: aborted outcome also unwinds the standing user action', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    let callStarted!: () => void
+    const started = new Promise<void>((r) => {
+      callStarted = r
+    })
+    // The composer's Send -> Cancel as it actually lands: the provider request
+    // hangs until the run's own signal aborts it. The SDK calls fetch with a
+    // lone Request, so the signal is on that and never on an init bag.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const signal = new Request(input, init).signal
+        return new Promise<Response>((_resolve, reject) => {
+          const fail = () => reject(new DOMException('Aborted', 'AbortError'))
+          if (signal.aborted) return fail()
+          signal.addEventListener('abort', fail, { once: true })
+          callStarted()
+        })
+      }) as unknown as typeof fetch,
+    )
+
+    const regen = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    await started
+    await awaitRunTerminal(PER_TURN_KIND, 'b1', 'cancel')
+    const settled = await regen
+
+    expect(settled.status).toBe('ran')
+    if (settled.status !== 'ran') return
+    expect(expectRan(settled.result).outcome).toBe('aborted')
+    expect(settled.userActionContent).toBe('I cross the bridge.')
+    const rows = branchEntries('b1').sort((a, b) => a.position - b.position)
+    expect(rows.map((r) => r.id)).toEqual(['e_opening', 'e_u1', 'e_r1'])
+  })
+
+  it('drains an in-flight classifier before the sweep (C3 bracket)', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const order: string[] = []
+    sweepHook.onSweep = () => order.push('swept')
+    let resolveTerminal!: () => void
+    const terminal = new Promise<void>((r) => {
+      resolveTerminal = r
+    })
+    const abortController = new AbortController()
+    abortController.signal.addEventListener('abort', () => {
+      order.push('classifier-aborted')
+      // The orchestrator deregisters the run and resolves its terminal only
+      // after its own unwind, so a bracket that aborted without AWAITING the
+      // terminal would reach the sweep before 'classifier-drained' lands.
+      setTimeout(() => {
+        order.push('classifier-drained')
+        generationStore.abortRun('run_c')
+        resolveTerminal()
+      }, 0)
+    })
+    generationStore.startRun({
+      runId: 'run_c',
+      kind: 'periodic-classifier',
+      gateBehavior: 'no-gate',
+      actionId: 'act_live',
+      storyId: 's1',
+      branchId: 'b1',
+      abortController,
+      currentPhase: '',
+      intermediates: {},
+      terminal,
+      resolveTerminal,
+    })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    order.push('regen-settled')
+
+    expect(order).toEqual(['classifier-aborted', 'classifier-drained', 'swept', 'regen-settled'])
+    expect(regen.status).toBe('ran')
+    // Committed catch-up facts about surviving turns are untouched by the drain.
+    const facts = await ctx.db.select().from(happenings)
+    expect(facts.map((f) => f.id)).toEqual(['h_a'])
+  })
+
+  it('rejects a non-AI target without destroying anything', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx)
+
+    expect(regen).toEqual({ status: 'rejected', reason: 'target is not an AI reply' })
+    expect(branchEntries('b1')).toHaveLength(5)
+  })
+
+  it('refuses while a swap is pending, before any reversal', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    const open = currentStoryStore.getCurrentStory()
+    if (open == null) throw new Error('story not open')
+    currentStoryStore.set({
+      ...open,
+      settings: { ...open.settings, embedding_swap_target: 'bge-m3' },
+    })
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen).toEqual({ status: 'rejected', reason: 'embedder-swap' })
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+  })
+
+  it('clears the redo stack (a regenerate is a new unrelated action)', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+    expect(undoRedoStore.hasRedo()).toBe(true)
+
+    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  // Where clearing eagerly earns its keep: a failed run writes no delta, so
+  // applyDeltaAction's choke-point clear never fires — yet the sweep has already
+  // pruned the rows a stale redo snapshot would try to re-apply.
+  it('clears the redo stack even when the regenerate fails', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    undoRedoStore.pushRedoGroup([])
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen.status).toBe('ran')
+    expect(undoRedoStore.hasRedo()).toBe(false)
+  })
+
+  it('CTRL-Z after a completed regenerate undoes the new take, keeping the user action', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    const undo = await undoLastAction('b1', ctx)
+
+    expect(undo.status).toBe('ok')
+    const rows = branchEntries('b1').sort((a, b) => a.position - b.position)
+    expect(rows.map((r) => r.id)).toEqual(['e_opening', 'e_u1', 'e_r1', 'e_u2'])
+  })
+
+  // d_u2 — the surviving user_action's create delta — appears only in the
+  // FOLLOW-UP sweep's row set; the first sweep never reaches back past the reply.
+  const isFollowUpSweep = (rows: readonly { id: string }[]) => rows.some((r) => r.id === 'd_u2')
+
+  async function regenerateWithFailingUnwind(error: Error) {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    const attempted: boolean[] = []
+    sweepHook.onSweep = (rows) => {
+      attempted.push(isFollowUpSweep(rows))
+      if (isFollowUpSweep(rows)) throw error
+    }
+    return { attempted, regen: regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx) }
+  }
+
+  it('keeps the run result and the user text when the follow-up unwind fails', async () => {
+    const { attempted, regen } = await regenerateWithFailingUnwind(
+      new DeltaReplayError('Reverse-and-prune failed', {
+        cause: new Error('database is locked'),
+        actionId: 'act_t2',
+      }),
+    )
+
+    const settled = await regen
+
+    // Attempted and thrown, not skipped — the assertions below would also hold
+    // if no follow-up sweep had run at all.
+    expect(attempted).toEqual([false, true])
+    expect(settled.status).toBe('ran')
+    if (settled.status !== 'ran') return
+    expect(expectRan(settled.result).outcome).toBe('failed')
+    // The two halves the host needs for Retry / draft-restore survive an unwind
+    // that could not land — and the un-unwound user_action is still standing.
+    expect(settled.userActionContent).toBe('I cross the bridge.')
+    expect(entriesStore.getById('e_u2')).toBeDefined()
+  })
+
+  it('propagates a non-DeltaReplayError thrown by the follow-up unwind', async () => {
+    const { attempted, regen } = await regenerateWithFailingUnwind(
+      new Error('unknown target_table lore'),
+    )
+
+    await expect(regen).rejects.toThrow('unknown target_table lore')
+    expect(attempted).toEqual([false, true])
   })
 })
