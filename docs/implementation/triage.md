@@ -1449,3 +1449,29 @@ v++)` never runs), so the era is silently lost. Observed with origin
   `jumpButtonEnabled`, and omits `branchKey` and `systemFixLabel`.
   Route through a docs pass over both files rather than piecemeal
   edits. Raised 2026-08-15 by the Slice 3.8 Task 8 doc pass.
+- **`per-turn-retrieval.test.ts` fails intermittently, but only when
+  `pnpm test:run` runs the unit and storybook projects in one
+  invocation.** Observed 2 failures in 4 consecutive `pnpm test:run`
+  invocations while closing Slice 3.8. The failing pair is always
+  `retrieval phase — embedder config > fails blocking when the embedder
+config does not resolve` (hits the default 5 s test timeout at
+  ~5020 ms, so `runRetrievalPhase()` hangs) and `retrieval phase —
+abort > survives a post-sync recount that rejects, warning instead of
+failing` (fails in ~11 ms, consistent with a cascade from shared
+  state the timed-out test left behind rather than an independent
+  defect). What was ruled out: the file passes 60/60 five times run
+  alone, 3/3 more while a full storybook run is saturating the machine
+  concurrently, and the storybook project alone passes 3/3 — so plain
+  CPU contention is not the trigger. Attribution to Slice 3.8 is
+  **unresolved**: its only change to shared substrate is extracting
+  `withKeyLock` from `apply-delta-action.ts` into
+  `lib/actions/delta/key-lock.ts`, which is a byte-identical move with
+  `promoteStagedEntity`'s opt-in unchanged and no path from the
+  retrieval phase to it — but the slice did grow the suite from 2942 to
+  3697 tests, so it could be surfacing a pre-existing marginal
+  condition rather than causing one. A base-commit comparison at equal
+  load was attempted and is inconclusive: a git worktree with a
+  symlinked `node_modules` cannot run the storybook project at all (the
+  addon setup file 404s outside the vite root), which is itself worth
+  fixing since it blocks every reviewer working from a worktree.
+  Raised 2026-08-15 while closing Slice 3.8.
