@@ -39,6 +39,17 @@ const aiEntry = {
   meta: aiMeta,
 } satisfies Partial<EntryCardProps>
 
+// The clickable footer is found by its aria-label, so nothing else notices if
+// the label degrades to a bare string on the trigger — which would silently
+// drop the muted text style, since bare strings ignore TextClassContext.
+function expectLabelIsOwnTextNode() {
+  const label = screen.getByText(baseProps.worldTimeLabel)
+  const trigger = screen.getByRole('button', { name: 'Edit time' })
+  expect(label).toBeVisible()
+  expect(trigger).toContainElement(label)
+  expect(label).not.toBe(trigger)
+}
+
 const meta: Meta<typeof EntryCard> = {
   title: 'Compounds/EntryCard',
   component: EntryCard,
@@ -414,6 +425,7 @@ export const EditableWorldTimeFooter: StoryT = {
   play: async ({ args, canvasElement }) => {
     // No break passed, so nothing may claim the indicator's role.
     expect(canvasElement.querySelector('[role="img"]')).toBeNull()
+    expectLabelIsOwnTextNode()
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
@@ -441,10 +453,39 @@ export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
     onRequestEditTime: fn(),
   },
   play: async ({ args }) => {
+    expectLabelIsOwnTextNode()
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(args.onRequestEditTime).toHaveBeenCalledTimes(1))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(args.onEditTime).not.toHaveBeenCalled()
+  },
+}
+
+/**
+ * Pins the fallback as contract, not accident: a host that supplies only an
+ * inline editor gets the inline editor at every tier, phone included. The dev
+ * screen and these stories are exactly such hosts, so this is not a misuse to
+ * warn about — only a host that omits `onEditTime` asks for the native Sheet.
+ */
+export const WorldTimeInlineEditorOnPhone: StoryT = {
+  ...wrap,
+  globals: { viewport: { value: 'mobile1' } },
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
   },
 }
 
@@ -505,9 +546,14 @@ export const WorldTimeMonotonicityIndicator: StoryT = {
     worldTimeMonotonicityBreak: { previousLabel: 'Day 12 · 14:33' },
   },
   play: async () => {
-    await expect(
-      screen.getByLabelText('Earlier than previous entry (Day 12 · 14:33)'),
-    ).toBeVisible()
+    const indicator = screen.getByLabelText('Earlier than previous entry (Day 12 · 14:33)')
+    await expect(indicator).toBeVisible()
+    // Canon requires hovering the indicator to surface the same string without
+    // opening the overlay (patterns/entry-card.md → Click-to-edit).
+    expect(indicator.parentElement).toHaveAttribute(
+      'title',
+      'Earlier than previous entry (Day 12 · 14:33)',
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() =>
       expect(screen.getByText(/Earlier than previous entry \(Day 12 · 14:33\)/)).toBeVisible(),
