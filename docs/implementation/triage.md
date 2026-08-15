@@ -1325,3 +1325,35 @@ width }}` does, so a class-width decorator and a style-width
   lint/guard on narrow decorators, a `FormRow` that does not guess
   before measuring, or a documented story-authoring rule. Raised
   2026-08-15 by the Slice 3.8 Task 4 review.
+- **Storybook viewport globals: named keys only, and the default is
+  desktop.** `@storybook/addon-vitest` applies
+  `setViewport(parameters, globals)` before each story runs, so a
+  story can select a tier with `globals: { viewport: { value:
+'mobile1' } }` — no `vi`, no `Dimensions.set()`, no
+  `@vitest/browser/context` import. Two traps found while using it in
+  Slice 3.8. First, `setViewport` only honours a key present in
+  `{...MINIMAL_VIEWPORTS, ...options}`, so the `'{width}-{height}'`
+  form documented in `storybook/dist/viewport/index.d.ts` (e.g.
+  `'320-480'`) **silently falls back** to the default instead of
+  failing — a story written that way claims a tier it never ran at.
+  Second, `DEFAULT_VIEWPORT_DIMENSIONS` is 1200x900, so every story
+  without a viewport global runs at **desktop** tier (>= 1024), not at
+  some neutral width; a story that means to exercise phone or tablet
+  behaviour and omits the global tests desktop and passes for the
+  wrong reason. Worth a documented story-authoring note, and worth
+  auditing any existing story whose name or docblock claims a
+  narrow-tier behaviour. Raised 2026-08-15 by the Slice 3.8 Task 5
+  review.
+- **`useTier()` now runs per `EntryCard`, and on native it re-fires on
+  keyboard show/hide.** Slice 3.8's tier fork put a `useTier()` call
+  inside every `EntryCard`, and `components/reader/reader-surface.tsx`
+  renders one per row in a non-virtualized `.map()`, so every window
+  dimension change re-renders the whole loaded window. On desktop that
+  is resize-only and rare. Inside the expo-dom WebView on native,
+  `useWindowDimensions()` also fires when the soft keyboard shows or
+  hides — which happens on every composer focus and every world-time
+  edit on phone, i.e. exactly during the interactions this slice adds.
+  Not measured. Options if it shows up in a profile: hoist the tier
+  read to `ReaderSurface` and pass it down, or give `EntryCard` a tier
+  override prop defaulting to its own read. Raised 2026-08-15 by the
+  Slice 3.8 Task 5 review.
