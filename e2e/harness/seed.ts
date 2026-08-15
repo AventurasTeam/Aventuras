@@ -157,6 +157,15 @@ export function setClassifierCadence(dbPath: string, storyId: string, cadence: n
   }
 }
 
+function parkWatermark(db: DatabaseSync, branchId: string, processedThrough: number): void {
+  db.prepare(
+    `UPDATE branches SET classifier_status = json_set(
+       COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
+       '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
+     WHERE id = ?`,
+  ).run(processedThrough, branchId)
+}
+
 /**
  * Append `count` filler turns and park the classifier watermark at `processedThrough`,
  * so the branch carries a backlog deeper than the reader's entry window. Each filler
@@ -187,12 +196,33 @@ export function seedClassifierBacklog(
         `FILLER-${position} nothing happens.`,
       )
     }
-    db.prepare(
-      `UPDATE branches SET classifier_status = json_set(
-         COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
-         '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
-       WHERE id = ?`,
-    ).run(processedThrough, branchId)
+    parkWatermark(db, branchId, processedThrough)
+  } finally {
+    db.close()
+  }
+}
+
+/**
+ * Park the classifier watermark at the last `ai_reply` and return that position, so a pass
+ * covers only the turns a spec commits after launch — the fixture seeds
+ * `classifier_status = NULL`, which floors the window at 0. Anchors on the last reply rather
+ * than MAX(position) because the fixture ends on a dangling in-flight turn that boot recovery
+ * reverse-replays, putting the seed-time maximum above the tip the app boots with.
+ * Runs before launch.
+ */
+export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db
+      .prepare(
+        `SELECT MAX(position) AS p FROM story_entries WHERE branch_id = ? AND kind = 'ai_reply'`,
+      )
+      .get(branchId) as { p: number | null }
+    if (row.p === null) {
+      throw new Error(`No ai_reply on branch ${branchId}: the watermark would floor at 0.`)
+    }
+    parkWatermark(db, branchId, row.p)
+    return row.p
   } finally {
     db.close()
   }

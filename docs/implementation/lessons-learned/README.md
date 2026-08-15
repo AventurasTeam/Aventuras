@@ -136,6 +136,10 @@ slice plans when relevant.
   — `embedding_stale` is a handoff signal, not a durable property, so a
   post-hoc E2E assertion on it tests drain scheduling; assert the initial
   write or the settled end state, never the handoff.
+- [The seeded branch tip moves at boot](./seed-tip-position-shifts-at-boot.md)
+  — boot recovery reverse-replays the fixture's dangling in-flight turn, so a
+  pre-launch `MAX(position)` sits above the tip the app boots with and shifts
+  every classifier window handle; anchor on the last `ai_reply`.
 - [A literal NUL in a plan file silently rewrites the code it specifies](./plan-file-nul-corruption.md)
   — `file .impl-plans/*.md` should never say `data`; reading tools disagree
   about a raw NUL and each renders a different separator.
