@@ -113,10 +113,40 @@ the reader keybinding behavior.
 
 ## Open questions
 
-- **Redo-stack shape for suffix units** — M2.5's stack stores
-  single groups; batched units need ordered multi-group frames.
-  Confirm the frame shape at planning (runtime-only, no schema).
+- **Redo-stack shape for suffix units** — resolved during slice
+  planning; see Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+The Scope-in mechanics pre-landed before this slice started: Slice
+3.2 shipped the head-selection algorithm (`lib/undo`,
+classifier-skip plus turn/group classification) and Slice 3.3
+rewired `undoLastAction` through the C3 bracket, the survival-anchor
+positional window, and the watermark clamp. This slice therefore
+executed as a verification slice: the acceptance-criteria fixture
+matrix (`lib/actions/story-entries/undo-classifier.test.ts`) was
+built against the shipped machinery, and no fixture surfaced a
+defect. Because the tests were expected to pass on arrival, three
+mutation checks stand in for TDD's watch-it-fail step and are the
+evidence the assertions are not vacuous: relaxing the
+survival-anchor comparison to strict `>` spares a fact anchored
+exactly at B; dropping the `periodic_classifier` skip in
+head-selection retargets undo at the classifier group; and dropping
+the `await` on the C3 drain lets the sweep finish before the
+classifier's terminal resolves.
+
+Resolved decisions:
+
+- **Redo-stack shape for suffix units** — the shipped
+  `RedoGroup = RedoSnapshot[]` frame (one ordered frame per undo
+  unit, spanning multiple `action_id`s for suffix units, each
+  snapshot carrying the pruned delta row plus the pre-reversal row
+  content) is the resolution. Runtime-only, no schema.
+- **AC5 depth** — asserted at the write-path seam: after
+  undo → redo, a re-deriving pass drives `applyDeltaAction`
+  directly; the awareness natural-key upsert absorbs, the duplicate
+  happening row is tolerated (cleaned at M5 chapter-close dedup),
+  and the watermark stays clamped after redo.
+- **E2E** — no new spec; `e2e/tests/reader-undo-redo.spec.ts`
+  already covers the user-facing flow, and the classifier interplay
+  is log-selection logic owned by the vitest matrix.
