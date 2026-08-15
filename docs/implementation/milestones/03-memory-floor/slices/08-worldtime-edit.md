@@ -111,10 +111,82 @@ preceding entry with `worldTime > 0` (flashback zeros skipped).
 
 ## Open questions
 
-- **No-change Save semantics** — suppress the delta on equal value
-  vs always-write; lean suppress (delta-log hygiene), confirm at
-  planning.
+_None outstanding._ No-change Save semantics resolved at planning —
+see Implementation notes.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+### Resolved developer decisions
+
+- **Overlay hosting splits by tier.** Desktop and tablet get an
+  anchored Popover hosted by EntryCard itself; phone bridges out via
+  `onRequestEditTime` and the reader route presents a native bottom
+  Sheet, mirroring the rollback-modal precedent. The document bundle
+  has no `BottomSheetModalProvider`, and gorhom-on-web inside an
+  Android WebView with a soft keyboard is an unexercised path. This
+  deviates from the letter of `entry-card.md`, which was authored
+  pre-pivot and read as though the compound hosted both; that doc was
+  amended in this PR.
+- **No-change Save suppresses on tuple equality, not seconds.** An
+  untouched open-then-save closes without invoking the action. Tuple
+  equality is the load-bearing choice: on a coarse-grain calendar the
+  tuple cannot represent sub-base-unit remainders, so a seconds-level
+  test would let an untouched save silently rewrite `worldTime` to the
+  truncated value. A second, independent guard lives in the action
+  (exact seconds equality) because the form is not structurally the
+  only caller. Both are covered; the coarse-calendar story is the only
+  test that distinguishes the two predicates.
+- **The monotonicity walk is window-local.** Head-of-window entries
+  stay unflagged until their predecessor loads; no DB reach. The flag
+  is soft advisory UI and self-heals on scroll-up.
+
+### Deviations from the plan worth carrying forward
+
+- **Decorations cross the bridge as a side table, not merged into
+  rows.** The plan's merged-row shape was measured wrong during
+  implementation: `working-set-store` rebuilds its row map on every
+  entry patch, so a walk returning fresh row objects would void
+  `ReaderRow`'s memo for the whole window on turn commit, classifier
+  writes and edits — not just on append, which was the only case the
+  plan's mitigation covered. `decorateWorldTime` returns a record
+  keyed by entry id and `ReaderRow` takes flat primitives. Verified
+  empirically with a render-counting probe: a fresh decorations object
+  with identical values re-renders nothing, while a fresh `calendar`
+  reference re-renders every row.
+- **The tuple-to-seconds conversion is bounded by a span cap.** It is
+  linear in the top-tier value, so a mistyped year froze the UI thread
+  for seconds and the resulting value was writable, after which every
+  reader render paid the same cost for that row permanently. The cap
+  is measured against the seeded tuple rather than the origin, so an
+  entry legitimately far past the origin does not open with Save
+  already disabled. Bounds each keystroke, not the reachable total.
+- **A failed write keeps both overlays open with the typed tuple
+  intact.** The Popover originally closed before knowing the result,
+  losing the user's input on failure while the Sheet kept it. The
+  Sheet was right and matches the route's sibling flows.
+- **Strings in the form and footer stay raw English.** This is tracked
+  debt, not a sanctioned exception — the triage entry it was pinned to
+  describes the pattern as a defect, and the premise that the document
+  bundle cannot reach `t()` is false. Converting only the new
+  component would split the monotonicity sentence across two sources,
+  so the debt stays uniform and tracked.
+
+### Constraints a later slice must not lose
+
+- `story_entries.metadata` is a JSON-mode column with a compile-time
+  `$type` cast, and the forward write path never parses it. The
+  non-negative-integer check inside `updateEntryWorldTime` is the
+  **only** runtime enforcement of the storage floor; it must not be
+  deleted as redundant with the Zod schema.
+- The E2E's delta query filters on `entry_id`, which makes it the only
+  assertion anywhere that pins the survival anchor.
+
+### Unresolved, awaiting a developer decision
+
+- **Delta anchoring for user edits contradicts `data-model.md`.** This
+  slice stamps the edited entry's own id so that rolling back a later
+  turn spares a correction on a surviving entry; canon lists user
+  direct edits as null-anchor deltas that always reverse positionally.
+  The doc line cannot mean content edits, which are exempt from the
+  delta log entirely. Filed in `docs/implementation/triage.md`; the
+  code was left as shipped because amending canon is gated.
