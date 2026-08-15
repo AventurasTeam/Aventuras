@@ -123,6 +123,9 @@ test.describe('reader — regenerate a reply', () => {
 
     mock.setNarrative(REPLY_2)
     await reader.regenEntry(app.window, oldReplyId).click()
+    // The titular claim, asserted rather than inferred: without this, a modal
+    // regression would surface only as the R2 wait timing out at 30s.
+    await expect(reader.regenerateConfirm(app.window)).toBeHidden()
     await expect(app.window.getByText('E2E-REGEN-R2', { exact: false })).toBeVisible({
       timeout: 30_000,
     })

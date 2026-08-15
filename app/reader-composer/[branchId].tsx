@@ -506,7 +506,11 @@ export default function ReaderComposerRoute() {
   const regenerateInFlightRef = useRef(false)
   const runRegenerate = useCallback(
     async (targetId: string) => {
-      if (!storyId || !hydrationSucceeded || regenerateInFlightRef.current) return
+      if (!storyId || !hydrationSucceeded) return
+      if (regenerateInFlightRef.current) {
+        logger.warn('pipeline.regenerate_dispatch_suppressed', { branchId, entryId: targetId })
+        return
+      }
       regenerateInFlightRef.current = true
       try {
         await dropSystemTail()
@@ -657,6 +661,9 @@ export default function ReaderComposerRoute() {
 
   const handleRequestRegenerate = useCallback(
     async (entryId: string) => {
+      // Opening a confirm whose dispatch the in-flight guard will drop leaves
+      // the user watching the modal close on nothing.
+      if (regenerateInFlightRef.current) return
       const counts = await getRollbackCounts(branchId, entryId, ctx)
       if ('status' in counts) {
         toast.error(t('reader:regenerateFailed'))
