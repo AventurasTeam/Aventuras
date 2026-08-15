@@ -399,7 +399,15 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   `suggestion-strip.tsx` all render inside the document and call it. The
   overlay is the sharpest case for fixing this, since its host chrome
   (Sheet `aria-label`, failure toast) is already `t()`-routed, leaving
-  one overlay half-translated.
+  one overlay half-translated. One correction to 3.8's own reasoning,
+  found in the final review: it declined to convert just the form
+  because that _would_ split the monotonicity sentence across two
+  sources — but the sentence is already built independently in both
+  `entry-card.tsx` (for the indicator's label and tooltip) and
+  `world-time-edit-form.tsx` (for the banner). The i18n verdict still
+  holds, but the stated reason is weaker than it reads, and the two
+  literals can drift. Stories and the E2E assert both today, so drift
+  would be caught; unifying them is part of the pass.
 - **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
   `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
   `{{ entry.content }}` (inside the `recentEntries` loop) renders the

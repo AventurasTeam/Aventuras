@@ -206,9 +206,12 @@ breakpoint the compound renders no Sheet: it calls
 outside the document (the document requests, native presents — see
 [`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract)).
 The breakpoint is the one the card itself lays out in, which is the
-reader document rather than the device. Both overlays mount the
-same edit form, so the user-visible shape below is identical on
-either tier.
+reader document rather than the device. A host that supplies only
+`onRequestEditTime` gets the request path at every tier, not just
+phone — the card will not host a Popover whose Save has nowhere to
+report, since that would discard the edit silently. Both overlays
+mount the same edit form, so the user-visible shape below is
+identical on either tier.
 
 The overlay body hosts a `TierTupleInput` matching the active
 calendar's tier shape (the same primitive the wizard's
