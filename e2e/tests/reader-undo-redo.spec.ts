@@ -14,10 +14,11 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// Reverse / re-apply a committed turn — the "regenerate / undo" alternative flow
-// (there is no wired regenerate control; undo is the reversal path). Undo of a
-// turn reverse-and-prunes its delta rows (the entries go with them); redo
-// re-applies the snapshot. Asserted through the DB. See docs/testing.md → Coverage.
+// Reverse / re-apply a committed turn via the chrome Actions menu (the undo/redo
+// reversal path — see reader-regenerate.spec.ts for the reply-level ↻ control's
+// own C3 sweep + re-dispatch). Undo of a turn reverse-and-prunes its delta rows
+// (the entries go with them); redo re-applies the snapshot. Asserted through the
+// DB. See docs/testing.md → Coverage.
 const REPLY = 'E2E-UNDO-REPLY the courier turns back into the rain.'
 
 test.describe('reader — undo / redo a turn', () => {
