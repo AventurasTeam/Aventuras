@@ -1,5 +1,6 @@
 import { applyDeltaAction } from '@/lib/actions/delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '@/lib/actions/delta/reverse-replay'
+import { __resetBranchQueues } from '@/lib/actions/turns/branch-queue'
 import { branches, stories } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { clearBuffers, configureDiagnosticsGate } from '@/lib/diagnostics'
@@ -33,6 +34,7 @@ export async function makeHarness(): Promise<{
 export function resetSingletons(): void {
   __resetRegistry()
   __resetBus()
+  __resetBranchQueues()
   resetAllStores()
   clearBuffers()
   configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })

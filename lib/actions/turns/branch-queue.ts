@@ -6,6 +6,12 @@
 // ai_reply (pipeline.ts), which runs inside the same queued turn.
 const branchQueues = new Map<string, Promise<unknown>>()
 
+// Test seam — a queue entry left pending by one test chains onto every later
+// dispatch for that branch, so a single hang cascades into unrelated timeouts.
+export function __resetBranchQueues(): void {
+  branchQueues.clear()
+}
+
 export function withBranchQueue<T>(branchId: string, fn: () => Promise<T>): Promise<T> {
   const prior = branchQueues.get(branchId) ?? Promise.resolve()
   const result = prior.then(fn, fn)
