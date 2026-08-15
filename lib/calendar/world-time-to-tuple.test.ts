@@ -192,9 +192,9 @@ describe('tupleToWorldTime', () => {
     }
   })
 
-  it('returns negative seconds for a tuple before the origin', () => {
+  it('returns -365 days for a tuple exactly one non-leap year before the origin', () => {
     const before = { ...ORIGIN, year: 2023 }
-    expect(tupleToWorldTime(before, EARTH_GREGORIAN, ORIGIN)).toBeLessThan(0)
+    expect(tupleToWorldTime(before, EARTH_GREGORIAN, ORIGIN)).toBe(-365 * 86_400)
   })
 
   it('truncates sub-base-unit remainders on a coarse-grain calendar', () => {
