@@ -24,7 +24,7 @@ import {
   useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
-import { decorateWorldTime } from '@/components/reader/worldtime-decoration'
+import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
 import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -44,13 +44,11 @@ import {
   rollbackToEntry,
   submitTurn,
   undoLastAction,
-  updateEntryWorldTime,
   updateStoryEntryContent,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
 } from '@/lib/actions'
-import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -174,25 +172,20 @@ export default function ReaderComposerRoute() {
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
-  const calendarSystemId = openForBranch?.definition.calendarSystemId
-  // Unknown ids resolve to the default, mirroring the wizard's own fallback.
-  const calendar = useMemo(
-    () =>
-      calendarSystemId != null
-        ? (getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID) ?? null)
-        : null,
-    [calendarSystemId],
-  )
-  const worldTimeOrigin = openForBranch?.definition.worldTimeOrigin ?? null
-  // One walk per entries-collection identity (reader-composer.md → Per-entry
-  // world-time footer). A side table leaves row identity untouched, so
-  // ReaderRow's memo still short-circuits unchanged rows after a re-walk.
-  const worldTimeDecorations = useMemo(
-    () =>
-      calendar != null && worldTimeOrigin != null
-        ? decorateWorldTime(entries, calendar, worldTimeOrigin)
-        : {},
-    [entries, calendar, worldTimeOrigin],
+  const {
+    calendar,
+    worldTimeOrigin,
+    worldTimeDecorations,
+    timeEdit,
+    editWorldTime,
+    requestEditWorldTime,
+    closeTimeEdit,
+  } = useWorldTimeEditing(
+    branchId,
+    entries,
+    openForBranch?.definition.calendarSystemId,
+    openForBranch?.definition.worldTimeOrigin,
+    ctx,
   )
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
@@ -577,50 +570,6 @@ export default function ReaderComposerRoute() {
     [openRollback],
   )
 
-  // Phone tier bridges out: EntryCard's useTier() measures the reader document,
-  // not the device, so the request is honoured whatever this route's own tier is.
-  const [timeEditId, setTimeEditId] = useState<string | null>(null)
-  // Carries failure in the result channel, never the rejection channel: there is
-  // no global unhandled-rejection handler, and across the expo-dom bridge a
-  // rejected promise is unobservable — a thrown write would leave Save inert.
-  const handleEditWorldTime = useCallback(
-    async (entryId: string, next: number): Promise<EditResult> => {
-      try {
-        const result = await updateEntryWorldTime(branchId, entryId, next, ctx)
-        if (result.status !== 'ok') {
-          logger.warn('action_layer.world_time_edit_rejected', {
-            branchId,
-            entryId,
-            reason: result.reason,
-            code: result.code,
-          })
-          toast.error(t('reader:worldTimeEdit.failed'))
-          return { ok: false }
-        }
-        return { ok: true }
-      } catch (err) {
-        logger.error('action_layer.world_time_edit_failed', {
-          branchId,
-          entryId,
-          error: err instanceof Error ? err.message : String(err),
-        })
-        toast.error(t('reader:worldTimeEdit.failed'))
-        return { ok: false }
-      }
-    },
-    [branchId],
-  )
-  const handleRequestEditWorldTime = useCallback(async (entryId: string) => {
-    setTimeEditId(entryId)
-  }, [])
-  const timeEditDecoration = timeEditId != null ? worldTimeDecorations[timeEditId] : undefined
-  // An undo, a rollback or a branch switch can drop the entry under an open
-  // sheet. Dropping the id with it keeps a later redo from resurrecting the
-  // overlay on an entry the user has since navigated away from.
-  useEffect(() => {
-    if (timeEditId != null && timeEditDecoration == null) setTimeEditId(null)
-  }, [timeEditId, timeEditDecoration])
-
   // Chips are finished prose, so the draft is replaced outright and the mode
   // forced to Free — no wrapping (reader-composer.md → Next-turn suggestions).
   const handleTapChip = useCallback((text: string) => {
@@ -822,8 +771,8 @@ export default function ReaderComposerRoute() {
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: handleRequestRollback,
-    onEditWorldTime: handleEditWorldTime,
-    onRequestEditWorldTime: handleRequestEditWorldTime,
+    onEditWorldTime: editWorldTime,
+    onRequestEditWorldTime: requestEditWorldTime,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
@@ -977,24 +926,23 @@ export default function ReaderComposerRoute() {
           onConfirm={() => void confirmRollback()}
         />
       ) : null}
-      {timeEditId != null &&
-      timeEditDecoration != null &&
-      calendar != null &&
-      worldTimeOrigin != null ? (
+      {timeEdit != null && calendar != null && worldTimeOrigin != null ? (
         <WorldTimeEditSheet
           calendar={calendar}
           worldTimeOrigin={worldTimeOrigin}
-          worldTimeRaw={timeEditDecoration.raw}
+          worldTimeRaw={timeEdit.decoration.raw}
           monotonicityBreak={
-            timeEditDecoration.previousLabel != null
-              ? { previousLabel: timeEditDecoration.previousLabel }
+            timeEdit.decoration.previousLabel != null
+              ? { previousLabel: timeEdit.decoration.previousLabel }
               : undefined
           }
+          // Closing only on success keeps a rejected write's typed tuple on
+          // screen, matching the desktop Popover and the reader's other edits.
           onSave={async (next) => {
-            const result = await handleEditWorldTime(timeEditId, next)
-            if (result.ok) setTimeEditId(null)
+            const result = await editWorldTime(timeEdit.entryId, next)
+            if (result.ok) closeTimeEdit()
           }}
-          onClose={() => setTimeEditId(null)}
+          onClose={closeTimeEdit}
         />
       ) : null}
     </ScreenShell>
