@@ -1221,3 +1221,27 @@ on hover`; the shipped rows render label and tagline only, so the
   restore them on reopen, or block the swipe once a result has
   landed. Applies to `AiAssist` first but the same reset pattern will
   reach 3.6b's cast suggestions. Raised 2026-08-11.
+- **`formatWorldTime` re-parses its Liquid template on every call.**
+  `lib/calendar/render.ts` runs `parseAndRenderSync` per invocation,
+  so a screen that formats N times parses the calendar's
+  `displayFormat` N times. Measured at the reader's 50-entry window:
+  2.1 ms of a 16.9 ms decoration walk, against 13.0 ms in
+  `worldTimeToTuple` — the smaller half, and Slice 3.8 absorbed the
+  duplicate-value rows with a call-local memo, so nothing is blocked.
+  It became worth naming because 3.8 turned this from one call per
+  render into one per row. Caching the parsed template by
+  `displayFormat` is a small change in `render.ts`; the larger win, if
+  the walk ever shows up in a profile, is memoizing `worldTimeToTuple`
+  by `(worldTime, calendar, origin)` rather than re-walking tiers.
+  Raised 2026-08-15 by the Slice 3.8 Task 2 review.
+- **`worldTime === 0` is overloaded: story origin and flashback
+  sentinel.** The opening entry and every user action that inherits
+  from it sit at 0, `lib/calendar/render.ts` special-cases 0, and the
+  classifier emits 0 for flashbacks. The monotonicity check therefore
+  cannot see a genuine backwards jump that lands exactly on 0 — it is
+  indistinguishable from a flashback and stays unflagged.
+  `docs/ui/patterns/entry-card.md` prescribes this convention, so
+  Slice 3.8 implements it as specified; the note exists so the next
+  person to ask "why is this regression not warned about?" finds the
+  answer. Revisit if flashbacks ever get their own marker.
+  Raised 2026-08-15 by the Slice 3.8 Task 2 review.
