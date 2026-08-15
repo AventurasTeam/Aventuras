@@ -31,9 +31,9 @@ anchoring a fact to `t2` silently anchors it somewhere else.
 Anchor a pre-launch position on a row boot recovery cannot remove — the last
 **settled** turn:
 
-```ts
-;`SELECT COALESCE(MAX(position), 0) AS p FROM story_entries
-  WHERE branch_id = ? AND kind = 'ai_reply'`
+```sql
+SELECT COALESCE(MAX(position), 0) AS p FROM story_entries
+ WHERE branch_id = ? AND kind = 'ai_reply'
 ```
 
 A dangling `user_action` is exactly what recovery reverses; a reply is only ever
