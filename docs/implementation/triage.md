@@ -1357,3 +1357,87 @@ width }}` does, so a class-width decorator and a style-width
   read to `ReaderSurface` and pass it down, or give `EntryCard` a tier
   override prop defaulting to its own read. Raised 2026-08-15 by the
   Slice 3.8 Task 5 review.
+- **A BC-style origin renders every non-opening entry in the wrong
+  era.** `formatWorldTime` short-circuits at `worldTime === 0` and
+  renders the origin tuple directly, which is the only path that can
+  express a year below a tier's `startValue`. One second later the
+  normal path takes over, and `tupleToBaseUnits` cannot represent
+  `year < 1` for `earth-gregorian` (its loop `for (v = 1; v < -43;
+v++)` never runs), so the era is silently lost. Observed with origin
+  `{year: -43, month: 3, day: 15}`: `worldTime 0` renders
+  `"March 15, 44 BC 0:0"` and `worldTime 1` renders
+  `"March 15, 1 AD 0:0"` — a hard discontinuity one second past the
+  origin. The zero short-circuit is not the bug, it is the mask; the
+  real fix is in `tupleToBaseUnits` / `baseUnitsToTuple`, which have no
+  representation for values below a tier's `startValue`. Nothing in v1
+  ships a BC origin, and Slice 3.8 deliberately left the guard intact
+  rather than widening its scope. Raised 2026-08-15 by the Slice 3.8
+  calendar fix.
+- **`components/ui/popover.tsx` renders nested `role="dialog"`
+  elements.** Radix's own content wrapper plus `NativeAwareContent`'s
+  inner View both carry the role, so an unfiltered
+  `getByRole('dialog')` resolves to two elements and trips Playwright's
+  strict mode and Testing Library's multiple-match error. Only the
+  inner node carries an accessible name, so a name-filtered query
+  happens to resolve uniquely today — which means the hazard is
+  invisible until someone writes the unfiltered form. Affects every
+  Popover consumer, not one slice. Either drop the role from the inner
+  View or stop `NativeAwareContent` re-declaring it. Raised 2026-08-15
+  by the Slice 3.8 Task 5 and Task 7 reviews.
+- **`getCalendar` consults only code builtins, never the
+  `vault_calendars` table.** The seeded story sets `calendarSystemId:
+'cal_default'` and a matching `vault_calendars` row exists, but the
+  registry holds only `earth-gregorian`, so every story falls through
+  to the default and renders Gregorian dates regardless of the
+  calendar it was configured with. Slice 3.8 relies on that fallback
+  being load-bearing and correct, so nothing is broken today — but it
+  means the registry-hit path is unexercised by seed data and a
+  user-authored calendar would be silently ignored once the vault can
+  hold one. Decide whether resolution is meant to be registry-only,
+  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
+  Slice 3.8 Task 6 implementation.
+- **Vitest treats a value returned from `beforeEach` as a teardown
+  callback.** A concise arrow body — `beforeEach(() => mock.mockReset())`
+  — implicitly returns the mock, which Vitest then _invokes_ after each
+  test. When the mock's implementation throws, the throw surfaces as a
+  test failure whose stack points at the `throw` statement, reading
+  exactly like "the code under test does not handle errors" when the
+  code is fine. Cost real debugging time during Slice 3.8. Use a block
+  body in `beforeEach`. Worth a line in the testing conventions or a
+  lint rule, since the failure mode actively misdirects. Raised
+  2026-08-15 by the Slice 3.8 Task 6 fixes.
+- **Post-3.8 tidy in the reader and UI layers.** Four small items, none
+  behavioural. The reader route still uses bare `void action(...)` on
+  `handleCommitEdit` despite `runAction` existing in `lib/utils.ts`
+  specifically to replace it, and there is no global unhandled-rejection
+  handler, so a thrown action error produces no toast and no log. The
+  calendar-fallback expression is duplicated verbatim between the
+  reader route's world-time hook and `app/wizard.tsx`, and belongs in
+  `lib/calendar` as a `resolveCalendar` policy alongside the registry;
+  its trailing `?? null` is unreachable and its `useMemo` is
+  unnecessary, both of which dissolve in that move.
+  `DisabledReasonTooltip` is now used for a warning on an _enabled_
+  control, so its name and TSDoc no longer describe it — a rename or a
+  thin generic alias would fix it. And `saveEdit` in
+  `e2e/locators/reader.ts` is page-scoped, which was unambiguous until
+  3.8 added a second Save button to the reader; not reachable today
+  since the two overlays cannot both be open, but it is one strict-mode
+  violation away. Raised 2026-08-15 by the Slice 3.8 reviews.
+- **`entry-card.md` and `reader-document.md` have drifted from their
+  components on names predating Slice 3.8.** Found while amending both
+  for 3.8 and deliberately left alone, since fixing them is not
+  surgical and would have widened that PR's diff. In `entry-card.md`:
+  the API block types `meta.tokens` with a `reply` field where the
+  component takes `Pick<EntryMetadata, 'tokens'>` and renders
+  `tokens.completion`; `fixAction` ships on the component but is absent
+  from the block; the prose claim that "`kind` uses UI-layer names,
+  `user` / `ai` abbreviate the DB values" is now false, since `kind` is
+  `StoryEntry['kind'] | 'streaming'` directly, and correcting it
+  ripples through the per-kind table; and that table describes the
+  streaming bubble as ai styling plus `border-dashed` where the shipped
+  `KIND_BUBBLE.streaming` is deliberately identical to `ai_reply`, so
+  the commit swap does not reframe the row. In `reader-document.md` the
+  props list names `showJumpToBottom` where the type says
+  `jumpButtonEnabled`, and omits `branchKey` and `systemFixLabel`.
+  Route through a docs pass over both files rather than piecemeal
+  edits. Raised 2026-08-15 by the Slice 3.8 Task 8 doc pass.
