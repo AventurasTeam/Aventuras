@@ -27,6 +27,7 @@ import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
+import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
 import { canSetLead } from './step-cast-logic'
 
@@ -34,13 +35,6 @@ const STATUS_OPTIONS: SelectOption[] = [
   { value: 'active', label: t('wizard:cast.editor.statusActive') },
   { value: 'staged', label: t('wizard:cast.editor.statusStaged') },
 ]
-
-// docs/data-model.md → Soft caps + compaction discipline: prompt-discipline
-// ceilings, not Zod-enforced. Applied here as `maxCount` so wizard-authored
-// rows start under the same ceiling the classifier is held to.
-const TRAITS_CAP = 8
-const DRIVES_CAP = 6
-const AGENDA_CAP = 4
 
 const VISUAL_FIELDS = ['physique', 'face', 'hair', 'eyes', 'attire', 'distinguishing'] as const
 
@@ -114,6 +108,7 @@ function TagsRow({ row }: { row: WizardCastDraft }) {
       <TagInput
         value={row.tags}
         onChange={(tags) => wizardStore.patchCast(row, { tags })}
+        label={t('wizard:cast.editor.tags')}
         placeholder={t('wizard:cast.editor.tagsPlaceholder')}
       />
     </FormRow>
@@ -209,16 +204,18 @@ export function CharacterEditor({
         <TagInput
           value={row.traits}
           onChange={(traits) => wizardStore.patchCast(row, { traits })}
+          label={t('wizard:cast.editor.traits')}
           placeholder={t('wizard:cast.editor.traitsPlaceholder')}
-          maxCount={TRAITS_CAP}
+          maxCount={CAST_SOFT_CAPS.traits}
         />
       </FormRow>
       <FormRow label={t('wizard:cast.editor.drives')}>
         <TagInput
           value={row.drives}
           onChange={(drives) => wizardStore.patchCast(row, { drives })}
+          label={t('wizard:cast.editor.drives')}
           placeholder={t('wizard:cast.editor.drivesPlaceholder')}
-          maxCount={DRIVES_CAP}
+          maxCount={CAST_SOFT_CAPS.drives}
         />
       </FormRow>
       <Accordion type="single" collapsible defaultValue="">
@@ -337,8 +334,9 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
         <TagInput
           value={row.agenda}
           onChange={(agenda) => wizardStore.patchCast(row, { agenda })}
+          label={t('wizard:cast.editor.agenda')}
           placeholder={t('wizard:cast.editor.agendaPlaceholder')}
-          maxCount={AGENDA_CAP}
+          maxCount={CAST_SOFT_CAPS.agenda}
         />
       </FormRow>
       <Accordion type="single" collapsible defaultValue="">

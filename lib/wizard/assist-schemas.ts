@@ -65,6 +65,13 @@ export type SettingOutput = z.infer<typeof settingOutputSchema>
 
 export type OpeningOutput = z.infer<typeof openingOutputSchema>
 
+// Import truncates overages so one noisy array never discards an otherwise-valid batch.
+export const CAST_SOFT_CAPS = {
+  traits: 8,
+  drives: 6,
+  agenda: 4,
+} as const
+
 const castSuggestionStatus = z
   .enum(['active', 'staged'])
   .default('active')
@@ -88,8 +95,14 @@ const characterSuggestionSchema = z.object({
   // Named for how the character talks, not how they sound; lands in the
   // `voice` state key at import.
   speech: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
-  traits: z.array(z.string().trim()).optional().describe('personality/skill traits, at most 8'),
-  drives: z.array(z.string().trim()).optional().describe('goals, fears, sore spots, at most 6'),
+  traits: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`personality/skill traits, at most ${CAST_SOFT_CAPS.traits}`),
+  drives: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`goals, fears, sore spots, at most ${CAST_SOFT_CAPS.drives}`),
   faction_name: z
     .string()
     .trim()
@@ -130,7 +143,10 @@ const itemSuggestionSchema = z.object({
 const factionSuggestionSchema = z.object({
   kind: z.literal('faction'),
   ...castSuggestionShared,
-  agenda: z.array(z.string().trim()).optional().describe('current goals, at most 4'),
+  agenda: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`current goals, at most ${CAST_SOFT_CAPS.agenda}`),
   standing: z.string().trim().optional().describe('dynamic power/situation'),
 })
 

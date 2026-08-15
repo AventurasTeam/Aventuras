@@ -270,8 +270,7 @@ describe('resolveCastImports', () => {
     expect(gatehouse).toMatchObject({ parentLocationId: null })
   })
 
-  // Bounds documented on the clamp constants in cast-import.ts.
-  it('clamps character speech/traits/drives/visual fields to the degradation bounds', () => {
+  it('clamps character arrays to wizard soft caps and strings to degradation bounds', () => {
     const [char] = importRows(
       [
         {
@@ -289,12 +288,12 @@ describe('resolveCastImports', () => {
       mintId,
     )
     expect(char.kind === 'character' && char.voice.length).toBe(2000)
-    expect(char.kind === 'character' && char.traits.length).toBe(50)
-    expect(char.kind === 'character' && char.drives.length).toBe(50)
+    expect(char.kind === 'character' && char.traits.length).toBe(8)
+    expect(char.kind === 'character' && char.drives.length).toBe(6)
     expect(char.kind === 'character' && char.visual.hair.length).toBe(500)
   })
 
-  it('clamps faction agenda/standing and location/item condition to the degradation bounds', () => {
+  it('clamps faction agenda to its wizard soft cap and strings to degradation bounds', () => {
     const [fac, loc, item] = importRows(
       [
         {
@@ -323,7 +322,7 @@ describe('resolveCastImports', () => {
       [],
       mintId,
     )
-    expect(fac.kind === 'faction' && fac.agenda.length).toBe(50)
+    expect(fac.kind === 'faction' && fac.agenda.length).toBe(4)
     expect(fac.kind === 'faction' && fac.standing.length).toBe(500)
     expect(loc.kind === 'location' && loc.condition.length).toBe(500)
     expect(item.kind === 'item' && item.condition.length).toBe(500)

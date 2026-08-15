@@ -6,6 +6,7 @@ export {
   labeledPromptOutputSchema,
   settingOutputSchema,
   castSuggestionsSchema,
+  CAST_SOFT_CAPS,
   type OpeningOutput,
   type LoreSuggestions,
   type LabeledPromptOutput,

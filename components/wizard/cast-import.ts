@@ -1,15 +1,12 @@
 import { wizardCastDraftSchema, type WizardCastDraft } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { CAST_ID_PREFIX } from '@/lib/stores'
-import type { CastSuggestion } from '@/lib/wizard'
+import { CAST_SOFT_CAPS, type CastSuggestion } from '@/lib/wizard'
 
-// docs/data-model.md → Zod degradation bounds: voice ≤ 2000 chars,
-// traits/drives/agenda arrays ≤ 50 elements, every visual sub-field and
-// condition/standing ≤ 500 chars. Nothing downstream re-checks them: wizard rows
-// land in entities.state via a raw insert (lib/actions/stories/create-story.ts)
-// that never runs entityStateSchemaForKind, and Finish routes through neither of
-// register.ts's validating handlers. This clamps the AI-import path only — the
-// hand-typed editors enforce no string bounds at all.
+// AI-imported strings use the entity-state degradation bounds; arrays use the
+// lower wizard soft caps, with ARRAY_MAX as a hard backstop. Nothing downstream
+// re-checks them: Finish raw-inserts state without entityStateSchemaForKind.
+// The hand-typed editors still enforce no string bounds.
 export const VOICE_MAX = 2000
 export const ARRAY_MAX = 50
 export const FIELD_MAX = 500
@@ -18,8 +15,8 @@ function clampStr(value: string, max: number): string {
   return value.slice(0, max)
 }
 
-function clampArr(value: readonly string[]): string[] {
-  return value.slice(0, ARRAY_MAX)
+function clampArr(value: readonly string[], softMax: number): string[] {
+  return value.slice(0, Math.min(softMax, ARRAY_MAX))
 }
 
 function norm(name: string): string {
@@ -112,8 +109,8 @@ export function resolveCastImports(
           description: s.description,
           status: s.status,
           voice: clampStr(s.speech ?? '', VOICE_MAX),
-          traits: clampArr(s.traits ?? []),
-          drives: clampArr(s.drives ?? []),
+          traits: clampArr(s.traits ?? [], CAST_SOFT_CAPS.traits),
+          drives: clampArr(s.drives ?? [], CAST_SOFT_CAPS.drives),
           visual: {
             physique: clampStr(s.visual?.physique ?? '', FIELD_MAX),
             face: clampStr(s.visual?.face ?? '', FIELD_MAX),
@@ -150,7 +147,7 @@ export function resolveCastImports(
           name: s.name,
           description: s.description,
           status: s.status,
-          agenda: clampArr(s.agenda ?? []),
+          agenda: clampArr(s.agenda ?? [], CAST_SOFT_CAPS.agenda),
           standing: clampStr(s.standing ?? '', FIELD_MAX),
         })
     }

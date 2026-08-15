@@ -50,10 +50,8 @@ function castRowById(id: string): WizardCastDraft {
   return wizardStore.getWizard().state.cast.find((r) => r.id === id)!
 }
 
-// TagInput exposes no aria-label (its inner TextInput only forwards a fixed
-// prop set — see lore-list.stories.tsx), so its placeholder is the only handle
-// these four have. It renders while the chip list is empty, which is when a
-// test needs to find them; capture the element before typing into it.
+// Placeholders remain the most specific handle while these fields are empty;
+// after a chip commits, the persistent labels below are the only stable names.
 const PLACEHOLDER = {
   traits: 'e.g. "methodical, guarded"',
   drives: 'e.g. "find her sister, clear the family name"',
@@ -177,6 +175,8 @@ export const Character: Story = {
       expect(row.traits).toEqual(['stubborn'])
       expect(row.drives).toEqual(['protect the forge'])
     })
+    expect(screen.getByRole('textbox', { name: 'Traits' })).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Drives' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Visual' }))
     await userEvent.type(await screen.findByLabelText('Physique'), 'Tall, broad-shouldered')
@@ -193,6 +193,7 @@ export const Character: Story = {
     await waitFor(() =>
       expect((castRowById('char-1') as WizardCharacterDraft).tags).toEqual(['blacksmith']),
     )
+    expect(screen.getByRole('textbox', { name: 'Tags' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('radio', { name: 'The Iron Guild' }))
     await waitFor(() =>
@@ -426,12 +427,14 @@ export const Faction: Story = {
         'control the trade routes',
       ]),
     )
+    expect(screen.getByRole('textbox', { name: 'Agenda' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
     await userEvent.type(await screen.findByPlaceholderText(PLACEHOLDER.tags), 'guild{Enter}')
     await waitFor(() =>
       expect((castRowById('fact-1') as WizardFactionDraft).tags).toEqual(['guild']),
     )
+    expect(screen.getByRole('textbox', { name: 'Tags' })).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Standing'), 'Respected but feared')
     await waitFor(() =>
@@ -543,7 +546,7 @@ export const TraitsCapAtEightButAnExistingChipStaysRemovable: Story = {
       ])
     })
 
-    // TRAITS_CAP only blocks new additions — an existing chip still removes
+    // The soft cap only blocks new additions — an existing chip still removes
     // via its own × once the row is at cap.
     const trait1Chip = screen.getByText('trait1').parentElement!
     await userEvent.click(within(trait1Chip).getByRole('button', { name: 'Remove' }))

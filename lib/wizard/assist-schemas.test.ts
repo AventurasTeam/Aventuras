@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 
 import {
+  CAST_SOFT_CAPS,
   castSuggestionsSchema,
   descriptionOutputSchema,
   labeledPromptOutputSchema,
@@ -193,6 +194,37 @@ describe('castSuggestionsSchema', () => {
     expect(block).toContain('faction_name')
     expect(block).toContain('physique')
     expect(block).toContain('agenda')
+    expect(block).toContain(`personality/skill traits, at most ${CAST_SOFT_CAPS.traits}`)
+    expect(block).toContain(`goals, fears, sore spots, at most ${CAST_SOFT_CAPS.drives}`)
+    expect(block).toContain(`current goals, at most ${CAST_SOFT_CAPS.agenda}`)
+  })
+
+  it('leaves soft-cap enforcement to import so an oversized batch can be salvaged', () => {
+    const parsed = castSuggestionsSchema.parse({
+      entities: [
+        {
+          kind: 'character',
+          name: 'Aria',
+          description: 'A blacksmith.',
+          traits: Array(CAST_SOFT_CAPS.traits + 1).fill('brave'),
+          drives: Array(CAST_SOFT_CAPS.drives + 1).fill('protect the forge'),
+        },
+        {
+          kind: 'faction',
+          name: 'Ashfall Pact',
+          description: 'A cult.',
+          agenda: Array(CAST_SOFT_CAPS.agenda + 1).fill('expand'),
+        },
+      ],
+    })
+
+    expect(parsed.entities[0]).toMatchObject({
+      traits: Array(CAST_SOFT_CAPS.traits + 1).fill('brave'),
+      drives: Array(CAST_SOFT_CAPS.drives + 1).fill('protect the forge'),
+    })
+    expect(parsed.entities[1]).toMatchObject({
+      agenda: Array(CAST_SOFT_CAPS.agenda + 1).fill('expand'),
+    })
   })
 
   it('rejects an unknown kind', () => {

@@ -10,6 +10,8 @@ type TagInputProps = {
   /** Fires on add (Enter / comma / blur / paste-split) and on remove (chip × / Backspace-on-empty). */
   onChange: (next: string[]) => void
 
+  /** Persistent accessible name for the inner text input. */
+  label?: string
   placeholder?: string
   disabled?: boolean
   /**
@@ -72,6 +74,7 @@ function splitIncoming(raw: string): string[] {
 export function TagInput({
   value,
   onChange,
+  label,
   placeholder,
   disabled,
   disabledReason,
@@ -193,6 +196,7 @@ export function TagInput({
         onFocus={handleFocus}
         onBlur={handleBlur}
         editable={inputEditable}
+        aria-label={label}
         placeholder={value.length === 0 ? placeholder : undefined}
         // Keep keyboard up after Enter so iterative entry works
         // without a re-tap. Standard tokenized-input behavior.
