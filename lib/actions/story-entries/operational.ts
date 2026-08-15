@@ -1,6 +1,6 @@
 import { and, desc, eq, sql, type SQL } from 'drizzle-orm'
 
-import type { Delta } from '@/lib/db'
+import type { Delta, SqlOp } from '@/lib/db'
 import { deltas, storyEntries } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
@@ -114,6 +114,28 @@ export async function resolveRollbackWindow(
   }
 }
 
+/**
+ * The rollback window materialized: the delta rows to reverse (log_position DESC,
+ * the order reverse-replay requires) plus the watermark clamp that must ride in
+ * their transaction. Deliberately side-effect-free — each caller owns its own tail
+ * (`countBuckets`, a redo snapshot, nothing) and its own redo-stack policy, which
+ * `undoLastAction` alone declines to clear.
+ */
+export async function resolveSweep(
+  branchId: string,
+  targetId: string,
+  ctx: DbCtx,
+): Promise<{ rows: Delta[]; clampOps: SqlOp[] } | StoryEntryRejection> {
+  const win = await resolveRollbackWindow(branchId, targetId, ctx)
+  if ('status' in win) return win
+  const rows = (await ctx.db
+    .select()
+    .from(deltas)
+    .where(win.where)
+    .orderBy(desc(deltas.logPosition))) as Delta[]
+  return { rows, clampOps: classifierWatermarkClampOps(branchId, win.earliestRemovedPosition) }
+}
+
 function countBuckets(rows: Pick<Delta, 'op' | 'targetTable'>[]): RollbackCounts {
   let entries = 0
   let chapters = 0
@@ -152,16 +174,10 @@ export async function rollbackToEntry(
     }
 
   return bracketProseReversal(branchId, async () => {
-    const win = await resolveRollbackWindow(branchId, targetId, ctx)
-    if ('status' in win) return win
-    const rows = (await ctx.db
-      .select()
-      .from(deltas)
-      .where(win.where)
-      .orderBy(desc(deltas.logPosition))) as Delta[]
-    const counts = countBuckets(rows)
-    const clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
-    await reverseAndPruneDeltaRows(rows, ctx, clampOps)
+    const swept = await resolveSweep(branchId, targetId, ctx)
+    if ('status' in swept) return swept
+    const counts = countBuckets(swept.rows)
+    await reverseAndPruneDeltaRows(swept.rows, ctx, swept.clampOps)
     // A second unrelated action clears the redo stack (data-model.md).
     undoRedoStore.clear()
     return { status: 'ok', counts }

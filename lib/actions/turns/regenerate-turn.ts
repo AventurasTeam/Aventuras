@@ -1,6 +1,6 @@
 import { and, desc, eq, lt, ne } from 'drizzle-orm'
 
-import { deltas, storyEntries, type Delta } from '@/lib/db'
+import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
@@ -13,8 +13,8 @@ import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import { isStorySwapPending, withTurnAdmission } from '../embedder-swap/app-deps'
-import { resolveRollbackWindow } from '../story-entries/operational'
-import { bracketProseReversal, classifierWatermarkClampOps } from '../story-entries/prose-reversal'
+import { resolveSweep } from '../story-entries/operational'
+import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
 import { withBranchQueue } from './branch-queue'
 
@@ -23,18 +23,9 @@ export type RegenerateTurnResult =
   | { status: 'ran'; result: Awaited<ReturnType<typeof runPipeline>>; userActionContent: string }
 
 async function sweepFrom(branchId: string, targetId: string, ctx: DbCtx) {
-  const win = await resolveRollbackWindow(branchId, targetId, ctx)
-  if ('status' in win) return win
-  const rows = (await ctx.db
-    .select()
-    .from(deltas)
-    .where(win.where)
-    .orderBy(desc(deltas.logPosition))) as Delta[]
-  await reverseAndPruneDeltaRows(
-    rows,
-    ctx,
-    classifierWatermarkClampOps(branchId, win.earliestRemovedPosition),
-  )
+  const swept = await resolveSweep(branchId, targetId, ctx)
+  if ('status' in swept) return swept
+  await reverseAndPruneDeltaRows(swept.rows, ctx, swept.clampOps)
   // A regenerate is a new unrelated action (data-model.md); the discarded take
   // is not redo-restorable.
   undoRedoStore.clear()

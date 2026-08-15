@@ -5,8 +5,8 @@ import { deltas } from '@/lib/db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 import { selectUndoTarget } from '@/lib/undo'
 
-import { resolveRollbackWindow } from './operational'
-import { bracketProseReversal, classifierWatermarkClampOps } from './prose-reversal'
+import { resolveSweep } from './operational'
+import { bracketProseReversal } from './prose-reversal'
 import { applyRedo, snapshotForRedo } from '../delta/redo'
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import type { DbCtx } from '../types'
@@ -42,14 +42,10 @@ export async function undoLastAction(branchId: string, ctx: DbCtx): Promise<Undo
     // An action group removes no entry, so there is no watermark to clamp.
     let clampOps: SqlOp[] = []
     if (target.kind === 'turn') {
-      const win = await resolveRollbackWindow(branchId, target.entryId, ctx)
-      if ('status' in win) return { status: 'rejected', reason: win.reason }
-      rows = (await ctx.db
-        .select()
-        .from(deltas)
-        .where(win.where)
-        .orderBy(desc(deltas.logPosition))) as Delta[]
-      clampOps = classifierWatermarkClampOps(branchId, win.earliestRemovedPosition)
+      const swept = await resolveSweep(branchId, target.entryId, ctx)
+      if ('status' in swept) return { status: 'rejected', reason: swept.reason }
+      rows = swept.rows
+      clampOps = swept.clampOps
     } else {
       rows = recent.filter((r) => r.actionId === target.actionId)
     }
