@@ -130,9 +130,16 @@ inset: 0` root) — expo-dom's mount root is a flex container in
 
 Serializable props in (native → document):
 
-- `rows` — the loaded entry window (entries with metadata), plus
-  the host-formatted world-time labels (calendar rendering stays
-  native).
+- `rows` — the loaded entry window (entries with metadata),
+  unchanged. Alongside it, `worldTimeDecorations` carries the
+  host-formatted world-time labels, raw seconds, and the
+  monotonicity-break marker (the preceding entry's label), keyed by
+  entry id (calendar rendering and the monotonicity walk stay
+  native). It is a side table rather than
+  fields merged into `rows` so that re-walking the window doesn't
+  hand the document fresh row objects and defeat per-row
+  memoization. The active calendar definition and `worldTimeOrigin`
+  cross as data too, seeding the in-document edit Popover.
 - `streaming` — the live stream row (`content`, `reasoning`,
   `phase`) or null. Buffer throttling stays native; cadence
   variance is accepted.
@@ -148,9 +155,12 @@ Serializable props in (native → document):
 Async function props out (document → native):
 
 - Entry actions: edit commit, regenerate, branch, delete, flip era,
-  system-entry retry/dismiss/fix. The document requests; native
-  confirms (modals) and executes (action layer); results flow back
-  as `rows` updates.
+  system-entry retry/dismiss/fix, and world-time edits —
+  `onEditWorldTime` carries the desktop/tablet Popover's Save, and
+  `onRequestEditWorldTime` asks native to present the phone Sheet.
+  The document requests; native confirms (modals) and executes
+  (action layer); results flow back as `rows` updates, with the
+  decorations recomputed from them.
 - `onNearTop` — boundary auto-load request (older entries). Fired
   only at scroll rest and only while `hasOlder` holds.
 - `onReady` — the readiness handshake (below).

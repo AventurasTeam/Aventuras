@@ -373,7 +373,7 @@ takes the formatted label opaque. Calendar formatter failure or a
 calendar that omits per-entry display drops the footer cleanly via
 an undefined label.
 
-**Click-to-edit on AI / opening entries.** The footer is the
+**Click-to-edit on AI, opening, and user entries.** The footer is the
 manual-correction surface for `metadata.worldTime`. Click opens an
 edit overlay anchored to the footer with a `TierTupleInput` for the
 active calendar; Save writes one `op=update` delta against
