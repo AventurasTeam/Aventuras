@@ -53,9 +53,13 @@ describe('stepForwardValid', () => {
       lore: [],
     }
     const lead = { ...emptyCastDraft('character', 'char_a'), name: 'Aria' }
+    const unnamed = emptyCastDraft('item', 'item_b')
     expect(stepForwardValid(4, { ...base, cast: [lead], leadEntityId: 'char_a' })).toBe(true)
     expect(stepForwardValid(4, { ...base, cast: [lead], leadEntityId: null })).toBe(false)
-    expect(stepForwardValid(1, { ...base, cast: [], leadEntityId: null })).toBe(true)
+    // A blank name blocks on its own, with the lead requirement already met.
+    expect(stepForwardValid(4, { ...base, cast: [lead, unnamed], leadEntityId: 'char_a' })).toBe(
+      false,
+    )
   })
   it('step 5 has no forward gate', () => {
     expect(stepForwardValid(5, mkParams({ worldTimeOrigin: {} }))).toBe(true)
@@ -188,5 +192,20 @@ describe('nextActiveStep / prevActiveStep', () => {
   it('holds at the first/last entry rather than falling off the sequence', () => {
     expect(prevActiveStep(1)).toBe(1)
     expect(nextActiveStep(5)).toBe(5)
+  })
+
+  it('walks the supplied order, not step ± 1', () => {
+    // ACTIVE_STEP_ORDER is contiguous today, so the default-order cases above
+    // cannot tell "next by position" from "step + 1". A gapped order can.
+    const gapped = [1, 3, 5]
+    expect(nextActiveStep(1, gapped)).toBe(3)
+    expect(nextActiveStep(3, gapped)).toBe(5)
+    expect(nextActiveStep(5, gapped)).toBe(5)
+    expect(prevActiveStep(5, gapped)).toBe(3)
+    expect(prevActiveStep(3, gapped)).toBe(1)
+    expect(prevActiveStep(1, gapped)).toBe(1)
+    // A step outside the order holds rather than snapping into it.
+    expect(nextActiveStep(2, gapped)).toBe(2)
+    expect(prevActiveStep(4, gapped)).toBe(4)
   })
 })

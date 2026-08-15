@@ -240,6 +240,19 @@ describe('cast mutators', () => {
     expect(s.cast.find((r) => r.id === lead)?.status).toBe('active')
   })
 
+  it('setCastStatus on an unknown id reports nothing and leaves a dangling lead alone', () => {
+    const row = wizardStore.addCast('character')
+    // The pointer names a row that is not in the cast — the shape a hydrated
+    // draft can arrive in. Staging that id changes no row, so reporting `true`
+    // would toast the user about an unset that never happened.
+    wizardStore.setLeadEntityId('char_gone')
+    expect(wizardStore.setCastStatus('char_gone', 'staged')).toBe(false)
+    const s = wizardStore.getWizard().state
+    expect(s.leadEntityId).toBe('char_gone')
+    expect(s.cast).toHaveLength(1)
+    expect(s.cast[0]).toMatchObject({ id: row, status: 'active' })
+  })
+
   it("setCastStatus back to 'active' on the lead keeps the lead", () => {
     const lead = wizardStore.addCast('character')
     wizardStore.setLeadEntityId(lead)
