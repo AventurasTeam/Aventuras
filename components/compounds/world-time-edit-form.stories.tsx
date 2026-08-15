@@ -11,7 +11,9 @@ const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 
 // `lib/calendar` keeps its day-grain fixtures behind the module's public API,
 // so this mirrors one: Gregorian year/month/day over a day-sized base unit,
-// where a tuple simply cannot carry a sub-day remainder.
+// where a tuple simply cannot carry a sub-day remainder. The `id` must stay
+// distinct from EARTH_GREGORIAN's — the per-year cost cache is module-level and
+// keyed by calendar id, so sharing one would poison every other story.
 const DAY_GRAIN_CALENDAR: CalendarSystem = {
   ...EARTH_GREGORIAN,
   id: 'story-day-grain',
@@ -19,6 +21,7 @@ const DAY_GRAIN_CALENDAR: CalendarSystem = {
   secondsPerBaseUnit: 86400,
   tiers: EARTH_GREGORIAN.tiers.slice(0, 3),
   exampleStartValue: { year: 2024, month: 1, day: 1 },
+  displayFormat: '{{ monthName }} {{ day }}, {{ year }}',
 }
 const DAY_GRAIN_ORIGIN = { year: 2024, month: 1, day: 1 }
 // One day plus one hour. The tuple rounds to day 2, worth 86400s, so the hour
@@ -35,9 +38,10 @@ const meta: Meta<typeof WorldTimeEditForm> = {
 export default meta
 type StoryT = StoryObj<typeof WorldTimeEditForm>
 
-// Keep the frame at or above FormRow's 640px stacked/row threshold. Below it,
-// FormRow's window-derived first guess disagrees with its measured width, and
-// the correcting re-render swaps JSX branches and remounts every field.
+// Harness constraint, not a product boundary: NativeWind classes don't compute
+// in the vitest storybook browser, so FormRow measures this inline width against
+// its window-derived first guess. Below 640px the two disagree and the
+// correcting re-render swaps JSX branches, remounting every field mid-play.
 const wrapDecorator = (Story: () => ReactElement) => (
   <View style={{ width: 720 }}>
     <Story />
@@ -147,6 +151,40 @@ export const AtOriginIsAllowed: StoryT = {
       screen.queryByText('Time cannot be before the story start.'),
     ).not.toBeInTheDocument()
     await expect(screen.getByRole('button', { name: 'Save' })).not.toBeDisabled()
+  },
+}
+
+// Cancel discards. The two buttons sit side by side and differ only in handler,
+// so a miswiring that commits the edit would otherwise look identical.
+export const CancelDiscardsEdit: StoryT = {
+  ...wrap,
+  args: { ...baseArgs },
+  play: async ({ args }) => {
+    const second = screen.getByLabelText('Second')
+    await userEvent.clear(second)
+    await userEvent.type(second, '0')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await expect(args.onCancel).toHaveBeenCalled()
+    await expect(args.onSave).not.toHaveBeenCalled()
+  },
+}
+
+// The conversion's cost is linear in the top tier, so an unbounded year turns a
+// typo into a multi-minute freeze of the whole renderer. The cap has to block
+// before the walk, which is also why this story runs fast.
+export const AbsurdYearBlocked: StoryT = {
+  ...wrap,
+  args: { ...baseArgs },
+  play: async ({ args }) => {
+    const year = screen.getByLabelText('Year')
+    await userEvent.clear(year)
+    await userEvent.type(year, '20240101')
+    await expect(year).toHaveValue('20240101')
+
+    await expect(screen.getByText('That time is too far from the current value.')).toBeVisible()
+    await expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    await expect(args.onSave).not.toHaveBeenCalled()
   },
 }
 
