@@ -221,8 +221,8 @@ test.describe('reader — undo of a turn covered by a two-turn classifier pass',
         [branch, rows[2][0] as string],
       )
     )[0][0] as number
-    // Both facts sit above turn B's create — the whole point: a bare suffix
-    // sweep would take the surviving turn's fact down with the undone turn.
+    // FACT_A sits above turn B's create — the whole point: a bare suffix sweep
+    // would take the surviving turn's fact down with the undone turn.
     expect(anchorFor(FACT_A)[2]).toBeGreaterThan(createLogPosition)
 
     await reader.actionsTrigger(app.window).click()
