@@ -8,6 +8,7 @@ export type {
 } from './calendar-schema'
 export {
   worldTimeToTuple,
+  tupleToWorldTime,
   tupleToBaseUnits,
   baseUnitsToTuple,
   tierMax,

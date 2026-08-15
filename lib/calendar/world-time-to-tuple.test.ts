@@ -8,6 +8,7 @@ import {
   __originComputeCount,
   __resetCache,
   tierMax,
+  tupleToWorldTime,
   worldTimeToTuple,
 } from './world-time-to-tuple'
 
@@ -180,5 +181,31 @@ describe('worldTimeToTuple (degenerate zero-length tier)', () => {
       era: 0,
       phase: 5,
     })
+  })
+})
+
+describe('tupleToWorldTime', () => {
+  it('round-trips worldTimeToTuple losslessly on a seconds-grain calendar', () => {
+    for (const w of [0, 45, 3_600, 86_400 * 400 + 3_661]) {
+      const tuple = worldTimeToTuple(w, EARTH_GREGORIAN, ORIGIN)
+      expect(tupleToWorldTime(tuple, EARTH_GREGORIAN, ORIGIN)).toBe(w)
+    }
+  })
+
+  it('returns negative seconds for a tuple before the origin', () => {
+    const before = { ...ORIGIN, year: 2023 }
+    expect(tupleToWorldTime(before, EARTH_GREGORIAN, ORIGIN)).toBeLessThan(0)
+  })
+
+  it('truncates sub-base-unit remainders on a coarse-grain calendar', () => {
+    const origin = { year: 1, day: 1 }
+    // 1 day + 1 hour of seconds; the day-grain tuple cannot carry the hour.
+    const w = 86_400 + 3_600
+    const tuple = worldTimeToTuple(w, FIXTURE_RULE_CALENDAR, origin)
+    expect(tupleToWorldTime(tuple, FIXTURE_RULE_CALENDAR, origin)).toBe(86_400)
+  })
+
+  it('maps the origin tuple itself to zero', () => {
+    expect(tupleToWorldTime(ORIGIN, EARTH_GREGORIAN, ORIGIN)).toBe(0)
   })
 })

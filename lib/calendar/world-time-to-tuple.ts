@@ -167,3 +167,12 @@ export function worldTimeToTuple(
   const elapsed = Math.floor(worldTime / calendar.secondsPerBaseUnit)
   return baseUnitsToTuple(calendar, cachedOriginUnits(calendar, origin) + elapsed)
 }
+
+export function tupleToWorldTime(
+  tuple: TierTuple,
+  calendar: CalendarSystem,
+  origin: TierTuple,
+): number {
+  const elapsed = tupleToBaseUnits(calendar, tuple) - cachedOriginUnits(calendar, origin)
+  return elapsed * calendar.secondsPerBaseUnit
+}
