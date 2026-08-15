@@ -3,6 +3,8 @@
     settings,
     CLASSIFIER_WINDOW_MIN,
     CLASSIFIER_WINDOW_MAX,
+    ENTRY_RETRIEVAL_WINDOW_MIN,
+    ENTRY_RETRIEVAL_WINDOW_MAX,
   } from '$lib/stores/settings.svelte'
   import {
     ChevronDown,
@@ -294,8 +296,8 @@
               label: 'Recent Entries Window',
               value: system.entryRetrieval.recentEntriesCount,
               display: `${system.entryRetrieval.recentEntriesCount} entries`,
-              min: CLASSIFIER_WINDOW_MIN,
-              max: CLASSIFIER_WINDOW_MAX,
+              min: ENTRY_RETRIEVAL_WINDOW_MIN,
+              max: ENTRY_RETRIEVAL_WINDOW_MAX,
               step: 1,
               help: view.help.entryRecentEntries,
               onChange: (v) => {
@@ -650,8 +652,8 @@
               label: 'Recent Entries Window',
               value: system.classifier.recentEntriesWindow,
               display: `${system.classifier.recentEntriesWindow} entries`,
-              min: 2,
-              max: 15,
+              min: CLASSIFIER_WINDOW_MIN,
+              max: CLASSIFIER_WINDOW_MAX,
               step: 1,
               help: 'Recent story entries sent whole alongside the passage being classified. Two per turn — an action and a narration',
               onChange: (v) => {

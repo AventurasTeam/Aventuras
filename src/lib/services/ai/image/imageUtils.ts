@@ -14,36 +14,6 @@ import { expectedPixels, defaultImageSpec, type ImageSpec } from '$lib/utils/ima
 
 const log = createLogger('ImageUtils')
 
-/**
- * Check if image generation is enabled and has valid configuration.
- * Now checks Image Profiles instead of API Profiles.
- */
-export function isImageGenerationEnabled(
-  storySettings?: StorySettings,
-  type: 'standard' | 'background' | 'portrait' | 'reference' = 'standard',
-): boolean {
-  const imageSettings = settings.systemServicesSettings.imageGeneration
-
-  if (storySettings) {
-    if (type !== 'background' && storySettings.imageGenerationMode === 'none') return false
-  } else {
-    if (!imageSettings?.profileId) return false
-  }
-
-  // Determine which profileId to check based on type
-  let profileId: string | null = imageSettings.profileId
-  if (type === 'background') profileId = imageSettings.backgroundProfileId
-  if (type === 'portrait') profileId = imageSettings.portraitProfileId
-  if (type === 'reference') profileId = imageSettings.referenceProfileId
-
-  if (!profileId) return false
-
-  const profile = settings.getImageProfile(profileId)
-  if (!profile) return false
-
-  return supportsImageGeneration(profile.providerType)
-}
-
 export type ImageProfileSlot = 'standard' | 'background' | 'portrait' | 'reference'
 
 const SLOT_PROFILE_KEYS = {
@@ -54,12 +24,44 @@ const SLOT_PROFILE_KEYS = {
 } as const satisfies Record<ImageProfileSlot, string>
 
 /**
+ * Each slot answers for itself: an unset slot profile means unconfigured, never a reason to
+ * spend the standard one. The settings UI and the generation paths read this same value, and
+ * they have to agree — a slot the UI offers and generation then refuses fails in silence.
+ */
+function slotProfileId(slot: ImageProfileSlot): string | null {
+  return settings.systemServicesSettings.imageGeneration?.[SLOT_PROFILE_KEYS[slot]] ?? null
+}
+
+/**
+ * Check if image generation is enabled and has valid configuration.
+ * Now checks Image Profiles instead of API Profiles.
+ */
+export function isImageGenerationEnabled(
+  storySettings?: StorySettings,
+  type: ImageProfileSlot = 'standard',
+): boolean {
+  const imageSettings = settings.systemServicesSettings.imageGeneration
+
+  if (storySettings) {
+    if (type !== 'background' && storySettings.imageGenerationMode === 'none') return false
+  } else {
+    if (!imageSettings?.profileId) return false
+  }
+
+  const profileId = slotProfileId(type)
+  if (!profileId) return false
+
+  const profile = settings.getImageProfile(profileId)
+  if (!profile) return false
+
+  return supportsImageGeneration(profile.providerType)
+}
+
+/**
  * Check if required credentials are configured for a given image slot.
- * Slots other than `standard` fall back to it, matching the Images settings tab.
  */
 export function hasRequiredCredentials(slot: ImageProfileSlot = 'standard'): boolean {
-  const imageSettings = settings.systemServicesSettings.imageGeneration
-  const profileId = imageSettings?.[SLOT_PROFILE_KEYS[slot]] || imageSettings?.profileId
+  const profileId = slotProfileId(slot)
   if (!profileId) return false
 
   const profile = settings.getImageProfile(profileId)

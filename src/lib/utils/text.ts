@@ -686,10 +686,15 @@ export function sameEntityName(a: string, b: string): boolean {
  * what the scene fields are for. Only a horizontal rule goes entirely, having no text.
  */
 export function stripNarratorMarkup(content: string): string {
-  return content
-    .replace(/^[ \t]*([*\-_])(?:[ \t]*\1){2,}[ \t]*$/gm, '')
-    .replace(/^#{1,6}[ \t]+(.*)$/gm, '$1')
-    .replace(/^[ \t]*\*\*(.+?)\*\*[ \t]*$/gm, '$1')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
+  return (
+    content
+      .replace(/^[ \t]*([*\-_])(?:[ \t]*\1){2,}[ \t]*$/gm, '')
+      .replace(/^#{1,6}[ \t]+(.*)$/gm, '$1')
+      // One span covering the whole line, so a line carrying two of them keeps both intact
+      // rather than surrendering its inner markers to a match that spans from the first
+      // opener to the last closer.
+      .replace(/^[ \t]*\*\*((?:(?!\*\*).)+)\*\*[ \t]*$/gm, '$1')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  )
 }

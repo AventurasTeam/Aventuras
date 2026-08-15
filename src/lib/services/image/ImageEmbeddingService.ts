@@ -92,7 +92,13 @@ function markerSignature(images: EmbeddedImage[]): string {
 function rawMarkers(content: string, images: EmbeddedImage[]): ImageMarker[] {
   const signature = markerSignature(images)
   const cached = rawMarkerCache.get(content)
-  if (cached?.signature === signature) return cached.markers
+  if (cached?.signature === signature) {
+    // Re-set to move the key to the end: eviction takes the first key, so without this a
+    // steadily re-read entry is dropped on age rather than on disuse.
+    rawMarkerCache.delete(content)
+    rawMarkerCache.set(content, cached)
+    return cached.markers
+  }
 
   const markers = findAgenticMarkers(content, images)
   rawMarkerCache.set(content, { signature, markers })

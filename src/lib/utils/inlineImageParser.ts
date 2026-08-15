@@ -203,6 +203,15 @@ function errorWithInfo(errorMsg: string, shortPrompt: string, imageId: string): 
  * from it, and the placeholder still has to appear: silently rendering it as the empty
  * string is how the markup went missing from the narration in the first place.
  */
+/** A tag past the per-message budget: no record, and none is coming. */
+function overBudgetInfo(shortPrompt: string): string {
+  return `<div class="placeholder-error-icon">${errorIconSvg}</div>
+    <div class="placeholder-info">
+      <span class="placeholder-status error">Past the per-message image limit</span>
+      <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
+    </div>`
+}
+
 function missingRecordInfo(prompt: string, shortPrompt: string): string {
   const action = prompt
     ? `\n    <button class="inline-image-btn create-missing-btn" data-action="create-missing" data-prompt="${escapeHtml(prompt)}" title="Recreate this image">Generate</button>`
@@ -245,6 +254,11 @@ export interface PicTagRenderOptions {
    * so taking it then would create a second record for every tag about to be flushed.
    */
   offerMissingRecovery?: boolean
+  /**
+   * The entry has spent its per-message image budget, so a tag without a record was skipped
+   * rather than lost. Reported as a limit: the rescan would refuse to recreate it.
+   */
+  overBudget?: boolean
 }
 
 /**
@@ -256,7 +270,7 @@ export function renderSinglePicTag(
   imageMap: Map<string, ImageReplacementInfo>,
   options: PicTagRenderOptions = {},
 ): string {
-  const { regeneratingIds, stuckIds, offerMissingRecovery = true } = options
+  const { regeneratingIds, stuckIds, offerMissingRecovery = true, overBudget = false } = options
   const attrMatch = match.match(picTagRegex('i'))
   const attrs = attrMatch ? attrMatch[1] : ''
   const prompt = readAttribute(attrs, 'prompt') ?? ''
@@ -264,6 +278,9 @@ export function renderSinglePicTag(
 
   const imageInfo = imageMap.get(match)
   if (!imageInfo) {
+    if (overBudget) {
+      return buildPlaceholder('failed', '', prompt, overBudgetInfo(shortPrompt))
+    }
     return offerMissingRecovery
       ? buildPlaceholder('failed', '', prompt, missingRecordInfo(prompt, shortPrompt))
       : buildPlaceholder(

@@ -432,8 +432,11 @@
     }
 
     try {
-      await inlineImageService.processNarrativeForInlineImages(context)
+      const queued = await inlineImageService.processNarrativeForInlineImages(context)
       await loadEmbeddedImages()
+      if (queued === 0) {
+        ui.showToast('Nothing left to recreate for this entry', 'info')
+      }
     } catch (err) {
       console.error('[StoryEntry] Failed to recreate missing images:', err)
       ui.showToast('Could not recreate the missing image', 'error')
@@ -986,11 +989,13 @@
   )
 
   /**
-   * How long an image may sit before the retry is offered: the same wait the user set for
-   * a generation request on the Generation tab, since it is the same question — how long
-   * before this is not coming back.
+   * How long an image may sit before the retry is offered: the wait the user set for a
+   * generation request, plus a margin. The image request aborts at `llmTimeoutMs` and
+   * records its own failure, so offering the retry at that exact mark races the abort and
+   * leaves two generations writing one record.
    */
-  const stuckThresholdMs = $derived(settings.apiSettings.llmTimeoutMs)
+  const IMAGE_STUCK_GRACE_MS = 30000
+  const stuckThresholdMs = $derived(settings.apiSettings.llmTimeoutMs + IMAGE_STUCK_GRACE_MS)
 
   const unfinishedImages = $derived(
     embeddedImages.filter((img) => img.status === 'pending' || img.status === 'generating'),
@@ -1019,9 +1024,23 @@
    * of a fresh narration every tag is legitimately without one.
    */
   const MISSING_RECORD_GRACE_MS = 5000
+
+  /**
+   * A tag left without a record because the entry already spent its per-message budget was
+   * skipped, not lost: the rescan refuses it for the same reason, so it is reported as a
+   * limit rather than offered a recovery that can only do nothing.
+   */
+  const overImageBudget = $derived(
+    (() => {
+      const maxImages = settings.systemServicesSettings.imageGeneration.maxImagesPerMessage ?? 3
+      return maxImages !== 0 && embeddedImages.length >= maxImages
+    })(),
+  )
+
   const picOptions = $derived({
     stuckIds: stuckImageIds,
     offerMissingRecovery: now - entry.createdAt >= MISSING_RECORD_GRACE_MS,
+    overBudget: overImageBudget,
   })
 
   // `now` decides two things — which unfinished images are old enough to offer a retry,

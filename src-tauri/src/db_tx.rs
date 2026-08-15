@@ -10,8 +10,17 @@
 use serde::Deserialize;
 use sqlx::{AssertSqlSafe, SqlitePool};
 use tauri::AppHandle;
+use tokio::sync::Mutex;
 
 use crate::db::{open_rw_pool, INTERACTIVE_BUSY_TIMEOUT};
+
+/// One batch at a time, whoever asks.
+///
+/// Each call opens its own connection, so two of them otherwise race for the file's write
+/// lock and the loser spends `INTERACTIVE_BUSY_TIMEOUT` before failing — work rolled back
+/// over a conflict that queueing avoids entirely. A rename issued right after a delete is
+/// enough to hit it. Waiting here costs the same time without the error.
+static TX_LOCK: Mutex<()> = Mutex::const_new(());
 
 /// One statement and its bound parameters.
 ///
@@ -37,6 +46,8 @@ pub async fn db_transaction(
     if statements.is_empty() {
         return Ok(Vec::new());
     }
+
+    let _queued = TX_LOCK.lock().await;
 
     let pool = open_rw_pool(&app, INTERACTIVE_BUSY_TIMEOUT).await?;
     let result = run_statements(&pool, &statements).await;

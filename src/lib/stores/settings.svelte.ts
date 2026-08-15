@@ -223,10 +223,12 @@ export function getDefaultClassifierSettings(): ClassifierSettings {
 
 /** A stored window outside the slider's range, back inside it. */
 function clampClassifierWindow(loaded: ClassifierSettings): ClassifierSettings {
-  const window = Math.round(loaded.recentEntriesWindow)
-  if (!Number.isFinite(window)) {
+  // Checked before rounding: `Math.round(null)` is 0, which is finite and would clamp to the
+  // slider's minimum instead of restoring the default.
+  if (!Number.isFinite(loaded.recentEntriesWindow)) {
     return { ...loaded, recentEntriesWindow: getDefaultClassifierSettings().recentEntriesWindow }
   }
+  const window = Math.round(loaded.recentEntriesWindow)
   return {
     ...loaded,
     recentEntriesWindow: Math.min(Math.max(window, CLASSIFIER_WINDOW_MIN), CLASSIFIER_WINDOW_MAX),
@@ -575,6 +577,10 @@ export interface EntryRetrievalSettings {
   reasoningEffort: ReasoningEffort
   manualBody: string
 }
+
+/** The window Tier 2/Tier 3 retrieval scans, in whole story entries. Shared with the slider. */
+export const ENTRY_RETRIEVAL_WINDOW_MIN = 2
+export const ENTRY_RETRIEVAL_WINDOW_MAX = 15
 
 export function getDefaultEntryRetrievalSettings(): EntryRetrievalSettings {
   return getDefaultEntryRetrievalSettingsForProvider('openrouter')

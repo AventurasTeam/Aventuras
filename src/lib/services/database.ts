@@ -45,9 +45,16 @@ import { hashContent } from '$lib/services/packs/hash'
  * The key is quoted rather than spliced bare: SQLite reads an unquoted path segment up to
  * the next `.` or `[`, so an id carrying either would address a different slot and the
  * UPDATE would match nothing — silently, since a path that finds no key is not an error.
+ *
+ * A quote or a backslash inside the segment has no escape at all in SQLite's path grammar,
+ * so ids carrying one are refused here. Every id is a `crypto.randomUUID()`, which cannot
+ * contain either; the check is what keeps that true if the ids ever change shape.
  */
 function runtimeVarPath(defId: string, field?: string): string {
-  const key = `$."runtimeVars"."${defId.replace(/"/g, '""')}"`
+  if (/["\\]/.test(defId)) {
+    throw new Error(`runtime variable id cannot be addressed in a JSON path: ${defId}`)
+  }
+  const key = `$."runtimeVars"."${defId}"`
   return field ? `${key}."${field}"` : key
 }
 
@@ -183,7 +190,18 @@ class DatabaseService {
     // to have been through load and migrations first.
     await this.getDb()
     return invoke<number[]>('db_transaction', {
-      statements: statements.map(({ sql, params }) => ({ sql, params: params ?? [] })),
+      statements: statements.map(({ sql, params }) => ({
+        sql,
+        // `undefined` and `NaN` both serialize to JSON null on the way over, where the
+        // command can no longer tell them from a deliberate NULL and writes one. Caught
+        // here, while the caller's mistake is still visible as one.
+        params: (params ?? []).map((param) => {
+          if (param === undefined || (typeof param === 'number' && Number.isNaN(param))) {
+            throw new Error(`transaction parameter is ${String(param)}: ${sql}`)
+          }
+          return param
+        }),
+      })),
     })
   }
 
@@ -3724,19 +3742,21 @@ class DatabaseService {
     pairKeys: string[],
   ): Promise<void> {
     if (pairKeys.length === 0) return
-    const db = await this.getDb()
     const now = Date.now()
     const branch = this.keptSeparateBranch(branchId)
-    // A single INSERT is atomic on its own, which is the most this layer can get.
+    // Chunked to keep each statement under SQLite's bound-parameter ceiling, then run as one
+    // transaction: a dismissal set that lands by halves leaves the rest back on the worklist.
     const chunkSize = 100
+    const statements = []
     for (let start = 0; start < pairKeys.length; start += chunkSize) {
       const chunk = pairKeys.slice(start, start + chunkSize)
-      await db.execute(
-        `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
+      statements.push({
+        sql: `INSERT OR IGNORE INTO kept_separate (story_id, branch_id, pool, pair_key, created_at)
          VALUES ${chunk.map(() => '(?, ?, ?, ?, ?)').join(', ')}`,
-        chunk.flatMap((pairKey) => [storyId, branch, pool, pairKey, now]),
-      )
+        params: chunk.flatMap((pairKey) => [storyId, branch, pool, pairKey, now]),
+      })
     }
+    await this.transaction(statements)
   }
 
   /** Forget every dismissal for a story branch, so the full worklist comes back. */

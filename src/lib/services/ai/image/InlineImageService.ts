@@ -36,8 +36,10 @@ export class InlineImageGenerationService {
    * Process narrative content for <pic> tags and generate images.
    * This is the main entry point called after narrative generation completes
    * when inline image mode is enabled.
+   *
+   * @returns how many tags were queued, so a caller can tell a no-op from work done.
    */
-  async processNarrativeForInlineImages(context: InlineImageContext): Promise<void> {
+  async processNarrativeForInlineImages(context: InlineImageContext): Promise<number> {
     const imageSettings = settings.systemServicesSettings.imageGeneration
 
     // Extract all <pic> tags from the narrative
@@ -45,7 +47,7 @@ export class InlineImageGenerationService {
 
     if (picTags.length === 0) {
       log('No <pic> tags found in narrative')
-      return
+      return 0
     }
 
     log('Found <pic> tags', {
@@ -75,7 +77,7 @@ export class InlineImageGenerationService {
 
     if (missingTags.length === 0) {
       log('Every <pic> tag in this entry already has a record')
-      return
+      return 0
     }
 
     // Existing records count against the limit: it is a budget per message, not per call.
@@ -94,7 +96,7 @@ export class InlineImageGenerationService {
       })
     }
 
-    if (tagsToProcess.length === 0) return
+    if (tagsToProcess.length === 0) return 0
 
     // Process each tag
     for (const tag of tagsToProcess) {
@@ -102,6 +104,7 @@ export class InlineImageGenerationService {
     }
 
     log('All inline images queued', { count: tagsToProcess.length })
+    return tagsToProcess.length
   }
 
   /**

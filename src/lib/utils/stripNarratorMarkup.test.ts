@@ -45,4 +45,15 @@ describe('stripNarratorMarkup', () => {
   it('leaves a bullet alone, which is not a rule', () => {
     expect(stripNarratorMarkup('- a bullet')).toBe('- a bullet')
   })
+
+  it('keeps both spans on a line carrying two of them', () => {
+    const line = '**Morning** at **the pool**'
+    expect(stripNarratorMarkup(line)).toBe(line)
+  })
+
+  it('still unwraps a line that is one span end to end', () => {
+    expect(stripNarratorMarkup('**Late Morning | The Grotto Pool**')).toBe(
+      'Late Morning | The Grotto Pool',
+    )
+  })
 })

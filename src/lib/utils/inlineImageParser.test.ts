@@ -231,6 +231,31 @@ describe('renderSinglePicTag', () => {
     expect(html).toContain('In queue...')
   })
 
+  it('reports a tag past the per-message limit instead of offering a recovery', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map(), { overBudget: true })
+
+    expect(html).toContain('Past the per-message image limit')
+    expect(html).not.toContain('data-action="create-missing"')
+    expect(html).not.toContain('In queue...')
+  })
+
+  it('prefers the limit notice over the recovery offer', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map(), {
+      overBudget: true,
+      offerMissingRecovery: true,
+    })
+
+    expect(html).not.toContain('Image record missing')
+  })
+
+  it('leaves a recorded image alone when the entry is over budget', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, imageMap(SELF_CLOSING, { status: 'complete' }), {
+      overBudget: true,
+    })
+
+    expect(html).not.toContain('Past the per-message image limit')
+  })
+
   it('renders the finished image inline', () => {
     const html = renderSinglePicTag(SELF_CLOSING, imageMap(SELF_CLOSING, { status: 'complete' }))
 
