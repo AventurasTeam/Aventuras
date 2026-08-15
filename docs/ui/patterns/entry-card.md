@@ -223,6 +223,15 @@ tuple intact, on both tiers — the host reports the failure (toast)
 and the user retries or cancels without retyping. Only a write that
 did not report failure closes the overlay.
 
+A Save whose tuple is unchanged never reaches the write path at
+all: no delta, no edit callback, and the overlay closes through the
+same cancel route an explicit Cancel takes. The check is tuple
+equality, not a comparison of the recomputed seconds — on a
+coarse-grain calendar (`secondsPerBaseUnit` above one) the tuple
+can't express a sub-base-unit remainder, so a seconds-level test
+would read an untouched Save as a change and rewrite `worldTime` to
+the truncated value.
+
 On phone the Sheet variant carries a non-scrollable body
 (TierTupleInput is a fixed-shape form), so the Sheet's default
 `avoidKeyboard={true}` alone is sufficient — no
