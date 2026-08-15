@@ -426,7 +426,7 @@ export default function ReaderComposerRoute() {
   const showTurnFailure = useCallback(
     async (
       error: PipelineError | undefined,
-      submission: { content: string; composerMode: string } | undefined,
+      submission: { content: string; composerMode: string },
     ) => {
       // Copy + discriminant + the reversed user_action's text all persist on
       // the entry, so kind-specific recovery survives an app restart.
@@ -532,10 +532,16 @@ export default function ReaderComposerRoute() {
           composerRef.current?.restoreDraft(regen.userActionContent, 'free')
         }
       } catch (err) {
-        await showTurnFailure(
-          { kind: 'orchestrator', detail: err instanceof Error ? err.message : String(err) },
-          undefined,
-        )
+        // A toast, not a failure entry: the throw carries no userActionContent,
+        // and a system entry's Retry renders unconditionally — it would offer a
+        // resubmit that is doomed (nothing to send) or wrong (a stale earlier
+        // submission duplicated over the standing user_action).
+        logger.error('pipeline.regenerate_threw', {
+          branchId,
+          entryId: targetId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        toast.error(t('reader:regenerateFailed'))
       }
     },
     [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
