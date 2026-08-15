@@ -128,10 +128,7 @@ export const MoreOptionsFieldsRoundTripThroughCollapse: Story = {
 
     await userEvent.click(screen.getByRole('button', { name: 'More options' }))
 
-    // The Tags field has no aria-label of its own (TagInput doesn't expose one —
-    // its inner TextInput only forwards a fixed prop set), so its placeholder is
-    // the handle. Captured before typing: it hides once the first chip lands.
-    const tagsInput = await screen.findByPlaceholderText('e.g. "faith, ritual"')
+    const tagsInput = await screen.findByLabelText('Tags')
     await userEvent.type(tagsInput, 'ancient{Enter}')
     await userEvent.type(tagsInput, 'ruins{Enter}')
     await waitFor(() => expect(screen.getByText('ancient')).toBeInTheDocument())

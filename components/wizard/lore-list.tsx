@@ -177,6 +177,7 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
                   <TagInput
                     value={row.tags}
                     onChange={(tags) => wizardStore.patchLore(row.id, { tags })}
+                    label={t('wizard:world.lore.tags')}
                     placeholder={t('wizard:world.lore.tagsPlaceholder')}
                   />
                 </FormRow>
