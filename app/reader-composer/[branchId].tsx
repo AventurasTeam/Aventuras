@@ -443,19 +443,22 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  // A prior failure leaves a system entry as the branch tail; drop it (and
+  // resync the store) before a dispatch so the pipeline's prompt/position reads
+  // the real content tail, not the failure singleton.
+  const dropSystemTail = useCallback(async () => {
+    const hasSystemTail = [...entriesStore.getEntries().values()].some(
+      (e) => e.branchId === branchId && e.kind === 'system',
+    )
+    if (!hasSystemTail) return
+    await clearSystemEntry(branchId, ctx)
+    await reload()
+  }, [branchId, reload])
+
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
       if (!storyId || !hydrationSucceeded) return
-      // A prior failure leaves a system entry as the branch tail; drop it (and
-      // resync the store) before the turn so the pipeline's prompt/position
-      // reads the real content tail, not the failure singleton.
-      const hasSystemTail = [...entriesStore.getEntries().values()].some(
-        (e) => e.branchId === branchId && e.kind === 'system',
-      )
-      if (hasSystemTail) {
-        await clearSystemEntry(branchId, ctx)
-        await reload()
-      }
+      await dropSystemTail()
       const submission = { content, composerMode }
       setLastSubmission(submission)
       try {
@@ -490,21 +493,13 @@ export default function ReaderComposerRoute() {
         )
       }
     },
-    [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
+    [storyId, branchId, hydrationSucceeded, dropSystemTail, showTurnFailure],
   )
 
   const runRegenerate = useCallback(
     async (targetId: string) => {
       if (!storyId || !hydrationSucceeded) return
-      // Same pre-dispatch hygiene as runSubmit: a failure singleton at the tail
-      // must not feed the pipeline's prompt/position reads.
-      const hasSystemTail = [...entriesStore.getEntries().values()].some(
-        (e) => e.branchId === branchId && e.kind === 'system',
-      )
-      if (hasSystemTail) {
-        await clearSystemEntry(branchId, ctx)
-        await reload()
-      }
+      await dropSystemTail()
       try {
         const regen = await regenerateTurn({ storyId, branchId }, targetId, ctx)
         if (regen.status === 'rejected') {
@@ -547,7 +542,7 @@ export default function ReaderComposerRoute() {
         await reload()
       }
     },
-    [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
+    [storyId, branchId, hydrationSucceeded, dropSystemTail, reload, showTurnFailure],
   )
 
   // Derived from the persisted entry, not React state, so the failure kind,
