@@ -37,11 +37,13 @@ export function RollbackConfirmModal({
       ? {
           title: t('reader:regenerateConfirm.title', { entryNumber: targetEntryNumber }),
           body: t('reader:regenerateConfirm.body', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:regenerateConfirm.irreversible'),
           confirm: t('reader:regenerateConfirm.confirm'),
         }
       : {
           title: t('reader:rollbackConfirm.title', { entryNumber: targetEntryNumber }),
           body: t('reader:rollbackConfirm.body', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:rollbackConfirm.irreversible'),
           confirm: t('reader:rollbackConfirm.confirm'),
         }
   return (
@@ -65,7 +67,7 @@ export function RollbackConfirmModal({
           </Text>
         </View>
         <Text size="sm" className="font-bold">
-          {t('reader:rollbackConfirm.irreversible')}
+          {copy.irreversible}
         </Text>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
