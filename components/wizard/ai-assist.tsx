@@ -361,6 +361,10 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (props.result !== 'list') return null
     const marked = markExisting(listItems, props.existingKeys)
     const selectable = marked.filter((row) => !row.exists)
+    // `existingKeys` is live: a row can go from selected to already-existing
+    // while the overlay is open, so a non-empty selection is not proof there is
+    // anything left to import — importing none of it would close as a silent no-op.
+    const importable = selectable.filter((row) => selected.has(itemKey(row)))
     const allSelected =
       selectable.length > 0 && selectable.every((row) => selected.has(itemKey(row)))
     const toggleRow = (key: string) =>
@@ -497,13 +501,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             <Text>{t('wizard:aiAssist.actions.generateMore')}</Text>
           </Button>
           <Button
-            disabled={selected.size === 0}
+            disabled={importable.length === 0}
             onPress={() => {
-              props.onImport(
-                marked
-                  .filter((row) => selected.has(itemKey(row)) && !row.exists)
-                  .map((row) => row.payload),
-              )
+              props.onImport(importable.map((row) => row.payload))
               closeOverlay()
             }}
           >

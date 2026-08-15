@@ -1363,5 +1363,10 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     if (indicator == null) throw new Error('expected a rendered Indicator wrapper on a checked row')
     await expect(userEvent.click(indicator)).rejects.toThrow(/pointer-events/)
     expect(checkbox).toBeChecked()
+
+    // The selection is non-empty but every member of it now exists, so there is
+    // nothing left to import: the button must not offer an import that would
+    // pass an empty array and close the overlay as if it had done something.
+    expect(screen.getByRole('button', { name: 'Import selected' })).toBeDisabled()
   },
 }
