@@ -1162,6 +1162,18 @@ here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
   is trimming in the insert alongside `category`, which also makes
   the embedded composite match what the UI renders. Surfaced by the
   Slice 3.6a whole-slice review (2026-08-10).
+- **Hand-authored cast can commit schema-invalid entity state while
+  AI-imported cast is clamped.** The Speech input accepts more than
+  2,000 characters, and the visual, condition, and standing inputs
+  accept more than 500. `finish.ts` maps those values into entity
+  state unchanged, then `createStoryWithBranch` raw-inserts them
+  without running `entityStateSchemaForKind`; the resulting row is
+  outside the canonical degradation bounds and later full-state
+  `updateEntity` calls reject it. `cast-import.ts` already clamps the
+  same AI-authored fields. Close the hand-authored path with editor
+  limits plus a per-kind validation backstop before insertion; do not
+  silently truncate authored content at Finish. Surfaced by the Slice
+  3.6b whole-slice review (2026-08-15).
 - **Four assist result types are hand-redeclared beside their
   schema-inferred equivalents, and the inferred ones are dead.**
   `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
