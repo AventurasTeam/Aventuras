@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { EARTH_GREGORIAN } from '@/lib/calendar'
+import { EARTH_GREGORIAN, type CalendarSystem } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 
 import { decorateWorldTime } from './worldtime-decoration'
@@ -62,9 +62,25 @@ describe('decorateWorldTime', () => {
     expect(out[0].worldTimeMonotonicityBreak).toBeUndefined()
   })
 
-  it('system entries do not participate as ancestors', () => {
-    const rows = [entry('ai_reply', 120), entry('system', 0), entry('ai_reply', 60)]
+  it('system entries are undecorated and do not participate as ancestors', () => {
+    // worldTime > 0 (not the flashback 0 already covered above) so this
+    // isolates the kind gate from the worldTime>0 ancestry guard.
+    const rows = [entry('ai_reply', 120), entry('system', 60), entry('ai_reply', 90)]
     const out = decorateWorldTime(rows, EARTH_GREGORIAN, ORIGIN)
+    expect(out[1].worldTimeLabel).toBeUndefined()
+    expect(out[1].worldTimeRaw).toBeUndefined()
+    // 90 compares against 120 (the system row is skipped), not against 60.
     expect(out[2].worldTimeMonotonicityBreak).toEqual({ previousLabel: out[0].worldTimeLabel })
+  })
+
+  it('a formatter miss produces no label, no raw, and no break', () => {
+    const brokenCalendar: CalendarSystem = { ...EARTH_GREGORIAN, displayFormat: '{{ unclosed' }
+    const rows = [entry('ai_reply', 120), entry('ai_reply', 60)]
+    const out = decorateWorldTime(rows, brokenCalendar, ORIGIN)
+    expect(out[0].worldTimeLabel).toBeUndefined()
+    expect(out[0].worldTimeRaw).toBeUndefined()
+    expect(out[1].worldTimeLabel).toBeUndefined()
+    expect(out[1].worldTimeRaw).toBeUndefined()
+    expect(out[1].worldTimeMonotonicityBreak).toBeUndefined()
   })
 })
