@@ -14,6 +14,8 @@ const EDIT_TEXTAREA_LABEL = 'Edit entry content'
 const SAVE_LABEL = 'Save'
 const RETRY_LABEL = 'Retry'
 const DISMISS_LABEL = 'Dismiss'
+const EDIT_TIME_LABEL = 'Edit time'
+const WORLD_TIME_BREAK_LABEL = /Earlier than previous entry/
 
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
@@ -37,6 +39,28 @@ export const reader = {
     reader.row(page, entryId).getByRole('button', { name: DELETE_ENTRY_LABEL }),
   editTextarea: (page: Page): Locator => page.getByRole('textbox', { name: EDIT_TEXTAREA_LABEL }),
   saveEdit: (page: Page): Locator => page.getByRole('button', { name: SAVE_LABEL }),
+
+  // Per-entry world-time footer. Desktop tier hosts the edit form in a Popover;
+  // the phone tier bridges out to a native Sheet, which desktop-only E2E never
+  // reaches.
+  worldTimeFooter: (page: Page, entryId: string): Locator =>
+    reader.row(page, entryId).getByRole('button', { name: EDIT_TIME_LABEL }),
+  // components/ui/popover.tsx nests two role="dialog" nodes on web — radix's own
+  // content wrapper (unnamed) around the View that carries the aria-label. Only
+  // the inner one should match a name filter, but `.first()` keeps the locator
+  // strict-mode-safe either way: both wrap the same subtree, so scoping fields
+  // and buttons under it resolves identically.
+  worldTimeDialog: (page: Page): Locator =>
+    page.getByRole('dialog', { name: EDIT_TIME_LABEL }).first(),
+  // Tier names are calendar-authored content (earth-gregorian: Year / Month /
+  // Day / Hour / Minute / Second), capitalized for display by TierTupleInput.
+  // Labelled tiers (Month) render a Select, not a textbox.
+  worldTimeField: (page: Page, tier: string): Locator =>
+    reader.worldTimeDialog(page).getByRole('textbox', { name: tier }),
+  worldTimeSave: (page: Page): Locator =>
+    reader.worldTimeDialog(page).getByRole('button', { name: SAVE_LABEL }),
+  monotonicityIndicator: (page: Page, entryId: string): Locator =>
+    reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
   // System (turn-failure) entry actions.
   retrySystemEntry: (page: Page): Locator => page.getByRole('button', { name: RETRY_LABEL }),
