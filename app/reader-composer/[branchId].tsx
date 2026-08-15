@@ -8,6 +8,7 @@ import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
+import { isDraftEmpty } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -496,13 +497,28 @@ export default function ReaderComposerRoute() {
     [storyId, branchId, hydrationSucceeded, dropSystemTail, showTurnFailure],
   )
 
+  // A ref, not state: `editBlocked` only flips once the action reaches its
+  // reversal barrier — several awaits, a branch-queue hop and a re-render away —
+  // so a second dispatch inside that window would queue behind the first, reject
+  // on the by-then-swept id, and report a successful regenerate as a failure.
+  // Guarded here rather than at the callers because both the immediate tap and
+  // the modal's confirm funnel through this one dispatch.
+  const regenerateInFlightRef = useRef(false)
   const runRegenerate = useCallback(
     async (targetId: string) => {
-      if (!storyId || !hydrationSucceeded) return
-      await dropSystemTail()
+      if (!storyId || !hydrationSucceeded || regenerateInFlightRef.current) return
+      regenerateInFlightRef.current = true
       try {
+        await dropSystemTail()
         const regen = await regenerateTurn({ storyId, branchId }, targetId, ctx)
         if (regen.status === 'rejected') {
+          // Five materially different refusals share one toast; the reason is
+          // the only thing that tells them apart afterwards.
+          logger.warn('pipeline.regenerate_rejected', {
+            branchId,
+            entryId: targetId,
+            reason: regen.reason,
+          })
           toast.error(t('reader:regenerateFailed'))
           return
         }
@@ -524,7 +540,13 @@ export default function ReaderComposerRoute() {
             submission,
           )
         } else if (result.outcome === 'aborted') {
-          composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+          // Unlike runSubmit's arm, the composer is not empty by construction
+          // here — nothing cleared it — so restoring would destroy text the user
+          // typed. The swept action is unrecoverable either way, but they asked
+          // to discard it; the draft they typed they never agreed to lose.
+          if (isDraftEmpty(composerRef.current?.getDraft()))
+            composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+          else toast.info(t('reader:regenerateCancelledDraftKept'))
         }
       } catch (err) {
         // A toast, not a failure entry: the throw carries no userActionContent,
@@ -540,6 +562,8 @@ export default function ReaderComposerRoute() {
         // A DeltaReplayError can commit its transaction and fail the store sync,
         // leaving entriesStore holding rows the sweep already deleted.
         await reload()
+      } finally {
+        regenerateInFlightRef.current = false
       }
     },
     [storyId, branchId, hydrationSucceeded, dropSystemTail, reload, showTurnFailure],

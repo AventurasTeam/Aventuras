@@ -45,6 +45,7 @@
   "editFailed": "Couldn't save your edit. Please try again.",
   "rollbackFailed": "Couldn't roll back the story. Please try again.",
   "regenerateFailed": "Couldn't regenerate the reply. Please try again.",
+  "regenerateCancelledDraftKept": "Regeneration cancelled. Your draft was kept, so the discarded action wasn't restored.",
   "spellcheckSuggestion": "→ {{text}}",
   "rollbackConfirm": {
     "title": "Delete from entry {{entryNumber}}?",
