@@ -516,6 +516,37 @@ export const WorldTimeEditSaveReportsSeconds: StoryT = {
 }
 
 /**
+ * A host that reports the write failed keeps the overlay open on the typed
+ * tuple, so the edit is not lost to a retype — the phone Sheet and the reader's
+ * other edit flows behave the same way. Any other result (including the
+ * `undefined` a void-returning host gives) still closes.
+ */
+export const WorldTimeEditKeepsOverlayOpenOnFailure: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => false),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    // Still open, still holding what was typed.
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+  },
+}
+
+/**
  * Tier-independent half of the fork: with no `onEditTime` to land a save on,
  * the card refuses to host the overlay at any width, because a Popover Save
  * would have nowhere to report and would discard the edit silently.

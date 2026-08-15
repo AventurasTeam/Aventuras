@@ -120,7 +120,9 @@ const ReaderRow = memo(function ReaderRow({
       worldTimeMonotonicityBreak={monotonicityBreak}
       calendar={timeEditable ? (calendar ?? undefined) : undefined}
       worldTimeOrigin={timeEditable ? (worldTimeOrigin ?? undefined) : undefined}
-      onEditTime={timeEditable ? (next) => void onEditWorldTime(row.id, next) : undefined}
+      onEditTime={
+        timeEditable ? async (next) => (await onEditWorldTime(row.id, next)).ok : undefined
+      }
       onRequestEditTime={timeEditable ? () => void onRequestEditWorldTime(row.id) : undefined}
     />
   )

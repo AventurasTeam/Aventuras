@@ -50,8 +50,12 @@ type EntryCardProps = {
   worldTimeLabel?: string
   /** Raw cumulative seconds; with `calendar` + `worldTimeOrigin` + a handler, makes the footer clickable. */
   worldTimeRaw?: number
-  /** Desktop/tablet: fired by the in-card Popover's Save with the recomputed seconds. */
-  onEditTime?: (nextWorldTime: number) => void
+  /**
+   * Desktop/tablet: fired by the in-card Popover's Save with the recomputed
+   * seconds. Resolve `false` to report a failed write — the Popover then stays
+   * open with the typed tuple intact. Any other result closes it.
+   */
+  onEditTime?: (nextWorldTime: number) => void | Promise<boolean>
   /** Phone: the compound requests; the host presents the native Sheet. */
   onRequestEditTime?: () => void
   /** Presence renders the warning indicator; the label feeds the banner/tooltip. */
@@ -134,7 +138,7 @@ function WorldTimeFooter({
   /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
   edit: WorldTimeEditTarget | null
   monotonicityBreak?: { previousLabel: string }
-  onEditTime?: (nextWorldTime: number) => void
+  onEditTime?: (nextWorldTime: number) => void | Promise<boolean>
   onRequestEditTime?: () => void
 }) {
   const tier = useTier()
@@ -201,9 +205,13 @@ function WorldTimeFooter({
               worldTimeOrigin={edit.worldTimeOrigin}
               worldTimeRaw={edit.worldTimeRaw}
               monotonicityBreak={monotonicityBreak}
+              // Closing only once the write has not reported failure keeps a
+              // rejected save's typed tuple on screen, matching the phone
+              // Sheet and the reader's other edit flows.
               onSave={(next) => {
-                triggerRef.current?.close()
-                onEditTime?.(next)
+                void (async () => {
+                  if ((await onEditTime?.(next)) !== false) triggerRef.current?.close()
+                })()
               }}
               onCancel={() => triggerRef.current?.close()}
             />
