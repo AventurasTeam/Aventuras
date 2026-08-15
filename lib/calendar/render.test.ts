@@ -15,6 +15,22 @@ describe('formatWorldTime', () => {
     const bc = { year: -43, month: 3, day: 15, hour: 0, minute: 0, second: 0 }
     expect(formatWorldTime(0, EARTH_GREGORIAN, bc)).toContain('44 BC')
   })
+  // Expected strings are derived from EARTH_GREGORIAN's displayFormat plus the
+  // month labels and hour/minute startValues — not from what render.ts emits.
+  it('completes an origin that omits tiers before rendering worldTime 0', () => {
+    expect(formatWorldTime(0, EARTH_GREGORIAN, { year: 1247, day: 1 })).toBe(
+      'January 1, 1247 AD 0:0',
+    )
+  })
+  it('renders one instant identically from a partial origin at zero and from an offset', () => {
+    const partial = { year: 1247, day: 1 }
+    const dayBefore = { year: 1246, month: 12, day: 31, hour: 0, minute: 0, second: 0 }
+    const ONE_DAY = 86_400
+    expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, dayBefore)).toBe(
+      formatWorldTime(0, EARTH_GREGORIAN, partial),
+    )
+    expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, partial)).toBe('January 2, 1247 AD 0:0')
+  })
   it('returns a typed miss on a broken template rather than throwing to the caller', () => {
     const broken = { ...EARTH_GREGORIAN, displayFormat: '{% badtag %}' }
     const out = formatWorldTime(0, broken, ORIGIN)

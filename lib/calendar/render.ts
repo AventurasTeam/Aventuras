@@ -16,6 +16,15 @@ function monthName(calendar: CalendarSystem, tuple: TierTuple): string | undefin
   return monthTier.labels[tuple.month - monthTier.startValue]
 }
 
+// An origin may omit tiers; tupleToBaseUnits reads a missing tier as its
+// startValue, so the template must see the same completed tuple that
+// baseUnitsToTuple hands the non-zero path.
+function completeTuple(calendar: CalendarSystem, tuple: TierTuple): TierTuple {
+  const out: TierTuple = {}
+  for (const tier of calendar.tiers) out[tier.name] = tuple[tier.name] ?? tier.startValue
+  return out
+}
+
 export function formatWorldTime(
   worldTime: number,
   calendar: CalendarSystem,
@@ -24,7 +33,10 @@ export function formatWorldTime(
 ): string | FormatMiss {
   try {
     // At worldTime 0 the tuple IS the origin; worldTimeToTuple's round-trip breaks for BC origins.
-    const tuple = worldTime === 0 ? origin : worldTimeToTuple(worldTime, calendar, origin)
+    const tuple =
+      worldTime === 0
+        ? completeTuple(calendar, origin)
+        : worldTimeToTuple(worldTime, calendar, origin)
     const era = calendar.eras
       ? resolveEra(worldTime, calendar, origin, flips)
       : { era: '', eraYear: 0 }
