@@ -580,14 +580,33 @@ export default function ReaderComposerRoute() {
   // Phone tier bridges out: EntryCard's useTier() measures the reader document,
   // not the device, so the request is honoured whatever this route's own tier is.
   const [timeEditId, setTimeEditId] = useState<string | null>(null)
+  // Carries failure in the result channel, never the rejection channel: there is
+  // no global unhandled-rejection handler, and across the expo-dom bridge a
+  // rejected promise is unobservable — a thrown write would leave Save inert.
   const handleEditWorldTime = useCallback(
     async (entryId: string, next: number): Promise<EditResult> => {
-      const result = await updateEntryWorldTime(branchId, entryId, next, ctx)
-      if (result.status !== 'ok') {
+      try {
+        const result = await updateEntryWorldTime(branchId, entryId, next, ctx)
+        if (result.status !== 'ok') {
+          logger.warn('action_layer.world_time_edit_rejected', {
+            branchId,
+            entryId,
+            reason: result.reason,
+            code: result.code,
+          })
+          toast.error(t('reader:worldTimeEdit.failed'))
+          return { ok: false }
+        }
+        return { ok: true }
+      } catch (err) {
+        logger.error('action_layer.world_time_edit_failed', {
+          branchId,
+          entryId,
+          error: err instanceof Error ? err.message : String(err),
+        })
         toast.error(t('reader:worldTimeEdit.failed'))
         return { ok: false }
       }
-      return { ok: true }
     },
     [branchId],
   )
