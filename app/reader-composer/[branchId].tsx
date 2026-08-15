@@ -24,6 +24,8 @@ import {
   useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
+import { decorateWorldTime } from '@/components/reader/worldtime-decoration'
+import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -42,11 +44,13 @@ import {
   rollbackToEntry,
   submitTurn,
   undoLastAction,
+  updateEntryWorldTime,
   updateStoryEntryContent,
   writeSystemEntry,
   type LoadOpenStoryResult,
   type RollbackCounts,
 } from '@/lib/actions'
+import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
 import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -169,6 +173,27 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
+
+  const calendarSystemId = openForBranch?.definition.calendarSystemId
+  // Unknown ids resolve to the default, mirroring the wizard's own fallback.
+  const calendar = useMemo(
+    () =>
+      calendarSystemId != null
+        ? (getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID) ?? null)
+        : null,
+    [calendarSystemId],
+  )
+  const worldTimeOrigin = openForBranch?.definition.worldTimeOrigin ?? null
+  // One walk per entries-collection identity (reader-composer.md → Per-entry
+  // world-time footer). A side table leaves row identity untouched, so
+  // ReaderRow's memo still short-circuits unchanged rows after a re-walk.
+  const worldTimeDecorations = useMemo(
+    () =>
+      calendar != null && worldTimeOrigin != null
+        ? decorateWorldTime(entries, calendar, worldTimeOrigin)
+        : {},
+    [entries, calendar, worldTimeOrigin],
+  )
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState<PipelineError | null>(null)
@@ -552,6 +577,31 @@ export default function ReaderComposerRoute() {
     [openRollback],
   )
 
+  // Phone tier bridges out: EntryCard's useTier() measures the reader document,
+  // not the device, so the request is honoured whatever this route's own tier is.
+  const [timeEditId, setTimeEditId] = useState<string | null>(null)
+  const handleEditWorldTime = useCallback(
+    async (entryId: string, next: number): Promise<EditResult> => {
+      const result = await updateEntryWorldTime(branchId, entryId, next, ctx)
+      if (result.status !== 'ok') {
+        toast.error(t('reader:worldTimeEdit.failed'))
+        return { ok: false }
+      }
+      return { ok: true }
+    },
+    [branchId],
+  )
+  const handleRequestEditWorldTime = useCallback(async (entryId: string) => {
+    setTimeEditId(entryId)
+  }, [])
+  const timeEditDecoration = timeEditId != null ? worldTimeDecorations[timeEditId] : undefined
+  // An undo, a rollback or a branch switch can drop the entry under an open
+  // sheet. Dropping the id with it keeps a later redo from resurrecting the
+  // overlay on an entry the user has since navigated away from.
+  useEffect(() => {
+    if (timeEditId != null && timeEditDecoration == null) setTimeEditId(null)
+  }, [timeEditId, timeEditDecoration])
+
   // Chips are finished prose, so the draft is replaced outright and the mode
   // forced to Free — no wrapping (reader-composer.md → Next-turn suggestions).
   const handleTapChip = useCallback((text: string) => {
@@ -741,6 +791,9 @@ export default function ReaderComposerRoute() {
 
   const surfaceProps = {
     rows: entries,
+    worldTimeDecorations,
+    calendar,
+    worldTimeOrigin,
     streaming: streamingPayload,
     branchKey: branchId,
     hasOlder,
@@ -750,6 +803,8 @@ export default function ReaderComposerRoute() {
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: handleRequestRollback,
+    onEditWorldTime: handleEditWorldTime,
+    onRequestEditWorldTime: handleRequestEditWorldTime,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
@@ -901,6 +956,26 @@ export default function ReaderComposerRoute() {
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
           onConfirm={() => void confirmRollback()}
+        />
+      ) : null}
+      {timeEditId != null &&
+      timeEditDecoration != null &&
+      calendar != null &&
+      worldTimeOrigin != null ? (
+        <WorldTimeEditSheet
+          calendar={calendar}
+          worldTimeOrigin={worldTimeOrigin}
+          worldTimeRaw={timeEditDecoration.raw}
+          monotonicityBreak={
+            timeEditDecoration.previousLabel != null
+              ? { previousLabel: timeEditDecoration.previousLabel }
+              : undefined
+          }
+          onSave={async (next) => {
+            const result = await handleEditWorldTime(timeEditId, next)
+            if (result.ok) setTimeEditId(null)
+          }}
+          onClose={() => setTimeEditId(null)}
         />
       ) : null}
     </ScreenShell>

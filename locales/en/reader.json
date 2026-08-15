@@ -57,6 +57,10 @@
     "irreversible": "This cannot be undone.",
     "confirm": "Delete entries"
   },
+  "worldTimeEdit": {
+    "title": "Edit time",
+    "failed": "Couldn't update the entry's time."
+  },
   "systemEntry": {
     "retry": "Retry",
     "viewDetails": "View details",

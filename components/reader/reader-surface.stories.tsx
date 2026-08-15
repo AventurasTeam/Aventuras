@@ -64,6 +64,8 @@ const noopHandlers = {
   onNearTop: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
+  onEditWorldTime: async () => ({ ok: true }),
+  onRequestEditWorldTime: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onFixSystemEntry: async () => {},
@@ -81,6 +83,11 @@ const meta = {
   ],
   args: {
     rows: ROWS,
+    // Footer behavior is covered at the compound layer (entry-card.stories);
+    // these stories exercise the surface's scroll/edit machinery instead.
+    worldTimeDecorations: {},
+    calendar: null,
+    worldTimeOrigin: null,
     streaming: null,
     branchKey: 'branch_story',
     hasOlder: false,
