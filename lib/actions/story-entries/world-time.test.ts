@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { updateEntryWorldTime, undoLastAction } from '@/lib/actions'
+import { applyDeltaAction, undoLastAction, updateEntryWorldTime } from '@/lib/actions'
 import { branches, deltas, stories, storyEntries, type EntryMetadata } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
@@ -59,20 +59,25 @@ type TestDb = Awaited<ReturnType<typeof createTestDb>>['db']
 async function seed(db: TestDb) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
   await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+  await db.insert(branches).values({ id: 'b2', storyId: 's1', name: 'alt', createdAt: 1 })
   for (const row of entryRows()) await db.insert(storyEntries).values(row)
   entriesStore.hydrate('b1', entryRows())
 }
 
-async function storedMetadata(db: TestDb, id: string): Promise<EntryMetadata | null> {
-  const [row] = await db
+function storedEntry(db: TestDb, id: string, branchId = 'b1') {
+  return db
     .select()
     .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, id)))
-  return row.metadata
+    .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
+    .then((rows) => rows[0])
 }
 
-function branchDeltas(db: TestDb) {
-  return db.select().from(deltas).where(eq(deltas.branchId, 'b1'))
+async function storedMetadata(db: TestDb, id: string): Promise<EntryMetadata | null> {
+  return (await storedEntry(db, id)).metadata
+}
+
+function branchDeltas(db: TestDb, branchId = 'b1') {
+  return db.select().from(deltas).where(eq(deltas.branchId, branchId))
 }
 
 describe('updateEntryWorldTime', () => {
@@ -80,6 +85,7 @@ describe('updateEntryWorldTime', () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
+    undoRedoStore.pushRedoGroup([])
 
     const result = await updateEntryWorldTime('b1', 'e2', 45, ctx)
     expect(result.status).toBe('ok')
@@ -101,19 +107,69 @@ describe('updateEntryWorldTime', () => {
     expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
     expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(45)
     expect(entriesStore.getEntries().get('e1')?.metadata?.worldTime).toBe(60)
+    // Contrast with the suppression test below: a real write does clear the
+    // global redo stack, which is why suppressing a no-op write matters.
+    expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
-  it('CTRL-Z (undoLastAction) reverses the edit and prunes the delta', async () => {
+  it('rejects an entry read through the wrong branch', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }
     await seed(db)
 
+    const result = await updateEntryWorldTime('b2', 'e1', 45, ctx)
+    expect(result.status).toBe('rejected')
+    if (result.status === 'rejected') expect(result.code).toBe('not-found')
+
+    expect((await branchDeltas(db)).length).toBe(0)
+    expect((await branchDeltas(db, 'b2')).length).toBe(0)
+    expect((await storedMetadata(db, 'e1'))?.worldTime).toBe(60)
+  })
+
+  it('CTRL-Z (undoLastAction) reverses only the edit, sparing the prior turn', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    // A prior turn's create delta at a lower log_position. Without it the log
+    // holds no story_entries create at all, so selectUndoTarget's `turn` branch
+    // is unreachable and "one CTRL-Z undoes just the edit" holds by construction.
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createStoryEntry',
+          source: 'ai_classifier',
+          payload: {
+            entry: {
+              id: 'e4',
+              branchId: 'b1',
+              position: 4,
+              kind: 'ai_reply',
+              content: 'prior turn',
+              metadata: { sceneEntities: [], currentLocationId: null, worldTime: 200 },
+              createdAt: 4,
+            },
+          },
+        },
+        actionId: 'act_prior_turn',
+        branchId: 'b1',
+        entryId: null,
+      },
+      ctx,
+    )
+
     expect((await updateEntryWorldTime('b1', 'e2', 45, ctx)).status).toBe('ok')
+    expect((await branchDeltas(db)).length).toBe(2)
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(120)
-    expect((await branchDeltas(db)).length).toBe(0)
     expect(entriesStore.getEntries().get('e2')?.metadata?.worldTime).toBe(120)
+
+    // The prior turn is untouched: its delta and the entry it created survive.
+    const remaining = await branchDeltas(db)
+    expect(remaining.length).toBe(1)
+    expect(remaining[0]).toMatchObject({ op: 'create', targetId: 'e4' })
+    expect(await storedEntry(db, 'e4')).toBeDefined()
+    expect(entriesStore.getEntries().get('e4')).toBeDefined()
   })
 
   // 0 is the accept boundary of the storage invariant, not an edge to reject:

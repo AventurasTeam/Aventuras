@@ -24,7 +24,9 @@ export async function updateEntryWorldTime(
       reason: 'generation in flight',
       code: STORY_ENTRY_REJECTION.inFlight,
     }
-  // Storage invariant (data-model.md -> In-world time tracking): worldTime >= 0.
+  // The ONLY runtime enforcement of the storage invariant (data-model.md ->
+  // In-world time tracking): metadata is a `mode: 'json'` column and the forward
+  // write path never parses it, so entryMetadataSchema's .min(0) never runs here.
   // Cumulative monotonicity is deliberately NOT checked — a manual edit may move
   // time backwards and the UI flags it.
   if (!Number.isInteger(worldTime) || worldTime < 0)
