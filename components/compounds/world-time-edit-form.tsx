@@ -71,7 +71,7 @@ export function WorldTimeEditForm({
   return (
     <View className="gap-3">
       {monotonicityBreak != null ? (
-        <View className="rounded border border-warning bg-bg-sunken p-2">
+        <View className="rounded-md border border-warning bg-bg-sunken p-2">
           <Text size="xs" className="text-warning">
             ⚠ Earlier than previous entry ({monotonicityBreak.previousLabel})
           </Text>
