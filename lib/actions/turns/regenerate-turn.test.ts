@@ -239,6 +239,8 @@ describe('regenerateTurn', () => {
     if (regen.status !== 'ran') return
     expect(expectRan(regen.result).outcome).toBe('failed')
     expect(regen.userActionContent).toBe('I cross the bridge.')
+    // The unwind landed, so the text is safe to offer as a retryable submission.
+    expect(regen.converged).toBe(true)
 
     // No orphan placeholder, no stranded user action: log at the fully unwound
     // state — turn 1 intact, its catch-up fact spared.
@@ -467,6 +469,58 @@ describe('regenerateTurn', () => {
     // that could not land — and the un-unwound user_action is still standing.
     expect(settled.userActionContent).toBe('I cross the bridge.')
     expect(entriesStore.getById('e_u2')).toBeDefined()
+    // The flag the host reads to refuse Retry: offering this text while the
+    // action still stands would insert a second identical user_action.
+    expect(settled.converged).toBe(false)
+  })
+
+  it('reports no convergence when the follow-up sweep is refused', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch')
+      }),
+    )
+    // Drop the user_action's create delta during the first sweep, which never
+    // touches it: the follow-up then resolves no rollback window and is refused
+    // outright, reversing nothing — the arm that leaves the action standing
+    // without ever raising a DeltaReplayError.
+    const regen = await withSweepHook(
+      (rows) => {
+        if (!isFollowUpSweep(rows))
+          void ctx.db.delete(deltas).where(eq(deltas.targetId, 'e_u2')).run()
+      },
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(regen.converged).toBe(false)
+    // The refusal reversed nothing, so the action really is still there.
+    expect(branchEntries('b1').map((r) => r.id)).toContain('e_u2')
+  })
+
+  it('reports convergence when the failed unwind had already committed', async () => {
+    // committed means the reversal landed and only the store sync threw, so the
+    // user_action is gone. The hook throws ahead of the sweep, so the harness DB
+    // cannot show that — `converged` tracking `committed` is what is pinned here.
+    const { regen } = await regenerateWithFailingUnwind(
+      new DeltaReplayError('Post-commit patch sync failed', {
+        cause: new Error('patcher exploded'),
+        actionId: 'act_t2',
+        committed: true,
+      }),
+    )
+
+    const settled = await regen
+
+    expect(settled.status).toBe('ran')
+    if (settled.status !== 'ran') return
+    expect(settled.converged).toBe(true)
   })
 
   it('propagates a non-DeltaReplayError thrown by the follow-up unwind', async () => {

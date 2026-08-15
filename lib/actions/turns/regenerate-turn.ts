@@ -22,7 +22,19 @@ import { withBranchQueue } from './branch-queue'
 
 export type RegenerateTurnResult =
   | { status: 'rejected'; reason: string }
-  | { status: 'ran'; result: TxResult | RejectedStart; userActionContent: string }
+  | {
+      status: 'ran'
+      result: TxResult | RejectedStart
+      userActionContent: string
+      /**
+       * False when the follow-up unwind did not land, leaving the originating
+       * user_action standing: the branch is NOT in the M2 failed-turn state, so
+       * `userActionContent` must not be offered as a retryable submission — a
+       * resend would duplicate the action. Always true when the run completed,
+       * since no unwind is owed.
+       */
+      converged: boolean
+    }
 
 const SWAP_REJECTION = { status: 'rejected', reason: 'embedder-swap' } as const
 
@@ -101,24 +113,30 @@ export async function regenerateTurn(
         // Non-success converges to the M2 failed-turn state: the standing
         // user_action unwinds too, so Retry / draft-restore re-enter through
         // the normal submit path without duplicating the action.
+        let converged = true
         if (result.outcome !== 'completed') {
           try {
             const followUp = await bracketProseReversal(ids.branchId, () =>
               sweepFrom(ids.branchId, origin.id, ctx),
             )
-            if (followUp.status === 'rejected')
+            if (followUp.status === 'rejected') {
+              // A refused sweep reverses nothing, so the user_action stands.
+              converged = false
               logger.warn('action_layer.regenerate_follow_up_sweep_rejected', {
                 branchId: ids.branchId,
                 entryId: origin.id,
                 reason: followUp.reason,
               })
+            }
           } catch (e) {
             // A failed unwind must not cost the caller the run result and the
             // user's text: without them the host has no Retry content and no
             // draft to restore, the very state this convergence exists to avoid.
             if (!(e instanceof DeltaReplayError)) throw e
             // committed separates the two opposite recovery states: false leaves
-            // the user_action standing, true leaves entriesStore stale instead.
+            // the user_action standing, true leaves entriesStore stale instead —
+            // and only the latter actually reached the converged state.
+            converged = e.committed
             logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
               branchId: ids.branchId,
               entryId: origin.id,
@@ -127,7 +145,7 @@ export async function regenerateTurn(
             })
           }
         }
-        return { status: 'ran', result, userActionContent: origin.content }
+        return { status: 'ran', result, userActionContent: origin.content, converged }
       },
     )
     return admission.admitted ? admission.value : SWAP_REJECTION

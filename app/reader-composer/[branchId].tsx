@@ -522,11 +522,24 @@ export default function ReaderComposerRoute() {
           toast.error(t('reader:regenerateFailed'))
           return
         }
+        const { result } = regen
+        if (result.outcome !== 'completed' && !regen.converged) {
+          // The unwind didn't land, so the user_action is still in the branch.
+          // Neither a Retry nor a draft-restore can offer its text without
+          // duplicating it — the same hazard the throw arm below refuses.
+          logger.error('pipeline.regenerate_unconverged', {
+            branchId,
+            entryId: targetId,
+            outcome: result.outcome,
+          })
+          toast.error(t('reader:regenerateFailed'))
+          await reload()
+          return
+        }
         // The convergence submission: regenerate's non-success paths unwound the
         // user_action, so Retry re-enters through the normal submit path. Wrapped
         // text returns under 'free' (no re-wrap on send), same as cancel-restore.
         const submission = { content: regen.userActionContent, composerMode: 'free' }
-        const { result } = regen
         if (result.outcome === 'failed') {
           setLastSubmission(submission)
           await showTurnFailure(result.error, submission)
