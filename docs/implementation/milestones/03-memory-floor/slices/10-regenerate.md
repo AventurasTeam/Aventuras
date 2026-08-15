@@ -122,12 +122,75 @@ slice enables it.
 
 ## Open questions
 
-- **Re-dispatch layer** — reuse the C6 `submitTurn`-shaped action
-  minus the entry write, vs a pipeline-internal re-run entry point;
-  pick at planning (affects where the "same wrapped input" is
-  sourced from — the surviving `user_action` entry's content is the
-  natural source).
+- **Re-dispatch layer** — resolved at planning; see
+  [Implementation notes](#implementation-notes).
+- **Failure entry lost to the pre-dispatch tail clear** — regenerate
+  drops a standing system entry before dispatching (the sweep spares
+  system entries, which carry no create deltas, so one would strand
+  between the user action and the new reply). If the regenerate then
+  rejects or throws, nothing replaces it, and the _earlier_ failed
+  turn's Retry affordance is gone. Needs either a host-side
+  pre-check or a way to defer the clear past the action's guards.
+- **Confirm-time count staleness (M5.2)** — the cascade counts are
+  resolved when the modal opens. Unreachable in M3 (no background
+  writer adds entries or closes chapters), but once chapter close
+  lands, a background close while the modal sits open would make the
+  confirmed cascade larger than the displayed one.
+- **Per-mount regenerate guard** — the in-flight guard is a route
+  ref, so it cannot serialize two mounts of the same branch. Correct
+  today (single reader surface); would need to move into a store if
+  the rail ever hosts a second one.
+- **E2E test coupling** — `reader-regenerate.spec.ts`'s second test
+  builds on the first's DB state. `mode: 'serial'` makes a retry skip
+  rather than mislead, but the seeded hero branch already carries
+  non-terminal `ai_reply` rows, so the cascade test could be made
+  self-contained (and LLM-free) later.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Re-dispatch layer** — resolved to an action-layer `regenerateTurn`
+in `lib/actions/turns/`, sharing `submitTurn`'s scaffolding (the
+per-branch queue, extracted to `branch-queue.ts`; embedder-swap
+admission), not a pipeline-internal re-run entry. The "same wrapped
+input" needs no sourcing at all: the per-turn pipeline reads its
+prompt and insert position from the branch tail in SQLite, so once
+the sweep removes the reply, the surviving `user_action` **is** the
+tail — byte-for-byte the DB shape a normal submit leaves after its
+own `user_action` insert. The sweep composes the C3 primitives
+through `resolveSweep`, which this slice extracted in
+`story-entries/operational.ts` after `rollbackToEntry`,
+`undoLastAction`, and regenerate became a third copy of the same
+window-materializing sequence; each caller keeps its own tail and its
+own redo-stack policy, which is not uniform (undo deliberately does
+not clear).
+
+**Non-success convergence** — failed, rejected, and aborted outcomes
+all converge to the M2 failed-turn model: a follow-up sweep unwinds
+the standing `user_action` too, landing the branch in exactly the
+state a failed `submitTurn` leaves, so the existing Retry machinery
+re-submits through the normal path without duplicating the action.
+This is why the acceptance criterion "the user action entry is
+untouched" holds on the happy path only. Two failure modes needed
+their own handling: a `DeltaReplayError` from the follow-up sweep is
+tolerated (logged with `committed`, which separates "user action
+still standing" from "store stale") rather than costing the caller
+the run result and the user's text; and a throw out of
+`regenerateTurn` gets a toast plus a store resync, **not** a system
+failure entry — the throw carries no submission, so that entry's
+Retry would be doomed, and in the partial-sweep cases a Retry on a
+stale submission would append a duplicate turn.
+
+**Composer draft on cancel** — cancelling a regenerate restores the
+swept action text only into an _empty_ composer. Unlike `submitTurn`,
+regenerate never clears the composer, so an unconditional restore
+would destroy text the user typed; the swept action is unrecoverable
+in that branch, but the user asked to discard that turn and never
+agreed to lose their draft.
+
+**E2E** — added `e2e/tests/reader-regenerate.spec.ts` (terminal
+no-confirm, older-reply cascade) beyond the slice's original Tests
+section, per [`testing.md → Coverage`](../../../../testing.md#coverage-thorough-not-exhaustive),
+which names "regenerate / undo a turn" as an in-scope alternative
+flow. Its DB reads poll rather than reading straight after a
+visible-text wait: the reader renders stream chunks live, so the DOM
+resolves before the entry and its delta commit.
