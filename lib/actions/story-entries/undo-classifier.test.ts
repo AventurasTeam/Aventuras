@@ -112,11 +112,24 @@ const AWARENESS_B: HappeningAwareness = {
 
 const B_METADATA: EntryMetadata = { sceneEntities: [], currentLocationId: null, worldTime: 5 }
 
+async function seedBranch(entries: StoryEntry[], classifierStatus?: ClassifierStatus) {
+  const { db, runInTransaction } = await createTestDb()
+  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+  await db.insert(branches).values({
+    id: 'b1',
+    storyId: 's1',
+    name: 'm',
+    createdAt: 1,
+    ...(classifierStatus ? { classifierStatus } : {}),
+  })
+  await db.insert(storyEntries).values(entries)
+  entriesStore.hydrate('b1', entries)
+  return { db, ctx: { db, runInTransaction } }
+}
+
 // AC1's log: turn A, classifier pass anchored to A, turn B (with a piggyback
 // metadata delta), classifier pass with facts anchored to both A and B.
 async function seedAc1() {
-  const { db, runInTransaction } = await createTestDb()
-  const ctx = { db, runInTransaction }
   const entries = [
     entry('e_opening', 1, 'opening'),
     entry('e_a', 2, 'ai_reply'),
@@ -127,15 +140,7 @@ async function seedAc1() {
     hap('hap_a2', 'fact about A (pass 2)', 'e_a'),
     hap('hap_b1', 'fact about B (pass 2)', 'e_b'),
   ]
-  await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-  await db.insert(branches).values({
-    id: 'b1',
-    storyId: 's1',
-    name: 'm',
-    createdAt: 1,
-    classifierStatus: status(3),
-  })
-  await db.insert(storyEntries).values(entries)
+  const { db, ctx } = await seedBranch(entries, status(3))
   await db.insert(happenings).values(haps)
   await db.insert(happeningAwareness).values(AWARENESS_B)
   await db
@@ -195,7 +200,6 @@ async function seedAc1() {
         'e_b',
       ),
     ])
-  entriesStore.hydrate('b1', entries)
   happeningsStore.hydrate('b1', haps)
   happeningAwarenessStore.hydrate('b1', [AWARENESS_B])
   return { db, ctx }
@@ -263,25 +267,20 @@ describe('AC1 — undo of turn B spares facts anchored to surviving turn A', () 
 
 describe('AC2 — classifier group at the literal head', () => {
   it('steps over it, targets the turn beneath, and the suffix sweep carries the classifier group down', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    const entries = [
+    const { db, ctx } = await seedBranch([
       entry('e_opening', 1, 'opening'),
       entry('e_a', 2, 'ai_reply'),
       entry('e_b', 3, 'ai_reply'),
-    ]
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(storyEntries).values(entries)
-    await db.insert(happenings).values(hap('hap_b1', 'fact about B', 'e_b'))
+    ])
+    const hapB = hap('hap_b1', 'fact about B', 'e_b')
+    await db.insert(happenings).values(hapB)
     await db.insert(deltas).values([
       delta('d_a_create', 1, 'act_a', 'ai_classifier', 'story_entries', 'e_a', 'create'),
       delta('d_b_create', 2, 'act_b', 'ai_classifier', 'story_entries', 'e_b', 'create'),
       // The literal head is a classifier group — never an undo target.
       delta('d_c_hapB', 3, 'act_c', 'periodic_classifier', 'happenings', 'hap_b1', 'create', 'e_b'),
     ])
-    entriesStore.hydrate('b1', entries)
-    happeningsStore.hydrate('b1', [hap('hap_b1', 'fact about B', 'e_b')])
+    happeningsStore.hydrate('b1', [hapB])
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
@@ -299,13 +298,12 @@ describe('AC2 — classifier group at the literal head', () => {
 
 describe('AC3 — user field-edit above a classifier group', () => {
   it('reverses only the edit group; the classifier group stays put', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    const entries = [entry('e_opening', 1, 'opening'), entry('e_a', 2, 'ai_reply')]
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(storyEntries).values(entries)
-    await db.insert(happenings).values(hap('hap_a1', 'Edited title', 'e_a'))
+    const { db, ctx } = await seedBranch([
+      entry('e_opening', 1, 'opening'),
+      entry('e_a', 2, 'ai_reply'),
+    ])
+    const hapA = hap('hap_a1', 'Edited title', 'e_a')
+    await db.insert(happenings).values(hapA)
     await db.insert(deltas).values([
       delta('d_a_create', 1, 'act_a', 'ai_classifier', 'story_entries', 'e_a', 'create'),
       delta('d_c_hapA', 2, 'act_c', 'periodic_classifier', 'happenings', 'hap_a1', 'create', 'e_a'),
@@ -314,8 +312,7 @@ describe('AC3 — user field-edit above a classifier group', () => {
         title: 'Original title',
       }),
     ])
-    entriesStore.hydrate('b1', entries)
-    happeningsStore.hydrate('b1', [hap('hap_a1', 'Edited title', 'e_a')])
+    happeningsStore.hydrate('b1', [hapA])
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
 
@@ -337,13 +334,8 @@ describe('AC3 — user field-edit above a classifier group', () => {
 
 describe('AC6 — undo floor in a wizard-created story', () => {
   it('rejects in a fresh story (no deltas) and stops at the opening after the only turn is undone', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
     // Wizard commit: opening baked in, delta log empty.
-    await db.insert(storyEntries).values(entry('e_opening', 1, 'opening'))
-    entriesStore.hydrate('b1', [entry('e_opening', 1, 'opening')])
+    const { db, ctx } = await seedBranch([entry('e_opening', 1, 'opening')])
 
     expect((await undoLastAction('b1', ctx)).status).toBe('rejected')
 
@@ -363,16 +355,13 @@ describe('AC6 — undo floor in a wizard-created story', () => {
 
 describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
   it('aborts the run and holds the sweep until its terminal resolves', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    const entries = [entry('e_opening', 1, 'opening'), entry('e_t1', 2, 'ai_reply')]
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
-    await db.insert(storyEntries).values(entries)
+    const { db, ctx } = await seedBranch([
+      entry('e_opening', 1, 'opening'),
+      entry('e_t1', 2, 'ai_reply'),
+    ])
     await db
       .insert(deltas)
       .values(delta('d_t1', 1, 'act_t1', 'ai_classifier', 'story_entries', 'e_t1', 'create'))
-    entriesStore.hydrate('b1', entries)
 
     let resolveTerminal!: () => void
     const terminal = new Promise<void>((r) => {
@@ -416,19 +405,12 @@ describe('AC4 — CTRL-Z with a classifier run mid-flight', () => {
 
 describe('AC5 — redo of a classifier-processed turn tolerates re-derivation', () => {
   it('keeps the watermark clamped after redo; a re-deriving pass upserts awareness cleanly and only duplicates the happening', async () => {
-    const { db, runInTransaction } = await createTestDb()
-    const ctx = { db, runInTransaction }
-    const entries = [entry('e_opening', 1, 'opening'), entry('e_b', 2, 'ai_reply')]
-    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
-    await db.insert(branches).values({
-      id: 'b1',
-      storyId: 's1',
-      name: 'm',
-      createdAt: 1,
-      classifierStatus: status(2),
-    })
-    await db.insert(storyEntries).values(entries)
-    await db.insert(happenings).values(hap('hap_b1', 'fact about B', 'e_b'))
+    const { db, ctx } = await seedBranch(
+      [entry('e_opening', 1, 'opening'), entry('e_b', 2, 'ai_reply')],
+      status(2),
+    )
+    const hapB = hap('hap_b1', 'fact about B', 'e_b')
+    await db.insert(happenings).values(hapB)
     await db.insert(happeningAwareness).values(AWARENESS_B)
     await db
       .insert(deltas)
@@ -455,8 +437,7 @@ describe('AC5 — redo of a classifier-processed turn tolerates re-derivation', 
           'e_b',
         ),
       ])
-    entriesStore.hydrate('b1', entries)
-    happeningsStore.hydrate('b1', [hap('hap_b1', 'fact about B', 'e_b')])
+    happeningsStore.hydrate('b1', [hapB])
     happeningAwarenessStore.hydrate('b1', [AWARENESS_B])
 
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
