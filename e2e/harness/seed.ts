@@ -198,6 +198,38 @@ export function seedClassifierBacklog(
   }
 }
 
+/**
+ * Park the classifier watermark at the last settled turn and return that position, so
+ * the cadence counts only the turns a spec commits after launch. The fixture seeds
+ * `classifier_status = NULL`, which floors the window at 0 — a pass would otherwise
+ * claim the whole seeded branch and the spec could not say which turns it read.
+ *
+ * Anchors on the last `ai_reply`, not MAX(position): the fixture ends on a dangling
+ * in-flight turn that boot recovery reverse-replays away, so the seed-time maximum
+ * sits one position above the tip the app actually boots with — high enough to push
+ * the first committed turn out of the window and shift every handle. Runs before launch.
+ */
+export function parkClassifierWatermarkAtLastReply(dbPath: string, branchId: string): number {
+  const db = new DatabaseSync(dbPath)
+  try {
+    const row = db
+      .prepare(
+        `SELECT COALESCE(MAX(position), 0) AS p FROM story_entries
+          WHERE branch_id = ? AND kind = 'ai_reply'`,
+      )
+      .get(branchId) as { p: number }
+    db.prepare(
+      `UPDATE branches SET classifier_status = json_set(
+         COALESCE(classifier_status, '{}'), '$.state', 'idle', '$.retryCount', 0,
+         '$.lastSuccessAt', NULL, '$.lastError', NULL, '$.processedThrough', ?)
+       WHERE id = ?`,
+    ).run(row.p, branchId)
+    return row.p
+  } finally {
+    db.close()
+  }
+}
+
 /** Strip the `classifier` agent assignment so the pass fails pre-flight. Runs before launch. */
 export function unassignClassifierAgent(dbPath: string): void {
   const db = new DatabaseSync(dbPath)

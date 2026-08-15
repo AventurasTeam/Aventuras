@@ -126,14 +126,16 @@ positional window, and the watermark clamp. This slice therefore
 executed as a verification slice: the acceptance-criteria fixture
 matrix (`lib/actions/story-entries/undo-classifier.test.ts`) was
 built against the shipped machinery, and no fixture surfaced a
-defect. Because the tests were expected to pass on arrival, three
+defect. Because the tests were expected to pass on arrival, four
 mutation checks stand in for TDD's watch-it-fail step and are the
 evidence the assertions are not vacuous: relaxing the
 survival-anchor comparison to strict `>` spares a fact anchored
 exactly at B; dropping the `periodic_classifier` skip in
-head-selection retargets undo at the classifier group; and dropping
+head-selection retargets undo at the classifier group; dropping
 the `await` on the C3 drain lets the sweep finish before the
-classifier's terminal resolves.
+classifier's terminal resolves; and deleting the anchor predicate
+outright (a bare suffix sweep) takes the surviving turn's fact down
+with the undone turn, caught at the E2E layer.
 
 Resolved decisions:
 
@@ -147,6 +149,17 @@ Resolved decisions:
   directly; the awareness natural-key upsert absorbs, the duplicate
   happening row is tolerated (cleaned at M5 chapter-close dedup),
   and the watermark stays clamped after redo.
-- **E2E** — no new spec; `e2e/tests/reader-undo-redo.spec.ts`
-  already covers the user-facing flow, and the classifier interplay
-  is log-selection logic owned by the vitest matrix.
+- **E2E** — planned as "no new spec", reversed during execution.
+  The manual smoke this slice's Tests section calls for is not
+  practically runnable (it needs a classifier pass landed against a
+  real provider), so its substance moved into
+  `e2e/tests/reader-undo-redo.spec.ts` as a second describe: two
+  turns under a cadence tuned so one pass covers both, a fact
+  anchored to each turn via `sourceTurn`, then CTRL-Z. It is the
+  only place the survival anchor is proven on a log the app built
+  itself rather than one a fixture hand-wrote — the window, its
+  `t1..tN` handles, and `deltas.entry_id` all come from the real
+  reconciler. Building it required a new harness helper
+  (`parkClassifierWatermarkAtLastReply`) and surfaced a boot-order
+  trap now recorded in
+  [lessons-learned](../../../lessons-learned/seed-tip-position-shifts-at-boot.md).
