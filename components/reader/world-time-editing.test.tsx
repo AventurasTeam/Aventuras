@@ -64,6 +64,27 @@ describe('useWorldTimeEditing → calendar resolution', () => {
   })
 })
 
+describe('useWorldTimeEditing → decoration memo', () => {
+  // The walk runs once per entries-collection identity. A stream chunk or an
+  // unrelated store write re-renders the route without touching `entries`, and
+  // a fresh decorations object there would hand every ReaderRow new primitives
+  // and void its memo.
+  it('reuses the walk for the same entries reference and redoes it for a new one', async () => {
+    const { result, rerender } = render(ENTRIES, 'earth-gregorian')
+    const first = result.current.worldTimeDecorations
+    expect(Object.keys(first)).toEqual(['e1', 'e2'])
+
+    await act(async () => rerender({ rows: ENTRIES }))
+    expect(result.current.worldTimeDecorations).toBe(first)
+
+    // A new array over the same rows is what every entries patch produces
+    // (working-set-store rebuilds the Map, so the route's sort re-runs).
+    await act(async () => rerender({ rows: [...ENTRIES] }))
+    expect(result.current.worldTimeDecorations).not.toBe(first)
+    expect(result.current.worldTimeDecorations).toEqual(first)
+  })
+})
+
 describe('useWorldTimeEditing → stale edit target', () => {
   it('drops the pending id when the entry disappears from the decorations', async () => {
     const { result, rerender } = render(ENTRIES, 'earth-gregorian')
