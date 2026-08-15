@@ -118,8 +118,8 @@ export async function resolveRollbackWindow(
  * The rollback window materialized: the delta rows to reverse (log_position DESC,
  * the order reverse-replay requires) plus the watermark clamp that must ride in
  * their transaction. Deliberately side-effect-free — each caller owns its own tail
- * (`countBuckets`, a redo snapshot, nothing) and its own redo-stack policy, which
- * `undoLastAction` alone declines to clear.
+ * (`countBuckets`, a redo snapshot, nothing) and decides its own redo-stack policy,
+ * which is not uniform across callers.
  */
 export async function resolveSweep(
   branchId: string,

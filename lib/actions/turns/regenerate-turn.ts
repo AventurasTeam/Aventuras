@@ -117,9 +117,12 @@ export async function regenerateTurn(
             // user's text: without them the host has no Retry content and no
             // draft to restore, the very state this convergence exists to avoid.
             if (!(e instanceof DeltaReplayError)) throw e
+            // committed separates the two opposite recovery states: false leaves
+            // the user_action standing, true leaves entriesStore stale instead.
             logger.warn('action_layer.regenerate_follow_up_sweep_failed', {
               branchId: ids.branchId,
               entryId: origin.id,
+              committed: e.committed,
               error: String(e),
             })
           }
