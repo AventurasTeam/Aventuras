@@ -85,22 +85,11 @@
     return label
   }
 
-  // A custom id typed by the user is not in the fetched list, so it is prepended: without
-  // it the trigger would show the placeholder for a model that is actually saved.
-  const displayModels = $derived.by(() => {
-    const list = [...filteredModels]
-    if (selectedModelId && !list.some((m) => m.id === selectedModelId)) {
-      list.unshift({
-        id: selectedModelId,
-        name: selectedModelId,
-        supportsImg2Img: false,
-      })
-    }
-    return list
-  })
-
   // Get current selection object
-  const selectedModel = $derived(displayModels.find((m) => m.id === selectedModelId))
+  const selectedModel = $derived(filteredModels.find((m) => m.id === selectedModelId))
+
+  // An id the provider no longer lists is reported, never offered as a choice.
+  const selectedIsUnavailable = $derived(!isLoading && !!selectedModelId && !selectedModel)
   const selectedLabel = $derived(
     selectedModel ? getModelLabel(selectedModel) : selectedModelId || placeholder,
   )
@@ -122,7 +111,7 @@
     <div class="flex items-center gap-2">
       <div class="flex-1">
         <Autocomplete
-          items={displayModels}
+          items={filteredModels}
           selected={selectedModel}
           onSelect={(m) => handleChange((m as ImageModelInfo)?.id)}
           allowCustom={true}
@@ -182,6 +171,11 @@
         </Button>
       {/if}
     </div>
+    {#if selectedIsUnavailable}
+      <p class="text-muted-foreground text-xs">
+        Saved model "{selectedModelId}" is not in this provider's list.
+      </p>
+    {/if}
     {#if errorMessage}
       <p class="text-destructive text-xs">{errorMessage}</p>
     {/if}
