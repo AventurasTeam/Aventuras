@@ -259,3 +259,103 @@ describe('AC1 — undo of turn B spares facts anchored to surviving turn A', () 
     expect(branchAfterRedo.classifierStatus?.processedThrough).toBe(2)
   })
 })
+
+describe('AC2 — classifier group at the literal head', () => {
+  it('steps over it, targets the turn beneath, and the suffix sweep carries the classifier group down', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const entries = [
+      entry('e_opening', 1, 'opening'),
+      entry('e_a', 2, 'ai_reply'),
+      entry('e_b', 3, 'ai_reply'),
+    ]
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values(entries)
+    await db.insert(happenings).values(hap('hap_b1', 'fact about B', 'e_b'))
+    await db.insert(deltas).values([
+      delta('d_a_create', 1, 'act_a', 'ai_classifier', 'story_entries', 'e_a', 'create'),
+      delta('d_b_create', 2, 'act_b', 'ai_classifier', 'story_entries', 'e_b', 'create'),
+      // The literal head is a classifier group — never an undo target.
+      delta('d_c_hapB', 3, 'act_c', 'periodic_classifier', 'happenings', 'hap_b1', 'create', 'e_b'),
+    ])
+    entriesStore.hydrate('b1', entries)
+    happeningsStore.hydrate('b1', [hap('hap_b1', 'fact about B', 'e_b')])
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    // The turn beneath the classifier group was the target…
+    expect(entriesStore.getById('e_b')).toBeUndefined()
+    expect(entriesStore.getById('e_a')).toBeDefined()
+    // …and the head classifier group was carried down with the suffix.
+    expect((await db.select().from(happenings).where(eq(happenings.id, 'hap_b1'))).length).toBe(0)
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
+      (d) => d.id,
+    )
+    expect(remaining).toEqual(['d_a_create'])
+  })
+})
+
+describe('AC3 — user field-edit above a classifier group', () => {
+  it('reverses only the edit group; the classifier group stays put', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    const entries = [entry('e_opening', 1, 'opening'), entry('e_a', 2, 'ai_reply')]
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    await db.insert(storyEntries).values(entries)
+    await db.insert(happenings).values(hap('hap_a1', 'Edited title', 'e_a'))
+    await db.insert(deltas).values([
+      delta('d_a_create', 1, 'act_a', 'ai_classifier', 'story_entries', 'e_a', 'create'),
+      delta('d_c_hapA', 2, 'act_c', 'periodic_classifier', 'happenings', 'hap_a1', 'create', 'e_a'),
+      // User edits the happening's title afterwards — a non-prose group at the head.
+      delta('d_edit', 3, 'act_edit', 'user_edit', 'happenings', 'hap_a1', 'update', null, {
+        title: 'Original title',
+      }),
+    ])
+    entriesStore.hydrate('b1', entries)
+    happeningsStore.hydrate('b1', [hap('hap_a1', 'Edited title', 'e_a')])
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+
+    // Group path: only the edit reversed — the row survives with its old title.
+    const [row] = await db.select().from(happenings).where(eq(happenings.id, 'hap_a1'))
+    expect(row.title).toBe('Original title')
+    expect(entriesStore.getById('e_a')).toBeDefined()
+    const remaining = (await db.select().from(deltas).where(eq(deltas.branchId, 'b1'))).map(
+      (d) => d.id,
+    )
+    expect(remaining.sort()).toEqual(['d_a_create', 'd_c_hapA'])
+
+    // Redo re-applies the single-delta frame.
+    expect((await redoLastAction('b1', ctx)).status).toBe('ok')
+    const [redone] = await db.select().from(happenings).where(eq(happenings.id, 'hap_a1'))
+    expect(redone.title).toBe('Edited title')
+  })
+})
+
+describe('AC6 — undo floor in a wizard-created story', () => {
+  it('rejects in a fresh story (no deltas) and stops at the opening after the only turn is undone', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    // Wizard commit: opening baked in, delta log empty.
+    await db.insert(storyEntries).values(entry('e_opening', 1, 'opening'))
+    entriesStore.hydrate('b1', [entry('e_opening', 1, 'opening')])
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('rejected')
+
+    // First turn arrives, then gets undone — the log empties again, floor holds.
+    await db.insert(storyEntries).values(entry('e_t1', 2, 'user_action'))
+    await db
+      .insert(deltas)
+      .values(delta('d_t1', 1, 'act_t1', 'user_edit', 'story_entries', 'e_t1', 'create'))
+    entriesStore.hydrate('b1', [entry('e_opening', 1, 'opening'), entry('e_t1', 2, 'user_action')])
+
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect(entriesStore.getById('e_t1')).toBeUndefined()
+    expect((await undoLastAction('b1', ctx)).status).toBe('rejected')
+    expect(entriesStore.getById('e_opening')).toBeDefined()
+  })
+})
