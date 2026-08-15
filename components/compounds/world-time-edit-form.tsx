@@ -13,9 +13,14 @@ import {
 } from '@/lib/calendar'
 
 type WorldTimeEditFormProps = {
+  /** Stable reference required: the tuple→seconds memo keys on identity. */
   calendar: CalendarSystem
+  /** Stable reference required: the tuple→seconds memo keys on identity. */
   worldTimeOrigin: TierTuple
-  /** Raw cumulative seconds; seeds the tier tuple. */
+  /**
+   * Raw cumulative seconds. Seeds the tier tuple on mount only — a later change
+   * does not reseed, so hosts must mount the form fresh per open.
+   */
   worldTimeRaw: number
   monotonicityBreak?: { previousLabel: string }
   /** Fired with the recomputed cumulative seconds; never fired on a no-change save. */
