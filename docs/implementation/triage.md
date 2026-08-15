@@ -1283,21 +1283,29 @@ on hover`; the shipped rows render label and tagline only, so the
   `lib/calendar`: memoize or restructure the tier walk so cost stops
   scaling with the year. Raised 2026-08-15 by the Slice 3.8 Task 4
   implementation.
-- **Storybook play functions may run against a detached tree, turning
-  interaction assertions vacuous.** While building
-  `world-time-edit-form.stories.tsx`, every story after the first was
-  observed remounting roughly one tick into `play`: a field node
-  captured before the remount is detached, keystrokes land on the dead
-  node, and the component keeps its seed state — so a story that
-  "types a value and asserts the result" can pass green having typed
-  nothing. Bisected against `tier-tuple-input.stories.tsx`, which does
-  not exhibit it; autodocs, decorator placement, `component:` in meta,
-  render style, args, shared-vs-per-story `fn()` mocks, and story
-  ordering were all ruled out without finding the trigger. Worked
-  around locally with a helper that polls until the query returns the
-  same connected node twice. This needs a real diagnosis, not a
-  per-file workaround: if it reaches other story files, existing
-  interaction coverage is weaker than it reads. Start by checking
-  whether large existing play-driven files (`entry-card.stories.tsx`)
-  show the same remount. Raised 2026-08-15 by the Slice 3.8 Task 4
-  implementation.
+- **A narrow story decorator silently detaches nodes captured in
+  `play`, turning interaction assertions vacuous.** `FormRow` guesses
+  `stacked` from `useTier()` (which reads the window: 1200 px in the
+  vitest browser), then corrects it from `onLayout` against the real
+  container width. When those disagree, the JSX branch swaps ~1-5 ms
+  after mount and `children` remount at a new position — so a field
+  node captured before that is detached, keystrokes land on the dead
+  node, and the component keeps its seed state. A story that "types a
+  value and asserts the result" then passes green having typed
+  nothing. Width sweep on the same file confirms the boundary is
+  exactly `NARROW_THRESHOLD_PX = 640`: detaches at 560 and 639, clean
+  at 641, 900, 1100. Two traps found alongside it: NativeWind width
+  classes do **not** compute in the vitest storybook browser (both
+  `w-[560px]` and `w-24` measure 1200 px) while inline `style={{
+width }}` does, so a class-width decorator and a style-width
+  decorator are not comparable controls; and first-story immunity is
+  incidental, not a rule — `useWindowDimensions()` sometimes returns 0
+  on first mount, which happens to make the guess match. Reachable
+  wherever a play-driven story puts a `FormRow` under an effective
+  width below 640 and captures a node before typing.
+  `entry-card.stories.tsx` has no `FormRow` and is unaffected (20/20
+  green); `components/wizard/wizard-shell.stories.tsx` uses an inline
+  375 px phone frame and is worth a check. Decide whether the fix is a
+  lint/guard on narrow decorators, a `FormRow` that does not guess
+  before measuring, or a documented story-authoring rule. Raised
+  2026-08-15 by the Slice 3.8 Task 4 review.
