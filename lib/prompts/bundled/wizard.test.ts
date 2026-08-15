@@ -325,6 +325,21 @@ describe('WIZARD_OPENING cast block', () => {
     expect(out).not.toContain('lead character')
     expect(out).not.toContain('Aria')
   })
+
+  it('drops the lead line when the lead id points at a non-character row', () => {
+    const out = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'adventure', genre: {}, tone: {}, setting: '' },
+      cast: [
+        { id: 'l1', kind: 'location', name: 'Mornstone Keep', description: '', status: 'active' },
+      ],
+      // Same reasoning as the staged case: canSetLead gates the shipped UI to
+      // active characters, but a hydrated pointer can outlive the row it named.
+      leadEntityId: 'l1',
+      guidance: '',
+    })
+    expect(out).toContain('Mornstone Keep (location, cast id: l1)')
+    expect(out).not.toContain('lead character')
+  })
 })
 
 describe('WIZARD_CAST', () => {

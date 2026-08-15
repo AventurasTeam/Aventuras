@@ -28,8 +28,10 @@
 //
 // The lead line also checks leadRows.first, not just leadEntityId != blank:
 // this macro doesn't own how leadEntityId got set, and naming an id as the
-// lead while the cast block above excludes that same id (staged, or simply
-// absent from cast) would contradict the prompt in the same breath.
+// lead while the cast block above lists it as something other than an active
+// character (staged, a non-character kind, or simply absent from cast) would
+// contradict the prompt in the same breath. Same resolution rule as
+// step-cast-logic's activeLead.
 export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %}Setting: {{ definition.setting }}
 {% endif %}{% if definition.genre.promptBody != blank %}Genre: {{ definition.genre.promptBody }}
 {% endif %}{% if definition.tone.promptBody != blank %}Tone: {{ definition.tone.promptBody }}
@@ -37,7 +39,7 @@ export const MACRO_WIZARD_OPENING_CONTEXT = `{% if definition.setting != blank %
 {% for row in lore %}- {{ row.title }}: {{ row.body }}
 {% endfor %}{% endif %}{% assign activeCast = cast | active %}{% if activeCast.size > 0 %}Cast — sceneEntities takes only the character and item ids from this list, currentLocationId only a location id from it; factions are never scene-tagged:
 {% for row in activeCast %}- {{ row.name }} ({{ row.kind }}, cast id: {{ row.id }}){% if row.description != blank %}: {{ row.description }}{% endif %}
-{% endfor %}{% endif %}{% assign leadRows = activeCast | where: 'id', leadEntityId %}{% if leadEntityId != blank and leadRows.first %}The lead character's cast id is {{ leadEntityId }}.
+{% endfor %}{% endif %}{% assign leadRows = activeCast | by_kind: 'character' | where: 'id', leadEntityId %}{% if leadEntityId != blank and leadRows.first %}The lead character's cast id is {{ leadEntityId }}.
 {% endif %}`
 
 export const WIZARD_OPENING = `Write the opening passage of this {{ definition.mode }} story.
