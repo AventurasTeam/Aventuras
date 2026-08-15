@@ -7,7 +7,9 @@ import { t } from '../harness/i18n'
 // EntryCard per-row action controls, which the component hardcodes in English
 // (not `t()` — see docs/implementation/triage.md). They're centralized here so
 // a future i18n pass is a one-line change, and the literals still match the
-// app's real accessible output today.
+// app's real accessible output today. One is a RegExp rather than a literal:
+// the monotonicity label interpolates the predecessor's formatted time, so only
+// its fixed lead-in can be matched.
 const EDIT_ENTRY_LABEL = 'Edit entry'
 const DELETE_ENTRY_LABEL = 'Delete entry'
 const EDIT_TEXTAREA_LABEL = 'Edit entry content'
@@ -46,16 +48,20 @@ export const reader = {
   worldTimeFooter: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: EDIT_TIME_LABEL }),
   // components/ui/popover.tsx nests two role="dialog" nodes on web — radix's own
-  // content wrapper (unnamed) around the View that carries the aria-label. Only
-  // the inner one should match a name filter, but `.first()` keeps the locator
-  // strict-mode-safe either way: both wrap the same subtree, so scoping fields
-  // and buttons under it resolves identically.
+  // content wrapper around the View that carries the aria-label. Only the inner
+  // one has an accessible name, so the name filter already resolves to one;
+  // `.first()` is belt and braces, and outcome-identical because both wrap the
+  // same subtree. It is NOT row disambiguation: every row owns its own Popover,
+  // so a spec driving two rows at once would silently get whichever portal
+  // mounted first.
   worldTimeDialog: (page: Page): Locator =>
     page.getByRole('dialog', { name: EDIT_TIME_LABEL }).first(),
   // Tier names are calendar-authored content (earth-gregorian: Year / Month /
   // Day / Hour / Minute / Second), capitalized for display by TierTupleInput.
-  // Labelled tiers (Month) render a Select, not a textbox.
-  worldTimeField: (page: Page, tier: string): Locator =>
+  // Numeric only, hence the name: a labelled tier (Month) renders a Select with
+  // no aria-label at all, so passing one yields an empty locator, not a wrong
+  // element. A union type would pin this to earth-gregorian's tier names.
+  worldTimeNumericField: (page: Page, tier: string): Locator =>
     reader.worldTimeDialog(page).getByRole('textbox', { name: tier }),
   worldTimeSave: (page: Page): Locator =>
     reader.worldTimeDialog(page).getByRole('button', { name: SAVE_LABEL }),

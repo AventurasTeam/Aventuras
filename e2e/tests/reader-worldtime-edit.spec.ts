@@ -54,6 +54,11 @@ test.describe('reader — edit an entry world time', () => {
       `SELECT json_extract(metadata, '$.worldTime') FROM story_entries WHERE id = ?`,
       [entryId],
     )
+    // The seeded ids above are the one constant the preconditions below can't
+    // check by value; without this a renamed id scheme (or an N_HERO under 71)
+    // surfaces as an anonymous `undefined[0]` TypeError from in here.
+    if (rows.length === 0)
+      throw new Error(`worldTimeOf: no story_entries row for ${entryId} — seed drift?`)
     return rows[0][0] as number
   }
 
@@ -88,20 +93,23 @@ test.describe('reader — edit an entry world time', () => {
     await expect(reader.worldTimeDialog(app.window)).toBeVisible()
     // The form really mounted on this entry's seeded time, so the Save below is
     // a genuine untouched save and not a click into an overlay that never opened.
-    await expect(reader.worldTimeField(app.window, 'Minute')).toHaveValue(SEEDED_MINUTE)
-    await expect(reader.worldTimeField(app.window, 'Second')).toHaveValue(SEEDED_SECOND)
+    await expect(reader.worldTimeNumericField(app.window, 'Minute')).toHaveValue(SEEDED_MINUTE)
+    await expect(reader.worldTimeNumericField(app.window, 'Second')).toHaveValue(SEEDED_SECOND)
     await expect(reader.worldTimeSave(app.window)).toBeEnabled()
     await reader.worldTimeSave(app.window).click()
     await expect(reader.worldTimeDialog(app.window)).toBeHidden()
 
+    // Read straight away, so on its own this only catches a synchronous write.
+    // The binding proof that the no-change save landed nothing is the exact
+    // `toBe(1)` in the next phase.
     expect(await editDeltaCount(TARGET_ID)).toBe(0)
     expect(await worldTimeOf(TARGET_ID)).toBe(SEEDED_WORLD_TIME)
 
     // A real edit writes exactly one delta and moves the stored seconds.
     await reader.worldTimeFooter(app.window, TARGET_ID).click()
     await expect(reader.worldTimeDialog(app.window)).toBeVisible()
-    await reader.worldTimeField(app.window, 'Minute').fill(EDITED_MINUTE)
-    await expect(reader.worldTimeField(app.window, 'Minute')).toHaveValue(EDITED_MINUTE)
+    await reader.worldTimeNumericField(app.window, 'Minute').fill(EDITED_MINUTE)
+    await expect(reader.worldTimeNumericField(app.window, 'Minute')).toHaveValue(EDITED_MINUTE)
     await reader.worldTimeSave(app.window).click()
 
     await expect.poll(() => worldTimeOf(TARGET_ID), { timeout: 15_000 }).toBe(EDITED_WORLD_TIME)
