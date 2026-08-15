@@ -398,9 +398,9 @@ export const RichXssSanitization: StoryT = {
 }
 
 /**
- * Desktop / tablet fork: the card anchors the edit form itself. `useTier()`
- * reads the window, and the test window is wider than the phone breakpoint,
- * so `onRequestEditTime` must stay untouched here.
+ * Desktop / tablet fork: the card anchors the edit form itself, and Cancel
+ * closes it without reporting. Runs at the 1200 px default viewport, so
+ * `onRequestEditTime` must stay untouched even though it is supplied.
  */
 export const EditableWorldTimeFooter: StoryT = {
   ...wrap,
@@ -418,6 +418,33 @@ export const EditableWorldTimeFooter: StoryT = {
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
     expect(args.onRequestEditTime).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(args.onEditTime).not.toHaveBeenCalled()
+  },
+}
+
+/**
+ * Phone fork. Both handlers are supplied, so `tier === 'phone'` is the only
+ * path that reaches `onRequestEditTime` — the viewport global is what proves
+ * it, and Storybook's vitest addon applies it before the story runs.
+ */
+export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
+  ...wrap,
+  globals: { viewport: { value: 'mobile1' } },
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(),
+    onRequestEditTime: fn(),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(args.onRequestEditTime).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(args.onEditTime).not.toHaveBeenCalled()
   },
 }
 
@@ -448,8 +475,9 @@ export const WorldTimeEditSaveReportsSeconds: StoryT = {
 }
 
 /**
- * Phone fork: with no `onEditTime` to land a save on, the card refuses to host
- * the overlay and asks the route to present the native Sheet instead.
+ * Tier-independent half of the fork: with no `onEditTime` to land a save on,
+ * the card refuses to host the overlay at any width, because a Popover Save
+ * would have nowhere to report and would discard the edit silently.
  */
 export const WorldTimeEditRequestsHostOverlay: StoryT = {
   ...wrap,
