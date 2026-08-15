@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import { branches, deltas, happenings, storyEntries, type Delta, type StoryEntry } from '@/lib/db'
 import { PER_TURN_KIND } from '@/lib/pipeline'
 import {
@@ -36,6 +37,19 @@ vi.mock('../embedder-swap/engine', async (importOriginal) => {
 const sweepHook = vi.hoisted(() => ({
   onSweep: null as ((rows: readonly { id: string }[]) => void) | null,
 }))
+// Armed only across the call under test: undo / redo / rollback sweep through
+// the same function, so a hook left live would fire on those too.
+async function withSweepHook<T>(
+  onSweep: NonNullable<typeof sweepHook.onSweep>,
+  body: () => Promise<T>,
+): Promise<T> {
+  sweepHook.onSweep = onSweep
+  try {
+    return await body()
+  } finally {
+    sweepHook.onSweep = null
+  }
+}
 vi.mock('../delta/reverse-replay', async (importOriginal) => {
   const actual = await importOriginal<
     Record<string, unknown> & { reverseAndPruneDeltaRows: typeof reverseAndPruneDeltaRows }
@@ -247,8 +261,9 @@ describe('regenerateTurn', () => {
       callStarted = r
     })
     // The composer's Send -> Cancel as it actually lands: the provider request
-    // hangs until the run's own signal aborts it. The SDK calls fetch with a
-    // lone Request, so the signal is on that and never on an init bag.
+    // hangs until the run's own signal aborts it. createFetchWithCapture folds
+    // init into a Request before delegating, so any stub here reads the signal
+    // off the request and never off an init bag.
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
@@ -282,7 +297,6 @@ describe('regenerateTurn', () => {
     await hydrateAppSettings(async () => WORKING_CONFIG)
 
     const order: string[] = []
-    sweepHook.onSweep = () => order.push('swept')
     let resolveTerminal!: () => void
     const terminal = new Promise<void>((r) => {
       resolveTerminal = r
@@ -301,7 +315,7 @@ describe('regenerateTurn', () => {
     })
     generationStore.startRun({
       runId: 'run_c',
-      kind: 'periodic-classifier',
+      kind: PERIODIC_CLASSIFIER_KIND,
       gateBehavior: 'no-gate',
       actionId: 'act_live',
       storyId: 's1',
@@ -313,7 +327,10 @@ describe('regenerateTurn', () => {
       resolveTerminal,
     })
 
-    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    const regen = await withSweepHook(
+      () => order.push('swept'),
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
     order.push('regen-settled')
 
     expect(order).toEqual(['classifier-aborted', 'classifier-drained', 'swept', 'regen-settled'])
@@ -385,6 +402,8 @@ describe('regenerateTurn', () => {
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
 
     expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(expectRan(regen.result).outcome).toBe('failed')
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
@@ -418,11 +437,14 @@ describe('regenerateTurn', () => {
       }),
     )
     const attempted: boolean[] = []
-    sweepHook.onSweep = (rows) => {
-      attempted.push(isFollowUpSweep(rows))
-      if (isFollowUpSweep(rows)) throw error
-    }
-    return { attempted, regen: regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx) }
+    const regen = withSweepHook(
+      (rows) => {
+        attempted.push(isFollowUpSweep(rows))
+        if (isFollowUpSweep(rows)) throw error
+      },
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+    return { attempted, regen }
   }
 
   it('keeps the run result and the user text when the follow-up unwind fails', async () => {
