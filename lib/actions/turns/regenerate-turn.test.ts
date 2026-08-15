@@ -151,6 +151,9 @@ describe('regenerateTurn', () => {
     expect(newCreate.actionId).not.toBe('act_t2')
     const [uaCreate] = await ctx.db.select().from(deltas).where(eq(deltas.targetId, 'e_u2'))
     expect(uaCreate.actionId).toBe('act_t2')
+
+    // What the host re-submits on Retry / restores as a draft.
+    expect(regen.userActionContent).toBe('I cross the bridge.')
   })
 
   it('older reply: deeper cascade through the same sweep, regenerating from that action', async () => {
@@ -170,5 +173,7 @@ describe('regenerateTurn', () => {
     expect(rows[2].kind).toBe('ai_reply')
     expect(rows[2].content).toBe('A new take.')
     expect(await ctx.db.select().from(happenings)).toEqual([])
+    // Clamped to position(e_r1) - 1, one turn deeper than the terminal case.
+    expect(await watermark(ctx)).toBe(2)
   })
 })

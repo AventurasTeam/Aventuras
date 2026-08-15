@@ -8,9 +8,9 @@ import type { makeHarness } from '../../../pipeline/__tests__/harness'
 
 // The phase streams via the real openai-compatible provider path; stub global
 // fetch (a call-time seam, unlike a module mock of the AI/provider graph, which
-// the setup-file's eager load of that graph would defeat — `@/lib/retrieval`
-// sits outside it and mocks fine) with a canned OpenAI SSE stream so the
-// happy path gets deterministic streamed tokens without a network round-trip.
+// the setup-file's eager load of that graph would defeat) with a canned OpenAI
+// SSE stream so the happy path gets deterministic streamed tokens without a
+// network round-trip.
 export function sseFetch(tokens: readonly string[]): typeof fetch {
   const chunks = tokens.map(
     (content) =>
