@@ -5,6 +5,7 @@ import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
+import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx } from '../types'
 import { STORY_ENTRY_REJECTION } from './register'
 
@@ -12,7 +13,24 @@ export type UpdateWorldTimeResult =
   | { status: 'ok' }
   | { status: 'rejected'; reason: string; code?: string }
 
+/**
+ * Keyed on this action rather than on `updateStoryEntryMetadata`: what needs
+ * serializing is the read-then-decide below, which only this function performs.
+ * The pipeline's own dispatches of that kind never pass through here, so a
+ * kind-wide key would serialize them against each other for no benefit.
+ */
 export async function updateEntryWorldTime(
+  branchId: string,
+  id: string,
+  worldTime: number,
+  ctx: DbCtx,
+): Promise<UpdateWorldTimeResult> {
+  return withKeyLock(`updateEntryWorldTime:${branchId}:${id}`, () =>
+    updateEntryWorldTimeLocked(branchId, id, worldTime, ctx),
+  )
+}
+
+async function updateEntryWorldTimeLocked(
   branchId: string,
   id: string,
   worldTime: number,

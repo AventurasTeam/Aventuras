@@ -209,6 +209,30 @@ describe('updateEntryWorldTime', () => {
     expect(undoRedoStore.hasRedo()).toBe(true)
   })
 
+  // Two Saves landing during one in-flight write: unserialized, both reads
+  // observe the pre-edit seconds, both dispatch, and each mints its own
+  // actionId — so the user gets two CTRL-Z steps for one conceptual edit, the
+  // second silently consuming the undo of whatever came before. Both promises
+  // are created before either is awaited, so the calls genuinely overlap.
+  it('collapses two concurrent edits of the same entry into one delta', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const first = updateEntryWorldTime('b1', 'e2', 45, ctx)
+    const second = updateEntryWorldTime('b1', 'e2', 45, ctx)
+    expect((await Promise.all([first, second])).map((r) => r.status)).toEqual(['ok', 'ok'])
+
+    expect((await branchDeltas(db)).length).toBe(1)
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(45)
+
+    // The criterion the count stands in for: one CTRL-Z restores the pre-edit
+    // value with nothing left behind it.
+    expect((await undoLastAction('b1', ctx)).status).toBe('ok')
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(120)
+    expect((await branchDeltas(db)).length).toBe(0)
+  })
+
   it('preserves sibling metadata fields on write', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

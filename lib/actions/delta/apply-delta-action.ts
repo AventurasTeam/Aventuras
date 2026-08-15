@@ -6,6 +6,7 @@ import { generateId } from '@/lib/ids'
 import { undoRedoStore } from '@/lib/stores'
 
 import type { DbCtx, MutationResult, PipelineAction } from '../types'
+import { withKeyLock } from './key-lock'
 import { resolveByActionKind, resolveByTable } from './registry'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
@@ -15,31 +16,11 @@ function nextLogPosition(branchId: string) {
   return sql<number>`(SELECT COALESCE(MAX(${deltas.logPosition}), 0) + 1 FROM ${deltas} WHERE ${deltas.branchId} = ${branchId})`
 }
 
-// Serializes concurrent dispatches that target the same key: the second
-// caller's body doesn't start until the first's has fully settled. Needed
-// because promoteStagedEntity's read-then-decide (loadCurrent, then branch on
-// status) isn't atomic with its write — two interleaved dispatches for the
-// same entity can both observe 'staged' and both commit, producing two delta
-// log entries for one conceptual promotion (breaks the one-CTRL-Z-undoes-it
-// acceptance criterion). This app is single-process (Electron main owns the
-// db), so an in-process key lock is sufficient — no cross-process writers.
-const inFlightByKey = new Map<string, Promise<unknown>>()
-
-function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {
-  const prior = inFlightByKey.get(key) ?? Promise.resolve()
-  const settled = prior.then(run, run)
-  const current = settled.catch(() => undefined)
-  inFlightByKey.set(key, current)
-  current.finally(() => {
-    if (inFlightByKey.get(key) === current) {
-      inFlightByKey.delete(key)
-    }
-  })
-  return settled
-}
-
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action } = args
+  // Opting in here covers promoteStagedEntity because its read-then-decide
+  // (loadCurrent, then branch on status) lives inside its handler. An action
+  // whose read happens before dispatch must take the lock itself.
   if (action.kind === 'promoteStagedEntity') {
     return withKeyLock(`promoteStagedEntity:${action.payload.branchId}:${action.payload.id}`, () =>
       applyDeltaActionUnlocked(args, ctx),
