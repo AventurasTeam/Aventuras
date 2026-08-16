@@ -205,7 +205,7 @@ export class RisuRealmProvider implements DiscoveryProvider {
     // Risu's decoded page data uses SillyTavern-compatible field names when the
     // author exposes them. Preserve those fields instead of reducing the card to metadata.
     const stCard = {
-      name: fullCard.name,
+      name: fullCard.name || card.name || 'Unnamed',
       description: fullCard.desc || '',
       personality: fullCard.personality || '',
       scenario: fullCard.scenario || '',

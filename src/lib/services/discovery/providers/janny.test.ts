@@ -184,6 +184,40 @@ describe('JannyProvider', () => {
     expect(await blob.text()).toBe('png-card-payload')
   })
 
+  it.each([
+    ['malformed', 'not a URL'],
+    ['non-HTTPS', 'http://cdn.jannyai.com/cards/astra.png'],
+    ['nonstandard port', 'https://cdn.jannyai.com:444/cards/astra.png'],
+    ['lookalike host', 'https://cdn.jannyai.com.evil.example/cards/astra.png'],
+    ['untrusted subdomain', 'https://evil.jannyai.com/cards/astra.png'],
+  ])('rejects a %s download URL', async (_case, downloadUrl) => {
+    mockCorsFetch.mockResolvedValueOnce(jsonResponse({ status: 'ok', downloadUrl }))
+
+    const { JannyProvider } = await import('./janny')
+    await expect(new JannyProvider().downloadCard(discoveryCard())).rejects.toThrow(
+      'JannyAI did not return a character download',
+    )
+    expect(mockCorsFetch).toHaveBeenCalledOnce()
+  })
+
+  it('rejects a download payload without a usable URL', async () => {
+    mockCorsFetch.mockResolvedValueOnce(jsonResponse({ status: 'error' }))
+
+    const { JannyProvider } = await import('./janny')
+    await expect(new JannyProvider().downloadCard(discoveryCard())).rejects.toThrow(
+      'JannyAI did not return a character download',
+    )
+  })
+
+  it('throws for non-403 download failures', async () => {
+    mockCorsFetch.mockResolvedValueOnce(new Response('Unavailable', { status: 500 }))
+
+    const { JannyProvider } = await import('./janny')
+    await expect(new JannyProvider().downloadCard(discoveryCard())).rejects.toThrow(
+      'Failed to fetch JannyAI character: 500',
+    )
+  })
+
   it('returns an explicit metadata-only V2 card when Cloudflare blocks downloads', async () => {
     const card = discoveryCard()
     mockCorsFetch.mockResolvedValueOnce(new Response('Forbidden', { status: 403 }))
@@ -206,7 +240,9 @@ describe('JannyProvider', () => {
       data: expect.objectContaining({
         name: 'Astra & Co.',
         description: 'A spacefaring guide.',
-        scenario: 'A spacefaring guide.',
+        scenario: '',
+        creator_notes:
+          'Imported from JannyAI search metadata only. Full card unavailable. https://jannyai.com/characters/character-42_character-astra-co',
         tags: ['NSFW', 'Fantasy'],
         extensions: {
           jannyai: {

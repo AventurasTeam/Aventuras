@@ -144,6 +144,33 @@ describe('BackyardProvider', () => {
     )
   })
 
+  it('keeps NSFW groups when NSFW results are requested', async () => {
+    corsFetchMock.mockResolvedValueOnce(
+      jsonResponse([
+        {
+          result: {
+            data: {
+              json: {
+                hubGroupConfigs: [
+                  {
+                    id: 'group-nsfw',
+                    isNSFW: true,
+                    CharacterConfigs: [{ id: 'config-nsfw', displayName: 'Unfiltered Character' }],
+                  },
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    )
+
+    const result = await new BackyardProvider().search({ query: '', nsfw: true }, 'character')
+
+    expect(result.cards.map((card) => card.id)).toEqual(['config-nsfw'])
+    expect(result.cards[0].nsfw).toBe(true)
+  })
+
   it('builds a stable page URL and downloads full character data as JSON', async () => {
     const provider = new BackyardProvider()
     const card = {

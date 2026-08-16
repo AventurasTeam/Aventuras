@@ -4,6 +4,8 @@ import { corsFetch, GENERIC_ICON } from '../utils'
 const JANNY_SEARCH_URL = 'https://search.jannyai.com/multi-search'
 const JANNY_DOWNLOAD_URL = 'https://api.jannyai.com/api/v1/download'
 const JANNY_IMAGE_BASE = 'https://image.jannyai.com/bot-avatars/'
+// The API controls the returned URL, so keep this exact to prevent Tauri HTTP from fetching arbitrary hosts.
+const JANNY_DOWNLOAD_HOSTS = new Set(['cdn.jannyai.com', 'image.jannyai.com'])
 
 // Cached token
 let cachedToken: string | null = null
@@ -249,7 +251,22 @@ export class JannyProvider implements DiscoveryProvider {
         throw new Error('JannyAI did not return a character download')
       }
 
-      const cardResponse = await corsFetch(result.downloadUrl)
+      let downloadUrl: URL
+      try {
+        downloadUrl = new URL(result.downloadUrl)
+      } catch {
+        throw new Error('JannyAI did not return a character download')
+      }
+
+      if (
+        downloadUrl.protocol !== 'https:' ||
+        downloadUrl.port !== '' ||
+        !JANNY_DOWNLOAD_HOSTS.has(downloadUrl.hostname)
+      ) {
+        throw new Error('JannyAI did not return a character download')
+      }
+
+      const cardResponse = await corsFetch(downloadUrl.href)
       if (!cardResponse.ok) {
         throw new Error(`Failed to download JannyAI character: ${cardResponse.status}`)
       }
@@ -276,10 +293,11 @@ export class JannyProvider implements DiscoveryProvider {
         name: card.name || 'Unnamed',
         description: card.description || '',
         personality: '',
-        scenario: card.description || '',
+        scenario: '',
         first_mes: '',
         mes_example: '',
-        creator_notes: card.description || '',
+        creator_notes:
+          `Imported from JannyAI search metadata only. Full card unavailable. ${card.raw?.pageUrl || ''}`.trim(),
         system_prompt: '',
         post_history_instructions: '',
         alternate_greetings: [],

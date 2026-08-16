@@ -116,7 +116,7 @@ describe('RisuRealmProvider', () => {
         creator_notes: 13,
       },
       'risu-9',
-      'Lantern Keeper',
+      null,
       'RealmScribe',
       'A guide through a city that dreams at night.',
       [7, 8],
