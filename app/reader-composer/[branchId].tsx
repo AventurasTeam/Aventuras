@@ -16,8 +16,14 @@ import {
   type ReaderSurfaceHandle,
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
-import { classifyRegenerateGate } from '@/components/reader/regenerate-gate'
-import { planRegenerateOutcome } from '@/components/reader/regenerate-outcome'
+import {
+  classifyRegenerateGate,
+  loadRegenerateCountsIfCurrent,
+} from '@/components/reader/regenerate-gate'
+import {
+  planRegenerateOutcome,
+  shouldRestoreUserActionAfterHandlingFailure,
+} from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
@@ -131,6 +137,8 @@ export default function ReaderComposerRoute() {
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
+  const branchIdRef = useRef(branchId)
+  branchIdRef.current = branchId
 
   const [storyId, setStoryId] = useState<string | null>(null)
   const [rollback, setRollback] = useState<RollbackState | null>(null)
@@ -361,7 +369,7 @@ export default function ReaderComposerRoute() {
 
   const reload = useCallback(async () => {
     const recent = await readRecentEntries(branchId, db)
-    entriesStore.hydrate(branchId, recent)
+    if (!entriesStore.hydrateIfLoaded(branchId, recent)) return
     // A recent-window reload drops any older entries a scroll-up had loaded, so
     // recompute the boundary: a full window means older may exist, a short one
     // proves the branch top is in the window. The seed guard won't do this.
@@ -686,7 +694,12 @@ export default function ReaderComposerRoute() {
             error: err instanceof Error ? err.message : String(err),
           })
           toast.error(t('reader:regenerateFailed'))
-          if (isDraftEmpty(composerRef.current?.getDraft()))
+          if (
+            shouldRestoreUserActionAfterHandlingFailure(
+              plan.action,
+              isDraftEmpty(composerRef.current?.getDraft()),
+            )
+          )
             composerRef.current?.restoreDraft(regen.userActionContent, 'free')
           await reload()
         }
@@ -785,7 +798,18 @@ export default function ReaderComposerRoute() {
       // Opening a confirm whose dispatch the in-flight guard will drop leaves
       // the user watching the modal close on nothing.
       if (dispatchInFlightRef.current) return
-      const counts = await getRollbackCounts(branchId, entryId, ctx)
+      const startedBranchId = branchId
+      const counts = await loadRegenerateCountsIfCurrent(
+        () => getRollbackCounts(startedBranchId, entryId, ctx),
+        () => ({
+          startedBranchId,
+          currentBranchId: branchIdRef.current,
+          loadedBranchId: entriesStore.getLoadedBranch(),
+          dispatchInFlight: dispatchInFlightRef.current,
+          userEditBlocked: generationStore.isUserEditBlocked(),
+        }),
+      )
+      if (counts == null) return
       if ('status' in counts) {
         toast.error(t('reader:regenerateFailed'))
         return
@@ -824,9 +848,7 @@ export default function ReaderComposerRoute() {
   // error belongs to the strip that fired it. The entry ref alone would cover
   // it (ids are globally unique, and a switch nulls the tail); the branch ref
   // stays so the guard is legible without trusting that cross-module invariant.
-  const branchIdRef = useRef(branchId)
   const terminalEntryIdRef = useRef(terminalEntry?.id)
-  branchIdRef.current = branchId
   terminalEntryIdRef.current = terminalEntry?.id
 
   const handleRefreshSuggestions = useCallback(() => {

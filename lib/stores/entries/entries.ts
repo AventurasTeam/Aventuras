@@ -10,6 +10,7 @@ export const entriesStore = {
   getLoadedBranch: store.getLoadedBranch,
   getById: (id: string): StoryEntry | undefined => store.getRows().get(id),
   hydrate: store.hydrate,
+  hydrateIfLoaded: store.hydrateIfLoaded,
   patch: store.patch,
   __reset: store.__reset,
 }

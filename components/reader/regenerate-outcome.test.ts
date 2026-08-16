@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   offersUserAction,
   planRegenerateOutcome,
+  shouldRestoreUserActionAfterHandlingFailure,
   type RegenerateOutcomeAction,
 } from './regenerate-outcome'
 
@@ -99,5 +100,11 @@ describe('offersUserAction', () => {
     ['none', false],
   ] as [RegenerateOutcomeAction, boolean][])('%s → %s', (action, expected) => {
     expect(offersUserAction(action)).toBe(expected)
+  })
+})
+
+describe('outcome handling failure recovery', () => {
+  it('does not restore text for an unconverged action that still stands', () => {
+    expect(shouldRestoreUserActionAfterHandlingFailure('refuse-unconverged', true)).toBe(false)
   })
 })

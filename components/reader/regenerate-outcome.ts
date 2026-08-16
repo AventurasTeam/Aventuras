@@ -51,3 +51,10 @@ export function offersUserAction(action: RegenerateOutcomeAction): boolean {
     action === 'restore-draft'
   )
 }
+
+export function shouldRestoreUserActionAfterHandlingFailure(
+  action: RegenerateOutcomeAction,
+  draftEmpty: boolean,
+): boolean {
+  return draftEmpty && offersUserAction(action)
+}

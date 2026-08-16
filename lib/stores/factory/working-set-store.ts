@@ -9,6 +9,7 @@ export type WorkingSetStore<Row extends { id: string }> = {
   getLoadedBranch: () => string | null
   patch: (branchId: string, patch: StorePatch) => void
   hydrate: (branchId: string, rows: Row[]) => void
+  hydrateIfLoaded: (branchId: string, rows: Row[]) => boolean
   __reset: () => void
 }
 
@@ -34,14 +35,21 @@ export function createWorkingSetStore<Row extends { id: string }>(): WorkingSetS
     store.setState({ rows })
   }
 
+  const hydrate = (branchId: string, rows: Row[]) =>
+    store.setState({ loadedBranch: branchId, rows: new Map(rows.map((r) => [r.id, r])) })
+
   return {
     useRows: (selector) => useStore(store, (s) => selector(s.rows)),
     // ReadonlyMap is a type-level guard; this is the live snapshot — do not mutate (replaced on next patch).
     getRows: () => store.getState().rows,
     getLoadedBranch: () => store.getState().loadedBranch,
     patch,
-    hydrate: (branchId, rows) =>
-      store.setState({ loadedBranch: branchId, rows: new Map(rows.map((r) => [r.id, r])) }),
+    hydrate,
+    hydrateIfLoaded: (branchId, rows) => {
+      if (store.getState().loadedBranch !== branchId) return false
+      hydrate(branchId, rows)
+      return true
+    },
     __reset: () => store.setState({ rows: new Map(), loadedBranch: null }),
   }
 }
