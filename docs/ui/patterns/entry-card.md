@@ -233,13 +233,13 @@ computes the new cumulative seconds and invokes `onEditTime(next)`
 delta against `entries.metadata.worldTime`. Cancel discards.
 
 A rejected or failed write keeps the overlay open with the typed
-tuple intact, on both tiers — the host reports the failure (toast)
-and the user retries or cancels without retyping. Only a write that
-reports success closes the overlay; `onEditTime` resolving `false`
-and `onEditTime` rejecting are both treated as failures, the latter
-reported by the card itself since a rejection crossing the
-[reader document](./reader-document.md) bridge has no other
-handler.
+tuple intact, on both tiers. The form reports the failure inline, in
+the same rendering realm as the editor, so the user retries or
+cancels without retyping. While Save is pending, the tuple controls
+and Cancel are disabled, Save carries its loading indicator, and
+the Dialog or Sheet cannot be dismissed. Only a write that reports
+success closes the overlay; `onEditTime` resolving `false` and
+`onEditTime` rejecting are both treated as failures.
 
 A Save whose tuple is unchanged never reaches the write path at
 all: no delta, no edit callback, and the overlay closes through the

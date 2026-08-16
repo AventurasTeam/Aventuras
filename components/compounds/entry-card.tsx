@@ -35,11 +35,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { useTier } from '@/hooks/use-tier'
 import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import { stripTrailingBlocks } from '@/lib/piggyback'
-import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
@@ -145,31 +143,41 @@ function WorldTimeEditDialog({
   onEditTime?: (nextWorldTime: number) => Promise<boolean>
 }) {
   const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
 
-  // Closing only once the write has reported success keeps a rejected save's
-  // typed tuple on screen, matching the phone Sheet and the reader's other edit
-  // flows. The catch is load-bearing: on native this runs in the expo-dom
-  // WebView, where a bridge-level failure rejects outside the host's own
-  // try/catch and nothing else would surface it.
   async function save(next: number) {
+    if (saving) return
+    setSaving(true)
+    setSaveError(undefined)
     try {
-      if (await onEditTime?.(next)) setOpen(false)
-    } catch (err) {
-      logger.error('action_layer.world_time_edit_failed', {
-        error: err instanceof Error ? err.message : String(err),
-      })
-      toast.error(t('reader:worldTimeEdit.failed'))
+      if (await onEditTime?.(next)) {
+        setOpen(false)
+      } else {
+        setSaveError(t('reader:worldTimeEdit.failed'))
+      }
+    } catch {
+      setSaveError(t('reader:worldTimeEdit.failed'))
+    } finally {
+      setSaving(false)
     }
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next && saving) return
+    if (next) setSaveError(undefined)
+    setOpen(next)
   }
 
   return (
     // Centred modal rather than an anchored Popover: the entry list scrolls
     // under the overlay, so an anchor drifts off its own trigger and collides
     // with the chrome around the list.
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
         className="max-w-xl"
+        hideCloseButton={saving}
         // Radix autofocuses the first tabbable field and selects its text.
         // Land on the content container instead: the selection is one
         // keystroke from wiping a field, and on touch it flashes the
@@ -189,6 +197,8 @@ function WorldTimeEditDialog({
           frame={edit.frame}
           worldTimeRaw={edit.worldTimeRaw}
           monotonicityBreak={monotonicityBreak}
+          saving={saving}
+          saveError={saveError}
           onSave={(next) => void save(next)}
           onCancel={() => setOpen(false)}
         />

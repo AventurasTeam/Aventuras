@@ -127,23 +127,22 @@ describe('useWorldTimeEditing → stale edit target', () => {
 })
 
 describe('useWorldTimeEditing → edit result channel', () => {
-  it('reports a rejected write as a result rather than throwing, and tells the user', async () => {
+  it('reports a rejected write as a result and leaves presentation to the editor', async () => {
     updateEntryWorldTime.mockResolvedValue({ status: 'rejected', reason: 'generation in flight' })
     const { result } = render(ENTRIES, 'earth-gregorian')
     await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: false })
-    // Without this the save visibly does nothing and says nothing.
-    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).not.toHaveBeenCalled()
     expect(logger.warn).toHaveBeenCalledWith(
       'action_layer.world_time_edit_rejected',
       expect.objectContaining({ entryId: 'e2', reason: 'generation in flight' }),
     )
   })
 
-  it('reports a thrown write as a result rather than rejecting, and tells the user', async () => {
+  it('reports a thrown write as a result and leaves presentation to the editor', async () => {
     updateEntryWorldTime.mockRejectedValue(new Error('database is locked'))
     const { result } = render(ENTRIES, 'earth-gregorian')
     await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: false })
-    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(toast.error).not.toHaveBeenCalled()
     // A throw is a different diagnostic from a rejection: error, not warn.
     expect(logger.error).toHaveBeenCalledWith(
       'action_layer.world_time_edit_failed',

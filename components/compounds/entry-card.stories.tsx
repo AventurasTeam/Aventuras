@@ -6,7 +6,6 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import { themes } from '@/lib/themes'
-import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
 
@@ -21,16 +20,6 @@ const baseProps = {
 
 const aiMeta = {
   tokens: { prompt: 1840, completion: 312, reasoning: 87 },
-}
-
-// `subscribe` replays the queue to a new listener synchronously, so this reads
-// the live store without mounting a Toaster.
-function currentToasts(): ToastItem[] {
-  let items: ToastItem[] = []
-  toastStore.subscribe((next) => {
-    items = next
-  })()
-  return items
 }
 
 // Module scope keeps the frame referentially stable — WorldTimeEditForm's
@@ -550,9 +539,11 @@ export const WorldTimeEditKeepsOverlayOpenOnFailure: StoryT = {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
 
-    // Still open, still holding what was typed.
+    // Still open, still holding what was typed, and the failure is explained
+    // in the same realm that owns the editor.
     expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't update the entry's time.")
   },
 }
 
@@ -573,7 +564,6 @@ export const WorldTimeEditSurvivesARejectedWrite: StoryT = {
     }),
   },
   play: async ({ args }) => {
-    toastStore.__reset()
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
 
@@ -584,15 +574,55 @@ export const WorldTimeEditSurvivesARejectedWrite: StoryT = {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
 
-    // The rejection is reported, not swallowed. Without the catch the overlay
-    // would look identical, so this is the assertion that carries the fix.
-    await waitFor(() => expect(currentToasts().map((item) => item.severity)).toEqual(['error']))
+    // A WebView-local error stays visible beside the form; a document-local
+    // toast queue has no mounted consumer in the native reader.
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't update the entry's time."),
+    )
 
     // Overlay survives with the typed tuple, and Save still works on a retry.
     expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
     expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(args.onEditTime).toHaveBeenCalledTimes(2))
+  },
+}
+
+const pendingWorldTimeSave: { finish?: (ok: boolean) => void } = {}
+
+/** A submitted editor cannot be dismissed and replaced before its save settles. */
+export const WorldTimeEditLocksWhileSaving: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          pendingWorldTimeSave.finish = resolve
+        }),
+    ),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+
+    pendingWorldTimeSave.finish?.(true)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   },
 }
 

@@ -1,3 +1,5 @@
+import { useState } from 'react'
+
 import {
   WorldTimeEditForm,
   type MonotonicityBreak,
@@ -11,7 +13,7 @@ type WorldTimeEditSheetProps = {
   frame: CalendarFrame
   worldTimeRaw: number
   monotonicityBreak?: MonotonicityBreak
-  onSave: (next: number) => Promise<void>
+  onSave: (next: number) => Promise<boolean>
   onClose: () => void
 }
 
@@ -22,15 +24,35 @@ export function WorldTimeEditSheet({
   onSave,
   onClose,
 }: WorldTimeEditSheetProps) {
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
+
+  async function save(next: number) {
+    if (saving) return
+    setSaving(true)
+    setSaveError(undefined)
+    try {
+      if (await onSave(next)) {
+        onClose()
+      } else {
+        setSaveError(t('reader:worldTimeEdit.failed'))
+      }
+    } catch {
+      setSaveError(t('reader:worldTimeEdit.failed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <Sheet
       open
       onOpenChange={(next) => {
-        if (!next) onClose()
+        if (!next && !saving) onClose()
       }}
       ariaLabel={t('reader:worldTimeEdit.title')}
     >
-      <SheetContent anchor="bottom" size="auto">
+      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving}>
         {/* Keyed so an external worldTime change (undo, classifier write)
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm
@@ -38,7 +60,9 @@ export function WorldTimeEditSheet({
           frame={frame}
           worldTimeRaw={worldTimeRaw}
           monotonicityBreak={monotonicityBreak}
-          onSave={(next) => void onSave(next)}
+          saving={saving}
+          saveError={saveError}
+          onSave={(next) => void save(next)}
           onCancel={onClose}
         />
       </SheetContent>

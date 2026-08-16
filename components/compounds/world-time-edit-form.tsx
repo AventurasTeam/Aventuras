@@ -25,6 +25,8 @@ type WorldTimeEditFormProps = {
    */
   worldTimeRaw: number
   monotonicityBreak?: MonotonicityBreak
+  saving?: boolean
+  saveError?: string
   /** Fired with the recomputed cumulative seconds; never fired on a no-change save. */
   onSave: (next: number) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
@@ -49,6 +51,8 @@ export function WorldTimeEditForm({
   frame,
   worldTimeRaw,
   monotonicityBreak,
+  saving = false,
+  saveError,
   onSave,
   onCancel,
 }: WorldTimeEditFormProps) {
@@ -117,7 +121,7 @@ export function WorldTimeEditForm({
           </Text>
         </View>
       ) : null}
-      <TierTupleInput calendar={calendar} value={tuple} onChange={setTuple} />
+      <TierTupleInput calendar={calendar} value={tuple} onChange={setTuple} disabled={saving} />
       {rangeError != null ? (
         <View role="alert" accessibilityLiveRegion="assertive">
           <Text size="xs" className="text-danger">
@@ -125,8 +129,15 @@ export function WorldTimeEditForm({
           </Text>
         </View>
       ) : null}
+      {saveError != null ? (
+        <View role="alert" accessibilityLiveRegion="assertive">
+          <Text size="xs" className="text-danger">
+            {saveError}
+          </Text>
+        </View>
+      ) : null}
       <View className="flex-row justify-end gap-2">
-        <Button variant="ghost" size="sm" onPress={onCancel}>
+        <Button variant="ghost" size="sm" onPress={onCancel} disabled={saving}>
           <Text>Cancel</Text>
         </Button>
         <Button
@@ -134,6 +145,7 @@ export function WorldTimeEditForm({
           size="sm"
           onPress={handleSave}
           disabled={blockReason != null}
+          loading={saving}
           disabledReason={blockReason}
         >
           <Text>Save</Text>

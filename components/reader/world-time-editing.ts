@@ -14,8 +14,6 @@ import {
 } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import { t } from '@/lib/i18n'
-import { toast } from '@/lib/toast'
 
 export type WorldTimeEditing = {
   /** Registry-resolved with the default applied; null hides/inerts every footer.
@@ -81,9 +79,6 @@ export function useWorldTimeEditing(
           error: err instanceof Error ? err.message : String(err),
         })
       }
-      // A rejection and a throw differ only in the diagnostic they carry: both
-      // leave the entry unchanged, so they share one report to the user.
-      toast.error(t('reader:worldTimeEdit.failed'))
       return { ok: false }
     },
     [branchId, ctx],

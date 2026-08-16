@@ -31,7 +31,7 @@ const meta: Meta<typeof WorldTimeEditSheet> = {
     frame: { calendar: EARTH_GREGORIAN, origin: ORIGIN },
     // 90 s past the origin — 00:01:30, so the `second` tier seeds at 30.
     worldTimeRaw: 90,
-    onSave: fn(async () => {}),
+    onSave: fn(async () => true),
     onClose: fn(),
   },
 }
@@ -63,12 +63,9 @@ export const CancelCloses: Story = {
   },
 }
 
-/**
- * The sheet never closes itself on Save — it reports and waits. That is what
- * lets the host keep it open on a rejected write (the route only drops the
- * pending id when the action returns ok), so a failed save costs no retyping.
- */
-export const SaveDefersClosingToTheHost: Story = {
+/** A failed write stays in the sheet and explains the failure inline. */
+export const SaveFailureStaysOpen: Story = {
+  args: { onSave: fn(async () => false) },
   play: async ({ args }) => {
     await openSheet()
     await typeSecond('45')
@@ -77,6 +74,35 @@ export const SaveDefersClosingToTheHost: Story = {
 
     expect(args.onClose).not.toHaveBeenCalled()
     expect(secondField()).toHaveValue('45')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't update the entry's time.")
+  },
+}
+
+const pendingSheetSave: { finish?: (ok: boolean) => void } = {}
+
+/** Cancel and pan-down cannot replace the editor while its save is pending. */
+export const SavingLocksTheSheet: Story = {
+  args: {
+    onSave: fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          pendingSheetSave.finish = resolve
+        }),
+    ),
+  },
+  play: async ({ args }) => {
+    await openSheet()
+    await typeSecond('45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onSave).toHaveBeenCalledWith(105))
+
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(args.onClose).not.toHaveBeenCalled()
+
+    pendingSheetSave.finish?.(true)
+    await waitFor(() => expect(args.onClose).toHaveBeenCalledTimes(1))
   },
 }
 

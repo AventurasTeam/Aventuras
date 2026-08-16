@@ -933,11 +933,9 @@ export default function ReaderComposerRoute() {
               ? { previousLabel: timeEdit.decoration.previousLabel }
               : undefined
           }
-          // Closing only on success keeps a rejected write's typed tuple on
-          // screen, matching the desktop Dialog and the reader's other edits.
           onSave={async (next) => {
             const result = await editWorldTime(timeEdit.entryId, next)
-            if (result.ok) closeTimeEdit()
+            return result.ok
           }}
           onClose={closeTimeEdit}
         />
