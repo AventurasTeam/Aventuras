@@ -913,6 +913,19 @@ class StoryStore {
   }
 
   /**
+   * A checkpoint restores to its `lastEntryId`, so one whose entry is gone can only produce a
+   * branch with a dangling fork point.
+   */
+  private async pruneCheckpointsForEntries(entryIds: Set<string>): Promise<void> {
+    const orphaned = this.checkpoints.filter((cp) => entryIds.has(cp.lastEntryId))
+    if (orphaned.length === 0) return
+
+    await Promise.all(orphaned.map((cp) => database.deleteCheckpoint(cp.id)))
+    this.checkpoints = this.checkpoints.filter((cp) => !entryIds.has(cp.lastEntryId))
+    log('Deleted checkpoints whose entry was removed:', orphaned.length)
+  }
+
+  /**
    * Common cleanup logic after an entry is deleted.
    * Restores suggested actions from the new last narration entry and invalidates the retry backup.
    */
@@ -990,6 +1003,7 @@ class StoryStore {
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
+    await this.pruneCheckpointsForEntries(new Set([entryId]))
     await database.deleteStoryEntry(entryId)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
@@ -1303,6 +1317,8 @@ class StoryStore {
       await database.deleteChapters(chaptersToDelete.map((ch) => ch.id))
       this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     }
+
+    await this.pruneCheckpointsForEntries(entryIdsToDelete)
 
     // Delete embedded images for entries being deleted
     // (explicit deletion to ensure cleanup even if CASCADE isn't working)

@@ -97,8 +97,13 @@
   function getLatestCheckpoint() {
     if (story.checkpoints.length === 0) return null
     const currentBranchId = story.currentStory?.currentBranchId ?? null
+    // A checkpoint left behind by a story saved before entry deletion pruned them still points
+    // at an entry that is gone; branching from it would fail on the missing fork entry.
+    const liveEntryIds = new Set(story.entries.map((e) => e.id))
     const eligible = story.checkpoints.filter(
-      (checkpoint) => getCheckpointBranchId(checkpoint) === currentBranchId,
+      (checkpoint) =>
+        getCheckpointBranchId(checkpoint) === currentBranchId &&
+        liveEntryIds.has(checkpoint.lastEntryId),
     )
     if (eligible.length === 0) return null
     // Sort by createdAt descending and return the most recent
