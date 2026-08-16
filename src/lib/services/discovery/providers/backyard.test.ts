@@ -54,6 +54,11 @@ describe('BackyardProvider', () => {
                         },
                       ],
                     },
+                    {
+                      id: 'group-nsfw',
+                      isNSFW: true,
+                      CharacterConfigs: [{ id: 'config-nsfw', displayName: 'Filtered Character' }],
+                    },
                   ],
                 },
               },
@@ -86,7 +91,7 @@ describe('BackyardProvider', () => {
     expect(decodeTrpcInput(requestUrl)).toEqual({
       tagNames: ['Mystery'],
       sortBy: { type: 'New', direction: 'desc' },
-      type: 'sfw',
+      type: 'all',
       direction: 'forward',
       search: 'Iris',
     })

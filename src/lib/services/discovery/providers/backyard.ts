@@ -33,7 +33,8 @@ export class BackyardProvider implements DiscoveryProvider {
         type: sortMap[options.sort || 'popular'] || 'Popularity',
         direction: 'desc',
       },
-      type: options.nsfw ? 'all' : 'sfw',
+      // Backyard now uses this field for chat topology, not content sensitivity.
+      type: 'all',
       direction: 'forward',
     }
 
@@ -95,7 +96,11 @@ export class BackyardProvider implements DiscoveryProvider {
       this.lastCursor = undefined
     }
 
-    const configs = data.hubGroupConfigs || []
+    const configs = (data.hubGroupConfigs || []).filter(
+      (config: any) =>
+        options.nsfw ||
+        !(config.isNSFW || config.CharacterConfigs?.some((character: any) => character.isNSFW)),
+    )
     const cards = configs.map((c: any) => this.transformCard(c))
 
     return {
