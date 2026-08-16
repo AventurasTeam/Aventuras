@@ -147,8 +147,11 @@ Serializable props in (native → document):
   Host-derived from window-size math (a full first window means
   maybe-more; any short load proves the branch top is in the
   window). Drives the boundary skeleton and gates `onNearTop`.
-- `editBlocked`, `showJumpToBottom`, theme id + token values, and
-  other settings-derived flags.
+- `branchKey` — branch identity. A change resets in-document edit
+  state and re-lands the scroll at the bottom.
+- `editBlocked`, `jumpButtonEnabled`, `systemFixLabel` (present only
+  when the system entry has a kind-specific fix route), theme id +
+  token values, and other settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full
   prop re-emission (see handshake).
 

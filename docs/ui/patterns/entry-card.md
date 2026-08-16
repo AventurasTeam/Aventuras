@@ -1,7 +1,8 @@
 # EntryCard pattern
 
 The reader-composer narrative-row compound. Renders all five
-entry kinds (`user`, `ai`, `opening`, `system`, `streaming`) as
+entry kinds (`user_action`, `ai_reply`, `opening`, `system`,
+`streaming`) as
 full-width bubbles with kind-keyed styling, conditional reasoning
 body, in-place edit, and a muted world-time footer.
 
@@ -29,13 +30,13 @@ Used by:
 
 ## Compound API
 
-The `kind` prop uses UI-layer names: `user` / `ai` abbreviate the
-DB `story_entries.kind` values `user_action` / `ai_reply`, and
-`streaming` is a transient render state with no persisted row.
+The `kind` prop takes the DB `story_entries.kind` values directly
+(`StoryEntry['kind']`), widened with `streaming` — a transient
+render state with no persisted row.
 
 ```ts
 type EntryCardProps = {
-  kind: 'user' | 'ai' | 'opening' | 'system' | 'streaming'
+  kind: StoryEntry['kind'] | 'streaming'
   content: string
   worldTimeLabel?: string
 
@@ -51,7 +52,7 @@ type EntryCardProps = {
   worldTimeOrigin?: TierTuple // anchors the tuple ↔ seconds round-trip; stable reference required
 
   // AI / opening:
-  meta?: { tokens: { reply: number; reasoning?: number } }
+  meta?: Pick<EntryMetadata, 'tokens'> // the top line renders tokens.completion (+ tokens.reasoning when set)
   reasoning?: string
   onRegen?: () => void // ai only
   onBranch?: () => void // ai, opening
@@ -62,6 +63,7 @@ type EntryCardProps = {
 
   // System-only:
   detail?: string
+  fixAction?: { label: string; onPress: () => void } // kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry
   onRetry?: () => void
   onDismiss?: () => void
 
@@ -93,16 +95,19 @@ Two structural choices:
 
 ## Per-kind structure
 
-| Slot                       | user                             | ai                                        | opening                                | system                                       | streaming                             |
-| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | -------------------------------------------- | ------------------------------------- |
-| Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                     | meta line (brain pulses, trailing → ) |
-| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                            | live-streaming on `streamingPhase`    |
-| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline action buttons | partial prose tokens                  |
-| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                      | —                                     |
-| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                       | hidden                                |
-| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai                             | `bg-bg-base border-warning`                  | ai styling plus `border-dashed`       |
+| Slot                       | user_action                      | ai_reply                                  | opening                                | system                                                              | streaming                             |
+| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------- |
+| Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing → ) |
+| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
+| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
+| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
+| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
+| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                      |
 
-`opening` renders identically to `ai` for visual treatment; the
+Streaming is deliberately not visually distinguished: the swap to
+the committed `ai_reply` row should not re-frame the card.
+
+`opening` renders identically to `ai_reply` for visual treatment; the
 discriminator only affects available actions. See
 [data-model.md → Opening entry](../../data-model.md#opening-entry)
 for the underlying invariant.
@@ -267,13 +272,13 @@ holds, cleared on next render when the user fixes it.
 
 Per-kind action sets:
 
-| Kind      | edit                                                  | regen | branch | flip-era    | delete            |
-| --------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------------- |
-| user      | yes                                                   | —     | —      | conditional | yes               |
-| ai        | yes                                                   | yes   | yes    | conditional | yes               |
-| opening   | yes                                                   | —     | yes    | conditional | no (block-delete) |
-| system    | (inline buttons inside content; no top-right cluster) |
-| streaming | (no actions; cancel via composer)                     |
+| Kind        | edit                                                  | regen | branch | flip-era    | delete            |
+| ----------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------------- |
+| user_action | yes                                                   | —     | —      | conditional | yes               |
+| ai_reply    | yes                                                   | yes   | yes    | conditional | yes               |
+| opening     | yes                                                   | —     | yes    | conditional | no (block-delete) |
+| system      | (inline buttons inside content; no top-right cluster) |
+| streaming   | (no actions; cancel via composer)                     |
 
 `flip-era` is conditional: host passes `onFlipEra` only when
 active calendar has eras. Same gating as the

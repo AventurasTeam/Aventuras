@@ -1412,24 +1412,6 @@ v++)` never runs), so the era is silently lost. Observed with origin
   3.8 added a second Save button to the reader; not reachable today
   since the two overlays cannot both be open, but it is one strict-mode
   violation away. Raised 2026-08-15 by the Slice 3.8 reviews.
-- **`entry-card.md` and `reader-document.md` have drifted from their
-  components on names predating Slice 3.8.** Found while amending both
-  for 3.8 and deliberately left alone, since fixing them is not
-  surgical and would have widened that PR's diff. In `entry-card.md`:
-  the API block types `meta.tokens` with a `reply` field where the
-  component takes `Pick<EntryMetadata, 'tokens'>` and renders
-  `tokens.completion`; `fixAction` ships on the component but is absent
-  from the block; the prose claim that "`kind` uses UI-layer names,
-  `user` / `ai` abbreviate the DB values" is now false, since `kind` is
-  `StoryEntry['kind'] | 'streaming'` directly, and correcting it
-  ripples through the per-kind table; and that table describes the
-  streaming bubble as ai styling plus `border-dashed` where the shipped
-  `KIND_BUBBLE.streaming` is deliberately identical to `ai_reply`, so
-  the commit swap does not reframe the row. In `reader-document.md` the
-  props list names `showJumpToBottom` where the type says
-  `jumpButtonEnabled`, and omits `branchKey` and `systemFixLabel`.
-  Route through a docs pass over both files rather than piecemeal
-  edits. Raised 2026-08-15 by the Slice 3.8 Task 8 doc pass.
 - **`per-turn-retrieval.test.ts` fails intermittently, but only when
   `pnpm test:run` runs the unit and storybook projects in one
   invocation.** Observed 2 failures in 4 consecutive `pnpm test:run`
