@@ -124,22 +124,22 @@ slice enables it.
 
 - **Re-dispatch layer** — resolved at planning; see
   [Implementation notes](#implementation-notes).
-- **Failure entry lost to the pre-dispatch tail clear** — regenerate
-  drops a standing system entry before dispatching (the sweep spares
-  system entries, which carry no create deltas, so one would strand
-  between the user action and the new reply). If the regenerate then
-  rejects or throws, nothing replaces it, and the _earlier_ failed
-  turn's Retry affordance is gone. Needs either a host-side
-  pre-check or a way to defer the clear past the action's guards.
-- **Confirm-time count staleness (M5.2)** — the cascade counts are
-  resolved when the modal opens. Unreachable in M3 (no background
-  writer adds entries or closes chapters), but once chapter close
-  lands, a background close while the modal sits open would make the
-  confirmed cascade larger than the displayed one.
-- **Per-mount regenerate guard** — the in-flight guard is a route
-  ref, so it cannot serialize two mounts of the same branch. Correct
-  today (single reader surface); would need to move into a store if
-  the rail ever hosts a second one.
+- **Failure entry lost when a dispatch throws** — regenerate drops a
+  standing system entry before dispatching (the sweep spares system
+  entries, which carry no create deltas, so one would strand between
+  the user action and the new reply). `dropSystemTail` now hands that
+  entry back and the rejected arm restores it, which is an exact undo
+  because every rejection fires before the first sweep. The throw arm
+  does not: past a partial sweep, re-appending at `MAX(position) + 1`
+  would park a stale failure over a branch it no longer describes, and
+  which state to land in there is the open half. The broader question —
+  that a failed turn's text has custody in one deletable entry at all,
+  which Dismiss also destroys — is
+  [triage](../../../triage.md), not this slice.
+- **Per-mount dispatch guard** — the in-flight guard is a route ref,
+  so it cannot serialize two mounts of the same branch. Correct today
+  (single reader surface); would need to move into a store if the
+  rail ever hosts a second one.
 - **E2E test coupling** — `reader-regenerate.spec.ts`'s second test
   builds on the first's DB state. `mode: 'serial'` makes a retry skip
   rather than mislead, but the seeded hero branch already carries
@@ -180,12 +180,30 @@ failure entry — the throw carries no submission, so that entry's
 Retry would be doomed, and in the partial-sweep cases a Retry on a
 stale submission would append a duplicate turn.
 
-**Composer draft on cancel** — cancelling a regenerate restores the
-swept action text only into an _empty_ composer. Unlike `submitTurn`,
-regenerate never clears the composer, so an unconditional restore
-would destroy text the user typed; the swept action is unrecoverable
-in that branch, but the user asked to discard that turn and never
-agreed to lose their draft.
+**Composer draft on cancel** — cancelling a turn restores the swept
+action text only into an _empty_ composer. The composer clears itself
+on send, so that path is unaffected; the paths that re-enter without
+clearing (regenerate, and Retry on a failure entry) would otherwise
+overwrite text the user typed. The swept action is unrecoverable in
+that branch, but the user asked to discard that turn and never agreed
+to lose their draft.
+
+**Dispatch guard** — `editBlocked` derives from the generation gate,
+which only closes once a run registers or a reversal barrier opens —
+several awaits and a branch-queue hop past the tap. Send survived that
+window only because the composer clears its own text; the per-entry
+glyphs had no equivalent, so a regenerate tapped mid-submit would
+queue, resume against the committed turn, and sweep it away without
+the cascade confirm. Both dispatches now mark the window through one
+route-level guard, and every edit affordance gates on the union.
+
+**Outcome handling** — which arm runs after `regenerateTurn` returns
+is a pure decision over the outcome, `converged`, and whether the
+composer holds a draft, so it lives in `regenerate-outcome.ts` where
+the table is exhaustively testable. It carries the store-resync
+obligation as data: `converged` is also true when the follow-up unwind
+committed and only its post-commit store sync threw, so every
+non-completed arm resyncs.
 
 **E2E** — added `e2e/tests/reader-regenerate.spec.ts` (terminal
 no-confirm, older-reply cascade) beyond the slice's original Tests
