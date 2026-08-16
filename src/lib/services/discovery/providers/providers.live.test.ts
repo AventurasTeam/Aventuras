@@ -1,9 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CharacterTavernProvider } from './characterTavern'
-import { ChubProvider } from './chub'
-import { MlpchagProvider } from './mlpchag'
-import { QuillGenProvider } from './quillgen'
-import { WyvernProvider } from './wyvern'
+import { discoveryService } from '../index'
 
 vi.mock('../utils', () => ({
   // Provider production code uses Tauri HTTP; live Node tests use the platform fetch equivalent.
@@ -14,16 +10,14 @@ vi.mock('../utils', () => ({
 const live = process.env.AVENTURAS_LIVE_DISCOVERY === '1'
 
 describe.skipIf(!live)('discovery providers live smoke', () => {
-  it.each([
-    ['Character Tavern', () => new CharacterTavernProvider()],
-    ['Chub', () => new ChubProvider()],
-    ['MLPChag', () => new MlpchagProvider()],
-    ['QuillGen', () => new QuillGenProvider()],
-    ['Wyvern', () => new WyvernProvider()],
-  ])(
-    '$s finds and downloads a public character',
-    async (_name, makeProvider) => {
-      const provider = makeProvider()
+  // Build the matrix from the registry so adding a provider automatically adds a live contract.
+  it.each(
+    discoveryService
+      .getProviders('character')
+      .map((provider) => [provider.name, provider] as const),
+  )(
+    '%s finds and downloads a public character',
+    async (_name, provider) => {
       const result = await provider.search(
         { query: '', page: 1, limit: 1, sort: 'popular', nsfw: false },
         'character',

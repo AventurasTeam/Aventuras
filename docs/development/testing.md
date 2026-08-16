@@ -20,15 +20,14 @@ The discovery provider unit tests mock `corsFetch` with representative upstream 
 CI contract for request construction, result mapping, and card downloads; they do not depend on remote
 services remaining available or preserving their current catalog.
 
-An opt-in smoke suite exercises public search and download paths against Character Tavern, Chub,
-MLPChag, QuillGen, and Wyvern:
+An opt-in smoke suite exercises public search and download paths against every registered discovery
+provider:
 
 ```powershell
 $env:AVENTURAS_LIVE_DISCOVERY='1'; npx vitest run src/lib/services/discovery/providers/providers.live.test.ts
 ```
 
-It is skipped unless `AVENTURAS_LIVE_DISCOVERY=1` and must not be enabled in required CI. JannyAI is
-excluded because token discovery and card downloads can be challenged by Cloudflare. Backyard,
-Pygmalion, and RisuRealm use volatile application protocols whose availability is not a stable health
-signal for this repository. Their deterministic provider tests still cover the complete request,
-mapping, and download contracts.
+It is skipped unless `AVENTURAS_LIVE_DISCOVERY=1` and must not be enabled in required CI. The suite is
+intentionally comprehensive: failures from Cloudflare, volatile application protocols, upstream
+catalog changes, or provider outages are useful signals during an explicit live run, but would make
+required CI flaky.
