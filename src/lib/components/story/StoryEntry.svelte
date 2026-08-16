@@ -253,6 +253,16 @@
   let expandedImageId = $state<string | null>(null)
   let clickedElement = $state<HTMLElement | null>(null)
 
+  const hasEmbeddedImages = $derived(embeddedImages.length > 0)
+  const canGenerateStoryImages = $derived(
+    entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic',
+  )
+  const storyImagesLabel = $derived(
+    hasEmbeddedImages ? 'Images already generated' : 'Generate story images',
+  )
+  const ttsLabel = $derived(isPlayingTTS ? 'Stop narration' : 'Narrate')
+  const copyLabel = $derived(isCopied ? 'Copied!' : 'Copy message text')
+
   // Branching state
   let isBranching = $state(false)
   let branchName = $state('')
@@ -1320,6 +1330,17 @@
       />
     {/if}
 
+    <!-- Token count badge (shows 0 if no tokens). Hidden on narrow screens, where the toolbar
+         needs the width; still reachable there through "Response info". -->
+    <span class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums sm:inline">
+      {#if isReasoningEnabled && reasoningTokens > 0}
+        <span class="text-muted-foreground">{reasoningTokens}r</span>
+        <span class="text-muted-foreground/50 mx-0.5">+</span>
+      {/if}
+      <span class="text-muted-foreground">{contentTokens}</span>
+      <span class="text-muted-foreground ml-0.5">tokens</span>
+    </span>
+
     <!-- Spacer to push buttons to the right -->
     <div class="flex-1"></div>
 
@@ -1341,8 +1362,14 @@
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
       <div class="flex shrink-0 items-center gap-0.5">
-        {#snippet responseInfoContent()}
-          <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
+        {#snippet copyIcon()}
+          {#if isCopied}
+            <Check class="h-4 w-4 text-green-500" />
+          {:else}
+            <Copy class="h-4 w-4" />
+          {/if}
+        {/snippet}
+        {#snippet responseInfoRows()}
           <dl class="space-y-1.5">
             {#if isReasoningEnabled && reasoningTokens > 0}
               <div class="flex justify-between gap-3">
@@ -1417,7 +1444,8 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
-              {@render responseInfoContent()}
+              <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
+              {@render responseInfoRows()}
             </Popover.Content>
           </Popover.Root>
         {/if}
@@ -1469,8 +1497,8 @@
           size="icon"
           onclick={handleTTSToggle}
           disabled={isGeneratingTTS}
-          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
-          title={isPlayingTTS ? 'Stop narration' : 'Narrate'}
+          class="text-muted-foreground hover:text-foreground h-7 w-7"
+          title={ttsLabel}
         >
           {#if isGeneratingTTS}
             <Loader2 class="h-4 w-4 animate-spin" />
@@ -1480,14 +1508,14 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if canGenerateStoryImages}
           <Button
             variant="text"
             size="icon"
             onclick={handleGenerateStoryImages}
-            disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
+            disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
             class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
-            title={embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
+            title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
               <Loader2 class="h-4 w-4 animate-spin" />
@@ -1500,15 +1528,11 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={isCopied ? 'Copied!' : 'Copy message text'}
-          aria-label={isCopied ? 'Message copied' : 'Copy message text'}
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+          title={copyLabel}
+          aria-label={isCopied ? 'Message copied' : copyLabel}
         >
-          {#if isCopied}
-            <Check class="h-4 w-4 text-green-500" />
-          {:else}
-            <Copy class="h-4 w-4" />
-          {/if}
+          {@render copyIcon()}
         </Button>
         <Button
           variant="text"
@@ -1538,6 +1562,7 @@
                 size="icon"
                 class="text-muted-foreground hover:text-foreground h-7 w-7 sm:hidden"
                 title="More actions"
+                aria-label="More actions"
                 {...props}
               >
                 <MoreVertical class="h-4 w-4" />
@@ -1557,36 +1582,35 @@
                 Create checkpoint
               </DropdownMenu.Item>
             {/if}
-            <DropdownMenu.Item onclick={handleTTSToggle} disabled={isGeneratingTTS}>
-              {#if isGeneratingTTS}
-                <Loader2 class="h-4 w-4 animate-spin" />
-              {:else if isPlayingTTS}
-                <X class="h-4 w-4 text-red-500" />
-              {:else}
-                <Volume2 class="h-4 w-4" />
-              {/if}
-              {isPlayingTTS ? 'Stop narration' : 'Narrate'}
+            <DropdownMenu.Item onclick={handleCopyContent}>
+              {@render copyIcon()}
+              {copyLabel}
             </DropdownMenu.Item>
-            {#if entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+            {#if canGenerateStoryImages}
               <DropdownMenu.Item
                 onclick={handleGenerateStoryImages}
-                disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
+                disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
               >
                 {#if isGeneratingStoryImages}
                   <Loader2 class="h-4 w-4 animate-spin" />
                 {:else}
                   <ImageIcon class="h-4 w-4" />
                 {/if}
-                {embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
+                {storyImagesLabel}
               </DropdownMenu.Item>
             {/if}
             <!-- Rendered inline rather than behind an item: selecting an item closes the
                  menu, which would unmount any popover anchored to it. -->
             {#if showInfo}
               <DropdownMenu.Separator />
-              <div class="w-56 px-2 py-1.5 text-xs">
-                {@render responseInfoContent()}
-              </div>
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
+                  Response info
+                </DropdownMenu.GroupHeading>
+                <div class="w-56 px-2 pb-1.5 text-xs">
+                  {@render responseInfoRows()}
+                </div>
+              </DropdownMenu.Group>
             {/if}
           </DropdownMenu.Content>
         </DropdownMenu.Root>
