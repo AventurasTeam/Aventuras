@@ -97,7 +97,7 @@ export async function submitTurn(
         runInTransaction: ctx.runInTransaction,
       }
       // Held for the whole run, not just the user_action insert above:
-      // narrativePhase (pipeline.ts) does its own MAX(position)+1 read for the
+      // narrativePhase (per-turn.ts) does its own MAX(position)+1 read for the
       // ai_reply, which needs the same per-branch exclusion.
       const runResult = await runPipeline(PER_TURN_KIND, runCtx)
       if (runResult.outcome === 'rejected') {

@@ -101,7 +101,7 @@ export const STORY_SETTINGS = storySettingsSchema.parse({
   packVariables: {},
 })
 
-// narrativePhase (pipeline.ts) reads the open story from currentStoryStore, not
+// narrativePhase (per-turn.ts) reads the open story from currentStoryStore, not
 // from the run's own storyId/branchId — mirrors the real app opening a story
 // before the composer can submit a turn. storiesStore is populated from the same
 // committed row because the retrieval phase resolves the embedder config there.

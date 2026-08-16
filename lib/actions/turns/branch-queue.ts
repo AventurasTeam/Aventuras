@@ -3,7 +3,7 @@
 // fix, not a partial mitigation: it's the only place two turn dispatches for
 // the same branch could ever interleave a MAX(position) read with an insert —
 // the user_action's own read in submitTurn, or narrativePhase's read for the
-// ai_reply (pipeline.ts), which runs inside the same queued turn.
+// ai_reply (per-turn.ts), which runs inside the same queued turn.
 const branchQueues = new Map<string, Promise<unknown>>()
 
 // Test seam — a queue entry left pending by one test chains onto every later
