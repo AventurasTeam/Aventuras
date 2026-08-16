@@ -15,6 +15,7 @@ import {
 
 import { branchEntries, openStory, sseFetch, WORKING_CONFIG } from './__tests__/fixtures'
 import { regenerateTurn } from './regenerate-turn'
+import { submitTurn } from './submit-turn'
 import { expectRan, makeHarness, resetSingletons } from '../../pipeline/__tests__/harness'
 import { DeltaReplayError, type reverseAndPruneDeltaRows } from '../delta/reverse-replay'
 import { undoLastAction } from '../story-entries/undo'
@@ -350,8 +351,100 @@ describe('regenerateTurn', () => {
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_u2', ctx)
 
-    expect(regen).toEqual({ status: 'rejected', reason: 'target is not an AI reply' })
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'not-an-ai-reply',
+      reason: 'target is not an AI reply',
+    })
     expect(branchEntries('b1')).toHaveLength(5)
+  })
+
+  it('refuses while a hard-gate run holds the edit gate, before any reversal', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    generationStore.setReversalInProgress(true)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    generationStore.setReversalInProgress(false)
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'generation-in-flight',
+      reason: 'generation in flight',
+    })
+    // The reply and its classifier fact both survive an in-flight refusal.
+    expect(entriesStore.getById('e_r2')).toBeDefined()
+    expect((await ctx.db.select().from(happenings)).map((f) => f.id)).toEqual(['h_a', 'h_b'])
+  })
+
+  // The sweep destroys everything from the target forward, so a misresolved
+  // origin unwinds the wrong entry and hands the host the wrong Retry text.
+  it('resolves the origin past a system entry rather than treating it as the action', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    // A system entry wedged between the action and its reply: the origin lookup
+    // must skip it, not stop on it.
+    await ctx.db.insert(storyEntries).values(ENTRY('e_sys', 4.5, 'system', 'a prior failure'))
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+
+    expect(regen.status).toBe('ran')
+    if (regen.status !== 'ran') return
+    expect(regen.userActionContent).toBe('I cross the bridge.')
+  })
+
+  it('rejects when the reply has no originating user action', async () => {
+    const { ctx, db } = await makeHarness()
+    // opening then a reply with no action between them.
+    const rows = [
+      ENTRY('e_opening', 1, 'opening', 'once upon a time'),
+      ENTRY('e_orphan', 2, 'ai_reply', 'The horse drinks.'),
+    ]
+    for (const row of rows) await ctx.db.insert(storyEntries).values(row)
+    await ctx.db
+      .insert(deltas)
+      .values([DELTA('d_orphan', 'act_t1', 'story_entries', 'e_orphan', null, 'ai_classifier', 1)])
+    entriesStore.hydrate('b1', rows)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_orphan', ctx)
+
+    expect(regen).toEqual({
+      status: 'rejected',
+      code: 'no-origin',
+      reason: 'no originating user action',
+    })
+    expect(entriesStore.getById('e_orphan')).toBeDefined()
+  })
+
+  // Without the per-branch queue the two dispatches interleave their
+  // MAX(position) reads and the sweep runs against a half-written turn.
+  it('serializes against a concurrent submit rather than interleaving', async () => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+
+    const submitted = submitTurn(
+      { storyId: 's1', branchId: 'b1' },
+      { content: 'I ford the river.', composerMode: 'free' },
+      ctx,
+    )
+    const regenerated = regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
+    await Promise.all([submitted, regenerated])
+
+    const rows = (await ctx.db.select().from(storyEntries)).sort((a, b) => a.position - b.position)
+    // Whichever order they ran in, positions stay unique and every reply still
+    // sits directly on a user_action — the invariant a shared MAX read breaks.
+    expect(new Set(rows.map((r) => r.position)).size).toBe(rows.length)
+    rows.forEach((row, i) => {
+      if (row.kind === 'ai_reply') expect(rows[i - 1]?.kind).toBe('user_action')
+    })
   })
 
   it('refuses while a swap is pending, before any reversal', async () => {
@@ -368,7 +461,7 @@ describe('regenerateTurn', () => {
 
     const regen = await regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx)
 
-    expect(regen).toEqual({ status: 'rejected', reason: 'embedder-swap' })
+    expect(regen).toEqual({ status: 'rejected', code: 'embedder-swap', reason: 'embedder-swap' })
     expect(entriesStore.getById('e_r2')).toBeDefined()
   })
 

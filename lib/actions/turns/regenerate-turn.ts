@@ -20,8 +20,21 @@ import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'
 import { withBranchQueue } from './branch-queue'
 
+/**
+ * Why a regenerate refused. Distinct from `reason` (a diagnostic string): the
+ * host picks user-facing copy from this, and the classes differ in what the
+ * user can do — wait, resume a swap, or nothing at all.
+ */
+export type RegenerateRejectionCode =
+  | 'embedder-swap'
+  | 'generation-in-flight'
+  | 'branch-not-loaded'
+  | 'not-an-ai-reply'
+  | 'no-origin'
+  | 'sweep-refused'
+
 export type RegenerateTurnResult =
-  | { status: 'rejected'; reason: string }
+  | { status: 'rejected'; code: RegenerateRejectionCode; reason: string }
   | {
       status: 'ran'
       result: TxResult | RejectedStart
@@ -36,7 +49,11 @@ export type RegenerateTurnResult =
       converged: boolean
     }
 
-const SWAP_REJECTION = { status: 'rejected', reason: 'embedder-swap' } as const
+const SWAP_REJECTION = {
+  status: 'rejected',
+  code: 'embedder-swap',
+  reason: 'embedder-swap',
+} as const
 
 async function sweepFrom(
   branchId: string,
@@ -62,16 +79,24 @@ export async function regenerateTurn(
       async (): Promise<RegenerateTurnResult> => {
         if (isStorySwapPending(ids.storyId)) return SWAP_REJECTION
         if (generationStore.isUserEditBlocked())
-          return { status: 'rejected', reason: 'generation in flight' }
+          return {
+            status: 'rejected',
+            code: 'generation-in-flight',
+            reason: 'generation in flight',
+          }
         if (entriesStore.getLoadedBranch() !== ids.branchId)
-          return { status: 'rejected', reason: 'branch not loaded' }
+          return { status: 'rejected', code: 'branch-not-loaded', reason: 'branch not loaded' }
 
         const [target] = await ctx.db
           .select()
           .from(storyEntries)
           .where(and(eq(storyEntries.branchId, ids.branchId), eq(storyEntries.id, replyEntryId)))
         if (target == null || target.kind !== 'ai_reply')
-          return { status: 'rejected', reason: 'target is not an AI reply' }
+          return {
+            status: 'rejected',
+            code: 'not-an-ai-reply',
+            reason: 'target is not an AI reply',
+          }
 
         // The reply's positional predecessor is its originating user_action by
         // construction (one reply per action, consecutive positions, deletes
@@ -89,12 +114,13 @@ export async function regenerateTurn(
           .orderBy(desc(storyEntries.position))
           .limit(1)
         if (origin == null || origin.kind !== 'user_action')
-          return { status: 'rejected', reason: 'no originating user action' }
+          return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
         const swept = await bracketProseReversal(ids.branchId, () =>
           sweepFrom(ids.branchId, replyEntryId, ctx),
         )
-        if (swept.status === 'rejected') return { status: 'rejected', reason: swept.reason }
+        if (swept.status === 'rejected')
+          return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
         // A regenerate is a new unrelated action (data-model.md); the discarded
         // take is not redo-restorable.
         undoRedoStore.clear()
@@ -106,8 +132,10 @@ export async function regenerateTurn(
           db: ctx.db,
           runInTransaction: ctx.runInTransaction,
         }
-        // No input threading: narrativePhase reads prompt + insert position from
-        // the branch tail, and post-sweep the surviving user_action IS that tail.
+        // No input threading: narrativePhase (per-turn.ts) reads its prompt from
+        // the branch tail and its insert position from MAX(position). Post-sweep the
+        // surviving user_action is that tail — provided the caller cleared any
+        // system tail first, which MAX(position) would otherwise insert after.
         const result = await runPipeline(PER_TURN_KIND, runCtx)
 
         // Non-success converges to the M2 failed-turn state: the standing
