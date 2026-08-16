@@ -74,6 +74,8 @@
             <Input
               type="number"
               class="h-9 w-24 text-left"
+              min={LLM_TIMEOUT_MIN_SECONDS}
+              max={LLM_TIMEOUT_MAX_SECONDS}
               value={Math.round(settings.apiSettings.llmTimeoutMs / 1000)}
               oninput={(e) => {
                 const seconds = parseInt(e.currentTarget.value, 10)

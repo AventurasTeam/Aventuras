@@ -48,6 +48,26 @@ const PROVIDER_FACTORIES: Record<ImageProviderType, ProviderFactory> = {
   a1111: createA1111Provider,
 }
 
+/**
+ * Whether a provider authenticates with an API key. Only the ones that run on the user's
+ * own machine do not. Exhaustive by type, so a new provider has to declare which it is.
+ *
+ * Pollinations counts as requiring one: the model list is served without it, but
+ * generation is not, and a profile that can list and cannot draw is the worse failure —
+ * it looks configured.
+ */
+const PROVIDER_REQUIRES_API_KEY: Record<ImageProviderType, boolean> = {
+  nanogpt: true,
+  openai: true,
+  openrouter: true,
+  chutes: true,
+  google: true,
+  zhipu: true,
+  pollinations: true,
+  comfyui: false,
+  a1111: false,
+}
+
 // ============================================================================
 // Model Cache
 // ============================================================================
@@ -66,10 +86,6 @@ function getCacheKey(providerType: ImageProviderType, apiKey?: string, baseUrl?:
   return `${providerType}:${keyHash}:${urlKey}`
 }
 
-export function clearModelsCache(): void {
-  modelCaches.clear()
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -79,6 +95,11 @@ export function clearModelsCache(): void {
  */
 export function supportsImageGeneration(providerType: string): boolean {
   return providerType in PROVIDER_FACTORIES
+}
+
+/** Whether a profile of this provider needs an API key to be usable. */
+export function requiresApiKey(providerType: string): boolean {
+  return PROVIDER_REQUIRES_API_KEY[providerType as ImageProviderType] ?? true
 }
 
 /**

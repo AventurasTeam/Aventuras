@@ -18,14 +18,7 @@ use tauri::{AppHandle, Manager};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipArchive, ZipWriter};
 
-/// Path to the live application database (app_config_dir/aventura.db).
-fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("failed to resolve app config dir: {e}"))?
-        .join("aventura.db"))
-}
+use crate::db::db_path;
 
 /// Open the export destination for writing, returning a real `std::fs::File`.
 ///

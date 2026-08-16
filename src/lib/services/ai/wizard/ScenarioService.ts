@@ -5,7 +5,15 @@
  */
 
 import { settings } from '$lib/stores/settings.svelte'
-import type { StoryMode, POV, TargetLength, Character, Location, Item } from '$lib/types'
+import type {
+  StoryMode,
+  POV,
+  TargetLength,
+  Character,
+  Location,
+  Item,
+  ImageGenerationMode,
+} from '$lib/types'
 import { ContextBuilder } from '$lib/services/context'
 import { createLogger } from '$lib/log'
 import {
@@ -44,7 +52,7 @@ export interface WizardData {
     tense: Tense
     tone: string
     visualProseMode?: boolean
-    imageGenerationMode?: 'none' | 'agentic' | 'inline'
+    imageGenerationMode?: ImageGenerationMode
     backgroundImagesEnabled?: boolean
     referenceMode?: boolean
     targetLength?: TargetLength
@@ -794,7 +802,7 @@ class ScenarioService {
       themes?: string[]
       visualProseMode?: boolean
       inlineImageMode?: boolean
-      imageGenerationMode?: 'none' | 'agentic' | 'inline'
+      imageGenerationMode?: ImageGenerationMode
       backgroundImagesEnabled?: boolean
       referenceMode?: boolean
       targetLength?: TargetLength

@@ -30,8 +30,14 @@ export interface LorebookEntryToolContext {
   entries: VaultLorebookEntry[]
   /** The ID of the lorebook these entries belong to, if bound */
   activeLorebookId?: string
-  /** Callback to register a pending change */
-  onPendingChange: (change: LorebookEntryPendingChangeSchema) => void
+  /**
+   * Callback to register a pending change.
+   *
+   * A caller that applies the change straight away answers with the index a create or a
+   * merge landed at, which the tool hands back to the model. One that queues it for a
+   * human returns nothing: there is no index until someone approves it.
+   */
+  onPendingChange: (change: LorebookEntryPendingChangeSchema) => number | void
   /** Generate unique ID for pending changes */
   generateId: () => string
   /**
@@ -53,6 +59,10 @@ export interface LorebookEntryToolContext {
    * character every run; off for the vault, where a human reads the change first.
    */
   preventDuplicateNames?: boolean
+  /**
+   * When true, tool descriptions and messages omit pending/approval phrases intended for human review.
+   */
+  isAutonomous?: boolean
 }
 
 /**
@@ -86,6 +96,7 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
     getLorebookEntries,
     removedIndices,
     preventDuplicateNames,
+    isAutonomous,
   } = context
 
   /** Removed slots belong to the bound `entries` only; another lorebook's indices are its own. */
@@ -252,7 +263,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      * Returns a pending change for approval workflow.
      */
     create_entry: tool({
-      description: 'Create a new lorebook entry. The change will be pending until approved.',
+      description: isAutonomous
+        ? 'Create a new lorebook entry.'
+        : 'Create a new lorebook entry. The change will be pending until approved.',
       inputSchema: z.object({
         lorebookId: z
           .string()
@@ -344,13 +357,16 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           status: 'pending',
         }
 
-        onPendingChange(pendingChange)
+        const newIndex = onPendingChange(pendingChange)
 
         const note = describeDropped(cleanedAliases.dropped, cleanedKeywords.dropped)
         return {
           success: true,
           pendingChange,
-          message: `Created pending entry "${name}" (${type}). Awaiting approval.`,
+          ...(typeof newIndex === 'number' ? { newIndex } : {}),
+          message: isAutonomous
+            ? `Created entry "${name}" (${type})${typeof newIndex === 'number' ? ` at index ${newIndex}` : ''}.`
+            : `Created pending entry "${name}" (${type}). Awaiting approval.`,
           ...(note ? { note } : {}),
         }
       },
@@ -361,8 +377,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      * Returns a pending change for approval workflow.
      */
     update_entry: tool({
-      description:
-        'Update an existing lorebook entry by index. Only include fields you want to change. The change will be pending until approved.',
+      description: isAutonomous
+        ? 'Update an existing lorebook entry by index. Only include fields you want to change.'
+        : 'Update an existing lorebook entry by index. Only include fields you want to change. The change will be pending until approved.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook containing the entry'),
         index: z.number().describe('Index of the entry to update'),
@@ -446,7 +463,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         return {
           success: true,
           pendingChange,
-          message: `Created pending update for "${previous.name}". Awaiting approval.`,
+          message: isAutonomous
+            ? `Updated entry "${previous.name}".`
+            : `Created pending update for "${previous.name}". Awaiting approval.`,
           ...(note ? { note } : {}),
         }
       },
@@ -457,7 +476,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      * Returns a pending change for approval workflow.
      */
     delete_entry: tool({
-      description: 'Delete a lorebook entry by index. The change will be pending until approved.',
+      description: isAutonomous
+        ? 'Delete a lorebook entry by index.'
+        : 'Delete a lorebook entry by index. The change will be pending until approved.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook containing the entry'),
         index: z.number().describe('Index of the entry to delete'),
@@ -507,7 +528,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
         return {
           success: true,
           pendingChange,
-          message: `Created pending deletion for "${previous.name}"${reason ? ` (${reason})` : ''}. Awaiting approval.`,
+          message: isAutonomous
+            ? `Deleted entry "${previous.name}"${reason ? ` (${reason})` : ''}.`
+            : `Created pending deletion for "${previous.name}"${reason ? ` (${reason})` : ''}. Awaiting approval.`,
         }
       },
     }),
@@ -517,8 +540,9 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
      * Returns a pending change for approval workflow.
      */
     merge_entries: tool({
-      description:
-        'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. The change will be pending until approval.',
+      description: isAutonomous
+        ? 'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. You MUST provide at least 2 distinct valid entry indices in the `indices` array. Never pass a single index.'
+        : 'Merge multiple lorebook entries into a single entry. Useful for consolidating duplicate or related entries. You MUST provide at least 2 distinct valid entry indices in the `indices` array. Never pass a single index. The change will be pending until approval.',
       inputSchema: z.object({
         lorebookId: z.string().optional().describe('ID of the lorebook containing the entries'),
         indices: z.array(z.number()).min(2).describe('Indices of entries to merge (at least 2)'),
@@ -552,16 +576,16 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           }
         }
 
-        // Check for duplicates
+        // Check for duplicates and minimum distinct indices
         const uniqueIndices = [...new Set(indices)]
-        if (uniqueIndices.length !== indices.length) {
+        if (uniqueIndices.length < 2) {
           return {
             success: false,
-            error: 'Duplicate indices provided',
+            error: `merge_entries requires at least 2 distinct valid entry indices to merge. Provided: [${indices.join(', ')}]. To update a single entry, use update_entry instead of merge_entries.`,
           }
         }
 
-        const previousEntries = indices.map((i) => targetEntries[i])
+        const previousEntries = uniqueIndices.map((i) => targetEntries[i])
         const changeId = generateId()
 
         const pendingChange: LorebookEntryPendingChangeSchema = {
@@ -575,13 +599,16 @@ function createLorebookEntryTools(context: LorebookEntryToolContext) {
           status: 'pending',
         }
 
-        onPendingChange(pendingChange)
+        const newIndex = onPendingChange(pendingChange)
 
         const names = previousEntries.map((e) => e.name).join(', ')
         return {
           success: true,
           pendingChange,
-          message: `Created pending merge of [${names}] into "${mergedEntry.name}". Awaiting approval.`,
+          ...(typeof newIndex === 'number' ? { newIndex } : {}),
+          message: isAutonomous
+            ? `Merged [${names}] into "${mergedEntry.name}"${typeof newIndex === 'number' ? `, now at index ${newIndex}. Indices [${uniqueIndices.join(', ')}] are gone` : ''}.`
+            : `Created pending merge of [${names}] into "${mergedEntry.name}". Awaiting approval.`,
         }
       },
     }),
@@ -750,8 +777,10 @@ function createStoryTools(context: StoryToolContext) {
             // Kept: a refusal on the last step still ends the run, and this is its summary.
             summary: args.summary,
             remainingDuplicates: remaining,
-            message:
-              'Not finished yet. These possible duplicates have not been dealt with. For each one: merge_entries if they are the same subject, keep_separate if they are not. Then call finish_lore_management again.',
+            // Naming the instructions is the point: the duplicate list up there is the
+            // state the session started from, and a model that goes back to it redoes
+            // every group it has already closed.
+            message: `Not finished yet. ${remaining.length} of the duplicate groups ${remaining.length === 1 ? 'is' : 'are'} still open, and ${remaining.length === 1 ? 'it is' : 'they are'} listed here — this list, not the one in your instructions, which is the state you started from. Every group missing from it is already closed; do not revisit those. For each one here: merge_entries if they are the same subject, keep_separate if they are not. Then call finish_lore_management again.`,
           }
         }
 
@@ -787,6 +816,11 @@ function withoutFields<T extends { inputSchema: unknown }>(tool: T, ...fields: s
   return { ...tool, inputSchema: schema.omit(mask) } as T
 }
 
+/** Re-word a shared tool for one agent, where the common description names what it cannot see. */
+function withDescription<T extends object>(tool: T, description: string): T {
+  return { ...tool, description } as T
+}
+
 /**
  * `lorebookId` names something that does not exist here.
  *
@@ -797,21 +831,35 @@ function withoutFields<T extends { inputSchema: unknown }>(tool: T, ...fields: s
  */
 const LOREBOOK_ID = 'lorebookId'
 
+/**
+ * `list_entries` is not among this agent's tools.
+ *
+ * Its prompt already carries every entry with the index the tools take, so the only thing
+ * the tool could add was the list *after* the session had changed it — and capped at
+ * `MAX_LIST_ENTRIES` it answered that with a fifth of a large lorebook and no way to page,
+ * which reads as "the rest is gone". `create_entry` and `merge_entries` report the index
+ * their result landed at instead, so the agent follows the index space from its own
+ * results. Same reasoning as the absent `list_chapters`, in `createStoryTools`.
+ */
+type LoreManagementEntryTools = Exclude<keyof LorebookEntryTools, 'list_entries'>
+
 export function createLoreManagementTools(context: LoreManagementToolContext) {
   const { create_entry, update_entry, ...entryTools } = createLorebookEntryTools(context)
 
   // `satisfies` is the guard: every entry tool has to be named here, so a tool added to the
   // factory later cannot quietly reach this agent with its `lorebookId` still attached.
   const entry = {
-    list_entries: withoutFields(entryTools.list_entries, LOREBOOK_ID),
-    read_entry: withoutFields(entryTools.read_entry, LOREBOOK_ID),
+    read_entry: withDescription(
+      withoutFields(entryTools.read_entry, LOREBOOK_ID),
+      'Read the full details of one lorebook entry by its index, as listed in your instructions. Use it when the one-line summary there is not enough to judge a merge or an update.',
+    ),
     delete_entry: withoutFields(entryTools.delete_entry, LOREBOOK_ID),
     merge_entries: withoutFields(entryTools.merge_entries, LOREBOOK_ID),
     // `always` is a budget decision past every retrieval threshold, and this agent runs
     // unattended and cannot see the budget. The vault assistant keeps it: a user reads it.
     create_entry: withoutFields(create_entry, LOREBOOK_ID, 'injectionMode'),
     update_entry: withoutFields(update_entry, LOREBOOK_ID, 'injectionMode'),
-  } satisfies Record<keyof LorebookEntryTools, unknown>
+  } satisfies Record<LoreManagementEntryTools, unknown>
 
   return {
     ...entry,

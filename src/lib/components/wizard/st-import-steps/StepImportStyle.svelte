@@ -5,7 +5,7 @@
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { hasRequiredCredentials } from '$lib/services/ai/image'
-  import type { StoryMode, POV } from '$lib/types'
+  import type { StoryMode, POV, ImageGenerationMode } from '$lib/types'
   import type { Tense } from '$lib/services/ai/wizard/ScenarioService'
 
   interface Props {
@@ -14,7 +14,7 @@
     selectedTense: Tense
     tone: string
     visualProseMode: boolean
-    imageGenerationMode: 'none' | 'agentic' | 'inline'
+    imageGenerationMode: ImageGenerationMode
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     importChatAsEntries: boolean
@@ -26,7 +26,7 @@
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
     onVisualProseModeChange: (v: boolean) => void
-    onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
+    onImageGenerationModeChange: (v: ImageGenerationMode) => void
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
     onImportChatToggle: (v: boolean) => void

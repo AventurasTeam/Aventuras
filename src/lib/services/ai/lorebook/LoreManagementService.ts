@@ -23,6 +23,7 @@ import type { LoreManagementToolContext } from '../sdk/tools/lorebook'
 import {
   findDuplicateGroups,
   formatDuplicateGroup,
+  groupIsSettledBy,
   pairKeys,
   type DuplicateGroup,
 } from '$lib/services/duplicates'
@@ -189,11 +190,14 @@ export class LoreManagementService extends BaseAIService {
     // Create tool context with chapter querying
     const toolContext: LoreManagementToolContext = {
       entries: vaultEntries,
+      isAutonomous: true,
       onPendingChange: (change) => {
         // Auto-approve in autonomous mode
         change.status = 'approved'
-        ledger.apply(change)
-        log('Auto-approved change', { type: change.type, id: change.id })
+        const newIndex = ledger.apply(change)
+        log('Auto-approved change', { type: change.type, id: change.id, newIndex })
+        // Back to the tool, which reports it: the agent has no listing to find it in.
+        return newIndex
       },
       generateId: () => `lm-${++changeIdCounter}`,
       removedIndices,
@@ -209,14 +213,12 @@ export class LoreManagementService extends BaseAIService {
       // Without the obligation there is nothing to refuse over, so the predicate is not
       // installed: the worklist and `keep_separate` stay, they just stop being a gate.
       pendingDuplicates: this.requireDuplicateResolution
-        ? () => openDuplicateGroups().map(formatDuplicateGroup)
+        ? () => openDuplicateGroups().map((group) => formatDuplicateGroup(group, removedIndices))
         : undefined,
       onKeepSeparate: (indices, reason) => {
         const named = new Set(indices)
-        // Every index of a group must be named. Closing on a single shared index dismissed
-        // neighbouring groups the agent had never looked at.
         const closing = duplicateGroups.filter(
-          (group) => !dismissedGroups.has(group) && group.indices.every((i) => named.has(i)),
+          (group) => !dismissedGroups.has(group) && groupIsSettledBy(group, named, removedIndices),
         )
         for (const group of closing) dismissedGroups.add(group)
         // Persisted, not just dismissed for this session: the next run would otherwise
@@ -242,7 +244,9 @@ export class LoreManagementService extends BaseAIService {
         )
         .join('\n') || 'No entries yet.'
 
-    const duplicateSummary = duplicateGroups.map(formatDuplicateGroup).join('\n')
+    const duplicateSummary = duplicateGroups
+      .map((group) => formatDuplicateGroup(group, removedIndices))
+      .join('\n')
 
     // Left out entirely rather than printed empty: an empty heading is text the model
     // reads to learn nothing, and there is nothing after the last chapter more often than not.

@@ -440,4 +440,14 @@ describe('createFuzzyTextRegex', () => {
     const cjkRegex = createFuzzyTextRegex('古い *龍*')
     expect(cjkRegex.test('古い 龍が目を覚ました')).toBe(true)
   })
+
+  it('builds a usable pattern for text carrying an apostrophe', () => {
+    const regex = createFuzzyTextRegex("Yuka's breath hitches")
+    expect(regex.test('and Yuka’s breath hitches once')).toBe(true)
+  })
+
+  it('matches a quoted line of dialogue', () => {
+    const regex = createFuzzyTextRegex('"Who are you?" she asked')
+    expect(regex.test('“Who are you?” she asked, stepping back')).toBe(true)
+  })
 })

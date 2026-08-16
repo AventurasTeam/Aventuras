@@ -12,8 +12,8 @@
  *
  * - A prompt containing `>` ("a sign reading 10 > 9") ends the match early, so *no* rule
  *   fires. The consequence is not a missing image but the literal `<pic ...>` string
- *   surviving into rendered narration, with `hasPicTags` and `stripPicTags` both agreeing
- *   there is nothing there to strip.
+ *   surviving into rendered narration, with `stripPicTags` agreeing there is nothing
+ *   there to strip.
  * - It cannot tell a quote that closes an attribute from one inside its value.
  *
  * Matching quoted runs explicitly fixes both: `"[^"]*"` and `'[^']*'` consume a whole
@@ -139,7 +139,7 @@ export function hasIncompletePicTag(content: string): { incomplete: boolean; saf
 /**
  * Escape HTML special characters for safe attribute values.
  */
-function escapeHtml(str: string): string {
+export function escapeHtml(str: string): string {
   return str
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -168,7 +168,10 @@ function buildPlaceholder(
   innerContent: string,
 ): string {
   const shimmer = status !== 'failed' ? '<div class="placeholder-shimmer"></div>' : ''
-  return `<div class="inline-image-placeholder ${status}" data-image-id="${imageId}" data-prompt="${escapeHtml(prompt)}">
+  // No id while streaming and none for a missing record: the attribute is a click target,
+  // and an empty one resolves to no image at all.
+  const idAttribute = imageId ? ` data-image-id="${imageId}"` : ''
+  return `<div class="inline-image-placeholder ${status}"${idAttribute} data-prompt="${escapeHtml(prompt)}">
     ${shimmer}
     <div class="placeholder-content">${innerContent}</div>
   </div>`
@@ -191,6 +194,35 @@ function errorWithInfo(errorMsg: string, shortPrompt: string, imageId: string): 
     ${retryButton(imageId)}`
 }
 
+/**
+ * A tag whose image record is gone: the generation never reached the database, or the
+ * record was removed under it. Offering the rescan is the difference between a narration
+ * that lost a paragraph's worth of markup for no stated reason and one the reader can fix.
+ *
+ * A tag with no prompt gets the notice without the button. There is nothing to generate
+ * from it, and the placeholder still has to appear: silently rendering it as the empty
+ * string is how the markup went missing from the narration in the first place.
+ */
+/** A tag past the per-message budget: no record, and none is coming. */
+function overBudgetInfo(shortPrompt: string): string {
+  return `<div class="placeholder-error-icon">${errorIconSvg}</div>
+    <div class="placeholder-info">
+      <span class="placeholder-status error">Past the per-message image limit</span>
+      <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
+    </div>`
+}
+
+function missingRecordInfo(prompt: string, shortPrompt: string): string {
+  const action = prompt
+    ? `\n    <button class="inline-image-btn create-missing-btn" data-action="create-missing" data-prompt="${escapeHtml(prompt)}" title="Recreate this image">Generate</button>`
+    : ''
+  return `<div class="placeholder-error-icon">${errorIconSvg}</div>
+    <div class="placeholder-info">
+      <span class="placeholder-status error">Image record missing</span>
+      <span class="placeholder-prompt">${escapeHtml(shortPrompt)}</span>
+    </div>${action}`
+}
+
 // ─── Completed image renderers ───
 
 function renderCompleteImage(imageId: string, prompt: string, imageData: string): string {
@@ -209,27 +241,57 @@ function renderRegeneratingImage(imageId: string, prompt: string, imageData: str
   </div>`
 }
 
+export interface PicTagRenderOptions {
+  /** Image IDs currently being regenerated. */
+  regeneratingIds?: Set<string>
+  /** Image IDs waiting long enough to offer a retry. */
+  stuckIds?: Set<string>
+  /**
+   * Offer to recreate a tag that has no image record.
+   *
+   * Off for the moments after an entry is saved, where its records are still being
+   * written and a missing one is the normal state: the recovery rescans the whole entry,
+   * so taking it then would create a second record for every tag about to be flushed.
+   */
+  offerMissingRecovery?: boolean
+  /**
+   * The entry has spent its per-message image budget, so a tag without a record was skipped
+   * rather than lost. Reported as a limit: the rescan would refuse to recreate it.
+   */
+  overBudget?: boolean
+}
+
 /**
  * Render HTML for a single <pic> tag match.
  * Handles all image states: complete, regenerating, generating, failed, pending, unknown.
- *
- * @param match - The full <pic> tag match string
- * @param imageMap - Map of original tag text to image info
- * @param regeneratingIds - Optional set of image IDs currently being regenerated
- * @returns HTML string for the image (or empty string if no image record found)
  */
 export function renderSinglePicTag(
   match: string,
   imageMap: Map<string, ImageReplacementInfo>,
-  regeneratingIds?: Set<string>,
+  options: PicTagRenderOptions = {},
 ): string {
+  const { regeneratingIds, stuckIds, offerMissingRecovery = true, overBudget = false } = options
   const attrMatch = match.match(picTagRegex('i'))
   const attrs = attrMatch ? attrMatch[1] : ''
   const prompt = readAttribute(attrs, 'prompt') ?? ''
   const shortPrompt = prompt.length > 60 ? prompt.slice(0, 60) + '...' : prompt
 
   const imageInfo = imageMap.get(match)
-  if (!imageInfo) return ''
+  if (!imageInfo) {
+    if (overBudget) {
+      return buildPlaceholder('failed', '', prompt, overBudgetInfo(shortPrompt))
+    }
+    return offerMissingRecovery
+      ? buildPlaceholder('failed', '', prompt, missingRecordInfo(prompt, shortPrompt))
+      : buildPlaceholder(
+          'pending',
+          '',
+          prompt,
+          loaderWithInfo('In queue...', shortPrompt, 'pending'),
+        )
+  }
+
+  const stuck = stuckIds?.has(imageInfo.id) ?? false
 
   if (imageInfo.status === 'complete' && imageInfo.imageData) {
     return (regeneratingIds?.has(imageInfo.id) ?? false)
@@ -242,7 +304,7 @@ export function renderSinglePicTag(
       'generating',
       imageInfo.id,
       prompt,
-      loaderWithInfo('Generating image...', shortPrompt),
+      loaderWithInfo('Generating image...', shortPrompt) + (stuck ? retryButton(imageInfo.id) : ''),
     )
   }
 
@@ -261,7 +323,8 @@ export function renderSinglePicTag(
     'pending',
     imageInfo.id,
     prompt,
-    loaderWithInfo('In queue...', shortPrompt, 'pending'),
+    loaderWithInfo('In queue...', shortPrompt, 'pending') +
+      (stuck ? retryButton(imageInfo.id) : ''),
   )
 }
 
@@ -294,16 +357,6 @@ export interface ImageReplacementInfo {
   status: 'pending' | 'generating' | 'complete' | 'failed'
   id: string
   errorMessage?: string
-}
-
-/**
- * Check if content contains any <pic> tags.
- *
- * @param content - The content to check
- * @returns True if at least one <pic> tag is found
- */
-export function hasPicTags(content: string): boolean {
-  return picTagRegex('i').test(content)
 }
 
 /**

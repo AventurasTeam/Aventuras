@@ -12,14 +12,11 @@
  */
 
 import type { Character, EmbeddedImage } from '$lib/types'
-import {
-  generateImage as registryGenerateImage,
-  supportsImageGeneration,
-} from './providers/registry'
+import { runImageGeneration } from './imageUtils'
 import { database } from '$lib/services/database'
 import { settings } from '$lib/stores/settings.svelte'
-import { emitImageQueued, emitImageReady, emitImageAnalysisFailed } from '$lib/services/events'
-import { normalizeImageDataUrl, expectedPixels, type ImageSpec } from '$lib/utils/image'
+import { emitImageQueued } from '$lib/services/events'
+import { normalizeImageDataUrl, expectedPixels } from '$lib/utils/image'
 import { extractPicTags, type ParsedPicTag } from '$lib/utils/inlineImageParser'
 import { resolveStylePrompt } from './stylePrompt'
 import { createLogger } from '$lib/log'
@@ -36,27 +33,13 @@ export interface InlineImageContext {
 
 export class InlineImageGenerationService {
   /**
-   * Check if inline image generation is enabled and configured.
-   * Uses profile-based configuration - checks if a valid image-capable profile is selected.
-   */
-  static isEnabled(): boolean {
-    const imageSettings = settings.systemServicesSettings.imageGeneration
-
-    const profileId = imageSettings.profileId
-    if (!profileId) return false
-
-    const profile = settings.getImageProfile(profileId)
-    if (!profile) return false
-
-    return supportsImageGeneration(profile.providerType)
-  }
-
-  /**
    * Process narrative content for <pic> tags and generate images.
    * This is the main entry point called after narrative generation completes
    * when inline image mode is enabled.
+   *
+   * @returns how many tags were queued, so a caller can tell a no-op from work done.
    */
-  async processNarrativeForInlineImages(context: InlineImageContext): Promise<void> {
+  async processNarrativeForInlineImages(context: InlineImageContext): Promise<number> {
     const imageSettings = settings.systemServicesSettings.imageGeneration
 
     // Extract all <pic> tags from the narrative
@@ -64,7 +47,7 @@ export class InlineImageGenerationService {
 
     if (picTags.length === 0) {
       log('No <pic> tags found in narrative')
-      return
+      return 0
     }
 
     log('Found <pic> tags', {
@@ -75,17 +58,45 @@ export class InlineImageGenerationService {
       })),
     })
 
-    // Apply max images limit
-    const maxImages = imageSettings.maxImagesPerMessage ?? 3
-    const tagsToProcess = maxImages === 0 ? picTags : picTags.slice(0, maxImages)
+    // Tags that already have a record are not generated again. On a fresh narration there
+    // are none and this costs one empty query; on the recovery rescan it is the whole
+    // point, since a second record for a tag shadows the first — the render map is keyed
+    // on `sourceText` — and the working image is replaced by a fresh generation.
+    const recordedTexts = await database.getEmbeddedImageSourceTextsForEntry(context.entryId)
 
-    if (tagsToProcess.length < picTags.length) {
+    // The set carries the tags accepted so far as well as the recorded ones: a narration
+    // can repeat a tag verbatim, and two records under one `sourceText` shadow each other
+    // exactly as a duplicate of an existing record would.
+    const seen = new Set(recordedTexts)
+    const missingTags: ParsedPicTag[] = []
+    for (const tag of picTags) {
+      if (seen.has(tag.originalTag)) continue
+      seen.add(tag.originalTag)
+      missingTags.push(tag)
+    }
+
+    if (missingTags.length === 0) {
+      log('Every <pic> tag in this entry already has a record')
+      return 0
+    }
+
+    // Existing records count against the limit: it is a budget per message, not per call.
+    // Counted as rows, not as distinct texts — an entry that already carries a duplicate
+    // pair has spent two of the budget.
+    const maxImages = imageSettings.maxImagesPerMessage ?? 3
+    const remaining = maxImages === 0 ? missingTags.length : maxImages - recordedTexts.length
+    const tagsToProcess = missingTags.slice(0, Math.max(0, remaining))
+
+    if (tagsToProcess.length < missingTags.length) {
       log('Limiting to max images', {
-        found: picTags.length,
+        missing: missingTags.length,
+        alreadyRecorded: recordedTexts.length,
         processing: tagsToProcess.length,
         maxAllowed: maxImages,
       })
     }
+
+    if (tagsToProcess.length === 0) return 0
 
     // Process each tag
     for (const tag of tagsToProcess) {
@@ -93,6 +104,7 @@ export class InlineImageGenerationService {
     }
 
     log('All inline images queued', { count: tagsToProcess.length })
+    return tagsToProcess.length
   }
 
   /**
@@ -194,86 +206,18 @@ export class InlineImageGenerationService {
     emitImageQueued(imageId, context.entryId)
 
     // Start async generation (fire-and-forget)
-    this.generateImage(
+    runImageGeneration({
       imageId,
-      fullPrompt,
+      entryId: context.entryId,
+      prompt: fullPrompt,
       profileId,
-      modelToUse,
-      sizeToUse,
-      context.entryId,
-      referenceImageUrls,
-    ).catch((error) => {
+      model: modelToUse,
+      size: sizeToUse,
+      referenceImages: referenceImageUrls,
+      notifyFailure: true,
+    }).catch((error) => {
       log('Async inline image generation failed', { imageId, error })
     })
-  }
-
-  /**
-   * Generate a single image using the SDK (runs asynchronously)
-   */
-  private async generateImage(
-    imageId: string,
-    prompt: string,
-    profileId: string,
-    model: string,
-    size: ImageSpec,
-    entryId: string,
-    referenceImageUrls?: string[],
-  ): Promise<void> {
-    try {
-      // Update status to generating
-      await database.updateEmbeddedImage(imageId, { status: 'generating' })
-
-      log('Generating inline image via SDK', {
-        imageId,
-        profileId,
-        model,
-        hasReference: !!referenceImageUrls?.length,
-      })
-
-      // Generate image using SDK
-      const result = await registryGenerateImage({
-        profileId,
-        model,
-        prompt,
-        size,
-        referenceImages: referenceImageUrls,
-      })
-
-      if (!result.base64) {
-        throw new Error('No image data returned')
-      }
-
-      // Update record with image data
-      await database.updateEmbeddedImage(imageId, {
-        imageData: result.base64,
-        status: 'complete',
-      })
-
-      log('Inline image generated successfully', {
-        imageId,
-        hasReference: !!referenceImageUrls,
-      })
-
-      // Emit ready event
-      emitImageReady(imageId, entryId, true)
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      log('Inline image generation failed', { imageId, error: errorMessage })
-
-      try {
-        // Update record with error
-        await database.updateEmbeddedImage(imageId, {
-          status: 'failed',
-          errorMessage,
-        })
-      } finally {
-        // Emit ready event (with failure) and notify UI. In a `finally` because the
-        // `ImageQueued` emitted when this was scheduled has to be balanced even if
-        // recording the failure is itself what failed.
-        emitImageReady(imageId, entryId, false)
-        emitImageAnalysisFailed(entryId, errorMessage)
-      }
-    }
   }
 }
 

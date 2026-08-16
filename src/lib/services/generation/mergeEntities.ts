@@ -23,7 +23,7 @@
  */
 
 import type { Character, Entry, Item, Location } from '$lib/types'
-import { escapeRegex } from '$lib/utils/text'
+import { containsWholeUnit } from '$lib/utils/text'
 
 /** Where a field's value came from, which is what the preview shows next to it. */
 export type FieldOrigin =
@@ -302,27 +302,6 @@ export function planEntryMerge(primary: Entry, others: Entry[]): MergePlan {
 const APPEND_SEPARATOR = '\n\n'
 
 /**
- * Checks whether `needle` is contained in `haystack` as a whole-word / whole-unit text passage,
- * so sub-word occurrences ("Gatto" in "Cattedrale") are not false positives.
- */
-function containsAsWholeUnit(haystack: string, needle: string): boolean {
-  const normHay = haystack.toLowerCase().trim()
-  const normNeedle = needle.toLowerCase().trim()
-  if (!normNeedle) return false
-  if (normHay === normNeedle) return true
-
-  let patternStr = escapeRegex(normNeedle)
-  if (/^[\p{L}\p{N}]/u.test(normNeedle)) {
-    patternStr = '(?<![\\p{L}\\p{N}])' + patternStr
-  }
-  if (/[\p{L}\p{N}]$/u.test(normNeedle)) {
-    patternStr = patternStr + '(?![\\p{L}\\p{N}])'
-  }
-
-  return new RegExp(patternStr, 'u').test(normHay)
-}
-
-/**
  * Join the candidates, skipping any whose text the result already carries.
  *
  * Performs a bidirectional, boundary-aware check:
@@ -338,7 +317,7 @@ function appendCandidates(candidates: MergeCandidate[]): string {
     if (!text) continue
 
     // 1. If an existing part already covers this text as a whole unit, skip text.
-    if (parts.some((p) => containsAsWholeUnit(p, text))) {
+    if (parts.some((p) => containsWholeUnit(p, text))) {
       continue
     }
 
@@ -346,7 +325,7 @@ function appendCandidates(candidates: MergeCandidate[]): string {
     let replaced = false
     const newParts: string[] = []
     for (const p of parts) {
-      if (containsAsWholeUnit(text, p)) {
+      if (containsWholeUnit(text, p)) {
         if (!replaced) {
           newParts.push(text)
           replaced = true

@@ -20,6 +20,17 @@ function jsonSchemaToTypeScript(schema: JSONSchema7, indent = 0): string {
   const pad = '  '.repeat(indent)
   const padInner = '  '.repeat(indent + 1)
 
+  // Zod spells `.nullable()` as `anyOf: [T, null]`, not as a type array. Everything below
+  // keys off `type`, which is absent here, so without this branch every nullable field
+  // reaches the model as `unknown`.
+  const union = (schema.anyOf ?? schema.oneOf) as JSONSchema7[] | undefined
+  if (union?.length) {
+    const parts = union.map((variant) =>
+      variant.type === 'null' ? 'null' : jsonSchemaToTypeScript(variant, indent),
+    )
+    return [...new Set(parts)].join(' | ')
+  }
+
   const nullable = Array.isArray(schema.type) && schema.type.includes('null')
   const primaryType = Array.isArray(schema.type)
     ? schema.type.find((t: string) => t !== 'null')
@@ -74,7 +85,7 @@ function jsonSchemaToTypeScript(schema: JSONSchema7, indent = 0): string {
   }
 }
 
-function schemaToTypeScriptBlock(schema: JSONSchema7, name = 'Response'): string {
+export function schemaToTypeScriptBlock(schema: JSONSchema7, name = 'Response'): string {
   const typeBody = jsonSchemaToTypeScript(schema, 0)
   if (schema.type === 'object' && schema.properties) {
     return `interface ${name} ${typeBody}`

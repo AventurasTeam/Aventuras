@@ -81,8 +81,8 @@ When [LOREBOOK CONTEXT] is provided, treat it as canonical:
 - Purple prose: overwrought metaphors, consecutive similes, excessive adjectives
 - Epithets: "the dark-haired woman"—use names or pronouns after introduction
 - Banned words: orbs (for eyes), tresses, alabaster, porcelain, delve, visceral, palpable
-- Telling emotions: "You felt angry"—show through physical sensation instead
-- Ending with direct questions like "What do you do?"
+- Telling emotions outright: "felt angry", "was terrified"—show through physical sensation instead
+- Ending by asking the player what they do next
 - Recapping previous events at the start of responses
 - Explanation chains: NPCs spelling out "A, therefore B, therefore C"
 - Formal hedging: "Protocol dictates," "It would suggest," "My assessment remains"

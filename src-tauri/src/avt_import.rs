@@ -25,9 +25,10 @@ use std::io::{BufReader, Read};
 use serde::de::{DeserializeSeed, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::Deserializer;
 use serde_json::{Map, Value};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+
+use crate::db::{open_rw_pool, IMPORT_BUSY_TIMEOUT};
 
 /// The JSON key holding the base64 payload — the only thing this module works to avoid.
 const IMAGE_DATA_KEY: &str = "imageData";
@@ -325,30 +326,6 @@ impl<'de, F: FnMut(ImageRow) -> Result<(), String>> Visitor<'de> for ImportRootS
     }
 }
 
-/// Open a writable pool to the live database.
-///
-/// The sql plugin holds its own connection to the same file, and WAL allows only one writer at a
-/// time, so a generous busy_timeout is what keeps a concurrent app write from turning into
-/// SQLITE_BUSY here.
-async fn open_rw_pool(app: &AppHandle) -> Result<SqlitePool, String> {
-    let db = app
-        .path()
-        .app_config_dir()
-        .map_err(|e| format!("failed to resolve app config dir: {e}"))?
-        .join("aventura.db");
-
-    let options = SqliteConnectOptions::new()
-        .filename(&db)
-        .create_if_missing(false)
-        .busy_timeout(std::time::Duration::from_secs(30));
-
-    SqlitePoolOptions::new()
-        .max_connections(1)
-        .connect_with(options)
-        .await
-        .map_err(|e| format!("failed to open database: {e}"))
-}
-
 /// Stream every mapped image from an `.avt` straight into SQLite.
 ///
 /// `mapping` is the small table JS produced while importing the structure: it decides which images
@@ -370,7 +347,7 @@ pub async fn avt_import_images(
         .map(|m| (m.old_image_id, m.new_entry_id))
         .collect();
 
-    let pool = open_rw_pool(&app).await?;
+    let pool = open_rw_pool(&app, IMPORT_BUSY_TIMEOUT).await?;
     let reader = BufReader::new(open_source(&app, &src_path)?);
 
     let result = import_images_from(reader, pool.clone(), story_id, entry_by_image).await;
@@ -484,6 +461,7 @@ fn uuid_v4() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
     use sqlx::Row;
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::sync::atomic::{AtomicUsize, Ordering};

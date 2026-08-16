@@ -1,7 +1,7 @@
 <script lang="ts">
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import type { POV, Tense, TargetLength } from '$lib/types'
+  import type { POV, Tense, TargetLength, ImageGenerationMode } from '$lib/types'
 
   interface Props {
     selectedPOV: POV
@@ -9,7 +9,7 @@
     tone: string
     visualProseMode: boolean
     imageGenerationEnabled: boolean
-    imageGenerationMode: 'none' | 'agentic' | 'inline'
+    imageGenerationMode: ImageGenerationMode
     backgroundImagesEnabled: boolean
     referenceMode: boolean
     targetLength?: TargetLength
@@ -18,7 +18,7 @@
     onTenseChange: (v: Tense) => void
     onToneChange: (v: string) => void
     onVisualProseModeChange: (v: boolean) => void
-    onImageGenerationModeChange: (v: 'none' | 'agentic' | 'inline') => void
+    onImageGenerationModeChange: (v: ImageGenerationMode) => void
     onBackgroundImagesEnabledChange: (v: boolean) => void
     onReferenceModeChange: (v: boolean) => void
     onTargetLengthChange?: (v: TargetLength) => void

@@ -202,6 +202,10 @@ export function getDefaultAdvancedRequestSettings(): AdvancedRequestSettings {
 }
 
 // Classifier service settings (World State Classifier - extracts entities from narrative)
+/** The window the classifier reads, in whole story entries. Shared with the slider. */
+export const CLASSIFIER_WINDOW_MIN = 2
+export const CLASSIFIER_WINDOW_MAX = 15
+
 export interface ClassifierSettings {
   presetId?: string
   profileId: string | null // API profile to use (null = use default profile)
@@ -210,11 +214,25 @@ export interface ClassifierSettings {
   maxTokens: number
   reasoningEffort: ReasoningEffort
   manualBody: string
-  chatHistoryTruncation: number // Max words per chat history entry (0 = no truncation, up to 500)
+  recentEntriesWindow: number // Recent story entries sent whole as context, 2-15
 }
 
 export function getDefaultClassifierSettings(): ClassifierSettings {
   return getDefaultClassifierSettingsForProvider('openrouter')
+}
+
+/** A stored window outside the slider's range, back inside it. */
+function clampClassifierWindow(loaded: ClassifierSettings): ClassifierSettings {
+  // Checked before rounding: `Math.round(null)` is 0, which is finite and would clamp to the
+  // slider's minimum instead of restoring the default.
+  if (!Number.isFinite(loaded.recentEntriesWindow)) {
+    return { ...loaded, recentEntriesWindow: getDefaultClassifierSettings().recentEntriesWindow }
+  }
+  const window = Math.round(loaded.recentEntriesWindow)
+  return {
+    ...loaded,
+    recentEntriesWindow: Math.min(Math.max(window, CLASSIFIER_WINDOW_MIN), CLASSIFIER_WINDOW_MAX),
+  }
 }
 
 export function getDefaultClassifierSettingsForProvider(
@@ -229,7 +247,7 @@ export function getDefaultClassifierSettingsForProvider(
     maxTokens: 8192,
     reasoningEffort: preset.reasoningEffort,
     manualBody: '',
-    chatHistoryTruncation: 0,
+    recentEntriesWindow: 7,
   }
 }
 
@@ -560,6 +578,10 @@ export interface EntryRetrievalSettings {
   manualBody: string
 }
 
+/** The window Tier 2/Tier 3 retrieval scans, in whole story entries. Shared with the slider. */
+export const ENTRY_RETRIEVAL_WINDOW_MIN = 2
+export const ENTRY_RETRIEVAL_WINDOW_MAX = 15
+
 export function getDefaultEntryRetrievalSettings(): EntryRetrievalSettings {
   return getDefaultEntryRetrievalSettingsForProvider('openrouter')
 }
@@ -674,6 +696,14 @@ export interface TTSServiceSettings {
   removeAllHtmlContent: boolean // Removes content within all HTML tags (default: false)
   htmlTagsToRemoveContent: string // Specific HTML tags to remove content from (default: span, div)
   provider: 'openai' | 'google' | 'microsoft' // TTS Provider (default: 'openai')
+  /**
+   * Audio container asked of an OpenAI-compatible endpoint.
+   *
+   * MP3 by default, because it is the OpenAI default and roughly a fifth of the bytes.
+   * A local runtime built without an MP3 encoder answers it with a 400 and serves WAV
+   * instead — hence the choice rather than a constant. Other providers do not read this.
+   */
+  responseFormat: 'mp3' | 'wav'
   volume: number // TTS volume 0.0-1.0 (default: 1.0)
   volumeOverride: boolean // Enable volume override (default: false)
   providerVoices: Record<string, string> // Provider-specific voices
@@ -702,6 +732,7 @@ export function getDefaultTTSSettings(): TTSServiceSettings {
     removeAllHtmlContent: false,
     htmlTagsToRemoveContent: 'span, div',
     provider: 'openai',
+    responseFormat: 'mp3',
     volume: 1.0,
     volumeOverride: false,
     providerVoices: { openai: 'alloy', google: 'en', microsoft: '' },
@@ -725,6 +756,7 @@ export function getDefaultTTSSettingsForProvider(_provider: ProviderType): TTSSe
     removeAllHtmlContent: false,
     htmlTagsToRemoveContent: 'span, div',
     provider: 'openai',
+    responseFormat: 'mp3',
     volume: 1.0,
     volumeOverride: false,
     providerVoices: { openai: 'alloy', google: 'en', microsoft: '' },
@@ -778,10 +810,6 @@ export function getDefaultCharacterCardImportSettingsForProvider(
 
 // Combined system services settings
 // Service-specific settings (only extra fields, not generation config)
-export interface ClassifierSpecificSettings {
-  chatHistoryTruncation: number
-}
-
 export interface LorebookClassifierSpecificSettings {
   batchSize: number
   maxConcurrent: number
@@ -860,7 +888,6 @@ export interface TTSSpecificSettings {
 export type CharacterCardImportSpecificSettings = object
 
 export interface ServiceSpecificSettings {
-  classifier: ClassifierSpecificSettings
   lorebookClassifier: LorebookClassifierSpecificSettings
   suggestions: SuggestionsSpecificSettings
   actionChoices: ActionChoicesSpecificSettings
@@ -891,7 +918,6 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
 
 export function getDefaultServiceSpecificSettings(): ServiceSpecificSettings {
   return {
-    classifier: getDefaultClassifierSpecificSettings(),
     lorebookClassifier: getDefaultLorebookClassifierSpecificSettings(),
     suggestions: getDefaultSuggestionsSpecificSettings(),
     actionChoices: getDefaultActionChoicesSpecificSettings(),
@@ -905,12 +931,6 @@ export function getDefaultServiceSpecificSettings(): ServiceSpecificSettings {
     characterCardImport: getDefaultCharacterCardImportSpecificSettings(),
     contextWindow: getDefaultContextWindowSettings(),
     lorebookLimits: getDefaultLorebookLimitsSettings(),
-  }
-}
-
-export function getDefaultClassifierSpecificSettings(): ClassifierSpecificSettings {
-  return {
-    chatHistoryTruncation: 0,
   }
 }
 
@@ -1656,7 +1676,6 @@ class SettingsStore {
         try {
           const loaded = JSON.parse(serviceSpecificJson)
           this.serviceSpecificSettings = {
-            classifier: { ...getDefaultClassifierSpecificSettings(), ...loaded.classifier },
             lorebookClassifier: {
               ...getDefaultLorebookClassifierSpecificSettings(),
               ...loaded.lorebookClassifier,
@@ -1713,7 +1732,9 @@ class SettingsStore {
             this.getDefaultProviderType(),
           )
           this.systemServicesSettings = {
-            classifier: { ...defaults.classifier, ...loaded.classifier },
+            // `recentEntriesWindow` reaches `recentContent`, where a zero returns the empty
+            // string rather than an error: the classifier would lose its history in silence.
+            classifier: clampClassifierWindow({ ...defaults.classifier, ...loaded.classifier }),
             lorebookClassifier: { ...defaults.lorebookClassifier, ...loaded.lorebookClassifier },
             memory: { ...defaults.memory, ...loaded.memory },
             suggestions: { ...defaults.suggestions, ...loaded.suggestions },
@@ -1875,9 +1896,17 @@ class SettingsStore {
     await database.setSetting('max_tokens', tokens.toString())
   }
 
+  /**
+   * Clamped here rather than only in the form: this value is also the wait before an image
+   * is called stuck, so a zero would offer the retry on every image the moment it queues.
+   */
   async setLlmTimeout(timeoutMs: number) {
-    this.apiSettings.llmTimeoutMs = timeoutMs
-    await database.setSetting('llm_timeout_ms', timeoutMs.toString())
+    // `Math.max(NaN, …)` is NaN, and it would reach both the live setting and the stored
+    // string — where it survives as "NaN" until someone moves the slider.
+    const requested = Number.isFinite(timeoutMs) ? timeoutMs : LLM_TIMEOUT_DEFAULT
+    const clamped = Math.min(Math.max(requested, LLM_TIMEOUT_MIN), LLM_TIMEOUT_MAX)
+    this.apiSettings.llmTimeoutMs = clamped
+    await database.setSetting('llm_timeout_ms', clamped.toString())
   }
 
   /**

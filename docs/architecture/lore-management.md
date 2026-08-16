@@ -11,6 +11,12 @@ name, shared alias, token containment, length-scaled edit distance, grouped tran
 service and not a corner of the lorebook's, because `ai/lorebook`'s barrel pulls in the SDK
 and through it a rune store, which no plain module can be imported alongside.
 
+**Every form is compared against every form** — a name and an alias are the same kind of
+evidence, and comparing only the two primary names missed an alias that had drifted or grown
+a title. The comparison is by whole tokens, which is what makes it boundary-aware without a
+length floor: `Ren` is a word of `Ren Wald` and is not a word of `Renwald`, so a short name
+is a candidate in the first case and not in the second.
+
 **The world state is the pool that actually grows.** The classifier mints a new `Character`
 whenever the story calls someone by a different title, so one measured save held
 `Baron Kaelen` and `Forge-Master Kaelen`, `Captain Vor'koth`, `General Vor'koth` and
@@ -62,9 +68,9 @@ one. Several things hold that down, and only the last is optional:
   re-proposed the same consolidation it had already "done". `merges` and `deletedEntries` now
   come back with the result and reach the caller's existing `onMergeEntries` / `onDeleteEntry`.
 - **Changes land in the snapshot as they are made.** The array the tools read is the array the
-  session mutates, so an entry created on step 2 is visible to `list_entries` on step 3. It is
-  never spliced: the model holds indices from the prompt and from every listing it has read, so
-  a delete keeps its slot and joins `removedIndices` — hidden from listings, refused by
+  session mutates, so an entry created on step 2 is addressable on step 3, at the index its tool
+  result reported. It is never spliced: the model holds indices from the prompt and from every
+  result it has read, so a delete keeps its slot and joins `removedIndices` — refused by
   everything that takes an index.
 - **`create_entry` refuses a name that already exists**, matching on names and aliases through
   `foldName`. The refusal says to update that index instead. The vault assistant does not
@@ -98,7 +104,12 @@ one. Several things hold that down, and only the last is optional:
   `stopOnCompletedTerminalTool`, reading the tool's answer rather than its call. The refusal is
   capped at two: the agent may be right that the groups are distinct, and a run that cannot end
   returns nothing. `keep_separate` is how it says so, and it must name **every** index of a
-  group: closing on one shared index dismissed neighbours the agent had never read.
+  group: closing on one shared index dismissed neighbours the agent had never read. An index a
+  merge or a delete has already consumed counts as named — the worklist stops printing those,
+  so demanding them back would leave any group that survived a consolidation impossible to
+  close. `groupIsSettledBy` and `formatDuplicateGroup` sit together in `duplicates/names.ts`
+  for that reason: they are the two halves of one rule, and drifting apart is what deadlocked
+  the run.
 
   **Resolved means the group collapsed**, not that a member was touched. An update is what the
   agent does anyway on its next task, so counting it opened the gate without consolidating
@@ -139,13 +150,16 @@ cut is what costs: on a 41-chapter story the block goes from ~9k characters to ~
 it because those summaries are this task's input (the median summary is 1,223 characters, so the
 cut showed 16% of one), because the block is the cacheable head of the prompt, and because the
 only other way to recover the missing text is `query_chapter` — a whole chapter read by a second
-model. `list_entries` stays: after a merge or a delete it is the only view of the list as it now
-stands, and the prompt says so, so it is not called before there is anything to see. It takes a
-`query` and a `limit` — the query matches names, aliases, keywords and descriptions through the
-same `entityNameMatches` the retrieval side searches with, and the cap exists because a tool
-result stays in the prompt for the rest of the run. It is deliberately **not**
-`search_entries`: that tool addresses entries by id, and every write here goes by index, so
-mixing the two addressing schemes is how the `lorebookId` bug happens again.
+model. **`list_entries` went the same way, and for the same reason.** The prompt already carries every
+entry with the index the tools take, so the only thing the tool could add was the list _after_
+the session had changed it — and capped at twenty rows it answered that with a fifth of a large
+lorebook and no way to page, which a model reads as "the rest is gone". What it was really being
+asked was "where did my own work land", and `create_entry` and `merge_entries` now answer that
+directly: both report the index their result was appended at, and a merge also names the indices
+it consumed. The agent follows the index space from its own results. The tool stays on the vault
+assistant, which browses several lorebooks and has no list in its prompt — where it is
+deliberately **not** `search_entries`: that tool addresses entries by id, and every write here
+goes by index, so mixing the two addressing schemes is how the `lorebookId` bug happens again.
 
 **What each field is for is a contract, and it is split between the code and the prompt.**
 `EntryRetrievalService` matches an entry's name, its aliases _and_ its keywords against the

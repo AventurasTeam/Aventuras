@@ -15,6 +15,21 @@ The database, the native layer that moves bytes around it, and the settings blob
 - **Line endings matter**: `sqlx` checksums each migration file to detect drift, so migrations must use LF
   line endings on every platform. This is enforced by `.gitattributes` (forces `eol=lf` for
   `src-tauri/migrations/*.sql`) and by the `check_migrations` pre-commit hook below.
+- **Never `BEGIN` from the frontend**: `tauri-plugin-sql` runs every `execute()` on an arbitrary
+  connection from an `sqlx` pool, and exposes no way to pin one (`Pool::connect` in the plugin's
+  `wrapper.rs` takes no options). A `BEGIN` therefore opens a transaction that the following statements
+  never join and the `COMMIT` never finds, while the connection that opened it keeps a write lock that
+  turns every later write into `database is locked`. Prefer one statement that is atomic by itself — a
+  multi-row `INSERT`, an `UPDATE ... WHERE`. When several statements must land together, send them as a
+  batch to **`database.transaction()`**, which hands them to the `db_transaction` Rust command
+  (`src-tauri/src/db_tx.rs`): one connection, a real transaction, rollback on the first error, and the
+  rows affected by each statement back. Values travel as bound parameters — never interpolate into the
+  SQL. Keep the SQL in `database.ts` rather than in components, as
+  `deleteRuntimeVariableEverywhere` and its neighbours do.
+- **A read the batch depends on belongs inside it**, as a subquery. The runtime-variable writes reach
+  their rows through `SELECT id FROM stories WHERE pack_id = ?` rather than resolving the ids first:
+  the batch is atomic, the round trip that fed it was not, and a story assigned to the pack in
+  between kept a variable the pack no longer had.
 
 ## The Native (Rust) Layer
 
@@ -29,14 +44,18 @@ Rust owns the bytes**: only small parameters (paths, ids) cross the IPC bridge.
   ordering and foreign keys stay in TypeScript where they are tested), then `avt_import_images`
   re-reads the file and streams each base64 payload straight into SQLite. Peak memory is one image
   regardless of file size.
+- **`db.rs`** — where the live database is and how to open a writable pool to it. The one place
+  that knows the filename and the busy_timeout; close what it hands back.
+- **`db_tx.rs`** — the `db_transaction` command: a batch of statements on one connection, which is
+  the only place a frontend transaction can come from (see the bullet above).
 - **`migration_patch.rs`** — patches `sqlx`'s stored migration checksums (see
   [Database and Migrations](#database-and-migrations)).
 - **`sync/`** — the LAN sync server (`start_sync_server`, `sync_connect`, `sync_pull_story`,
   `sync_push_story`, …), paired via QR code.
 
-`backup.rs`, `avt_import.rs` and `migration_patch.rs` (via the `lib.rs` setup hook) open
-`sqlite:aventura.db` under Tauri's **app config dir** — see the migrations section for why that is
-not the app data dir. `sync/` never touches the database directly; it moves stories over the
+`db.rs` (for `avt_import.rs`, `db_tx.rs` and `backup.rs`) and `migration_patch.rs` (via the
+`lib.rs` setup hook) open `sqlite:aventura.db` under Tauri's **app config dir** — see the
+migrations section for why that is not the app data dir. `sync/` never touches the database directly; it moves stories over the
 `tauri-plugin-sql` connection on the JS side.
 
 ## Settings Migrations

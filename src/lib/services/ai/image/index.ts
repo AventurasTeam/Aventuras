@@ -8,11 +8,7 @@
  */
 
 // Main inline image service
-export {
-  InlineImageGenerationService,
-  inlineImageService,
-  type InlineImageContext,
-} from './InlineImageService'
+export { inlineImageService, type InlineImageContext } from './InlineImageService'
 
 // Inline image tracker for streaming
 export { InlineImageTracker } from './InlineImageTracker'
@@ -23,12 +19,10 @@ export { ImageAnalysisService, type ImageAnalysisContext } from './ImageAnalysis
 // Provider registry (replaces modelListing.ts)
 export {
   generateImage,
-  listImageModels,
   listImageModelsByProvider,
   getProviderSamplerInfo,
   listLoras,
-  clearModelsCache,
-  supportsImageGeneration,
+  requiresApiKey,
   type ImageModelInfo,
 } from './providers/registry'
 
@@ -36,20 +30,17 @@ export {
 export {
   isImageGenerationEnabled,
   hasRequiredCredentials,
+  type ImageProfileSlot,
   getProviderDisplayName,
   retryImageGeneration,
   generatePortrait,
+  runImageGeneration,
 } from './imageUtils'
 
 // Style template resolution
 export { resolveStylePrompt, resolveStylePromptForPack } from './stylePrompt'
 
 // Constants
-export {
-  DEFAULT_FALLBACK_STYLE_PROMPT,
-  POLLINATIONS_DEFAULT_MODEL_ID,
-  POLLINATIONS_REFERENCE_MODEL_ID,
-  IMAGE_STUCK_THRESHOLD_MS,
-} from './constants'
+export { DEFAULT_FALLBACK_STYLE_PROMPT } from './constants'
 // Provider types
 export { ComfyMode } from './providers/comfy'

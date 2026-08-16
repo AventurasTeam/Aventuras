@@ -13,7 +13,7 @@ import type {
   AbortedEvent,
   ErrorEvent,
 } from '../types'
-import type { StoryEntry } from '$lib/types'
+import type { StoryEntry, ImageGenerationMode } from '$lib/types'
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface BackgroundImageDependencies {
@@ -30,7 +30,7 @@ export interface BackgroundImageDependencies {
 /** Settings needed for image phase decision making */
 export interface BackgroundImageSettings {
   backgroundImagesEnabled?: boolean
-  imageGenerationMode?: 'none' | 'agentic' | 'inline'
+  imageGenerationMode?: ImageGenerationMode
 }
 
 /** Input for the image phase */

@@ -4,6 +4,7 @@ import {
   createLoreManagementTools,
   createInteractiveVaultLorebookTools,
   type LoreManagementToolContext,
+  type LorebookEntryToolContext,
 } from './lorebook'
 
 const context: LoreManagementToolContext = {
@@ -33,7 +34,6 @@ describe('createLoreManagementTools', () => {
     >
 
     for (const name of [
-      'list_entries',
       'read_entry',
       'create_entry',
       'update_entry',
@@ -50,13 +50,40 @@ describe('createLoreManagementTools', () => {
     // could only create.
     const tools = createLoreManagementTools({ ...context, entries: [entry('Kaelen')] })
 
-    const listed = (await tools.list_entries.execute?.({} as never, {} as never)) as {
-      returnedCount: number
+    const read = (await tools.read_entry.execute?.({ index: 0 } as never, {} as never)) as {
+      found: boolean
       error?: string
     }
 
-    expect(listed.error).toBeUndefined()
-    expect(listed.returnedCount).toBe(1)
+    expect(read.error).toBeUndefined()
+    expect(read.found).toBe(true)
+  })
+
+  it('offers no list_entries: the prompt already carries every entry with its index', () => {
+    const tools = createLoreManagementTools(context) as unknown as Record<string, unknown>
+
+    expect(tools.list_entries).toBeUndefined()
+    // read_entry stays — it reads one entry, it does not restate the list.
+    expect(tools.read_entry).toBeDefined()
+  })
+
+  it('reports where a merge landed, which is how the agent tracks the index space', async () => {
+    // Without it the only way to find out was a listing, and the listing is capped.
+    const tools = createLoreManagementTools({
+      ...context,
+      entries: [entry('Kaelen'), entry('Kaelen the Bold')],
+      // As the lore manager runs it: applied on the spot, so there is an index to report.
+      isAutonomous: true,
+      onPendingChange: () => 2,
+    })
+
+    const merged = (await tools.merge_entries.execute?.(
+      { indices: [0, 1], mergedEntry: entry('Kaelen') } as never,
+      {} as never,
+    )) as { newIndex?: number; message: string }
+
+    expect(merged.newIndex).toBe(2)
+    expect(merged.message).toContain('index 2')
   })
 
   it('offers no list_chapters: the prompt already carries every summary in full', () => {
@@ -178,54 +205,6 @@ describe('lore management guards', () => {
     )) as { success: boolean }
 
     expect(result.success).toBe(true)
-  })
-
-  it('hides a removed entry from the list but keeps the indices of the rest', async () => {
-    const tools = createLoreManagementTools({
-      ...context,
-      entries: [entry('Kaelen'), entry('Mara'), entry('Tovin')],
-      removedIndices: new Set([1]),
-    })
-
-    const result = (await tools.list_entries.execute?.({} as never, {} as never)) as {
-      entries: { index: number; name: string }[]
-    }
-
-    expect(result.entries.map((e) => e.index)).toEqual([0, 2])
-  })
-
-  it('narrows the listing by query, over names, aliases, keywords and descriptions', async () => {
-    const tools = createLoreManagementTools({
-      ...context,
-      entries: [
-        entry('Kaelen'),
-        { ...entry('Mara'), description: 'Serves Kaelen at the forge.' },
-        entry('Tovin', ['Kaelen the Younger']),
-        entry('Rusthaven'),
-      ],
-    })
-
-    const result = (await tools.list_entries.execute?.(
-      { query: 'Kaelen' } as never,
-      {} as never,
-    )) as { entries: { index: number }[] }
-
-    expect(result.entries.map((e) => e.index)).toEqual([0, 1, 2])
-  })
-
-  it('caps the listing and says there is more', async () => {
-    const tools = createLoreManagementTools({
-      ...context,
-      entries: Array.from({ length: 30 }, (_, i) => entry(`Entry ${i}`)),
-    })
-
-    const result = (await tools.list_entries.execute?.({ limit: 5 } as never, {} as never)) as {
-      availableTotal: number
-      returnedCount: number
-      hasMore: boolean
-    }
-
-    expect(result).toMatchObject({ availableTotal: 30, returnedCount: 5, hasMore: true })
   })
 
   it('refuses to act on a removed index rather than acting on its neighbour', async () => {
@@ -396,6 +375,64 @@ describe('finish_lore_management', () => {
     )) as { completed: boolean }
 
     expect(result.completed).toBe(true)
+  })
+})
+
+describe('list_entries, on the vault assistant that still has it', () => {
+  // The factory's return type is the union of "vault only" and "vault plus entry tools",
+  // so the entry half is reached the way the tests below already reach it.
+  const vaultTools = (entryContext: LorebookEntryToolContext) =>
+    createInteractiveVaultLorebookTools(
+      { lorebooks: () => [], generateId: () => 'c1' },
+      entryContext,
+    ) as unknown as Record<string, { execute?: (input: never, options: never) => Promise<unknown> }>
+
+  it('hides a removed entry from the list but keeps the indices of the rest', async () => {
+    const tools = vaultTools({
+      ...context,
+      entries: [entry('Kaelen'), entry('Mara'), entry('Tovin')],
+      removedIndices: new Set([1]),
+    })
+
+    const result = (await tools.list_entries.execute?.({} as never, {} as never)) as {
+      entries: { index: number; name: string }[]
+    }
+
+    expect(result.entries.map((e) => e.index)).toEqual([0, 2])
+  })
+
+  it('narrows the listing by query, over names, aliases, keywords and descriptions', async () => {
+    const tools = vaultTools({
+      ...context,
+      entries: [
+        entry('Kaelen'),
+        { ...entry('Mara'), description: 'Serves Kaelen at the forge.' },
+        entry('Tovin', ['Kaelen the Younger']),
+        entry('Rusthaven'),
+      ],
+    })
+
+    const result = (await tools.list_entries.execute?.(
+      { query: 'Kaelen' } as never,
+      {} as never,
+    )) as { entries: { index: number }[] }
+
+    expect(result.entries.map((e) => e.index)).toEqual([0, 1, 2])
+  })
+
+  it('caps the listing and says there is more', async () => {
+    const tools = vaultTools({
+      ...context,
+      entries: Array.from({ length: 30 }, (_, i) => entry(`Entry ${i}`)),
+    })
+
+    const result = (await tools.list_entries.execute?.({ limit: 5 } as never, {} as never)) as {
+      availableTotal: number
+      returnedCount: number
+      hasMore: boolean
+    }
+
+    expect(result).toMatchObject({ availableTotal: 30, returnedCount: 5, hasMore: true })
   })
 })
 

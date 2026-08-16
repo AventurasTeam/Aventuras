@@ -57,19 +57,21 @@ describe('recentContent', () => {
     expect(recentContent(entries, 3, AS_HAYSTACK)).toBe('two three four')
   })
 
-  describe('withRoles', () => {
+  describe('roles', () => {
     const typed = (type: StoryEntry['type']): StoryEntry => ({ ...entry('said', 0), type })
 
     it('labels who produced each entry', () => {
       // The fixture alternates by index: 'three' is index 2, so it is the player's.
-      expect(recentContent(entries, 2, AS_PROSE, true)).toBe(
+      expect(recentContent(entries, 2, AS_PROSE, { roles: true })).toBe(
         '[Player Action]: three\n\n[Narrator]: four',
       )
     })
 
     it('never puts an internal type identifier in the prompt', () => {
       // Nothing creates these today; they survive in stories saved by older versions.
-      const labelled = recentContent([typed('system'), typed('retry')], 2, AS_PROSE, true)
+      const labelled = recentContent([typed('system'), typed('retry')], 2, AS_PROSE, {
+        roles: true,
+      })
 
       expect(labelled).not.toContain('[system]')
       expect(labelled).not.toContain('[retry]')
@@ -77,11 +79,44 @@ describe('recentContent', () => {
     })
 
     it('calls a retry a narration, because that is what the model is being shown', () => {
-      expect(recentContent([typed('retry')], 1, AS_PROSE, true)).toBe('[Narrator]: said')
+      expect(recentContent([typed('retry')], 1, AS_PROSE, { roles: true })).toBe('[Narrator]: said')
     })
 
-    it('leaves the content untouched in the unlabelled form', () => {
-      expect(recentContent(entries, 2, AS_PROSE, false)).toBe('three\n\nfour')
+    it('leaves the content untouched with no options', () => {
+      expect(recentContent(entries, 2, AS_PROSE)).toBe('three\n\nfour')
+    })
+  })
+
+  describe('time', () => {
+    const stamped = (content: string, hours: number): StoryEntry => ({
+      ...entry(content, 1),
+      metadata: { timeStart: { years: 0, days: 10, hours, minutes: 5 } },
+    })
+
+    it('stamps the in-story clock the entry began at', () => {
+      expect(recentContent([stamped('a', 17)], 1, AS_PROSE, { roles: true, time: true })).toBe(
+        '[Narrator] (at Y0D10 17:05): a',
+      )
+    })
+
+    it('pads hours and minutes to two digits, and opens the line without the role', () => {
+      expect(recentContent([stamped('a', 9)], 1, AS_PROSE, { time: true })).toBe(
+        '(at Y0D10 09:05): a',
+      )
+    })
+
+    it('leaves entries that carry no time unstamped', () => {
+      expect(recentContent(entries, 1, AS_PROSE, { roles: true, time: true })).toBe(
+        '[Narrator]: four',
+      )
+    })
+  })
+
+  describe('transform', () => {
+    it('rewrites each entry before it is labelled', () => {
+      expect(
+        recentContent(entries, 2, AS_PROSE, { roles: true, transform: (c) => c.toUpperCase() }),
+      ).toBe('[Player Action]: THREE\n\n[Narrator]: FOUR')
     })
   })
 })

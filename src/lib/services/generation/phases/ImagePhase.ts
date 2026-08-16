@@ -12,7 +12,7 @@ import type {
   ErrorEvent,
 } from '../types'
 import type { ImageGenerationContext } from '$lib/services/ai'
-import type { Character } from '$lib/types'
+import type { Character, ImageGenerationMode } from '$lib/types'
 
 /** Dependencies for image phase - injected to avoid tight coupling */
 export interface ImageDependencies {
@@ -25,7 +25,7 @@ export interface ImageDependencies {
 
 /** Settings needed for image phase decision making */
 export interface ImageSettings {
-  imageGenerationMode?: 'none' | 'agentic' | 'inline'
+  imageGenerationMode?: ImageGenerationMode
   referenceMode?: boolean
 }
 

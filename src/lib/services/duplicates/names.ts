@@ -36,13 +36,6 @@ export interface DuplicateGroup {
 export type DuplicateReason = 'same-name' | 'shared-alias' | 'contained' | 'similar'
 
 /**
- * Containment and similarity on a two- or three-letter name are noise: every short string
- * is inside some longer one. Exact-name and alias matches have no such floor — they are
- * exact.
- */
-const MIN_FUZZY_LENGTH = 4
-
-/**
  * How far apart two names may be spelled and still be the same name.
  *
  * One edit is plausible drift on a name long enough for it — "Kaelen"/"Kaelan" — and on a
@@ -146,11 +139,44 @@ function isSpellingDrift(a: string, b: string): boolean {
 }
 
 interface Normalized {
-  name: string
   type: string
-  tokens: string[]
-  /** Every name this entry answers to. Precomputed: every pair is compared. */
-  keys: Set<string>
+  /** Every name this entry answers to, the entry's own first. Precomputed: every pair is compared. */
+  keys: string[]
+  keySet: Set<string>
+  /** The tokens of each key, in the same order. */
+  tokens: string[][]
+}
+
+/**
+ * Whether one name is the other with more words around it, which is what makes "Kaelen"
+ * and "Kaelen the Bold" one candidate.
+ *
+ * Whole tokens on both sides, so this is boundary-aware by construction: "Ren" is a token
+ * of "Ren Wald" and is not a token of "Renwald". That is why there is no length floor here
+ * — a floor would only rule out the short *whole* names this is meant to catch, while the
+ * substring noise it was aimed at ("Ren" inside "Renwald") cannot arise in the first place.
+ *
+ * A token may also match by the drift allowed at its length, so a name that was both
+ * extended and misspelled is still caught.
+ *
+ * Each longer token answers for one shorter token and no more. Without that, a name whose
+ * own tokens repeat — or near-repeat, once drift is allowed — is "contained" in a longer
+ * name that carries the word once, which is not what containment means.
+ */
+function isContained(a: string[], b: string[]): boolean {
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a]
+  if (shorter.length === 0 || shorter.length >= longer.length) return false
+
+  const taken = new Array<boolean>(longer.length).fill(false)
+  return shorter.every((token) => {
+    // The exact hit first: the edit distance is the expensive half of this module and most
+    // tokens are carried over unchanged.
+    let at = longer.findIndex((other, i) => !taken[i] && other === token)
+    if (at === -1) at = longer.findIndex((other, i) => !taken[i] && isSpellingDrift(token, other))
+    if (at === -1) return false
+    taken[at] = true
+    return true
+  })
 }
 
 /**
@@ -158,36 +184,34 @@ interface Normalized {
  *
  * Order matters: the strongest reason wins, because it is what the agent is shown and a
  * "same-name" pair deserves less deliberation than a "contained" one.
+ *
+ * Containment and drift run over **every form against every form**, not just the two
+ * primary names: an alias is extended and misspelled exactly like a name, and comparing
+ * only the names missed "Kaelen" against an entry called "Kaelan the Bold".
  */
 function pairReason(a: Normalized, b: Normalized): DuplicateReason | null {
-  if (!a.name || !b.name) return null
+  if (a.keys.length === 0 || b.keys.length === 0) return null
 
-  if (a.name === b.name) return 'same-name'
+  if (a.keys[0] === b.keys[0]) return 'same-name'
 
-  for (const key of a.keys) {
-    if (b.keys.has(key)) return 'shared-alias'
+  for (const key of a.keySet) {
+    if (b.keySet.has(key)) return 'shared-alias'
   }
 
   // Beyond exact naming, only entries of the same kind are worth comparing: a location and
   // a character sharing a word are a namesake, not a duplicate.
   if (a.type !== b.type) return null
 
-  const [shorter, longer] = a.tokens.length <= b.tokens.length ? [a, b] : [b, a]
-  if (
-    shorter.tokens.length > 0 &&
-    shorter.tokens.length < longer.tokens.length &&
-    shorter.name.length >= MIN_FUZZY_LENGTH &&
-    shorter.tokens.every((token) => longer.tokens.includes(token))
-  ) {
-    return 'contained'
+  for (const aTokens of a.tokens) {
+    for (const bTokens of b.tokens) {
+      if (isContained(aTokens, bTokens)) return 'contained'
+    }
   }
 
-  if (
-    a.name.length >= MIN_FUZZY_LENGTH &&
-    b.name.length >= MIN_FUZZY_LENGTH &&
-    isSpellingDrift(a.name, b.name)
-  ) {
-    return 'similar'
+  for (const aKey of a.keys) {
+    for (const bKey of b.keys) {
+      if (isSpellingDrift(aKey, bKey)) return 'similar'
+    }
   }
 
   return null
@@ -210,11 +234,15 @@ export function findDuplicateGroups(entries: DuplicateCandidateInput[]): Duplica
   const normalized: Normalized[] = entries.map((entry) => {
     const name = normalizeName(entry.name)
     const aliases = (entry.aliases ?? []).map(normalizeName).filter(Boolean)
+    // An entry whose name folds to nothing is not compared at all: the empty string is
+    // equal to every other empty string, and two names this module cannot read are not
+    // two names it may declare the same.
+    const keys = name ? [...new Set([name, ...aliases])] : []
     return {
-      name,
       type: entry.type,
-      tokens: tokensOf(name),
-      keys: new Set([name, ...aliases].filter(Boolean)),
+      keys,
+      keySet: new Set(keys),
+      tokens: keys.map(tokensOf),
     }
   })
 
@@ -271,8 +299,37 @@ const REASON_LABELS: Record<DuplicateReason, string> = {
   similar: 'near-identical spelling',
 }
 
-/** One line per group, in the index form every lorebook tool takes. */
-export function formatDuplicateGroup(group: DuplicateGroup): string {
-  const members = group.indices.map((i, n) => `[${i}] ${group.names[n]}`).join(' | ')
+/**
+ * One line per group, in the index form every lorebook tool takes.
+ *
+ * `consumed` drops the members a merge or a delete has already taken. A group stays open
+ * while two of its members are left, and reprinting the dead indices alongside them offers
+ * the agent an index every tool will refuse. It is required rather than optional so that
+ * `groups.map(formatDuplicateGroup)` cannot compile: that hands the map's index across as
+ * the set.
+ */
+export function formatDuplicateGroup(group: DuplicateGroup, consumed: ReadonlySet<number>): string {
+  const members = group.indices
+    .map((index, n) => ({ index, name: group.names[n] }))
+    .filter(({ index }) => !consumed.has(index))
+    .map(({ index, name }) => `[${index}] ${name}`)
+    .join(' | ')
   return `${members} — ${REASON_LABELS[group.reason]}`
+}
+
+/**
+ * Whether naming `named` settles this group.
+ *
+ * Every member has to be accounted for: closing on one shared index dismissed neighbouring
+ * groups nobody had looked at. A `consumed` index counts as accounted for, and that half is
+ * why this lives next to `formatDuplicateGroup` — the listing hides those indices, so a rule
+ * that demanded them back would leave every group that survived a merge or a delete
+ * impossible to close, with the agent refused for an index it was never shown.
+ */
+export function groupIsSettledBy(
+  group: DuplicateGroup,
+  named: ReadonlySet<number>,
+  consumed: ReadonlySet<number>,
+): boolean {
+  return group.indices.every((i) => named.has(i) || consumed.has(i))
 }

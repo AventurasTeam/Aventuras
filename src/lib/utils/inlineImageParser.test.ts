@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest'
 import {
   extractPicTags,
   hasIncompletePicTag,
-  hasPicTags,
   stripPicTags,
   replacePicTagsWithPlaceholders,
   renderSinglePicTag,
@@ -153,13 +152,7 @@ describe('hasIncompletePicTag', () => {
   })
 })
 
-describe('hasPicTags / stripPicTags', () => {
-  it('detects both tag forms', () => {
-    expect(hasPicTags(SELF_CLOSING)).toBe(true)
-    expect(hasPicTags(PAIRED)).toBe(true)
-    expect(hasPicTags('no markup here')).toBe(false)
-  })
-
+describe('stripPicTags', () => {
   it('removes every tag and leaves the prose', () => {
     expect(stripPicTags(`One. ${SELF_CLOSING} Two. ${PAIRED} Three.`)).toBe('One.  Two.  Three.')
   })
@@ -187,12 +180,11 @@ describe('replacePicTagsWithPlaceholders', () => {
   })
 
   it('handles a prompt containing ">" in every rule, not just the parser', () => {
-    // All four used to share `[^>]*?` and all four used to miss this tag together, so a
-    // raw `<pic ...>` string reached rendered narration while `hasPicTags` and
-    // `stripPicTags` both reported there was nothing to strip.
+    // Every rule used to share `[^>]*?` and they all missed this tag together, so a raw
+    // `<pic ...>` string reached rendered narration while `stripPicTags` reported there
+    // was nothing to strip.
     const withAngle = '<pic prompt="a sign reading 10 > 9 above the door" />'
 
-    expect(hasPicTags(withAngle)).toBe(true)
     expect(stripPicTags(withAngle)).toBe('')
     expect(replacePicTagsWithPlaceholders(withAngle)).not.toContain('<pic')
     expect(extractPicTags(withAngle)).toHaveLength(1)
@@ -208,8 +200,60 @@ describe('replacePicTagsWithPlaceholders', () => {
 })
 
 describe('renderSinglePicTag', () => {
-  it('renders nothing when the tag has no image record', () => {
-    expect(renderSinglePicTag(SELF_CLOSING, new Map())).toBe('')
+  it('offers to recreate a tag whose image record is missing', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map())
+
+    expect(html).toContain('Image record missing')
+    expect(html).toContain('data-action="create-missing"')
+  })
+
+  it('offers a retry on an image that has been waiting too long', () => {
+    const map = imageMap(SELF_CLOSING, { status: 'generating' })
+    const id = map.get(SELF_CLOSING)!.id
+
+    expect(renderSinglePicTag(SELF_CLOSING, map)).not.toContain('data-action="regenerate"')
+    expect(renderSinglePicTag(SELF_CLOSING, map, { stuckIds: new Set([id]) })).toContain(
+      'data-action="regenerate"',
+    )
+  })
+
+  it('reports a missing record with no prompt, but offers nothing to generate from it', () => {
+    const html = renderSinglePicTag('<pic prompt="" />', new Map())
+
+    expect(html).toContain('Image record missing')
+    expect(html).not.toContain('data-action="create-missing"')
+  })
+
+  it('waits out the grace period before calling a missing record lost', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map(), { offerMissingRecovery: false })
+
+    expect(html).not.toContain('data-action="create-missing"')
+    expect(html).toContain('In queue...')
+  })
+
+  it('reports a tag past the per-message limit instead of offering a recovery', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map(), { overBudget: true })
+
+    expect(html).toContain('Past the per-message image limit')
+    expect(html).not.toContain('data-action="create-missing"')
+    expect(html).not.toContain('In queue...')
+  })
+
+  it('prefers the limit notice over the recovery offer', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, new Map(), {
+      overBudget: true,
+      offerMissingRecovery: true,
+    })
+
+    expect(html).not.toContain('Image record missing')
+  })
+
+  it('leaves a recorded image alone when the entry is over budget', () => {
+    const html = renderSinglePicTag(SELF_CLOSING, imageMap(SELF_CLOSING, { status: 'complete' }), {
+      overBudget: true,
+    })
+
+    expect(html).not.toContain('Past the per-message image limit')
   })
 
   it('renders the finished image inline', () => {
@@ -221,11 +265,9 @@ describe('renderSinglePicTag', () => {
   })
 
   it('overlays the previous image while it is being regenerated', () => {
-    const html = renderSinglePicTag(
-      SELF_CLOSING,
-      imageMap(SELF_CLOSING, { status: 'complete' }),
-      new Set(['img-1']),
-    )
+    const html = renderSinglePicTag(SELF_CLOSING, imageMap(SELF_CLOSING, { status: 'complete' }), {
+      regeneratingIds: new Set(['img-1']),
+    })
 
     expect(html).toContain('regenerating')
     // The old image stays visible underneath rather than the frame going blank.
@@ -303,7 +345,7 @@ describe('PIC_TAG — malformed input', () => {
     const content = `<pic prompt="never closed ${'word '.repeat(4000)}`
 
     expect(extractPicTags(content)).toEqual([])
-    expect(hasPicTags(content)).toBe(false)
+    expect(stripPicTags(content)).toBe(content)
   })
 
   it('stays linear on a long run of paired quotes', () => {
