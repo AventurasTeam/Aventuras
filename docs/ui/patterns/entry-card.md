@@ -1,9 +1,8 @@
 # EntryCard pattern
 
-The reader-composer narrative-row compound. Renders all five
-entry kinds (`user_action`, `ai_reply`, `opening`, `system`,
-`streaming`) as
-full-width bubbles with kind-keyed styling, conditional reasoning
+The reader-composer narrative-row compound. Renders all five entry
+kinds (`user_action`, `ai_reply`, `opening`, `system`, `streaming`)
+as full-width bubbles with kind-keyed styling, conditional reasoning
 body, in-place edit, and a muted world-time footer.
 
 Sister patterns:
@@ -107,8 +106,8 @@ Two structural choices:
 Streaming is deliberately not visually distinguished: the swap to
 the committed `ai_reply` row should not re-frame the card.
 
-`opening` renders identically to `ai_reply` for visual treatment; the
-discriminator only affects available actions. See
+`opening` renders identically to `ai_reply` for visual treatment;
+the discriminator only affects available actions. See
 [data-model.md → Opening entry](../../data-model.md#opening-entry)
 for the underlying invariant.
 
