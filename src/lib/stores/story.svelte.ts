@@ -718,6 +718,7 @@ class StoryStore {
 
     // Wipe all existing main-branch entries (and any chapters that
     // referenced them — clearStoryEntries deletes both, see database.ts)
+    await this.pruneCheckpointsForEntries(new Set(this.entries.map((e) => e.id)))
     await database.clearStoryEntries(storyId)
     this.chapters = this.chapters.filter((ch) => ch.branchId !== null)
     this.invalidateChapterCache()
@@ -920,7 +921,7 @@ class StoryStore {
     const orphaned = this.checkpoints.filter((cp) => entryIds.has(cp.lastEntryId))
     if (orphaned.length === 0) return
 
-    await Promise.all(orphaned.map((cp) => database.deleteCheckpoint(cp.id)))
+    await database.deleteCheckpoints(orphaned.map((cp) => cp.id))
     this.checkpoints = this.checkpoints.filter((cp) => !entryIds.has(cp.lastEntryId))
     log('Deleted checkpoints whose entry was removed:', orphaned.length)
   }
@@ -1269,6 +1270,19 @@ class StoryStore {
     options?: { skipRollback?: boolean },
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
+
+    // Refused before the rollback runs: a branch forked from an entry this cascade would take
+    // with it survives as a branch whose fork point no longer exists. deleteEntry guards its own
+    // target the same way, but only that one entry — the cascade reaches every later one.
+    const forkedBranch = this.branches.find((b) =>
+      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
+    )
+    if (forkedBranch) {
+      throw new Error(
+        `Cannot delete these entries because branch "${forkedBranch.name}" forks from one of them. ` +
+          `Delete the branch first.`,
+      )
+    }
 
     // Phase 2: Rollback world state before deleting entries
     // Skip if caller already performed rollback (e.g. deleteEntry)
@@ -4311,6 +4325,8 @@ class StoryStore {
         currentEntriesCount: this.entries.length,
         entriesToDelete: entryIdsToDelete.length,
       })
+
+      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(

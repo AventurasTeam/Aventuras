@@ -2516,6 +2516,10 @@ class DatabaseService {
     await this.deleteByIds('chapters', ids)
   }
 
+  async deleteCheckpoints(ids: string[]): Promise<void> {
+    await this.deleteByIds('checkpoints', ids)
+  }
+
   async deleteEmbeddedImagesForEntries(entryIds: string[]): Promise<void> {
     await this.deleteByIds('embedded_images', entryIds, 'entry_id')
   }
