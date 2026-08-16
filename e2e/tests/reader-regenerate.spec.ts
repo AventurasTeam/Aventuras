@@ -123,12 +123,15 @@ test.describe('reader — regenerate a reply', () => {
 
     mock.setNarrative(REPLY_2)
     await reader.regenEntry(app.window, oldReplyId).click()
-    // The titular claim, asserted rather than inferred: without this, a modal
-    // regression would surface only as the R2 wait timing out at 30s.
-    await expect(reader.regenerateConfirm(app.window)).toBeHidden()
+    // The new take arriving with no click on a confirm IS the no-confirm claim:
+    // the modal gates the dispatch, so R2 could not stream past an open one.
     await expect(app.window.getByText('E2E-REGEN-R2', { exact: false })).toBeVisible({
       timeout: 30_000,
     })
+    // Asserted after that wait, not before it. Checked straight after the click
+    // it passes at t≈0 against a locator that has not resolved yet — the
+    // dispatch is a full IPC round trip away — so it proved nothing there.
+    await expect(reader.regenerateConfirm(app.window)).toHaveCount(0)
 
     // Old take gone; the originating user action untouched (same row id).
     await pollEntryGone(branch, 'E2E-REGEN-R1')
