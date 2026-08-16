@@ -1438,3 +1438,22 @@ failing` (fails in ~11 ms, consistent with a cascade from shared
   addon setup file 404s outside the vite root), which is itself worth
   fixing since it blocks every reviewer working from a worktree.
   Raised 2026-08-15 while closing Slice 3.8.
+- **`patches/js-tiktoken.patch` is load-bearing for Android and nothing
+  fails if it is dropped.** `js-tiktoken`'s `Tiktoken` constructor stages
+  the decompressed BPE ranks in a plain object before copying them into
+  its two `Map`s. That staging object reaches 199,998 properties, and
+  Hermes caps object property storage at 196,607
+  ([facebook/hermes#851](https://github.com/facebook/hermes/issues/851)),
+  so `new Tiktoken(o200kBase)` throws `RangeError` on Android. It is
+  reached on the reader route via `useOpenRegionTokens` → `countTokens`,
+  which means **opening any story crashes on Android** — since Slice 3.4b
+  wired the hook, not since 3.8. The patch swaps the staging object for a
+  `Map`; verified equivalent, not merely plausible: same 199,998 pairs,
+  zero rank mismatches, and zero duplicate byte-keys or ranks, so the
+  differing iteration order cannot change either `Map`'s contents. The
+  hazard is that **no test can catch its removal** — Node has no property
+  cap, so the whole suite passes green with the patch reverted, and a
+  `js-tiktoken` bump that fails to reapply it silently re-breaks Android.
+  Options: a bundle-level assertion that the staging object is gone, an
+  Android smoke in CI, or upstreaming the `Map` change. Raised 2026-08-16
+  by the Slice 3.8 Android smoke.
