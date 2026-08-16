@@ -10,7 +10,10 @@
   } from '$lib/services/prompts/templates'
   import { ContextBuilder } from '$lib/services/context'
   import { database } from '$lib/services/database'
+  import { packService } from '$lib/services/packs/pack-service'
+  import type { PresetPack } from '$lib/services/packs/types'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
+  import * as Select from '$lib/components/ui/select'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
   import { Label } from '$lib/components/ui/label'
@@ -111,6 +114,34 @@
   let unknownVars = $state<string[]>([])
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
   let showVarReference = $state(false)
+  let availablePacks = $state<PresetPack[]>([])
+  let selectedPackId = $state('default-pack')
+  let packChangePending = $state(false)
+  let packError = $state<string | null>(null)
+
+  const selectedPack = $derived(availablePacks.find((pack) => pack.id === selectedPackId))
+
+  $effect(() => {
+    const storyId = story.currentStory?.id
+    if (!storyId) return
+
+    let cancelled = false
+    Promise.all([packService.getAllPacks(), database.getStoryPackId(storyId)])
+      .then(([packs, packId]) => {
+        if (cancelled) return
+        availablePacks = packs
+        selectedPackId = packId || 'default-pack'
+        packError = null
+      })
+      .catch((error) => {
+        if (cancelled) return
+        packError = error instanceof Error ? error.message : String(error)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  })
 
   onDestroy(() => {
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -136,8 +167,7 @@
     let cancelled = false
     const resolve = async () => {
       if (override) return templateUsesLengthInstruction(override)
-      const packId = (await database.getStoryPackId(storyId)) || 'default-pack'
-      const template = await new ContextBuilder(packId).resolveTemplate(templateId)
+      const template = await new ContextBuilder(selectedPackId).resolveTemplate(templateId)
       return templateUsesLengthInstruction(template?.content)
     }
 
@@ -179,6 +209,22 @@
     validationResult = null // clear stale result immediately so canSave goes false until debounce fires
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => validate(value), 300)
+  }
+
+  async function changePromptPack(packId: string) {
+    const storyId = story.currentStory?.id
+    if (!storyId || packId === selectedPackId) return
+
+    packChangePending = true
+    packError = null
+    try {
+      await database.setStoryPack(storyId, packId)
+      selectedPackId = packId
+    } catch (error) {
+      packError = error instanceof Error ? error.message : String(error)
+    } finally {
+      packChangePending = false
+    }
   }
 
   function loadCurrentTemplate() {
@@ -237,8 +283,41 @@
     disabledReason="Cannot be changed mid-story. Set during story creation."
   />
 
-  <!-- ── Custom System Prompt ─────────────────────────────────────────────── -->
   <div class="border-t pt-4">
+    <div class="space-y-2">
+      <Label class="text-sm font-medium">Prompt Pack</Label>
+      <Select.Root
+        type="single"
+        value={selectedPackId}
+        disabled={packChangePending || availablePacks.length === 0}
+        onValueChange={(value) => {
+          if (value) void changePromptPack(value)
+        }}
+      >
+        <Select.Trigger class="w-full">
+          {selectedPack?.name ??
+            (availablePacks.length === 0 ? 'Loading prompt packs…' : 'Select a pack')}
+        </Select.Trigger>
+        <Select.Content>
+          {#each availablePacks as pack (pack.id)}
+            <Select.Item value={pack.id} label={pack.name}>
+              {pack.name}
+            </Select.Item>
+          {/each}
+        </Select.Content>
+      </Select.Root>
+      <p class="text-muted-foreground text-xs">
+        Changes take effect on the next generation. An active Custom System Prompt below still
+        replaces this pack's narrator template for this story.
+      </p>
+      {#if packError}
+        <p class="text-destructive text-xs">Could not change prompt pack: {packError}</p>
+      {/if}
+    </div>
+  </div>
+
+  <!-- ── Custom System Prompt ─────────────────────────────────────────────── -->
+  <div>
     <div class="mb-3 flex items-center justify-between gap-2">
       <div class="flex items-center gap-2">
         <Label class="text-sm font-medium">Custom System Prompt</Label>
