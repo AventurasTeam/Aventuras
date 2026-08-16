@@ -178,3 +178,40 @@ export const ErrorReplacesHint: Story = {
     expect(screen.queryByText('Helper text')).not.toBeInTheDocument()
   },
 }
+
+/**
+ * Stacked rows put the hint above the control and the error below it
+ * (forms.md → Stacked-row visual treatment). Asserted as document order
+ * rather than by eye: the error reading above the input is the exact
+ * regression this pins, and it is invisible to a presence-only check.
+ */
+export const StackedErrorSitsBelowTheControl: Story = {
+  render: () => (
+    <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
+      <FormRow label="Email" stacked error="Enter a valid email address">
+        <ControlledInput placeholder="…" />
+      </FormRow>
+    </View>
+  ),
+  play: async () => {
+    const error = screen.getByText('Enter a valid email address')
+    const input = screen.getByPlaceholderText('…')
+    // DOCUMENT_POSITION_PRECEDING: the input comes before the error.
+    expect(error.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
+  },
+}
+
+export const StackedHintSitsAboveTheControl: Story = {
+  render: () => (
+    <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
+      <FormRow label="Email" stacked hint="We never share it.">
+        <ControlledInput placeholder="…" />
+      </FormRow>
+    </View>
+  ),
+  play: async () => {
+    const hint = screen.getByText('We never share it.')
+    const input = screen.getByPlaceholderText('…')
+    expect(hint.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  },
+}

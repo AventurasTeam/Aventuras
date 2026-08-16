@@ -9,12 +9,11 @@ type FormRowProps = {
   /** Field label. Always rendered; shape depends on layout mode. */
   label: string
   /**
-   * Inline help text below the field. Replaced by `error` when an error is set.
+   * Inline help text. Sits above the control when stacked, below it in the
+   * two-column layout. Suppressed while `error` is set.
    */
   hint?: string
-  /**
-   * Validation error string.
-   */
+  /** Validation error string. Always renders below the control. */
   error?: string
   /** Renders a `*` indicator next to the label. Visual only. */
   required?: boolean
@@ -63,12 +62,14 @@ export function FormRow({
             {label}
             {requiredMark}
           </Text>
-          {error != null ? (
-            <Text className="text-xs text-danger">{error}</Text>
-          ) : hint != null ? (
+          {/* Hint sits above the control (forms.md → Stacked-row visual
+              treatment) but the error sits below it, next to what produced
+              it — same side as the two-column layout puts it. */}
+          {error == null && hint != null ? (
             <Text className="text-xs text-fg-secondary">{hint}</Text>
           ) : null}
           {children}
+          {error != null ? <Text className="text-xs text-danger">{error}</Text> : null}
         </View>
       ) : (
         <View className="flex-row items-start gap-3">
