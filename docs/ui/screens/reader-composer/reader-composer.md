@@ -371,12 +371,19 @@ formatter on the host side; the
 [EntryCard pattern](../../patterns/entry-card.md#world-time-footer)
 takes the formatted label opaque. Calendar formatter failure or a
 calendar that omits per-entry display drops the footer cleanly via
-an undefined label.
+an undefined label. The drop is silent on screen but not in the
+log: a formatter failure takes the label, the monotonicity
+indicator, and the edit affordance with it all at once, which is
+indistinguishable from a story that tracks no world time, so the
+host emits one `calendar.format_miss` warning per walk naming the
+reason and how many entries it covered.
 
 **Click-to-edit on AI, opening, and user entries.** The footer is the
 manual-correction surface for `metadata.worldTime`. Click opens an
-edit overlay anchored to the footer with a `TierTupleInput` for the
-active calendar; Save writes one `op=update` delta against
+edit overlay carrying a `TierTupleInput` for the active calendar —
+a centred Dialog on desktop, a bottom Sheet on phone, neither
+anchored to the scrolling footer; Save writes one `op=update` delta
+against
 `entries.metadata.worldTime`. Host contract (props, render rules,
 indicator behavior, cross-tier overlay shape):
 [`entry-card.md → World-time footer`](../../patterns/entry-card.md#world-time-footer).

@@ -1850,13 +1850,22 @@ for the calendar primitive.
 **Invariants split across three layers.** The "monotonically
 non-decreasing" claim splits by source:
 
-- **Storage** (hard): `worldTime ≥ 0`. The integer is non-negative;
-  the action layer rejects writes outside this range.
+- **Storage** (hard): `0 ≤ worldTime ≤ MAX_WORLD_TIME_SECONDS`. The
+  integer is non-negative; the action layer rejects writes outside
+  this range. The ceiling is a render-cost bound, not a domain rule:
+  resolving an integer to a tier-tuple walks the top tier one unit at
+  a time, so an unbounded value freezes the reader's first paint
+  rather than rendering something wrong. It sits far past any
+  narrative span (~3169 Gregorian years).
 - **Classifier** (hard, see
   [`architecture.md → Classifier contract — metadata fields`](./architecture.md#classifier-contract--metadata-fields)):
   per-entry delta `≥ 0`. Flashbacks emit `0`. The classifier is
   structurally incapable of producing a non-monotonic cumulative
-  sequence on its own.
+  sequence on its own. The delta is clamped on both ends before it is
+  added to the running total — a model that emits a unix timestamp
+  where it meant an elapsed interval is capped at the storage
+  ceiling's remaining headroom, with a `classifier.delta_clamped`
+  warning.
 - **Cumulative monotonicity** (soft): the sequence is monotonically
   non-decreasing **when written by the classifier alone**. User
   manual `worldTime` edits (via the

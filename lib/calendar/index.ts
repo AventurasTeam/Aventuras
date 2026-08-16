@@ -14,6 +14,8 @@ export {
   tierMax,
 } from './world-time-to-tuple'
 export { resolveEra, type EraFlip, type EraResult } from './era'
+export { MAX_WORLD_TIME_SECONDS } from './limits'
+export type { CalendarFrame } from './frame'
 export { formatWorldTime, FormatMiss } from './render'
 export { describeCalendarVocabulary, type CalendarVocabulary } from './vocabulary'
 export { getCalendar, listCalendars, DEFAULT_CALENDAR_ID } from './registry'

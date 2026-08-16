@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { toast } from '@/lib/toast'
 
 import { useWorldTimeEditing } from './world-time-editing'
 
@@ -12,6 +14,7 @@ const updateEntryWorldTime = vi.hoisted(() =>
 )
 
 vi.mock('@/lib/actions', () => ({ updateEntryWorldTime }))
+vi.mock('@/lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 
 const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 const CTX = {} as never
@@ -35,6 +38,9 @@ const ENTRIES = [entry('e1', 1, 60), entry('e2', 2, 120)]
 // returned from `beforeEach` is registered as a teardown callback and invoked.
 beforeEach(() => {
   updateEntryWorldTime.mockReset()
+  vi.mocked(toast.error).mockClear()
+  vi.spyOn(logger, 'warn').mockImplementation(() => {})
+  vi.spyOn(logger, 'error').mockImplementation(() => {})
 })
 afterEach(cleanup)
 
@@ -48,19 +54,34 @@ function render(entries: StoryEntry[], calendarId: string | undefined) {
 }
 
 describe('useWorldTimeEditing → calendar resolution', () => {
+  // The registry currently holds only the default, so this pins the fallback
+  // arm; the "resolves the requested id" arm is unfalsifiable until a second
+  // calendar is registered, and no assertion here can stand in for it.
   it('falls back to the default calendar for an id the registry does not know', () => {
     const { result } = render(ENTRIES, 'cal_default')
-    // Not merely non-null: the fallback must be the default, not the requested id.
-    expect(result.current.calendar).toBe(getCalendar(DEFAULT_CALENDAR_ID))
-    expect(result.current.calendar?.id).not.toBe('cal_default')
+    expect(result.current.worldTimeFrame?.calendar).toBe(getCalendar(DEFAULT_CALENDAR_ID))
     // A resolved calendar is what makes the footers editable at all.
     expect(Object.keys(result.current.worldTimeDecorations)).toEqual(['e1', 'e2'])
   })
 
-  it('leaves the calendar null — and every footer undecorated — with no story open', () => {
+  it('pairs the resolved calendar with the story origin', () => {
+    const { result } = render(ENTRIES, 'earth-gregorian')
+    expect(result.current.worldTimeFrame?.origin).toBe(ORIGIN)
+  })
+
+  it('leaves the frame null — and every footer undecorated — with no story open', () => {
     const { result } = render(ENTRIES, undefined)
-    expect(result.current.calendar).toBeNull()
+    expect(result.current.worldTimeFrame).toBeNull()
     expect(result.current.worldTimeDecorations).toEqual({})
+  })
+
+  // Both halves cross the ReaderRow seam as one prop, so a frame rebuilt per
+  // render would void the row memo exactly as a merged decoration would.
+  it('keeps one frame identity across re-renders', () => {
+    const { result, rerender } = render(ENTRIES, 'earth-gregorian')
+    const first = result.current.worldTimeFrame
+    rerender({ rows: ENTRIES })
+    expect(result.current.worldTimeFrame).toBe(first)
   })
 })
 
@@ -106,16 +127,35 @@ describe('useWorldTimeEditing → stale edit target', () => {
 })
 
 describe('useWorldTimeEditing → edit result channel', () => {
-  it('reports a rejected write as a result rather than throwing', async () => {
+  it('reports a rejected write as a result rather than throwing, and tells the user', async () => {
     updateEntryWorldTime.mockResolvedValue({ status: 'rejected', reason: 'generation in flight' })
     const { result } = render(ENTRIES, 'earth-gregorian')
     await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: false })
+    // Without this the save visibly does nothing and says nothing.
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    expect(logger.warn).toHaveBeenCalledWith(
+      'action_layer.world_time_edit_rejected',
+      expect.objectContaining({ entryId: 'e2', reason: 'generation in flight' }),
+    )
   })
 
-  it('reports a thrown write as a result rather than rejecting', async () => {
+  it('reports a thrown write as a result rather than rejecting, and tells the user', async () => {
     updateEntryWorldTime.mockRejectedValue(new Error('database is locked'))
     const { result } = render(ENTRIES, 'earth-gregorian')
     await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: false })
+    expect(toast.error).toHaveBeenCalledTimes(1)
+    // A throw is a different diagnostic from a rejection: error, not warn.
+    expect(logger.error).toHaveBeenCalledWith(
+      'action_layer.world_time_edit_failed',
+      expect.objectContaining({ entryId: 'e2', error: 'database is locked' }),
+    )
+  })
+
+  it('stays quiet on a successful write', async () => {
+    updateEntryWorldTime.mockResolvedValue({ status: 'ok' })
+    const { result } = render(ENTRIES, 'earth-gregorian')
+    await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: true })
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it('reports a successful write as ok', async () => {

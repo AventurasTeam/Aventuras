@@ -28,8 +28,7 @@ const meta: Meta<typeof WorldTimeEditSheet> = {
   parameters: { layout: 'centered' },
   tags: ['autodocs'],
   args: {
-    calendar: EARTH_GREGORIAN,
-    worldTimeOrigin: ORIGIN,
+    frame: { calendar: EARTH_GREGORIAN, origin: ORIGIN },
     // 90 s past the origin — 00:01:30, so the `second` tier seeds at 30.
     worldTimeRaw: 90,
     onSave: fn(async () => {}),

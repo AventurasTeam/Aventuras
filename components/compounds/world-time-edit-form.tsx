@@ -8,21 +8,23 @@ import { validateOriginTuple } from '@/components/wizard/tier-tuple-input-logic'
 import {
   tupleToWorldTime,
   worldTimeToTuple,
+  type CalendarFrame,
   type CalendarSystem,
   type TierTuple,
 } from '@/lib/calendar'
 
+/** Presence renders the warning; the label names the predecessor entry. */
+export type MonotonicityBreak = { previousLabel: string }
+
 type WorldTimeEditFormProps = {
   /** Stable reference required: the tuple→seconds memo keys on identity. */
-  calendar: CalendarSystem
-  /** Stable reference required: the tuple→seconds memo keys on identity. */
-  worldTimeOrigin: TierTuple
+  frame: CalendarFrame
   /**
    * Raw cumulative seconds. Seeds the tier tuple on mount only — a later change
    * does not reseed, so hosts must mount the form fresh per open.
    */
   worldTimeRaw: number
-  monotonicityBreak?: { previousLabel: string }
+  monotonicityBreak?: MonotonicityBreak
   /** Fired with the recomputed cumulative seconds; never fired on a no-change save. */
   onSave: (next: number) => void
   /** Close the overlay. Also fires in place of `onSave` on a no-change save. */
@@ -32,9 +34,11 @@ type WorldTimeEditFormProps = {
 const BELOW_ORIGIN_MESSAGE = 'Time cannot be before the story start.'
 const TOO_FAR_MESSAGE = 'That time is too far from the current value.'
 
-// A conversion walks the top tier one unit at a time from where the seed left
-// off — measured ~11ms per 2000 Gregorian years, ~20ms per 4000. Capped near a
-// frame: uncapped, a mistyped `20240101` blocks the UI thread for minutes.
+// A conversion walks the top tier from its startValue, so only years past the
+// seed are uncached work. Measured on desktop against earth-gregorian: ~11ms per
+// 2000 years, ~20ms per 4000; Hermes is slower, and a calendar with a coarser
+// top tier costs more per unit. Capped near a frame — uncapped, a mistyped
+// `20240101` blocks the UI thread for minutes.
 const MAX_TOP_TIER_SPAN = 2000
 
 function tuplesEqual(a: TierTuple, b: TierTuple, calendar: CalendarSystem): boolean {
@@ -42,16 +46,16 @@ function tuplesEqual(a: TierTuple, b: TierTuple, calendar: CalendarSystem): bool
 }
 
 export function WorldTimeEditForm({
-  calendar,
-  worldTimeOrigin,
+  frame,
   worldTimeRaw,
   monotonicityBreak,
   onSave,
   onCancel,
 }: WorldTimeEditFormProps) {
+  const { calendar, origin } = frame
   const seedTuple = useMemo(
-    () => worldTimeToTuple(worldTimeRaw, calendar, worldTimeOrigin),
-    [worldTimeRaw, calendar, worldTimeOrigin],
+    () => worldTimeToTuple(worldTimeRaw, calendar, origin),
+    [worldTimeRaw, calendar, origin],
   )
   const [tuple, setTuple] = useState<TierTuple>(seedTuple)
 
@@ -62,19 +66,20 @@ export function WorldTimeEditForm({
     const result = validateOriginTuple(tuple, calendar)
     if (!result.ok) return { validity: result, next: null, tooFar: false }
 
-    // Span is measured from the seed rather than the origin: the seed's own
-    // conversion already ran at mount, so it is the cached point the next walk
-    // starts from, and an entry legitimately far past the origin stays editable.
+    // Measured from the seed, not the origin: the mount conversion already
+    // cached every top-tier unit below the seed, so those are Map hits and an
+    // entry legitimately far past the origin stays editable. One-sided on
+    // purpose — a value below the seed is entirely cached, hence cheap.
     const topTier = calendar.tiers[0].name
-    if (tuple[topTier] - seedTuple[topTier] > MAX_TOP_TIER_SPAN) {
+    if (tuple[topTier] - seedTuple[topTier] >= MAX_TOP_TIER_SPAN) {
       return { validity: result, next: null, tooFar: true }
     }
     return {
       validity: result,
-      next: tupleToWorldTime(tuple, calendar, worldTimeOrigin),
+      next: tupleToWorldTime(tuple, calendar, origin),
       tooFar: false,
     }
-  }, [tuple, calendar, worldTimeOrigin, seedTuple])
+  }, [tuple, calendar, origin, seedTuple])
 
   const belowOrigin = next != null && next < 0
   const blockReason = !validity.ok

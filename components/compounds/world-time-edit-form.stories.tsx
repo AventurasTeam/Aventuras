@@ -50,8 +50,7 @@ const wrapDecorator = (Story: () => ReactElement) => (
 const wrap = { decorators: [wrapDecorator] } satisfies Partial<StoryT>
 
 const baseArgs = {
-  calendar: EARTH_GREGORIAN,
-  worldTimeOrigin: ORIGIN,
+  frame: { calendar: EARTH_GREGORIAN, origin: ORIGIN },
   // 90s past the origin → minute 1, second 30.
   worldTimeRaw: 90,
   onSave: fn(),
@@ -127,8 +126,7 @@ export const CoarseCalendarKeepsRemainder: StoryT = {
   ...wrap,
   args: {
     ...baseArgs,
-    calendar: DAY_GRAIN_CALENDAR,
-    worldTimeOrigin: DAY_GRAIN_ORIGIN,
+    frame: { calendar: DAY_GRAIN_CALENDAR, origin: DAY_GRAIN_ORIGIN },
     worldTimeRaw: DAY_PLUS_HOUR,
   },
   play: async ({ args }) => {

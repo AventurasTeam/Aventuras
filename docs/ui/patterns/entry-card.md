@@ -44,11 +44,10 @@ type EntryCardProps = {
 
   // World-time editing — see "World-time footer" below
   worldTimeRaw?: number // raw cumulative seconds; seeds the TierTupleInput in the edit overlay
-  onEditTime?: (nextWorldTime: number) => void | Promise<boolean> // desktop/tablet Popover Save; host writes the metadata.worldTime delta, resolves false on a failed write
+  onEditTime?: (nextWorldTime: number) => Promise<boolean> // desktop/tablet Dialog Save; host writes the metadata.worldTime delta, resolves false on a failed write
   onRequestEditTime?: () => void // phone: the compound requests, the host presents the native Sheet
-  worldTimeMonotonicityBreak?: { previousLabel: string } // presence fires the warning indicator + overlay banner
-  calendar?: CalendarSystem // active calendar definition; stable reference required
-  worldTimeOrigin?: TierTuple // anchors the tuple ↔ seconds round-trip; stable reference required
+  worldTimeMonotonicityBreak?: MonotonicityBreak // presence fires the warning indicator + overlay banner
+  worldTimeFrame?: CalendarFrame // active calendar + story origin; anchors the tuple ↔ seconds round-trip, stable reference required
 
   // AI / opening:
   meta?: Pick<EntryMetadata, 'tokens'> // the top line renders tokens.completion (+ tokens.reasoning when set)
@@ -190,20 +189,27 @@ on its own; the behavior is owned by the parent ScrollView.
   authored worldTime metadata).
 
 **Click-to-edit (interactive when editable).** The footer becomes
-interactive when the host supplies `worldTimeRaw`, `calendar`,
-`worldTimeOrigin`, and at least one edit handler — in practice on
+interactive when the host supplies `worldTimeRaw`, `worldTimeFrame`
+(the calendar paired with the story origin), and at least one edit
+handler — in practice on
 AI, opening, and user entries (classifier-authored,
 wizard-authored, or inherited-at-write `worldTime`; see
 [`data-model.md → In-world time tracking`](../../data-model.md#in-world-time-tracking)).
-Hover-brighten + cursor pointer signal the affordance. Click opens an edit overlay anchored to the footer:
-**Popover on desktop, Sheet on phone** (per
-[`patterns/overlays.md`](./overlays.md) and the
+Hover-brighten + cursor pointer signal the affordance. Click opens
+an edit overlay: **centred Dialog on desktop, bottom Sheet on
+phone** (per [`patterns/overlays.md`](./overlays.md) and the
 [mobile decision tree](../foundations/mobile/layout.md)). Tablet
 follows the standard breakpoint rule.
 
+**The desktop overlay is deliberately not anchored to the footer.**
+The trigger lives in a scrolling entry list, so an anchored Popover
+tracks a footer that moves under it and overlaps the chrome framing
+the list — a centred modal sidesteps the whole class of problem
+rather than chasing it with collision detection.
+
 **Overlay hosting splits by tier** since the single-document reader
-pivot. At desktop and tablet breakpoints EntryCard hosts the
-anchored Popover itself — pure DOM, so it works inside the
+pivot. At desktop and tablet breakpoints EntryCard hosts the Dialog
+itself — pure DOM, so it works inside the
 [reader document](./reader-document.md) on every platform. At phone
 breakpoint the compound renders no Sheet: it calls
 `onRequestEditTime`, and the host presents the native bottom Sheet
@@ -212,15 +218,16 @@ outside the document (the document requests, native presents — see
 The breakpoint is the one the card itself lays out in, which is the
 reader document rather than the device. A host that supplies only
 `onRequestEditTime` gets the request path at every tier, not just
-phone — the card will not host a Popover whose Save has nowhere to
+phone — the card will not host a Dialog whose Save has nowhere to
 report, since that would discard the edit silently. Both overlays
 mount the same edit form, so the user-visible shape below is
 identical on either tier.
 
 The overlay body hosts a `TierTupleInput` matching the active
 calendar's tier shape (the same primitive the wizard's
-`worldTimeOrigin` step uses), pre-populated from `worldTimeRaw +
-worldTimeOrigin` walked through the calendar's tier stack. Save
+`worldTimeOrigin` step uses), pre-populated by walking
+`worldTimeRaw` from the frame's origin through the calendar's tier
+stack. Save
 computes the new cumulative seconds and invokes `onEditTime(next)`
 (phone: the host's Sheet save); the host writes one `op=update`
 delta against `entries.metadata.worldTime`. Cancel discards.
@@ -228,7 +235,11 @@ delta against `entries.metadata.worldTime`. Cancel discards.
 A rejected or failed write keeps the overlay open with the typed
 tuple intact, on both tiers — the host reports the failure (toast)
 and the user retries or cancels without retyping. Only a write that
-did not report failure closes the overlay.
+reports success closes the overlay; `onEditTime` resolving `false`
+and `onEditTime` rejecting are both treated as failures, the latter
+reported by the card itself since a rejection crossing the
+[reader document](./reader-document.md) bridge has no other
+handler.
 
 A Save whose tuple is unchanged never reaches the write path at
 all: no delta, no edit callback, and the overlay closes through the

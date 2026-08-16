@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { applyDeltaAction, undoLastAction, updateEntryWorldTime } from '@/lib/actions'
+import { MAX_WORLD_TIME_SECONDS } from '@/lib/calendar'
 import { branches, deltas, stories, storyEntries, type EntryMetadata } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
@@ -278,11 +279,29 @@ describe('updateEntryWorldTime', () => {
     const ctx = { db, runInTransaction }
     await seed(db)
 
-    expect((await updateEntryWorldTime('b1', 'e2', -1, ctx)).status).toBe('rejected')
+    const negative = await updateEntryWorldTime('b1', 'e2', -1, ctx)
+    expect(negative.status).toBe('rejected')
+    if (negative.status === 'rejected') expect(negative.code).toBe('invalid-world-time')
     expect((await updateEntryWorldTime('b1', 'e2', 1.5, ctx)).status).toBe('rejected')
 
     expect((await branchDeltas(db)).length).toBe(0)
     expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(120)
+  })
+
+  // The reader's format walk is linear in the resolved top-tier value, so an
+  // unbounded worldTime freezes the first paint rather than rendering wrong.
+  it('rejects a worldTime past the render-cost ceiling but accepts the ceiling itself', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    const tooBig = await updateEntryWorldTime('b1', 'e2', MAX_WORLD_TIME_SECONDS + 1, ctx)
+    expect(tooBig.status).toBe('rejected')
+    if (tooBig.status === 'rejected') expect(tooBig.code).toBe('invalid-world-time')
+    expect((await branchDeltas(db)).length).toBe(0)
+
+    expect((await updateEntryWorldTime('b1', 'e2', MAX_WORLD_TIME_SECONDS, ctx)).status).toBe('ok')
+    expect((await storedMetadata(db, 'e2'))?.worldTime).toBe(MAX_WORLD_TIME_SECONDS)
   })
 
   it('rejects when the entry has no metadata or does not exist', async () => {

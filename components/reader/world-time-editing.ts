@@ -9,7 +9,7 @@ import { updateEntryWorldTime, type DbCtx } from '@/lib/actions'
 import {
   DEFAULT_CALENDAR_ID,
   getCalendar,
-  type CalendarSystem,
+  type CalendarFrame,
   type TierTuple,
 } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
@@ -18,9 +18,9 @@ import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
 export type WorldTimeEditing = {
-  /** Registry-resolved with the default applied; null hides/inerts every footer. */
-  calendar: CalendarSystem | null
-  worldTimeOrigin: TierTuple | null
+  /** Registry-resolved with the default applied; null hides/inerts every footer.
+   *  Memoized so both halves cross the ReaderRow seam with one stable identity. */
+  worldTimeFrame: CalendarFrame | null
   /** Side table keyed by entry id, so row identity — and ReaderRow's memo — is untouched. */
   worldTimeDecorations: Record<string, WorldTimeDecoration>
   /** The entry whose host Sheet is open, with the decoration it was opened on. */
@@ -44,29 +44,25 @@ export function useWorldTimeEditing(
   ctx: DbCtx,
 ): WorldTimeEditing {
   // Unknown ids resolve to the default, mirroring the wizard's own fallback.
-  const calendar = useMemo(
-    () =>
-      calendarSystemId != null
-        ? (getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID) ?? null)
-        : null,
-    [calendarSystemId],
-  )
-  const worldTimeOrigin = origin ?? null
+  // Memoized as a pair so the seam sees one identity, not two nullables.
+  const worldTimeFrame = useMemo((): CalendarFrame | null => {
+    if (calendarSystemId == null || origin == null) return null
+    const calendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
+    return calendar != null ? { calendar, origin } : null
+  }, [calendarSystemId, origin])
   // One walk per entries-collection identity. A side table leaves row identity
   // untouched, so ReaderRow's memo still short-circuits unchanged rows.
   const worldTimeDecorations = useMemo(
-    () =>
-      calendar != null && worldTimeOrigin != null
-        ? decorateWorldTime(entries, calendar, worldTimeOrigin)
-        : {},
-    [entries, calendar, worldTimeOrigin],
+    () => (worldTimeFrame != null ? decorateWorldTime(entries, worldTimeFrame) : {}),
+    [entries, worldTimeFrame],
   )
 
   const [timeEditId, setTimeEditId] = useState<string | null>(null)
 
-  // Carries failure in the result channel, never the rejection channel: there is
-  // no global unhandled-rejection handler, and across the expo-dom bridge a
-  // rejected promise is unobservable — a thrown write would leave Save inert.
+  // Carries failure in the result channel, never the rejection channel: the
+  // expo-dom bridge re-rejects faithfully, but there is no global
+  // unhandled-rejection handler, so a rejection surfacing in the DOM realm has
+  // nothing to catch it and would leave Save inert.
   const editWorldTime = useCallback(
     async (entryId: string, next: number): Promise<EditResult> => {
       try {
@@ -111,8 +107,7 @@ export function useWorldTimeEditing(
   }, [timeEditId, decoration])
 
   return {
-    calendar,
-    worldTimeOrigin,
+    worldTimeFrame,
     worldTimeDecorations,
     timeEdit: timeEditId != null && decoration != null ? { entryId: timeEditId, decoration } : null,
     editWorldTime,

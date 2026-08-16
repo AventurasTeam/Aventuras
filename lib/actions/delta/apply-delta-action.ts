@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm'
 
 import type { SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import { undoRedoStore } from '@/lib/stores'
 
@@ -63,8 +64,8 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
 
   await ctx.runInTransaction(ops)
 
-  // Any new delta-logged action invalidates redo (data-model.md → the stack
-  // clears on any new action). Cleared at this choke point so future forward
+  // Any new delta-logged action invalidates redo (data-model.md → Entry
+  // mutability & rollback). Cleared at this choke point so future forward
   // writers can't forget it; redo's own re-insert bypasses this function.
   undoRedoStore.clear()
 
@@ -77,6 +78,12 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
     .select({ lp: deltas.logPosition })
     .from(deltas)
     .where(eq(deltas.id, deltaId))
-  if (!row) throw new Error(`delta row not found after insert: ${deltaId}`)
+  // The transaction has committed and the store is patched, so the write stands
+  // whatever the readback says. Reporting a failure here would tell the user a
+  // durable edit was lost, and they would redo it into a second delta.
+  if (!row) {
+    logger.error('action_layer.delta_readback_miss', { deltaId, branchId, kind: action.kind })
+    return { status: 'ok', logPosition: null }
+  }
   return { status: 'ok', logPosition: row.lp }
 }

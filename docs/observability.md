@@ -146,6 +146,7 @@ type LogSubsystem =
   | 'translation'
   | 'memory'
   | 'bootstrap'
+  | 'calendar'
 
 type LogKind = `${LogSubsystem}.${string}`
 ```
@@ -180,6 +181,9 @@ convention, and the expectation that subsystems route through
   emissions
 - `bootstrap.*` — boot-time hydration failures (e.g.
   `app_settings_hydrate_failed`)
+- `calendar.*` — `format_miss` (a `displayFormat` that fails or
+  renders empty, which silently drops every world-time footer in the
+  window), `pad_width_invalid`
 
 Kinds grow organically as subsystems land.
 

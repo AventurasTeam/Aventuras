@@ -14,6 +14,9 @@ export const STORY_ENTRY_REJECTION = {
   rollbackFloor: 'rollback-floor',
   inFlight: 'in-flight-gated',
   notFound: 'not-found',
+  invalidWorldTime: 'invalid-world-time',
+  noMetadata: 'no-metadata',
+  deltaFailed: 'delta-failed',
 } as const
 export type StoryEntryRejectionCode =
   (typeof STORY_ENTRY_REJECTION)[keyof typeof STORY_ENTRY_REJECTION]

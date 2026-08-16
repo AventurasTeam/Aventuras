@@ -1457,3 +1457,35 @@ failing` (fails in ~11 ms, consistent with a cascade from shared
   Options: a bundle-level assertion that the staging object is gone, an
   Android smoke in CI, or upstreaming the `Map` change. Raised 2026-08-16
   by the Slice 3.8 Android smoke.
+- **`updateEntryWorldTime`'s read-modify-write is serialized only
+  against itself, not against the pipeline's writes to the same row.**
+  `updateStoryEntryMetadata`'s handler is a whole-column replace
+  (`.set({ metadata })`, no merge), and `updateEntryWorldTime` reads
+  `current.metadata` outside the transaction, then dispatches. Its
+  `withKeyLock` key is per-action, so it does not serialize against
+  `suggestion-refresh` or `per-turn-piggyback` dispatching the same
+  kind at the same entry — an interleave is a silent lost update in
+  whichever direction loses. What actually prevents it today is that
+  both pipeline writers run under `hard-gate` pipelines, which
+  `isUserEditBlocked` rejects; the gate is now re-checked immediately
+  before the dispatch, which closes the awaited-read window but not the
+  dispatch itself. The trap for whoever fixes this properly: sharing
+  the key with `applyDeltaAction` **deadlocks**, since `withKeyLock` is
+  not reentrant and the inner call would await the outer's own promise.
+  The real fixes are a reentrant lock or building the payload inside
+  the transaction; both are larger than a slice. Raised 2026-08-16 by
+  the Slice 3.8 review.
+- **The calendar-registry fallback now backs a write path, not just
+  rendering.** Already filed above for display: every story falls
+  through to `earth-gregorian` because the registry never consults
+  `vault_calendars`. Two corollaries the display framing does not
+  cover. (1) The fallback calendar defines the world-time edit form's
+  tiers _and_ its inverse conversion, so a user edits Minute/Second
+  fields the story's own calendar does not have and those seconds are
+  written to `metadata.worldTime`; when the registry eventually
+  resolves the real calendar, previously-saved values silently mean
+  something different. (2) The reader and the prompt disagree —
+  `generation-context.ts` calls `getCalendar` with no fallback and
+  sends `calendarVocabulary: null`, so the reader shows Gregorian dates
+  while the model is told there is no calendar. Raised 2026-08-16 by
+  the Slice 3.8 review.

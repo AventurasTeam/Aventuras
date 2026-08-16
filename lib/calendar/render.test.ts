@@ -1,9 +1,30 @@
 import { describe, expect, it } from 'vitest'
 
 import { EARTH_GREGORIAN } from './builtins/earth-gregorian'
+import { MAX_WORLD_TIME_SECONDS } from './limits'
 import { formatWorldTime, FormatMiss } from './render'
 
 const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
+
+describe('formatWorldTime → renderable range', () => {
+  // Resolving an integer to a tuple walks the top tier one unit at a time, so
+  // an out-of-range value is a UI-thread freeze rather than a wrong string.
+  it('misses instead of walking a value past the ceiling', () => {
+    const out = formatWorldTime(MAX_WORLD_TIME_SECONDS + 1, EARTH_GREGORIAN, ORIGIN)
+    expect(out).toBeInstanceOf(FormatMiss)
+  })
+
+  it('still renders the ceiling itself', () => {
+    expect(formatWorldTime(MAX_WORLD_TIME_SECONDS, EARTH_GREGORIAN, ORIGIN)).not.toBeInstanceOf(
+      FormatMiss,
+    )
+  })
+
+  it('misses on a negative or non-finite worldTime', () => {
+    expect(formatWorldTime(-1, EARTH_GREGORIAN, ORIGIN)).toBeInstanceOf(FormatMiss)
+    expect(formatWorldTime(Number.NaN, EARTH_GREGORIAN, ORIGIN)).toBeInstanceOf(FormatMiss)
+  })
+})
 
 describe('formatWorldTime', () => {
   it('renders the displayFormat with monthName + tier values', () => {

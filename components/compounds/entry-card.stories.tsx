@@ -6,6 +6,7 @@ import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 import { Text } from '@/components/ui/text'
 import { EARTH_GREGORIAN } from '@/lib/calendar'
 import { themes } from '@/lib/themes'
+import { toastStore, type ToastItem } from '@/lib/toast'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
 
@@ -22,15 +23,24 @@ const aiMeta = {
   tokens: { prompt: 1840, completion: 312, reasoning: 87 },
 }
 
-// Module scope keeps `calendar` / `worldTimeOrigin` referentially stable —
-// WorldTimeEditForm's tuple memo keys on their identity.
+// `subscribe` replays the queue to a new listener synchronously, so this reads
+// the live store without mounting a Toaster.
+function currentToasts(): ToastItem[] {
+  let items: ToastItem[] = []
+  toastStore.subscribe((next) => {
+    items = next
+  })()
+  return items
+}
+
+// Module scope keeps the frame referentially stable — WorldTimeEditForm's
+// tuple memo keys on its identity.
 const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 
 // 90 s past the origin — 00:01:30, so the `second` tier seeds at 30.
 const editableTimeProps = {
   worldTimeRaw: 90,
-  calendar: EARTH_GREGORIAN,
-  worldTimeOrigin: ORIGIN,
+  worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: ORIGIN },
 }
 
 const aiEntry = {
@@ -419,7 +429,7 @@ export const EditableWorldTimeFooter: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
     onRequestEditTime: fn(),
   },
   play: async ({ args, canvasElement }) => {
@@ -449,7 +459,7 @@ export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
     onRequestEditTime: fn(),
   },
   play: async ({ args }) => {
@@ -474,7 +484,7 @@ export const WorldTimeInlineEditorOnPhone: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
   },
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
@@ -496,14 +506,14 @@ export const WorldTimeEditSaveReportsSeconds: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
   },
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
 
     // Re-query after each step: FormRow re-picks its layout one frame after the
-    // popover opens, which swaps the branch and detaches the earlier node.
+    // dialog opens, which swaps the branch and detaches the earlier node.
     await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
     await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
@@ -518,8 +528,8 @@ export const WorldTimeEditSaveReportsSeconds: StoryT = {
 /**
  * A host that reports the write failed keeps the overlay open on the typed
  * tuple, so the edit is not lost to a retype — the phone Sheet and the reader's
- * other edit flows behave the same way. Any other result (including the
- * `undefined` a void-returning host gives) still closes.
+ * other edit flows behave the same way. Only `true` closes it; a rejected
+ * promise is caught and reported rather than closing on a write that failed.
  */
 export const WorldTimeEditKeepsOverlayOpenOnFailure: StoryT = {
   ...wrap,
@@ -547,8 +557,48 @@ export const WorldTimeEditKeepsOverlayOpenOnFailure: StoryT = {
 }
 
 /**
+ * A rejecting host must not wedge Save. On native the card runs inside the
+ * expo-dom WebView, where a bridge-level failure rejects outside the host's own
+ * try/catch and no global handler exists — uncaught, the overlay would sit there
+ * doing nothing on every retry.
+ */
+export const WorldTimeEditSurvivesARejectedWrite: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => {
+      throw new Error('bridge closed')
+    }),
+  },
+  play: async ({ args }) => {
+    toastStore.__reset()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    // The rejection is reported, not swallowed. Without the catch the overlay
+    // would look identical, so this is the assertion that carries the fix.
+    await waitFor(() => expect(currentToasts().map((item) => item.severity)).toEqual(['error']))
+
+    // Overlay survives with the typed tuple, and Save still works on a retry.
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledTimes(2))
+  },
+}
+
+/**
  * Tier-independent half of the fork: with no `onEditTime` to land a save on,
- * the card refuses to host the overlay at any width, because a Popover Save
+ * the card refuses to host the overlay at any width, because a Dialog Save
  * would have nowhere to report and would discard the edit silently.
  */
 export const WorldTimeEditRequestsHostOverlay: StoryT = {
@@ -573,7 +623,7 @@ export const WorldTimeMonotonicityIndicator: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
     worldTimeMonotonicityBreak: { previousLabel: 'Day 12 · 14:33' },
   },
   play: async () => {
@@ -599,7 +649,7 @@ export const WorldTimeFooterInertWhileDisabled: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
     onRequestEditTime: fn(),
     disabled: true,
     disabledReason: 'Generating…',
@@ -617,7 +667,7 @@ export const WorldTimeFooterInertWhileEditing: StoryT = {
     ...baseProps,
     ...aiEntry,
     ...editableTimeProps,
-    onEditTime: fn(),
+    onEditTime: fn(async () => true),
     onRequestEditTime: fn(),
     editing: true,
     onContentChange: fn(),

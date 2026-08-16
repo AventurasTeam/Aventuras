@@ -4,9 +4,11 @@
 // callers can both observe the pre-write state and both commit, producing two
 // delta log entries for one conceptual change (breaks the
 // one-CTRL-Z-undoes-it acceptance criterion). The lock must wrap the read, not
-// just the write, so it goes wherever that sequence actually lives. This app is
-// single-process (Electron main owns the db), so an in-process key lock is
-// sufficient — no cross-process writers.
+// just the write, so it goes wherever that sequence actually lives. An
+// in-process map suffices because every domain write originates from a single
+// JS realm (the renderer, or the native host); Electron main owns the db file
+// and serves queries but never writes domain rows itself. Not reentrant — a
+// locked body must not re-enter the same key.
 const inFlightByKey = new Map<string, Promise<unknown>>()
 
 export function withKeyLock<T>(key: string, run: () => Promise<T>): Promise<T> {

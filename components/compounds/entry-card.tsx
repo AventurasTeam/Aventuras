@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -20,21 +20,30 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useTier } from '@/hooks/use-tier'
-import type { CalendarSystem, TierTuple } from '@/lib/calendar'
+import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
+import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import { stripTrailingBlocks } from '@/lib/piggyback'
+import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
-import { WorldTimeEditForm } from './world-time-edit-form'
+import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
 
@@ -48,22 +57,20 @@ type EntryCardProps = {
   content: string
   /** Pre-formatted by the host's calendar renderer; opaque to the compound. */
   worldTimeLabel?: string
-  /** Raw cumulative seconds; with `calendar` + `worldTimeOrigin` + a handler, makes the footer clickable. */
+  /** Raw cumulative seconds; with `worldTimeFrame` + a handler, makes the footer clickable. */
   worldTimeRaw?: number
   /**
-   * Desktop/tablet: fired by the in-card Popover's Save with the recomputed
-   * seconds. Resolve `false` to report a failed write — the Popover then stays
-   * open with the typed tuple intact. Any other result closes it.
+   * Desktop/tablet: fired by the in-card Dialog's Save with the recomputed
+   * seconds. Resolve `false` to report a failed write — the Dialog then stays
+   * open with the typed tuple intact. Only `true` closes it.
    */
-  onEditTime?: (nextWorldTime: number) => void | Promise<boolean>
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
   /** Phone: the compound requests; the host presents the native Sheet. */
   onRequestEditTime?: () => void
   /** Presence renders the warning indicator; the label feeds the banner/tooltip. */
-  worldTimeMonotonicityBreak?: { previousLabel: string }
+  worldTimeMonotonicityBreak?: MonotonicityBreak
   /** Stable reference required: the edit form's tuple memo keys on identity. */
-  calendar?: CalendarSystem
-  /** Stable reference required: the edit form's tuple memo keys on identity. */
-  worldTimeOrigin?: TierTuple
+  worldTimeFrame?: CalendarFrame
 
   onEdit?: () => void
   /** Not provided for `opening` (block-delete) or `system`/`streaming`. */
@@ -123,8 +130,7 @@ const WORLD_TIME_LABEL_CLASS = Platform.select({ web: 'group-hover/world-time:te
 
 type WorldTimeEditTarget = {
   worldTimeRaw: number
-  calendar: CalendarSystem
-  worldTimeOrigin: TierTuple
+  frame: CalendarFrame
 }
 
 function WorldTimeFooter({
@@ -137,19 +143,19 @@ function WorldTimeFooter({
   label: string
   /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
   edit: WorldTimeEditTarget | null
-  monotonicityBreak?: { previousLabel: string }
-  onEditTime?: (nextWorldTime: number) => void | Promise<boolean>
+  monotonicityBreak?: MonotonicityBreak
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
   onRequestEditTime?: () => void
 }) {
   const tier = useTier()
-  const triggerRef = useRef<ComponentRef<typeof PopoverTrigger>>(null)
+  const [open, setOpen] = useState(false)
 
   const breakText =
     monotonicityBreak != null
       ? `Earlier than previous entry (${monotonicityBreak.previousLabel})`
       : null
 
-  // `onEditTime == null` also routes to the request fork: the Popover's Save has
+  // `onEditTime == null` also routes to the request fork: the Dialog's Save has
   // nowhere to land without it, and would drop the edit silently.
   const usePhoneRequest = onRequestEditTime != null && (tier === 'phone' || onEditTime == null)
 
@@ -173,50 +179,69 @@ function WorldTimeFooter({
       ) : usePhoneRequest ? (
         <Pressable
           role="button"
-          aria-label="Edit time"
+          aria-label={t('reader:worldTimeEdit.title')}
           onPress={onRequestEditTime}
           className={WORLD_TIME_TRIGGER_CLASS}
         >
           {labelNode}
         </Pressable>
       ) : (
-        <Popover
-          ariaLabel="Edit time"
-          // Radix autofocuses the first tabbable field and selects its text.
-          // Land on the content container instead: the selection is one
-          // keystroke from wiping a field, and on touch it flashes the
-          // soft keyboard open and shut.
-          onOpenAutoFocus={(event) => {
-            event.preventDefault()
-            ;(event.currentTarget as HTMLElement | null)?.focus()
-          }}
-        >
-          <PopoverTrigger ref={triggerRef} asChild>
-            <Pressable role="button" aria-label="Edit time" className={WORLD_TIME_TRIGGER_CLASS}>
+        // Centred modal rather than an anchored Popover: the entry list
+        // scrolls under the overlay, so an anchor drifts off its own trigger
+        // and collides with the chrome around the list.
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogTrigger asChild>
+            <Pressable
+              role="button"
+              aria-label={t('reader:worldTimeEdit.title')}
+              className={WORLD_TIME_TRIGGER_CLASS}
+            >
               {labelNode}
             </Pressable>
-          </PopoverTrigger>
-          <PopoverContent side="top" align="end" className="w-auto max-w-xl">
+          </DialogTrigger>
+          <DialogContent
+            className="max-w-xl"
+            // Radix autofocuses the first tabbable field and selects its text.
+            // Land on the content container instead: the selection is one
+            // keystroke from wiping a field, and on touch it flashes the
+            // soft keyboard open and shut.
+            onOpenAutoFocus={(event) => {
+              event.preventDefault()
+              ;(event.currentTarget as HTMLElement | null)?.focus()
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>{t('reader:worldTimeEdit.title')}</DialogTitle>
+            </DialogHeader>
             {/* Keyed so an external worldTime change (undo, classifier write)
                 reseeds the form, which only reads the prop on mount. */}
             <WorldTimeEditForm
               key={edit.worldTimeRaw}
-              calendar={edit.calendar}
-              worldTimeOrigin={edit.worldTimeOrigin}
+              frame={edit.frame}
               worldTimeRaw={edit.worldTimeRaw}
               monotonicityBreak={monotonicityBreak}
-              // Closing only once the write has not reported failure keeps a
+              // Closing only once the write has reported success keeps a
               // rejected save's typed tuple on screen, matching the phone
-              // Sheet and the reader's other edit flows.
+              // Sheet and the reader's other edit flows. The catch is load-
+              // bearing: on native this runs in the expo-dom WebView, where a
+              // bridge-level failure rejects outside the host's own try/catch
+              // and nothing else would surface it.
               onSave={(next) => {
                 void (async () => {
-                  if ((await onEditTime?.(next)) !== false) triggerRef.current?.close()
+                  try {
+                    if (await onEditTime?.(next)) setOpen(false)
+                  } catch (err) {
+                    logger.error('action_layer.world_time_edit_failed', {
+                      error: err instanceof Error ? err.message : String(err),
+                    })
+                    toast.error(t('reader:worldTimeEdit.failed'))
+                  }
                 })()
               }}
-              onCancel={() => triggerRef.current?.close()}
+              onCancel={() => setOpen(false)}
             />
-          </PopoverContent>
-        </Popover>
+          </DialogContent>
+        </Dialog>
       )}
     </View>
   )
@@ -269,8 +294,7 @@ export function EntryCard({
   onEditTime,
   onRequestEditTime,
   worldTimeMonotonicityBreak,
-  calendar,
-  worldTimeOrigin,
+  worldTimeFrame,
   onEdit,
   onDelete,
   meta,
@@ -301,10 +325,9 @@ export function EntryCard({
     !editing &&
     disabled !== true &&
     worldTimeRaw != null &&
-    calendar != null &&
-    worldTimeOrigin != null &&
+    worldTimeFrame != null &&
     (onEditTime != null || onRequestEditTime != null)
-      ? { worldTimeRaw, calendar, worldTimeOrigin }
+      ? { worldTimeRaw, frame: worldTimeFrame }
       : null
 
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])

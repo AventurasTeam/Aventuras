@@ -138,8 +138,11 @@ Serializable props in (native → document):
   native). It is a side table rather than
   fields merged into `rows` so that re-walking the window doesn't
   hand the document fresh row objects and defeat per-row
-  memoization. The active calendar definition and `worldTimeOrigin`
-  cross as data too, seeding the in-document edit Popover.
+  memoization. `worldTimeFrame` — the active calendar definition
+  paired with the story's `worldTimeOrigin` — crosses as data too,
+  seeding the in-document edit Dialog. The two travel as one
+  memoized object so the seam sees a single stable identity rather
+  than two nullables checked apart.
 - `streaming` — the live stream row (`content`, `reasoning`,
   `phase`) or null. Buffer throttling stays native; cadence
   variance is accepted.
@@ -159,7 +162,7 @@ Async function props out (document → native):
 
 - Entry actions: edit commit, regenerate, branch, delete, flip era,
   system-entry retry/dismiss/fix, and world-time edits —
-  `onEditWorldTime` carries the desktop/tablet Popover's Save, and
+  `onEditWorldTime` carries the desktop/tablet Dialog's Save, and
   `onRequestEditWorldTime` asks native to present the phone Sheet.
   The document requests; native confirms (modals) and executes
   (action layer); results flow back as `rows` updates, with the

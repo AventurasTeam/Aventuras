@@ -42,20 +42,15 @@ export const reader = {
   editTextarea: (page: Page): Locator => page.getByRole('textbox', { name: EDIT_TEXTAREA_LABEL }),
   saveEdit: (page: Page): Locator => page.getByRole('button', { name: SAVE_LABEL }),
 
-  // Per-entry world-time footer. Desktop tier hosts the edit form in a Popover;
-  // the phone tier bridges out to a native Sheet, which desktop-only E2E never
-  // reaches.
+  // Per-entry world-time footer. Desktop tier hosts the edit form in a centred
+  // Dialog; the phone tier bridges out to a native Sheet, which desktop-only
+  // E2E never reaches.
   worldTimeFooter: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: EDIT_TIME_LABEL }),
-  // components/ui/popover.tsx nests two role="dialog" nodes on web — radix's own
-  // content wrapper around the View that carries the aria-label. Only the inner
-  // one has an accessible name, so the name filter already resolves to one;
-  // `.first()` is belt and braces, and outcome-identical because both wrap the
-  // same subtree. It is NOT row disambiguation: every row owns its own Popover,
-  // so a spec driving two rows at once would silently get whichever portal
-  // mounted first.
-  worldTimeDialog: (page: Page): Locator =>
-    page.getByRole('dialog', { name: EDIT_TIME_LABEL }).first(),
+  // One node, named by DialogTitle — no `.first()`. The desktop overlay is a
+  // modal, so a second one cannot be open to disambiguate against; strict mode
+  // catching that is the point.
+  worldTimeDialog: (page: Page): Locator => page.getByRole('dialog', { name: EDIT_TIME_LABEL }),
   // Tier names are calendar-authored content (earth-gregorian: Year / Month /
   // Day / Hour / Minute / Second), capitalized for display by TierTupleInput.
   // Numeric only, hence the name: a labelled tier (Month) renders a Select with

@@ -1,5 +1,5 @@
 // components/reader/reader-document-types.ts
-import type { CalendarSystem, TierTuple } from '@/lib/calendar'
+import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 
 import type { WorldTimeDecoration } from './worldtime-decoration'
@@ -21,9 +21,8 @@ export type ReaderSurfaceProps = {
    *  Deliberately a side table, not merged into `rows` — merging would hand
    *  ReaderRow fresh row objects on every entries patch and void its memo. */
   worldTimeDecorations: Record<string, WorldTimeDecoration>
-  /** Active calendar definition (registry-resolved, fallback applied) — null hides/inerts footers. */
-  calendar: CalendarSystem | null
-  worldTimeOrigin: TierTuple | null
+  /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
+  worldTimeFrame: CalendarFrame | null
   /** Non-null only while the streaming row should be visible (host-gated). */
   streaming: StreamingPayload | null
   /** Branch identity: switch resets edit state and re-lands at bottom. */

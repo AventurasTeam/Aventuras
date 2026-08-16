@@ -113,6 +113,9 @@ test.describe('reader — edit an entry world time', () => {
     await reader.worldTimeNumericField(app.window, 'Minute').fill(EDITED_MINUTE)
     await expect(reader.worldTimeNumericField(app.window, 'Minute')).toHaveValue(EDITED_MINUTE)
     await reader.worldTimeSave(app.window).click()
+    // An inverted success signal would leave this open forever; without the
+    // assertion that only surfaces later as an unexplained click timeout.
+    await expect(reader.worldTimeDialog(app.window)).toBeHidden()
 
     await expect.poll(() => worldTimeOf(TARGET_ID), { timeout: 15_000 }).toBe(EDITED_WORLD_TIME)
     // Exactly one: a second row would mean the no-change save wrote after all.

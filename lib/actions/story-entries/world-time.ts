@@ -1,5 +1,6 @@
 import { and, eq } from 'drizzle-orm'
 
+import { MAX_WORLD_TIME_SECONDS } from '@/lib/calendar'
 import { storyEntries } from '@/lib/db'
 import { generateId } from '@/lib/ids'
 import { generationStore } from '@/lib/stores'
@@ -7,17 +8,25 @@ import { generationStore } from '@/lib/stores'
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx } from '../types'
+import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION } from './register'
 
-export type UpdateWorldTimeResult =
-  | { status: 'ok' }
-  | { status: 'rejected'; reason: string; code?: string }
+export type UpdateWorldTimeResult = { status: 'ok' } | StoryEntryRejection
+
+const inFlight = (): StoryEntryRejection => ({
+  status: 'rejected',
+  reason: 'generation in flight',
+  code: STORY_ENTRY_REJECTION.inFlight,
+})
 
 /**
  * Keyed on this action rather than on `updateStoryEntryMetadata`: what needs
  * serializing is the read-then-decide below, which only this function performs.
- * The pipeline's own dispatches of that kind never pass through here, so a
- * kind-wide key would serialize them against each other for no benefit.
+ * That leaves it unserialized against the pipeline's own dispatches of that
+ * kind — safe only because every one of them runs under a `hard-gate` pipeline,
+ * which `isUserEditBlocked` rejects. Do not close that gap by sharing the key
+ * with `applyDeltaAction`: `withKeyLock` is not reentrant, so the inner call
+ * would await the outer's own promise and deadlock.
  */
 export async function updateEntryWorldTime(
   branchId: string,
@@ -36,21 +45,19 @@ async function updateEntryWorldTimeLocked(
   worldTime: number,
   ctx: DbCtx,
 ): Promise<UpdateWorldTimeResult> {
-  if (generationStore.isUserEditBlocked())
+  if (generationStore.isUserEditBlocked()) return inFlight()
+  // The only runtime check on this edit path (data-model.md -> In-world time
+  // tracking): metadata is a `mode: 'json'` column and the forward write path
+  // never parses it, so entryMetadataSchema's .min(0) never runs here — it runs
+  // only on create-story's opening entry. The upper bound is a render-cost
+  // guard, not a domain rule (lib/calendar/limits.ts). Cumulative monotonicity
+  // is deliberately NOT checked — a manual edit may move time backwards and the
+  // UI flags it.
+  if (!Number.isInteger(worldTime) || worldTime < 0 || worldTime > MAX_WORLD_TIME_SECONDS)
     return {
       status: 'rejected',
-      reason: 'generation in flight',
-      code: STORY_ENTRY_REJECTION.inFlight,
-    }
-  // The ONLY runtime enforcement of the storage invariant (data-model.md ->
-  // In-world time tracking): metadata is a `mode: 'json'` column and the forward
-  // write path never parses it, so entryMetadataSchema's .min(0) never runs here.
-  // Cumulative monotonicity is deliberately NOT checked — a manual edit may move
-  // time backwards and the UI flags it.
-  if (!Number.isInteger(worldTime) || worldTime < 0)
-    return {
-      status: 'rejected',
-      reason: `worldTime must be a non-negative integer, got ${worldTime}`,
+      reason: `worldTime must be an integer in [0, ${MAX_WORLD_TIME_SECONDS}], got ${worldTime}`,
+      code: STORY_ENTRY_REJECTION.invalidWorldTime,
     }
   const [current] = await ctx.db
     .select()
@@ -64,9 +71,16 @@ async function updateEntryWorldTimeLocked(
     }
   // Nothing to merge onto: synthesizing the sibling fields would invent data.
   if (current.metadata == null)
-    return { status: 'rejected', reason: `entry ${id} has no metadata to edit` }
+    return {
+      status: 'rejected',
+      reason: `entry ${id} has no metadata to edit`,
+      code: STORY_ENTRY_REJECTION.noMetadata,
+    }
   // A no-op delta would clear the global (cross-branch) redo stack for nothing.
   if (current.metadata.worldTime === worldTime) return { status: 'ok' }
+  // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
+  // hard-gate run starting inside it would race this whole-column replace.
+  if (generationStore.isUserEditBlocked()) return inFlight()
 
   const result = await applyDeltaAction(
     {
@@ -78,12 +92,17 @@ async function updateEntryWorldTimeLocked(
       },
       actionId: generateId('act'),
       branchId,
-      // Survival anchor (data-model.md -> Survival anchor): the edit belongs to
-      // the entry it was made on, so reversing a LATER turn's suffix spares it.
+      // Survival anchor (data-model.md -> Survival anchor): the delta's subject
+      // is this entry, so reversing a LATER turn's suffix spares it.
       entryId: id,
     },
     ctx,
   )
-  if (result.status !== 'ok') return result
+  if (result.status !== 'ok')
+    return {
+      status: 'rejected',
+      reason: result.reason,
+      code: STORY_ENTRY_REJECTION.deltaFailed,
+    }
   return { status: 'ok' }
 }

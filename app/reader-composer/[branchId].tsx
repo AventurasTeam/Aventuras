@@ -173,8 +173,7 @@ export default function ReaderComposerRoute() {
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
 
   const {
-    calendar,
-    worldTimeOrigin,
+    worldTimeFrame,
     worldTimeDecorations,
     timeEdit,
     editWorldTime,
@@ -760,8 +759,7 @@ export default function ReaderComposerRoute() {
   const surfaceProps = {
     rows: entries,
     worldTimeDecorations,
-    calendar,
-    worldTimeOrigin,
+    worldTimeFrame,
     streaming: streamingPayload,
     branchKey: branchId,
     hasOlder,
@@ -799,7 +797,7 @@ export default function ReaderComposerRoute() {
                 : undefined
           }
           // A background classifier pass has no cancel affordance, so the prop is
-          // absent rather than a no-op handler that would still open the popover.
+          // absent rather than a no-op handler that would still open the dialog.
           {...(isGenerating || refreshingSuggestions
             ? {
                 // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a
@@ -926,10 +924,9 @@ export default function ReaderComposerRoute() {
           onConfirm={() => void confirmRollback()}
         />
       ) : null}
-      {timeEdit != null && calendar != null && worldTimeOrigin != null ? (
+      {timeEdit != null && worldTimeFrame != null ? (
         <WorldTimeEditSheet
-          calendar={calendar}
-          worldTimeOrigin={worldTimeOrigin}
+          frame={worldTimeFrame}
           worldTimeRaw={timeEdit.decoration.raw}
           monotonicityBreak={
             timeEdit.decoration.previousLabel != null
@@ -937,7 +934,7 @@ export default function ReaderComposerRoute() {
               : undefined
           }
           // Closing only on success keeps a rejected write's typed tuple on
-          // screen, matching the desktop Popover and the reader's other edits.
+          // screen, matching the desktop Dialog and the reader's other edits.
           onSave={async (next) => {
             const result = await editWorldTime(timeEdit.entryId, next)
             if (result.ok) closeTimeEdit()

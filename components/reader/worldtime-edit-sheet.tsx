@@ -1,22 +1,22 @@
-import { WorldTimeEditForm } from '@/components/compounds/world-time-edit-form'
+import {
+  WorldTimeEditForm,
+  type MonotonicityBreak,
+} from '@/components/compounds/world-time-edit-form'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
-import type { CalendarSystem, TierTuple } from '@/lib/calendar'
+import type { CalendarFrame } from '@/lib/calendar'
 import { t } from '@/lib/i18n'
 
 type WorldTimeEditSheetProps = {
   /** Stable reference required: the form's tuple memo keys on identity. */
-  calendar: CalendarSystem
-  /** Stable reference required: the form's tuple memo keys on identity. */
-  worldTimeOrigin: TierTuple
+  frame: CalendarFrame
   worldTimeRaw: number
-  monotonicityBreak?: { previousLabel: string }
+  monotonicityBreak?: MonotonicityBreak
   onSave: (next: number) => Promise<void>
   onClose: () => void
 }
 
 export function WorldTimeEditSheet({
-  calendar,
-  worldTimeOrigin,
+  frame,
   worldTimeRaw,
   monotonicityBreak,
   onSave,
@@ -35,8 +35,7 @@ export function WorldTimeEditSheet({
             reseeds the form, which only reads the prop on mount. */}
         <WorldTimeEditForm
           key={worldTimeRaw}
-          calendar={calendar}
-          worldTimeOrigin={worldTimeOrigin}
+          frame={frame}
           worldTimeRaw={worldTimeRaw}
           monotonicityBreak={monotonicityBreak}
           onSave={(next) => void onSave(next)}

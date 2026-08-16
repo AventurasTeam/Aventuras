@@ -17,7 +17,7 @@ import {
 import { EntryCard } from '@/components/compounds/entry-card'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
-import type { CalendarSystem, TierTuple } from '@/lib/calendar'
+import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
@@ -46,8 +46,7 @@ type ReaderRowProps = {
   worldTimeLabel?: string
   worldTimeRaw?: number
   worldTimeBreakPreviousLabel?: string
-  calendar: CalendarSystem | null
-  worldTimeOrigin: TierTuple | null
+  worldTimeFrame: CalendarFrame | null
   onEditWorldTime: (entryId: string, next: number) => Promise<EditResult>
   onRequestEditWorldTime: (entryId: string) => Promise<void>
   onStartEdit: (row: StoryEntry) => void
@@ -73,8 +72,7 @@ const ReaderRow = memo(function ReaderRow({
   worldTimeLabel,
   worldTimeRaw,
   worldTimeBreakPreviousLabel,
-  calendar,
-  worldTimeOrigin,
+  worldTimeFrame,
   onEditWorldTime,
   onRequestEditWorldTime,
   onStartEdit,
@@ -87,7 +85,7 @@ const ReaderRow = memo(function ReaderRow({
   onDismissSystemEntry,
 }: ReaderRowProps) {
   const isSystem = row.kind === 'system'
-  const timeEditable = worldTimeRaw != null && calendar != null && worldTimeOrigin != null
+  const timeEditable = worldTimeRaw != null && worldTimeFrame != null
   // EntryCard's canonical prop is an object; building it here keeps the walk
   // primitive-valued so ReaderRow's memo compare still holds.
   const monotonicityBreak =
@@ -118,8 +116,7 @@ const ReaderRow = memo(function ReaderRow({
       worldTimeLabel={worldTimeLabel}
       worldTimeRaw={timeEditable ? worldTimeRaw : undefined}
       worldTimeMonotonicityBreak={monotonicityBreak}
-      calendar={timeEditable ? (calendar ?? undefined) : undefined}
-      worldTimeOrigin={timeEditable ? (worldTimeOrigin ?? undefined) : undefined}
+      worldTimeFrame={timeEditable ? worldTimeFrame : undefined}
       onEditTime={
         timeEditable ? async (next) => (await onEditWorldTime(row.id, next)).ok : undefined
       }
@@ -131,8 +128,7 @@ const ReaderRow = memo(function ReaderRow({
 export function ReaderSurface({
   rows,
   worldTimeDecorations,
-  calendar,
-  worldTimeOrigin,
+  worldTimeFrame,
   streaming,
   branchKey,
   hasOlder,
@@ -168,7 +164,7 @@ export function ReaderSurface({
   editDraftRef.current = editDraft
 
   // Branch switch: new window, scrolled to bottom, edit state dropped
-  // (reader-composer.md → Loaded-set model → Branch switch).
+  // (reader-composer.md → Loaded-set model).
   const landedBranchRef = useRef<string | null>(null)
   const pinActiveRef = useRef(false)
   useEffect(() => {
@@ -445,8 +441,7 @@ export function ReaderSurface({
                 worldTimeLabel={decoration?.label}
                 worldTimeRaw={decoration?.raw}
                 worldTimeBreakPreviousLabel={decoration?.previousLabel}
-                calendar={calendar}
-                worldTimeOrigin={worldTimeOrigin}
+                worldTimeFrame={worldTimeFrame}
                 onEditWorldTime={onEditWorldTime}
                 onRequestEditWorldTime={onRequestEditWorldTime}
                 onStartEdit={startEdit}
