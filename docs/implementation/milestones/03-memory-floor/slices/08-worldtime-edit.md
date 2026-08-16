@@ -186,12 +186,16 @@ see Implementation notes.
 - The E2E's delta query filters on `entry_id`, which makes it the only
   assertion anywhere that pins the survival anchor.
 
-### Unresolved, awaiting a developer decision
+### Resolved against canon during this slice
 
-- **Delta anchoring for user edits contradicts `data-model.md`.** This
-  slice stamps the edited entry's own id so that rolling back a later
-  turn spares a correction on a surviving entry; canon lists user
-  direct edits as null-anchor deltas that always reverse positionally.
-  The doc line cannot mean content edits, which are exempt from the
-  delta log entirely. Filed in `docs/implementation/triage.md`; the
-  code was left as shipped because amending canon is gated.
+- **The survival anchor is subject-based, not source-based.** This slice
+  stamps the edited entry's own id, so rolling back a later turn spares a
+  correction made on an entry that survives. That read initially looked
+  like a contradiction with the `#survival-anchor` section, which listed
+  "user direct edit" as a null-anchor case. It is not: `data-model.md`
+  already named a user `worldTime` correction as a delta-logged edit
+  under [Entry metadata shape](../../../../data-model.md#entry-metadata-shape),
+  so the inconsistency was internal to that doc. What chapter close and
+  entity / lore / thread edits actually share is having **no entry
+  subject** — not their author. `data-model.md` was amended in this PR to
+  state the rule that way; the code is unchanged.
