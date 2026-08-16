@@ -914,6 +914,23 @@ class StoryStore {
   }
 
   /**
+   * Every destructive operation that removes entries from a position onward runs this first,
+   * before any rollback: a branch forked at or after that position would survive with a fork
+   * point that no longer exists, and a rollback already applied cannot be taken back.
+   */
+  private assertNoBranchForkAtOrAfter(position: number): void {
+    const forked = this.branches.find((b) =>
+      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
+    )
+    if (forked) {
+      throw new Error(
+        `Cannot remove these entries because branch "${forked.name}" forks from one of them. ` +
+          `Delete the branch first.`,
+      )
+    }
+  }
+
+  /**
    * A checkpoint restores to its `lastEntryId`, so one whose entry is gone can only produce a
    * branch with a dangling fork point.
    */
@@ -975,6 +992,8 @@ class StoryStore {
 
     if (rollbackEnabled) {
       log('Rollback-on-delete: cascading from position', existingEntry.position)
+
+      this.assertNoBranchForkAtOrAfter(existingEntry.position)
 
       // Run rollback to undo world state changes for this entry and all after it
       const rollbackSummary = await rollbackService.rollbackFromPosition(
@@ -1069,6 +1088,8 @@ class StoryStore {
         `Cannot regenerate this entry because it is the fork point for branch "${branchUsingEntry.name}".`,
       )
     }
+
+    this.assertNoBranchForkAtOrAfter(entry.position)
 
     let entitiesUndone = false
     let timeUndone = false
@@ -1271,18 +1292,7 @@ class StoryStore {
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    // Refused before the rollback runs: a branch forked from an entry this cascade would take
-    // with it survives as a branch whose fork point no longer exists. deleteEntry guards its own
-    // target the same way, but only that one entry — the cascade reaches every later one.
-    const forkedBranch = this.branches.find((b) =>
-      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
-    )
-    if (forkedBranch) {
-      throw new Error(
-        `Cannot delete these entries because branch "${forkedBranch.name}" forks from one of them. ` +
-          `Delete the branch first.`,
-      )
-    }
+    this.assertNoBranchForkAtOrAfter(position)
 
     // Phase 2: Rollback world state before deleting entries
     // Skip if caller already performed rollback (e.g. deleteEntry)
@@ -4326,6 +4336,7 @@ class StoryStore {
         entriesToDelete: entryIdsToDelete.length,
       })
 
+      this.assertNoBranchForkAtOrAfter(backup.entryCountBeforeAction)
       await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Restore to database (branch-aware: only delete/restore world state for current branch)
