@@ -103,7 +103,18 @@ describe('RisuRealmProvider', () => {
     } satisfies DiscoveryCard
     const devalueData = [
       null,
-      { id: 2, name: 3, authorname: 4, desc: 5, tags: 6 },
+      {
+        id: 2,
+        name: 3,
+        authorname: 4,
+        desc: 5,
+        tags: 6,
+        personality: 9,
+        scenario: 10,
+        first_mes: 11,
+        mes_example: 12,
+        creator_notes: 13,
+      },
       'risu-9',
       'Lantern Keeper',
       'RealmScribe',
@@ -111,6 +122,11 @@ describe('RisuRealmProvider', () => {
       [7, 8],
       'dreams',
       'urban fantasy',
+      'Patient, watchful, and fond of riddles.',
+      'The city has begun dreaming while awake.',
+      'Keep your lantern close. The streets moved again.',
+      '<START>\n{{char}}: Do you remember this alley?',
+      'Keep the mystery gradual and atmospheric.',
     ]
     mocks.corsFetch.mockResolvedValueOnce(jsonResponse({ nodes: [{}, { data: devalueData }] }))
 
@@ -127,11 +143,11 @@ describe('RisuRealmProvider', () => {
     await expect(blob.text().then(JSON.parse)).resolves.toEqual({
       name: 'Lantern Keeper',
       description: 'A guide through a city that dreams at night.',
-      personality: '',
-      scenario: '',
-      first_mes: '',
-      mes_example: '',
-      creator_notes: '',
+      personality: 'Patient, watchful, and fond of riddles.',
+      scenario: 'The city has begun dreaming while awake.',
+      first_mes: 'Keep your lantern close. The streets moved again.',
+      mes_example: '<START>\n{{char}}: Do you remember this alley?',
+      creator_notes: 'Keep the mystery gradual and atmospheric.',
       tags: ['dreams', 'urban fantasy'],
       creator: 'RealmScribe',
       character_version: '1.0',

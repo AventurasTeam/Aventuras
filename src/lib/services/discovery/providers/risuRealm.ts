@@ -202,25 +202,16 @@ export class RisuRealmProvider implements DiscoveryProvider {
       }
     }
 
-    // Convert to ST format
+    // Risu's decoded page data uses SillyTavern-compatible field names when the
+    // author exposes them. Preserve those fields instead of reducing the card to metadata.
     const stCard = {
       name: fullCard.name,
       description: fullCard.desc || '',
-      personality: '',
-      scenario: '',
-      first_mes: '', // RisuRealm might not expose first_mes in the public data? Bot Browser uses transformRisuRealmCard which doesn't seem to extract first_mes!
-      // Wait, Bot Browser's `transformFullRisuRealmCard` just wraps `transformRisuRealmCard` and adds `desc`.
-      // It seems RisuRealm public API might not expose all fields needed for a full card?
-      // Let's check if we can get more.
-      // The `__data.json` for a character page usually contains what's rendered.
-      // If RisuRealm hides first_mes, we might be out of luck or need another endpoint.
-      // However, usually these sites render the first message.
-      // Looking at `parseDevalueData` again, maybe I missed fields?
-      // `cardSchema` keys are dynamic.
-      // If `first_mes` isn't there, we can't get it.
-      // But for now, let's dump what we have.
-      mes_example: '',
-      creator_notes: '',
+      personality: fullCard.personality || '',
+      scenario: fullCard.scenario || '',
+      first_mes: fullCard.first_mes || '',
+      mes_example: fullCard.mes_example || '',
+      creator_notes: fullCard.creator_notes || '',
       tags: fullCard.tags || [],
       creator: fullCard.authorname,
       character_version: '1.0',
@@ -228,9 +219,6 @@ export class RisuRealmProvider implements DiscoveryProvider {
         risu_realm: { id: card.id },
       },
     }
-
-    // If RisuRealm exports a PNG, we might prefer that.
-    // But `__data.json` is what we have.
 
     const blob = new Blob([JSON.stringify(stCard, null, 2)], { type: 'application/json' })
     return blob
