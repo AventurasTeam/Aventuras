@@ -67,26 +67,24 @@ export function useWorldTimeEditing(
     async (entryId: string, next: number): Promise<EditResult> => {
       try {
         const result = await updateEntryWorldTime(branchId, entryId, next, ctx)
-        if (result.status !== 'ok') {
-          logger.warn('action_layer.world_time_edit_rejected', {
-            branchId,
-            entryId,
-            reason: result.reason,
-            code: result.code,
-          })
-          toast.error(t('reader:worldTimeEdit.failed'))
-          return { ok: false }
-        }
-        return { ok: true }
+        if (result.status === 'ok') return { ok: true }
+        logger.warn('action_layer.world_time_edit_rejected', {
+          branchId,
+          entryId,
+          reason: result.reason,
+          code: result.code,
+        })
       } catch (err) {
         logger.error('action_layer.world_time_edit_failed', {
           branchId,
           entryId,
           error: err instanceof Error ? err.message : String(err),
         })
-        toast.error(t('reader:worldTimeEdit.failed'))
-        return { ok: false }
       }
+      // A rejection and a throw differ only in the diagnostic they carry: both
+      // leave the entry unchanged, so they share one report to the user.
+      toast.error(t('reader:worldTimeEdit.failed'))
+      return { ok: false }
     },
     [branchId, ctx],
   )

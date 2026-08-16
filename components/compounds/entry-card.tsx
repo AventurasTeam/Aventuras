@@ -10,7 +10,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -133,6 +133,70 @@ type WorldTimeEditTarget = {
   frame: CalendarFrame
 }
 
+function WorldTimeEditDialog({
+  trigger,
+  edit,
+  monotonicityBreak,
+  onEditTime,
+}: {
+  trigger: ReactElement
+  edit: WorldTimeEditTarget
+  monotonicityBreak?: MonotonicityBreak
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
+}) {
+  const [open, setOpen] = useState(false)
+
+  // Closing only once the write has reported success keeps a rejected save's
+  // typed tuple on screen, matching the phone Sheet and the reader's other edit
+  // flows. The catch is load-bearing: on native this runs in the expo-dom
+  // WebView, where a bridge-level failure rejects outside the host's own
+  // try/catch and nothing else would surface it.
+  async function save(next: number) {
+    try {
+      if (await onEditTime?.(next)) setOpen(false)
+    } catch (err) {
+      logger.error('action_layer.world_time_edit_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+      toast.error(t('reader:worldTimeEdit.failed'))
+    }
+  }
+
+  return (
+    // Centred modal rather than an anchored Popover: the entry list scrolls
+    // under the overlay, so an anchor drifts off its own trigger and collides
+    // with the chrome around the list.
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent
+        className="max-w-xl"
+        // Radix autofocuses the first tabbable field and selects its text.
+        // Land on the content container instead: the selection is one
+        // keystroke from wiping a field, and on touch it flashes the
+        // soft keyboard open and shut.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement | null)?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t('reader:worldTimeEdit.title')}</DialogTitle>
+        </DialogHeader>
+        {/* Keyed so an external worldTime change (undo, classifier write)
+            reseeds the form, which only reads the prop on mount. */}
+        <WorldTimeEditForm
+          key={edit.worldTimeRaw}
+          frame={edit.frame}
+          worldTimeRaw={edit.worldTimeRaw}
+          monotonicityBreak={monotonicityBreak}
+          onSave={(next) => void save(next)}
+          onCancel={() => setOpen(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 function WorldTimeFooter({
   label,
   edit,
@@ -148,7 +212,6 @@ function WorldTimeFooter({
   onRequestEditTime?: () => void
 }) {
   const tier = useTier()
-  const [open, setOpen] = useState(false)
 
   const breakText =
     monotonicityBreak != null
@@ -164,6 +227,34 @@ function WorldTimeFooter({
       {label}
     </Text>
   )
+  // One trigger for both editable forks: the Dialog injects its own press
+  // handler through the trigger slot, so only the request fork passes one.
+  const trigger = (
+    <Pressable
+      role="button"
+      aria-label={t('reader:worldTimeEdit.title')}
+      onPress={usePhoneRequest ? onRequestEditTime : undefined}
+      className={WORLD_TIME_TRIGGER_CLASS}
+    >
+      {labelNode}
+    </Pressable>
+  )
+
+  let control: ReactNode
+  if (edit == null) {
+    control = labelNode
+  } else if (usePhoneRequest) {
+    control = trigger
+  } else {
+    control = (
+      <WorldTimeEditDialog
+        trigger={trigger}
+        edit={edit}
+        monotonicityBreak={monotonicityBreak}
+        onEditTime={onEditTime}
+      />
+    )
+  }
 
   return (
     <View className="mt-3 flex-row items-center justify-end gap-1.5">
@@ -174,75 +265,7 @@ function WorldTimeFooter({
           </View>
         </DisabledReasonTooltip>
       ) : null}
-      {edit == null ? (
-        labelNode
-      ) : usePhoneRequest ? (
-        <Pressable
-          role="button"
-          aria-label={t('reader:worldTimeEdit.title')}
-          onPress={onRequestEditTime}
-          className={WORLD_TIME_TRIGGER_CLASS}
-        >
-          {labelNode}
-        </Pressable>
-      ) : (
-        // Centred modal rather than an anchored Popover: the entry list
-        // scrolls under the overlay, so an anchor drifts off its own trigger
-        // and collides with the chrome around the list.
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Pressable
-              role="button"
-              aria-label={t('reader:worldTimeEdit.title')}
-              className={WORLD_TIME_TRIGGER_CLASS}
-            >
-              {labelNode}
-            </Pressable>
-          </DialogTrigger>
-          <DialogContent
-            className="max-w-xl"
-            // Radix autofocuses the first tabbable field and selects its text.
-            // Land on the content container instead: the selection is one
-            // keystroke from wiping a field, and on touch it flashes the
-            // soft keyboard open and shut.
-            onOpenAutoFocus={(event) => {
-              event.preventDefault()
-              ;(event.currentTarget as HTMLElement | null)?.focus()
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>{t('reader:worldTimeEdit.title')}</DialogTitle>
-            </DialogHeader>
-            {/* Keyed so an external worldTime change (undo, classifier write)
-                reseeds the form, which only reads the prop on mount. */}
-            <WorldTimeEditForm
-              key={edit.worldTimeRaw}
-              frame={edit.frame}
-              worldTimeRaw={edit.worldTimeRaw}
-              monotonicityBreak={monotonicityBreak}
-              // Closing only once the write has reported success keeps a
-              // rejected save's typed tuple on screen, matching the phone
-              // Sheet and the reader's other edit flows. The catch is load-
-              // bearing: on native this runs in the expo-dom WebView, where a
-              // bridge-level failure rejects outside the host's own try/catch
-              // and nothing else would surface it.
-              onSave={(next) => {
-                void (async () => {
-                  try {
-                    if (await onEditTime?.(next)) setOpen(false)
-                  } catch (err) {
-                    logger.error('action_layer.world_time_edit_failed', {
-                      error: err instanceof Error ? err.message : String(err),
-                    })
-                    toast.error(t('reader:worldTimeEdit.failed'))
-                  }
-                })()
-              }}
-              onCancel={() => setOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      {control}
     </View>
   )
 }

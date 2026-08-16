@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -677,5 +677,50 @@ export const WorldTimeFooterInertWhileEditing: StoryT = {
   play: async () => {
     expect(screen.queryByRole('button', { name: 'Edit time' })).not.toBeInTheDocument()
     await expect(screen.getByText('Day 12 · 14:33')).toBeVisible()
+  },
+}
+
+/**
+ * A generation starting while the dialog is open drops the edit affordance and
+ * unmounts the overlay. It must not come back on its own when generation ends:
+ * the open flag lives inside the dialog subtree so it dies with it. Driven
+ * through a harness rather than args because the resurrection only shows across
+ * a `disabled` round-trip, and the setter is called directly because a modal
+ * aria-hides every control outside itself.
+ */
+let setStoryBlocked: ((blocked: boolean) => void) | null = null
+
+function ResurrectHarness(args: EntryCardProps) {
+  const [blocked, setBlocked] = useState(false)
+  useEffect(() => {
+    setStoryBlocked = setBlocked
+    return () => {
+      setStoryBlocked = null
+    }
+  }, [])
+  return <EntryCard {...args} disabled={blocked} />
+}
+
+export const WorldTimeEditDoesNotResurrectAfterGeneration: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+  },
+  render: (args) => <ResurrectHarness {...args} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible())
+
+    setStoryBlocked?.(true)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit time' })).not.toBeInTheDocument(),
+    )
+
+    setStoryBlocked?.(false)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit time' })).toBeVisible())
+    expect(screen.queryByRole('dialog', { name: 'Edit time' })).not.toBeInTheDocument()
   },
 }

@@ -9,15 +9,17 @@ import { applyDeltaAction } from '../delta/apply-delta-action'
 import { withKeyLock } from '../delta/key-lock'
 import type { DbCtx } from '../types'
 import type { StoryEntryRejection } from './operational'
-import { STORY_ENTRY_REJECTION } from './register'
+import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 
 export type UpdateWorldTimeResult = { status: 'ok' } | StoryEntryRejection
 
-const inFlight = (): StoryEntryRejection => ({
-  status: 'rejected',
-  reason: 'generation in flight',
-  code: STORY_ENTRY_REJECTION.inFlight,
-})
+function rejected(code: StoryEntryRejectionCode, reason: string): StoryEntryRejection {
+  return { status: 'rejected', reason, code }
+}
+
+function inFlight(): StoryEntryRejection {
+  return rejected(STORY_ENTRY_REJECTION.inFlight, 'generation in flight')
+}
 
 /**
  * Keyed on this action rather than on `updateStoryEntryMetadata`: what needs
@@ -54,28 +56,19 @@ async function updateEntryWorldTimeLocked(
   // is deliberately NOT checked — a manual edit may move time backwards and the
   // UI flags it.
   if (!Number.isInteger(worldTime) || worldTime < 0 || worldTime > MAX_WORLD_TIME_SECONDS)
-    return {
-      status: 'rejected',
-      reason: `worldTime must be an integer in [0, ${MAX_WORLD_TIME_SECONDS}], got ${worldTime}`,
-      code: STORY_ENTRY_REJECTION.invalidWorldTime,
-    }
+    return rejected(
+      STORY_ENTRY_REJECTION.invalidWorldTime,
+      `worldTime must be an integer in [0, ${MAX_WORLD_TIME_SECONDS}], got ${worldTime}`,
+    )
   const [current] = await ctx.db
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), eq(storyEntries.id, id)))
   if (!current)
-    return {
-      status: 'rejected',
-      reason: `story_entries ${branchId}:${id} not found`,
-      code: STORY_ENTRY_REJECTION.notFound,
-    }
+    return rejected(STORY_ENTRY_REJECTION.notFound, `story_entries ${branchId}:${id} not found`)
   // Nothing to merge onto: synthesizing the sibling fields would invent data.
   if (current.metadata == null)
-    return {
-      status: 'rejected',
-      reason: `entry ${id} has no metadata to edit`,
-      code: STORY_ENTRY_REJECTION.noMetadata,
-    }
+    return rejected(STORY_ENTRY_REJECTION.noMetadata, `entry ${id} has no metadata to edit`)
   // A no-op delta would clear the global (cross-branch) redo stack for nothing.
   if (current.metadata.worldTime === worldTime) return { status: 'ok' }
   // Re-checked after the awaited read: the gate above is a TOCTOU window, and a
@@ -98,11 +91,6 @@ async function updateEntryWorldTimeLocked(
     },
     ctx,
   )
-  if (result.status !== 'ok')
-    return {
-      status: 'rejected',
-      reason: result.reason,
-      code: STORY_ENTRY_REJECTION.deltaFailed,
-    }
+  if (result.status !== 'ok') return rejected(STORY_ENTRY_REJECTION.deltaFailed, result.reason)
   return { status: 'ok' }
 }

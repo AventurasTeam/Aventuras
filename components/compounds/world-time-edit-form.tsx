@@ -61,10 +61,17 @@ export function WorldTimeEditForm({
 
   // Two independent gates run before the conversion: validity keeps a cleared
   // (NaN) or out-of-range tier out of a function that does not bounds-check,
-  // and the span cap keeps the walk itself inside a frame.
-  const { validity, next, tooFar } = useMemo(() => {
-    const result = validateOriginTuple(tuple, calendar)
-    if (!result.ok) return { validity: result, next: null, tooFar: false }
+  // and the span cap keeps the walk itself inside a frame. A tier error names
+  // the offending field, so it stays out of the inline range alert.
+  const { next, tierError, rangeError } = useMemo(() => {
+    const validity = validateOriginTuple(tuple, calendar)
+    if (!validity.ok) {
+      return {
+        next: null,
+        tierError: `Enter a valid ${validity.tier} between ${validity.min} and ${validity.max}.`,
+        rangeError: null,
+      }
+    }
 
     // Measured from the seed, not the origin: the mount conversion already
     // cached every top-tier unit below the seed, so those are Map hits and an
@@ -72,26 +79,22 @@ export function WorldTimeEditForm({
     // purpose — a value below the seed is entirely cached, hence cheap.
     const topTier = calendar.tiers[0].name
     if (tuple[topTier] - seedTuple[topTier] >= MAX_TOP_TIER_SPAN) {
-      return { validity: result, next: null, tooFar: true }
+      return { next: null, tierError: null, rangeError: TOO_FAR_MESSAGE }
     }
+
+    const seconds = tupleToWorldTime(tuple, calendar, origin)
     return {
-      validity: result,
-      next: tupleToWorldTime(tuple, calendar, origin),
-      tooFar: false,
+      next: seconds,
+      tierError: null,
+      rangeError: seconds < 0 ? BELOW_ORIGIN_MESSAGE : null,
     }
   }, [tuple, calendar, origin, seedTuple])
 
-  const belowOrigin = next != null && next < 0
-  const blockReason = !validity.ok
-    ? `Enter a valid ${validity.tier} between ${validity.min} and ${validity.max}.`
-    : tooFar
-      ? TOO_FAR_MESSAGE
-      : belowOrigin
-        ? BELOW_ORIGIN_MESSAGE
-        : undefined
+  const blockReason = tierError ?? rangeError ?? undefined
 
   const handleSave = () => {
-    if (next == null || belowOrigin) return
+    // Redundant behind the disabled Save; kept because `next` needs the narrowing.
+    if (blockReason != null || next == null) return
     // Tuple-level equality, not seconds-level: on a coarse-grain calendar the
     // tuple cannot express a sub-base-unit remainder, so an untouched save
     // compared in seconds would silently truncate the stored worldTime.
@@ -115,10 +118,10 @@ export function WorldTimeEditForm({
         </View>
       ) : null}
       <TierTupleInput calendar={calendar} value={tuple} onChange={setTuple} />
-      {tooFar || belowOrigin ? (
+      {rangeError != null ? (
         <View role="alert" accessibilityLiveRegion="assertive">
           <Text size="xs" className="text-danger">
-            {tooFar ? TOO_FAR_MESSAGE : BELOW_ORIGIN_MESSAGE}
+            {rangeError}
           </Text>
         </View>
       ) : null}
