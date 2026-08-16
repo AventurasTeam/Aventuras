@@ -116,9 +116,15 @@ export async function regenerateTurn(
         if (origin == null || origin.kind !== 'user_action')
           return { status: 'rejected', code: 'no-origin', reason: 'no originating user action' }
 
-        const swept = await bracketProseReversal(ids.branchId, () =>
-          sweepFrom(ids.branchId, replyEntryId, ctx),
-        )
+        let swept: { status: 'ok' } | StoryEntryRejection
+        try {
+          swept = await bracketProseReversal(ids.branchId, () =>
+            sweepFrom(ids.branchId, replyEntryId, ctx),
+          )
+        } catch (error) {
+          if (error instanceof DeltaReplayError && error.committed) undoRedoStore.clear()
+          throw error
+        }
         if (swept.status === 'rejected')
           return { status: 'rejected', code: 'sweep-refused', reason: swept.reason }
         // A regenerate is a new unrelated action (data-model.md); the discarded

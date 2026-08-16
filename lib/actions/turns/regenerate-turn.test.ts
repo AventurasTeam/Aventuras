@@ -478,6 +478,39 @@ describe('regenerateTurn', () => {
     expect(undoRedoStore.hasRedo()).toBe(false)
   })
 
+  it.each([
+    {
+      name: 'clears redo when the initial sweep committed',
+      committed: true,
+      expectedHasRedo: false,
+    },
+    {
+      name: 'preserves redo when the initial sweep did not commit',
+      committed: false,
+      expectedHasRedo: true,
+    },
+  ] as const)('$name', async ({ committed, expectedHasRedo }) => {
+    const { ctx, db } = await makeHarness()
+    await seedTwoTurnsWithCatchUp(ctx)
+    await openStory(db, 's1', 'b1')
+    await hydrateAppSettings(async () => WORKING_CONFIG)
+    undoRedoStore.pushRedoGroup([])
+
+    const regen = withSweepHook(
+      () => {
+        throw new DeltaReplayError('Initial sweep failed', {
+          cause: new Error('store sync failed'),
+          actionId: 'act_t2',
+          committed,
+        })
+      },
+      () => regenerateTurn({ storyId: 's1', branchId: 'b1' }, 'e_r2', ctx),
+    )
+
+    await expect(regen).rejects.toBeInstanceOf(DeltaReplayError)
+    expect(undoRedoStore.hasRedo()).toBe(expectedHasRedo)
+  })
+
   // Where clearing eagerly earns its keep: a failed run writes no delta, so
   // applyDeltaAction's choke-point clear never fires — yet the sweep has already
   // pruned the rows a stale redo snapshot would try to re-apply.
