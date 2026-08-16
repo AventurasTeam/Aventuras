@@ -46,6 +46,6 @@ export const EARTH_GREGORIAN: CalendarSystem = {
   ],
   exampleStartValue: { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 },
   displayFormat:
-    '{{ monthName }} {{ day }}, {% if year < 1 %}{{ 1 | minus: year }} BC{% else %}{{ year }} AD{% endif %} {{ hour }}:{{ minute }}',
+    '{{ monthName }} {{ day }}, {% if year < 1 %}{{ 1 | minus: year }} BC{% else %}{{ year }} AD{% endif %} {{ hour | pad: 2 }}:{{ minute | pad: 2 }}',
   eras: null,
 }

@@ -132,7 +132,7 @@ export const EarthGregorianSelected: Story = {
     expect(screen.getByRole('button', { name: /January/ })).toBeInTheDocument()
 
     // A valid origin renders a real sample instead of the pre-pick placeholder.
-    expect(screen.getByText('January 1, 2024 AD 0:0')).toBeInTheDocument()
+    expect(screen.getByText('January 1, 2024 AD 00:00')).toBeInTheDocument()
     expect(screen.queryByText('Placeholder')).not.toBeInTheDocument()
 
     // No calendar has been swapped yet — no reset notice.

@@ -10,6 +10,12 @@ export class FormatMiss {
 
 const engine = new Liquid()
 
+// Liquid ships no zero-pad filter, and clock-style tiers are unreadable without
+// one (`0:5` for five past midnight). Calendar-authored templates use it too.
+engine.registerFilter('pad', (value: unknown, width: unknown) =>
+  String(value).padStart(typeof width === 'number' ? width : 2, '0'),
+)
+
 function monthName(calendar: CalendarSystem, tuple: TierTuple): string | undefined {
   const monthTier = calendar.tiers.find((t) => t.name === 'month')
   if (!monthTier?.labels) return undefined

@@ -19,7 +19,14 @@ describe('formatWorldTime', () => {
   // month labels and hour/minute startValues — not from what render.ts emits.
   it('completes an origin that omits tiers before rendering worldTime 0', () => {
     expect(formatWorldTime(0, EARTH_GREGORIAN, { year: 1247, day: 1 })).toBe(
-      'January 1, 1247 AD 0:0',
+      'January 1, 1247 AD 00:00',
+    )
+  })
+  // Single-digit on BOTH clock tiers: the unpadded template renders '1:5' here.
+  it('zero-pads the clock tiers to two digits', () => {
+    const ONE_HOUR_FIVE = 3600 + 5 * 60
+    expect(formatWorldTime(ONE_HOUR_FIVE, EARTH_GREGORIAN, { year: 1247, day: 1 })).toBe(
+      'January 1, 1247 AD 01:05',
     )
   })
   it('renders one instant identically from a partial origin at zero and from an offset', () => {
@@ -29,7 +36,7 @@ describe('formatWorldTime', () => {
     expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, dayBefore)).toBe(
       formatWorldTime(0, EARTH_GREGORIAN, partial),
     )
-    expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, partial)).toBe('January 2, 1247 AD 0:0')
+    expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, partial)).toBe('January 2, 1247 AD 00:00')
   })
   it('returns a typed miss on a broken template rather than throwing to the caller', () => {
     const broken = { ...EARTH_GREGORIAN, displayFormat: '{% badtag %}' }
