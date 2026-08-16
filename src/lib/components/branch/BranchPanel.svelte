@@ -114,6 +114,16 @@
   const latestCheckpoint = $derived(getLatestCheckpoint())
   const canCreateBranch = $derived(!!latestCheckpoint)
 
+  /** Distinguishes "never had one" from "had one, but its entry was deleted". */
+  const createBranchTitle = $derived.by(() => {
+    if (canCreateBranch) return 'Create new branch from latest checkpoint'
+    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    const hadOne = story.checkpoints.some((c) => getCheckpointBranchId(c) === currentBranchId)
+    return hadOne
+      ? 'This branch has no usable checkpoint left - the entry each one marked has been deleted'
+      : 'No checkpoints available - checkpoints are created at chapter boundaries'
+  })
+
   async function handleCreateBranch() {
     if (!newBranchName.trim()) return
     if (!latestCheckpoint) {
@@ -248,9 +258,7 @@
           : 'text-surface-600 cursor-not-allowed'}"
         onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
         disabled={!canCreateBranch}
-        title={canCreateBranch
-          ? 'Create new branch from latest checkpoint'
-          : 'No checkpoints available - checkpoints are created at chapter boundaries'}
+        title={createBranchTitle}
       >
         <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
       </button>

@@ -52,6 +52,7 @@
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { countTokens } from '$lib/services/tokenizer'
+  import { errMessage } from '$lib/utils/error'
   import { Button } from '$lib/components/ui/button'
   import * as Popover from '$lib/components/ui/popover'
   import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
@@ -192,7 +193,13 @@
     if (ui.lastGenerationError?.errorEntryId === entry.id) {
       ui.clearGenerationError()
     }
-    await story.deleteEntry(entry.id)
+    try {
+      await story.deleteEntry(entry.id)
+    } catch (error) {
+      // A branch forking from this entry refuses the delete; without this the button
+      // would simply do nothing.
+      ui.showToast(errMessage(error), 'error')
+    }
   }
 
   /**
@@ -1331,7 +1338,8 @@
     {/if}
 
     <!-- Token count badge (shows 0 if no tokens). Hidden on narrow screens, where the toolbar
-         needs the width; still reachable there through "Response info". -->
+         needs the width. Narration entries keep it under "Response info" in the overflow menu;
+         on any other entry type it is not shown there at all. -->
     <span class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums sm:inline">
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
@@ -1569,7 +1577,7 @@
               </Button>
             {/snippet}
           </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end">
+          <DropdownMenu.Content align="end" class="max-h-[70vh] overflow-y-auto">
             {#if canBranch}
               <DropdownMenu.Item onclick={() => (isBranching = true)}>
                 <GitBranch class="h-4 w-4" />
@@ -1582,9 +1590,11 @@
                 Create checkpoint
               </DropdownMenu.Item>
             {/if}
+            <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
+                 state would never be on screen. The toast is the feedback here. -->
             <DropdownMenu.Item onclick={handleCopyContent}>
-              {@render copyIcon()}
-              {copyLabel}
+              <Copy class="h-4 w-4" />
+              Copy message text
             </DropdownMenu.Item>
             {#if canGenerateStoryImages}
               <DropdownMenu.Item

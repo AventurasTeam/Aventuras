@@ -931,6 +931,14 @@ class StoryStore {
   }
 
   /**
+   * The same check, for a caller that mutates other state before it reaches the entries — a
+   * retry restores lorebook activation first, and would otherwise leave that half-applied.
+   */
+  assertEntriesRemovable(position: number): void {
+    this.assertNoBranchForkAtOrAfter(position)
+  }
+
+  /**
    * A checkpoint restores to its `lastEntryId`, so one whose entry is gone can only produce a
    * branch with a dangling fork point.
    */

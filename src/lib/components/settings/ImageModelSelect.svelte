@@ -154,12 +154,12 @@
       {/if}
     </div>
     {#if selectedIsUnavailable}
-      <p class="text-muted-foreground text-xs">
+      <p class="text-muted-foreground text-xs" role="status">
         "{selectedModelId}" is not in the list fetched from this provider. It will be sent as typed.
       </p>
     {/if}
     {#if errorMessage}
-      <p class="text-destructive text-xs">{errorMessage}</p>
+      <p class="text-destructive text-xs" role="alert">{errorMessage}</p>
     {/if}
   {/if}
 </div>

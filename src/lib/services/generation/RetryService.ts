@@ -74,6 +74,8 @@ export interface RetryStoreCallbacks {
   }) => Promise<void>
   restoreCharacterSnapshots: (snapshots?: PersistentCharacterSnapshot[]) => Promise<void>
   restoreTimeTrackerSnapshot: (snapshot: TimeTracker | null | undefined) => Promise<void>
+  /** Throws if the entries from this position on cannot be removed. */
+  assertEntriesRemovable: (position: number) => void
   lockRetryInProgress: () => void
   unlockRetryInProgress: () => void
 
@@ -117,6 +119,10 @@ export class RetryService {
     })
 
     try {
+      // Ahead of both paths, which restore lorebook activation before they touch the entries:
+      // a refusal that surfaced later would leave that restore applied with nothing undone.
+      callbacks.assertEntriesRemovable(backup.entryCountBeforeAction)
+
       if (backup.hasFullState) {
         // Full state restore path
         await this.restoreFullState(backup, callbacks)
