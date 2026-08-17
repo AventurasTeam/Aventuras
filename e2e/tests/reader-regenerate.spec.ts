@@ -157,6 +157,9 @@ test.describe('reader — regenerate a reply', () => {
     const olderReplyId = await pollEntryId(branch, 'E2E-REGEN-R2')
     await pollEntryId(branch, 'E2E-REGEN-U2')
     await pollEntryId(branch, 'E2E-REGEN-R3')
+    // Captured before the cascade: "U1 survives" is a claim about the row, and
+    // a re-created row carrying the same marker would satisfy mere presence.
+    const userActionId = await pollEntryId(branch, 'E2E-REGEN-U1')
 
     mock.setNarrative(REPLY_1)
     await reader.regenEntry(app.window, olderReplyId).click()
@@ -176,6 +179,6 @@ test.describe('reader — regenerate a reply', () => {
     await pollEntryGone(branch, 'E2E-REGEN-R2')
     await pollEntryGone(branch, 'E2E-REGEN-U2')
     await pollEntryGone(branch, 'E2E-REGEN-R3')
-    expect(await entryIdByContent(branch, 'E2E-REGEN-U1')).toBeDefined()
+    expect(await entryIdByContent(branch, 'E2E-REGEN-U1')).toBe(userActionId)
   })
 })
