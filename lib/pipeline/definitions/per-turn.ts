@@ -1,6 +1,7 @@
+import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
-import { resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { generateId, IdBiMap } from '@/lib/ids'
 import {
@@ -170,12 +171,25 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // supposed to discard.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   if (streamError !== undefined) {
+    // The envelope message alone ("Failed to process successful response") names
+    // nothing actionable, and this is the only surface the failure reaches — the
+    // orchestrator does not log phase failures.
+    ctx.log.error('provider.narrative_stream_failed', {
+      detail: describeProviderError(streamError),
+      ...(APICallError.isInstance(streamError)
+        ? {
+            statusCode: streamError.statusCode,
+            url: streamError.url,
+            responseBody: streamError.responseBody,
+          }
+        : {}),
+    })
     return {
       status: 'failed',
       error: {
         kind: 'provider',
         reason: 'network',
-        detail: streamError instanceof Error ? streamError.message : String(streamError),
+        detail: describeProviderError(streamError),
       },
     }
   }

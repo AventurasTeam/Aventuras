@@ -15,7 +15,7 @@ export {
 // production call paths go through streamText / generateStructured.
 export { getModel } from './model'
 export { callWithRetry, type CallRetryError } from './transport/call-with-retry'
-export { ProviderTimeoutError } from './transport/classify-provider-error'
+export { describeProviderError, ProviderTimeoutError } from './transport/classify-provider-error'
 export {
   resolveModel,
   type ResolveModelConfig,
