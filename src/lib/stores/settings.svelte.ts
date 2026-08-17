@@ -15,6 +15,7 @@ import type {
   UISettings,
   UpdateSettings,
 } from '$lib/types'
+import { ACTION_CHOICES_PANEL_DEFAULTS, normalizeActionChoicesPanelWidth } from './uiLayoutSettings'
 import { database } from '$lib/services/database'
 import { grammarService } from '$lib/services/grammar'
 import { PROVIDERS } from '$lib/services/ai/sdk/providers/config'
@@ -1196,6 +1197,8 @@ export function getDefaultUISettings(): UISettings {
     showScrollToTop: false,
     showScrollToBottom: true,
     storyMaxWidth: '3xl',
+    actionChoicesSidePanel: ACTION_CHOICES_PANEL_DEFAULTS.enabled,
+    actionChoicesPanelWidth: ACTION_CHOICES_PANEL_DEFAULTS.width,
     highlightDialogue: false,
     dialogueColor: '',
   }
@@ -1572,6 +1575,16 @@ class SettingsStore {
       const storyMaxWidth = await database.getSetting('story_max_width')
       if (storyMaxWidth && VALID_STORY_WIDTH_KEYS.includes(storyMaxWidth))
         this.uiSettings.storyMaxWidth = storyMaxWidth as UISettings['storyMaxWidth']
+
+      const actionChoicesSidePanel = await database.getSetting('action_choices_side_panel')
+      if (actionChoicesSidePanel !== null)
+        this.uiSettings.actionChoicesSidePanel = actionChoicesSidePanel === 'true'
+
+      const actionChoicesPanelWidth = await database.getSetting('action_choices_panel_width')
+      if (actionChoicesPanelWidth !== null)
+        this.uiSettings.actionChoicesPanelWidth = normalizeActionChoicesPanelWidth(
+          Number.parseFloat(actionChoicesPanelWidth),
+        )
 
       const highlightDialogue = await database.getSetting('highlight_dialogue')
       if (highlightDialogue !== null)
@@ -2654,6 +2667,23 @@ class SettingsStore {
     await database.setSetting('story_max_width', width)
   }
 
+  async setActionChoicesSidePanel(enabled: boolean) {
+    this.uiSettings.actionChoicesSidePanel = enabled
+    await database.setSetting('action_choices_side_panel', enabled.toString())
+  }
+
+  /** Update the live layout while dragging; persistence happens once when the control commits. */
+  previewActionChoicesPanelWidth(width: number) {
+    const normalizedWidth = normalizeActionChoicesPanelWidth(width)
+    this.uiSettings.actionChoicesPanelWidth = normalizedWidth
+  }
+
+  async setActionChoicesPanelWidth(width: number) {
+    this.previewActionChoicesPanelWidth(width)
+    const normalizedWidth = this.uiSettings.actionChoicesPanelWidth
+    await database.setSetting('action_choices_panel_width', normalizedWidth.toString())
+  }
+
   /**
    * Publish the dialogue colour to CSS. The toggle and the colour live on the root
    * element, not in the rendered markup: the `<span class="dialogue-line">` wrappers
@@ -3116,6 +3146,15 @@ class SettingsStore {
     await database.setSetting(
       'show_scroll_to_bottom',
       this.uiSettings.showScrollToBottom.toString(),
+    )
+    await database.setSetting('story_max_width', this.uiSettings.storyMaxWidth)
+    await database.setSetting(
+      'action_choices_side_panel',
+      this.uiSettings.actionChoicesSidePanel.toString(),
+    )
+    await database.setSetting(
+      'action_choices_panel_width',
+      this.uiSettings.actionChoicesPanelWidth.toString(),
     )
     await database.setSetting('highlight_dialogue', this.uiSettings.highlightDialogue.toString())
     await database.setSetting('dialogue_color', this.uiSettings.dialogueColor)

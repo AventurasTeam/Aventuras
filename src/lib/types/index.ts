@@ -733,6 +733,10 @@ export interface UISettings {
   showScrollToTop: boolean
   showScrollToBottom: boolean
   storyMaxWidth: '2xl' | '3xl' | '4xl' | '5xl' | '7xl' | '9xl'
+  /** Place adventure action choices beside the story when the viewport is wide enough. */
+  actionChoicesSidePanel: boolean
+  /** Preferred width of the action-choices column, in rem. */
+  actionChoicesPanelWidth: number
   /** Colour quoted speech in story text. Has no effect on Visual Prose stories. */
   highlightDialogue: boolean
   /**

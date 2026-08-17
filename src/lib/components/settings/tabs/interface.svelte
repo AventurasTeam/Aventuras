@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { settings, STORY_WIDTH_OPTIONS } from '$lib/stores/settings.svelte'
+  import { ACTION_CHOICES_PANEL_WIDTH } from '$lib/stores/uiLayoutSettings'
   import { ui } from '$lib/stores/ui.svelte'
   import { database } from '$lib/services/database'
   import { grammarService } from '$lib/services/grammar'
@@ -222,29 +223,73 @@
     </Select.Root>
   </div>
 
-  <!-- Story Content Width -->
-  <div class="space-y-2">
-    <div class="flex items-center justify-between">
-      <Label>Story Content Width</Label>
-      <span class="text-muted-foreground text-sm">
-        {STORY_WIDTH_OPTIONS[storyWidthIndex]?.label ?? 'Default'}
-      </span>
+  <!-- Story Layout -->
+  <div class="space-y-4 rounded-lg border p-3">
+    <Label class="text-base font-medium">Story Layout</Label>
+
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <Label>Story Width</Label>
+        <span class="text-muted-foreground text-sm">
+          {STORY_WIDTH_OPTIONS[storyWidthIndex]?.label ?? 'Default'}
+        </span>
+      </div>
+      <p class="text-muted-foreground text-xs">
+        Maximum width of the story column, action input, and inline images
+      </p>
+      <Slider
+        type="single"
+        min={0}
+        max={STORY_WIDTH_OPTIONS.length - 1}
+        step={1}
+        value={storyWidthIndex}
+        onValueChange={(idx) => settings.setStoryMaxWidth(STORY_WIDTH_OPTIONS[idx].key)}
+      />
+      <div class="text-muted-foreground flex justify-between text-xs">
+        <span>{STORY_WIDTH_OPTIONS[0].label}</span>
+        <span>{STORY_WIDTH_OPTIONS[STORY_WIDTH_OPTIONS.length - 1].label}</span>
+      </div>
     </div>
-    <p class="text-muted-foreground text-xs">
-      Max width of the story area — applies to text and inline images
-    </p>
-    <Slider
-      type="single"
-      min={0}
-      max={STORY_WIDTH_OPTIONS.length - 1}
-      step={1}
-      value={storyWidthIndex}
-      onValueChange={(idx) => settings.setStoryMaxWidth(STORY_WIDTH_OPTIONS[idx].key)}
-    />
-    <div class="text-muted-foreground flex justify-between text-xs">
-      <span>{STORY_WIDTH_OPTIONS[0].label}</span>
-      <span>{STORY_WIDTH_OPTIONS[STORY_WIDTH_OPTIONS.length - 1].label}</span>
+
+    <div class="flex items-center justify-between gap-4">
+      <div>
+        <Label>Action Choices Side Panel</Label>
+        <p class="text-muted-foreground text-xs">
+          On wide windows, show adventure choices beside the story instead of below it
+        </p>
+      </div>
+      <Switch
+        checked={settings.uiSettings.actionChoicesSidePanel}
+        onCheckedChange={(v) => settings.setActionChoicesSidePanel(v)}
+      />
     </div>
+
+    {#if settings.uiSettings.actionChoicesSidePanel}
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <Label>Action Choices Width</Label>
+          <span class="text-muted-foreground text-sm">
+            {settings.uiSettings.actionChoicesPanelWidth} rem
+          </span>
+        </div>
+        <p class="text-muted-foreground text-xs">
+          Preferred width of the choices column; it can shrink when window space is limited
+        </p>
+        <Slider
+          type="single"
+          min={ACTION_CHOICES_PANEL_WIDTH.min}
+          max={ACTION_CHOICES_PANEL_WIDTH.max}
+          step={1}
+          value={settings.uiSettings.actionChoicesPanelWidth}
+          onValueChange={(width) => settings.previewActionChoicesPanelWidth(width)}
+          onValueCommit={(width) => settings.setActionChoicesPanelWidth(width)}
+        />
+        <div class="text-muted-foreground flex justify-between text-xs">
+          <span>{ACTION_CHOICES_PANEL_WIDTH.min} rem</span>
+          <span>{ACTION_CHOICES_PANEL_WIDTH.max} rem</span>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Word Count Toggle -->

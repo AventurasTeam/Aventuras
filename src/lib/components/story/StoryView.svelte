@@ -13,12 +13,22 @@
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { eventBus, type BranchSwitchedEvent } from '$lib/services/events'
 
-  const storyMaxWidthStyle = $derived.by(() => {
+  const storyWidthStyle = $derived.by(() => {
     const maxWidth =
       STORY_WIDTH_OPTIONS.find((o) => o.key === settings.uiSettings.storyMaxWidth)?.maxWidth ??
       '48rem'
-    return `max-width: ${maxWidth}`
+    return `--story-max-width: ${maxWidth}; --choice-panel-width: ${settings.uiSettings.actionChoicesPanelWidth}rem`
   })
+
+  const actionChoicesAvailable = $derived(
+    story.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions,
+  )
+
+  const sidePanelLayoutEnabled = $derived(
+    actionChoicesAvailable && settings.uiSettings.actionChoicesSidePanel,
+  )
+
+  const showActionChoices = $derived(actionChoicesAvailable && !ui.isStreaming && !ui.isGenerating)
 
   let storyContainer: HTMLDivElement
   let containerHeight = $state(0)
@@ -463,7 +473,7 @@
   })
 </script>
 
-<div class="relative flex h-full flex-col overflow-hidden">
+<div class="story-view relative flex h-full flex-col overflow-hidden">
   <!-- Background Image Layer -->
   {#if story.currentBgImage}
     {#key story.currentBgImage}
@@ -490,82 +500,94 @@
     onscroll={handleScroll}
   >
     <div
-      class="mx-auto space-y-2.5 sm:space-y-3"
-      style={storyMaxWidthStyle}
+      class="story-layout mx-auto w-full {sidePanelLayoutEnabled ? 'with-choice-column' : ''}"
+      style={storyWidthStyle}
       bind:clientHeight={innerHeight}
     >
-      {#if story.entries.length === 0 && !ui.isStreaming}
-        <EmptyState
-          icon={BookOpen}
-          title="Your adventure begins here..."
-          description="Type an action below to start your story."
-          class="py-12 sm:py-20"
-        />
-      {:else}
-        <!-- Show collapsed entries indicator if there are hidden entries at top -->
-        {#if displayedEntries.hiddenAtTop > 0}
-          <div class="border-border mb-3 flex flex-col items-center gap-2 border-b py-3">
-            <p class="text-muted-foreground text-sm">
-              {displayedEntries.hiddenAtTop} earlier entries hidden for performance
-            </p>
-            <div class="flex flex-row gap-2">
-              <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreAbove}>
-                Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtTop)} more
-              </Button>
-              {#if !settings.uiSettings.showScrollToTop}
-                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={scrollToTop}>
-                  Go to top
+      <div class="story-column space-y-2.5 sm:space-y-3">
+        {#if story.entries.length === 0 && !ui.isStreaming}
+          <EmptyState
+            icon={BookOpen}
+            title="Your adventure begins here..."
+            description="Type an action below to start your story."
+            class="py-12 sm:py-20"
+          />
+        {:else}
+          <!-- Show collapsed entries indicator if there are hidden entries at top -->
+          {#if displayedEntries.hiddenAtTop > 0}
+            <div class="border-border mb-3 flex flex-col items-center gap-2 border-b py-3">
+              <p class="text-muted-foreground text-sm">
+                {displayedEntries.hiddenAtTop} earlier entries hidden for performance
+              </p>
+              <div class="flex flex-row gap-2">
+                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreAbove}>
+                  Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtTop)} more
                 </Button>
-              {/if}
+                {#if !settings.uiSettings.showScrollToTop}
+                  <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={scrollToTop}>
+                    Go to top
+                  </Button>
+                {/if}
+              </div>
             </div>
-          </div>
+          {/if}
+
+          {#each displayedEntries.entries as entry (entry.id)}
+            <!-- data-entry-id lets branch-switch landing locate a specific entry element -->
+            <div data-entry-id={entry.id}>
+              <StoryEntry {entry} />
+            </div>
+          {/each}
+
+          <!-- Show streaming entry while generating -->
+          {#if ui.isStreaming}
+            <StreamingEntry />
+          {/if}
+
+          <!-- Show post-generation status (e.g. Updating world...) -->
+          {#if ui.isGenerating && !ui.isStreaming && ui.generationStatus}
+            <div
+              class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
+            >
+              <Loader2 class="h-4 w-4 animate-spin" />
+              <span class="text-sm">{ui.generationStatus}</span>
+            </div>
+          {/if}
+
+          {#if showActionChoices && !sidePanelLayoutEnabled}
+            <ActionChoices />
+          {/if}
+
+          <!-- Show collapsed entries indicator if there are hidden entries at bottom -->
+          {#if displayedEntries.hiddenAtBottom > 0}
+            <div class="border-border mt-3 flex flex-col items-center gap-2 border-t py-3">
+              <p class="text-muted-foreground text-sm">
+                {displayedEntries.hiddenAtBottom} later entries hidden for performance
+              </p>
+              <div class="flex flex-row gap-2">
+                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreBelow}>
+                  Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtBottom)} more
+                </Button>
+                {#if !settings.uiSettings.showScrollToBottom}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    class="h-7 text-xs"
+                    onclick={scrollToBottom}
+                  >
+                    Go to bottom
+                  </Button>
+                {/if}
+              </div>
+            </div>
+          {/if}
         {/if}
+      </div>
 
-        {#each displayedEntries.entries as entry (entry.id)}
-          <!-- data-entry-id lets branch-switch landing locate a specific entry element -->
-          <div data-entry-id={entry.id}>
-            <StoryEntry {entry} />
-          </div>
-        {/each}
-
-        <!-- Show streaming entry while generating -->
-        {#if ui.isStreaming}
-          <StreamingEntry />
-        {/if}
-
-        <!-- Show post-generation status (e.g. Updating world...) -->
-        {#if ui.isGenerating && !ui.isStreaming && ui.generationStatus}
-          <div
-            class="text-muted-foreground animate-fade-in flex items-center justify-center gap-2 py-2"
-          >
-            <Loader2 class="h-4 w-4 animate-spin" />
-            <span class="text-sm">{ui.generationStatus}</span>
-          </div>
-        {/if}
-
-        <!-- Show RPG-style action choices after narration (adventure mode only) -->
-        {#if !ui.isStreaming && !ui.isGenerating && story.storyMode === 'adventure' && !settings.uiSettings.disableSuggestions}
+      {#if showActionChoices && sidePanelLayoutEnabled}
+        <aside class="choice-column" aria-label="Action choices">
           <ActionChoices />
-        {/if}
-
-        <!-- Show collapsed entries indicator if there are hidden entries at bottom -->
-        {#if displayedEntries.hiddenAtBottom > 0}
-          <div class="border-border mt-3 flex flex-col items-center gap-2 border-t py-3">
-            <p class="text-muted-foreground text-sm">
-              {displayedEntries.hiddenAtBottom} later entries hidden for performance
-            </p>
-            <div class="flex flex-row gap-2">
-              <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={showMoreBelow}>
-                Show {Math.min(LOAD_MORE_BATCH, displayedEntries.hiddenAtBottom)} more
-              </Button>
-              {#if !settings.uiSettings.showScrollToBottom}
-                <Button variant="secondary" size="sm" class="h-7 text-xs" onclick={scrollToBottom}>
-                  Go to bottom
-                </Button>
-              {/if}
-            </div>
-          </div>
-        {/if}
+        </aside>
       {/if}
     </div>
 
@@ -616,8 +638,51 @@
       ? 'bg-background/60 backdrop-blur-md'
       : 'bg-card'}"
   >
-    <div class="mx-auto" style={storyMaxWidthStyle}>
-      <ActionInput />
+    <div
+      class="story-input-layout mx-auto w-full {sidePanelLayoutEnabled ? 'with-choice-column' : ''}"
+      style={storyWidthStyle}
+    >
+      <div class="story-input-column">
+        <ActionInput />
+      </div>
     </div>
   </div>
 </div>
+
+<style>
+  .story-view {
+    container-name: story-view;
+    container-type: inline-size;
+  }
+
+  .story-layout,
+  .story-input-layout {
+    max-width: var(--story-max-width);
+  }
+
+  .story-column {
+    min-width: 0;
+  }
+
+  @container story-view (min-width: 88rem) {
+    .story-layout.with-choice-column,
+    .story-input-layout.with-choice-column {
+      display: grid;
+      grid-template-columns: minmax(32rem, 1fr) minmax(16rem, var(--choice-panel-width));
+      gap: 1.5rem;
+      max-width: calc(var(--story-max-width) + var(--choice-panel-width) + 1.5rem);
+    }
+
+    .choice-column {
+      position: sticky;
+      bottom: 0.5rem;
+      grid-column: 2;
+      min-width: 0;
+      align-self: end;
+    }
+
+    .story-input-column {
+      grid-column: 1;
+    }
+  }
+</style>
