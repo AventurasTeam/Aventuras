@@ -582,11 +582,23 @@
   background-color: var(--fg-secondary);
 }
 
-/* Narrative markdown render — mirrors lib/markdown/native.ts's
- * narrativeTagsStyles for cross-platform parity (docs/tech-stack.md ->
- * Markdown rendering + HTML sanitization).
+/* Narrative markdown render — kept in parity with rich-entry-content.tsx's
+ * BASELINE_CSS, which restates these as bare element selectors because a
+ * document class selector can't reach into the rich path's shadow tree
+ * (docs/tech-stack.md -> Markdown rendering + HTML sanitization).
  */
 @layer components {
+  /* Nothing between here and the reader's scroller clips overflow, so unwrapped
+   * content escapes the entry card and gives that scroller a horizontal axis.
+   * `overflow-wrap` inherits, covering long unbroken model tokens everywhere;
+   * `pre` additionally needs its default `white-space: pre` relaxed, since
+   * indented reasoning streams parse as code blocks. */
+  .narrative-html {
+    overflow-wrap: break-word;
+  }
+  .narrative-html pre {
+    white-space: pre-wrap;
+  }
   .narrative-html p {
     margin-top: 4px;
     margin-bottom: 4px;

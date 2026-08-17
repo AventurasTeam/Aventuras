@@ -229,6 +229,62 @@ export const ReasoningTogglesOnBrainClick: StoryT = {
   },
 }
 
+// Nothing between the narrative island and the reader's scroller clips
+// overflow, so anything that refuses to wrap escapes the card and gives that
+// scroller a horizontal axis. scrollWidth reports overflowing content even
+// under overflow: visible, which is what makes the leak measurable here.
+async function expectReasoningStaysInsideCard(canvasElement: HTMLElement) {
+  await userEvent.click(screen.getByRole('button', { name: 'Show reasoning' }))
+  const island = await waitFor(() => {
+    const found = canvasElement.querySelector<HTMLElement>('.narrative-html')
+    expect(found).not.toBeNull()
+    return found as HTMLElement
+  })
+  expect(island.scrollWidth).toBeLessThanOrEqual(island.clientWidth)
+}
+
+/**
+ * Reasoning streams arrive indented, which `marked` reads as an indented code
+ * block — and `<pre>` defaults to `white-space: pre`, which suppresses line
+ * breaking outright.
+ */
+export const ReasoningIndentedBlockWraps: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    content: 'The floorboards were cool beneath her bare feet.',
+    meta: aiMeta,
+    reasoning: `Maya [c1].
+Write the next beat as prose. Do not break character or address the reader.
+
+    *   *Current state:* Maya is moving from her bedroom to the kitchen.
+    *   *Goal:* Expand on the sensory details of the walk and her arrival in the kitchen, maintaining the established "mundane" and "safe" tone, while potentially hinting at something.
+`,
+  },
+  play: async ({ canvasElement }) => {
+    await expectReasoningStaysInsideCard(canvasElement)
+  },
+}
+
+/**
+ * The second escape route, independent of the code-block one: an unbroken run
+ * of characters has no break opportunity for normal wrapping to take.
+ */
+export const ReasoningLongTokenWraps: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    kind: 'ai_reply',
+    content: 'The floorboards were cool beneath her bare feet.',
+    meta: aiMeta,
+    reasoning: `Considering the retrieval key ${'x'.repeat(400)} before drafting.`,
+  },
+  play: async ({ canvasElement }) => {
+    await expectReasoningStaysInsideCard(canvasElement)
+  },
+}
+
 export const SystemRetryFires: StoryT = {
   ...wrap,
   args: {
