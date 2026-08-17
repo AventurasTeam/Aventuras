@@ -281,7 +281,8 @@
           max={ACTION_CHOICES_PANEL_WIDTH.max}
           step={1}
           value={settings.uiSettings.actionChoicesPanelWidth}
-          onValueChange={(width) => settings.setActionChoicesPanelWidth(width)}
+          onValueChange={(width) => settings.previewActionChoicesPanelWidth(width)}
+          onValueCommit={(width) => settings.setActionChoicesPanelWidth(width)}
         />
         <div class="text-muted-foreground flex justify-between text-xs">
           <span>{ACTION_CHOICES_PANEL_WIDTH.min} rem</span>

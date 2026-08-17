@@ -2672,9 +2672,15 @@ class SettingsStore {
     await database.setSetting('action_choices_side_panel', enabled.toString())
   }
 
-  async setActionChoicesPanelWidth(width: number) {
+  /** Update the live layout while dragging; persistence happens once when the control commits. */
+  previewActionChoicesPanelWidth(width: number) {
     const normalizedWidth = normalizeActionChoicesPanelWidth(width)
     this.uiSettings.actionChoicesPanelWidth = normalizedWidth
+  }
+
+  async setActionChoicesPanelWidth(width: number) {
+    this.previewActionChoicesPanelWidth(width)
+    const normalizedWidth = this.uiSettings.actionChoicesPanelWidth
     await database.setSetting('action_choices_panel_width', normalizedWidth.toString())
   }
 
