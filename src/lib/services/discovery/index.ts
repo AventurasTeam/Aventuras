@@ -17,25 +17,29 @@ interface ProviderPaginationState {
   hasMore: boolean
 }
 
-class DiscoveryService {
+export class DiscoveryService {
   private providers: Map<string, DiscoveryProvider> = new Map()
   private allModeState: Map<string, ProviderPaginationState> = new Map()
-  private lastAllModeOptions: {
-    query: string
-    tags?: string[]
-    type: 'character' | 'lorebook' | 'scenario'
-  } | null = null
+  private lastAllModeOptions:
+    | (Omit<SearchOptions, 'page' | 'limit'> & {
+        type: 'character' | 'lorebook' | 'scenario'
+      })
+    | null = null
 
-  constructor() {
-    this.registerProvider(new ChubProvider())
-    this.registerProvider(new JannyProvider())
-    this.registerProvider(new BackyardProvider())
-    this.registerProvider(new CharacterTavernProvider())
-    this.registerProvider(new RisuRealmProvider())
-    this.registerProvider(new WyvernProvider())
-    this.registerProvider(new PygmalionProvider())
-    this.registerProvider(new MlpchagProvider())
-    this.registerProvider(new QuillGenProvider())
+  constructor(
+    providers: DiscoveryProvider[] = [
+      new ChubProvider(),
+      new JannyProvider(),
+      new BackyardProvider(),
+      new CharacterTavernProvider(),
+      new RisuRealmProvider(),
+      new WyvernProvider(),
+      new PygmalionProvider(),
+      new MlpchagProvider(),
+      new QuillGenProvider(),
+    ],
+  ) {
+    for (const provider of providers) this.registerProvider(provider)
   }
 
   registerProvider(provider: DiscoveryProvider): void {
@@ -80,7 +84,8 @@ class DiscoveryService {
 
     // Reset pagination state for new search
     this.allModeState.clear()
-    this.lastAllModeOptions = { query: options.query, tags: options.tags, type }
+    const { page: _page, limit: _limit, ...stableOptions } = options
+    this.lastAllModeOptions = { ...stableOptions, type }
 
     // Search all providers in parallel
     const results = await Promise.allSettled(
@@ -157,6 +162,8 @@ class DiscoveryService {
           {
             query: this.lastAllModeOptions!.query,
             tags: this.lastAllModeOptions!.tags,
+            sort: this.lastAllModeOptions!.sort,
+            nsfw: this.lastAllModeOptions!.nsfw,
             page: state.nextPage,
             limit,
           },
