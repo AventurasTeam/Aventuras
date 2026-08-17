@@ -12,6 +12,7 @@ import {
   type CalendarSystem,
   type TierTuple,
 } from '@/lib/calendar'
+import { t } from '@/lib/i18n'
 
 /** Presence renders the warning; the label names the predecessor entry. */
 export type MonotonicityBreak = { previousLabel: string }
@@ -33,14 +34,9 @@ type WorldTimeEditFormProps = {
   onCancel: () => void
 }
 
-const BELOW_ORIGIN_MESSAGE = 'Time cannot be before the story start.'
-const TOO_FAR_MESSAGE = 'That time is too far from the current value.'
-
-// A conversion walks the top tier from its startValue, so only years past the
-// seed are uncached work. Measured on desktop against earth-gregorian: ~11ms per
-// 2000 years, ~20ms per 4000; Hermes is slower, and a calendar with a coarser
-// top tier costs more per unit. Capped near a frame — uncapped, a mistyped
-// `20240101` blocks the UI thread for minutes.
+// The conversion walks the top tier, and only units past the seed are uncached
+// work: ~11ms per 2000 years. Uncapped, a mistyped `20240101` blocks the UI
+// thread for minutes.
 const MAX_TOP_TIER_SPAN = 2000
 
 function tuplesEqual(a: TierTuple, b: TierTuple, calendar: CalendarSystem): boolean {
@@ -72,7 +68,11 @@ export function WorldTimeEditForm({
     if (!validity.ok) {
       return {
         next: null,
-        tierError: `Enter a valid ${validity.tier} between ${validity.min} and ${validity.max}.`,
+        tierError: t('reader:worldTimeEdit.invalidTier', {
+          tier: validity.tier,
+          min: validity.min,
+          max: validity.max,
+        }),
         rangeError: null,
       }
     }
@@ -83,14 +83,14 @@ export function WorldTimeEditForm({
     // purpose — a value below the seed is entirely cached, hence cheap.
     const topTier = calendar.tiers[0].name
     if (tuple[topTier] - seedTuple[topTier] >= MAX_TOP_TIER_SPAN) {
-      return { next: null, tierError: null, rangeError: TOO_FAR_MESSAGE }
+      return { next: null, tierError: null, rangeError: t('reader:worldTimeEdit.tooFar') }
     }
 
     const seconds = tupleToWorldTime(tuple, calendar, origin)
     return {
       next: seconds,
       tierError: null,
-      rangeError: seconds < 0 ? BELOW_ORIGIN_MESSAGE : null,
+      rangeError: seconds < 0 ? t('reader:worldTimeEdit.belowOrigin') : null,
     }
   }, [tuple, calendar, origin, seedTuple])
 
@@ -117,7 +117,9 @@ export function WorldTimeEditForm({
           className="rounded-md border border-warning bg-bg-sunken p-2"
         >
           <Text size="xs" className="text-warning">
-            ⚠ Earlier than previous entry ({monotonicityBreak.previousLabel})
+            {`⚠ ${t('reader:worldTimeEdit.monotonicityBreak', {
+              previousLabel: monotonicityBreak.previousLabel,
+            })}`}
           </Text>
         </View>
       ) : null}
@@ -138,7 +140,7 @@ export function WorldTimeEditForm({
       ) : null}
       <View className="flex-row justify-end gap-2">
         <Button variant="ghost" size="sm" onPress={onCancel} disabled={saving}>
-          <Text>Cancel</Text>
+          <Text>{t('cancel')}</Text>
         </Button>
         <Button
           variant="primary"
@@ -148,7 +150,7 @@ export function WorldTimeEditForm({
           loading={saving}
           disabledReason={blockReason}
         >
-          <Text>Save</Text>
+          <Text>{t('save')}</Text>
         </Button>
       </View>
     </View>

@@ -42,7 +42,12 @@ beforeEach(() => {
   vi.spyOn(logger, 'warn').mockImplementation(() => {})
   vi.spyOn(logger, 'error').mockImplementation(() => {})
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // `logger` is a singleton: a spy left on it accumulates calls across tests,
+  // so a later assertion can be satisfied by an earlier test's call.
+  vi.restoreAllMocks()
+})
 
 // No default parameter for `calendarId`: passing `undefined` explicitly is the
 // case under test, and a default would silently swallow it.

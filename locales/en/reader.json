@@ -57,9 +57,32 @@
     "irreversible": "This cannot be undone.",
     "confirm": "Delete entries"
   },
+  "entryCard": {
+    "you": "You",
+    "system": "System",
+    "showReasoning": "Show reasoning",
+    "hideReasoning": "Hide reasoning",
+    "showState": "Show state",
+    "hideState": "Hide state",
+    "stateBlock": "World state block",
+    "thinking": "Thinking…",
+    "generating": "Generating…",
+    "tokens": "{{n}} tokens",
+    "tokensWithReasoning": "{{n}} tokens (+{{reasoning}} reasoning)",
+    "editEntry": "Edit entry",
+    "editContent": "Edit entry content",
+    "regenerate": "Regenerate",
+    "branchFromHere": "Branch from here",
+    "flipEra": "Flip era",
+    "deleteEntry": "Delete entry"
+  },
   "worldTimeEdit": {
     "title": "Edit time",
-    "failed": "Couldn't update the entry's time."
+    "failed": "Couldn't update the entry's time.",
+    "monotonicityBreak": "Earlier than previous entry ({{previousLabel}})",
+    "belowOrigin": "Time cannot be before the story start.",
+    "tooFar": "That time is too far from the current value.",
+    "invalidTier": "Enter a valid {{tier}} between {{min}} and {{max}}."
   },
   "systemEntry": {
     "retry": "Retry",

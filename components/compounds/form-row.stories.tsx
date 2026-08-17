@@ -180,10 +180,8 @@ export const ErrorReplacesHint: Story = {
 }
 
 /**
- * Stacked rows put the hint above the control and the error below it
- * (forms.md → Stacked-row visual treatment). Asserted as document order
- * rather than by eye: the error reading above the input is the exact
- * regression this pins, and it is invisible to a presence-only check.
+ * Asserted as document order, not presence: an error reading above the input is
+ * the regression this pins (forms.md → Stacked-row visual treatment).
  */
 export const StackedErrorSitsBelowTheControl: Story = {
   render: () => (

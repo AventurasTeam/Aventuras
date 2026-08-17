@@ -373,41 +373,6 @@ slice-planning gate forces its resolution before that slice is planned.
   packaged-green until that's fixed, and there is no clean in-app route to
   a non-existent branch. Surfaced by the M3 E2E harness work (2026-07-24),
   narrowed by the coverage-expansion pass (2026-07-24).
-- **`EntryCard` action controls are not internationalized.**
-  `components/compounds/entry-card.tsx` hardcodes English on its per-row
-  controls — `Edit entry`, `Delete entry`, `Regenerate`, `Branch from
-here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
-  `Cancel`, and the system-entry `Retry` / `Dismiss` — rather than routing
-  through `t()` like the rest of the chrome. No user-facing regression yet
-  (English-only today), but it breaks the i18n discipline and forces E2E to
-  match literals: `e2e/locators/reader.ts` centralizes them so the eventual
-  i18n pass is a one-line locator change. Fix is to move the strings into
-  the `reader` / `common` namespaces and swap the locators to `t()`.
-  Surfaced by the coverage-expansion pass (2026-07-24). **Grew in Slice
-  3.8 (2026-08-15):** the world-time edit overlay's strings — the
-  monotonicity banner, the below-origin and out-of-range messages, and
-  the footer's `Edit time` control — follow the same hardcoded pattern,
-  in `components/compounds/world-time-edit-form.tsx` as well as
-  `entry-card.tsx`. That slice considered converting just the new
-  component and decided against it: the monotonicity sentence renders
-  from both files, so a partial migration would split one string across
-  two sources and invite drift. Two corrections for whoever does the
-  pass, because 3.8's planning recorded both wrongly and nearly
-  propagated them: this entry is a **defect**, not a sanctioned
-  exception to cite, and the reader document bundle **can** reach
-  `t()` — `components/reader/jump-buttons.tsx`, `composer.tsx` and
-  `suggestion-strip.tsx` all render inside the document and call it. The
-  overlay is the sharpest case for fixing this, since its host chrome
-  (Sheet `aria-label`, failure toast) is already `t()`-routed, leaving
-  one overlay half-translated. One correction to 3.8's own reasoning,
-  found in the final review: it declined to convert just the form
-  because that _would_ split the monotonicity sentence across two
-  sources — but the sentence is already built independently in both
-  `entry-card.tsx` (for the indicator's label and tooltip) and
-  `world-time-edit-form.tsx` (for the banner). The i18n verdict still
-  holds, but the stated reason is weaker than it reads, and the two
-  literals can drift. Stories and the E2E assert both today, so drift
-  would be caught; unifying them is part of the pass.
 - **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
   `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
   `{{ entry.content }}` (inside the `recentEntries` loop) renders the

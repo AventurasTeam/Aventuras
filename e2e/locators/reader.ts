@@ -2,22 +2,19 @@ import type { Locator, Page } from '@playwright/test'
 
 import { t } from '../harness/i18n'
 
-// Reader/composer locators. Most resolve through the app's own i18n keys
-// (docs/testing.md → Selector strategy, Tier 2). The exceptions are the
-// EntryCard per-row action controls, which the component hardcodes in English
-// (not `t()` — see docs/implementation/triage.md). They're centralized here so
-// a future i18n pass is a one-line change, and the literals still match the
-// app's real accessible output today. One is a RegExp rather than a literal:
-// the monotonicity label interpolates the predecessor's formatted time, so only
-// its fixed lead-in can be matched.
-const EDIT_ENTRY_LABEL = 'Edit entry'
-const DELETE_ENTRY_LABEL = 'Delete entry'
-const EDIT_TEXTAREA_LABEL = 'Edit entry content'
-const SAVE_LABEL = 'Save'
-const RETRY_LABEL = 'Retry'
-const DISMISS_LABEL = 'Dismiss'
-const EDIT_TIME_LABEL = 'Edit time'
-const WORLD_TIME_BREAK_LABEL = /Earlier than previous entry/
+// Reader/composer locators, resolved through the app's own i18n keys
+// (docs/testing.md → Selector strategy, Tier 2).
+
+// The monotonicity label interpolates the predecessor's formatted time, which
+// no caller knows, so only the lead-in before it can be matched. Cut at a
+// sentinel rather than at the punctuation around it, so the key's shape is free
+// to change.
+const BREAK_SENTINEL = '@@'
+const WORLD_TIME_BREAK_LABEL = new RegExp(
+  t('reader:worldTimeEdit.monotonicityBreak', { previousLabel: BREAK_SENTINEL })
+    .split(BREAK_SENTINEL)[0]
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+)
 
 export const reader = {
   composer: (page: Page): Locator => page.getByPlaceholder(t('reader:composerPlaceholder')),
@@ -36,21 +33,23 @@ export const reader = {
   // a stable DOM scope anchor — no component change needed.
   row: (page: Page, entryId: string): Locator => page.locator(`[data-entry-row="${entryId}"]`),
   editEntry: (page: Page, entryId: string): Locator =>
-    reader.row(page, entryId).getByRole('button', { name: EDIT_ENTRY_LABEL }),
+    reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
   deleteEntry: (page: Page, entryId: string): Locator =>
-    reader.row(page, entryId).getByRole('button', { name: DELETE_ENTRY_LABEL }),
-  editTextarea: (page: Page): Locator => page.getByRole('textbox', { name: EDIT_TEXTAREA_LABEL }),
-  saveEdit: (page: Page): Locator => page.getByRole('button', { name: SAVE_LABEL }),
+    reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+  editTextarea: (page: Page): Locator =>
+    page.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
+  saveEdit: (page: Page): Locator => page.getByRole('button', { name: t('save') }),
 
   // Per-entry world-time footer. Desktop tier hosts the edit form in a centred
   // Dialog; the phone tier bridges out to a native Sheet, which desktop-only
   // E2E never reaches.
   worldTimeFooter: (page: Page, entryId: string): Locator =>
-    reader.row(page, entryId).getByRole('button', { name: EDIT_TIME_LABEL }),
+    reader.row(page, entryId).getByRole('button', { name: t('reader:worldTimeEdit.title') }),
   // One node, named by DialogTitle — no `.first()`. The desktop overlay is a
   // modal, so a second one cannot be open to disambiguate against; strict mode
   // catching that is the point.
-  worldTimeDialog: (page: Page): Locator => page.getByRole('dialog', { name: EDIT_TIME_LABEL }),
+  worldTimeDialog: (page: Page): Locator =>
+    page.getByRole('dialog', { name: t('reader:worldTimeEdit.title') }),
   // Tier names are calendar-authored content (earth-gregorian: Year / Month /
   // Day / Hour / Minute / Second), capitalized for display by TierTupleInput.
   // Numeric only, hence the name: a labelled tier (Month) renders a Select with
@@ -59,13 +58,15 @@ export const reader = {
   worldTimeNumericField: (page: Page, tier: string): Locator =>
     reader.worldTimeDialog(page).getByRole('textbox', { name: tier }),
   worldTimeSave: (page: Page): Locator =>
-    reader.worldTimeDialog(page).getByRole('button', { name: SAVE_LABEL }),
+    reader.worldTimeDialog(page).getByRole('button', { name: t('save') }),
   monotonicityIndicator: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByLabel(WORLD_TIME_BREAK_LABEL),
 
   // System (turn-failure) entry actions.
-  retrySystemEntry: (page: Page): Locator => page.getByRole('button', { name: RETRY_LABEL }),
-  dismissSystemEntry: (page: Page): Locator => page.getByRole('button', { name: DISMISS_LABEL }),
+  retrySystemEntry: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:systemEntry.retry') }),
+  dismissSystemEntry: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:systemEntry.dismiss') }),
 
   // The chrome actions menu (IconAction trigger; on web the accessible name
   // carries the "(Ctrl+K)" shortcut hint, so match on the base label). Undo /

@@ -62,9 +62,7 @@ export function FormRow({
             {label}
             {requiredMark}
           </Text>
-          {/* Hint sits above the control (forms.md → Stacked-row visual
-              treatment) but the error sits below it, next to what produced
-              it — same side as the two-column layout puts it. */}
+          {/* Hint above, error below — forms.md → Stacked-row visual treatment. */}
           {error == null && hint != null ? (
             <Text className="text-xs text-fg-secondary">{hint}</Text>
           ) : null}

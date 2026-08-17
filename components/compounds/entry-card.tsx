@@ -225,7 +225,9 @@ function WorldTimeFooter({
 
   const breakText =
     monotonicityBreak != null
-      ? `Earlier than previous entry (${monotonicityBreak.previousLabel})`
+      ? t('reader:worldTimeEdit.monotonicityBreak', {
+          previousLabel: monotonicityBreak.previousLabel,
+        })
       : null
 
   // `onEditTime == null` also routes to the request fork: the Dialog's Save has
@@ -383,14 +385,14 @@ export function EntryCard({
         {kind === 'user_action' ? (
           <View className="rounded-sm bg-fg-primary px-2 py-0.5">
             <Text size="xs" className="font-medium text-bg-base">
-              You
+              {t('reader:entryCard.you')}
             </Text>
           </View>
         ) : kind === 'system' ? (
           <>
             <Icon as={AlertTriangle} size="sm" className="shrink-0 text-warning" />
             <Text size="xs" className="font-medium text-warning">
-              System
+              {t('reader:entryCard.system')}
             </Text>
           </>
         ) : (
@@ -403,7 +405,11 @@ export function EntryCard({
                 <Pulsing>
                   <IconAction
                     icon={Brain}
-                    label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                    label={t(
+                      expanded
+                        ? 'reader:entryCard.hideReasoning'
+                        : 'reader:entryCard.showReasoning',
+                    )}
                     size="sm"
                     onPress={() => setExpanded((v) => !v)}
                   />
@@ -411,7 +417,9 @@ export function EntryCard({
               ) : (
                 <IconAction
                   icon={Brain}
-                  label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                  label={t(
+                    expanded ? 'reader:entryCard.hideReasoning' : 'reader:entryCard.showReasoning',
+                  )}
                   size="sm"
                   onPress={() => setExpanded((v) => !v)}
                 />
@@ -420,19 +428,29 @@ export function EntryCard({
             {hasState ? (
               <IconAction
                 icon={Globe}
-                label={stateExpanded ? 'Hide state' : 'Show state'}
+                label={t(
+                  stateExpanded ? 'reader:entryCard.hideState' : 'reader:entryCard.showState',
+                )}
                 size="sm"
                 onPress={() => setStateExpanded((v) => !v)}
               />
             ) : null}
             {kind === 'streaming' ? (
               <Text size="xs" variant="muted" className="leading-none">
-                {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
+                {t(
+                  streamingPhase === 'reasoning'
+                    ? 'reader:entryCard.thinking'
+                    : 'reader:entryCard.generating',
+                )}
               </Text>
             ) : meta?.tokens != null ? (
               <Text size="xs" variant="muted" className="leading-none">
-                {meta.tokens.completion} tokens
-                {meta.tokens.reasoning != null ? ` (+${meta.tokens.reasoning} reasoning)` : ''}
+                {meta.tokens.reasoning != null
+                  ? t('reader:entryCard.tokensWithReasoning', {
+                      n: meta.tokens.completion,
+                      reasoning: meta.tokens.reasoning,
+                    })
+                  : t('reader:entryCard.tokens', { n: meta.tokens.completion })}
               </Text>
             ) : null}
           </>
@@ -450,7 +468,7 @@ export function EntryCard({
       {hasState && stateExpanded && !editing ? (
         <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
           <Text size="xs" variant="muted" className="mb-1 font-medium">
-            World state block
+            {t('reader:entryCard.stateBlock')}
           </Text>
           <Text size="xs" className="font-mono text-fg-muted">
             {stateRaw}
@@ -465,17 +483,17 @@ export function EntryCard({
             onChangeText={onContentChange}
             editable={!disabled}
             autoFocus
-            aria-label="Edit entry content"
+            aria-label={t('reader:entryCard.editContent')}
             onKeyPress={(e) => {
               if (e.nativeEvent.key === 'Escape') onCancelEdit?.()
             }}
           />
           <View className="flex-row justify-end gap-2">
             <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={disabled}>
-              <Text>Cancel</Text>
+              <Text>{t('cancel')}</Text>
             </Button>
             <Button variant="primary" size="sm" onPress={onCommitEdit} disabled={disabled}>
-              <Text>Save</Text>
+              <Text>{t('save')}</Text>
             </Button>
           </View>
         </View>
@@ -502,13 +520,13 @@ export function EntryCard({
               {onRetry != null ? (
                 <Button variant="secondary" size="sm" onPress={onRetry} disabled={disabled}>
                   <Icon as={RefreshCw} size="sm" />
-                  <Text>Retry</Text>
+                  <Text>{t('reader:systemEntry.retry')}</Text>
                 </Button>
               ) : null}
               {onDismiss != null ? (
                 <Button variant="ghost" size="sm" onPress={onDismiss} disabled={disabled}>
                   <Icon as={X} size="sm" />
-                  <Text>Dismiss</Text>
+                  <Text>{t('reader:systemEntry.dismiss')}</Text>
                 </Button>
               ) : null}
             </View>
@@ -526,7 +544,7 @@ export function EntryCard({
           {onEdit != null ? (
             <IconAction
               icon={Pencil}
-              label="Edit entry"
+              label={t('reader:entryCard.editEntry')}
               size="sm"
               onPress={onEdit}
               disabled={disabled}
@@ -536,7 +554,7 @@ export function EntryCard({
           {onRegen != null && kind === 'ai_reply' ? (
             <IconAction
               icon={RefreshCw}
-              label="Regenerate"
+              label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
               disabled={disabled}
@@ -546,7 +564,7 @@ export function EntryCard({
           {onBranch != null && (kind === 'ai_reply' || kind === 'opening') ? (
             <IconAction
               icon={GitBranch}
-              label="Branch from here"
+              label={t('reader:entryCard.branchFromHere')}
               size="sm"
               onPress={onBranch}
               disabled={disabled}
@@ -556,7 +574,7 @@ export function EntryCard({
           {onFlipEra != null ? (
             <IconAction
               icon={ArrowLeftRight}
-              label="Flip era"
+              label={t('reader:entryCard.flipEra')}
               size="sm"
               onPress={onFlipEra}
               disabled={disabled}
@@ -566,7 +584,7 @@ export function EntryCard({
           {onDelete != null && kind !== 'opening' ? (
             <IconAction
               icon={Trash2}
-              label="Delete entry"
+              label={t('reader:entryCard.deleteEntry')}
               size="sm"
               variant="destructive"
               onPress={onDelete}
