@@ -17,10 +17,11 @@ import {
 import { EntryCard } from '@/components/compounds/entry-card'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
+import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
-import type { ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
 
 const NEAR_BOTTOM_THRESHOLD_PX = 20
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
@@ -40,6 +41,14 @@ type ReaderRowProps = {
   editContent: string | null
   editBlocked: boolean
   systemFixLabel?: string
+  // Flat primitives rather than the decoration object: a fresh `{…}` per walk
+  // would defeat the shallow memo compare the same way a merged row would.
+  worldTimeLabel?: string
+  worldTimeRaw?: number
+  worldTimeBreakPreviousLabel?: string
+  worldTimeFrame: CalendarFrame | null
+  onEditWorldTime: (entryId: string, next: number) => Promise<EditResult>
+  onRequestEditWorldTime: (entryId: string) => Promise<void>
   onStartEdit: (row: StoryEntry) => void
   onContentChange: (text: string) => void
   onCommitEdit: () => void | Promise<void>
@@ -61,6 +70,12 @@ const ReaderRow = memo(function ReaderRow({
   editContent,
   editBlocked,
   systemFixLabel,
+  worldTimeLabel,
+  worldTimeRaw,
+  worldTimeBreakPreviousLabel,
+  worldTimeFrame,
+  onEditWorldTime,
+  onRequestEditWorldTime,
   onStartEdit,
   onContentChange,
   onCommitEdit,
@@ -72,6 +87,11 @@ const ReaderRow = memo(function ReaderRow({
   onDismissSystemEntry,
 }: ReaderRowProps) {
   const isSystem = row.kind === 'system'
+  const timeEditable = worldTimeRaw != null && worldTimeFrame != null
+  // EntryCard's canonical prop is an object; building it here keeps the walk
+  // primitive-valued so ReaderRow's memo compare still holds.
+  const monotonicityBreak =
+    worldTimeBreakPreviousLabel != null ? { previousLabel: worldTimeBreakPreviousLabel } : undefined
   return (
     <EntryCard
       kind={row.kind}
@@ -96,12 +116,22 @@ const ReaderRow = memo(function ReaderRow({
       }
       onRetry={isSystem ? () => void onRetrySystemEntry() : undefined}
       onDismiss={isSystem ? () => void onDismissSystemEntry() : undefined}
+      worldTimeLabel={worldTimeLabel}
+      worldTimeRaw={timeEditable ? worldTimeRaw : undefined}
+      worldTimeMonotonicityBreak={monotonicityBreak}
+      worldTimeFrame={timeEditable ? worldTimeFrame : undefined}
+      onEditTime={
+        timeEditable ? async (next) => (await onEditWorldTime(row.id, next)).ok : undefined
+      }
+      onRequestEditTime={timeEditable ? () => void onRequestEditWorldTime(row.id) : undefined}
     />
   )
 })
 
 export function ReaderSurface({
   rows,
+  worldTimeDecorations,
+  worldTimeFrame,
   streaming,
   branchKey,
   hasOlder,
@@ -111,6 +141,8 @@ export function ReaderSurface({
   onNearTop,
   onCommitEdit,
   onRequestRollback,
+  onEditWorldTime,
+  onRequestEditWorldTime,
   onRegenerate,
   onRetrySystemEntry,
   onDismissSystemEntry,
@@ -136,7 +168,7 @@ export function ReaderSurface({
   editDraftRef.current = editDraft
 
   // Branch switch: new window, scrolled to bottom, edit state dropped
-  // (reader-composer.md → Loaded-set model → Branch switch).
+  // (reader-composer.md → Loaded-set model).
   const landedBranchRef = useRef<string | null>(null)
   const pinActiveRef = useRef(false)
   useEffect(() => {
@@ -400,26 +432,35 @@ export function ReaderSurface({
             </div>
           </div>
         ) : null}
-        {rows.map((row) => (
-          <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
-            <ReaderRow
-              row={row}
-              editing={editingId === row.id}
-              editContent={editingId === row.id ? editDraft : null}
-              editBlocked={editBlocked}
-              systemFixLabel={systemFixLabel}
-              onStartEdit={startEdit}
-              onContentChange={setEditDraft}
-              onCommitEdit={commitEdit}
-              onCancelEdit={cancelEdit}
-              onRequestRollback={onRequestRollback}
-              onRegenerate={onRegenerate}
-              onFixSystemEntry={onFixSystemEntry}
-              onRetrySystemEntry={onRetrySystemEntry}
-              onDismissSystemEntry={onDismissSystemEntry}
-            />
-          </div>
-        ))}
+        {rows.map((row) => {
+          const decoration = worldTimeDecorations[row.id]
+          return (
+            <div key={row.id} data-entry-row={row.id} className={ROW_FRAME_CLASS}>
+              <ReaderRow
+                row={row}
+                editing={editingId === row.id}
+                editContent={editingId === row.id ? editDraft : null}
+                editBlocked={editBlocked}
+                systemFixLabel={systemFixLabel}
+                worldTimeLabel={decoration?.label}
+                worldTimeRaw={decoration?.raw}
+                worldTimeBreakPreviousLabel={decoration?.previousLabel}
+                worldTimeFrame={worldTimeFrame}
+                onEditWorldTime={onEditWorldTime}
+                onRequestEditWorldTime={onRequestEditWorldTime}
+                onStartEdit={startEdit}
+                onContentChange={setEditDraft}
+                onCommitEdit={commitEdit}
+                onCancelEdit={cancelEdit}
+                onRequestRollback={onRequestRollback}
+                onRegenerate={onRegenerate}
+                onFixSystemEntry={onFixSystemEntry}
+                onRetrySystemEntry={onRetrySystemEntry}
+                onDismissSystemEntry={onDismissSystemEntry}
+              />
+            </div>
+          )
+        })}
         {streaming != null ? (
           <div className={ROW_FRAME_CLASS}>
             <EntryCard

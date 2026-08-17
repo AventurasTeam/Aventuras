@@ -40,7 +40,9 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   const sceneEntities = block.sceneEntities ?? previousMetadata.sceneEntities
   const rawDelta = block.worldTimeDelta ?? 0
-  const worldTime = previousMetadata.worldTime + resolvePiggybackWorldTimeDelta(rawDelta, entryId)
+  const worldTime =
+    previousMetadata.worldTime +
+    resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
 
   const actions: PipelineAction[] = []
   const byId = new Map(entities.map((e) => [e.id, e]))

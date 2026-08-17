@@ -8,6 +8,7 @@ import {
   __originComputeCount,
   __resetCache,
   tierMax,
+  tupleToWorldTime,
   worldTimeToTuple,
 } from './world-time-to-tuple'
 
@@ -180,5 +181,50 @@ describe('worldTimeToTuple (degenerate zero-length tier)', () => {
       era: 0,
       phase: 5,
     })
+  })
+})
+
+describe('tupleToWorldTime', () => {
+  it('round-trips worldTimeToTuple losslessly on a seconds-grain calendar', () => {
+    for (const w of [0, 45, 3_600, 86_400 * 400 + 3_661]) {
+      const tuple = worldTimeToTuple(w, EARTH_GREGORIAN, ORIGIN)
+      expect(tupleToWorldTime(tuple, EARTH_GREGORIAN, ORIGIN)).toBe(w)
+    }
+  })
+
+  // The shape production actually stores: seeded stories omit the tiers below
+  // day, so the inverse is only ever called against a partial origin.
+  it('round-trips through a partial origin', () => {
+    const partial = { year: 1247, day: 1 }
+    for (const w of [0, 210, 86_400 + 3_661]) {
+      const tuple = worldTimeToTuple(w, EARTH_GREGORIAN, partial)
+      expect(tupleToWorldTime(tuple, EARTH_GREGORIAN, partial)).toBe(w)
+    }
+  })
+
+  it('agrees with the completed form of the same partial origin', () => {
+    const partial = { year: 1247, day: 1 }
+    const completed = { year: 1247, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
+    const tuple = worldTimeToTuple(210, EARTH_GREGORIAN, partial)
+    expect(tupleToWorldTime(tuple, EARTH_GREGORIAN, partial)).toBe(
+      tupleToWorldTime(tuple, EARTH_GREGORIAN, completed),
+    )
+  })
+
+  it('returns -365 days for a tuple exactly one non-leap year before the origin', () => {
+    const before = { ...ORIGIN, year: 2023 }
+    expect(tupleToWorldTime(before, EARTH_GREGORIAN, ORIGIN)).toBe(-365 * 86_400)
+  })
+
+  it('truncates sub-base-unit remainders on a coarse-grain calendar', () => {
+    const origin = { year: 1, day: 1 }
+    // 1 day + 1 hour of seconds; the day-grain tuple cannot carry the hour.
+    const w = 86_400 + 3_600
+    const tuple = worldTimeToTuple(w, FIXTURE_RULE_CALENDAR, origin)
+    expect(tupleToWorldTime(tuple, FIXTURE_RULE_CALENDAR, origin)).toBe(86_400)
+  })
+
+  it('maps the origin tuple itself to zero', () => {
+    expect(tupleToWorldTime(ORIGIN, EARTH_GREGORIAN, ORIGIN)).toBe(0)
   })
 })

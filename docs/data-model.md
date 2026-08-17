@@ -260,7 +260,7 @@ erDiagram
     deltas {
         text id PK
         text branch_id FK
-        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; null (chapter close, user direct edit) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
+        text entry_id FK "survival anchor: reverse this delta iff this entry is reversed. The entry the delta is about, whoever wrote it. Foreground turn delta → its own turn; periodic_classifier fact → its provenance entry; translation → its target's content-defining-delta anchor; user edit → the entry it edits, or null when it edits no entry; null (chapter close, entity / lore / thread / happening edits) → reverse positionally by own commit position. See Entry mutability & rollback → Survival anchor"
         text action_id "groups deltas into one user-visible action (used for CTRL-Z batching)"
         integer log_position "append-only ordering within branch"
         text source "ai_classifier | piggyback_tagged_block | per_turn_classifier | periodic_classifier | user_edit | lore_agent | chapter_close"
@@ -1855,13 +1855,22 @@ for the calendar primitive.
 **Invariants split across three layers.** The "monotonically
 non-decreasing" claim splits by source:
 
-- **Storage** (hard): `worldTime ≥ 0`. The integer is non-negative;
-  the action layer rejects writes outside this range.
+- **Storage** (hard): `0 ≤ worldTime ≤ MAX_WORLD_TIME_SECONDS`. The
+  integer is non-negative; the action layer rejects writes outside
+  this range. The ceiling is a render-cost bound, not a domain rule:
+  resolving an integer to a tier-tuple walks the top tier one unit at
+  a time, so an unbounded value freezes the reader's first paint
+  rather than rendering something wrong. It sits far past any
+  narrative span (~3169 Gregorian years).
 - **Classifier** (hard, see
   [`architecture.md → Classifier contract — metadata fields`](./architecture.md#classifier-contract--metadata-fields)):
   per-entry delta `≥ 0`. Flashbacks emit `0`. The classifier is
   structurally incapable of producing a non-monotonic cumulative
-  sequence on its own.
+  sequence on its own. The delta is clamped on both ends before it is
+  added to the running total — a model that emits a unix timestamp
+  where it meant an elapsed interval is capped at the storage
+  ceiling's remaining headroom, with a `classifier.delta_clamped`
+  warning.
 - **Cumulative monotonicity** (soft): the sequence is monotonically
   non-decreasing **when written by the classifier alone**. User
   manual `worldTime` edits (via the
@@ -2325,8 +2334,8 @@ log_position ≥ N  AND  ( entry_id IS NULL OR position(entry_id) ≥ position(B
 ```
 
 where `position()` reads `story_entries.position`. Foreground deltas
-anchor to their own turn (≥ B), and `null`-anchor deltas (chapter close,
-user edit) always reverse, exactly as before; only a lagging background
+anchor to their own turn (≥ B), and `null`-anchor deltas always reverse,
+exactly as before; only a lagging background
 delta whose anchor is below `B` is spared. A background delta therefore
 survives only if its anchor entry survives — no orphans or dangling
 anchors by construction. The same predicate drives the
@@ -2340,6 +2349,18 @@ For this to hold, background-source (`periodic_classifier`) deltas stamp
 their target's content-defining-delta anchor — see
 [classifier.md → Provenance attribution](./memory/classifier.md#provenance-attribution)
 and [Translation](#translation).
+
+**The anchor is the entry a delta is _about_, not the actor who wrote
+it.** A user edit anchors on the same rule as everything else: an edit
+whose subject is a specific entry — `metadata.worldTime`,
+`sceneEntities`, `currentLocationId`, per
+[Entry metadata shape](#entry-metadata-shape) — stamps that entry, so
+correcting an old entry from the reader and then rolling back a later
+turn keeps the correction on the entry that survives. `null` is for
+deltas with no entry subject at all: chapter close, and direct edits to
+entities / lore / threads / happenings. `story_entries.content` never
+appears here — in-place text edits are exempt from the log entirely (see
+the exception above).
 
 The same `B` clamps the per-branch classifier watermark —
 `processedThrough ← min(processedThrough, position(B) − 1)`, in the sweep

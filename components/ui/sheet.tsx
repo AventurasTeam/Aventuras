@@ -88,6 +88,8 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   anchor?: SheetAnchor
   size?: SheetSize
   title?: string
+  /** Bottom-anchor only — allows a pending action to block swipe dismissal. */
+  enablePanDownToClose?: boolean
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
   portalHost?: string
 }
@@ -110,6 +112,7 @@ function BottomSheetContent({
   style,
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
+  enablePanDownToClose = true,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
@@ -202,6 +205,7 @@ function BottomSheetContent({
       ref={sheetRef}
       snapPoints={snapPoints}
       enableDynamicSizing={enableDynamicSizing}
+      enablePanDownToClose={enablePanDownToClose}
       // 'extend' resolves to the sheet's own tallest detent. Every size here has
       // exactly one ('auto' has none), so it never grows anything — it earns its
       // keep only on 'tall', which at 95% already clears the keyboard and just
@@ -266,6 +270,7 @@ function RightSheetContent({
   portalHost,
   title = 'Sheet',
   children,
+  enablePanDownToClose: _enablePanDownToClose,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const insets = useSafeAreaInsets()

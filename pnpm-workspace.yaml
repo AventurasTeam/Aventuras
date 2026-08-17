@@ -13,5 +13,6 @@ overrides:
   '@storybook/react-dom-shim': '10.3.5'
 patchedDependencies:
   '@gorhom/bottom-sheet': patches/@gorhom__bottom-sheet.patch
+  js-tiktoken: patches/js-tiktoken.patch
   onnxruntime-react-native: patches/onnxruntime-react-native.patch
   react-native-reanimated-dnd: patches/react-native-reanimated-dnd.patch

@@ -33,6 +33,8 @@ import {
   useConfigFixAction,
   useSystemEntryActions,
 } from '@/components/reader/system-entry-actions'
+import { useWorldTimeEditing } from '@/components/reader/world-time-editing'
+import { WorldTimeEditSheet } from '@/components/reader/worldtime-edit-sheet'
 import { ScreenShell } from '@/components/shells/screen-shell'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Text } from '@/components/ui/text'
@@ -220,6 +222,21 @@ export default function ReaderComposerRoute() {
     openForBranch?.settings.composerModesEnabled === true &&
     openForBranch.definition.mode === 'adventure'
   const wrapPov = openForBranch?.settings.composerWrapPov ?? 'first'
+
+  const {
+    worldTimeFrame,
+    worldTimeDecorations,
+    timeEdit,
+    editWorldTime,
+    requestEditWorldTime,
+    closeTimeEdit,
+  } = useWorldTimeEditing(
+    branchId,
+    entries,
+    openForBranch?.definition.calendarSystemId,
+    openForBranch?.definition.worldTimeOrigin,
+    ctx,
+  )
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState<PipelineError | null>(null)
@@ -1071,6 +1088,8 @@ export default function ReaderComposerRoute() {
 
   const surfaceProps = {
     rows: entries,
+    worldTimeDecorations,
+    worldTimeFrame,
     streaming: streamingPayload,
     branchKey: branchId,
     hasOlder,
@@ -1080,6 +1099,8 @@ export default function ReaderComposerRoute() {
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: handleRequestRollback,
+    onEditWorldTime: editWorldTime,
+    onRequestEditWorldTime: requestEditWorldTime,
     onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: handleDismissSystemEntry,
@@ -1107,7 +1128,7 @@ export default function ReaderComposerRoute() {
                 : undefined
           }
           // A background classifier pass has no cancel affordance, so the prop is
-          // absent rather than a no-op handler that would still open the popover.
+          // absent rather than a no-op handler that would still open the dialog.
           {...(isGenerating || refreshingSuggestions
             ? {
                 // The run's own kind, not PER_TURN_KIND: findTurnRun matches on a
@@ -1233,6 +1254,22 @@ export default function ReaderComposerRoute() {
           counts={rollback.counts}
           variant={rollback.mode}
           onConfirm={() => void confirmRollback()}
+        />
+      ) : null}
+      {timeEdit != null && worldTimeFrame != null ? (
+        <WorldTimeEditSheet
+          frame={worldTimeFrame}
+          worldTimeRaw={timeEdit.decoration.raw}
+          monotonicityBreak={
+            timeEdit.decoration.previousLabel != null
+              ? { previousLabel: timeEdit.decoration.previousLabel }
+              : undefined
+          }
+          onSave={async (next) => {
+            const result = await editWorldTime(timeEdit.entryId, next)
+            return result.ok
+          }}
+          onClose={closeTimeEdit}
         />
       ) : null}
     </ScreenShell>

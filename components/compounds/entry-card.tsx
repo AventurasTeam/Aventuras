@@ -10,8 +10,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { View } from 'react-native'
+import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -20,16 +20,28 @@ import Animated, {
 } from 'react-native-reanimated'
 
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
+import { useTier } from '@/hooks/use-tier'
+import type { CalendarFrame } from '@/lib/calendar'
 import type { EntryMetadata, StoryEntry } from '@/lib/db'
+import { t } from '@/lib/i18n'
 import { detectRichEntryHtml, parseMarkdownToHtml, sanitizeHtml } from '@/lib/markdown'
 import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
+import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
 
@@ -43,6 +55,20 @@ type EntryCardProps = {
   content: string
   /** Pre-formatted by the host's calendar renderer; opaque to the compound. */
   worldTimeLabel?: string
+  /** Raw cumulative seconds; with `worldTimeFrame` + a handler, makes the footer clickable. */
+  worldTimeRaw?: number
+  /**
+   * Desktop/tablet: fired by the in-card Dialog's Save with the recomputed
+   * seconds. Resolve `false` to report a failed write — the Dialog then stays
+   * open with the typed tuple intact. Only `true` closes it.
+   */
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
+  /** Phone: the compound requests; the host presents the native Sheet. */
+  onRequestEditTime?: () => void
+  /** Presence renders the warning indicator; the label feeds the banner/tooltip. */
+  worldTimeMonotonicityBreak?: MonotonicityBreak
+  /** Stable reference required: the edit form's tuple memo keys on identity. */
+  worldTimeFrame?: CalendarFrame
 
   onEdit?: () => void
   /** Not provided for `opening` (block-delete) or `system`/`streaming`. */
@@ -91,6 +117,171 @@ const KIND_BUBBLE: Record<EntryKind, string> = {
   streaming: 'bg-bg-raised border-border',
 }
 
+const WORLD_TIME_TRIGGER_CLASS = cn(
+  'group/world-time rounded-sm',
+  Platform.select({
+    web: 'cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-focus-ring',
+  }),
+)
+
+const WORLD_TIME_LABEL_CLASS = Platform.select({ web: 'group-hover/world-time:text-fg-primary' })
+
+type WorldTimeEditTarget = {
+  worldTimeRaw: number
+  frame: CalendarFrame
+}
+
+function WorldTimeEditDialog({
+  trigger,
+  edit,
+  monotonicityBreak,
+  onEditTime,
+}: {
+  trigger: ReactElement
+  edit: WorldTimeEditTarget
+  monotonicityBreak?: MonotonicityBreak
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
+}) {
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | undefined>()
+
+  async function save(next: number) {
+    if (saving) return
+    setSaving(true)
+    setSaveError(undefined)
+    try {
+      if (await onEditTime?.(next)) {
+        setOpen(false)
+      } else {
+        setSaveError(t('reader:worldTimeEdit.failed'))
+      }
+    } catch {
+      setSaveError(t('reader:worldTimeEdit.failed'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleOpenChange(next: boolean) {
+    if (!next && saving) return
+    if (next) setSaveError(undefined)
+    setOpen(next)
+  }
+
+  return (
+    // Centred modal rather than an anchored Popover: the entry list scrolls
+    // under the overlay, so an anchor drifts off its own trigger and collides
+    // with the chrome around the list.
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      <DialogContent
+        className="max-w-xl"
+        hideCloseButton={saving}
+        // Radix autofocuses the first tabbable field and selects its text.
+        // Land on the content container instead: the selection is one
+        // keystroke from wiping a field, and on touch it flashes the
+        // soft keyboard open and shut.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault()
+          ;(event.currentTarget as HTMLElement | null)?.focus()
+        }}
+      >
+        <DialogHeader>
+          <DialogTitle>{t('reader:worldTimeEdit.title')}</DialogTitle>
+        </DialogHeader>
+        {/* Keyed so an external worldTime change (undo, classifier write)
+            reseeds the form, which only reads the prop on mount. */}
+        <WorldTimeEditForm
+          key={edit.worldTimeRaw}
+          frame={edit.frame}
+          worldTimeRaw={edit.worldTimeRaw}
+          monotonicityBreak={monotonicityBreak}
+          saving={saving}
+          saveError={saveError}
+          onSave={(next) => void save(next)}
+          onCancel={() => setOpen(false)}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function WorldTimeFooter({
+  label,
+  edit,
+  monotonicityBreak,
+  onEditTime,
+  onRequestEditTime,
+}: {
+  label: string
+  /** Null leaves the footer inert — in-flight, content editing, or no host handler. */
+  edit: WorldTimeEditTarget | null
+  monotonicityBreak?: MonotonicityBreak
+  onEditTime?: (nextWorldTime: number) => Promise<boolean>
+  onRequestEditTime?: () => void
+}) {
+  const tier = useTier()
+
+  const breakText =
+    monotonicityBreak != null
+      ? t('reader:worldTimeEdit.monotonicityBreak', {
+          previousLabel: monotonicityBreak.previousLabel,
+        })
+      : null
+
+  // `onEditTime == null` also routes to the request fork: the Dialog's Save has
+  // nowhere to land without it, and would drop the edit silently.
+  const usePhoneRequest = onRequestEditTime != null && (tier === 'phone' || onEditTime == null)
+
+  const labelNode = (
+    <Text size="xs" variant="muted" className={edit != null ? WORLD_TIME_LABEL_CLASS : undefined}>
+      {label}
+    </Text>
+  )
+  // One trigger for both editable forks: the Dialog injects its own press
+  // handler through the trigger slot, so only the request fork passes one.
+  const trigger = (
+    <Pressable
+      role="button"
+      aria-label={t('reader:worldTimeEdit.title')}
+      onPress={usePhoneRequest ? onRequestEditTime : undefined}
+      className={WORLD_TIME_TRIGGER_CLASS}
+    >
+      {labelNode}
+    </Pressable>
+  )
+
+  let control: ReactNode
+  if (edit == null) {
+    control = labelNode
+  } else if (usePhoneRequest) {
+    control = trigger
+  } else {
+    control = (
+      <WorldTimeEditDialog
+        trigger={trigger}
+        edit={edit}
+        monotonicityBreak={monotonicityBreak}
+        onEditTime={onEditTime}
+      />
+    )
+  }
+
+  return (
+    <View className="mt-3 flex-row items-center justify-end gap-1.5">
+      {breakText != null ? (
+        <DisabledReasonTooltip reason={breakText}>
+          <View role="img" aria-label={breakText}>
+            <Icon as={AlertTriangle} size="sm" className="text-warning" />
+          </View>
+        </DisabledReasonTooltip>
+      ) : null}
+      {control}
+    </View>
+  )
+}
+
 // Tailwind's animate-pulse doesn't run on native, so the "model is thinking"
 // indication loops opacity through Reanimated instead.
 function Pulsing({ children }: { children: ReactNode }) {
@@ -134,6 +325,11 @@ export function EntryCard({
   kind,
   content,
   worldTimeLabel,
+  worldTimeRaw,
+  onEditTime,
+  onRequestEditTime,
+  worldTimeMonotonicityBreak,
+  worldTimeFrame,
   onEdit,
   onDelete,
   meta,
@@ -158,11 +354,24 @@ export function EntryCard({
   const [stateExpanded, setStateExpanded] = useState(false)
   const hasReasoning = reasoning != null && reasoning.length > 0
 
+  // Carries the narrowed values rather than a bare boolean so the footer can
+  // forward them without a non-null assertion.
+  const timeEdit =
+    !editing &&
+    disabled !== true &&
+    worldTimeRaw != null &&
+    worldTimeFrame != null &&
+    (onEditTime != null || onRequestEditTime != null)
+      ? { worldTimeRaw, frame: worldTimeFrame }
+      : null
+
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
   const hasState = stateRaw != null && stateRaw.length > 0
 
   const showActions = !editing && kind !== 'system' && kind !== 'streaming'
-  const showWorldTime = worldTimeLabel != null && kind !== 'system' && kind !== 'streaming'
+  // Holds the label rather than a boolean so the footer receives it narrowed.
+  const worldTimeFooterLabel =
+    kind !== 'system' && kind !== 'streaming' ? worldTimeLabel : undefined
 
   return (
     <View
@@ -176,14 +385,14 @@ export function EntryCard({
         {kind === 'user_action' ? (
           <View className="rounded-sm bg-fg-primary px-2 py-0.5">
             <Text size="xs" className="font-medium text-bg-base">
-              You
+              {t('reader:entryCard.you')}
             </Text>
           </View>
         ) : kind === 'system' ? (
           <>
             <Icon as={AlertTriangle} size="sm" className="shrink-0 text-warning" />
             <Text size="xs" className="font-medium text-warning">
-              System
+              {t('reader:entryCard.system')}
             </Text>
           </>
         ) : (
@@ -196,7 +405,11 @@ export function EntryCard({
                 <Pulsing>
                   <IconAction
                     icon={Brain}
-                    label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                    label={t(
+                      expanded
+                        ? 'reader:entryCard.hideReasoning'
+                        : 'reader:entryCard.showReasoning',
+                    )}
                     size="sm"
                     onPress={() => setExpanded((v) => !v)}
                   />
@@ -204,7 +417,9 @@ export function EntryCard({
               ) : (
                 <IconAction
                   icon={Brain}
-                  label={expanded ? 'Hide reasoning' : 'Show reasoning'}
+                  label={t(
+                    expanded ? 'reader:entryCard.hideReasoning' : 'reader:entryCard.showReasoning',
+                  )}
                   size="sm"
                   onPress={() => setExpanded((v) => !v)}
                 />
@@ -213,19 +428,29 @@ export function EntryCard({
             {hasState ? (
               <IconAction
                 icon={Globe}
-                label={stateExpanded ? 'Hide state' : 'Show state'}
+                label={t(
+                  stateExpanded ? 'reader:entryCard.hideState' : 'reader:entryCard.showState',
+                )}
                 size="sm"
                 onPress={() => setStateExpanded((v) => !v)}
               />
             ) : null}
             {kind === 'streaming' ? (
               <Text size="xs" variant="muted" className="leading-none">
-                {streamingPhase === 'reasoning' ? 'Thinking…' : 'Generating…'}
+                {t(
+                  streamingPhase === 'reasoning'
+                    ? 'reader:entryCard.thinking'
+                    : 'reader:entryCard.generating',
+                )}
               </Text>
             ) : meta?.tokens != null ? (
               <Text size="xs" variant="muted" className="leading-none">
-                {meta.tokens.completion} tokens
-                {meta.tokens.reasoning != null ? ` (+${meta.tokens.reasoning} reasoning)` : ''}
+                {meta.tokens.reasoning != null
+                  ? t('reader:entryCard.tokensWithReasoning', {
+                      n: meta.tokens.completion,
+                      reasoning: meta.tokens.reasoning,
+                    })
+                  : t('reader:entryCard.tokens', { n: meta.tokens.completion })}
               </Text>
             ) : null}
           </>
@@ -243,7 +468,7 @@ export function EntryCard({
       {hasState && stateExpanded && !editing ? (
         <View className="mb-3 rounded border border-border bg-bg-sunken p-2.5">
           <Text size="xs" variant="muted" className="mb-1 font-medium">
-            World state block
+            {t('reader:entryCard.stateBlock')}
           </Text>
           <Text size="xs" className="font-mono text-fg-muted">
             {stateRaw}
@@ -258,17 +483,17 @@ export function EntryCard({
             onChangeText={onContentChange}
             editable={!disabled}
             autoFocus
-            aria-label="Edit entry content"
+            aria-label={t('reader:entryCard.editContent')}
             onKeyPress={(e) => {
               if (e.nativeEvent.key === 'Escape') onCancelEdit?.()
             }}
           />
           <View className="flex-row justify-end gap-2">
             <Button variant="ghost" size="sm" onPress={onCancelEdit} disabled={disabled}>
-              <Text>Cancel</Text>
+              <Text>{t('cancel')}</Text>
             </Button>
             <Button variant="primary" size="sm" onPress={onCommitEdit} disabled={disabled}>
-              <Text>Save</Text>
+              <Text>{t('save')}</Text>
             </Button>
           </View>
         </View>
@@ -295,13 +520,13 @@ export function EntryCard({
               {onRetry != null ? (
                 <Button variant="secondary" size="sm" onPress={onRetry} disabled={disabled}>
                   <Icon as={RefreshCw} size="sm" />
-                  <Text>Retry</Text>
+                  <Text>{t('reader:systemEntry.retry')}</Text>
                 </Button>
               ) : null}
               {onDismiss != null ? (
                 <Button variant="ghost" size="sm" onPress={onDismiss} disabled={disabled}>
                   <Icon as={X} size="sm" />
-                  <Text>Dismiss</Text>
+                  <Text>{t('reader:systemEntry.dismiss')}</Text>
                 </Button>
               ) : null}
             </View>
@@ -319,7 +544,7 @@ export function EntryCard({
           {onEdit != null ? (
             <IconAction
               icon={Pencil}
-              label="Edit entry"
+              label={t('reader:entryCard.editEntry')}
               size="sm"
               onPress={onEdit}
               disabled={disabled}
@@ -329,7 +554,7 @@ export function EntryCard({
           {onRegen != null && kind === 'ai_reply' ? (
             <IconAction
               icon={RefreshCw}
-              label="Regenerate"
+              label={t('reader:entryCard.regenerate')}
               size="sm"
               onPress={onRegen}
               disabled={disabled}
@@ -339,7 +564,7 @@ export function EntryCard({
           {onBranch != null && (kind === 'ai_reply' || kind === 'opening') ? (
             <IconAction
               icon={GitBranch}
-              label="Branch from here"
+              label={t('reader:entryCard.branchFromHere')}
               size="sm"
               onPress={onBranch}
               disabled={disabled}
@@ -349,7 +574,7 @@ export function EntryCard({
           {onFlipEra != null ? (
             <IconAction
               icon={ArrowLeftRight}
-              label="Flip era"
+              label={t('reader:entryCard.flipEra')}
               size="sm"
               onPress={onFlipEra}
               disabled={disabled}
@@ -359,7 +584,7 @@ export function EntryCard({
           {onDelete != null && kind !== 'opening' ? (
             <IconAction
               icon={Trash2}
-              label="Delete entry"
+              label={t('reader:entryCard.deleteEntry')}
               size="sm"
               variant="destructive"
               onPress={onDelete}
@@ -370,12 +595,14 @@ export function EntryCard({
         </View>
       ) : null}
 
-      {showWorldTime ? (
-        <View className="mt-3 flex-row justify-end">
-          <Text size="xs" variant="muted">
-            {worldTimeLabel}
-          </Text>
-        </View>
+      {worldTimeFooterLabel != null ? (
+        <WorldTimeFooter
+          label={worldTimeFooterLabel}
+          edit={timeEdit}
+          monotonicityBreak={worldTimeMonotonicityBreak}
+          onEditTime={onEditTime}
+          onRequestEditTime={onRequestEditTime}
+        />
       ) : null}
     </View>
   )

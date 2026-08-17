@@ -1,8 +1,8 @@
 # EntryCard pattern
 
-The reader-composer narrative-row compound. Renders all five
-entry kinds (`user`, `ai`, `opening`, `system`, `streaming`) as
-full-width bubbles with kind-keyed styling, conditional reasoning
+The reader-composer narrative-row compound. Renders all five entry
+kinds (`user_action`, `ai_reply`, `opening`, `system`, `streaming`)
+as full-width bubbles with kind-keyed styling, conditional reasoning
 body, in-place edit, and a muted world-time footer.
 
 Sister patterns:
@@ -29,13 +29,13 @@ Used by:
 
 ## Compound API
 
-The `kind` prop uses UI-layer names: `user` / `ai` abbreviate the
-DB `story_entries.kind` values `user_action` / `ai_reply`, and
-`streaming` is a transient render state with no persisted row.
+The `kind` prop takes the DB `story_entries.kind` values directly
+(`StoryEntry['kind']`), widened with `streaming` — a transient
+render state with no persisted row.
 
 ```ts
 type EntryCardProps = {
-  kind: 'user' | 'ai' | 'opening' | 'system' | 'streaming'
+  kind: StoryEntry['kind'] | 'streaming'
   content: string
   worldTimeLabel?: string
 
@@ -43,12 +43,14 @@ type EntryCardProps = {
   onDelete?: () => void // not for opening (block-delete) or system/streaming
 
   // World-time editing — see "World-time footer" below
-  worldTimeRaw?: number // raw cumulative seconds; seeds the TierTupleInput in the edit Popover
-  onEditTime?: (nextWorldTime: number) => void // host writes the metadata.worldTime delta
-  worldTimeMonotonicityBreak?: { previousLabel: string } // presence fires the warning indicator + Popover banner
+  worldTimeRaw?: number // raw cumulative seconds; seeds the TierTupleInput in the edit overlay
+  onEditTime?: (nextWorldTime: number) => Promise<boolean> // desktop/tablet Dialog Save; host writes the metadata.worldTime delta, resolves false on a failed write
+  onRequestEditTime?: () => void // phone: the compound requests, the host presents the native Sheet
+  worldTimeMonotonicityBreak?: MonotonicityBreak // presence fires the warning indicator + overlay banner
+  worldTimeFrame?: CalendarFrame // active calendar + story origin; anchors the tuple ↔ seconds round-trip, stable reference required
 
   // AI / opening:
-  meta?: { tokens: { reply: number; reasoning?: number } }
+  meta?: Pick<EntryMetadata, 'tokens'> // the top line renders tokens.completion (+ tokens.reasoning when set)
   reasoning?: string
   onRegen?: () => void // ai only
   onBranch?: () => void // ai, opening
@@ -59,6 +61,7 @@ type EntryCardProps = {
 
   // System-only:
   detail?: string
+  fixAction?: { label: string; onPress: () => void } // kind-specific recovery route (e.g. "Fix profile" → settings); precedes Retry
   onRetry?: () => void
   onDismiss?: () => void
 
@@ -90,17 +93,20 @@ Two structural choices:
 
 ## Per-kind structure
 
-| Slot                       | user                             | ai                                        | opening                                | system                                       | streaming                             |
-| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | -------------------------------------------- | ------------------------------------- |
-| Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                     | meta line (brain pulses, trailing → ) |
-| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                            | live-streaming on `streamingPhase`    |
-| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline action buttons | partial prose tokens                  |
-| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                      | —                                     |
-| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                       | hidden                                |
-| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai                             | `bg-bg-base border-warning`                  | ai styling plus `border-dashed`       |
+| Slot                       | user_action                      | ai_reply                                  | opening                                | system                                                              | streaming                             |
+| -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------- |
+| Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing → ) |
+| Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
+| Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
+| Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
+| World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
+| Bubble styling             | `bg-bg-sunken border-border`     | `bg-bg-raised border-border`              | same as ai_reply                       | `bg-bg-base border-warning`                                         | same as ai_reply                      |
 
-`opening` renders identically to `ai` for visual treatment; the
-discriminator only affects available actions. See
+Streaming is deliberately not visually distinguished: the swap to
+the committed `ai_reply` row should not re-frame the card.
+
+`opening` renders identically to `ai_reply` for visual treatment;
+the discriminator only affects available actions. See
 [data-model.md → Opening entry](../../data-model.md#opening-entry)
 for the underlying invariant.
 
@@ -183,23 +189,66 @@ on its own; the behavior is owned by the parent ScrollView.
   authored worldTime metadata).
 
 **Click-to-edit (interactive when editable).** The footer becomes
-interactive when the host supplies `onEditTime` + `worldTimeRaw` —
-in practice on AI, opening, and user entries (classifier-authored,
+interactive when the host supplies `worldTimeRaw`, `worldTimeFrame`
+(the calendar paired with the story origin), and at least one edit
+handler — in practice on
+AI, opening, and user entries (classifier-authored,
 wizard-authored, or inherited-at-write `worldTime`; see
 [`data-model.md → In-world time tracking`](../../data-model.md#in-world-time-tracking)).
-Hover-brighten + cursor pointer signal the affordance. Click opens an edit overlay anchored to the footer:
-**Popover on desktop, Sheet on phone** (per
-[`patterns/overlays.md`](./overlays.md) and the
+Hover-brighten + cursor pointer signal the affordance. Click opens
+an edit overlay: **centred Dialog on desktop, bottom Sheet on
+phone** (per [`patterns/overlays.md`](./overlays.md) and the
 [mobile decision tree](../foundations/mobile/layout.md)). Tablet
 follows the standard breakpoint rule.
 
+**The desktop overlay is deliberately not anchored to the footer.**
+The trigger lives in a scrolling entry list, so an anchored Popover
+tracks a footer that moves under it and overlaps the chrome framing
+the list — a centred modal sidesteps the whole class of problem
+rather than chasing it with collision detection.
+
+**Overlay hosting splits by tier** since the single-document reader
+pivot. At desktop and tablet breakpoints EntryCard hosts the Dialog
+itself — pure DOM, so it works inside the
+[reader document](./reader-document.md) on every platform. At phone
+breakpoint the compound renders no Sheet: it calls
+`onRequestEditTime`, and the host presents the native bottom Sheet
+outside the document (the document requests, native presents — see
+[`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract)).
+The breakpoint is the one the card itself lays out in, which is the
+reader document rather than the device. A host that supplies only
+`onRequestEditTime` gets the request path at every tier, not just
+phone — the card will not host a Dialog whose Save has nowhere to
+report, since that would discard the edit silently. Both overlays
+mount the same edit form, so the user-visible shape below is
+identical on either tier.
+
 The overlay body hosts a `TierTupleInput` matching the active
 calendar's tier shape (the same primitive the wizard's
-`worldTimeOrigin` step uses), pre-populated from `worldTimeRaw +
-worldTimeOrigin` walked through the calendar's tier stack. Save
-computes the new cumulative seconds and invokes `onEditTime(next)`;
-the host writes one `op=update` delta against
-`entries.metadata.worldTime`. Cancel discards.
+`worldTimeOrigin` step uses), pre-populated by walking
+`worldTimeRaw` from the frame's origin through the calendar's tier
+stack. Save
+computes the new cumulative seconds and invokes `onEditTime(next)`
+(phone: the host's Sheet save); the host writes one `op=update`
+delta against `entries.metadata.worldTime`. Cancel discards.
+
+A rejected or failed write keeps the overlay open with the typed
+tuple intact, on both tiers. The form reports the failure inline, in
+the same rendering realm as the editor, so the user retries or
+cancels without retyping. While Save is pending, the tuple controls
+and Cancel are disabled, Save carries its loading indicator, and
+the Dialog or Sheet cannot be dismissed. Only a write that reports
+success closes the overlay; `onEditTime` resolving `false` and
+`onEditTime` rejecting are both treated as failures.
+
+A Save whose tuple is unchanged never reaches the write path at
+all: no delta, no edit callback, and the overlay closes through the
+same cancel route an explicit Cancel takes. The check is tuple
+equality, not a comparison of the recomputed seconds — on a
+coarse-grain calendar (`secondsPerBaseUnit` above one) the tuple
+can't express a sub-base-unit remainder, so a seconds-level test
+would read an untouched Save as a change and rewrite `worldTime` to
+the truncated value.
 
 On phone the Sheet variant carries a non-scrollable body
 (TierTupleInput is a fixed-shape form), so the Sheet's default
@@ -233,13 +282,13 @@ holds, cleared on next render when the user fixes it.
 
 Per-kind action sets:
 
-| Kind      | edit                                                  | regen | branch | flip-era    | delete            |
-| --------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------------- |
-| user      | yes                                                   | —     | —      | conditional | yes               |
-| ai        | yes                                                   | yes   | yes    | conditional | yes               |
-| opening   | yes                                                   | —     | yes    | conditional | no (block-delete) |
-| system    | (inline buttons inside content; no top-right cluster) |
-| streaming | (no actions; cancel via composer)                     |
+| Kind        | edit                                                  | regen | branch | flip-era    | delete            |
+| ----------- | ----------------------------------------------------- | ----- | ------ | ----------- | ----------------- |
+| user_action | yes                                                   | —     | —      | conditional | yes               |
+| ai_reply    | yes                                                   | yes   | yes    | conditional | yes               |
+| opening     | yes                                                   | —     | yes    | conditional | no (block-delete) |
+| system      | (inline buttons inside content; no top-right cluster) |
+| streaming   | (no actions; cancel via composer)                     |
 
 `flip-era` is conditional: host passes `onFlipEra` only when
 active calendar has eras. Same gating as the

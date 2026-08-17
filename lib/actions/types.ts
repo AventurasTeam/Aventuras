@@ -16,5 +16,7 @@ export type PipelineAction = {
 }[keyof PipelineActionMap]
 
 export type MutationResult =
-  | { status: 'ok'; logPosition: number }
+  // Null when the post-commit readback missed: the write is durable regardless,
+  // so the position is unknown rather than the action failed.
+  | { status: 'ok'; logPosition: number | null }
   | { status: 'rejected'; reason: string; code?: string }

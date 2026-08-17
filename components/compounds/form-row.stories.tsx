@@ -200,3 +200,19 @@ export const ErrorReplacesHint: Story = {
     expect(screen.queryByText('Helper text')).not.toBeInTheDocument()
   },
 }
+
+/** The hint's counterpart to `ErrorSitsBelowTheControl`, pinned as document order. */
+export const StackedHintSitsAboveTheControl: Story = {
+  render: () => (
+    <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
+      <FormRow label="Email" stacked hint="We never share it.">
+        <ControlledInput placeholder="…" />
+      </FormRow>
+    </View>
+  ),
+  play: async () => {
+    const hint = screen.getByText('We never share it.')
+    const input = screen.getByPlaceholderText('…')
+    expect(hint.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  },
+}

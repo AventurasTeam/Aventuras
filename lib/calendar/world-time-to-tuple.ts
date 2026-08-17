@@ -167,3 +167,20 @@ export function worldTimeToTuple(
   const elapsed = Math.floor(worldTime / calendar.secondsPerBaseUnit)
   return baseUnitsToTuple(calendar, cachedOriginUnits(calendar, origin) + elapsed)
 }
+
+/**
+ * `worldTimeToTuple`'s inverse. `tuple` must already pass tier-range
+ * validation (see `validateOriginTuple`) — this function does not check
+ * bounds. An in-range but non-canonical value (e.g. `day: 32`) normalizes
+ * via rollover; a value indexed past a table-kind tier's range (e.g.
+ * `month: 14`) yields `NaN`. The result is granular to `calendar.secondsPerBaseUnit`
+ * — sub-base-unit remainders from the original worldTime are not recoverable.
+ */
+export function tupleToWorldTime(
+  tuple: TierTuple,
+  calendar: CalendarSystem,
+  origin: TierTuple,
+): number {
+  const elapsed = tupleToBaseUnits(calendar, tuple) - cachedOriginUnits(calendar, origin)
+  return elapsed * calendar.secondsPerBaseUnit
+}

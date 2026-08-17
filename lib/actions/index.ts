@@ -95,6 +95,7 @@ export { ENTRIES_WINDOW_SIZE, readRecentEntries } from './story-entries/recent-w
 export { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './story-entries/register'
 export { redoLastAction, undoLastAction, type UndoResult } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
+export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
 export {
   regenerateTurn,

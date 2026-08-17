@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
+import { EARTH_GREGORIAN } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
@@ -9,6 +11,10 @@ import { describeTurnFailure } from './system-entry-actions'
 const NOW = 1752900000000
 
 const BASE_META = { sceneEntities: [], currentLocationId: null, worldTime: NOW }
+
+// Module scope keeps the frame referentially stable — the edit form's tuple
+// memo keys on its identity.
+const WORLD_TIME_ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
 
 function entry(
   partial: Partial<StoryEntry> & Pick<StoryEntry, 'id' | 'kind' | 'content' | 'position'>,
@@ -64,6 +70,8 @@ const noopHandlers = {
   onNearTop: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
+  onEditWorldTime: async () => ({ ok: true }),
+  onRequestEditWorldTime: async () => {},
   onRegenerate: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
@@ -82,6 +90,10 @@ const meta = {
   ],
   args: {
     rows: ROWS,
+    // Footer behavior is covered at the compound layer (entry-card.stories);
+    // these stories exercise the surface's scroll/edit machinery instead.
+    worldTimeDecorations: {},
+    worldTimeFrame: null,
     streaming: null,
     branchKey: 'branch_story',
     hasOlder: false,
@@ -95,6 +107,34 @@ export default meta
 type Story = StoryObj<typeof meta>
 
 export const Default: Story = {}
+
+/**
+ * The adapter between the host's `EditResult` and EntryCard's boolean is the one
+ * link the compound-layer stories cannot reach: dropping the `.ok` unwrap here
+ * returns `undefined`, which would close the Dialog on a write that failed and
+ * discard the typed tuple. Driven through the surface for exactly that reason.
+ */
+export const WorldTimeEditFailureKeepsOverlayOpen: Story = {
+  args: {
+    worldTimeDecorations: { e3: { label: 'Day 12 · 14:33', raw: 90 } },
+    worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: WORLD_TIME_ORIGIN },
+    onEditWorldTime: fn(async () => ({ ok: false })),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditWorldTime).toHaveBeenCalledWith('e3', 105))
+
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+  },
+}
 
 export const OlderBoundaryShimmer: Story = {
   args: { hasOlder: true },

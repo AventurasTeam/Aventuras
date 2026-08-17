@@ -1,0 +1,54 @@
+diff --git a/dist/chunk-VL2OQCWN.js b/dist/chunk-VL2OQCWN.js
+index b3edfcef8c832d4214f07b05ac452b8b6e232852..b71680ce7375d04f70305c6d2e5e85534cfcdfac 100644
+--- a/dist/chunk-VL2OQCWN.js
++++ b/dist/chunk-VL2OQCWN.js
+@@ -64,10 +64,10 @@ var _Tiktoken = class {
+     const uncompressed = ranks.bpe_ranks.split("\n").filter(Boolean).reduce((memo, x) => {
+       const [_, offsetStr, ...tokens] = x.split(" ");
+       const offset = Number.parseInt(offsetStr, 10);
+-      tokens.forEach((token, i) => memo[token] = offset + i);
++      tokens.forEach((token, i) => memo.set(token, offset + i));
+       return memo;
+-    }, {});
+-    for (const [token, rank] of Object.entries(uncompressed)) {
++    }, new Map());
++    for (const [token, rank] of uncompressed) {
+       const bytes = base64.toByteArray(token);
+       this.rankMap.set(bytes.join(","), rank);
+       this.textMap.set(rank, bytes);
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 54d9880e437a4130d64ce7d575f3ba515afbf5ad..b2ccdf52f7ce76be1856171cd8a174e5260a1237 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -86,10 +86,10 @@ var _Tiktoken = class {
+     const uncompressed = ranks.bpe_ranks.split("\n").filter(Boolean).reduce((memo, x) => {
+       const [_, offsetStr, ...tokens] = x.split(" ");
+       const offset = Number.parseInt(offsetStr, 10);
+-      tokens.forEach((token, i) => memo[token] = offset + i);
++      tokens.forEach((token, i) => memo.set(token, offset + i));
+       return memo;
+-    }, {});
+-    for (const [token, rank] of Object.entries(uncompressed)) {
++    }, new Map());
++    for (const [token, rank] of uncompressed) {
+       const bytes = base64__default.default.toByteArray(token);
+       this.rankMap.set(bytes.join(","), rank);
+       this.textMap.set(rank, bytes);
+diff --git a/dist/lite.cjs b/dist/lite.cjs
+index 52cc2141481e90d799058566204ef121a2dde973..dbdfa468510a6425d65777a56aa15705a85eae4a 100644
+--- a/dist/lite.cjs
++++ b/dist/lite.cjs
+@@ -68,10 +68,10 @@ var _Tiktoken = class {
+     const uncompressed = ranks.bpe_ranks.split("\n").filter(Boolean).reduce((memo, x) => {
+       const [_, offsetStr, ...tokens] = x.split(" ");
+       const offset = Number.parseInt(offsetStr, 10);
+-      tokens.forEach((token, i) => memo[token] = offset + i);
++      tokens.forEach((token, i) => memo.set(token, offset + i));
+       return memo;
+-    }, {});
+-    for (const [token, rank] of Object.entries(uncompressed)) {
++    }, new Map());
++    for (const [token, rank] of uncompressed) {
+       const bytes = base64__default.default.toByteArray(token);
+       this.rankMap.set(bytes.join(","), rank);
+       this.textMap.set(rank, bytes);

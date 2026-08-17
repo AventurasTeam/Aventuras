@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { type ReactElement } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { View } from 'react-native'
 import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
+import { EARTH_GREGORIAN } from '@/lib/calendar'
 import { themes } from '@/lib/themes'
 
 import { EntryCard, type EntryCardProps } from './entry-card'
@@ -19,6 +20,33 @@ const baseProps = {
 
 const aiMeta = {
   tokens: { prompt: 1840, completion: 312, reasoning: 87 },
+}
+
+// Module scope keeps the frame referentially stable — WorldTimeEditForm's
+// tuple memo keys on its identity.
+const ORIGIN = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
+
+// 90 s past the origin — 00:01:30, so the `second` tier seeds at 30.
+const editableTimeProps = {
+  worldTimeRaw: 90,
+  worldTimeFrame: { calendar: EARTH_GREGORIAN, origin: ORIGIN },
+}
+
+const aiEntry = {
+  kind: 'ai_reply',
+  content: 'The figure raises a single gloved hand.',
+  meta: aiMeta,
+} satisfies Partial<EntryCardProps>
+
+// The clickable footer is found by its aria-label, so nothing else notices if
+// the label degrades to a bare string on the trigger — which would silently
+// drop the muted text style, since bare strings ignore TextClassContext.
+function expectLabelIsOwnTextNode() {
+  const label = screen.getByText(baseProps.worldTimeLabel)
+  const trigger = screen.getByRole('button', { name: 'Edit time' })
+  expect(label).toBeVisible()
+  expect(trigger).toContainElement(label)
+  expect(label).not.toBe(trigger)
 }
 
 const meta: Meta<typeof EntryCard> = {
@@ -376,5 +404,353 @@ export const RichXssSanitization: StoryT = {
       expect(host!.shadowRoot!.innerHTML).toContain('Safe rich text.')
     })
     expect((globalThis as { __xssRich?: boolean }).__xssRich).toBeUndefined()
+  },
+}
+
+/**
+ * Desktop / tablet fork: the card anchors the edit form itself, and Cancel
+ * closes it without reporting. Runs at the 1200 px default viewport, so
+ * `onRequestEditTime` must stay untouched even though it is supplied.
+ */
+export const EditableWorldTimeFooter: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    onRequestEditTime: fn(),
+  },
+  play: async ({ args, canvasElement }) => {
+    // No break passed, so nothing may claim the indicator's role.
+    expect(canvasElement.querySelector('[role="img"]')).toBeNull()
+    expectLabelIsOwnTextNode()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+    expect(args.onRequestEditTime).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(args.onEditTime).not.toHaveBeenCalled()
+  },
+}
+
+/**
+ * Phone fork. Both handlers are supplied, so `tier === 'phone'` is the only
+ * path that reaches `onRequestEditTime` — the viewport global is what proves
+ * it, and Storybook's vitest addon applies it before the story runs.
+ */
+export const WorldTimeEditRequestsHostOverlayOnPhone: StoryT = {
+  ...wrap,
+  globals: { viewport: { value: 'mobile1' } },
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    onRequestEditTime: fn(),
+  },
+  play: async ({ args }) => {
+    expectLabelIsOwnTextNode()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(args.onRequestEditTime).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(args.onEditTime).not.toHaveBeenCalled()
+  },
+}
+
+/**
+ * Pins the fallback as contract, not accident: a host that supplies only an
+ * inline editor gets the inline editor at every tier, phone included. The dev
+ * screen and these stories are exactly such hosts, so this is not a misuse to
+ * warn about — only a host that omits `onEditTime` asks for the native Sheet.
+ */
+export const WorldTimeInlineEditorOnPhone: StoryT = {
+  ...wrap,
+  globals: { viewport: { value: 'mobile1' } },
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+  },
+}
+
+/** Editing the seed value and saving reports cumulative seconds, then closes. */
+export const WorldTimeEditSaveReportsSeconds: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    // Re-query after each step: FormRow re-picks its layout one frame after the
+    // dialog opens, which swaps the branch and detaches the earlier node.
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    // 00:01:45 past the origin.
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  },
+}
+
+/**
+ * A host that reports the write failed keeps the overlay open on the typed
+ * tuple, so the edit is not lost to a retype — the phone Sheet and the reader's
+ * other edit flows behave the same way. Only `true` closes it; a rejected
+ * promise is caught and reported rather than closing on a write that failed.
+ */
+export const WorldTimeEditKeepsOverlayOpenOnFailure: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => false),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    // Still open, still holding what was typed, and the failure is explained
+    // in the same realm that owns the editor.
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't update the entry's time.")
+  },
+}
+
+/**
+ * A rejecting host must not wedge Save. On native the card runs inside the
+ * expo-dom WebView, where a bridge-level failure rejects outside the host's own
+ * try/catch and no global handler exists — uncaught, the overlay would sit there
+ * doing nothing on every retry.
+ */
+export const WorldTimeEditSurvivesARejectedWrite: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => {
+      throw new Error('bridge closed')
+    }),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    // A WebView-local error stays visible beside the form; a document-local
+    // toast queue has no mounted consumer in the native reader.
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent("Couldn't update the entry's time."),
+    )
+
+    // Overlay survives with the typed tuple, and Save still works on a retry.
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+    expect(screen.getByRole('textbox', { name: 'Second' })).toHaveValue('45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledTimes(2))
+  },
+}
+
+const pendingWorldTimeSave: { finish?: (ok: boolean) => void } = {}
+
+/** A submitted editor cannot be dismissed and replaced before its save settles. */
+export const WorldTimeEditLocksWhileSaving: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          pendingWorldTimeSave.finish = resolve
+        }),
+    ),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Second' })).toBeVisible())
+
+    await userEvent.clear(screen.getByRole('textbox', { name: 'Second' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'Second' }), '45')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(args.onEditTime).toHaveBeenCalledWith(105))
+
+    expect(screen.getByRole('progressbar', { name: 'Loading' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible()
+
+    pendingWorldTimeSave.finish?.(true)
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  },
+}
+
+/**
+ * Tier-independent half of the fork: with no `onEditTime` to land a save on,
+ * the card refuses to host the overlay at any width, because a Dialog Save
+ * would have nowhere to report and would discard the edit silently.
+ */
+export const WorldTimeEditRequestsHostOverlay: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onRequestEditTime: fn(),
+  },
+  play: async ({ args }) => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(args.onRequestEditTime).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  },
+}
+
+/** The break shows as a footer indicator and again as a banner inside the form. */
+export const WorldTimeMonotonicityIndicator: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    worldTimeMonotonicityBreak: { previousLabel: 'Day 12 · 14:33' },
+  },
+  play: async () => {
+    const indicator = screen.getByLabelText('Earlier than previous entry (Day 12 · 14:33)')
+    await expect(indicator).toBeVisible()
+    // Canon requires hovering the indicator to surface the same string without
+    // opening the overlay (patterns/entry-card.md → Click-to-edit).
+    expect(indicator.parentElement).toHaveAttribute(
+      'title',
+      'Earlier than previous entry (Day 12 · 14:33)',
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() =>
+      expect(screen.getByText(/Earlier than previous entry \(Day 12 · 14:33\)/)).toBeVisible(),
+    )
+  },
+}
+
+/** In-flight gate: `disabled` makes the footer inert, no pointer-events juggling. */
+export const WorldTimeFooterInertWhileDisabled: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    onRequestEditTime: fn(),
+    disabled: true,
+    disabledReason: 'Generating…',
+  },
+  play: async () => {
+    expect(screen.queryByRole('button', { name: 'Edit time' })).not.toBeInTheDocument()
+    await expect(screen.getByText('Day 12 · 14:33')).toBeVisible()
+  },
+}
+
+/** An entry already open for content editing offers no second edit affordance. */
+export const WorldTimeFooterInertWhileEditing: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+    onRequestEditTime: fn(),
+    editing: true,
+    onContentChange: fn(),
+    onCommitEdit: fn(),
+    onCancelEdit: fn(),
+  },
+  play: async () => {
+    expect(screen.queryByRole('button', { name: 'Edit time' })).not.toBeInTheDocument()
+    await expect(screen.getByText('Day 12 · 14:33')).toBeVisible()
+  },
+}
+
+/**
+ * A generation starting while the dialog is open drops the edit affordance and
+ * unmounts the overlay. It must not come back on its own when generation ends:
+ * the open flag lives inside the dialog subtree so it dies with it. Driven
+ * through a harness rather than args because the resurrection only shows across
+ * a `disabled` round-trip, and the setter is called directly because a modal
+ * aria-hides every control outside itself.
+ */
+let setStoryBlocked: ((blocked: boolean) => void) | null = null
+
+function ResurrectHarness(args: EntryCardProps) {
+  const [blocked, setBlocked] = useState(false)
+  useEffect(() => {
+    setStoryBlocked = setBlocked
+    return () => {
+      setStoryBlocked = null
+    }
+  }, [])
+  return <EntryCard {...args} disabled={blocked} />
+}
+
+export const WorldTimeEditDoesNotResurrectAfterGeneration: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...editableTimeProps,
+    onEditTime: fn(async () => true),
+  },
+  render: (args) => <ResurrectHarness {...args} />,
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Edit time' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit time' })).toBeVisible())
+
+    setStoryBlocked?.(true)
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Edit time' })).not.toBeInTheDocument(),
+    )
+
+    setStoryBlocked?.(false)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Edit time' })).toBeVisible())
+    expect(screen.queryByRole('dialog', { name: 'Edit time' })).not.toBeInTheDocument()
   },
 }

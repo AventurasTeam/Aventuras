@@ -103,6 +103,12 @@ When stacked:
   chrome the desktop pane carries.
 - **Hint** — sits beneath the label, above the input. Sentence-case
   sans, 12 px / `text-xs`, `--fg-secondary`. No monospace.
+- **Error** — sits **beneath the input**, not in the hint's slot.
+  Same type treatment as the hint, `--danger`. Validation feedback
+  belongs next to the control that produced it, and this keeps the
+  error on the same side of the input in both layouts — the
+  two-column row already renders it there. The hint is suppressed
+  while an error is showing, so the two never stack up.
 - **Input** — consumes the full content width of the form
   container. Control height inherits from the active density
   (regular default on phone = 44 px, meeting Apple's tap-target

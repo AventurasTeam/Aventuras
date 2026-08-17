@@ -14,6 +14,7 @@ export type TierTupleInputProps = {
   calendar: CalendarSystem
   value: TierTuple
   onChange: (value: TierTuple) => void
+  disabled?: boolean
   className?: string
 }
 
@@ -35,7 +36,13 @@ function displayValue(value: number | undefined): string {
   return value === undefined || Number.isNaN(value) ? '' : String(value)
 }
 
-export function TierTupleInput({ calendar, value, onChange, className }: TierTupleInputProps) {
+export function TierTupleInput({
+  calendar,
+  value,
+  onChange,
+  disabled,
+  className,
+}: TierTupleInputProps) {
   // `touched` is keyed by tier NAME, and names collide across calendars (both
   // Earth and Shire have `day`). StepCalendar keys this component by calendar
   // id, so a swap remounts and resets `touched` — otherwise a stale flag would
@@ -66,6 +73,7 @@ export function TierTupleInput({ calendar, value, onChange, className }: TierTup
                   mode="dropdown"
                   options={labelOptions(tier)}
                   value={currentValue !== undefined ? String(currentValue) : undefined}
+                  disabled={disabled}
                   onValueChange={(v) => {
                     markTouched(tier.name)
                     onChange({ ...value, [tier.name]: Number(v) })
@@ -75,6 +83,7 @@ export function TierTupleInput({ calendar, value, onChange, className }: TierTup
               ) : (
                 <Input
                   keyboardType="numeric"
+                  editable={disabled ? false : undefined}
                   value={displayValue(currentValue)}
                   onChangeText={(text) => {
                     const parsed = text.trim() === '' ? Number.NaN : Number(text)

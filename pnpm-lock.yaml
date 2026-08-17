@@ -11,6 +11,9 @@ patchedDependencies:
   '@gorhom/bottom-sheet':
     hash: 3ed917bd30d41b51f65099d6d2a652b66ddc1d9084814b4508959176d7485c62
     path: patches/@gorhom__bottom-sheet.patch
+  js-tiktoken:
+    hash: 4210e180e6313a5f538d9310783eebeca66a747cd2e191ef7fbdeb00db97ee9b
+    path: patches/js-tiktoken.patch
   onnxruntime-react-native:
     hash: 2752bc57af4d8f99c0ead383a74b697c125199c719add370bf7fb2255f201678
     path: patches/onnxruntime-react-native.patch
@@ -189,7 +192,7 @@ importers:
         version: 26.3.0(typescript@5.9.3)
       js-tiktoken:
         specifier: ^1.0.21
-        version: 1.0.21
+        version: 1.0.21(patch_hash=4210e180e6313a5f538d9310783eebeca66a747cd2e191ef7fbdeb00db97ee9b)
       jsonrepair:
         specifier: ^3.14.1
         version: 3.15.0
@@ -15960,7 +15963,7 @@ snapshots:
       '@hapi/topo': 6.0.2
       '@standard-schema/spec': 1.1.0
 
-  js-tiktoken@1.0.21:
+  js-tiktoken@1.0.21(patch_hash=4210e180e6313a5f538d9310783eebeca66a747cd2e191ef7fbdeb00db97ee9b):
     dependencies:
       base64-js: 1.5.1
 

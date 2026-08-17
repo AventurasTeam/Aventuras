@@ -34,10 +34,13 @@ Used by:
   than our Popover primitive — the two are sibling rn-primitives
   packages, so Popover here is _not_ Select's tablet / desktop
   surface.
-- [EntryCard pattern](./entry-card.md#world-time-footer): Popover
-  hosts the per-entry world-time edit overlay on desktop (anchored
-  to the footer); Sheet hosts it on phone. Both contain a
-  `TierTupleInput` matching the active calendar's tier shape.
+- [EntryCard pattern](./entry-card.md#world-time-footer): Sheet
+  hosts the per-entry world-time edit overlay on phone. Desktop and
+  tablet use a centred **Dialog**, not a Popover — the trigger sits
+  in a scrolling entry list, so an anchored overlay drifts off its
+  own footer and collides with the chrome around the list. Both
+  contain a `TierTupleInput` matching the active calendar's tier
+  shape.
 - [`SearchableOverlayList`](./searchable-overlay-list.md): composes
   both — anchored Popover on desktop/tablet, bottom Sheet on phone —
   as the per-tier dispatch for its three consumers (Autocomplete,

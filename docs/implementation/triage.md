@@ -373,17 +373,6 @@ slice-planning gate forces its resolution before that slice is planned.
   packaged-green until that's fixed, and there is no clean in-app route to
   a non-existent branch. Surfaced by the M3 E2E harness work (2026-07-24),
   narrowed by the coverage-expansion pass (2026-07-24).
-- **`EntryCard` action controls are not internationalized.**
-  `components/compounds/entry-card.tsx` hardcodes English on its per-row
-  controls — `Edit entry`, `Delete entry`, `Regenerate`, `Branch from
-here`, `Flip era`, the edit textarea's `Edit entry content`, `Save` /
-  `Cancel`, and the system-entry `Retry` / `Dismiss` — rather than routing
-  through `t()` like the rest of the chrome. No user-facing regression yet
-  (English-only today), but it breaks the i18n discipline and forces E2E to
-  match literals: `e2e/locators/reader.ts` centralizes them so the eventual
-  i18n pass is a one-line locator change. Fix is to move the strings into
-  the `reader` / `common` namespaces and swap the locators to `t()`.
-  Surfaced by the coverage-expansion pass (2026-07-24).
 - **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
   `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
   `{{ entry.content }}` (inside the `recentEntries` loop) renders the
@@ -1233,6 +1222,250 @@ on hover`; the shipped rows render label and tagline only, so the
   restore them on reopen, or block the swipe once a result has
   landed. Applies to `AiAssist` first but the same reset pattern will
   reach 3.6b's cast suggestions. Raised 2026-08-11.
+- **`formatWorldTime` re-parses its Liquid template on every call.**
+  `lib/calendar/render.ts` runs `parseAndRenderSync` per invocation,
+  so a screen that formats N times parses the calendar's
+  `displayFormat` N times. Measured at the reader's 50-entry window:
+  2.1 ms of a 16.9 ms decoration walk, against 13.0 ms in
+  `worldTimeToTuple` — the smaller half, and Slice 3.8 absorbed the
+  duplicate-value rows with a call-local memo, so nothing is blocked.
+  It became worth naming because 3.8 turned this from one call per
+  render into one per row. Caching the parsed template by
+  `displayFormat` is a small change in `render.ts`; the larger win, if
+  the walk ever shows up in a profile, is memoizing `worldTimeToTuple`
+  by `(worldTime, calendar, origin)` rather than re-walking tiers.
+  Raised 2026-08-15 by the Slice 3.8 Task 2 review.
+- **`worldTime === 0` is overloaded: story origin and flashback
+  sentinel.** The opening entry and every user action that inherits
+  from it sit at 0, `lib/calendar/render.ts` special-cases 0, and the
+  classifier emits 0 for flashbacks. The monotonicity check therefore
+  cannot see a genuine backwards jump that lands exactly on 0 — it is
+  indistinguishable from a flashback and stays unflagged.
+  `docs/ui/patterns/entry-card.md` prescribes this convention, so
+  Slice 3.8 implements it as specified; the note exists so the next
+  person to ask "why is this regression not warned about?" finds the
+  answer. Revisit if flashbacks ever get their own marker.
+  Raised 2026-08-15 by the Slice 3.8 Task 2 review.
+- **`tupleToBaseUnits` is linear in the top-tier value, and free-text
+  tier inputs make that user-reachable.** Measured on
+  `EARTH_GREGORIAN`, one call, cold: year 2024 → 13 ms, 20245 → 91 ms,
+  202456 → 892 ms, 2024561 → ~11.6 s, all synchronous on the UI
+  thread. `validateOriginTuple` accepts anything up to `tierMax`
+  (10^9 here), so validation does not bound it, and memoizing at the
+  call site does not help typing — every keystroke is a new tuple, so
+  the memo misses every time. Both the wizard's origin picker and
+  Slice 3.8's world-time edit overlay expose this: one stray digit in
+  a year field freezes the UI for ~90 ms, two for ~900 ms. Slice 3.8
+  raises the exposure by moving the field from a once-per-story setup
+  flow into a frequent reader interaction. Fixing it at the call site
+  needs a lexicographic tuple compare, which is NOT safe in general —
+  `baseUnitsToTuple` tolerates zero-length units, so on a degenerate
+  calendar tuple ordering is monotonic but not strictly so, and a
+  below-origin block could flip to allowed. The fix belongs in
+  `lib/calendar`: memoize or restructure the tier walk so cost stops
+  scaling with the year. Raised 2026-08-15 by the Slice 3.8 Task 4
+  implementation.
+- **A narrow story decorator silently detaches nodes captured in
+  `play`, turning interaction assertions vacuous.** `FormRow` guesses
+  `stacked` from `useTier()` (which reads the window: 1200 px in the
+  vitest browser), then corrects it from `onLayout` against the real
+  container width. When those disagree, the JSX branch swaps ~1-5 ms
+  after mount and `children` remount at a new position — so a field
+  node captured before that is detached, keystrokes land on the dead
+  node, and the component keeps its seed state. A story that "types a
+  value and asserts the result" then passes green having typed
+  nothing. Width sweep on the same file confirms the boundary is
+  exactly `NARROW_THRESHOLD_PX = 640`: detaches at 560 and 639, clean
+  at 641, 900, 1100. Two traps found alongside it: NativeWind width
+  classes do **not** compute in the vitest storybook browser (both
+  `w-[560px]` and `w-24` measure 1200 px) while inline `style={{
+width }}` does, so a class-width decorator and a style-width
+  decorator are not comparable controls; and first-story immunity is
+  incidental, not a rule — `useWindowDimensions()` sometimes returns 0
+  on first mount, which happens to make the guess match. Reachable
+  wherever a play-driven story puts a `FormRow` under an effective
+  width below 640 and captures a node before typing.
+  `entry-card.stories.tsx` has no `FormRow` and is unaffected (20/20
+  green); `components/wizard/wizard-shell.stories.tsx` uses an inline
+  375 px phone frame and is worth a check. Decide whether the fix is a
+  lint/guard on narrow decorators, a `FormRow` that does not guess
+  before measuring, or a documented story-authoring rule. Raised
+  2026-08-15 by the Slice 3.8 Task 4 review.
+- **Storybook viewport globals: named keys only, and the default is
+  desktop.** `@storybook/addon-vitest` applies
+  `setViewport(parameters, globals)` before each story runs, so a
+  story can select a tier with `globals: { viewport: { value:
+'mobile1' } }` — no `vi`, no `Dimensions.set()`, no
+  `@vitest/browser/context` import. Two traps found while using it in
+  Slice 3.8. First, `setViewport` only honours a key present in
+  `{...MINIMAL_VIEWPORTS, ...options}`, so the `'{width}-{height}'`
+  form documented in `storybook/dist/viewport/index.d.ts` (e.g.
+  `'320-480'`) **silently falls back** to the default instead of
+  failing — a story written that way claims a tier it never ran at.
+  Second, `DEFAULT_VIEWPORT_DIMENSIONS` is 1200x900, so every story
+  without a viewport global runs at **desktop** tier (>= 1024), not at
+  some neutral width; a story that means to exercise phone or tablet
+  behaviour and omits the global tests desktop and passes for the
+  wrong reason. Worth a documented story-authoring note, and worth
+  auditing any existing story whose name or docblock claims a
+  narrow-tier behaviour. Raised 2026-08-15 by the Slice 3.8 Task 5
+  review.
+- **`useTier()` now runs per `EntryCard`, and on native it re-fires on
+  keyboard show/hide.** Slice 3.8's tier fork put a `useTier()` call
+  inside every `EntryCard`, and `components/reader/reader-surface.tsx`
+  renders one per row in a non-virtualized `.map()`, so every window
+  dimension change re-renders the whole loaded window. On desktop that
+  is resize-only and rare. Inside the expo-dom WebView on native,
+  `useWindowDimensions()` also fires when the soft keyboard shows or
+  hides — which happens on every composer focus and every world-time
+  edit on phone, i.e. exactly during the interactions this slice adds.
+  Not measured. Options if it shows up in a profile: hoist the tier
+  read to `ReaderSurface` and pass it down, or give `EntryCard` a tier
+  override prop defaulting to its own read. Raised 2026-08-15 by the
+  Slice 3.8 Task 5 review.
+- **A BC-style origin renders every non-opening entry in the wrong
+  era.** `formatWorldTime` short-circuits at `worldTime === 0` and
+  renders the origin tuple directly, which is the only path that can
+  express a year below a tier's `startValue`. One second later the
+  normal path takes over, and `tupleToBaseUnits` cannot represent
+  `year < 1` for `earth-gregorian` (its loop `for (v = 1; v < -43;
+v++)` never runs), so the era is silently lost. Observed with origin
+  `{year: -43, month: 3, day: 15}`: `worldTime 0` renders
+  `"March 15, 44 BC 0:0"` and `worldTime 1` renders
+  `"March 15, 1 AD 0:0"` — a hard discontinuity one second past the
+  origin. The zero short-circuit is not the bug, it is the mask; the
+  real fix is in `tupleToBaseUnits` / `baseUnitsToTuple`, which have no
+  representation for values below a tier's `startValue`. Nothing in v1
+  ships a BC origin, and Slice 3.8 deliberately left the guard intact
+  rather than widening its scope. Raised 2026-08-15 by the Slice 3.8
+  calendar fix.
+- **`components/ui/popover.tsx` renders nested `role="dialog"`
+  elements.** Radix's own content wrapper plus `NativeAwareContent`'s
+  inner View both carry the role, so an unfiltered
+  `getByRole('dialog')` resolves to two elements and trips Playwright's
+  strict mode and Testing Library's multiple-match error. Only the
+  inner node carries an accessible name, so a name-filtered query
+  happens to resolve uniquely today — which means the hazard is
+  invisible until someone writes the unfiltered form. Affects every
+  Popover consumer, not one slice. Either drop the role from the inner
+  View or stop `NativeAwareContent` re-declaring it. Raised 2026-08-15
+  by the Slice 3.8 Task 5 and Task 7 reviews.
+- **`getCalendar` consults only code builtins, never the
+  `vault_calendars` table.** The seeded story sets `calendarSystemId:
+'cal_default'` and a matching `vault_calendars` row exists, but the
+  registry holds only `earth-gregorian`, so every story falls through
+  to the default and renders Gregorian dates regardless of the
+  calendar it was configured with. Slice 3.8 relies on that fallback
+  being load-bearing and correct, so nothing is broken today — but it
+  means the registry-hit path is unexercised by seed data and a
+  user-authored calendar would be silently ignored once the vault can
+  hold one. Decide whether resolution is meant to be registry-only,
+  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
+  Slice 3.8 Task 6 implementation.
+- **Vitest treats a value returned from `beforeEach` as a teardown
+  callback.** A concise arrow body — `beforeEach(() => mock.mockReset())`
+  — implicitly returns the mock, which Vitest then _invokes_ after each
+  test. When the mock's implementation throws, the throw surfaces as a
+  test failure whose stack points at the `throw` statement, reading
+  exactly like "the code under test does not handle errors" when the
+  code is fine. Cost real debugging time during Slice 3.8. Use a block
+  body in `beforeEach`. Worth a line in the testing conventions or a
+  lint rule, since the failure mode actively misdirects. Raised
+  2026-08-15 by the Slice 3.8 Task 6 fixes.
+- **Post-3.8 tidy in the reader and UI layers.** Four small items, none
+  behavioural. The reader route still uses bare `void action(...)` on
+  `handleCommitEdit` despite `runAction` existing in `lib/utils.ts`
+  specifically to replace it, and there is no global unhandled-rejection
+  handler, so a thrown action error produces no toast and no log. The
+  calendar-fallback expression is duplicated verbatim between the
+  reader route's world-time hook and `app/wizard.tsx`, and belongs in
+  `lib/calendar` as a `resolveCalendar` policy alongside the registry;
+  its trailing `?? null` is unreachable and its `useMemo` is
+  unnecessary, both of which dissolve in that move.
+  `DisabledReasonTooltip` is now used for a warning on an _enabled_
+  control, so its name and TSDoc no longer describe it — a rename or a
+  thin generic alias would fix it. And `saveEdit` in
+  `e2e/locators/reader.ts` is page-scoped, which was unambiguous until
+  3.8 added a second Save button to the reader; not reachable today
+  since the two overlays cannot both be open, but it is one strict-mode
+  violation away. Raised 2026-08-15 by the Slice 3.8 reviews.
+- **`per-turn-retrieval.test.ts` fails intermittently, but only when
+  `pnpm test:run` runs the unit and storybook projects in one
+  invocation.** Observed 2 failures in 4 consecutive `pnpm test:run`
+  invocations while closing Slice 3.8. The failing pair is always
+  `retrieval phase — embedder config > fails blocking when the embedder
+config does not resolve` (hits the default 5 s test timeout at
+  ~5020 ms, so `runRetrievalPhase()` hangs) and `retrieval phase —
+abort > survives a post-sync recount that rejects, warning instead of
+failing` (fails in ~11 ms, consistent with a cascade from shared
+  state the timed-out test left behind rather than an independent
+  defect). What was ruled out: the file passes 60/60 five times run
+  alone, 3/3 more while a full storybook run is saturating the machine
+  concurrently, and the storybook project alone passes 3/3 — so plain
+  CPU contention is not the trigger. Attribution to Slice 3.8 is
+  **unresolved**: its only change to shared substrate is extracting
+  `withKeyLock` from `apply-delta-action.ts` into
+  `lib/actions/delta/key-lock.ts`, which is a byte-identical move with
+  `promoteStagedEntity`'s opt-in unchanged and no path from the
+  retrieval phase to it — but the slice did grow the suite from 2942 to
+  3697 tests, so it could be surfacing a pre-existing marginal
+  condition rather than causing one. A base-commit comparison at equal
+  load was attempted and is inconclusive: a git worktree with a
+  symlinked `node_modules` cannot run the storybook project at all (the
+  addon setup file 404s outside the vite root), which is itself worth
+  fixing since it blocks every reviewer working from a worktree.
+  Raised 2026-08-15 while closing Slice 3.8.
+- **`patches/js-tiktoken.patch` is load-bearing for Android and nothing
+  fails if it is dropped.** `js-tiktoken`'s `Tiktoken` constructor stages
+  the decompressed BPE ranks in a plain object before copying them into
+  its two `Map`s. That staging object reaches 199,998 properties, and
+  Hermes caps object property storage at 196,607
+  ([facebook/hermes#851](https://github.com/facebook/hermes/issues/851)),
+  so `new Tiktoken(o200kBase)` throws `RangeError` on Android. It is
+  reached on the reader route via `useOpenRegionTokens` → `countTokens`,
+  which means **opening any story crashes on Android** — since Slice 3.4b
+  wired the hook, not since 3.8. The patch swaps the staging object for a
+  `Map`; verified equivalent, not merely plausible: same 199,998 pairs,
+  zero rank mismatches, and zero duplicate byte-keys or ranks, so the
+  differing iteration order cannot change either `Map`'s contents. The
+  hazard is that **no test can catch its removal** — Node has no property
+  cap, so the whole suite passes green with the patch reverted, and a
+  `js-tiktoken` bump that fails to reapply it silently re-breaks Android.
+  Options: a bundle-level assertion that the staging object is gone, an
+  Android smoke in CI, or upstreaming the `Map` change. Raised 2026-08-16
+  by the Slice 3.8 Android smoke.
+- **`updateEntryWorldTime`'s read-modify-write is serialized only
+  against itself, not against the pipeline's writes to the same row.**
+  `updateStoryEntryMetadata`'s handler is a whole-column replace
+  (`.set({ metadata })`, no merge), and `updateEntryWorldTime` reads
+  `current.metadata` outside the transaction, then dispatches. Its
+  `withKeyLock` key is per-action, so it does not serialize against
+  `suggestion-refresh` or `per-turn-piggyback` dispatching the same
+  kind at the same entry — an interleave is a silent lost update in
+  whichever direction loses. What actually prevents it today is that
+  both pipeline writers run under `hard-gate` pipelines, which
+  `isUserEditBlocked` rejects; the gate is now re-checked immediately
+  before the dispatch, which closes the awaited-read window but not the
+  dispatch itself. The trap for whoever fixes this properly: sharing
+  the key with `applyDeltaAction` **deadlocks**, since `withKeyLock` is
+  not reentrant and the inner call would await the outer's own promise.
+  The real fixes are a reentrant lock or building the payload inside
+  the transaction; both are larger than a slice. Raised 2026-08-16 by
+  the Slice 3.8 review.
+- **The calendar-registry fallback now backs a write path, not just
+  rendering.** Already filed above for display: every story falls
+  through to `earth-gregorian` because the registry never consults
+  `vault_calendars`. Two corollaries the display framing does not
+  cover. (1) The fallback calendar defines the world-time edit form's
+  tiers _and_ its inverse conversion, so a user edits Minute/Second
+  fields the story's own calendar does not have and those seconds are
+  written to `metadata.worldTime`; when the registry eventually
+  resolves the real calendar, previously-saved values silently mean
+  something different. (2) The reader and the prompt disagree —
+  `generation-context.ts` calls `getCalendar` with no fallback and
+  sends `calendarVocabulary: null`, so the reader shows Gregorian dates
+  while the model is told there is no calendar. Raised 2026-08-16 by
+  the Slice 3.8 review.
 - **`Select`'s dropdown trigger drops the current value from its
   accessible name once `label` is set.** `@rn-primitives/select`
   forces `role="button"` on the web trigger, overriding Radix's

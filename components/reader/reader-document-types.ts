@@ -1,5 +1,8 @@
 // components/reader/reader-document-types.ts
+import type { CalendarFrame } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
+
+import type { WorldTimeDecoration } from './worldtime-decoration'
 
 export type StreamingPayload = { content: string; reasoning: string }
 
@@ -14,6 +17,12 @@ export type ReaderSurfaceHandle = { jumpToBottom: () => void }
  */
 export type ReaderSurfaceProps = {
   rows: StoryEntry[]
+  /** Host-computed world-time labels + monotonicity flags, keyed by entry id.
+   *  Deliberately a side table, not merged into `rows` — merging would hand
+   *  ReaderRow fresh row objects on every entries patch and void its memo. */
+  worldTimeDecorations: Record<string, WorldTimeDecoration>
+  /** Registry-resolved calendar + story origin (fallback applied) — null hides/inerts footers. */
+  worldTimeFrame: CalendarFrame | null
   /** Non-null only while the streaming row should be visible (host-gated). */
   streaming: StreamingPayload | null
   /** Branch identity: switch resets edit state and re-lands at bottom. */
@@ -31,6 +40,9 @@ export type ReaderSurfaceProps = {
   onNearTop: () => Promise<void>
   onCommitEdit: (entryId: string, content: string) => Promise<EditResult>
   onRequestRollback: (entryId: string) => Promise<void>
+  onEditWorldTime: (entryId: string, nextWorldTime: number) => Promise<EditResult>
+  /** Phone tier: the document requests; the host presents the native Sheet. */
+  onRequestEditWorldTime: (entryId: string) => Promise<void>
   onRegenerate: (entryId: string) => Promise<void>
   onRetrySystemEntry: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>

@@ -130,9 +130,19 @@ inset: 0` root) — expo-dom's mount root is a flex container in
 
 Serializable props in (native → document):
 
-- `rows` — the loaded entry window (entries with metadata), plus
-  the host-formatted world-time labels (calendar rendering stays
-  native).
+- `rows` — the loaded entry window (entries with metadata),
+  unchanged. Alongside it, `worldTimeDecorations` carries the
+  host-formatted world-time labels, raw seconds, and the
+  monotonicity-break marker (the preceding entry's label), keyed by
+  entry id (calendar rendering and the monotonicity walk stay
+  native). It is a side table rather than
+  fields merged into `rows` so that re-walking the window doesn't
+  hand the document fresh row objects and defeat per-row
+  memoization. `worldTimeFrame` — the active calendar definition
+  paired with the story's `worldTimeOrigin` — crosses as data too,
+  seeding the in-document edit Dialog. The two travel as one
+  memoized object so the seam sees a single stable identity rather
+  than two nullables checked apart.
 - `streaming` — the live stream row (`content`, `reasoning`,
   `phase`) or null. Buffer throttling stays native; cadence
   variance is accepted.
@@ -140,17 +150,23 @@ Serializable props in (native → document):
   Host-derived from window-size math (a full first window means
   maybe-more; any short load proves the branch top is in the
   window). Drives the boundary skeleton and gates `onNearTop`.
-- `editBlocked`, `showJumpToBottom`, theme id + token values, and
-  other settings-derived flags.
+- `branchKey` — branch identity. A change resets in-document edit
+  state and re-lands the scroll at the bottom.
+- `editBlocked`, `jumpButtonEnabled`, `systemFixLabel` (present only
+  when the system entry has a kind-specific fix route), theme id +
+  token values, and other settings-derived flags.
 - `syncNonce` — bumped by the host whenever it must force a full
   prop re-emission (see handshake).
 
 Async function props out (document → native):
 
 - Entry actions: edit commit, regenerate, branch, delete, flip era,
-  system-entry retry/dismiss/fix. The document requests; native
-  confirms (modals) and executes (action layer); results flow back
-  as `rows` updates.
+  system-entry retry/dismiss/fix, and world-time edits —
+  `onEditWorldTime` carries the desktop/tablet Dialog's Save, and
+  `onRequestEditWorldTime` asks native to present the phone Sheet.
+  The document requests; native confirms (modals) and executes
+  (action layer); results flow back as `rows` updates, with the
+  decorations recomputed from them.
 - `onNearTop` — boundary auto-load request (older entries). Fired
   only at scroll rest and only while `hasOlder` holds.
 - `onReady` — the readiness handshake (below).
