@@ -4,19 +4,11 @@ import Animated, { useAnimatedStyle } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 /**
- * Reserves the soft keyboard's height at the bottom of the reader column so the
- * composer stays above it.
- *
- * Padding, not translation: the reader above holds `flex-1`, so it compresses
- * and the newest entry stays visible directly above the input while the top bar
- * holds still.
- *
- * The composer is the bottom-most element of a full-height column, so its
- * overlap with the keyboard is exactly the keyboard height — no runtime screen
- * position is involved. That is why this drives padding off the animation hook
- * rather than using the library's `KeyboardAvoidingView`, whose one-shot
- * `viewPositionInWindow` measurement exists for containers that could be
- * anywhere on screen. See
+ * Reserves the soft keyboard's height below the reader column so the composer
+ * stays above it. Padding, not translation: the reader holds `flex-1`, so it
+ * compresses and the newest entry stays visible while the top bar holds still.
+ * Hand-driven off the animation hook rather than the library's
+ * `KeyboardAvoidingView` — see
  * lessons-learned/kav-automatic-offset-animation-race.md.
  */
 export function KeyboardInsetColumn({ children }: { children: ReactNode }) {

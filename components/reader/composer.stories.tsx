@@ -45,8 +45,8 @@ export const SendBlocked: Story = {
 }
 
 /**
- * Send hands the draft up and clears the input. Send also dismisses the soft
- * keyboard, which no browser has — this pins the surviving half, that the
+ * Send hands the draft up and clears the input. The keyboard dismissal that
+ * rides along on native has no web equivalent, so this pins the surviving half:
  * dismissal never swallows the submit.
  */
 export const SendHandsUpDraftAndClears: Story = {

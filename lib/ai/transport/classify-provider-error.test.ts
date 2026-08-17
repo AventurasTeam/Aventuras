@@ -121,4 +121,8 @@ describe('describeProviderError', () => {
     expect(describeProviderError('boom')).toBe('boom')
     expect(describeProviderError(undefined)).toBe('')
   })
+
+  it('labels a throwable that cannot be coerced to a string', () => {
+    expect(describeProviderError(Object.create(null))).toBe('[uncoercible value]')
+  })
 })

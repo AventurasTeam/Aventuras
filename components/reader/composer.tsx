@@ -136,11 +136,9 @@ export const Composer = forwardRef(function Composer(
 
   function handleSubmit() {
     if (!canSend) return
-    // Dismissing also blurs (`keepFocus` defaults false), which is what keeps
-    // the input refocusable — a focused input under a hidden keyboard is the
-    // state a tap won't reopen on Android. Guarded rather than platform-forked:
-    // the controller reports no keyboard on web or with a hardware one, so
-    // there is nothing to dismiss and nothing to blur.
+    // Dismissing also blurs (`keepFocus` defaults false): on Android a focused
+    // input under a hidden keyboard is the state a tap won't reopen. The guard
+    // is a no-op on web and with a hardware keyboard.
     if (isKeyboardVisible()) void dismissKeyboard()
     onSend(text, modesEnabled ? mode : 'free')
     setText('')

@@ -18,8 +18,18 @@ export class ProviderTimeoutError extends Error {
 
 const MAX_CAUSE_DEPTH = 5
 
+// A thrown value need not be coercible: `String()` on a null-prototype object
+// throws, which would replace the provider failure with a TypeError.
+function coerce(value: unknown): string {
+  try {
+    return String(value)
+  } catch {
+    return '[uncoercible value]'
+  }
+}
+
 function labelOf(error: unknown): string {
-  if (!(error instanceof Error)) return String(error)
+  if (!(error instanceof Error)) return coerce(error)
   // The AI SDK stamps every error name with an `AI_` prefix; it carries no
   // information the surrounding log line doesn't already have.
   const name = error.name.replace(/^AI_/, '')
