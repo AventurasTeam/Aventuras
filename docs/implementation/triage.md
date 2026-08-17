@@ -1532,3 +1532,15 @@ failing` (fails in ~11 ms, consistent with a cascade from shared
   the failure entry a pure notice with no custody role and delete this
   class of bug rather than patching its instances. Wants a reader-composer
   design pass, not a local fix. Raised 2026-08-16.
+- **`text-transparent` was never proven to apply to `Text` on Android.**
+  The composer's lint overlay stacks an invisible copy of the whole draft
+  over the input to carry underlines, and it was the codebase's only user
+  of `text-transparent`. On Android that copy painted, showing as doubled
+  glyphs. The overlay now renders only when lints exist, which is never
+  on native (harper needs WebAssembly, Hermes has none), so nothing
+  depends on the class there today and the visible bug is gone — but the
+  cause was not diagnosed on-device, only routed around. Anything that
+  later wants invisible native text (a native linter restoring this
+  overlay, a measurement mirror, a fade-through) must verify on hardware
+  that the class resolves rather than assuming parity with RN-Web, which
+  handles it correctly. Raised 2026-08-17.
