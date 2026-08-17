@@ -1507,7 +1507,10 @@ const appSettingsRow: NewAppSettings = {
       type: 'openai-compatible',
       displayName: 'Local (seed)',
       apiKey: '',
-      endpoint: 'http://localhost:1234/v1',
+      // scripts/mock-llm's default port, so `pnpm db:seed && pnpm mock` needs no
+      // further wiring. Deliberately not 1234, which LM Studio claims — that
+      // leaves a real local provider available as a passthrough upstream.
+      endpoint: 'http://localhost:4319/v1',
       favoriteModelIds: ['seed/narrative'],
       // taggedBlockReliable lets piggyback ride in-band on the narrative call;
       // the classifier profile below still backs the periodic classifier, the
