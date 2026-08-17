@@ -171,6 +171,62 @@ describe('BackyardProvider', () => {
     expect(result.cards[0].nsfw).toBe(true)
   })
 
+  it('advances past filtered-only pages without hiding later safe results', async () => {
+    corsFetchMock
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            result: {
+              data: {
+                json: {
+                  nextCursor: 'safe-page',
+                  hubGroupConfigs: [
+                    {
+                      id: 'group-nsfw',
+                      isNSFW: true,
+                      CharacterConfigs: [{ id: 'config-nsfw', displayName: 'Filtered Character' }],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse([
+          {
+            result: {
+              data: {
+                json: {
+                  nextCursor: 'cursor-3',
+                  hubGroupConfigs: [
+                    {
+                      id: 'group-safe',
+                      isNSFW: false,
+                      CharacterConfigs: [{ id: 'config-safe', displayName: 'Safe Character' }],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ]),
+      )
+
+    const result = await new BackyardProvider().search(
+      { query: 'adventure', page: 1, nsfw: false },
+      'character',
+    )
+
+    expect(corsFetchMock).toHaveBeenCalledTimes(2)
+    expect(decodeTrpcInput(corsFetchMock.mock.calls[1][0])).toEqual(
+      expect.objectContaining({ search: 'adventure', cursor: 'safe-page' }),
+    )
+    expect(result.cards.map((card) => card.id)).toEqual(['config-safe'])
+    expect(result).toEqual(expect.objectContaining({ hasMore: true, nextPage: 2 }))
+  })
+
   it('builds a stable page URL and downloads full character data as JSON', async () => {
     const provider = new BackyardProvider()
     const card = {
