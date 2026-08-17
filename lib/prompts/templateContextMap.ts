@@ -236,19 +236,19 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
-      name: 'leadName',
-      type: 'string',
-      category: 'Entities',
-      description:
-        'Lead character display name; blank on lead-less paths (creative + third-person).',
-      required: false,
-    },
-    {
       name: 'leadEntityId',
       type: 'string',
       category: 'Entities',
       description:
         'Lead cast id — a placeholder after id-substitution, so a model can echo it in sceneEntities; blank on lead-less paths.',
+      required: false,
+    },
+    {
+      name: 'cast',
+      type: 'WizardCastDraft[]',
+      category: 'Entities',
+      description:
+        'Wizard-authored cast rows: id/kind/name/description/status shared by every row, plus per-kind fields — character: voice/traits/drives/visual.{physique,face,hair,eyes,attire,distinguishing}/factionId; location: parentLocationId/condition; item: condition; faction: agenda/standing. `tags` is projected out: it is a user-only search/filter axis, matching the runtime entity rows, which drop it for the same reason. factionId/parentLocationId are ids, not the faction_name/parent_location_name names the cast-suggestion prompt asks the model for — those names resolve to ids at import time. Ids are placeholders after substitution, so the opening can echo them in sceneEntities.',
       required: false,
     },
     {
@@ -286,7 +286,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'WizardLoreDraft[]',
       category: 'Retrieval',
       description:
-        'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates.',
+        'Wizard-authored initial lore rows, uncapped — every row reaches the opening and lore templates. `tags` is projected out, same as on `cast`.',
       required: false,
     },
     {
@@ -314,6 +314,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
   [TEMPLATE_IDS.wizardDescription]: 'wizard',
   [TEMPLATE_IDS.wizardDescriptionRefine]: 'wizard',
   [TEMPLATE_IDS.wizardLore]: 'wizard',
+  [TEMPLATE_IDS.wizardCast]: 'wizard',
   [TEMPLATE_IDS.wizardGenre]: 'wizard',
   [TEMPLATE_IDS.wizardGenreRefine]: 'wizard',
   [TEMPLATE_IDS.wizardTone]: 'wizard',
@@ -326,7 +327,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries', 'turns'],
-  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadName', 'leadEntityId'],
+  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadEntityId', 'cast'],
   Plot: ['happenings'],
   Retrieval: [
     'retrievedEntities',

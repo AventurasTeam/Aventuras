@@ -56,27 +56,6 @@ function warnOnCaptureDrift(id: string, payload: ProbeCapturePayload): void {
   }
 }
 
-/** Pre-v2 payloads carried the failure marker only on the row's column. */
-type PreV2Payload = Omit<ProbeCapturePayload, 'failure_reason'> & {
-  failure_reason?: EmbedderErrorKind | null
-}
-
-/**
- * replayType never sees the row and reads an absent marker as a failure, so
- * without this every pre-v2 capture becomes unsimulatable. Not `??`: null is a
- * valid v2 value meaning "this pass succeeded", and collapsing it into the
- * column's value would re-introduce the dual source.
- */
-function backfillFailureReason(
-  payload: PreV2Payload,
-  rowReason: EmbedderErrorKind | null,
-): ProbeCapturePayload {
-  return {
-    ...payload,
-    failure_reason: payload.failure_reason === undefined ? rowReason : payload.failure_reason,
-  }
-}
-
 /**
  * `row` must be a positional value-array matching capturesForStoryQuery's
  * column order: id, branch_id, captured_at, capture_mode, failure_reason,
@@ -98,8 +77,7 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
   assertCaptureShape(decoded)
   assertRankerParams(decoded.params.ranker)
   warnOnCaptureDrift(id, decoded)
-  const payload = backfillFailureReason(decoded, failureReason)
-  return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload }
+  return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload: decoded }
 }
 
 /**

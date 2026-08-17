@@ -68,14 +68,16 @@
     "missing": {
       "title": "a title",
       "opening": "an opening",
-      "lead": "a lead character name",
+      "lead": "a lead character",
       "effectiveDim": "a valid effective dim",
+      "cast": "cast (every entry needs a name)",
       "lore": "lore (every entry needs a title and a body)"
     },
     "failed": "Couldn't create the story.",
     "createdNotOpened": "Your story was created, but it couldn't be opened. Find it on your story list.",
     "embedFailed": {
-      "title": "Couldn't initialize the embedder",
+      "initTitle": "Couldn't initialize the embedder",
+      "callTitle": "Couldn't index the story",
       "retry": "Retry",
       "openSettings": "Open Memory settings",
       "cancel": "Cancel",
@@ -133,11 +135,7 @@
         "description": "\"Aria drew…\""
       }
     },
-    "leadNotice": "This combination will require a lead character in Cast.",
-    "leadName": {
-      "label": "Lead character name",
-      "placeholder": "e.g. Aria Stoneheart"
-    }
+    "leadNotice": "This combination will require a lead character in Cast."
   },
   "calendarStep": {
     "originError": "Enter a value between {{min}} and {{max}}.",
@@ -256,6 +254,8 @@
       "categoryPlaceholder": "e.g. cosmology",
       "moreOptions": "More options",
       "tags": "Tags",
+      "tagsPlaceholder": "e.g. \"faith, ritual\"",
+      "tagsHint": "Not sent to the AI — for your own search and filtering.",
       "injectionMode": "Injection mode",
       "priority": "Priority",
       "priorityHint": "{{min}}–{{max}}. Higher makes this more likely to be recalled.",
@@ -270,5 +270,79 @@
       },
       "empty": "No lore yet. Add an entry or let AI suggest some."
     }
+  },
+  "cast": {
+    "heading": "Who's in this story?",
+    "suggest": "Suggest cast",
+    "add": "Add",
+    "kinds": {
+      "character": "Character",
+      "location": "Location",
+      "item": "Item",
+      "faction": "Faction"
+    },
+    "empty": "No cast yet. Add someone, or let ✨ suggest a few.",
+    "remove": "Remove {{name}}",
+    "expand": "Expand {{name}}",
+    "collapse": "Collapse {{name}}",
+    "unnamed": "Unnamed entry",
+    "leadChip": "Lead",
+    "stagedChip": "Staged",
+    "setAsLead": "Set as lead",
+    "leadUnsetToast": "Lead unset — staged characters can't be lead.",
+    "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
+    "importRefsDropped_one": "1 reference couldn't be matched and was left blank.",
+    "importRefsDropped_other": "{{count}} references couldn't be matched and were left blank.",
+    "leadNotice": {
+      "mode": "Adventure mode needs a lead character. Mark one active character as lead to continue.",
+      "narration": "First- and second-person narration need a lead character. Mark one active character as lead to continue."
+    },
+    "editor": {
+      "name": "Name",
+      "status": "Status",
+      "statusActive": "Active",
+      "statusStaged": "Staged",
+      "description": "Description",
+      "speech": "Speech",
+      "speechPlaceholder": "e.g. \"clipped, formal\"",
+      "traits": "Traits",
+      "traitsPlaceholder": "e.g. \"methodical, guarded\"",
+      "drives": "Drives",
+      "drivesPlaceholder": "e.g. \"find her sister, clear the family name\"",
+      "visual": "Visual",
+      "physique": "Physique",
+      "physiquePlaceholder": "e.g. \"tall, lean, slight stoop\"",
+      "face": "Face",
+      "facePlaceholder": "e.g. \"sharp cheekbones, sun-weathered\"",
+      "hair": "Hair",
+      "hairPlaceholder": "e.g. \"cropped salt-and-pepper\"",
+      "eyes": "Eyes",
+      "eyesPlaceholder": "e.g. \"pale grey, always narrowed\"",
+      "attire": "Attire",
+      "attirePlaceholder": "e.g. \"wool jerkin, ink-stained sleeves\"",
+      "distinguishing": "Distinguishing",
+      "distinguishingPlaceholder": "e.g. \"scar across the left palm\"",
+      "moreOptions": "More options",
+      "tags": "Tags",
+      "tagsPlaceholder": "e.g. \"ally, nobility\"",
+      "tagsHint": "Not sent to the AI — for your own search and filtering.",
+      "faction": "Faction",
+      "noFactionsYet": "(no factions yet — add one with + Add)",
+      "unaffiliated": "Unaffiliated",
+      "parentLocation": "Parent location",
+      "noLocationsYet": "(no locations yet — add one with + Add)",
+      "noParent": "None",
+      "condition": "Condition",
+      "conditionPlaceholderLocation": "e.g. \"war-damaged, half-abandoned\"",
+      "conditionPlaceholderItem": "e.g. \"cracked hilt, faintly humming\"",
+      "agenda": "Agenda",
+      "agendaPlaceholder": "e.g. \"seize the docks, discredit the guild\"",
+      "standing": "Standing",
+      "standingPlaceholder": "e.g. \"ascendant after the coup\"",
+      "errors": {
+        "name": "Name is required."
+      }
+    },
+    "guidance": "e.g. \"6 characters; 2 introduced later\""
   }
 }

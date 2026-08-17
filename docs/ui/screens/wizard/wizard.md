@@ -63,8 +63,11 @@ Horizontal pill row below the top-bar:
 - **Hollow dot (○)** = pending.
 - **Active step** gets accent treatment.
 - **Backward-jump clickable** on completed pills.
-- **Forward-jump disabled** — must advance via `Next →` (which
-  validates current step).
+- **Forward-jump** re-enters an already-visited step only. A pill
+  past the furthest step reached stays inert, and a visited pill
+  goes inert again if a gating step before it has since been
+  invalidated. `Next →` (which validates the current step) is the
+  only way to reach a step for the first time.
 - **Auto-save** fires on any nav (Next / Back / pill click).
 
 Named-not-numbered: 5 steps fit comfortably; names give spatial
@@ -308,6 +311,11 @@ Category        [_____________________________]
 Defaults sensible (`auto`, priority `0`, no tags / category).
 80%+ skip the disclosure.
 
+`Category` and `Tags` carry example placeholders on the same rule the
+cast editors follow ([Editor placeholders](#editor-placeholders));
+`Title` and `Body` go bare for the same reason `Name` and
+`Description` do.
+
 **Long scroll** — no pagination chrome on the lore list, per the
 [lists pattern](../../patterns/lists.md). Virtualization library
 is settled (`@tanstack/react-virtual` on web, FlatList on native);
@@ -366,8 +374,9 @@ A wandering wizard, gray of cloak and white of beard…
 
 - Kind icon + name + chips (`⭐ lead` / `STAGED` non-default).
 - Truncated description.
-- `⭐ Set as lead` button on character rows when no other
-  character is the lead AND status is `active`.
+- `⭐ Set as lead` button on every character row that is
+  `active` and isn't already the lead — clicking it reassigns
+  the lead, demoting the incumbent.
 - `STAGED` chip + muted row content for staged entities.
 - `✕` deletes (no confirm — wizard-time, no entries depend yet).
 
@@ -379,7 +388,7 @@ Click row → expand to inline editor.
 Name        [_________________________________]  [Active ▾]
 Description [textarea — user-authoritative who]
 
-Voice       [optional, e.g. "clipped, formal"]
+Speech      [optional, e.g. "clipped, formal"]
 Traits      [chip input — soft cap 8]
 Drives      [chip input — soft cap 6]
 
@@ -389,25 +398,28 @@ Drives      [chip input — soft cap 6]
   Hair           [_____________________________]
   Eyes           [_____________________________]
   Attire         [_____________________________]
-  Distinguishing [chip input]
+  Distinguishing [_____________________________]
 
 ▼ More options
   Tags          [chip input]
   Faction       [pick from cast ▾]
 
 ⭐ Set as lead   (button outside disclosure, character-only,
-                 visible when no other character is the lead
-                 AND status='active')
+                 visible on any active character that isn't
+                 already the lead — click reassigns)
 ```
 
 Maps to [`CharacterState`](../../../data-model.md#characterstate-shape).
 
 **Tier rationale:**
 
-- **Always-visible identity** (`Voice` / `Traits` / `Drives`) —
-  personality essentials, compact. Wizard-authored values seed
-  `CharacterState` at first-write per the
-  [authorship contract](../../../data-model.md#authorship-contract);
+- **Always-visible identity** (`Speech` / `Traits` / `Drives`) —
+  personality essentials, compact. `Speech` is the user-facing name
+  for `CharacterState.voice`: how the character talks, not how they
+  sound. The state key keeps its original name, and so does the
+  World panel, which labels state fields by their raw key.
+  Wizard-authored values seed `CharacterState` at first-write per
+  the [authorship contract](../../../data-model.md#authorship-contract);
   classifier extracts incrementally at runtime.
 - **`▼ Visual` disclosure** — six sub-fields would dwarf the editor
   expanded. Defaulted closed.
@@ -467,6 +479,37 @@ Maps to [`FactionState`](../../../data-model.md#factionstate-shape).
 `agenda` is identity-shaped (always visible); `standing` is
 dynamic-state (under More options).
 
+### Editor placeholders
+
+Every state field across the four editors carries an **example**
+placeholder in `e.g. "…"` form — `Speech`, `Traits`, `Drives`, each
+`Visual` sub-field, `Tags`, `Condition` (worded per kind), `Agenda`,
+`Standing`. A placeholder's job here is to show what belongs in a
+field the user has never filled before, so it names a plausible value
+rather than restating the label; on the chip inputs the two-item
+example also demonstrates that a comma commits a chip.
+
+`Name` and `Description` are the exceptions — their labels already
+say everything a placeholder could, and `Name` carries the step's
+only validation error, which a placeholder would compete with.
+
+### Tags are not prompt-facing
+
+`tags`, on cast rows and lore rows alike, is a user-only search and
+filter axis
+([Story identity fields](../../../data-model.md#story-identity-fields)).
+It reaches no prompt, is absent from the embedded text (entities embed
+`name` + `description`, lore embeds `title` + `body`), and the
+classifier never reads or writes it. The wizard's template context
+projects it out for the same reason the runtime `PROMPT_ENTITY_FIELDS`
+does: prompt packs are user-authored, and a field reachable from one
+cannot be withdrawn later without breaking it.
+
+Both Tags fields carry that as an inline hint — `Not sent to the AI —
+for your own search and filtering.` A field that looks like free-text
+steering and silently isn't is otherwise discovered only by not getting
+what you expected.
+
 ### Status field — `active` / `staged`
 
 Default `active`. User can flip to `staged` for entities-not-yet-
@@ -483,10 +526,14 @@ cast roster is known but only some enter the opening scene.
   `Lead unset — staged characters can't be lead.`
 - **Lead-required gate tightens** — "at least one **active**
   character marked as lead." Staged characters don't satisfy.
-- **Opening generation enum-list filters to active.** Wizard-assist's
-  structured-output schema for opening generation passes only
-  `status='active'` cast as the enum for `sceneEntities`. Staged
-  characters can't appear in opening scene metadata.
+- **Opening generation filters to active, kind-aware.** The
+  structured-output schema for opening generation is unconstrained
+  (a bare string array for `sceneEntities`, a nullable string for
+  `currentLocationId`) — the prompt lists only active cast,
+  kind-qualified (`sceneEntities` draws character/item ids,
+  `currentLocationId` draws location ids), and Finish re-filters the
+  model's refs against that same active + kind rule at commit.
+  Staged characters can't appear in opening scene metadata.
 - **Stage promotion is classifier-per-turn.** When prose introduces
   a staged entity (it appears in `metadata.sceneEntities` of a
   new entry), the classifier promotes status `staged` → `active`
@@ -505,7 +552,7 @@ cast roster is known but only some enter the opening scene.
         name
         description
         status?: 'active' | 'staged'
-        voice?
+        speech?
         traits?
         drives?
         faction_name?
@@ -534,7 +581,19 @@ Cross-batch reference resolution: location's
 import time to entity ids — matching case-insensitively by name
 against same-kind rows in the imported selection + the existing
 cast. Unresolved names (including a suggested parent or faction
-left unchecked at import) fall back to `null`.
+left unchecked at import) fall back to `null`; a blank name never
+resolves. When an imported row and an existing cast row share a
+kind and a name, the imported row wins for references inside that
+batch.
+
+A non-blank reference that resolves to nothing is counted and
+reported on import via [toast](../../patterns/toast.md)
+(`N references couldn't be matched and were left blank.`). Without
+it the discard is invisible: the row imports unaffiliated and the
+editor's picker reads `No factions yet`, which the user takes to
+mean they have none rather than that the AI's answer was dropped.
+A reference the model simply omitted is not counted — only one it
+supplied and the wizard could not honour.
 
 ### Lead-required gating
 
@@ -544,8 +603,9 @@ left unchecked at import) fall back to `null`.
   character marked lead. Copy varies by reason.
 - **`Next →` validation** blocks until satisfied when required.
 - **Cascading from back-jump.** If user revisits step 1 and
-  changes mode/narration, step 4's pill demotes from `✓` to `○`
-  if the new rule isn't satisfied.
+  changes mode/narration, the new rule re-gates step 4's `Next →`
+  and forward-jump eligibility. Pills track position, not
+  validity, so the pill itself does not change state.
 
 ### Validation gates on `Next` (Cast)
 
@@ -604,6 +664,13 @@ prose does **not** clear metadata refs — refs stay intact (user
 might tweak prose without invalidating cast/location grounding).
 For fresh metadata, user regenerates via `✨`.
 
+The same rule covers a back-jump to Cast that reassigns the lead
+after generation: `sceneEntities` isn't re-derived, so the metadata
+line keeps resolving names from whoever it already references (the
+prior lead included) rather than going blank or auto-clearing. It's
+model-authored scene metadata, not an authored field — same
+resolution path as any other stale ref, regenerate via `✨`.
+
 `✨` stays available in the committed state as the regenerate /
 refine entry point, per
 [Committed prose as the base](#committed-prose-as-the-base).
@@ -615,7 +682,7 @@ Wizard-assist emits:
 ```ts
 {
   prose: string,
-  sceneEntities: string[],          // subset of active cast entity ids
+  sceneEntities: string[],          // subset of active character/item cast entity ids
   currentLocationId: string | null, // one of the active location ids
   worldTime: 0                      // story start; always 0
 }
@@ -929,7 +996,8 @@ surface per-call cost.
 ### Pagination on list results
 
 `Generate more` after import preserves already-imported rows;
-case-insensitive name dedupe applies (collisions show
+case-insensitive dedupe applies, scoped by kind — a name collision
+across different kinds is not a match (collisions show
 `(already exists)` muted; checkbox auto-disabled).
 
 ### Context-shaping
@@ -962,17 +1030,18 @@ setting/lore/cast/opening).
 - **Concurrent draft + session.** Mutually exclusive; user
   resolves via the [concurrent-state prompts](../story-list/story-list.md#unfinished-wizard-session-automatic-safety-net).
 - **Mode/narration change via back-jump that adds the lead
-  requirement.** Step 4's pill demotes; user walks forward to
-  satisfy.
+  requirement.** Forward-jump past step 4 goes inert; user walks
+  forward to satisfy.
 - **AI-assist call mid-flight on Cancel.** Call cancels; session
   preserves at last committed state.
 - **Save-as-draft with no title.** Draft card renders
   `Untitled story` placeholder; rename when resumed.
 - **Replace-on-existing on genre/tone.** Confirm modal fires when
   preset OR AI-suggest accept would overwrite non-empty content.
-- **Lead unset cascade.** Multiple paths can unmark lead (kind
-  change, status flip to staged, row deletion). Same
-  [toast](../../patterns/toast.md) copy ("Lead unset — ...") on each.
+- **Lead unset cascade.** Two paths unmark the lead, each with its
+  own [toast](../../patterns/toast.md): status flip to staged →
+  `Lead unset — staged characters can't be lead.`; row deletion →
+  `Lead unset — the lead was removed from the cast.`
 
 ## Mobile expression
 

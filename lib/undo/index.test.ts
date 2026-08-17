@@ -103,4 +103,30 @@ describe('selectUndoTarget', () => {
     const rows = [delta({ actionId: 'act_c', source: 'periodic_classifier', targetTable: 'lore' })]
     expect(selectUndoTarget(rows)).toBeNull()
   })
+
+  it('targets only the most recent of consecutive prose turns', () => {
+    // Two turns, two action_ids. The earliest-create anchor is group-scoped, so
+    // the turn beneath must not pull the window down to its own entry.
+    const rows = [
+      delta({
+        actionId: 'act_t2',
+        source: 'ai_classifier',
+        targetTable: 'story_entries',
+        op: 'create',
+        targetId: 'entry_t2',
+      }),
+      delta({
+        actionId: 'act_t1',
+        source: 'ai_classifier',
+        targetTable: 'story_entries',
+        op: 'create',
+        targetId: 'entry_t1',
+      }),
+    ]
+    expect(selectUndoTarget(rows)).toEqual({
+      actionId: 'act_t2',
+      kind: 'turn',
+      entryId: 'entry_t2',
+    })
+  })
 })

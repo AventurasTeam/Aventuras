@@ -1151,6 +1151,18 @@ slice-planning gate forces its resolution before that slice is planned.
   is trimming in the insert alongside `category`, which also makes
   the embedded composite match what the UI renders. Surfaced by the
   Slice 3.6a whole-slice review (2026-08-10).
+- **Hand-authored cast can commit schema-invalid entity state while
+  AI-imported cast is clamped.** The Speech input accepts more than
+  2,000 characters, and the visual, condition, and standing inputs
+  accept more than 500. `finish.ts` maps those values into entity
+  state unchanged, then `createStoryWithBranch` raw-inserts them
+  without running `entityStateSchemaForKind`; the resulting row is
+  outside the canonical degradation bounds and later full-state
+  `updateEntity` calls reject it. `cast-import.ts` already clamps the
+  same AI-authored fields. Close the hand-authored path with editor
+  limits plus a per-kind validation backstop before insertion; do not
+  silently truncate authored content at Finish. Surfaced by the Slice
+  3.6b whole-slice review (2026-08-15).
 - **Four assist result types are hand-redeclared beside their
   schema-inferred equivalents, and the inferred ones are dead.**
   `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
@@ -1454,3 +1466,50 @@ failing` (fails in ~11 ms, consistent with a cascade from shared
   sends `calendarVocabulary: null`, so the reader shows Gregorian dates
   while the model is told there is no calendar. Raised 2026-08-16 by
   the Slice 3.8 review.
+- **`Select`'s dropdown trigger drops the current value from its
+  accessible name once `label` is set.** `@rn-primitives/select`
+  forces `role="button"` on the web trigger, overriding Radix's
+  `combobox`, so the element carries no value semantic at all — the
+  selected option reaches assistive tech only as the trigger's text
+  content. Adding `aria-label` (the fix for triggers that renamed
+  themselves on every pick) then suppresses that content: the month
+  picker in `tier-tuple-input.tsx` announces "Month, button,
+  collapsed" and never "January". Neither state is complete —
+  before the label there was a value and no field identity, after it
+  there is identity and no value. Reviewed and deliberately kept as
+  identity-only: the value is one open away (Radix renders options
+  with `role="option"` / `aria-selected` and focuses the selected one),
+  while identity is unrecoverable because `FormRow` renders its label
+  as plain `Text` with no `htmlFor` / `aria-labelledby`. The real fix
+  is a `combobox` role on the trigger, where content is read as the
+  value beside the label. Plausible-but-unverified path: the web build
+  destructures `role: _role` out of the trigger's props and hardcodes
+  `role='button'`, so a `patches/` one-liner deleting that destructure
+  would let a caller-supplied `role="combobox"` through — nobody has
+  applied or tested it. Applies to every `dropdown`-mode `Select` that
+  carries a `label`. Raised 2026-08-13.
+- **The wizard commits `parent_location_id` without the documented
+  cycle guard.**
+  [`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)
+  assigns cycle prevention to the action-layer mutator that writes
+  the field: walk the proposed parent chain, depth-cap 100, reject
+  with `reason: 'parent-cycle'`. Finish is such a writer and does no
+  walk, and neither authoring path blocks it — the editor's picker
+  and `cast-import.ts` each exclude only self, so `A → B` plus
+  `B → A` authors and commits cleanly. Inert today: nothing walks the
+  chain, and the only reader canon names is M4's prompt rendering
+  (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
+  shared guard rather than writing a wizard-local copy of it. Raised
+  2026-08-14.
+- **A single malformed row resets the whole wizard draft.**
+  `parsePersistedState` (`lib/actions/wizard/session.ts`) runs one
+  `safeParse` over the entire working state, so one bad `cast` or
+  `lore` row discards the title, description, genre, tone, setting,
+  calendar, opening prose, and every healthy sibling row — reported
+  via toast and `logger.warn`, so not silent, but all-or-nothing. Not
+  reachable today: every writer is typed and the schema strips unknown
+  keys rather than rejecting them, so the realistic triggers are a
+  future schema tightening or a hand-edited database. The
+  element-wise salvage pattern to copy already exists at
+  `decodeCaptures` in `lib/probe/read.ts`, which isolates a corrupt
+  row instead of failing the list. Raised 2026-08-14.

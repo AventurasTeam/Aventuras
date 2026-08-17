@@ -1,12 +1,27 @@
-import { clearLiveSession, createStoryWithBranch, openStory, type DbCtx } from '@/lib/actions'
+import {
+  clearLiveSession,
+  createStoryWithBranch,
+  openStory,
+  type DbCtx,
+  type WizardCastEntityInput,
+} from '@/lib/actions'
 import { resolveModelCapabilities, type ProviderInstanceWithStub } from '@/lib/ai'
 import {
   buildStorySettings,
+  type CharacterState,
   type EntryMetadata,
+  type FactionState,
+  type ItemState,
+  type LocationState,
   type ProviderInstance,
   type StoryDefinition,
   type StorySettings,
   type SuggestionCategory,
+  type WizardCastDraft,
+  type WizardCharacterDraft,
+  type WizardFactionDraft,
+  type WizardItemDraft,
+  type WizardLocationDraft,
   type WizardWorkingState,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
@@ -17,9 +32,9 @@ import {
   resolveEmbedderGate,
   type EmbedderGateResult,
 } from '@/lib/embedder'
-import { generateId } from '@/lib/ids'
 
 import { clampEffectiveDim } from './memory-cost-logic'
+import { activeLead, invalidCastRowIds } from './step-cast-logic'
 import { needsLead } from './step-frame-logic'
 import { invalidLoreRowIds } from './step-world-logic'
 
@@ -53,6 +68,102 @@ export type FinishEmbedCtx = {
   resolveProvider: (providerId: string) => ProviderInstanceWithStub | undefined
 }
 
+// An intra-cast pointer only commits when it still resolves to some OTHER row of
+// the expected kind: the store prunes factionId / parentLocationId as their
+// target is removed, and this is the backstop for a working state that reached
+// Finish some other way. Self-exclusion is part of that backstop rather than a
+// guard against a reachable producer: both authoring paths already reject a
+// self-reference (the editor's picker excludes self, cast-import.ts excludes
+// selfId before resolving refs).
+function castRef(
+  cast: readonly WizardCastDraft[],
+  self: WizardCastDraft,
+  id: string | null,
+  kind: WizardCastDraft['kind'],
+): string | null {
+  return id != null && id !== self.id && cast.some((r) => r.id === id && r.kind === kind)
+    ? id
+    : null
+}
+
+function characterVisual(draft: WizardCharacterDraft): CharacterState['visual'] {
+  const visual: CharacterState['visual'] = {}
+  for (const key of Object.keys(draft.visual) as (keyof WizardCharacterDraft['visual'])[]) {
+    if (draft.visual[key].trim().length > 0) visual[key] = draft.visual[key]
+  }
+  return visual
+}
+
+// data-model.md → Authorship contract: wizard-authored identity seeds the state
+// at its first write; every classifier-owned slot commits empty so the first
+// classifier pass writes into a clean field rather than over an invented value.
+// One builder per kind rather than one switch returning the wide EntityState —
+// that union is undiscriminated, so a single function could return a location's
+// shape from the item branch and still compile.
+function characterState(
+  draft: WizardCharacterDraft,
+  cast: readonly WizardCastDraft[],
+): CharacterState {
+  return {
+    visual: characterVisual(draft),
+    traits: [...draft.traits],
+    drives: [...draft.drives],
+    ...(draft.voice.trim().length > 0 ? { voice: draft.voice } : {}),
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: castRef(cast, draft, draft.factionId, 'faction'),
+    lastSeenAt: null,
+  }
+}
+
+function locationState(
+  draft: WizardLocationDraft,
+  cast: readonly WizardCastDraft[],
+): LocationState {
+  return {
+    parent_location_id: castRef(cast, draft, draft.parentLocationId, 'location'),
+    ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+  }
+}
+
+function itemState(draft: WizardItemDraft): ItemState {
+  return {
+    at_location_id: null,
+    ...(draft.condition.trim().length > 0 ? { condition: draft.condition } : {}),
+  }
+}
+
+function factionState(draft: WizardFactionDraft): FactionState {
+  return {
+    ...(draft.standing.trim().length > 0 ? { standing: draft.standing } : {}),
+    ...(draft.agenda.length > 0 ? { agenda: [...draft.agenda] } : {}),
+  }
+}
+
+function castEntityInput(
+  draft: WizardCastDraft,
+  cast: readonly WizardCastDraft[],
+): WizardCastEntityInput {
+  const shared = {
+    id: draft.id,
+    name: draft.name,
+    description: draft.description.trim().length > 0 ? draft.description : null,
+    status: draft.status,
+    tags: [...draft.tags],
+  }
+  switch (draft.kind) {
+    case 'character':
+      return { ...shared, kind: 'character', state: characterState(draft, cast) }
+    case 'location':
+      return { ...shared, kind: 'location', state: locationState(draft, cast) }
+    case 'item':
+      return { ...shared, kind: 'item', state: itemState(draft) }
+    case 'faction':
+      return { ...shared, kind: 'faction', state: factionState(draft) }
+  }
+}
+
 export async function finishWizard(
   s: WizardWorkingState,
   ctx: DbCtx,
@@ -69,11 +180,14 @@ export async function finishWizard(
   if (s.definition.title.trim().length === 0) reasons.push('title')
   if (s.opening.content.trim().length === 0) reasons.push('opening')
   const requiresLead = needsLead(s.definition.mode, s.definition.narration)
-  if (requiresLead && s.leadName.trim().length === 0) reasons.push('lead')
-  // In-session nav re-validates every gating step, so this can't be reached by
-  // clicking through. hydrate() sets furthestStep = state.step with no
+  const lead = activeLead(s.cast, s.leadEntityId)
+  if (requiresLead && lead == null) reasons.push('lead')
+  // In-session nav re-validates every gating step, so neither of these can be
+  // reached by clicking through. hydrate() sets furthestStep = state.step with no
   // re-validation, so a persisted draft resumed straight at step 5 (the zod
-  // schema defaults title/body to '') skips step 3's gate entirely — re-check here.
+  // schema defaults every name/title/body to '') skips steps 3 and 4's gates
+  // entirely — re-check both here.
+  if (invalidCastRowIds(s.cast).length > 0) reasons.push('cast')
   if (invalidLoreRowIds(s.lore).length > 0) reasons.push('lore')
 
   // effectiveDim only means something for a provider-backed Matryoshka model; if
@@ -105,9 +219,7 @@ export async function finishWizard(
     reasons.push('effectiveDim')
   if (reasons.length > 0) return { status: 'invalid', reasons }
 
-  const lead = requiresLead
-    ? { id: s.leadEntityId ?? generateId('char'), name: s.leadName }
-    : undefined
+  const castRows: WizardCastEntityInput[] = s.cast.map((draft) => castEntityInput(draft, s.cast))
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
@@ -122,13 +234,30 @@ export async function finishWizard(
 
   const settings = buildStorySettings(definition.mode, appDefaults, effectiveDim)
 
-  // The lead is the only entity the M2 commit materializes, so it's the only id
-  // opening refs can legitimately point at: keep the lead in sceneEntities, drop
-  // everything else (a back-jump clearing the lead requirement, or a hallucinated
-  // location id, would otherwise commit a dangling ref to a never-created row).
+  // Opening refs commit only when they resolve to a row this transaction
+  // materializes, that row is active, and its kind belongs in that field: a
+  // staged entity can't appear in scene metadata (wizard.md → Status field), and
+  // scene presence is kind-aware (data-model.md) — sceneEntities carries the
+  // characters and items that come and go, currentLocationId is the singleton
+  // "we are here" pointer, and a faction is never scene-tagged. Committing one
+  // anyway is not cosmetic: entities in sceneEntities are ALWAYS injected
+  // regardless of injection_mode, and the classifier promotes staged rows that
+  // appear there. openingOutputSchema is a bare string array, so this is the
+  // only gate between a model naming a faction and that becoming true.
+  const sceneTaggableIds = new Set(
+    s.cast
+      .filter((r) => r.status === 'active' && (r.kind === 'character' || r.kind === 'item'))
+      .map((r) => r.id),
+  )
+  const activeLocationIds = new Set(
+    s.cast.filter((r) => r.status === 'active' && r.kind === 'location').map((r) => r.id),
+  )
   const openingMetadata: EntryMetadata = {
-    sceneEntities: lead ? s.opening.sceneEntities.filter((id) => id === lead.id) : [],
-    currentLocationId: null,
+    sceneEntities: s.opening.sceneEntities.filter((id) => sceneTaggableIds.has(id)),
+    currentLocationId:
+      s.opening.currentLocationId != null && activeLocationIds.has(s.opening.currentLocationId)
+        ? s.opening.currentLocationId
+        : null,
     worldTime: 0,
     ...(s.opening.model ? { model: s.opening.model } : {}),
   }
@@ -183,7 +312,7 @@ export async function finishWizard(
         settings,
         openingContent: s.opening.content,
         openingMetadata,
-        lead,
+        cast: castRows,
         lore: s.lore,
         embed: {
           config: embedConfig,

@@ -78,6 +78,7 @@ export function TierTupleInput({
                     markTouched(tier.name)
                     onChange({ ...value, [tier.name]: Number(v) })
                   }}
+                  label={tierLabel(tier.name)}
                 />
               ) : (
                 <Input

@@ -504,6 +504,12 @@ Not in this list: an empty pool (a success, `failure_reason` null)
 and a non-embedder fault (no capture written at all). See
 [When a capture is written](#when-a-capture-is-written) above.
 
+The payload's marker is required, not defaulted. A decode refuses a
+payload that omits it rather than reading the row's column as a
+stand-in — the payload is the single source `replayType` consults,
+and a stale column deciding a replay's outcome is worse than the
+capture surfacing as corrupt in the browse list.
+
 Stale counts read zero on a failure arm. The failure carries one
 un-split scalar with no per-type breakdown, so spreading it across
 five types would be a guess — read `failure_reason` and the pipeline

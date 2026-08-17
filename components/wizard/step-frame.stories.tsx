@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, screen } from 'storybook/test'
 
 import { wizardStore } from '@/lib/stores'
 
@@ -34,9 +34,8 @@ export const CreativeThird: Story = {
     expect(screen.getByRole('radio', { name: /Creative/ })).toBeChecked()
     expect(screen.getByRole('radio', { name: /Third/ })).toBeChecked()
 
-    // Permissive default — no forward-pointer notice, no lead-name field.
+    // Permissive default — no forward-pointer notice renders.
     expect(screen.queryByText(/require a lead character/)).not.toBeInTheDocument()
-    expect(screen.queryByText('Lead character name')).not.toBeInTheDocument()
   },
 }
 
@@ -52,9 +51,5 @@ export const AdventureFirst: Story = {
     expect(
       await screen.findByText('This combination will require a lead character in Cast.'),
     ).toBeInTheDocument()
-
-    const leadInput = screen.getByPlaceholderText('e.g. Aria Stoneheart')
-    await userEvent.type(leadInput, 'Aria')
-    await waitFor(() => expect(wizardStore.getWizard().state.leadName).toBe('Aria'))
   },
 }

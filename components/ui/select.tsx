@@ -502,6 +502,13 @@ export type SelectProps = {
   /**
    * Field label. On phone (when `mode` resolves to `'dropdown'`),
    * it's a visible title at the top of the bottom Sheet.
+   *
+   * Also the control's `aria-label` in every mode, which on `dropdown`
+   * REPLACES the trigger's text content as the accessible name — the
+   * selected option is then announced only from the open listbox, not
+   * from the closed trigger. Deliberate: identity is unrecoverable
+   * otherwise (`FormRow` labels are plain `Text`, with no association),
+   * whereas the value is one open away.
    */
   label?: string
   disabled?: boolean
@@ -522,7 +529,9 @@ export type SelectProps = {
   renderRow?: (args: { option: SelectOption; selected: boolean }) => ReactNode
 
   /**
-   * Custom trigger content for `dropdown` mode.
+   * Custom trigger content for `dropdown` mode. Supplying it hands the
+   * caller the trigger's accessible name — `label` is not applied as
+   * `aria-label` — so icon-only content must carry its own.
    */
   renderTrigger?: (args: {
     selected: SelectOption | undefined
@@ -574,12 +583,13 @@ function groupOptions(options: SelectOption[]): {
   return groups
 }
 
-function SegmentBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+function SegmentBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
+      aria-label={label}
       className={cn(
         'h-control-md flex-row overflow-hidden rounded-md border border-border-strong bg-bg-base',
         className,
@@ -616,12 +626,13 @@ function SegmentBranch({ options, value, onValueChange, disabled, className }: S
   )
 }
 
-function RadioBranch({ options, value, onValueChange, disabled, className }: SelectProps) {
+function RadioBranch({ options, value, onValueChange, disabled, className, label }: SelectProps) {
   return (
     <RadioGroupBase.Root
       value={value}
       onValueChange={onValueChange}
       disabled={disabled}
+      aria-label={label}
       className={cn('flex-col gap-2', className)}
     >
       {options.map((opt) => {
@@ -694,7 +705,16 @@ function DropdownBranch({
       }}
       disabled={disabled}
     >
-      <Trigger className={className} disabled={disabled} size={size}>
+      {/* Only the default Value trigger needs the static fallback name — its
+          content is just the current value, which mutates as the user picks.
+          A caller-supplied renderTrigger has already composed its own
+          (often richer) accessible content and owns that name. */}
+      <Trigger
+        className={className}
+        disabled={disabled}
+        size={size}
+        aria-label={renderTrigger != null ? undefined : label}
+      >
         {renderTrigger != null ? (
           renderTrigger({ selected, placeholder })
         ) : (

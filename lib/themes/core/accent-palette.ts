@@ -43,9 +43,10 @@ function isCuratedSlot(value: string): value is CuratedAccentSlot {
   return (CURATED_ACCENT_SLOTS as readonly string[]).includes(value)
 }
 
-// Deliberately permissive on the read path: category rows predate any write
-// validation and can be orphaned, so every input must render as something. The
-// write path is where a bad colour should be rejected.
+// Deliberately permissive on the read path: nothing validates a colour on the
+// way in and category rows can be orphaned, so every input must render as
+// something. Rejecting a bad colour belongs on the write path, which has no
+// such check today.
 export function resolveAccentColor(value: string | null | undefined): AccentHex {
   if (value == null) return NEUTRAL_ACCENT
   if (isCuratedSlot(value)) return CURATED_ACCENT_PALETTE[value]

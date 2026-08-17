@@ -11,6 +11,7 @@ import {
 } from '@/components/wizard/embedder-gate-blocked'
 import { finishWizard, type EmbedderGateBlockedReason } from '@/components/wizard/finish'
 import { StepCalendar } from '@/components/wizard/step-calendar'
+import { StepCast } from '@/components/wizard/step-cast'
 import { StepFrame } from '@/components/wizard/step-frame'
 import { StepOpening } from '@/components/wizard/step-opening'
 import { StepWorld } from '@/components/wizard/step-world'
@@ -50,6 +51,7 @@ const FINISH_REASON_KEY = {
   opening: 'wizard:finish.missing.opening',
   lead: 'wizard:finish.missing.lead',
   effectiveDim: 'wizard:finish.missing.effectiveDim',
+  cast: 'wizard:finish.missing.cast',
   lore: 'wizard:finish.missing.lore',
 } as const
 
@@ -96,7 +98,8 @@ export default function WizardRoute() {
   const furthestStep = wizardStore.useWizard((s) => s.furthestStep)
   const mode = wizardStore.useWizard((s) => s.state.definition.mode)
   const narration = wizardStore.useWizard((s) => s.state.definition.narration)
-  const leadName = wizardStore.useWizard((s) => s.state.leadName)
+  const cast = wizardStore.useWizard((s) => s.state.cast)
+  const leadEntityId = wizardStore.useWizard((s) => s.state.leadEntityId)
   const calendarSystemId = wizardStore.useWizard((s) => s.state.definition.calendarSystemId)
   const worldTimeOrigin = wizardStore.useWizard((s) => s.state.definition.worldTimeOrigin)
   const lore = wizardStore.useWizard((s) => s.state.lore)
@@ -213,7 +216,8 @@ export default function WizardRoute() {
   const validityParams: StepValidityParams = {
     mode,
     narration,
-    leadName,
+    cast,
+    leadEntityId,
     worldTimeOrigin,
     calendar: selectedCalendar ?? null,
     lore,
@@ -383,13 +387,15 @@ export default function WizardRoute() {
         <StepCalendar />
       ) : step === 3 ? (
         <StepWorld onSetupAssist={() => router.push('/settings' as Href)} />
+      ) : step === 4 ? (
+        <StepCast onSetupAssist={() => router.push('/settings' as Href)} />
       ) : (
         <>
           <StepOpening onSetupAssist={() => router.push('/settings' as Href)} />
           {embedFailure && (
             <View className="mt-4 gap-3 rounded-md border border-danger bg-bg-base p-4">
               <Text className="text-sm font-medium text-danger">
-                {t('wizard:finish.embedFailed.title')}
+                {t(`wizard:finish.embedFailed.${embedFailure.kind}Title` as const)}
               </Text>
               <Text className="text-sm text-fg-secondary">
                 {t(`wizard:finish.embedFailed.${embedFailure.kind}` as const)}

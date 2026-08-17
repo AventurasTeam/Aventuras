@@ -56,8 +56,7 @@ export type StepOpeningProps = {
 export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const definition = wizardStore.useWizard((s) => s.state.definition)
   const opening = wizardStore.useWizard((s) => s.state.opening)
-  const leadName = wizardStore.useWizard((s) => s.state.leadName)
-  const leadEntityId = wizardStore.useWizard((s) => s.state.leadEntityId)
+  const cast = wizardStore.useWizard((s) => s.state.cast)
 
   const hasContent = opening.content.trim().length > 0
   // wizard.md → Replace-on-existing: a candidate accepted over authored prose
@@ -68,13 +67,44 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   const handleSetup = onSetupAssist ?? (() => {})
   const resolveModelId = assist?.resolveModelId ?? (() => resolveWizardAssistModelId())
 
-  const sceneName =
-    leadEntityId != null &&
-    opening.sceneEntities.includes(leadEntityId) &&
-    leadName.trim().length > 0
-      ? leadName
+  // Resolved live against the current cast, not snapshotted at generation
+  // time (wizard.md → Committed prose: refs stay intact across cast edits;
+  // the user regenerates via ✨ for fresh metadata rather than this label
+  // silently going stale-but-blank). Active AND character/item, matching the
+  // filter Finish commits through (data-model.md → Scene presence is
+  // kind-aware): previewing a ref that Finish then drops would promise the
+  // user scene state the story never gets.
+  const sceneNames = opening.sceneEntities
+    .map((id) =>
+      cast
+        .find(
+          (r) =>
+            r.id === id && r.status === 'active' && (r.kind === 'character' || r.kind === 'item'),
+        )
+        ?.name.trim(),
+    )
+    .filter((name): name is string => name != null && name.length > 0)
+  // Kind-guarded: resolveOpening's reverse substitution doesn't validate kind,
+  // so a non-placeholder id that survives it must not render a character's
+  // name in the location slot.
+  const locationName =
+    opening.currentLocationId != null
+      ? (cast
+          .find(
+            (r) =>
+              r.id === opening.currentLocationId && r.kind === 'location' && r.status === 'active',
+          )
+          ?.name.trim() ?? null)
       : null
-  const metadataLabel = isAiGenerated && hasContent && sceneName != null ? sceneName : null
+  // De-duped: a repeated id, two rows sharing a name, or the location id also
+  // present in sceneEntities would otherwise render "Aria · Aria".
+  const parts = [
+    ...new Set([
+      ...sceneNames,
+      ...(locationName != null && locationName.length > 0 ? [locationName] : []),
+    ]),
+  ]
+  const metadataLabel = isAiGenerated && hasContent && parts.length > 0 ? parts.join(' · ') : null
 
   // An absent default-story-setting tracks the code default, which is 'local'.
   const embeddingBackend =

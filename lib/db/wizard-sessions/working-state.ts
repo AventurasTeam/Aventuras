@@ -38,13 +38,88 @@ const wizardLoreDraftSchema = z.object({
 
 export type WizardLoreDraft = z.infer<typeof wizardLoreDraftSchema>
 
+const castVisualDraftSchema = z.object({
+  physique: z.string().default(''),
+  face: z.string().default(''),
+  hair: z.string().default(''),
+  eyes: z.string().default(''),
+  attire: z.string().default(''),
+  distinguishing: z.string().default(''),
+})
+
+const castDraftShared = {
+  // Minted at add/import time so the row keeps identity across autosave
+  // round-trips and lands in the commit under the same id (same rule as lore).
+  id: z.string(),
+  name: z.string().default(''),
+  description: z.string().default(''),
+  // `retired` is unreachable at wizard time (canon); only active|staged apply.
+  status: z.enum(['active', 'staged']).default('active'),
+  tags: z.array(z.string()).default(() => []),
+}
+
+const characterCastDraftSchema = z.object({
+  ...castDraftShared,
+  kind: z.literal('character'),
+  voice: z.string().default(''),
+  traits: z.array(z.string()).default(() => []),
+  drives: z.array(z.string()).default(() => []),
+  visual: castVisualDraftSchema.default(() => castVisualDraftSchema.parse({})),
+  factionId: z.string().nullable().default(null),
+})
+
+const locationCastDraftSchema = z.object({
+  ...castDraftShared,
+  kind: z.literal('location'),
+  parentLocationId: z.string().nullable().default(null),
+  condition: z.string().default(''),
+})
+
+const itemCastDraftSchema = z.object({
+  ...castDraftShared,
+  kind: z.literal('item'),
+  condition: z.string().default(''),
+})
+
+const factionCastDraftSchema = z.object({
+  ...castDraftShared,
+  kind: z.literal('faction'),
+  agenda: z.array(z.string()).default(() => []),
+  standing: z.string().default(''),
+})
+
+export const wizardCastDraftSchema = z.discriminatedUnion('kind', [
+  characterCastDraftSchema,
+  locationCastDraftSchema,
+  itemCastDraftSchema,
+  factionCastDraftSchema,
+])
+
+export type WizardCastDraft = z.infer<typeof wizardCastDraftSchema>
+export type WizardCharacterDraft = z.infer<typeof characterCastDraftSchema>
+export type WizardLocationDraft = z.infer<typeof locationCastDraftSchema>
+export type WizardItemDraft = z.infer<typeof itemCastDraftSchema>
+export type WizardFactionDraft = z.infer<typeof factionCastDraftSchema>
+
+export type WizardCastDraftByKind<K extends WizardCastDraft['kind']> = Extract<
+  WizardCastDraft,
+  { kind: K }
+>
+
+export function emptyCastDraft<K extends WizardCastDraft['kind']>(
+  kind: K,
+  id: string,
+): WizardCastDraftByKind<K> {
+  return wizardCastDraftSchema.parse({ kind, id }) as WizardCastDraftByKind<K>
+}
+
 export const wizardWorkingStateSchema = z.object({
   step: z.number().int().min(1).max(5).default(1),
   definition: wizardDefinitionDraftSchema.default(() => wizardDefinitionDraftSchema.parse({})),
-  leadName: z.string().default(''),
-  // Real UUID minted once when the opening ✨ runs on a lead-requiring path, so
-  // the opening's sceneEntities refs, the lead entities row, and
-  // definition.leadEntityId all resolve to the same id at Finish.
+  // Set by setLeadEntityId (the ⭐ button) and nulled by the cast mutators that
+  // stage or remove its target — but only on live edits. A hydrated draft can
+  // still carry a pointer at a staged, non-character, or absent row, so read it
+  // through activeLead (step-cast-logic.ts) rather than raw.
   leadEntityId: z.string().nullable().default(null),
   opening: wizardOpeningDraftSchema.default(() => wizardOpeningDraftSchema.parse({})),
   // null = model native dim; a positive int truncates to that Matryoshka dim.
@@ -55,6 +130,7 @@ export const wizardWorkingStateSchema = z.object({
   // mount — a deliberate Native choice survives step-nav remounts.
   effectiveDimTouched: z.boolean().default(false),
   lore: z.array(wizardLoreDraftSchema).default(() => []),
+  cast: z.array(wizardCastDraftSchema).default(() => []),
 })
 
 export type WizardWorkingState = z.infer<typeof wizardWorkingStateSchema>

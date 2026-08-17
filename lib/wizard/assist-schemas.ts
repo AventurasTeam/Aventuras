@@ -64,3 +64,107 @@ export type LabeledPromptOutput = z.infer<typeof labeledPromptOutputSchema>
 export type SettingOutput = z.infer<typeof settingOutputSchema>
 
 export type OpeningOutput = z.infer<typeof openingOutputSchema>
+
+// Import truncates overages so one noisy array never discards an otherwise-valid batch.
+export const CAST_SOFT_CAPS = {
+  traits: 8,
+  drives: 6,
+  agenda: 4,
+} as const
+
+const castSuggestionStatus = z
+  .enum(['active', 'staged'])
+  .default('active')
+  .describe("'active' if present from the opening scene; 'staged' for cast introduced later")
+
+// Trimmed at the parse boundary like loreSuggestionsSchema above: these payloads
+// bypass the render-layer trim, and the reference-name fields are matched
+// case-insensitively at import, so an untrimmed name would mismatch.
+const castSuggestionShared = {
+  name: z.string().trim().describe('entity name'),
+  description: z.string().trim().describe('two or three sentences of who or what this is'),
+  status: castSuggestionStatus,
+}
+
+// Discriminant first in every member: key order survives into the rendered
+// prompt, and a union whose members all open with the same three lines is
+// harder for the model to tell apart.
+const characterSuggestionSchema = z.object({
+  kind: z.literal('character'),
+  ...castSuggestionShared,
+  // Named for how the character talks, not how they sound; lands in the
+  // `voice` state key at import.
+  speech: z.string().trim().optional().describe('speech pattern, e.g. "clipped, formal"'),
+  traits: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`personality/skill traits, at most ${CAST_SOFT_CAPS.traits}`),
+  drives: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`goals, fears, sore spots, at most ${CAST_SOFT_CAPS.drives}`),
+  faction_name: z
+    .string()
+    .trim()
+    .optional()
+    .describe(
+      "this character's faction — the exact name of a faction in this batch or the existing cast",
+    ),
+  visual: z
+    .object({
+      physique: z.string().trim().optional(),
+      face: z.string().trim().optional(),
+      hair: z.string().trim().optional(),
+      eyes: z.string().trim().optional(),
+      attire: z.string().trim().optional(),
+      distinguishing: z.string().trim().optional(),
+    })
+    .optional()
+    .describe('visual descriptors, free strings'),
+})
+
+const locationSuggestionSchema = z.object({
+  kind: z.literal('location'),
+  ...castSuggestionShared,
+  parent_location_name: z
+    .string()
+    .trim()
+    .optional()
+    .describe('the exact name of the containing location in this batch or the existing cast'),
+  condition: z.string().trim().optional().describe('ongoing state, e.g. "war-damaged"'),
+})
+
+const itemSuggestionSchema = z.object({
+  kind: z.literal('item'),
+  ...castSuggestionShared,
+  condition: z.string().trim().optional().describe('dynamic state, e.g. "intact", "cursed"'),
+})
+
+const factionSuggestionSchema = z.object({
+  kind: z.literal('faction'),
+  ...castSuggestionShared,
+  agenda: z
+    .array(z.string().trim())
+    .optional()
+    .describe(`current goals, at most ${CAST_SOFT_CAPS.agenda}`),
+  standing: z.string().trim().optional().describe('dynamic power/situation'),
+})
+
+export const castSuggestionsSchema = z.object({
+  entities: z
+    .array(
+      z.discriminatedUnion('kind', [
+        characterSuggestionSchema,
+        locationSuggestionSchema,
+        itemSuggestionSchema,
+        factionSuggestionSchema,
+      ]),
+    )
+    .min(1)
+    .describe(
+      'five suggested cast entries — a mix of kinds — unless the guidance directs otherwise',
+    ),
+})
+
+export type CastSuggestions = z.infer<typeof castSuggestionsSchema>
+export type CastSuggestion = CastSuggestions['entities'][number]

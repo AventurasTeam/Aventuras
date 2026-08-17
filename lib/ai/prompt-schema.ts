@@ -12,6 +12,7 @@ type JsonSchemaNode = {
   enum?: unknown[]
   const?: unknown
   anyOf?: JsonSchemaNode[]
+  oneOf?: JsonSchemaNode[]
   items?: JsonSchemaNode
   properties?: Record<string, JsonSchemaNode>
   required?: string[]
@@ -22,10 +23,12 @@ function jsonSchemaToTypeScript(schema: JsonSchemaNode, indent = 0): string {
   const pad = '  '.repeat(indent)
   const padInner = '  '.repeat(indent + 1)
 
-  // zod v4 emits literals as `const` and nullables as `anyOf [T, null]`.
+  // zod v4 emits literals as `const`, nullables as `anyOf [T, null]`, and
+  // discriminated unions as `oneOf`; both keywords render as one TS union.
   if (schema.const !== undefined) return JSON.stringify(schema.const)
-  if (schema.anyOf) {
-    return schema.anyOf.map((member) => jsonSchemaToTypeScript(member, indent)).join(' | ')
+  const unionMembers = schema.anyOf ?? schema.oneOf
+  if (unionMembers) {
+    return unionMembers.map((member) => jsonSchemaToTypeScript(member, indent)).join(' | ')
   }
 
   const nullable = Array.isArray(schema.type) && schema.type.includes('null')

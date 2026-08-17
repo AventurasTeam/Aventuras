@@ -114,6 +114,12 @@ When stacked:
   (regular default on phone = 44 px, meeting Apple's tap-target
   floor; see also
   [`mobile/touch.md → Touch-target floor on phone`](../foundations/mobile/touch.md#touch-target-floor-on-phone)).
+- **Error** — sits directly **beneath the input**, not in the hint
+  slot above it, so the message reads after the control it rejects
+  and validity flipping mid-type never displaces the field the user
+  is typing in. Same position in both layouts. Sentence-case sans,
+  12 px / `text-xs`, `--danger`. Suppresses the hint while set —
+  never both at once.
 - **Spacing** — ~6 px between label and input, ~16 px between
   rows.
 

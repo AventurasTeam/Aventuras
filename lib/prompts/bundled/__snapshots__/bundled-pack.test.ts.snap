@@ -3,6 +3,8 @@
 exports[`bundled pack > renders the wizard opening from definition + lead 1`] = `
 "Write the opening passage of this adventure story.
 Setting: A frozen coast.
-The lead character is Aria (cast id: c1).
+Cast — sceneEntities takes only the character and item ids from this list, currentLocationId only a location id from it; factions are never scene-tagged:
+- Aria (character, cast id: c1)
+The lead character's cast id is c1.
 "
 `;

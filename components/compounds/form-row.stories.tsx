@@ -164,6 +164,28 @@ export const LabelRendersInBothLayouts: Story = {
   },
 }
 
+/**
+ * The error reads after the control it rejects, in both layouts — the stacked
+ * hint slot above the input is for help text only.
+ */
+export const ErrorSitsBelowTheControl: Story = {
+  render: () => (
+    // `stacked` is pinned, not inferred from the 360 px wrapper: the auto
+    // heuristic only flips after an async onLayout, which lands too late for a
+    // play function and would leave this asserting the 2-col branch instead.
+    <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
+      <FormRow label="Email" stacked error="Enter a valid email address">
+        <ControlledInput placeholder="you@example.com" aria-invalid />
+      </FormRow>
+    </View>
+  ),
+  play: async () => {
+    const input = screen.getByPlaceholderText('you@example.com')
+    const error = screen.getByText('Enter a valid email address')
+    expect(input.compareDocumentPosition(error) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  },
+}
+
 export const ErrorReplacesHint: Story = {
   render: () => (
     <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
@@ -179,26 +201,7 @@ export const ErrorReplacesHint: Story = {
   },
 }
 
-/**
- * Asserted as document order, not presence: an error reading above the input is
- * the regression this pins (forms.md → Stacked-row visual treatment).
- */
-export const StackedErrorSitsBelowTheControl: Story = {
-  render: () => (
-    <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
-      <FormRow label="Email" stacked error="Enter a valid email address">
-        <ControlledInput placeholder="…" />
-      </FormRow>
-    </View>
-  ),
-  play: async () => {
-    const error = screen.getByText('Enter a valid email address')
-    const input = screen.getByPlaceholderText('…')
-    // DOCUMENT_POSITION_PRECEDING: the input comes before the error.
-    expect(error.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy()
-  },
-}
-
+/** The hint's counterpart to `ErrorSitsBelowTheControl`, pinned as document order. */
 export const StackedHintSitsAboveTheControl: Story = {
   render: () => (
     <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">

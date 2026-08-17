@@ -190,8 +190,9 @@ async function* suggestionEmissionPhase(
     ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
     return { status: 'completed' }
   }
-  // The empty-state ⟳ Generate fires on entries that carry no metadata at all
-  // (legacy rows predating the column); the scene floor keeps it schema-valid.
+  // The empty-state ⟳ Generate fires on entries that carry no metadata at all —
+  // the column is nullable, so that is a live shape rather than an old one. The
+  // scene floor keeps the substituted default schema-valid.
   const base: EntryMetadata = current.metadata ?? inheritedEntryMetadata(null)
 
   yield {

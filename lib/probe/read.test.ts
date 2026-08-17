@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ProbeCapturePayload } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { EmbedderErrorKind } from '@/lib/embedder'
 import { RANKER_DEFAULTS } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
 import { queryAllOf } from '@/lib/retrieval/__tests__/query-all'
@@ -17,6 +16,7 @@ import {
   decodeCaptures,
   deleteCaptureOp,
 } from './read'
+import { CaptureShapeError } from './validate'
 import { writeProbeCapture } from './writer'
 
 describe('capturesForStoryQuery', () => {
@@ -186,26 +186,22 @@ describe('decodeCapture', () => {
     expect(warn).toHaveBeenCalledWith(event, expect.objectContaining({ id: 'pc_1' }))
   })
 
-  // A pre-v2 payload has the marker only on the column. replayType never sees
-  // the row, and reads an absent field as "failed" — so without the backfill
-  // every capture written before the bump becomes unsimulatable.
-  it.each<[string, EmbedderErrorKind | null]>([
-    ['a successful pre-v2 capture', null],
-    ['a failed pre-v2 capture', 'call'],
-  ])('backfills %s failure reason from the column', (_label, rowReason) => {
+  // The shape that predates the payload-side marker is refused, not upgraded
+  // off the column: replayType never sees the row, so reading the column would
+  // let it decide a replay's outcome, and nothing can write that shape any more.
+  it('rejects a payload carrying no failure marker', () => {
     const legacy = { ...buildCapturePayload(captureInput()) } as Record<string, unknown>
     delete legacy.failure_reason
     const { bytes } = compressPayload(legacy as unknown as ProbeCapturePayload)
 
-    const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', rowReason, 100, bytes])
-
-    expect(decoded.payload.failure_reason).toBe(rowReason)
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', 'call', 100, bytes])).toThrow(
+      CaptureShapeError,
+    )
   })
 
-  // The one input that separates the backfill's `=== undefined` from a `??`:
-  // a v2 payload saying "this pass succeeded" must win over a stale column
-  // rather than be collapsed into it, or the two sources silently disagree.
-  it('keeps a v2 payload null over a non-null column', () => {
+  // The payload is the single source for replay: a payload saying "this pass
+  // succeeded" must win over a stale column rather than be collapsed into it.
+  it('keeps a payload null over a non-null column', () => {
     const { bytes } = compressPayload({
       ...buildCapturePayload(captureInput()),
       failure_reason: null,

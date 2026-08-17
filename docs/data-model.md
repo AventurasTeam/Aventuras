@@ -1029,7 +1029,7 @@ Per-field "who writes / when":
 | ------------------------------------------- | -------------------------------------------- | --------------------------------------------------------- |
 | `description` (top-level)                   | Whoever spawns the entity                    | User-only in v1                                           |
 | `visual.*`                                  | Classifier from prose, or user via form      | Both — classifier evolves on observed prose change        |
-| `traits`, `drives`                          | Classifier from prose                        | Classifier (chapter-close lore-mgmt only) + user via form |
+| `traits`, `drives`                          | Classifier from prose, or user via form      | Classifier (chapter-close lore-mgmt only) + user via form |
 | `voice`                                     | Classifier from prose, or user via form      | Both                                                      |
 | `current_location_id`                       | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
 | `equipped_items`, `inventory`, `stackables` | Classifier per-turn                          | Classifier per-turn primary; user can edit                |
@@ -1791,17 +1791,22 @@ prose AND minimal scene metadata in one call:
 ```ts
 {
   prose: string,
-  sceneEntities: string[],          // subset of wizard-curated cast entity ids
-  currentLocationId: string | null, // one of the wizard-curated cast location ids
+  sceneEntities: string[],          // subset of active character/item ids from the wizard-curated cast
+  currentLocationId: string | null, // one of the active location ids from the wizard-curated cast
   worldTime: 0                      // story start; always 0
 }
 ```
 
-The model is constrained to reference only the wizard-curated cast
-in the metadata refs (passed as enum-shaped reference data in the
-generation context). Prose can mention unbacked names freely
-("Old Jorin was sleeping at the bar") — only the metadata refs are
-constrained.
+The structured-output schema itself is unconstrained — a bare
+string array for `sceneEntities`, a nullable string for
+`currentLocationId`, not an enum. The prompt lists only the active
+wizard-curated cast, kind-qualified (`sceneEntities` draws from
+character/item ids, `currentLocationId` from location ids);
+enforcement is a post-hoc filter at commit — Finish drops any ref
+that doesn't resolve to an active row of the right kind before it
+reaches `story_entries.metadata`. Prose can mention unbacked names
+freely ("Old Jorin was sleeping at the bar") — only the metadata
+refs are constrained.
 
 **No separate classifier pass on the opening (v1).** User-written
 openings start with empty metadata (`worldTime: 0`,

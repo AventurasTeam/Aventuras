@@ -310,6 +310,16 @@ registry's variable names, and TypeScript types on the runtime side
 are the safety net for the values. The registry mirrors that surface
 for authoring ergonomics.
 
+**Every context is a projection, never a spread.** Both
+`buildGenerationContext` and the wizard's `wizardTemplateContext` list
+their keys explicitly and project the rows they carry — runtime entity
+rows down to `PROMPT_ENTITY_FIELDS`, wizard cast and lore rows minus
+`tags`. Handing a template a whole DB row or a whole working state makes
+every present and future field part of the authoring surface, and a
+field a user's pack can reach is a field that can't be withdrawn.
+Parity tests run in both directions: the registry's variables must all
+be emitted, and nothing outside the registry may be.
+
 ### v2 shape of `generationContext` — what's carried over, what changes
 
 | Old variable                                   | V2 replacement                                                                                                                                |

@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
-import type { AssistListItem } from './assist-list-logic'
+import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './assist-list-logic'
 
 // AiAssist drives the overlay state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).
@@ -112,6 +112,23 @@ function guidanceCapturingRun<T>(value: T, calls: string[]) {
   }
 }
 
+// Records the exclusion list `run` was called with on each page — the only
+// thing that proves `Generate more` asks the model for something new instead
+// of re-rolling the prompt that produced page one.
+function excludeCapturingRun<T>(pages: T[], calls: (readonly string[])[]) {
+  let call = 0
+  return async (
+    _guidance: string,
+    _signal: AbortSignal,
+    exclude: readonly string[],
+  ): Promise<GenerateStructuredResult<T>> => {
+    calls.push(exclude)
+    const value = pages[Math.min(call, pages.length - 1)]
+    call += 1
+    return { status: 'ok', value }
+  }
+}
+
 type DescriptionValue = { description: string }
 type TitlesValue = { titles: string[] }
 
@@ -209,13 +226,25 @@ type ListItemValue = { items: AssistListItem<ListPayload>[] }
 
 type ListDemoProps = {
   resolveModelId: () => string | null
-  run: (guidance: string, signal: AbortSignal) => Promise<GenerateStructuredResult<ListItemValue>>
-  existingNames?: string[]
+  run: (
+    guidance: string,
+    signal: AbortSignal,
+    exclude: readonly string[],
+  ) => Promise<GenerateStructuredResult<ListItemValue>>
+  existingKeys?: DedupeKey[]
+  excludeLabel?: (item: AssistListItem<ListPayload>) => string
   onSetup: () => void
   onImport: (payloads: ListPayload[]) => void
 }
 
-function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }: ListDemoProps) {
+function ListDemo({
+  resolveModelId,
+  run,
+  existingKeys = [],
+  excludeLabel,
+  onSetup,
+  onImport,
+}: ListDemoProps) {
   const [imported, setImported] = useState<string[]>([])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -229,7 +258,8 @@ function ListDemo({ resolveModelId, run, existingNames = [], onSetup, onImport }
         resolveModelId={resolveModelId}
         result="list"
         getItems={(v) => v.items}
-        existingNames={existingNames}
+        existingKeys={existingKeys}
+        excludeLabel={excludeLabel}
         onImport={(payloads) => {
           setImported(payloads.map((p) => p.name))
           onImport(payloads)
@@ -247,16 +277,16 @@ type ListDemoWithLiveExistingProps = {
   // button would sit outside DialogContent's DOM, and clicking it would
   // register as an outside-interaction and dismiss the overlay through
   // handleOpenChange before the play function could observe anything.
-  onReady: (setExistingNames: (names: string[]) => void) => void
+  onReady: (setExistingKeys: (keys: DedupeKey[]) => void) => void
 }
 
-// `existingNames` toggles live (unlike ListDemo's fixed prop) so a play
+// `existingKeys` toggles live (unlike ListDemo's fixed prop) so a play
 // function can check a row, THEN mark it existing — reaching the
-// checked+disabled combination a static existingNames prop can't produce.
+// checked+disabled combination a static existingKeys prop can't produce.
 function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWithLiveExistingProps) {
-  const [existingNames, setExistingNames] = useState<string[]>([])
+  const [existingKeys, setExistingKeys] = useState<DedupeKey[]>([])
   useEffect(() => {
-    onReady(setExistingNames)
+    onReady(setExistingKeys)
   }, [onReady])
   return (
     <View className="w-96 gap-3 rounded-md bg-bg-base p-6">
@@ -266,7 +296,7 @@ function ListDemoWithLiveExisting({ resolveModelId, run, onReady }: ListDemoWith
         resolveModelId={resolveModelId}
         result="list"
         getItems={(v) => v.items}
-        existingNames={existingNames}
+        existingKeys={existingKeys}
         onImport={fn()}
         onSetup={fn()}
       />
@@ -915,6 +945,48 @@ export const ListResult_DedupesWhitespaceVariantWithinOnePage: Story = {
   },
 }
 
+const ASHFALL_LOCATION_ITEM: AssistListItem<ListPayload> = {
+  name: 'Ashfall',
+  detail: 'A city built on a dead volcano.',
+  dedupeKey: composeKey('location', 'Ashfall'),
+  payload: { name: 'Ashfall', category: 'location' },
+}
+const ASHFALL_FACTION_ITEM: AssistListItem<ListPayload> = {
+  name: 'Ashfall',
+  detail: 'A cult that worships the volcano.',
+  dedupeKey: composeKey('faction', 'Ashfall'),
+  payload: { name: 'Ashfall', category: 'faction' },
+}
+
+export const ListResult_SameNameDistinctDedupeKeysBothSelectable: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<ListItemValue>({ items: [ASHFALL_LOCATION_ITEM, ASHFALL_FACTION_ITEM] })}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findAllByText('Ashfall')
+
+    // A location and a faction sharing a name are distinct rows once each
+    // carries its own dedupeKey — unlike ListResult_DedupesWhitespaceVariant-
+    // WithinOnePage above, this pair must NOT collapse to one. Both rows share
+    // an accessible name (`accessibilityLabel={row.name}`), so they cannot be
+    // addressed individually via getByRole(..., { name }); order is the only
+    // available handle, matching `getItems`' emission order.
+    const checkboxes = screen.getAllByRole('checkbox', { name: 'Ashfall' })
+    expect(checkboxes).toHaveLength(2)
+
+    await userEvent.click(checkboxes[0])
+    expect(checkboxes[0]).toBeChecked()
+    expect(checkboxes[1]).not.toBeChecked()
+  },
+}
+
 export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
   render: () => (
     <ListDemo
@@ -942,12 +1014,84 @@ export const ListResult_GenerateMoreAppendsAndKeepsSelection: Story = {
   },
 }
 
+const generateMoreExcludeCalls: (readonly string[])[] = []
+export const ListResult_GenerateMoreExcludesRowsOnScreen: Story = {
+  render: () => {
+    generateMoreExcludeCalls.length = 0
+    return (
+      <ListDemo
+        resolveModelId={() => MODEL_ID}
+        run={excludeCapturingRun<ListItemValue>(
+          [{ items: [RUIN_ITEM] }, { items: [PAGE_TWO_ITEM] }, { items: [FACTION_ITEM] }],
+          generateMoreExcludeCalls,
+        )}
+        onSetup={fn()}
+        onImport={fn()}
+      />
+    )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Sunken Archive')
+    // A fresh Generate is meant to re-roll, so it excludes nothing.
+    expect(generateMoreExcludeCalls[0]).toEqual([])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('Old Jorin')
+    // Without this the call re-sends page one's prompt verbatim and the reply
+    // is deduped away — a wasted round-trip the user pays for.
+    expect(generateMoreExcludeCalls[1]).toEqual(['Sunken Archive'])
+
+    // Accumulates across pages rather than carrying only the newest one.
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('Ashfall Cartel')
+    expect(generateMoreExcludeCalls[2]).toEqual(['Sunken Archive', 'Old Jorin'])
+
+    // Regenerate replaces rather than appends, so it re-rolls unconstrained.
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+    await waitFor(() => expect(generateMoreExcludeCalls).toHaveLength(4))
+    expect(generateMoreExcludeCalls[3]).toEqual([])
+  },
+}
+
+const kindScopedExcludeCalls: (readonly string[])[] = []
+export const ListResult_ExcludeLabelCarriesTheScope: Story = {
+  render: () => {
+    kindScopedExcludeCalls.length = 0
+    return (
+      <ListDemo
+        resolveModelId={() => MODEL_ID}
+        run={excludeCapturingRun<ListItemValue>(
+          [{ items: [ASHFALL_LOCATION_ITEM] }, { items: [ASHFALL_FACTION_ITEM] }],
+          kindScopedExcludeCalls,
+        )}
+        excludeLabel={(item) => `${item.name.trim()} (${item.payload.category})`}
+        onSetup={fn()}
+        onImport={fn()}
+      />
+    )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('A city built on a dead volcano.')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText('A cult that worships the volcano.')
+    // Scope-qualified: a bare "Ashfall" would tell the model to suppress an
+    // Ashfall of ANY kind — the exact collision the kind-scoped dedupeKey
+    // exists to allow, so the two channels have to agree.
+    expect(kindScopedExcludeCalls[1]).toEqual(['Ashfall (location)'])
+  },
+}
+
 export const ListResult_ExistingNameDisabled: Story = {
   render: () => (
     <ListDemo
       resolveModelId={() => MODEL_ID}
       run={okRun<ListItemValue>({ items: [RUIN_ITEM, FACTION_ITEM] })}
-      existingNames={['sunken archive']}
+      existingKeys={[nameKey('sunken archive')]}
       onSetup={fn()}
       onImport={fn()}
     />
@@ -1181,14 +1325,14 @@ export const ListResult_CancelledGenerateMoreThenRegenerateReplaces: Story = {
   },
 }
 
-let setLiveExistingNames: (names: string[]) => void = () => {}
+let setLiveExistingKeys: (keys: DedupeKey[]) => void = () => {}
 export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
   render: () => (
     <ListDemoWithLiveExisting
       resolveModelId={() => MODEL_ID}
       run={okRun<ListItemValue>({ items: [RUIN_ITEM] })}
       onReady={(setter) => {
-        setLiveExistingNames = setter
+        setLiveExistingKeys = setter
       }}
     />
   ),
@@ -1199,12 +1343,12 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
 
     // Marking it existing WHILE checked reaches a combination a static
-    // existingNames prop never produces: checked AND disabled together, with
+    // existingKeys prop never produces: checked AND disabled together, with
     // the Indicator wrapper actually rendered. Driven directly through the
     // setter (not a click) — a button outside DialogContent would register
     // as an outside interaction and dismiss the overlay before this
     // assertion ever ran.
-    setLiveExistingNames(['Sunken Archive'])
+    setLiveExistingKeys([nameKey('Sunken Archive')])
     const checkbox = await screen.findByRole('checkbox', { name: 'Sunken Archive' })
     expect(checkbox).toBeChecked()
     expect(checkbox).toHaveStyle({ pointerEvents: 'none' })
@@ -1219,5 +1363,10 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     if (indicator == null) throw new Error('expected a rendered Indicator wrapper on a checked row')
     await expect(userEvent.click(indicator)).rejects.toThrow(/pointer-events/)
     expect(checkbox).toBeChecked()
+
+    // The selection is non-empty but every member of it now exists, so there is
+    // nothing left to import: the button must not offer an import that would
+    // pass an empty array and close the overlay as if it had done something.
+    expect(screen.getByRole('button', { name: 'Import selected' })).toBeDisabled()
   },
 }

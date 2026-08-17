@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 import type {
   CharacterState,
-  EntityState,
+  EntityStateByKind,
   FactionState,
   ItemState,
   LocationState,
@@ -95,26 +95,30 @@ export function entityStateSchemaForKind(kind: EntityKind) {
   }
 }
 
-export function emptyEntityState(kind: EntityKind): EntityState {
-  switch (kind) {
-    case 'character':
-      return {
-        visual: {},
-        traits: [],
-        drives: [],
-        current_location_id: null,
-        equipped_items: [],
-        inventory: [],
-        faction_id: null,
-        lastSeenAt: null,
-      }
-    case 'location':
-      return { parent_location_id: null }
-    case 'item':
-      return { at_location_id: null }
-    case 'faction':
-      return {}
-  }
+// Per-kind factories behind a `satisfies` map rather than one switch returning
+// EntityState: FactionState is all-optional, so the wide union is assignable to
+// it and a caller pairing `kind: 'faction'` with a character's empty state would
+// otherwise compile.
+const EMPTY_STATE_BY_KIND = {
+  character: (): CharacterState => ({
+    visual: {},
+    traits: [],
+    drives: [],
+    current_location_id: null,
+    equipped_items: [],
+    inventory: [],
+    faction_id: null,
+    lastSeenAt: null,
+  }),
+  location: (): LocationState => ({ parent_location_id: null }),
+  item: (): ItemState => ({ at_location_id: null }),
+  faction: (): FactionState => ({}),
+} satisfies { [K in EntityKind]: () => EntityStateByKind[K] }
+
+export function emptyEntityState<K extends EntityKind>(kind: K): EntityStateByKind[K] {
+  // The `satisfies` above is the proof each factory returns its own kind's
+  // shape; TS just can't distribute that over a call indexed by a generic key.
+  return EMPTY_STATE_BY_KIND[kind]() as EntityStateByKind[K]
 }
 
 // Compile-time guards: each per-kind Zod output must be assignable to its gate-owned TS type.
@@ -122,5 +126,12 @@ type _CharOk = z.infer<typeof characterStateSchema> extends CharacterState ? tru
 type _LocOk = z.infer<typeof locationStateSchema> extends LocationState ? true : never
 type _ItemOk = z.infer<typeof itemStateSchema> extends ItemState ? true : never
 type _FacOk = z.infer<typeof factionStateSchema> extends FactionState ? true : never
-const _checks: [_CharOk, _LocOk, _ItemOk, _FacOk] = [true, true, true, true]
+// …and the kind→state map must span exactly the kinds this module dispatches on,
+// so a fifth kind can't reach entityStateSchemaForKind without a state shape.
+type _KindMapOk = keyof EntityStateByKind extends EntityKind
+  ? EntityKind extends keyof EntityStateByKind
+    ? true
+    : never
+  : never
+const _checks: [_CharOk, _LocOk, _ItemOk, _FacOk, _KindMapOk] = [true, true, true, true, true]
 void _checks
