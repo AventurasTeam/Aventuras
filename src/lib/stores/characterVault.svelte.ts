@@ -1,6 +1,10 @@
 import type { VaultCharacter, Character } from '$lib/types'
 import { database } from '$lib/services/database'
-import { discoveryService, type DiscoveryCard } from '$lib/services/discovery'
+import {
+  discoveryService,
+  METADATA_ONLY_CHARACTER_MIME,
+  type DiscoveryCard,
+} from '$lib/services/discovery'
 import { CharacterCardImport } from '$lib/services/characterCardImport'
 import { LorebookImportExport } from '$lib/services/lorebookImportExport'
 import { lorebookVault } from './lorebookVault.svelte'
@@ -279,14 +283,24 @@ class CharacterVaultStore {
 
   private async _processDiscoveryImport(tempId: string, card: DiscoveryCard): Promise<void> {
     const blob = await discoveryService.downloadCard(card)
+    const metadataOnly = blob.type === METADATA_ONLY_CHARACTER_MIME
     const file = new File([blob], `${card.name}.${blob.type.includes('json') ? 'json' : 'png'}`, {
       type: blob.type,
     })
 
     await this._processFileImport(tempId, file, {
       sourceUrl: card.imageUrl || card.avatarUrl,
-      tags: card.tags,
+      tags: metadataOnly ? [...new Set([...card.tags, 'metadata-only'])] : card.tags,
+      ...(metadataOnly ? { metadataOnly: true } : {}),
     })
+
+    if (metadataOnly) {
+      ui.showToast(
+        `${card.name} was imported from search metadata only because Cloudflare blocked the full card download.`,
+        'warning',
+        10000,
+      )
+    }
   }
 
   /**

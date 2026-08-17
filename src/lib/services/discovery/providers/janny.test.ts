@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { METADATA_ONLY_CHARACTER_MIME } from '../types'
 import type { DiscoveryCard } from '../types'
 
 const { mockCorsFetch } = vi.hoisted(() => ({
@@ -218,9 +219,23 @@ describe('JannyProvider', () => {
     )
   })
 
+  it('does not treat an unrelated 403 as a Cloudflare challenge', async () => {
+    mockCorsFetch.mockResolvedValueOnce(new Response('Forbidden', { status: 403 }))
+
+    const { JannyProvider } = await import('./janny')
+    await expect(new JannyProvider().downloadCard(discoveryCard())).rejects.toThrow(
+      'Failed to fetch JannyAI character: 403',
+    )
+  })
+
   it('returns an explicit metadata-only V2 card when Cloudflare blocks downloads', async () => {
     const card = discoveryCard()
-    mockCorsFetch.mockResolvedValueOnce(new Response('Forbidden', { status: 403 }))
+    mockCorsFetch.mockResolvedValueOnce(
+      new Response('Cloudflare challenge', {
+        status: 403,
+        headers: { Server: 'cloudflare', 'CF-Ray': 'fixture-ray' },
+      }),
+    )
 
     const { JannyProvider } = await import('./janny')
     const blob = await new JannyProvider().downloadCard(card)
@@ -233,7 +248,7 @@ describe('JannyProvider', () => {
         body: JSON.stringify({ characterId: 'character-42' }),
       }),
     )
-    expect(blob.type).toBe('application/json')
+    expect(blob.type).toBe(METADATA_ONLY_CHARACTER_MIME)
     expect(payload).toEqual({
       spec: 'chara_card_v2',
       spec_version: '2.0',
@@ -253,5 +268,24 @@ describe('JannyProvider', () => {
         },
       }),
     })
+  })
+
+  it('uses the metadata-only fallback when Cloudflare blocks the card CDN', async () => {
+    mockCorsFetch
+      .mockResolvedValueOnce(
+        jsonResponse({ status: 'ok', downloadUrl: 'https://cdn.jannyai.com/cards/astra.png' }),
+      )
+      .mockResolvedValueOnce(
+        new Response('Cloudflare challenge', {
+          status: 403,
+          headers: { 'CF-Mitigated': 'challenge' },
+        }),
+      )
+
+    const { JannyProvider } = await import('./janny')
+    const blob = await new JannyProvider().downloadCard(discoveryCard())
+
+    expect(blob.type).toBe(METADATA_ONLY_CHARACTER_MIME)
+    expect(JSON.parse(await blob.text()).data.extensions.jannyai.metadataOnly).toBe(true)
   })
 })

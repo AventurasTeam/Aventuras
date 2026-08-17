@@ -1,4 +1,10 @@
-import type { DiscoveryProvider, DiscoveryCard, SearchOptions, SearchResult } from '../types'
+import {
+  METADATA_ONLY_CHARACTER_MIME,
+  type DiscoveryProvider,
+  type DiscoveryCard,
+  type SearchOptions,
+  type SearchResult,
+} from '../types'
 import { corsFetch, GENERIC_ICON } from '../utils'
 
 const JANNY_SEARCH_URL = 'https://search.jannyai.com/multi-search'
@@ -6,6 +12,16 @@ const JANNY_DOWNLOAD_URL = 'https://api.jannyai.com/api/v1/download'
 const JANNY_IMAGE_BASE = 'https://image.jannyai.com/bot-avatars/'
 // The API controls the returned URL, so keep this exact to prevent Tauri HTTP from fetching arbitrary hosts.
 const JANNY_DOWNLOAD_HOSTS = new Set(['cdn.jannyai.com', 'image.jannyai.com'])
+
+function isCloudflareChallenge(response: Response): boolean {
+  if (response.status !== 403) return false
+
+  return (
+    response.headers.has('cf-ray') ||
+    response.headers.get('cf-mitigated')?.toLowerCase() === 'challenge' ||
+    response.headers.get('server')?.toLowerCase().includes('cloudflare') === true
+  )
+}
 
 // Cached token
 let cachedToken: string | null = null
@@ -268,21 +284,28 @@ export class JannyProvider implements DiscoveryProvider {
 
       const cardResponse = await corsFetch(downloadUrl.href)
       if (!cardResponse.ok) {
+        if (isCloudflareChallenge(cardResponse)) {
+          return this.createMetadataOnlyCard(card)
+        }
         throw new Error(`Failed to download JannyAI character: ${cardResponse.status}`)
       }
 
       return cardResponse.blob()
     }
 
-    if (response.status !== 403) {
+    if (!isCloudflareChallenge(response)) {
       throw new Error(`Failed to fetch JannyAI character: ${response.status}`)
     }
 
+    return this.createMetadataOnlyCard(card)
+  }
+
+  private createMetadataOnlyCard(card: DiscoveryCard): Blob {
     console.warn('[Janny] Download blocked by Cloudflare; importing search metadata only')
     const stCard = this.convertSearchResultToSTFormat(card)
     const jsonString = JSON.stringify(stCard, null, 2)
 
-    return new Blob([jsonString], { type: 'application/json' })
+    return new Blob([jsonString], { type: METADATA_ONLY_CHARACTER_MIME })
   }
 
   private convertSearchResultToSTFormat(card: DiscoveryCard): any {

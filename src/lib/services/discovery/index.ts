@@ -10,6 +10,7 @@ import { MlpchagProvider } from './providers/mlpchag'
 import { QuillGenProvider } from './providers/quillgen'
 
 export type { DiscoveryProvider, DiscoveryCard, SearchOptions, SearchResult }
+export { METADATA_ONLY_CHARACTER_MIME } from './types'
 
 // Track pagination state per provider for "Search All" mode
 interface ProviderPaginationState {
