@@ -44,6 +44,10 @@ slice plans when relevant.
   — web inherits `body { color: var(--fg-primary) }`, native
   RenderHTML always gets a `baseStyle` color; never patch color
   per-island.
+- [RN's global `fetch` cannot stream](./rn-fetch-cannot-stream.md)
+  — whatwg-fetch is XHR-backed and exposes no `body`, so SSE calls
+  fail as an AI SDK `Failed to process successful response` at
+  status 200; route native through `expo/fetch`.
 - [Wide-table scroll containment](./table-scroll-containment.md)
   — wide tables wrap in their own `overflow-x: auto`; horizontal
   scroll must not bubble.

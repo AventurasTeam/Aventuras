@@ -1,7 +1,11 @@
 import { APICallError } from 'ai'
 import { describe, expect, it } from 'vitest'
 
-import { ProviderTimeoutError, classifyProviderError } from './classify-provider-error'
+import {
+  ProviderTimeoutError,
+  classifyProviderError,
+  describeProviderError,
+} from './classify-provider-error'
 
 function apiError(statusCode: number | undefined): APICallError {
   return new APICallError({
@@ -62,5 +66,63 @@ describe('classifyProviderError', () => {
 
   it('returns undefined retryAfterMs when the header is absent', () => {
     expect(classifyProviderError(apiError(503)).retryAfterMs).toBeUndefined()
+  })
+})
+
+describe('describeProviderError', () => {
+  // The shape the AI SDK produces when a response handler throws: the envelope
+  // names itself, the root cause is one link down (post-to-api.ts).
+  function wrapped(cause: Error): APICallError {
+    return new APICallError({
+      message: 'Failed to process successful response',
+      cause,
+      statusCode: 200,
+      url: 'https://api.test/v1/chat/completions',
+      requestBodyValues: {},
+    })
+  }
+
+  it('names the root cause, not just the envelope', () => {
+    const inner = new Error('Empty response body')
+    inner.name = 'EmptyResponseBodyError'
+    expect(describeProviderError(wrapped(inner))).toBe(
+      'APICallError: Failed to process successful response ← EmptyResponseBodyError: Empty response body',
+    )
+  })
+
+  it('walks a multi-link chain', () => {
+    const root = new Error('invalid json')
+    const mid = new Error('type validation failed', { cause: root })
+    expect(describeProviderError(wrapped(mid))).toBe(
+      'APICallError: Failed to process successful response ← type validation failed ← invalid json',
+    )
+  })
+
+  it('does not repeat a name already carried by the message', () => {
+    const inner = new Error('TypeValidationError: bad shape')
+    inner.name = 'TypeValidationError'
+    expect(describeProviderError(inner)).toBe('TypeValidationError: bad shape')
+  })
+
+  it('collapses a link whose label repeats the one before it', () => {
+    const root = new Error('same')
+    expect(describeProviderError(new Error('same', { cause: root }))).toBe('same')
+  })
+
+  it('terminates on a cyclic cause chain', () => {
+    const a = new Error('a')
+    const b = new Error('b')
+    ;(a as { cause?: unknown }).cause = b
+    ;(b as { cause?: unknown }).cause = a
+    expect(describeProviderError(a)).toBe('a ← b ← a ← b ← a')
+  })
+
+  it('handles non-Error throwables', () => {
+    expect(describeProviderError('boom')).toBe('boom')
+    expect(describeProviderError(undefined)).toBe('')
+  })
+
+  it('labels a throwable that cannot be coerced to a string', () => {
+    expect(describeProviderError(Object.create(null))).toBe('[uncoercible value]')
   })
 })

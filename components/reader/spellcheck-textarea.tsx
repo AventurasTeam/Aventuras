@@ -57,10 +57,17 @@ export function SpellcheckTextarea({
   const [scrollOffsetY, setScrollOffsetY] = useState(0)
   const [tooltip, setTooltip] = useState<TooltipState | null>(null)
 
-  const segments = buildTextSegments(
-    value,
-    lints.map((lint) => lint.span()),
-  )
+  // The overlay's only job is carrying underlines, so with no lints it is a
+  // transparent full-text duplicate of the input that can never draw anything.
+  // Native is always in that state — harper needs WebAssembly, which Hermes
+  // lacks, so `lintNarrativeText` there returns no lints by construction.
+  const hasLints = lints.length > 0
+  const segments = hasLints
+    ? buildTextSegments(
+        value,
+        lints.map((lint) => lint.span()),
+      )
+    : []
 
   const handleScroll = (event: TextInputScrollEvent) => {
     setScrollOffsetY(event.nativeEvent.contentOffset.y)
@@ -119,30 +126,32 @@ export function SpellcheckTextarea({
     <View ref={containerRef} className="relative">
       <Textarea value={value} onScroll={handleScroll} {...textareaProps} />
 
-      <View pointerEvents="box-none" className="absolute inset-0 overflow-hidden">
-        <TextClassContext.Provider value="text-transparent">
-          <Text
-            className={OVERLAY_TEXT_CLASS}
-            style={[OVERLAY_ROOT_STYLE, { transform: [{ translateY: -scrollOffsetY }] }]}
-          >
-            {segments.map((segment, i) => {
-              if (segment.kind === 'plain') return <Text key={`p-${i}`}>{segment.text}</Text>
-              const lint = lints[segment.index]
-              return (
-                <Text
-                  key={segment.key}
-                  className={LINT_UNDERLINE_CLASS}
-                  style={LINT_HIT_STYLE}
-                  onPress={() => handlePress(lint)}
-                  {...hoverProps(segment.key, lint)}
-                >
-                  {segment.text}
-                </Text>
-              )
-            })}
-          </Text>
-        </TextClassContext.Provider>
-      </View>
+      {hasLints ? (
+        <View pointerEvents="box-none" className="absolute inset-0 overflow-hidden">
+          <TextClassContext.Provider value="text-transparent">
+            <Text
+              className={OVERLAY_TEXT_CLASS}
+              style={[OVERLAY_ROOT_STYLE, { transform: [{ translateY: -scrollOffsetY }] }]}
+            >
+              {segments.map((segment, i) => {
+                if (segment.kind === 'plain') return <Text key={`p-${i}`}>{segment.text}</Text>
+                const lint = lints[segment.index]
+                return (
+                  <Text
+                    key={segment.key}
+                    className={LINT_UNDERLINE_CLASS}
+                    style={LINT_HIT_STYLE}
+                    onPress={() => handlePress(lint)}
+                    {...hoverProps(segment.key, lint)}
+                  >
+                    {segment.text}
+                  </Text>
+                )
+              })}
+            </Text>
+          </TextClassContext.Provider>
+        </View>
+      ) : null}
 
       {tooltip ? (
         <View

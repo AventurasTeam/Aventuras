@@ -13,6 +13,7 @@ import { Select, type SelectOption } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import type { ComposerMode } from '@/lib/composer-wrap'
 import { t } from '@/lib/i18n'
+import { dismissKeyboard, isKeyboardVisible } from '@/lib/keyboard'
 import { lintNarrativeText } from '@/lib/spellcheck'
 
 import { SpellcheckTextarea } from './spellcheck-textarea'
@@ -135,6 +136,10 @@ export const Composer = forwardRef(function Composer(
 
   function handleSubmit() {
     if (!canSend) return
+    // Dismissing also blurs (`keepFocus` defaults false): on Android a focused
+    // input under a hidden keyboard is the state a tap won't reopen. The guard
+    // is a no-op on web and with a hardware keyboard.
+    if (isKeyboardVisible()) void dismissKeyboard()
     onSend(text, modesEnabled ? mode : 'free')
     setText('')
     setLints([])

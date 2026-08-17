@@ -10,6 +10,7 @@ import { GenerationStatusPill } from '@/components/compounds/generation-status-p
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
 import { isDraftEmpty } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
+import { KeyboardInsetColumn } from '@/components/reader/keyboard-inset-column'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
   type EditResult,
@@ -1146,7 +1147,7 @@ export default function ReaderComposerRoute() {
       }
     >
       <View className="flex-1 flex-row">
-        <View className="flex-1">
+        <KeyboardInsetColumn>
           <View className="flex-1">
             {hydrationFailed ? (
               <View className="flex-1 items-center justify-center">
@@ -1235,7 +1236,7 @@ export default function ReaderComposerRoute() {
               />
             </View>
           </View>
-        </View>
+        </KeyboardInsetColumn>
         {showRail ? (
           <View className="w-[260px] border-l border-border bg-bg-sunken p-3">
             <Text variant="muted" size="sm">

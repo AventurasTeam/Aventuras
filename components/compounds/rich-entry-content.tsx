@@ -15,7 +15,7 @@ const HOST_STYLE: CSSProperties = { contain: 'layout paint' }
 // don't reach into a shadow tree, only inherited properties do. Entry styles
 // come after, so provider CSS wins ties.
 const BASELINE_CSS =
-  'p{margin:4px 0}blockquote{border-left:2px solid var(--border);padding-left:8px;font-style:italic}code{font-family:var(--font-mono)}'
+  ':host{overflow-wrap:break-word}pre{white-space:pre-wrap}p{margin:4px 0}blockquote{border-left:2px solid var(--border);padding-left:8px;font-style:italic}code{font-family:var(--font-mono)}'
 
 export function RichEntryContent({ markedHtml }: RichEntryContentProps) {
   const hostRef = useRef<HTMLDivElement>(null)

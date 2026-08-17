@@ -1,7 +1,9 @@
+import { APICallError } from 'ai'
 import { eq, sql } from 'drizzle-orm'
 
-import { resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
+import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { redactUrl } from '@/lib/diagnostics'
 import { generateId, IdBiMap } from '@/lib/ids'
 import {
   buildPiggybackActions,
@@ -170,12 +172,23 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // supposed to discard.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   if (streamError !== undefined) {
+    // The envelope message alone ("Failed to process successful response") names
+    // nothing actionable, and this is the only surface the failure reaches — the
+    // orchestrator does not log phase failures. No body: httpCallSink already
+    // stores it, capped. The URL is redacted — an OpenAI-compatible endpoint can
+    // pass its key as a query param.
+    ctx.log.error('provider.narrative_stream_failed', {
+      detail: describeProviderError(streamError),
+      ...(APICallError.isInstance(streamError)
+        ? { statusCode: streamError.statusCode, url: redactUrl(streamError.url) }
+        : {}),
+    })
     return {
       status: 'failed',
       error: {
         kind: 'provider',
         reason: 'network',
-        detail: streamError instanceof Error ? streamError.message : String(streamError),
+        detail: describeProviderError(streamError),
       },
     }
   }

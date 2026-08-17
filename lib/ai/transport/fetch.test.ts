@@ -161,4 +161,64 @@ describe('createFetchWithCapture', () => {
       expect(sink.failCall).toHaveBeenCalledWith('call-1', 'Error: stream exploded')
     })
   })
+  // expo/fetch's FetchResponse.clone() throws 'Not implemented'. These two cover
+  // the native transport's shape without needing the native bundle.
+  describe('when the response cannot be cloned', () => {
+    function uncloneable(body: BodyInit | null, headers: Record<string, string>): Response {
+      const response = new Response(body, { status: 200, headers })
+      Object.defineProperty(response, 'clone', {
+        value: () => {
+          throw new Error('Not implemented')
+        },
+      })
+      return response
+    }
+
+    it('captures an event stream without its body and leaves the stream to the caller', async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: one\n\n'))
+          controller.close()
+        },
+      })
+      const originalResponse = uncloneable(stream, {
+        'content-type': 'text/event-stream',
+      })
+      const wrappedFetch = createFetchWithCapture({
+        source: 'unit-test',
+        fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(originalResponse),
+      })
+
+      const response = await wrappedFetch('https://example.test/v1/stream')
+
+      expect(response).toBe(originalResponse)
+      expect(sink.completeCall).toHaveBeenCalledWith('call-1', {
+        status: 200,
+        responseHeaders: { 'content-type': 'text/event-stream' },
+        streamed: true,
+      })
+      expect(sink.failCall).not.toHaveBeenCalled()
+      // The point of skipping capture: the SDK still gets a readable stream.
+      expect(await response.text()).toBe('data: one\n\n')
+    })
+
+    it('rebuilds a non-streaming response so the body is still readable', async () => {
+      const wrappedFetch = createFetchWithCapture({
+        source: 'unit-test',
+        fetchImpl: vi
+          .fn<typeof fetch>()
+          .mockResolvedValue(uncloneable('{"ok":true}', { 'content-type': 'application/json' })),
+      })
+
+      const response = await wrappedFetch('https://example.test/v1/embeddings')
+
+      expect(sink.completeCall).toHaveBeenCalledWith('call-1', {
+        status: 200,
+        responseHeaders: { 'content-type': 'application/json' },
+        responseBody: '{"ok":true}',
+        streamed: false,
+      })
+      expect(await response.json()).toEqual({ ok: true })
+    })
+  })
 })
