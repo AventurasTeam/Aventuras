@@ -21,6 +21,7 @@ type RollbackConfirmModalProps = {
   targetEntryNumber: number
   counts: RollbackCounts
   onConfirm: () => void
+  variant?: 'rollback' | 'regenerate'
 }
 
 export function RollbackConfirmModal({
@@ -29,17 +30,28 @@ export function RollbackConfirmModal({
   targetEntryNumber,
   counts,
   onConfirm,
+  variant = 'rollback',
 }: RollbackConfirmModalProps) {
+  const copy =
+    variant === 'regenerate'
+      ? {
+          title: t('reader:regenerateConfirm.title', { entryNumber: targetEntryNumber }),
+          body: t('reader:regenerateConfirm.body', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:regenerateConfirm.irreversible'),
+          confirm: t('reader:regenerateConfirm.confirm'),
+        }
+      : {
+          title: t('reader:rollbackConfirm.title', { entryNumber: targetEntryNumber }),
+          body: t('reader:rollbackConfirm.body', { entryNumber: targetEntryNumber }),
+          irreversible: t('reader:rollbackConfirm.irreversible'),
+          confirm: t('reader:rollbackConfirm.confirm'),
+        }
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            {t('reader:rollbackConfirm.title', { entryNumber: targetEntryNumber })}
-          </AlertDialogTitle>
-          <AlertDialogDescription>
-            {t('reader:rollbackConfirm.body', { entryNumber: targetEntryNumber })}
-          </AlertDialogDescription>
+          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
+          <AlertDialogDescription>{copy.body}</AlertDialogDescription>
         </AlertDialogHeader>
         <View className="gap-1">
           <Text size="sm">
@@ -55,7 +67,7 @@ export function RollbackConfirmModal({
           </Text>
         </View>
         <Text size="sm" className="font-bold">
-          {t('reader:rollbackConfirm.irreversible')}
+          {copy.irreversible}
         </Text>
         <AlertDialogFooter>
           <AlertDialogCancel asChild>
@@ -65,7 +77,7 @@ export function RollbackConfirmModal({
           </AlertDialogCancel>
           <AlertDialogAction asChild>
             <Button variant="destructive" onPress={onConfirm}>
-              <Text>{t('reader:rollbackConfirm.confirm')}</Text>
+              <Text>{copy.confirm}</Text>
             </Button>
           </AlertDialogAction>
         </AlertDialogFooter>

@@ -55,4 +55,21 @@ describe('createWorkingSetStore', () => {
     store.patch('br_1', { op: 'create', id: 'x_2', row: { id: 'x_2', name: 'c' } })
     expect(store.getRows().has('x_2')).toBe(false)
   })
+
+  it('does not conditionally hydrate a branch after another branch became active', () => {
+    const store = createWorkingSetStore<Row>()
+    store.hydrate('br_2', [{ id: 'y_1', name: 'active' }])
+
+    expect(store.hydrateIfLoaded('br_1', [{ id: 'x_1', name: 'stale' }])).toBe(false)
+    expect(store.getLoadedBranch()).toBe('br_2')
+    expect([...store.getRows().values()]).toEqual([{ id: 'y_1', name: 'active' }])
+  })
+
+  it('conditionally hydrates the branch that is still active', () => {
+    const store = createWorkingSetStore<Row>()
+    store.hydrate('br_1', [{ id: 'x_1', name: 'old' }])
+
+    expect(store.hydrateIfLoaded('br_1', [{ id: 'x_1', name: 'fresh' }])).toBe(true)
+    expect([...store.getRows().values()]).toEqual([{ id: 'x_1', name: 'fresh' }])
+  })
 })

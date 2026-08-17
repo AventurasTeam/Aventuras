@@ -31,6 +31,7 @@ export type ReaderSurfaceProps = {
   onNearTop: () => Promise<void>
   onCommitEdit: (entryId: string, content: string) => Promise<EditResult>
   onRequestRollback: (entryId: string) => Promise<void>
+  onRegenerate: (entryId: string) => Promise<void>
   onRetrySystemEntry: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
   onFixSystemEntry: () => Promise<void>

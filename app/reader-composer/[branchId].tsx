@@ -1,13 +1,14 @@
 import { useIsFocused } from '@react-navigation/native'
 import { and, desc, eq, lt } from 'drizzle-orm'
 import { useLocalSearchParams, useRouter } from 'expo-router'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Platform, View } from 'react-native'
 
 import { type ActionGroup } from '@/components/compounds/actions-menu'
 import { AppActionsMenu } from '@/components/compounds/app-actions-menu'
 import { GenerationStatusPill } from '@/components/compounds/generation-status-pill'
 import { Composer, type ComposerHandle } from '@/components/reader/composer'
+import { isDraftEmpty } from '@/components/reader/composer-draft'
 import { readerPillPhase } from '@/components/reader/generation-phase'
 import ReaderDocument, { type ReaderDocumentRef } from '@/components/reader/reader-document'
 import {
@@ -15,6 +16,14 @@ import {
   type ReaderSurfaceHandle,
 } from '@/components/reader/reader-document-types'
 import { ReaderSurface } from '@/components/reader/reader-surface'
+import {
+  classifyRegenerateGate,
+  loadRegenerateCountsIfCurrent,
+} from '@/components/reader/regenerate-gate'
+import {
+  planRegenerateOutcome,
+  shouldRestoreUserActionAfterHandlingFailure,
+} from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
@@ -39,16 +48,27 @@ import {
   redoLastAction,
   refreshEmbeddingStatus,
   refreshSuggestions,
+  regenerateTurn,
   rollbackToEntry,
   submitTurn,
   undoLastAction,
   updateStoryEntryContent,
   writeSystemEntry,
   type LoadOpenStoryResult,
+  type RegenerateRejectionCode,
+  type RegenerateTurnResult,
   type RollbackCounts,
+  type StoryEntryRejection,
 } from '@/lib/actions'
 import { wrapComposerText, type ComposerMode } from '@/lib/composer-wrap'
-import { branches, db, runInTransaction, storyEntries, type StoryEntry } from '@/lib/db'
+import {
+  branches,
+  db,
+  runInTransaction,
+  storyEntries,
+  type StoryEntry,
+  type SystemFailureMeta,
+} from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
@@ -85,7 +105,24 @@ import { toast } from '@/lib/toast'
 
 const ctx = { db, runInTransaction }
 
-type RollbackState = { targetId: string; targetNumber: number; counts: RollbackCounts }
+// The three classes differ in what the user can do about it: wait for the turn,
+// resume the swap, or nothing (the last three are invariant violations, where
+// inviting a retry sends them into a loop that cannot succeed).
+const REGENERATE_REJECTION_COPY = {
+  'embedder-swap': 'reader:actions.blockedWhileSwapping',
+  'generation-in-flight': 'reader:actions.blockedWhileGenerating',
+  'branch-not-loaded': 'reader:regenerateUnavailable',
+  'not-an-ai-reply': 'reader:regenerateUnavailable',
+  'no-origin': 'reader:regenerateUnavailable',
+  'sweep-refused': 'reader:regenerateUnavailable',
+} as const satisfies Record<RegenerateRejectionCode, string>
+
+type RollbackState = {
+  mode: 'rollback' | 'regenerate'
+  targetId: string
+  targetNumber: number
+  counts: RollbackCounts
+}
 type BranchHydrationState =
   | { branchId: string; status: 'loading' }
   | {
@@ -101,6 +138,20 @@ export default function ReaderComposerRoute() {
   const showRail = tier !== 'phone'
   const isFocused = useIsFocused()
   const { branchId } = useLocalSearchParams<{ branchId: string }>()
+  const branchIdRef = useRef(branchId)
+  // Assigned post-commit, not during render: a discarded render would otherwise
+  // publish a branch that never landed, and every reader of this ref treats a
+  // mismatch as "the user left" — dropping work that was still legitimate.
+  // Layout, not passive: the commit phase runs to completion before any promise
+  // continuation, so no settling callback can read the pre-switch branch back.
+  useLayoutEffect(() => {
+    branchIdRef.current = branchId
+  }, [branchId])
+  // One composer and one lastSubmission serve every branch, so settle-time
+  // recovery must prove the branch didn't change under its awaits before handing
+  // the user's text back. Persisted recovery (the failure entry) is branch-bound
+  // and stays unconditional.
+  const branchUnchanged = useCallback((started: string) => branchIdRef.current === started, [])
 
   const [storyId, setStoryId] = useState<string | null>(null)
   const [rollback, setRollback] = useState<RollbackState | null>(null)
@@ -259,10 +310,14 @@ export default function ReaderComposerRoute() {
 
   // A branch switch must drop any in-flight buffer from the prior branch —
   // it belongs to a different entry list and would otherwise leak forward.
+  // `lastSubmission` rides along: retry prefers it over the persisted copy, so
+  // carrying it across would offer the previous branch's text to this branch's
+  // system entry.
   useEffect(() => {
     streamBufferRef.current = null
     setStreaming(null)
     setHasOlder(false)
+    setLastSubmission(null)
   }, [branchId])
 
   // Leaving the branch (switch or unmount) aborts an in-flight refresh: its
@@ -331,7 +386,7 @@ export default function ReaderComposerRoute() {
 
   const reload = useCallback(async () => {
     const recent = await readRecentEntries(branchId, db)
-    entriesStore.hydrate(branchId, recent)
+    if (!entriesStore.hydrateIfLoaded(branchId, recent)) return
     // A recent-window reload drops any older entries a scroll-up had loaded, so
     // recompute the boundary: a full window means older may exist, a short one
     // proves the branch top is in the window. The seed guard won't do this.
@@ -436,22 +491,78 @@ export default function ReaderComposerRoute() {
     [branchId, reload],
   )
 
+  type DroppedSystemEntry = { content: string; failure: SystemFailureMeta | undefined }
+
+  // A prior failure leaves a system entry as the branch tail; drop it (and
+  // resync the store) before a dispatch so the pipeline's prompt/position reads
+  // the real content tail, not the failure singleton.
+  //
+  // Hands back what it removed: that entry's `submission` is the only copy of
+  // the earlier failed turn's text that outlives a restart, because the turn's
+  // own user_action was reverse-replayed with its action group. A dispatch that
+  // then refuses has destroyed it for nothing unless it puts this back.
+  const dropSystemTail = useCallback(async (): Promise<DroppedSystemEntry | null> => {
+    const dropped = [...entriesStore.getEntries().values()].find(
+      (e) => e.branchId === branchId && e.kind === 'system',
+    )
+    if (!dropped) return null
+    await clearSystemEntry(branchId, ctx)
+    await reload()
+    return { content: dropped.content, failure: dropped.metadata?.systemFailure }
+  }, [branchId, reload])
+
+  // Only safe to call where nothing else changed: writeSystemEntry re-appends at
+  // MAX(position) + 1, so on a path that already swept entries this would park a
+  // stale failure over a branch it no longer describes.
+  const restoreSystemTail = useCallback(
+    async (dropped: DroppedSystemEntry | null) => {
+      if (!dropped) return
+      await writeSystemEntry(
+        {
+          branchId,
+          content: dropped.content,
+          ...(dropped.failure ? { failure: dropped.failure } : {}),
+        },
+        ctx,
+      )
+      await reload()
+    },
+    [branchId, reload],
+  )
+
+  // `editBlocked` only goes true once a dispatch registers a hard-gate run or
+  // enters its reversal barrier — several awaits and a branch-queue hop past the
+  // tap. Send survives that window only because the composer clears its own text
+  // on send; the per-entry glyphs have no such accident, so every turn dispatch
+  // marks the window itself. The ref is the correctness guard (synchronous, no
+  // render lag); the state is what disables the affordances.
+  const dispatchInFlightRef = useRef(false)
+  const [dispatchInFlight, setDispatchInFlight] = useState(false)
+  const beginDispatch = useCallback((): boolean => {
+    if (dispatchInFlightRef.current) return false
+    dispatchInFlightRef.current = true
+    setDispatchInFlight(true)
+    return true
+  }, [])
+  const endDispatch = useCallback(() => {
+    dispatchInFlightRef.current = false
+    setDispatchInFlight(false)
+  }, [])
+  // What every user-edit affordance gates on: the generation gate alone leaves
+  // the pre-registration window open.
+  const actionsBlocked = editBlocked || dispatchInFlight
+
   const runSubmit = useCallback(
     async (content: string, composerMode: string, raw?: { text: string; mode: ComposerMode }) => {
       if (!storyId || !hydrationSucceeded) return
-      // A prior failure leaves a system entry as the branch tail; drop it (and
-      // resync the store) before the turn so the pipeline's prompt/position
-      // reads the real content tail, not the failure singleton.
-      const hasSystemTail = [...entriesStore.getEntries().values()].some(
-        (e) => e.branchId === branchId && e.kind === 'system',
-      )
-      if (hasSystemTail) {
-        await clearSystemEntry(branchId, ctx)
-        await reload()
+      if (!beginDispatch()) {
+        logger.warn('pipeline.submit_dispatch_suppressed', { branchId })
+        return
       }
       const submission = { content, composerMode }
-      setLastSubmission(submission)
       try {
+        await dropSystemTail()
+        setLastSubmission(submission)
         const result = await submitTurn({ storyId, branchId }, { content, composerMode }, ctx)
         if (result.outcome === 'failed') await showTurnFailure(result.error, submission)
         else if (result.outcome === 'rejected')
@@ -465,11 +576,17 @@ export default function ReaderComposerRoute() {
             },
             submission,
           )
-        else if (result.outcome === 'aborted')
+        else if (result.outcome === 'aborted' && branchUnchanged(branchId)) {
           // Cancel reverses the whole turn (user_action included, C6) — hand
           // the text back for edit/re-send. A retry has no raw pre-wrap text,
           // so the wrapped content returns under 'free' (no re-wrap on send).
-          composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
+          // Only into an empty composer: the composer clears itself on send, but
+          // Retry re-enters here without clearing, so text typed while the turn
+          // ran would otherwise be overwritten by the cancelled action.
+          if (isDraftEmpty(composerRef.current?.getDraft()))
+            composerRef.current?.restoreDraft(raw?.text ?? content, raw?.mode ?? 'free')
+          else toast.info(t('reader:turnCancelledDraftKept'))
+        }
       } catch (err) {
         // submitTurn throws on a rejected user_action write — treat a thrown
         // failure like a structured 'failed' outcome so the UI surfaces an
@@ -481,9 +598,150 @@ export default function ReaderComposerRoute() {
           },
           submission,
         )
+      } finally {
+        endDispatch()
       }
     },
-    [storyId, branchId, hydrationSucceeded, reload, showTurnFailure],
+    [
+      storyId,
+      branchId,
+      hydrationSucceeded,
+      dropSystemTail,
+      showTurnFailure,
+      beginDispatch,
+      endDispatch,
+      branchUnchanged,
+    ],
+  )
+
+  // Guarded here rather than at the callers because both the immediate tap and
+  // the modal's confirm funnel through this one dispatch.
+  const runRegenerate = useCallback(
+    async (targetId: string) => {
+      if (!storyId || !hydrationSucceeded) return
+      if (!beginDispatch()) {
+        logger.warn('pipeline.regenerate_dispatch_suppressed', { branchId, entryId: targetId })
+        return
+      }
+      try {
+        let regen: RegenerateTurnResult
+        let dropped: DroppedSystemEntry | null = null
+        // Scoped to the action alone: a throw out of the arms below happens
+        // *after* it returned, with the user's text in hand, so it must not
+        // inherit the "no submission to hand back" premise the catch encodes.
+        try {
+          dropped = await dropSystemTail()
+          regen = await regenerateTurn({ storyId, branchId }, targetId, ctx)
+        } catch (err) {
+          // A toast, not a failure entry: the throw carries no userActionContent,
+          // and a system entry's Retry renders unconditionally — it would offer a
+          // resubmit that is doomed (nothing to send) or wrong (a stale earlier
+          // submission duplicated over the standing user_action).
+          logger.error('pipeline.regenerate_threw', {
+            branchId,
+            entryId: targetId,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          toast.error(t('reader:regenerateFailed'))
+          // A DeltaReplayError can commit its transaction and fail the store sync,
+          // leaving entriesStore holding rows the sweep already deleted.
+          await reload()
+          return
+        }
+        if (regen.status === 'rejected') {
+          logger.warn('pipeline.regenerate_rejected', {
+            branchId,
+            entryId: targetId,
+            reason: regen.reason,
+          })
+          // Every rejection fires before the first sweep, so nothing else moved
+          // and putting the failure entry back is an exact undo of the drop.
+          await restoreSystemTail(dropped)
+          toast.error(t(REGENERATE_REJECTION_COPY[regen.code]))
+          return
+        }
+        const { result } = regen
+        // A branch switch under the dispatch makes the composer's draft another
+        // branch's, so it can neither decide this plan nor receive its text.
+        const stillHere = branchUnchanged(branchId)
+        const plan = planRegenerateOutcome({
+          outcome: result.outcome,
+          converged: regen.converged,
+          draftEmpty: stillHere && isDraftEmpty(composerRef.current?.getDraft()),
+        })
+        // The convergence submission: regenerate's non-success paths unwound the
+        // user_action, so Retry re-enters through the normal submit path. Wrapped
+        // text returns under 'free' (no re-wrap on send), same as cancel-restore.
+        const submission = { content: regen.userActionContent, composerMode: 'free' }
+        try {
+          if (plan.action === 'refuse-unconverged') {
+            // The unwind didn't land, so the user_action is still in the branch.
+            // Neither a Retry nor a draft-restore can offer its text without
+            // duplicating it — the same hazard the throw arm above refuses.
+            logger.error('pipeline.regenerate_unconverged', {
+              branchId,
+              entryId: targetId,
+              outcome: result.outcome,
+            })
+            toast.error(t('reader:regenerateFailed'))
+          } else if (plan.action === 'write-failure-entry' && result.outcome === 'failed') {
+            if (stillHere) setLastSubmission(submission)
+            await showTurnFailure(result.error, submission)
+          } else if (plan.action === 'write-blocked-entry' && result.outcome === 'rejected') {
+            if (stillHere) setLastSubmission(submission)
+            await showTurnFailure(
+              {
+                kind: 'orchestrator',
+                detail: t('reader:systemEntry.blockedDetail', { reason: result.blockedBy }),
+              },
+              submission,
+            )
+          } else if (plan.action === 'restore-draft') {
+            composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+          } else if (plan.action === 'keep-draft' && stillHere) {
+            // The swept action is unrecoverable either way, but they asked to
+            // discard it; the draft they typed they never agreed to lose.
+            toast.info(t('reader:regenerateCancelledDraftKept'))
+          }
+          if (plan.resync) await reload()
+        } catch (err) {
+          // Reached only once the action returned, so unlike the arm above the
+          // user's text is still in hand — hand it back rather than losing it
+          // with the failure entry that was being written.
+          logger.error('pipeline.regenerate_outcome_handling_threw', {
+            branchId,
+            entryId: targetId,
+            outcome: result.outcome,
+            error: err instanceof Error ? err.message : String(err),
+          })
+          toast.error(t('reader:regenerateFailed'))
+          // Re-read rather than reuse `stillHere`: the arms above awaited.
+          if (
+            branchUnchanged(branchId) &&
+            shouldRestoreUserActionAfterHandlingFailure(
+              plan.action,
+              isDraftEmpty(composerRef.current?.getDraft()),
+            )
+          )
+            composerRef.current?.restoreDraft(regen.userActionContent, 'free')
+          await reload()
+        }
+      } finally {
+        endDispatch()
+      }
+    },
+    [
+      storyId,
+      branchId,
+      hydrationSucceeded,
+      dropSystemTail,
+      restoreSystemTail,
+      reload,
+      showTurnFailure,
+      beginDispatch,
+      endDispatch,
+      branchUnchanged,
+    ],
   )
 
   // Derived from the persisted entry, not React state, so the failure kind,
@@ -509,20 +767,39 @@ export default function ReaderComposerRoute() {
 
   const openRollback = useCallback(
     async (targetId: string) => {
-      const counts = await getRollbackCounts(branchId, targetId, ctx)
+      // A tapped delete silently doing nothing reads as broken — and the count
+      // read is a DB round trip that can reject as well as refuse.
+      let counts: RollbackCounts | StoryEntryRejection
+      try {
+        counts = await getRollbackCounts(branchId, targetId, ctx)
+      } catch (err) {
+        logger.error('action_layer.rollback_counts_threw', {
+          branchId,
+          entryId: targetId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        toast.error(t('reader:rollbackFailed'))
+        return
+      }
       if ('status' in counts) {
-        // A tapped delete silently doing nothing reads as broken.
         toast.error(t('reader:rollbackFailed'))
         return
       }
       const target = entriesStore.getById(targetId)
-      setRollback({ targetId, targetNumber: target?.position ?? 0, counts })
+      setRollback({ mode: 'rollback', targetId, targetNumber: target?.position ?? 0, counts })
     },
     [branchId],
   )
 
   const confirmRollback = useCallback(async () => {
     if (!rollback) return
+    if (rollback.mode === 'regenerate') {
+      const targetId = rollback.targetId
+      // Close before the stream starts; the streaming card takes over the surface.
+      setRollback(null)
+      await runRegenerate(targetId)
+      return
+    }
     const result = await rollbackToEntry(branchId, rollback.targetId, ctx)
     if (result.status === 'rejected') {
       // Keep the modal open so the user doesn't assume the delete happened.
@@ -530,7 +807,7 @@ export default function ReaderComposerRoute() {
       return
     }
     setRollback(null)
-  }, [branchId, rollback])
+  }, [branchId, rollback, runRegenerate])
 
   const handleCommitEdit = useCallback(
     async (entryId: string, content: string): Promise<EditResult> => {
@@ -552,6 +829,57 @@ export default function ReaderComposerRoute() {
     [openRollback],
   )
 
+  const handleRequestRegenerate = useCallback(
+    async (entryId: string) => {
+      // Opening a confirm whose dispatch the in-flight guard will drop leaves
+      // the user watching the modal close on nothing.
+      if (dispatchInFlightRef.current) return
+      const startedBranchId = branchId
+      let counts: RollbackCounts | StoryEntryRejection | null
+      try {
+        counts = await loadRegenerateCountsIfCurrent(
+          () => getRollbackCounts(startedBranchId, entryId, ctx),
+          () => ({
+            startedBranchId,
+            currentBranchId: branchIdRef.current,
+            loadedBranchId: entriesStore.getLoadedBranch(),
+            dispatchInFlight: dispatchInFlightRef.current,
+            userEditBlocked: generationStore.isUserEditBlocked(),
+          }),
+        )
+      } catch (err) {
+        // The count read is a DB round trip of its own: a throw here leaves the
+        // tapped ↻ doing nothing at all, which reads as broken.
+        logger.error('pipeline.regenerate_counts_threw', {
+          branchId: startedBranchId,
+          entryId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+        toast.error(t('reader:regenerateFailed'))
+        return
+      }
+      if (counts == null) return
+      if ('status' in counts) {
+        toast.error(t('reader:regenerateFailed'))
+        return
+      }
+      if (classifyRegenerateGate(counts) === 'immediate') {
+        await runRegenerate(entryId)
+        return
+      }
+      // Both confirm arms open the cascade modal in M3; M5.2 swaps the
+      // chapter-close arm's copy without touching this path.
+      const target = entriesStore.getById(entryId)
+      setRollback({
+        mode: 'regenerate',
+        targetId: entryId,
+        targetNumber: target?.position ?? 0,
+        counts,
+      })
+    },
+    [branchId, runRegenerate],
+  )
+
   // Chips are finished prose, so the draft is replaced outright and the mode
   // forced to Free — no wrapping (reader-composer.md → Next-turn suggestions).
   const handleTapChip = useCallback((text: string) => {
@@ -569,10 +897,12 @@ export default function ReaderComposerRoute() {
   // error belongs to the strip that fired it. The entry ref alone would cover
   // it (ids are globally unique, and a switch nulls the tail); the branch ref
   // stays so the guard is legible without trusting that cross-module invariant.
-  const branchIdRef = useRef(branchId)
   const terminalEntryIdRef = useRef(terminalEntry?.id)
-  branchIdRef.current = branchId
-  terminalEntryIdRef.current = terminalEntry?.id
+  // Published from the commit, like branchIdRef: the guard below reads both, and
+  // an anchor from a render that never landed would fail it against live state.
+  useLayoutEffect(() => {
+    terminalEntryIdRef.current = terminalEntry?.id
+  }, [terminalEntry?.id])
 
   const handleRefreshSuggestions = useCallback(() => {
     const anchor = terminalEntry
@@ -694,7 +1024,7 @@ export default function ReaderComposerRoute() {
     // would stay enabled and its rejection would toast "nothing to undo" over
     // an intact history.
     const blocked = {
-      disabled: editBlocked,
+      disabled: actionsBlocked,
       disabledReason: t('reader:actions.blockedWhileGenerating'),
     }
     return {
@@ -725,7 +1055,7 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, editBlocked, menuUndo, menuRedo, entries.length, jumpToBottom])
+  }, [hasRedo, actionsBlocked, menuUndo, menuRedo, entries.length, jumpToBottom])
 
   const streamingPayload = useMemo(
     () =>
@@ -744,12 +1074,13 @@ export default function ReaderComposerRoute() {
     streaming: streamingPayload,
     branchKey: branchId,
     hasOlder,
-    editBlocked,
+    editBlocked: actionsBlocked,
     jumpButtonEnabled,
     systemFixLabel: fixAction?.label,
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
     onRequestRollback: handleRequestRollback,
+    onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: handleDismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
@@ -851,7 +1182,7 @@ export default function ReaderComposerRoute() {
               onRefresh={handleRefreshSuggestions}
               onCancel={handleCancelSuggestions}
               onToggleCollapsed={handleToggleStripCollapsed}
-              disabled={editBlocked}
+              disabled={actionsBlocked}
             />
           ) : null}
           <View className="border-t border-border px-6 pb-3.5 pt-3">
@@ -861,7 +1192,7 @@ export default function ReaderComposerRoute() {
                 modesEnabled={modesEnabled}
                 isGenerating={isGenerating}
                 disabled={!hydrationSucceeded || swapPending}
-                sendBlocked={editBlocked}
+                sendBlocked={actionsBlocked}
                 disabledReason={
                   hydrationFailed
                     ? t('reader:hydrationFailedBody')
@@ -869,7 +1200,7 @@ export default function ReaderComposerRoute() {
                       ? t('reader:hydrationLoading')
                       : swapPending
                         ? t('reader:actions.blockedWhileSwapping')
-                        : editBlocked
+                        : actionsBlocked
                           ? t('reader:actions.blockedWhileGenerating')
                           : undefined
                 }
@@ -900,6 +1231,7 @@ export default function ReaderComposerRoute() {
           }}
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
+          variant={rollback.mode}
           onConfirm={() => void confirmRollback()}
         />
       ) : null}

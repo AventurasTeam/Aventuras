@@ -10,6 +10,7 @@ import { t } from '../harness/i18n'
 // app's real accessible output today.
 const EDIT_ENTRY_LABEL = 'Edit entry'
 const DELETE_ENTRY_LABEL = 'Delete entry'
+const REGEN_ENTRY_LABEL = 'Regenerate'
 const EDIT_TEXTAREA_LABEL = 'Edit entry content'
 const SAVE_LABEL = 'Save'
 const RETRY_LABEL = 'Retry'
@@ -35,6 +36,11 @@ export const reader = {
     reader.row(page, entryId).getByRole('button', { name: EDIT_ENTRY_LABEL }),
   deleteEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: DELETE_ENTRY_LABEL }),
+  // The cascade confirm's "Discard and regenerate" also matches a substring
+  // `name` query for "Regenerate"; the row scope — not exact:true — is what
+  // excludes it, since that button portals outside `[data-entry-row]`.
+  regenEntry: (page: Page, entryId: string): Locator =>
+    reader.row(page, entryId).getByRole('button', { name: REGEN_ENTRY_LABEL, exact: true }),
   editTextarea: (page: Page): Locator => page.getByRole('textbox', { name: EDIT_TEXTAREA_LABEL }),
   saveEdit: (page: Page): Locator => page.getByRole('button', { name: SAVE_LABEL }),
 
@@ -53,6 +59,11 @@ export const reader = {
   // Rollback (delete-to-entry) confirm modal.
   rollbackConfirm: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:rollbackConfirm.confirm') }),
+
+  // Regenerate cascade confirm modal (RollbackConfirmModal variant="regenerate").
+  // exact:true — see regenEntry's comment; the copy contains "regenerate" too.
+  regenerateConfirm: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:regenerateConfirm.confirm'), exact: true }),
 
   // Bad-branch hydration failure state.
   hydrationFailed: (page: Page): Locator =>

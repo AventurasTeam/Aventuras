@@ -24,8 +24,9 @@ export const storySettings = {
   switchEmbedder: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:memory.switchEmbedder') }),
 
-  // "Re-index this story now" — distinct from the swap dialog's "Re-index this
-  // story", and getByRole matches the name exactly, so the two can't collide.
+  // getByRole matches `name` as a substring, and the swap dialog's shorter
+  // "Re-index this story" is a prefix of this copy — so this locator anchors on
+  // the longer "…now" string, which the dialog's button name can't contain.
   reindexNow: (page: Page): Locator =>
     page.getByRole('button', { name: t('storySettings:memory.reindexNow') }),
 
