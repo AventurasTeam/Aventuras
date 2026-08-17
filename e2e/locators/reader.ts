@@ -36,6 +36,13 @@ export const reader = {
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.editEntry') }),
   deleteEntry: (page: Page, entryId: string): Locator =>
     reader.row(page, entryId).getByRole('button', { name: t('reader:entryCard.deleteEntry') }),
+  // The cascade confirm's "Discard and regenerate" also matches a substring
+  // `name` query for "Regenerate"; the row scope — not exact:true — is what
+  // excludes it, since that button portals outside `[data-entry-row]`.
+  regenEntry: (page: Page, entryId: string): Locator =>
+    reader
+      .row(page, entryId)
+      .getByRole('button', { name: t('reader:entryCard.regenerate'), exact: true }),
   editTextarea: (page: Page): Locator =>
     page.getByRole('textbox', { name: t('reader:entryCard.editContent') }),
   saveEdit: (page: Page): Locator => page.getByRole('button', { name: t('save') }),
@@ -79,6 +86,11 @@ export const reader = {
   // Rollback (delete-to-entry) confirm modal.
   rollbackConfirm: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:rollbackConfirm.confirm') }),
+
+  // Regenerate cascade confirm modal (RollbackConfirmModal variant="regenerate").
+  // exact:true — see regenEntry's comment; the copy contains "regenerate" too.
+  regenerateConfirm: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:regenerateConfirm.confirm'), exact: true }),
 
   // Bad-branch hydration failure state.
   hydrationFailed: (page: Page): Locator =>

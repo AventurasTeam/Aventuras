@@ -72,6 +72,7 @@ const noopHandlers = {
   onRequestRollback: async () => {},
   onEditWorldTime: async () => ({ ok: true }),
   onRequestEditWorldTime: async () => {},
+  onRegenerate: async () => {},
   onRetrySystemEntry: async () => {},
   onDismissSystemEntry: async () => {},
   onFixSystemEntry: async () => {},

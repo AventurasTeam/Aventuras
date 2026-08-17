@@ -45,3 +45,12 @@ export const CrossMultipleChapters: Story = {
     counts: { entries: 34, chapters: 2, worldStateChanges: 58 },
   },
 }
+
+export const RegenerateCascade: Story = {
+  args: {
+    open: true,
+    variant: 'regenerate',
+    targetEntryNumber: 47,
+    counts: { entries: 3, chapters: 0, worldStateChanges: 7 },
+  },
+}

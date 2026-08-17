@@ -269,6 +269,12 @@ companions.
   through its own commit, threading its fresh `actionId` and
   active-run pointer) already landed in 1.5a during post-M1
   reconciliation, so M5.2 needs no orchestrator change.
+  Slice-authoring note: the reader's regenerate confirm resolves its
+  cascade counts when the modal opens and never re-resolves them
+  (M3.10). No M3 writer can widen the window while the modal sits
+  open, but a background chapter close can — so this slice must
+  re-derive the counts under the branch queue at confirm time, or
+  invalidate an open modal when a close lands.
   Slice-authoring note: `orchestrator.handleEvent` stamps
   `turnCaptureSink.recordTargetEntry` on **any** `createStoryEntry`
   delta with per-turn anchor semantics — correct while `per-turn`

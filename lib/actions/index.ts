@@ -97,6 +97,11 @@ export { redoLastAction, undoLastAction, type UndoResult } from './story-entries
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
 export { updateEntryWorldTime, type UpdateWorldTimeResult } from './story-entries/world-time'
 export { refreshSuggestions } from './suggestions/refresh-suggestions'
+export {
+  regenerateTurn,
+  type RegenerateRejectionCode,
+  type RegenerateTurnResult,
+} from './turns/regenerate-turn'
 export { submitTurn, type SubmitTurnMeta } from './turns/submit-turn'
 export type { DbCtx, DeltaSource, MutationResult, PipelineAction } from './types'
 export {

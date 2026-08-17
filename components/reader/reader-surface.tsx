@@ -54,6 +54,7 @@ type ReaderRowProps = {
   onCommitEdit: () => void | Promise<void>
   onCancelEdit: () => void
   onRequestRollback: (entryId: string) => Promise<void>
+  onRegenerate: (entryId: string) => Promise<void>
   onFixSystemEntry: () => Promise<void>
   onRetrySystemEntry: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
@@ -80,6 +81,7 @@ const ReaderRow = memo(function ReaderRow({
   onCommitEdit,
   onCancelEdit,
   onRequestRollback,
+  onRegenerate,
   onFixSystemEntry,
   onRetrySystemEntry,
   onDismissSystemEntry,
@@ -99,6 +101,7 @@ const ReaderRow = memo(function ReaderRow({
       disabled={editBlocked}
       editing={editing}
       onEdit={isSystem ? undefined : () => onStartEdit(row)}
+      onRegen={row.kind === 'ai_reply' ? () => void onRegenerate(row.id) : undefined}
       onContentChange={onContentChange}
       onCommitEdit={() => void onCommitEdit()}
       onCancelEdit={onCancelEdit}
@@ -140,6 +143,7 @@ export function ReaderSurface({
   onRequestRollback,
   onEditWorldTime,
   onRequestEditWorldTime,
+  onRegenerate,
   onRetrySystemEntry,
   onDismissSystemEntry,
   onFixSystemEntry,
@@ -449,6 +453,7 @@ export function ReaderSurface({
                 onCommitEdit={commitEdit}
                 onCancelEdit={cancelEdit}
                 onRequestRollback={onRequestRollback}
+                onRegenerate={onRegenerate}
                 onFixSystemEntry={onFixSystemEntry}
                 onRetrySystemEntry={onRetrySystemEntry}
                 onDismissSystemEntry={onDismissSystemEntry}

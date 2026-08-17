@@ -122,12 +122,93 @@ slice enables it.
 
 ## Open questions
 
-- **Re-dispatch layer** — reuse the C6 `submitTurn`-shaped action
-  minus the entry write, vs a pipeline-internal re-run entry point;
-  pick at planning (affects where the "same wrapped input" is
-  sourced from — the surviving `user_action` entry's content is the
-  natural source).
+- **Re-dispatch layer** — resolved at planning; see
+  [Implementation notes](#implementation-notes).
+- **Failure entry lost when a dispatch throws** — regenerate drops a
+  standing system entry before dispatching (the sweep spares system
+  entries, which carry no create deltas, so one would strand between
+  the user action and the new reply). `dropSystemTail` now hands that
+  entry back and the rejected arm restores it, which is an exact undo
+  because every rejection fires before the first sweep. The throw arm
+  does not: past a partial sweep, re-appending at `MAX(position) + 1`
+  would park a stale failure over a branch it no longer describes, and
+  which state to land in there is the open half. The broader question —
+  that a failed turn's text has custody in one deletable entry at all,
+  which Dismiss also destroys — is
+  [triage](../../../triage.md), not this slice.
+- **Per-mount dispatch guard** — the in-flight guard is a route ref,
+  so it cannot serialize two mounts of the same branch. Correct today
+  (single reader surface); would need to move into a store if the
+  rail ever hosts a second one.
+- **E2E test coupling** — `reader-regenerate.spec.ts`'s second test
+  builds on the first's DB state. `mode: 'serial'` makes a retry skip
+  rather than mislead, but the seeded hero branch already carries
+  non-terminal `ai_reply` rows, so the cascade test could be made
+  self-contained (and LLM-free) later.
 
 ## Implementation notes
 
-_Populated at finish: notable deviations from the plan and resolved developer decisions._
+**Re-dispatch layer** — resolved to an action-layer `regenerateTurn`
+in `lib/actions/turns/`, sharing `submitTurn`'s scaffolding (the
+per-branch queue, extracted to `branch-queue.ts`; embedder-swap
+admission), not a pipeline-internal re-run entry. The "same wrapped
+input" needs no sourcing at all: the per-turn pipeline reads its
+prompt and insert position from the branch tail in SQLite, so once
+the sweep removes the reply, the surviving `user_action` **is** the
+tail — byte-for-byte the DB shape a normal submit leaves after its
+own `user_action` insert. The sweep composes the C3 primitives
+through `resolveSweep`, which this slice extracted in
+`story-entries/operational.ts` after `rollbackToEntry`,
+`undoLastAction`, and regenerate became a third copy of the same
+window-materializing sequence; each caller keeps its own tail and its
+own redo-stack policy, which is not uniform (undo deliberately does
+not clear).
+
+**Non-success convergence** — failed, rejected, and aborted outcomes
+all converge to the M2 failed-turn model: a follow-up sweep unwinds
+the standing `user_action` too, landing the branch in exactly the
+state a failed `submitTurn` leaves, so the existing Retry machinery
+re-submits through the normal path without duplicating the action.
+This is why the acceptance criterion "the user action entry is
+untouched" holds on the happy path only. Two failure modes needed
+their own handling: a `DeltaReplayError` from the follow-up sweep is
+tolerated (logged with `committed`, which separates "user action
+still standing" from "store stale") rather than costing the caller
+the run result and the user's text; and a throw out of
+`regenerateTurn` gets a toast plus a store resync, **not** a system
+failure entry — the throw carries no submission, so that entry's
+Retry would be doomed, and in the partial-sweep cases a Retry on a
+stale submission would append a duplicate turn.
+
+**Composer draft on cancel** — cancelling a turn restores the swept
+action text only into an _empty_ composer. The composer clears itself
+on send, so that path is unaffected; the paths that re-enter without
+clearing (regenerate, and Retry on a failure entry) would otherwise
+overwrite text the user typed. The swept action is unrecoverable in
+that branch, but the user asked to discard that turn and never agreed
+to lose their draft.
+
+**Dispatch guard** — `editBlocked` derives from the generation gate,
+which only closes once a run registers or a reversal barrier opens —
+several awaits and a branch-queue hop past the tap. Send survived that
+window only because the composer clears its own text; the per-entry
+glyphs had no equivalent, so a regenerate tapped mid-submit would
+queue, resume against the committed turn, and sweep it away without
+the cascade confirm. Both dispatches now mark the window through one
+route-level guard, and every edit affordance gates on the union.
+
+**Outcome handling** — which arm runs after `regenerateTurn` returns
+is a pure decision over the outcome, `converged`, and whether the
+composer holds a draft, so it lives in `regenerate-outcome.ts` where
+the table is exhaustively testable. It carries the store-resync
+obligation as data: `converged` is also true when the follow-up unwind
+committed and only its post-commit store sync threw, so every
+non-completed arm resyncs.
+
+**E2E** — added `e2e/tests/reader-regenerate.spec.ts` (terminal
+no-confirm, older-reply cascade) beyond the slice's original Tests
+section, per [`testing.md → Coverage`](../../../../testing.md#coverage-thorough-not-exhaustive),
+which names "regenerate / undo a turn" as an in-scope alternative
+flow. Its DB reads poll rather than reading straight after a
+visible-text wait: the reader renders stream chunks live, so the DOM
+resolves before the entry and its delta commit.

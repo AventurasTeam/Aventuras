@@ -43,6 +43,7 @@ export type ReaderSurfaceProps = {
   onEditWorldTime: (entryId: string, nextWorldTime: number) => Promise<EditResult>
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditWorldTime: (entryId: string) => Promise<void>
+  onRegenerate: (entryId: string) => Promise<void>
   onRetrySystemEntry: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>
   onFixSystemEntry: () => Promise<void>
