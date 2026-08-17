@@ -72,3 +72,6 @@ superpowers/
 
 # Test coverage reports
 coverage/
+
+# mock LLM dev tool — local response library, not shared
+scripts/mock-llm/state.json
