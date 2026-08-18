@@ -837,17 +837,6 @@ slice-planning gate forces its resolution before that slice is planned.
   designed, and an M7.5 simulator that wants to re-run a whole captured
   pass at once will need `RankAllInput` widened. Surfaced by the Slice
   3.5 Task 2 review (2026-08-08).
-- **`lib/db/world-json-types.ts` has outgrown its name.** It now holds
-  ~85 lines of probe-capture cluster (`CaptureCandidate`,
-  `CaptureQuery`, `CaptureParamsSnapshot`, `CaptureTokenizer`,
-  `ProbeCapturePayload`, `CAPTURE_VERSION`) beside `ClassifierStatus` —
-  a genuine JSON column — and `DropReason`, which is neither. The
-  capture payload is not a JSON column at all; it is a gzipped BLOB.
-  Splitting the cluster into `lib/db/probe-capture-types.ts` restores
-  the name's meaning and keeps the `@/lib/retrieval` import off the file
-  `stories.table.ts` imports. Deferred out of Slice 3.5 deliberately: a
-  `git mv`-shaped change with inbound references, not worth reshuffling
-  files mid-slice. Surfaced by the Slice 3.5 Task 8 review (2026-08-08).
 - **The fork-exclusion guard is structural and goes stale the moment
   fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
   not test the real behavior: `lib/probe/fork.test.ts` instead
