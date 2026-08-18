@@ -585,6 +585,10 @@ on hover`; the shipped rows render label and tagline only, so the
 - Every item in Scope: in is closed, dissolved with reasoning, or
   explicitly re-deferred with a named owner. None is left silently
   open.
+- The six items carrying an unresolved decision (below) have that
+  decision taken before the sweep holding them is planned — they are
+  not implementable as written, and discovering that mid-sweep is
+  what this criterion exists to prevent.
 - Each behaviour-changing fix carries a test that fails when the fix
   is reverted, mutation-checked rather than assumed.
 - No item is closed on a premise that was not re-verified against
@@ -609,6 +613,17 @@ the doc-only items have no behaviour to pin.
   after the defects it sits under.
 - Which items are genuinely v1 ship-blockers. The slice assumes all
   of them are, which is the assumption most likely to be wrong.
+- **Six items need a decision, not an implementation**, and are
+  spread across two sweeps rather than grouped. Sweep C: whether to
+  file the two `onnxruntime-react-native` gaps upstream; whether the
+  js-tiktoken guard is a bundle assertion, an Android CI smoke or an
+  upstream `Map` change; whether the narrow-decorator fix is a
+  lint guard, a `FormRow` that measures before guessing, or a
+  story-authoring rule. Sweep D: whether `probe.md`'s simulatable
+  list shrinks or its parameters become reachable; whether the preset
+  browser gains the hover preview or canon drops it; whether a
+  generation sheet blocks dismissal or restores on reopen. Each is a
+  product call, so none can be closed by the executing dev alone.
 
 ## Implementation notes
 
