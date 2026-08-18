@@ -19,17 +19,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **Every future model-removal path must evict the native session cache.**
-  `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
-  `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
-  its dir, so without eviction the cache keeps serving inferences from the
-  deleted model — and the resulting vectors land tagged with the _new_
-  model id, so nothing marks them for re-embedding. The hook now exists
-  (`evictBundle`) and is wired into the native driver's `deletePartial`,
-  mirroring desktop's `evictPipeline`; what remains is that the M7.1
-  model-remove flow, and any other future deletion path, must call it too.
-  Nothing enforces that mechanically. Surfaced by M3.1a implementation
-  (2026-07-20), partially resolved during M3.1a review (2026-07-21).
 - **The `onnxruntime-react-native` patch carries two upstream gaps worth
   reporting.** `patches/onnxruntime-react-native.patch` drops a Gradle-9
   incompatibility (`VersionNumber`, removed in Gradle 9, guarding a fbjni
@@ -40,17 +29,6 @@ slice-planning gate forces its resolution before that slice is planned.
   re-verified on every ORT-RN bump until they land upstream. Decide whether to
   file them against microsoft/onnxruntime. Surfaced by M3.1a review
   (2026-07-21).
-- **Custom-import file set may need `config.json` on desktop.**
-  [`model-management.md → Custom file import`](../memory/model-management.md#custom-file-import)
-  specifies three files (`model.onnx`, `tokenizer.json`,
-  `tokenizer_config.json`), but M3.1a found transformers.js fatally
-  requires `config.json` to build a pipeline, which is why the curated
-  catalog entries carry it. The native runtime constructs its tokenizer
-  directly and does its own pooling, so it may not need the file at all —
-  making the required set platform-dependent, which the custom-import
-  spec doesn't model. Resolve when M7.1 plans the import flow; verify the
-  native requirement rather than assuming symmetry. Surfaced by M3.1a
-  device review (2026-07-21).
 - **Story settings has no unset affordance for optional keys.**
   `updateStorySettings` ignores `undefined`-valued patch keys, so an
   explicit `undefined` reads as "leave untouched" rather than "clear
@@ -332,78 +310,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
   catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
   Task 12 (2026-07-24).
-
-- **A local model whose files are gone still resolves as healthy.**
-  `resolveEmbedderConfig` validates a local backend by looking the model id
-  up in the bundled catalog (`localModelDim`); it never checks that the
-  model's directory exists. So a model removed from disk resolves `ok`, is
-  offered as a swap candidate, and produces no reason line — the Memory
-  panel's `modelMissing` reason only fires for an id absent from the
-  _catalog_, which is the one shape a real removal never produces.
-  [`model-management.md → Removal`](../memory/model-management.md#removal)
-  expects the panel to explain "model missing"; today the failure surfaces
-  only per-embed, as a generic `That didn't work` toast with the cause in
-  a `logger.error` the user cannot see. Wants a files-exist check in the
-  resolution path (or an `installed`-set intersection at the panel), which
-  also gates the swap picker from offering an uninstallable target. Owner
-  is plausibly the M7.1 removal flow, but the gap is live now, since the
-  directory can vanish without going through any app flow. Surfaced by
-  M3.1b manual smoke (2026-07-25).
-
-- **The swap resume dialog can trap the user when the target cannot
-  embed.** A staging failure leaves the marker set — `runStagingSwap`
-  reaches `refreshStores` only on success — so the story-open resume
-  prompt fires correctly. But the dialog is non-dismissible and its
-  primary action re-runs the identical embed, so when the target model is
-  the reason staging failed (files removed, provider unreachable), Resume
-  can never succeed and each attempt reports only the generic
-  `actionFailed` toast. The escape exists and is correct — `Cancel switch`
-  never embeds, so it clears the marker and re-flags rows — but nothing in
-  the copy distinguishes "retry a transient failure" from "this target is
-  unusable, abandon it", and the failure reason is never surfaced.
-  Confirmed by hand on desktop (2026-07-25): resume → generic toast →
-  dialog persists. Wants the dialog to carry the last failure reason, or
-  Resume to pre-flight the target's resolvability and steer to Cancel when
-  it can't be met. Pairs with the files-exist gap above — a resolvability
-  pre-flight fixes both surfaces at once. Surfaced by M3.1b manual smoke
-  (2026-07-25).
-
-- **Native-dim-dependent M7 validation remains.** M3.1b now persists a
-  provider model's successful native probe as `embeddingDim` and threads
-  it through production config resolution. The wizard still does not bound
-  Custom by that value; an over-declared dim can therefore make its storage
-  preview overpromise even though the service clamps to native. The local
-  side also still needs a dim source for future custom imports:
-  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a non-catalog
-  model cannot be tested. M7 owns both UI-facing gaps. The original provider
-  persistence defect was surfaced by M3.1b manual smoke (2026-07-25) and
-  resolved by the 2026-07-28 review followup.
-
-- **Matryoshka support is not detectable, so M7 should let the user
-  assert it.** No OpenAI-compatible endpoint advertises MRL training, and
-  the obvious probe is a false-positive machine: sending `dimensions: N`
-  and getting N floats back proves only that the _server_ honoured the
-  parameter, which a naive slice of a non-MRL model satisfies identically
-  while returning quality-destroyed vectors. The property that actually
-  distinguishes MRL is rank preservation under truncation, which is
-  measurable — embed a fixed probe set at native and at candidate dims,
-  then rank-correlate the pairwise-similarity matrices — but it yields a
-  statistical result against a judgment threshold, not a boolean, and a
-  wrong answer degrades retrieval silently. So the contract stays capability
-  flag plus user assertion (matching the relabel disclaimer this slice
-  already ships), with **manual override as the primary path**: an advanced
-  user who knows a model is Matryoshka-trained enables the flag and fills in
-  the dims directly. A rank-preservation sweep, if built, belongs beside that
-  control as evidence shown to the user rather than a gate that decides for
-  them — and the sweep is also how the curated ladder's rungs would be found
-  rather than assumed. Deferred to **M7** (developer decision 2026-07-25):
-  the override needs the model-capability editing surface to host it, and
-  most users will never touch the feature. Note for whoever builds it:
-  `dimLadder`'s hardcoded `[512, 1024, 2048]` fallback becomes wrong under
-  a user-assertion model, since enabling the flag would always come with
-  user-supplied dims — the fallback currently fabricates rungs nobody
-  asserted, and can offer dims above the model's native size. Surfaced by
-  M3.1b manual smoke (2026-07-25).
 
 - **Staleness pill can stay lit for stale rows on non-open branches.**
   The drain worker warms only the open branch while the pill's mount
@@ -690,23 +596,6 @@ slice-planning gate forces its resolution before that slice is planned.
   which read the 999 comments as fact and reported a bind-limit defect
   that does not exist.
 
-- **Tighten the unprobed-dim escape hatches once M7 makes probing
-  mandatory.** `validateCustomDim` skips its `above-native` check and
-  `clampEffectiveDim` returns the value untouched whenever the model's
-  native dim is unknown (`components/wizard/memory-cost-logic.ts`),
-  both deliberately — rejecting on a ceiling nobody has measured would
-  block valid picks. The cost is one representable cell: an unprobed
-  provider with `effectiveDim` above native. There the pass reads the
-  dim family named by `effectiveDim` while the embed service clamps
-  the vectors it writes to the native dim, so the sync commits one
-  family and clears the flags before the query embed refuses on the
-  mismatch. The story has no in-app recovery — no post-creation
-  `effectiveDim` editor exists, and a swap reuses the locked dim. M7
-  is slated to force a probe before a model is selectable, which
-  removes the cell; when it lands, both permissive branches should go
-  with it rather than being left as a latent re-opening. Surfaced by
-  the M3.4 review (2026-08-07).
-
 - **`probe.md`'s light-mode simulatable list is mostly unreachable.**
   Seven of the nine parameters it lists feed `score`, which drives
   `mmrRank`'s greedy pick order, which needs the per-row vectors light
@@ -735,14 +624,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cannot build against the unqualified promise. Surfaced during Slice
   3.5 planning (2026-08-08), sharpened during Task 15 (2026-08-09),
   budgets verified 2026-08-09.
-- **`RankAllInput` carries no `capturedTokens`, so a whole-bundle probe
-  replay is impossible.** `rankPerType` takes it; `rankAll` does not,
-  and object-literal excess-property checking rejects passing it
-  through. Slice 3.5's parity test replays per type, so nothing is
-  blocked today — but this is deliberate-by-omission rather than
-  designed, and an M7.5 simulator that wants to re-run a whole captured
-  pass at once will need `RankAllInput` widened. Surfaced by the Slice
-  3.5 Task 2 review (2026-08-08).
 - **The fork-exclusion guard is structural and goes stale the moment
   fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
   not test the real behavior: `lib/probe/fork.test.ts` instead
@@ -758,21 +639,6 @@ slice-planning gate forces its resolution before that slice is planned.
   branch fork, replace the structural scan with the both-sides
   behavioral test** the slice AC originally described. Surfaced by the
   Slice 3.5 Task 14 review (2026-08-09).
-- **A non-embedder retrieval fault writes no capture, which is the
-  case the probe most wants.** `runRetrieval` converts only
-  `VectorInvariantError` into a captured failure and rethrows
-  everything else — correctly, since routing a SQL fault to the
-  "Switch embedder" surface would offer a re-index as the fix for a
-  locked database. But the rethrow escapes `retrievalPhase` before the
-  capture site, so a vec0/SQLite error, a dead IPC bridge or a ranker
-  bug produces no capture at all. `failure_reason` is an
-  `EmbedderErrorKind`, and `lib/embedder/types.ts` deliberately ties
-  that union to the IPC envelope's own tag, so a third tier cannot be
-  added to one side only — closing this needs a **capture-failure
-  taxonomy separate from the embedder's**, threaded through
-  `RetrievalPartial`, plus a capture-then-rethrow in the phase.
-  `probe.md` was narrowed to state the gap rather than promise the
-  behavior. Surfaced by the Slice 3.5 review (2026-08-09).
 - **The probe browse route decodes every payload in the story to
   render a list that shows none of them.** `capturesForStoryQuery`
   selects `pc.payload`, `decodeCaptures` gunzips and `JSON.parse`s all
