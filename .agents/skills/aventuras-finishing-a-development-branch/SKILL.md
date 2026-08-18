@@ -52,6 +52,42 @@ If this branch implemented a slice (it has a doc under
 
 Commit this reconciliation on the branch. Skip the step entirely for non-slice branches (hotfixes, chores, tooling).
 
+### Step 1.6: Offer the comment audit (optional)
+
+Comment bloat is the most common convention violation on AI-implemented
+branches, and it is cheapest to fix before review rather than after. Offer it
+here so the cleanup rides along in the merge or PR, exactly like Step 1.5.
+
+**Never run it unprompted.** Get the numbers first, then let the user decide:
+
+```bash
+node .agents/skills/aventuras-comment-audit/find-comment-blocks.mjs <base>...HEAD
+```
+
+If `candidateBlocks` is 0, say nothing and continue to Step 2. Otherwise
+present the real counts — a decision prompt with numbers in it beats a vague
+offer:
+
+```
+This branch added <K> comment lines across <B> blocks in <M> files.
+Run the comment audit before finishing? (~<N> subagents)
+
+1. Yes — audit and commit the cleanup on this branch
+2. No — finish as-is
+
+Which option?
+```
+
+On **yes**: invoke `aventuras-comment-audit` with the same range, let it run to
+its own verification gate, then commit the result on the branch as a separate
+`chore:` commit so the comment churn stays reviewable apart from the feature
+diff. Tests do not need re-running — the audit's verification proves the diff
+is comment-only.
+
+On **no**: continue to Step 2. Don't re-offer.
+
+Skip the step entirely when the branch is a doc-only or config-only change.
+
 ### Step 2: Detect Environment
 
 **Determine workspace state before presenting options:**
