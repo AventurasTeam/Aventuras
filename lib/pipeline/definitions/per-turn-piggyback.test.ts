@@ -1214,7 +1214,7 @@ describe('per-turn-piggyback', () => {
       })
     })
 
-    it('logs classifier.suggestions_parse_failed with the drop count when a ref does not resolve', async () => {
+    it('logs classifier.suggestions_fallback_parse_failed with the drop count when a ref does not resolve', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       currentStoryStore.set({
         storyId: 's1',
@@ -1262,12 +1262,12 @@ describe('per-turn-piggyback', () => {
       }
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'classifier.suggestions_parse_failed',
+        'classifier.suggestions_fallback_parse_failed',
         expect.objectContaining({ dropped: 1 }),
       )
     })
 
-    it('logs classifier.suggestions_parse_failed when asked but the model returns nothing usable', async () => {
+    it('logs classifier.suggestions_fallback_parse_failed when asked but the model returns nothing usable', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       currentStoryStore.set({
         storyId: 's1',
@@ -1315,12 +1315,12 @@ describe('per-turn-piggyback', () => {
       }
 
       expect(warnSpy).toHaveBeenCalledWith(
-        'classifier.suggestions_parse_failed',
+        'classifier.suggestions_fallback_parse_failed',
         expect.objectContaining({ received: 0, dropped: 0 }),
       )
     })
 
-    it('does not log classifier.suggestions_parse_failed when suggestions were not requested', async () => {
+    it('does not log classifier.suggestions_fallback_parse_failed when suggestions were not requested', async () => {
       const warnSpy = vi.spyOn(logger, 'warn')
       currentStoryStore.set({
         storyId: 's1',
@@ -1359,7 +1359,7 @@ describe('per-turn-piggyback', () => {
       }
 
       expect(warnSpy).not.toHaveBeenCalledWith(
-        'classifier.suggestions_parse_failed',
+        'classifier.suggestions_fallback_parse_failed',
         expect.anything(),
       )
     })

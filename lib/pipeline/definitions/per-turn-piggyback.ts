@@ -231,7 +231,7 @@ export async function* piggybackFallbackClassifierPhase(
       droppedCount > 0 ||
       suggestionItems.length < suggestionEmission.count)
   ) {
-    ctx.log.warn('classifier.suggestions_parse_failed', {
+    ctx.log.warn('classifier.suggestions_fallback_parse_failed', {
       received: rawSuggestions.length,
       dropped: droppedCount,
       resolved: suggestionItems.length,

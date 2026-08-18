@@ -352,18 +352,6 @@ slice-planning gate forces its resolution before that slice is planned.
   finishing for a cancel to land in. Becomes real once the M8.1
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
-- **Two of the three suggestion-emission paths share a log event name with
-  different payload shapes.** `classifier.suggestions_parse_failed` is
-  emitted by the narrative fold (`lib/pipeline/definitions/per-turn.ts:225`)
-  with `blockFound`, `failed`, and `dropped` fields, and by the classifier
-  fold (`lib/pipeline/definitions/per-turn-piggyback.ts:239`) with `received`
-  and `dropped` fields — two structurally different shapes under one event
-  name — while the refresh path
-  (`lib/pipeline/definitions/suggestion-refresh.ts:153`) uses a distinct
-  `classifier.suggestions_refresh_unusable`. Filtering diagnostics by event
-  name can't separate the two folds sharing one. Either all three emission
-  paths should share a name or none should; two-of-three is the
-  inconsistency. Surfaced by the M3.7a whole-slice review (2026-07-26).
 - **The next-turn-suggestions feature is invisible to every story created
   before this slice.** `suggestionsEnabled` (`stories.settings`) is a
   non-optional persisted boolean, so pre-slice stories carry whatever
