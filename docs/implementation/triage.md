@@ -698,13 +698,20 @@ slice-planning gate forces its resolution before that slice is planned.
   boundary; carrying a code alongside the reason would need the C7
   contract widened. Surfaced by M3.7b implementation (2026-07-31).
 
-- **`components/compounds/save-bar.tsx` uses the deprecated
-  `pointerEvents="none"` prop form**, which React Native flags as
-  deprecated in favor of `style.pointerEvents` on every render
-  (visible in test output). Pre-existing; not fixed in M3.7b to keep
-  that commit to its scope. Surfaced by M3.7b implementation
-  (2026-07-31).
-
+- **Twelve `pointerEvents="..."` prop-form call sites remain across
+  `components/`.** React Native flags the prop form as deprecated in favour
+  of `style.pointerEvents` on every render, so the warning is in every test
+  run. `save-bar.tsx` was converted on 2026-08-18 and the warning did not
+  go away — `toast.tsx` and `sheet.tsx` mount globally under the Storybook
+  preview decorator, so at least one fires regardless of the story. The
+  remaining sites are in `spellcheck-textarea.tsx`, `story-card.tsx`,
+  `list-row.tsx` (x3), `collision-list-row.tsx`, `banner.tsx`,
+  `toast.tsx` (x2), `sheet.tsx`, and `ai-assist.tsx`. Mechanical, but four
+  of them already carry a `style` prop that has to be merged rather than
+  replaced, and three of those are overlay/portal code (`sheet`, `toast`,
+  the reader tooltip) where nothing tests pointer behaviour — so this wants
+  its own change with a look at each overlay, not a drive-by regex. Split
+  out of the save-bar entry 2026-08-18.
 - **The save bar's invalid-reason notice is not tab-qualified.**
   `computeSnapshot` (`components/story-settings/save-session-state.ts`)
   reports the first dirty-and-invalid section in rail order, and the
