@@ -352,24 +352,6 @@ slice-planning gate forces its resolution before that slice is planned.
   to it is fixed (2026-08-18), but there is still no clean in-app route to
   a non-existent branch. Surfaced by the M3 E2E harness work (2026-07-24),
   narrowed by the coverage-expansion pass (2026-07-24).
-- **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
-  builds, so a story-level model override can't satisfy pre-flight even
-  though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
-  constructs its `config: ResolveModelConfig` from only `providers`,
-  `profiles`, `assignments`, and `defaultProviderId` off
-  `snapshot.appSettings` — never `snapshot.storySettings?.models` —
-  even though `resolveModel` (`lib/ai/resolve-model.ts`) checks
-  `config.storyModels?.[target]` for story-override targets, and every
-  runtime call site (`per-turn.ts`, `per-turn-piggyback.ts`,
-  `suggestion-refresh.ts`) already passes `storyModels: open.settings.models`
-  correctly. A story that overrides `narrative` or `classifier` (or,
-  once wired, `suggestion`) at the story level therefore resolves fine
-  when the call actually fires, but pre-flight — which runs first and
-  gates the whole run — halts on config that works. Affects
-  `narrative` / `classifier` today; inert until a UI writes story-level
-  model overrides. One-line fix: add
-  `storyModels: snapshot.storySettings?.models` to the config passed
-  into `resolveModel`. Surfaced by M3.7a Task 7 (2026-07-25).
 - **`Compounds/EntryCard → StreamingReasoning` reportedly renders empty
   in the Storybook dev server while passing under
   `vitest --project storybook` (20/20).** The vitest harness is not
@@ -602,27 +584,6 @@ slice-planning gate forces its resolution before that slice is planned.
   whose "a phase reads the domain stores directly" no longer holds (the
   "calls the group's context builder per render" half is unchanged).
   Surfaced by M3.7a post-merge review (2026-07-30).
-- **Config pre-flight cannot see story-level model overrides, so it
-  both passes runs that will fail and blocks runs that would
-  succeed.** `runPreflight` (`lib/pipeline/runtime/preflight.ts:14`)
-  builds its `ResolveModelConfig` from `snapshot.appSettings` only and
-  never passes `storyModels`, even though `orchestrator.ts` puts
-  `storySettings` in the snapshot and every phase passes
-  `open.settings.models`. Since `resolveModel` branches on
-  `config.storyModels?.[target]` for story-override targets
-  (`lib/db/app-settings/agents.ts` → `STORY_AGENT_IDS`), pre-flight
-  always takes the assignments path while the phase takes the override
-  path. Both directions are wrong: a story with `settings.models.X` set
-  and a missing `defaultProviderId` clears pre-flight and fails
-  in-phase, and a story whose override would resolve is rejected by
-  pre-flight when app-level assignments are empty. Affects every
-  story-override target, `narrative` included — it is a framework gap,
-  not a suggestions one, which is why it is here rather than in the
-  slice. Fixing it is a one-line config addition plus a decision about
-  whether pre-flight should resolve per-story at all (it is currently
-  documented as an app-config check). Surfaced by M3.7a review
-  (2026-07-31).
-
 - **The classifier's tuning signal is `unresolvedRefs`, not
   `window_head_fallback`.**
   [Slice 3.3](./milestones/03-memory-floor/slices/03-classifier.md) called
