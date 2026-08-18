@@ -40,11 +40,18 @@ function addedRanges(file) {
   return ranges
 }
 
-// Consecutive comment-only lines form one block. Deliberately loose — this is a
+// A comment sharing its line with code. Whitespace before the opener keeps
+// `'app://x'` and a bare `a / b` out; a mid-line `/*` that spans lines is the
+// one shape this misreads, and it does not occur in this repo.
+const TRAILING = /\s\{?\/[/*]/
+
+// Consecutive comment-only lines form one block; a comment sharing a line with
+// code is reported as a bare line number. Deliberately loose — this is a
 // candidate finder, the subagent adjudicates.
-function commentBlocks(src) {
+function commentCandidates(src) {
   const lines = src.split('\n')
   const blocks = []
+  const trailing = []
   let start = null
   let inBlockComment = false
 
@@ -54,11 +61,13 @@ function commentBlocks(src) {
     if (inBlockComment) {
       isComment = true
       if (t.includes('*/')) inBlockComment = false
-    } else if (t.startsWith('/*')) {
+    } else if (t.startsWith('/*') || t.startsWith('{/*')) {
       isComment = true
       if (!t.includes('*/')) inBlockComment = true
     } else if (t.startsWith('//') || t.startsWith('*')) {
       isComment = true
+    } else if (TRAILING.test(raw)) {
+      trailing.push(i + 1)
     }
 
     if (isComment) {
@@ -69,7 +78,7 @@ function commentBlocks(src) {
     }
   })
   if (start !== null) blocks.push({ start, end: lines.length, lines: lines.length - start + 1 })
-  return blocks
+  return { blocks, trailing }
 }
 
 const overlaps = (a, b, ranges) => ranges.some(([s, e]) => a <= e && b >= s)
@@ -79,15 +88,26 @@ for (const path of files) {
   const src = readFileSync(path, 'utf8')
   const ranges = addedRanges(path)
   if (!ranges.length) continue
-  const blocks = commentBlocks(src).filter((b) => b.lines >= MIN_BLOCK && overlaps(b.start, b.end, ranges))
-  if (!blocks.length) continue
+  const { blocks, trailing } = commentCandidates(src)
+  const inRange = blocks.filter((b) => overlaps(b.start, b.end, ranges))
+  // MIN_BLOCK sizes the block listing, not the audit scope. The DELETE classes
+  // (task references, prior-approach notes) are almost always one line, so a
+  // short block degrades to bare line numbers rather than dropping its file out
+  // of the plan and out of every subagent's reach.
+  const wide = inRange.filter((b) => b.lines >= MIN_BLOCK)
+  const short = inRange
+    .filter((b) => b.lines < MIN_BLOCK)
+    .flatMap((b) => Array.from({ length: b.lines }, (_, k) => b.start + k))
+  const inline = [...short, ...trailing.filter((n) => overlaps(n, n, ranges))].sort((a, b) => a - b)
+  if (!wide.length && !inline.length) continue
   entries.push({
     path,
     sourceLines: src.split('\n').length,
     addedRanges: ranges,
-    blocks,
-    blockCount: blocks.length,
-    commentLines: blocks.reduce((n, b) => n + b.lines, 0),
+    blocks: wide,
+    inline,
+    blockCount: wide.length + inline.length,
+    commentLines: wide.reduce((n, b) => n + b.lines, 0) + inline.length,
   })
 }
 
@@ -121,7 +141,10 @@ if (WANT_BATCH !== null) {
   for (const f of b.files) {
     console.log(`${f.path}  (${f.sourceLines} lines)`)
     console.log(`  in-range lines: ${fmt(f.addedRanges)}`)
-    console.log(`  candidate blocks: ${f.blocks.map((x) => `${x.start}-${x.end}(${x.lines}L)`).join(' ')}\n`)
+    console.log(
+      `  candidate blocks: ${f.blocks.map((x) => `${x.start}-${x.end}(${x.lines}L)`).join(' ') || 'none'}`,
+    )
+    console.log(`  inline / single-line comments: ${f.inline.join(',') || 'none'}\n`)
   }
   process.exit(0)
 }
@@ -146,6 +169,7 @@ console.log(
           sourceLines: f.sourceLines,
           inRangeLines: fmt(f.addedRanges),
           blocks: f.blocks.map((x) => `${x.start}-${x.end}(${x.lines}L)`),
+          inlineLines: f.inline,
         })),
       })),
     },

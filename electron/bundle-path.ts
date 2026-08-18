@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { join, normalize, sep } from 'node:path'
 
 /**
@@ -27,5 +27,13 @@ export function resolveBundlePath(urlPath: string, distRoot: string): string {
   // test also admits sibling dirs sharing the name (`dist-evil/`).
   if (resolved !== distRoot && !resolved.startsWith(distRoot + sep)) return indexHtml
 
-  return existsSync(resolved) ? resolved : indexHtml
+  // `isFile`, not an existence check: `/_expo` hits the asset directory, which
+  // `net.fetch` cannot read and would surface as a 500 instead of the shell.
+  // The catch also covers ENOTDIR (`/index.html/x`) and EACCES — this runs
+  // outside the protocol handler's own try, so a throw blanks the window.
+  try {
+    return statSync(resolved).isFile() ? resolved : indexHtml
+  } catch {
+    return indexHtml
+  }
 }

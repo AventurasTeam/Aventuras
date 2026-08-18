@@ -342,12 +342,8 @@ function lastParams(): RetrievalParams {
   return call[1] as RetrievalParams
 }
 
-// The phase imports @/lib/actions lazily, to break a require cycle — so unlike
-// the ten test files that import that barrel statically, this file resolves it
-// (and, through the mock factory's importOriginal, the real module graph behind
-// it) inside the first test that gets past the working-set guards. That puts
-// module resolution inside a 5s test timeout instead of ahead of it. Resolve it
-// here, where no test timeout applies.
+// The phase imports @/lib/actions lazily to break a require cycle, so nothing
+// resolves that barrel until the first test does — inside a 5s timeout. Preload.
 beforeAll(async () => {
   await import('@/lib/actions')
 }, 60_000)

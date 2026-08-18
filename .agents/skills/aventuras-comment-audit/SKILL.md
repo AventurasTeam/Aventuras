@@ -60,8 +60,8 @@ Track as tasks; complete in order:
 2. **Enumerate.** `node .agents/skills/aventuras-comment-audit/find-comment-blocks.mjs <range>`.
    Prints totals and the batch plan as JSON.
 3. **Sanity-check the plan.** If `candidateBlocks` is 0, stop and report — the
-   range added no multi-line comments. If `batches` exceeds ~20, raise
-   `BLOCK_BUDGET` rather than dispatching a swarm.
+   range touched no comments. If `batches` exceeds ~20, raise `BLOCK_BUDGET`
+   rather than dispatching a swarm.
 4. **Dispatch one subagent per batch**, in parallel, using
    [the brief](#subagent-brief). Batches hold disjoint file sets, so
    concurrent writes never collide — this is the invariant that makes parallel
@@ -227,8 +227,9 @@ Compression rubric). They are your spec.
 Rules:
 - Only touch comments intersecting the "in-range lines" listed per file.
   Comments outside those ranges are pre-existing and OUT OF SCOPE.
-- The candidate blocks are a starting point, not the whole job. Also judge
-  single-line and trailing comments inside the in-range lines.
+- Judge the candidate blocks AND the inline / single-line lines listed per
+  file. Both lists are a starting point — any other comment inside the
+  in-range lines is in scope too.
 - Read each file fully before editing — a verdict needs the surrounding code.
 - Change ONLY comment text. Not one token of code, not one import, not one
   blank line between statements.
@@ -253,13 +254,15 @@ Run after every batch returns.
 edits code while "cleaning comments" is the real risk.
 
 ```sh
-git diff -U0 -- '*.ts' '*.tsx' | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
-  | grep -vE '^[+-][[:space:]]*(//|/\*|\*)' | grep -vE '^[+-][[:space:]]*$'
+git diff -U0 -- '*.ts' '*.tsx' '*.js' '*.jsx' | grep -E '^[+-]' | grep -vE '^(\+\+\+|---)' \
+  | grep -vE '^[+-][[:space:]]*(//|\{?/\*|\*)' | grep -vE '^[+-][[:space:]]*$'
 ```
 
-Every line this prints must be a **trailing-comment edit** (`const x = 1 // why`),
-which legitimately shows the whole code line. Anything else is a subagent that
-touched code — revert that file and re-dispatch it.
+The pathspec matches every extension the finder audits, and the filter skips
+`//`, `/*`, `*`, and JSX `{/* … */}` openers. Every line it prints must be a
+**trailing-comment edit** (`const x = 1 // why`), which legitimately shows the
+whole code line. Anything else is a subagent that touched code — revert that
+file and re-dispatch it.
 
 **2. Then the standard gates:**
 

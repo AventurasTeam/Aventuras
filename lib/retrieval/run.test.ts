@@ -508,6 +508,19 @@ describe('runRetrieval — query embed failure', () => {
     expect(knnCalls(queryAll)).toEqual([])
   })
 
+  // The same check two-sided: a surplus batch is no more positionally
+  // trustworthy than a short one, and only `!==` rejects both.
+  it('fails when the embedder returns more vectors than it was given texts', async () => {
+    const { failure, queryAll } = await withQueryEmbed(async (texts) => ({
+      vectors: [...texts, 'surplus'].map(() => Float32Array.from([1, 0])),
+      dim: DIM,
+    }))
+    expect(failure.reason).toBe('call')
+    expect(failure.staleCount).toBeNull()
+    expect(failure.detail).toContain('served 3 of the 2')
+    expect(knnCalls(queryAll)).toEqual([])
+  })
+
   // A stored vector that is not unit-norm means this branch's vectors do not
   // match the model the pass reads, which is an embedder problem: escaping as a
   // raw throw would bucket it as an orchestrator error, whose only affordance is

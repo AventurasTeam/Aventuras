@@ -54,6 +54,17 @@ describe('resolveBundlePath', () => {
     expect(resolveBundlePath('/story-settings/story_a.b', distRoot)).toBe(indexHtml)
   })
 
+  // The asset dir exists, so a bare existence check would hand net.fetch a
+  // directory and turn a route miss into a 500.
+  it.each(['/_expo', '/_expo/static'])('falls back to the shell for directory %s', (route) => {
+    expect(resolveBundlePath(route, distRoot)).toBe(indexHtml)
+  })
+
+  // ENOTDIR rather than ENOENT: stat throws where existsSync only returned false.
+  it('falls back to the shell for a path descending through a file', () => {
+    expect(resolveBundlePath('/favicon.ico/nested', distRoot)).toBe(indexHtml)
+  })
+
   it('falls back to the shell for a percent-encoded traversal', () => {
     expect(resolveBundlePath('/%2e%2e%2f%2e%2e%2fetc%2fpasswd', distRoot)).toBe(indexHtml)
   })
