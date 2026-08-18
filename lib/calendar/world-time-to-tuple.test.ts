@@ -1,13 +1,18 @@
 import { describe, expect, it } from 'vitest'
 
 import { EARTH_GREGORIAN } from './builtins/earth-gregorian'
-import { FIXTURE_RULE_CALENDAR } from './builtins/fixtures'
+import {
+  FIXTURE_COPRIME_LEAP_CALENDAR,
+  FIXTURE_RULE_CALENDAR,
+  FIXTURE_TABLE_BY_YEAR_CALENDAR,
+} from './builtins/fixtures'
 import type { CalendarSystem } from './calendar-schema'
 import {
   __cacheSize,
   __originComputeCount,
   __resetCache,
   tierMax,
+  tupleToBaseUnits,
   tupleToWorldTime,
   worldTimeToTuple,
 } from './world-time-to-tuple'
@@ -226,5 +231,80 @@ describe('tupleToWorldTime', () => {
 
   it('maps the origin tuple itself to zero', () => {
     expect(tupleToWorldTime(ORIGIN, EARTH_GREGORIAN, ORIGIN)).toBe(0)
+  })
+})
+
+// The top tier's per-unit cost repeats with period lcm(every...) — 400 for
+// Gregorian's 4/100/400 leap rule — so the walk from the calendar epoch is
+// replaced by cycle arithmetic. Expected values are computed from first
+// principles (elapsed years x 365 + leap days) x 86400, never from the
+// implementation.
+describe('tupleToBaseUnits — top-tier cycle arithmetic', () => {
+  const atYearStart = (year: number) => ({
+    year,
+    month: 1,
+    day: 1,
+    hour: 0,
+    minute: 0,
+    second: 0,
+  })
+
+  it.each([
+    [401, 12_622_780_800],
+    [2024, 63_839_664_000],
+    [202_456, 6_388_862_688_000],
+    [2_024_561, 63_888_942_758_400],
+  ])('converts year %i to its epoch offset', (year, expected) => {
+    expect(tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(year))).toBe(expected)
+  })
+
+  // Structural proof that no epoch walk happens: a linear walk would memoize a
+  // per-year cost for every year it visited, so the cache would hold ~202k
+  // entries instead of one period.
+  it('costs one period of top-tier lookups regardless of how large the year is', () => {
+    __resetCache()
+    tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(202_456))
+    expect(__cacheSize()).toBe(400)
+
+    __resetCache()
+    tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(2_024_561))
+    expect(__cacheSize()).toBe(400)
+  })
+
+  it('stays exact across a period boundary', () => {
+    const before = tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(400))
+    const after = tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(401))
+    // Year 400 is a leap year (divisible by 400), so it contributes 366 days.
+    expect(after - before).toBe(366 * 86_400)
+  })
+
+  it('stays exact for a non-leap century boundary', () => {
+    const before = tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(300))
+    const after = tupleToBaseUnits(EARTH_GREGORIAN, atYearStart(301))
+    // Year 300 is divisible by 100 but not 400, so it is not a leap year.
+    expect(after - before).toBe(365 * 86_400)
+  })
+
+  it('falls back to the walk for a calendar whose period cannot be derived', () => {
+    const tuple: Record<string, number> = {}
+    for (const tier of FIXTURE_RULE_CALENDAR.tiers) tuple[tier.name] = tier.startValue
+    tuple[FIXTURE_RULE_CALENDAR.tiers[0].name] = FIXTURE_RULE_CALENDAR.tiers[0].startValue + 3
+    expect(tupleToBaseUnits(FIXTURE_RULE_CALENDAR, tuple)).toBeGreaterThan(0)
+  })
+
+  // lcm(4, 6) = 12, max(4, 6) = 6. Years 1-12 of this calendar run
+  // 100 x 12 + 5 leap days = 1205; a period of 6 would total 6 x 100 + 2 = 602
+  // and double to 1204, one day short.
+  it('derives the period as an lcm, not the widest condition', () => {
+    expect(tupleToBaseUnits(FIXTURE_COPRIME_LEAP_CALENDAR, { year: 13, day: 1 })).toBe(1205)
+    expect(tupleToBaseUnits(FIXTURE_COPRIME_LEAP_CALENDAR, { year: 25, day: 1 })).toBe(2410)
+  })
+
+  // A per-year table is not periodic, so the cycle must not be derived at all.
+  // Years 1 and 2 are 10 and 20 days; treating year 1 as a repeating period
+  // would give 20 instead of 30.
+  it('walks rather than cycling when the top tier indexes a table', () => {
+    expect(tupleToBaseUnits(FIXTURE_TABLE_BY_YEAR_CALENDAR, { year: 3, day: 1 })).toBe(30)
+    expect(tupleToBaseUnits(FIXTURE_TABLE_BY_YEAR_CALENDAR, { year: 2, day: 1 })).toBe(10)
   })
 })

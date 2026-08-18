@@ -1159,9 +1159,11 @@ on hover`; the shipped rows render label and tagline only, so the
   duplicate-value rows with a call-local memo, so nothing is blocked.
   It became worth naming because 3.8 turned this from one call per
   render into one per row. Caching the parsed template by
-  `displayFormat` is a small change in `render.ts`; the larger win, if
-  the walk ever shows up in a profile, is memoizing `worldTimeToTuple`
-  by `(worldTime, calendar, origin)` rather than re-walking tiers.
+  `displayFormat` is a small change in `render.ts`. The `worldTimeToTuple`
+  half is no longer the larger one: the tier walk stopped scaling with the
+  year on 2026-08-18 (top-tier costs are periodic, so both conversions do
+  cycle arithmetic), which took the same 50-row walk from 24.0 ms to
+  3.4 ms — re-measure before treating the Liquid parse as the small half.
   Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 - **`worldTime === 0` is overloaded: story origin and flashback
   sentinel.** The opening entry and every user action that inherits
@@ -1174,25 +1176,6 @@ on hover`; the shipped rows render label and tagline only, so the
   person to ask "why is this regression not warned about?" finds the
   answer. Revisit if flashbacks ever get their own marker.
   Raised 2026-08-15 by the Slice 3.8 Task 2 review.
-- **`tupleToBaseUnits` is linear in the top-tier value, and free-text
-  tier inputs make that user-reachable.** Measured on
-  `EARTH_GREGORIAN`, one call, cold: year 2024 → 13 ms, 20245 → 91 ms,
-  202456 → 892 ms, 2024561 → ~11.6 s, all synchronous on the UI
-  thread. `validateOriginTuple` accepts anything up to `tierMax`
-  (10^9 here), so validation does not bound it, and memoizing at the
-  call site does not help typing — every keystroke is a new tuple, so
-  the memo misses every time. Both the wizard's origin picker and
-  Slice 3.8's world-time edit overlay expose this: one stray digit in
-  a year field freezes the UI for ~90 ms, two for ~900 ms. Slice 3.8
-  raises the exposure by moving the field from a once-per-story setup
-  flow into a frequent reader interaction. Fixing it at the call site
-  needs a lexicographic tuple compare, which is NOT safe in general —
-  `baseUnitsToTuple` tolerates zero-length units, so on a degenerate
-  calendar tuple ordering is monotonic but not strictly so, and a
-  below-origin block could flip to allowed. The fix belongs in
-  `lib/calendar`: memoize or restructure the tier walk so cost stops
-  scaling with the year. Raised 2026-08-15 by the Slice 3.8 Task 4
-  implementation.
 - **A narrow story decorator silently detaches nodes captured in
   `play`, turning interaction assertions vacuous.** `FormRow` guesses
   `stacked` from `useTier()` (which reads the window: 1200 px in the

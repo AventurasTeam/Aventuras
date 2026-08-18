@@ -20,6 +20,7 @@
     "test:run": "vitest run --project unit --project storybook",
     "bench:retrieval": "vitest run --project bench bench/retrieval-cost.test.ts",
     "bench:probe": "vitest run --project bench bench/probe-capture-cost.test.ts",
+    "bench:calendar": "vitest run --project bench bench/calendar-cost.test.ts",
     "test:e2e": "tsx scripts/e2e.ts --project=dev",
     "test:e2e:packaged": "tsx scripts/e2e.ts --project=packaged",
     "coverage:lib": "vitest run --project unit --coverage",

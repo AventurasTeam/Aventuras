@@ -19,6 +19,7 @@ export function __originComputeCount(): number {
 export function __resetCache(): void {
   yearCostCache.clear()
   originUnitsCache.clear()
+  cycleCache.clear()
   originComputeCount = 0
 }
 
@@ -102,6 +103,88 @@ function cachedTopTierCost(calendar: CalendarSystem, value: number): number {
   return cost
 }
 
+// A top-tier unit's cost varies with its own value only through modular leap
+// conditions (`(value - offset) % every === 0`), so the cost sequence repeats
+// with a period of lcm(every...). That lets both walks below replace a walk
+// from the calendar epoch — O(year), ~780 ms at year 202456 — with cycle
+// arithmetic over one precomputed period.
+//
+// Returns null when the sequence isn't provably periodic (a table indexed by
+// the top tier runs out of entries) or the period is too wide to precompute;
+// callers then fall back to the linear walk.
+const MAX_TOP_TIER_PERIOD = 20_000
+
+type TopTierCycle = { period: number; prefix: number[]; total: number; allPositive: boolean }
+
+const cycleCache = new Map<string, TopTierCycle | null>()
+
+function lcm(a: number, b: number): number {
+  let x = a
+  let y = b
+  while (y !== 0) [x, y] = [y, x % y]
+  return (a / x) * b
+}
+
+function topTierPeriod(tiers: Tier[]): number | null {
+  const top = tiers[0].name
+  let period = 1
+  for (const tier of tiers) {
+    const r = tier.rollover
+    if (r.kind === 'table') {
+      // Indexed by the top tier, `values` is a finite lookup with no defined
+      // continuation past its length — nothing to extrapolate periodically.
+      if (r.indexedBy === top) return null
+      if (r.leap && r.leap.indexedBy === top) {
+        for (const c of r.leap.conditions) period = lcm(period, c.every)
+      }
+    } else if (r.kind === 'rule' && r.against === top) {
+      for (const c of r.conditions) period = lcm(period, c.every)
+    }
+    if (!Number.isSafeInteger(period) || period > MAX_TOP_TIER_PERIOD) return null
+  }
+  return period
+}
+
+function topTierCycle(calendar: CalendarSystem): TopTierCycle | null {
+  const cached = cycleCache.get(calendar.id)
+  if (cached !== undefined) return cached
+
+  const period = topTierPeriod(calendar.tiers)
+  if (period === null) {
+    cycleCache.set(calendar.id, null)
+    return null
+  }
+
+  const start = calendar.tiers[0].startValue
+  const prefix = new Array<number>(period + 1)
+  prefix[0] = 0
+  let allPositive = true
+  for (let k = 0; k < period; k++) {
+    const cost = cachedTopTierCost(calendar, start + k)
+    if (cost <= 0) allPositive = false
+    prefix[k + 1] = prefix[k] + cost
+  }
+  const cycle = { period, prefix, total: prefix[period], allPositive }
+  cycleCache.set(calendar.id, cycle)
+  return cycle
+}
+
+// Base units from the top tier's startValue up to (not including) `target`.
+function baseUnitsBeforeTopTier(calendar: CalendarSystem, target: number): number {
+  const start = calendar.tiers[0].startValue
+  const n = target - start
+  if (n <= 0) return 0
+
+  const cycle = topTierCycle(calendar)
+  if (cycle) {
+    return Math.floor(n / cycle.period) * cycle.total + cycle.prefix[n % cycle.period]
+  }
+
+  let total = 0
+  for (let v = start; v < target; v++) total += cachedTopTierCost(calendar, v)
+  return total
+}
+
 export function tupleToBaseUnits(calendar: CalendarSystem, tuple: TierTuple): number {
   const { tiers } = calendar
   let total = 0
@@ -109,9 +192,13 @@ export function tupleToBaseUnits(calendar: CalendarSystem, tuple: TierTuple): nu
   for (let i = 0; i < tiers.length; i++) {
     const tier = tiers[i]
     const target = tuple[tier.name]
-    for (let v = tier.startValue; v < target; v++) {
-      ctx[tier.name] = v
-      total += i === 0 ? cachedTopTierCost(calendar, v) : unitsInOneUnit(tiers, i, ctx)
+    if (i === 0) {
+      total += baseUnitsBeforeTopTier(calendar, target)
+    } else {
+      for (let v = tier.startValue; v < target; v++) {
+        ctx[tier.name] = v
+        total += unitsInOneUnit(tiers, i, ctx)
+      }
     }
     ctx[tier.name] = target
   }
@@ -131,6 +218,14 @@ export function baseUnitsToTuple(calendar: CalendarSystem, baseUnits: number): T
     // O(target - startValue) for the top tier: counting up from the calendar
     // epoch is linear in the year, bounded by the per-year cost cache.
     let value = tier.startValue
+    if (i === 0) {
+      const cycle = topTierCycle(calendar)
+      if (cycle && cycle.allPositive && cycle.total > 0) {
+        const fullCycles = Math.floor(remaining / cycle.total)
+        value += fullCycles * cycle.period
+        remaining -= fullCycles * cycle.total
+      }
+    }
     for (;;) {
       out[tier.name] = value
       const cost = i === 0 ? cachedTopTierCost(calendar, value) : unitsInOneUnit(tiers, i, out)
