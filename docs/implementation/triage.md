@@ -926,18 +926,6 @@ slice-planning gate forces its resolution before that slice is planned.
   template's group — cheap, and it would make the context map a real
   contract instead of documentation. Surfaced by the Slice 3.6a Task
   9b review (2026-08-10).
-- **Four assist result types are hand-redeclared beside their
-  schema-inferred equivalents, and the inferred ones are dead.**
-  `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
-  `GenreAssistValue`, `ToneAssistValue` and `SettingAssistValue` by
-  hand; `lib/wizard` simultaneously exports `LoreSuggestions`,
-  `LabeledPromptOutput` and `SettingOutput` inferred from the Zod
-  schemas, and nothing imports them. A field added to a schema will
-  not appear in the hand-written type and will not fail the build,
-  because Zod's `ZodType` stays assignable — it is simply typed
-  away. Collapse the hand-written ones onto the inferred ones.
-  (`GenreAssistValue` and `ToneAssistValue` are also byte-identical
-  to each other.) Surfaced by the Slice 3.6a whole-slice review.
 - **The preset browser drops canon's hover body preview.**
   [`wizard.md → Step 3`](../ui/screens/wizard/wizard.md#step-3--world)
   specifies each preset row as `displayName · tagline · preview body
