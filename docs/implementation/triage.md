@@ -99,25 +99,6 @@ slice-planning gate forces its resolution before that slice is planned.
   visible, the clean split is to hash a NUL-joined composite and embed
   a space-joined one, which also decouples the two uses. Needs the
   M3.1a owner. Surfaced by M3.11 Task 4 review (2026-07-22).
-- **Story Settings sections must own disjoint top-level settings
-  keys.** The save session merges each section's patch shallowly
-  (`{ ...merged, ...patch }`) and commits once, and
-  `updateStorySettings` deliberately replaces nested objects rather
-  than merging them (pinned by test). So two sections contributing
-  different parts of the SAME nested object — `translation`, `models`,
-  `retrievalBudgets`, `packVariables` — silently clobber one another,
-  and the winner is decided by `Map` insertion order, i.e. section
-  mount order, i.e. whichever tab the user opened first.
-  Non-deterministic data loss with no delta to recover it. No
-  collision exists in M3 (3.7's section owns only top-level keys), and
-  3.11 adds a `__DEV__` collision warning so the next one is loud
-  rather than silent. But the rule needs a real home before M7.2,
-  where a Translation tab section plausibly splits
-  `translation.enabled` from `translation.granularToggles`. Options:
-  enforce one-section-per-top-level-key at registration, give sections
-  a declared key-ownership manifest, or introduce a merge strategy at
-  the aggregation layer that is consistent with the action's
-  shallow-replace contract. Surfaced by M3.11 Task 5 (2026-07-22).
 - **The unsaved-changes guard lives in a single-domain folder.**
   [`save-sessions.md → Navigate-away guard`](../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
   specifies the intercept as **global** — "same modal, same copy, same
@@ -150,11 +131,11 @@ slice-planning gate forces its resolution before that slice is planned.
   save bar forgot my edits", not as a visible duplicate. **Partly
   closed by M3.11 review:** `attach`'s cleanup is now identity-checked,
   so a twin unmounting no longer detaches the survivor's callbacks, and
-  `SectionDirtyState` carries `tab` rather than a raw `order`. What
-  remains is the intra-tab rank for same-tab siblings, and a `__DEV__`
-  warning on `id` collision — the shared-`id` publish slot is still
-  last-writer-wins. Surfaced by M3.11 Task 4 review (2026-07-22),
-  narrowed 2026-07-22.
+  `SectionDirtyState` carries `tab` rather than a raw `order`. The
+  `__DEV__` collision guard also landed: `attach` throws on a duplicate
+  `id` (2026-07-23, 281c9a2a). What remains is only the intra-tab rank
+  for same-tab siblings. Surfaced by M3.11 Task 4 review (2026-07-22),
+  narrowed 2026-07-22 and 2026-08-18.
 - **`AppActionsMenu`'s Ctrl-K is not focus-gated.** The reader and
   Story Settings both mount `AppActionsMenu`, and expo-router's Stack
   keeps the pushed-under screen alive — so with Story Settings open
