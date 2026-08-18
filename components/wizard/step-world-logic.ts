@@ -43,7 +43,7 @@ export function worldStepValid(rows: readonly WizardLoreDraft[]): boolean {
 }
 
 /** wizard.md → Replace-on-existing: confirm before clobbering authored content. */
-export function needsReplaceConfirm(field: { label: string; promptBody: string }): boolean {
+export function needsReplaceConfirm(field: LabeledPrompt): boolean {
   return !blank(field.label) || !blank(field.promptBody)
 }
 

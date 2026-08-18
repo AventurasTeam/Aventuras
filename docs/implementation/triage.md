@@ -996,21 +996,6 @@ slice-planning gate forces its resolution before that slice is planned.
   a payload-free list query plus decode-on-View, which also moves
   corruption detection onto the specific row. Deferred as latent.
   Surfaced by the Slice 3.5 review (2026-08-09).
-- **`labeledPromptSchema` is defined twice, independently, with no
-  exported type.** `lib/db/stories/story-config-schema.ts` and
-  `lib/db/wizard-sessions/working-state.ts` each declare their own
-  private copy of the `{ label, promptBody }` Zod object that backs
-  `definition.genre` / `definition.tone`, and neither exports a
-  `LabeledPrompt` type — only the enclosing `StoryDefinition` /
-  `WizardWorkingState` are public, carrying the shape inline. The two
-  copies agree today, so nothing is broken; the risk is that the
-  wizard-session copy and the committed-story copy drift, since the
-  working-state blob is what a resumed draft parses and the config
-  schema is what Finish writes. It also means a consumer needing just
-  the pair (Slice 3.6a's `needsReplaceConfirm` is the first) has to take
-  a structural parameter instead of a named type. Fix is one exported
-  schema plus its inferred type, imported by both. Surfaced by the
-  Slice 3.6a Task 3 review (2026-08-10).
 - **The desktop-Popover / phone-Sheet tier wrap is written twice.**
   `components/wizard/ai-assist.tsx` and
   `components/ui/searchable-overlay-list.tsx` each carry the same

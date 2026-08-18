@@ -37,7 +37,7 @@ import {
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, invalidCastRowIds } from './step-cast-logic'
 import { needsLead } from './step-frame-logic'
-import { invalidLoreRowIds } from './step-world-logic'
+import { invalidLoreRowIds, type LabeledPrompt } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
 
@@ -79,10 +79,7 @@ export type FinishEmbedCtx = {
 // Hand-typed definition text reaches the same columns the AI-import path
 // writes, and that path trims at its Zod parse boundary
 // (lib/wizard/assist-schemas.ts). Normalize here so the two agree.
-function trimLabeledPrompt(v: { label: string; promptBody: string }): {
-  label: string
-  promptBody: string
-} {
+function trimLabeledPrompt(v: LabeledPrompt): LabeledPrompt {
   return { label: v.label.trim(), promptBody: v.promptBody.trim() }
 }
 
