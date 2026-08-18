@@ -207,6 +207,73 @@ chapter-management is M5.
 M4.6 once the M4.1 / M4.3 shells exist to host the import
 affordances.
 
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. The swap-prompt item is
+placed provisionally: it names only "a future reader/settings slice",
+and story-open is not owned by any M4 slice as sketched.
+
+- **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**
+  Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
+  names a second dialog entry point: a prompt when opening a story whose
+  embedding model differs from the current app default; accepting it fires
+  the swap dialog. Slice 3.1b shipped only the Story Settings entry point
+  (planning decision 2026-07-24) — the prompt needs its own "stops nagging
+  until the next manual swap attempt" persistence decision. Owner: a future
+  reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
+- **M4.4 — The phone list state hides a dirty save bar.** `StorySettingsShell`
+  renders the bar inside the detail pane, and `MasterDetailLayout`
+  drops that pane on phone when no tab is selected. No data loss —
+  panels stay mounted, and `←` and window-close both route through
+  the guard — but the unsaved state is invisible. Canon argues
+  against the obvious fix:
+  [`save-sessions.md → Save bar`](../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
+  says the bar "spans the editable pane only — never the rail," and
+  [`story-settings.md → Mobile expression`](../ui/screens/story-settings/story-settings.md#mobile-expression)
+  puts it at "the bottom edge of the detail-route's scroll region."
+  Accepted at M3.7b planning; the call belongs to M4.4, the surface's
+  real owner. Surfaced by M3.7b implementation (2026-07-31).
+- **M4.4 — M2.5's composer modes are unreachable on every real story.**
+  `composerModesEnabled` defaults to `false` in
+  `lib/db/stories/story-settings-defaults.ts`, and app-level
+  `defaultStorySettings` carries only `activePackId`, so no story is
+  ever created with it on and no UI can flip it — the same
+  dead-feature shape M3.7b just fixed for `suggestionsEnabled`. Canon
+  puts its toggle and wrap-POV in the same Authoring aids grouping
+  M3.7b's section lives in, so M4.4 completing that grouping is the
+  natural owner. Surfaced by M3.7b implementation (2026-07-31).
+- **M4.2 — The wizard commits `parent_location_id` without the documented
+  cycle guard.**
+  [`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)
+  assigns cycle prevention to the action-layer mutator that writes
+  the field: walk the proposed parent chain, depth-cap 100, reject
+  with `reason: 'parent-cycle'`. Finish is such a writer and does no
+  walk, and neither authoring path blocks it — the editor's picker
+  and `cast-import.ts` each exclude only self, so `A → B` plus
+  `B → A` authors and commits cleanly. Inert today: nothing walks the
+  chain, and the only reader canon names is M4's prompt rendering
+  (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
+  shared guard rather than writing a wizard-local copy of it. Raised
+  2026-08-14.
+- **M4.5 — Custody of a failed turn's text rests on one deletable system entry.**
+  A failed or refused turn reverse-replays its own `user_action` with the
+  rest of its action group (`abortRun` → `reverseReplayDeltas`, and
+  `submitTurn`'s own rejected arm), so the text the user typed survives
+  only as `metadata.systemFailure.submission` on the failure entry that
+  replaces it — pinned by `submit-turn.test.ts`'s
+  `expect(branchEntries('b1')).toHaveLength(0)`. Two paths then delete
+  that entry with no restore: **Dismiss** (`dismissSystemEntry` is a bare
+  `clearSystemEntry` plus `reload`, and dismissing an error is not a
+  request to discard the draft behind it), and the pre-dispatch tail clear
+  (fixed for regenerate's rejected arm in M3.10, still uncompensated when
+  the dispatch throws). In-session `lastSubmission` masks both; after a
+  restart the text is gone. The alternative shape to weigh: keep the
+  `user_action` standing on failure and let Retry re-dispatch against it —
+  which is exactly what regenerate already does — so only an explicit
+  cancel reverses it, returning the text to the composer. That would make
+  the failure entry a pure notice with no custody role and delete this
+  class of bug rather than patching its instances. Wants a reader-composer
+  design pass, not a local fix. Raised 2026-08-16.
+
 **Gates.** M3 for real-data validation (no entities without the
 classifier; no awareness without it; no retrieval scores without
 retrieval). The UI build itself can look ahead against seeded mock
