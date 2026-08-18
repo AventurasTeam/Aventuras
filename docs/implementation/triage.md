@@ -268,16 +268,6 @@ slice-planning gate forces its resolution before that slice is planned.
   blast radius so accepting it stays an informed decision. Surfaced
   during M3.2 review 2026-07-23.
 
-- **`data-model.md`'s "future user-triggered time-advance affordance"
-  now has a parked entry to point at.**
-  [`data-model.md → In-world time tracking`](../data-model.md#in-world-time-tracking)
-  justifies the `user_action` `worldTime` edit hook as enabling that
-  future affordance but names no destination. The affordance was
-  specified and parked on 2026-07-23 —
-  [`parked.md → Time-advance selection at user-entry submit`](../parked.md#time-advance-selection-at-user-entry-submit)
-  — so the sentence should carry the anchor. Small canonical edit;
-  fold into the next cleanup pass touching that section.
-
 - **A profile's `structuredOutput: 'force-on'` never reaches the
   provider.** The flag exists on the profile schema
   (`modelProfileSchema.structuredOutput`, `auto | force-on | force-off`)

@@ -1904,6 +1904,7 @@ and opening entries (see
 The classifier's "delta added to prev `worldTime`" rule on the next
 AI reply picks up the inherited — or user-edited — base naturally,
 which is what enables a future user-triggered time-advance affordance
+([parked.md → Time-advance selection at user-entry submit](./parked.md#time-advance-selection-at-user-entry-submit))
 without a structural exception.
 
 `stories.definition.worldTimeOrigin: TierTuple` — a `Record<string,
