@@ -36,8 +36,15 @@ reversible action.
 - **Tab switching is within session** — editing across multiple tabs
   is one session. Settings surfaces with section + tab nav (Story
   Settings, App Settings) treat the entire surface as one session.
-- **Save commits** all session changes as deltas under a single
-  shared `action_id`. CTRL-Z reverses the entire session as one step.
+- **Save commits** all session changes in one write. On surfaces
+  whose rows are delta-logged — the World / Plot detail panes this
+  pattern was written from — that is a set of deltas under a single
+  shared `action_id`, and CTRL-Z reverses the entire session as one
+  step. **Neither settings surface works that way:** `stories` and
+  `app_settings` are both absent from the twelve tables
+  [`deltas.target_table`](../../data-model.md#diagram) enumerates, so
+  Story Settings and App Settings saves are direct writes with no
+  delta and no CTRL-Z.
 - **Discard** throws the session away without any writes.
 
 ---

@@ -16,7 +16,7 @@ import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
 import { AiAssist } from './ai-assist'
-import { composeKey } from './assist-list-logic'
+import { composeKey } from './ai-assist-logic'
 import {
   CharacterEditor,
   FactionEditor,

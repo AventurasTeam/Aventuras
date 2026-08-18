@@ -2,7 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import type { ReactNode } from 'react'
 import { Platform, Pressable, type PressableProps } from 'react-native'
 
-import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Spinner } from '@/components/ui/spinner'
 import { TextClassContext } from '@/components/ui/text'
 import type { ThemeColorSlots } from '@/lib/themes'
@@ -96,7 +96,7 @@ export function Button({
   const isDisabled = disabled || loading
   const spinnerSlot = SPINNER_SLOT_BY_VARIANT[(variant ?? 'primary') as ButtonVariant]
   return (
-    <DisabledReasonTooltip reason={isDisabled ? disabledReason : undefined}>
+    <ReasonTooltip reason={isDisabled ? disabledReason : undefined}>
       <TextClassContext.Provider value={buttonTextVariants({ variant, size })}>
         <Pressable
           accessibilityRole="button"
@@ -110,7 +110,7 @@ export function Button({
           {children}
         </Pressable>
       </TextClassContext.Provider>
-    </DisabledReasonTooltip>
+    </ReasonTooltip>
   )
 }
 

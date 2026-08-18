@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
 
 import { AiAssist } from './ai-assist'
-import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './assist-list-logic'
+import { composeKey, nameKey, type AssistListItem, type DedupeKey } from './ai-assist-logic'
 
 // AiAssist drives the overlay state machine around two injected seams: `run`
 // (the bound assist call) and `resolveModelId` (configured model id, or null).

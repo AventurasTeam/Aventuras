@@ -1,8 +1,9 @@
-import { join, normalize } from 'node:path'
+import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
 
+import { resolveBundlePath } from './bundle-path'
 import {
   exec as dbExec,
   query as dbQuery,
@@ -52,19 +53,22 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-function resolveBundlePath(urlPath: string): string {
-  const distRoot = join(__dirname, '..', '..', 'dist')
-  const rel = decodeURIComponent(urlPath) || '/'
-  const normalized = rel === '/' ? '/index.html' : rel
-  const resolved = normalize(join(distRoot, normalized))
-  return resolved.startsWith(distRoot) ? resolved : join(distRoot, 'index.html')
-}
-
 function registerBundleProtocol(): void {
+  const distRoot = join(__dirname, '..', '..', 'dist')
   protocol.handle(APP_SCHEME, async (request) => {
     const url = new URL(request.url)
-    const filePath = resolveBundlePath(url.pathname)
-    return net.fetch(pathToFileURL(filePath).toString())
+    const filePath = resolveBundlePath(url.pathname, distRoot)
+    try {
+      return await net.fetch(pathToFileURL(filePath).toString())
+    } catch (error) {
+      // A rejected handler fails the main-frame load, which paints the
+      // window's #000000 background with nothing to diagnose from.
+      console.error(`[${APP_SCHEME}] cannot serve ${url.pathname} from ${filePath}`, error)
+      return new Response('Bundle asset unavailable', {
+        status: 500,
+        headers: { 'content-type': 'text/plain' },
+      })
+    }
   })
 }
 

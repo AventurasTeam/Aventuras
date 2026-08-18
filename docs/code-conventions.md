@@ -200,6 +200,39 @@ bar). Coverage settings live exclusively in `vitest.config.ts` —
 CLI `--coverage.*` dot-overrides crash the storybook project's
 preset loader, so never pass them; change the config instead.
 
+**Give `beforeEach` a block body.** Vitest treats a **callable**
+return value from `beforeEach` as a teardown callback and invokes it
+after each test. A concise arrow hides one: `mockReset` / `mockClear`
+return the mock for chaining, and a mock is callable — so
+`beforeEach(() => someMock.mockReset())` runs the mock's own
+implementation after every test. When that implementation throws, the
+throw is reported as a test failure whose stack points at the `throw`
+statement, reading exactly like "the code under test mishandles
+errors" while the code is fine. Returning a non-callable is harmless
+(`vi.useFakeTimers()` and `vi.clearAllMocks()` both return `vi`),
+which is why the trap is rare enough to be surprising. Write
+`beforeEach(() => { someMock.mockReset() })`.
+
+**A story with no viewport global runs at desktop tier.** Storybook's
+vitest addon applies `setViewport(parameters, globals)` before each
+story, and its default is 1200x900 — not a neutral width — so a story
+meant to exercise phone or tablet behaviour and omitting the global
+tests desktop and passes for the wrong reason. Select a tier with
+`globals: { viewport: { value: 'mobile1' } }`; no `vi`, no
+`Dimensions.set()`, no `@vitest/browser-playwright` import. **Only
+named keys work.** `setViewport` honours a key present in
+`{...MINIMAL_VIEWPORTS, ...options}`, so the `'{width}-{height}'` form
+that appears in Storybook's own type declarations silently falls back
+to the default rather than failing — measured: `'320-480'` yields
+1200x900, `'mobile1'` yields 320x568.
+
+An inline-width wrapper is **not** a substitute for a component that
+reads `useTier()`, which measures the window rather than the
+container. Several narrow-named stories
+(`master-detail-layout.stories.tsx`, `wizard-shell.stories.tsx`) wrap
+in a 360/375 px frame and carry a visible caveat saying so; the
+viewport global is what would let them actually assert the tier.
+
 End-to-end (Playwright + Electron) coverage of the cross-subsystem
 seams is a separate layer with its own spec:
 [`testing.md`](./testing.md).

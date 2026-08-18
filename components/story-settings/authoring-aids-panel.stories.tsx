@@ -104,14 +104,11 @@ const COPY = {
 
 /**
  * The save bar mounts only while the session is dirty, so this doubles as the
- * dirty probe. Anchored on Discard rather than the bar's own `status` role:
- * dnd-kit mounts a live region with that role too.
+ * dirty probe. Anchored on the test id, not a role: the bar's live region now
+ * wraps only its message, and dnd-kit mounts a `status` region of its own.
  */
 async function findSaveBar(): Promise<HTMLElement> {
-  const discard = await screen.findByRole('button', { name: COPY.discard })
-  const bar = discard.closest('[role="status"]')
-  expect(bar).not.toBeNull()
-  return bar as HTMLElement
+  return screen.findByTestId('save-bar')
 }
 
 function expectSessionClean(): void {

@@ -15,6 +15,7 @@ import {
   type LocationState,
   type ProviderInstance,
   type StoryDefinition,
+  entityStateSchemaForKind,
   type StorySettings,
   type SuggestionCategory,
   type WizardCastDraft,
@@ -36,7 +37,7 @@ import {
 import { clampEffectiveDim } from './memory-cost-logic'
 import { activeLead, invalidCastRowIds } from './step-cast-logic'
 import { needsLead } from './step-frame-logic'
-import { invalidLoreRowIds } from './step-world-logic'
+import { invalidLoreRowIds, type LabeledPrompt } from './step-world-logic'
 
 export type EmbedderGateBlockedReason = Extract<EmbedderGateResult, { usable: false }>['reason']
 
@@ -75,6 +76,13 @@ export type FinishEmbedCtx = {
 // guard against a reachable producer: both authoring paths already reject a
 // self-reference (the editor's picker excludes self, cast-import.ts excludes
 // selfId before resolving refs).
+// Hand-typed definition text reaches the same columns the AI-import path
+// writes, and that path trims at its Zod parse boundary
+// (lib/wizard/assist-schemas.ts). Normalize here so the two agree.
+function trimLabeledPrompt(v: LabeledPrompt): LabeledPrompt {
+  return { label: v.label.trim(), promptBody: v.promptBody.trim() }
+}
+
 function castRef(
   cast: readonly WizardCastDraft[],
   self: WizardCastDraft,
@@ -217,17 +225,30 @@ export async function finishWizard(
   // working state must never commit a dim that truncates vectors to garbage.
   if (effectiveDim != null && (!Number.isInteger(effectiveDim) || effectiveDim < 1))
     reasons.push('effectiveDim')
-  if (reasons.length > 0) return { status: 'invalid', reasons }
-
   const castRows: WizardCastEntityInput[] = s.cast.map((draft) => castEntityInput(draft, s.cast))
+
+  // createStoryWithBranch raw-inserts `state` without running the per-kind
+  // schema, so an out-of-bounds row commits here and is only rejected later, by
+  // the first full-state updateEntity. The editors cap every string field, so
+  // this is a backstop for a resumed draft written before those caps (or a
+  // hand-edited DB) — block Finish rather than silently truncating authored
+  // content.
+  if (
+    !reasons.includes('cast') &&
+    castRows.some((row) => !entityStateSchemaForKind(row.kind).safeParse(row.state).success)
+  ) {
+    reasons.push('cast')
+  }
+
+  if (reasons.length > 0) return { status: 'invalid', reasons }
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,
     leadEntityId: lead?.id ?? null,
     narration: s.definition.narration,
-    genre: s.definition.genre,
-    tone: s.definition.tone,
-    setting: s.definition.setting,
+    genre: trimLabeledPrompt(s.definition.genre),
+    tone: trimLabeledPrompt(s.definition.tone),
+    setting: s.definition.setting.trim(),
     calendarSystemId: s.definition.calendarSystemId,
     worldTimeOrigin: s.definition.worldTimeOrigin,
   }
@@ -305,9 +326,8 @@ export async function finishWizard(
       {
         storyId: promoteDraftStoryId,
         replaceExistingStoryId: promoteDraftStoryId != null,
-        title: s.definition.title,
-        description:
-          s.definition.description.trim().length > 0 ? s.definition.description : undefined,
+        title: s.definition.title.trim(),
+        description: s.definition.description.trim() || undefined,
         definition,
         settings,
         openingContent: s.opening.content,

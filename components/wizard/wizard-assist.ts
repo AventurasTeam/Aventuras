@@ -20,6 +20,9 @@ import {
   settingOutputSchema,
   titleChipsSchema,
   type CastSuggestions,
+  type LabeledPromptOutput,
+  type LoreSuggestions,
+  type SettingOutput,
 } from '@/lib/wizard'
 
 const ASSIST_TARGET = 'wizard-assist'
@@ -56,11 +59,14 @@ export type OpeningAssistValue = {
 }
 export type TitleAssistValue = { titles: string[] }
 export type DescriptionAssistValue = { description: string }
-export type LoreAssistValue = { lore: { title: string; body: string; category: string }[] }
+// Aliases of the schema-inferred types, not re-declarations: a hand-written
+// copy stays assignable when a field is added to the schema, so the new field
+// is typed away rather than surfacing as a build error.
+export type LoreAssistValue = LoreSuggestions
 export type CastAssistValue = CastSuggestions
-export type GenreAssistValue = { label: string; promptBody: string }
-export type ToneAssistValue = { label: string; promptBody: string }
-export type SettingAssistValue = { setting: string }
+export type GenreAssistValue = LabeledPromptOutput
+export type ToneAssistValue = LabeledPromptOutput
+export type SettingAssistValue = SettingOutput
 
 export type WizardAssistDeps = {
   /** Test seam — production reads the live app-settings store. */

@@ -12,7 +12,16 @@ export function runPreflight(
   snapshot: PreflightSnapshot,
 ): ConfigResolverError | null {
   const { providers, profiles, assignments, defaultProviderId } = snapshot.appSettings
-  const config: ResolveModelConfig = { providers, profiles, assignments, defaultProviderId }
+  // Without storyModels, pre-flight always takes the assignments path while the
+  // phase takes the override path — so it both clears runs that fail in-phase
+  // and rejects runs whose story-level override would have resolved.
+  const config: ResolveModelConfig = {
+    providers,
+    profiles,
+    assignments,
+    defaultProviderId,
+    storyModels: snapshot.storySettings?.models,
+  }
 
   for (const node of pipeline.phases) {
     const branches = 'parallel' in node ? node.parallel : [node]

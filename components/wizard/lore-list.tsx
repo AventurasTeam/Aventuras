@@ -21,7 +21,13 @@ import type { InjectionMode, WizardLoreDraft } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { wizardStore } from '@/lib/stores'
 
-import { loreRowErrors, parsePriorityInput, PRIORITY_MAX, PRIORITY_MIN } from './step-world-logic'
+import {
+  blank,
+  loreRowErrors,
+  parsePriorityInput,
+  PRIORITY_MAX,
+  PRIORITY_MIN,
+} from './step-world-logic'
 
 export type LoreListProps = {
   rows: readonly WizardLoreDraft[]
@@ -44,10 +50,6 @@ const INJECTION_MODE_OPTIONS: SelectOption[] = [
   { value: 'auto', label: t('wizard:world.lore.modes.auto') },
   { value: 'disabled', label: t('wizard:world.lore.modes.disabled') },
 ]
-
-function blank(value: string): boolean {
-  return value.trim().length === 0
-}
 
 type Chip = { key: string; label: string }
 

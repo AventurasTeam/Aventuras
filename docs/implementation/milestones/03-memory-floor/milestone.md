@@ -140,6 +140,9 @@ browsable.
   the shared reversal sweep
 - [Slice 3.11](./slices/11-story-settings-shell.md) — minimal
   Story Settings host + section-registration seam
+- [Slice 3.12](./slices/12-reconciliation.md) — M3 reconciliation:
+  the unowned defects M3's slices left behind, grouped into four
+  sweeps; splits into 3.12a-d when planned
 
 ## Dependency graph
 
@@ -154,6 +157,8 @@ day-one: 3.1a   3.2   3.6a   3.8   3.11
 3.6a ──→ 3.6b
 3.11 ┄─→ 3.1b   (partial: settings-section portions only)
 3.11 ───→ 3.7b
+
+all ───→ 3.12  (reconciliation: every slice above must be merged)
 ```
 
 - **3.1a** gates 3.1b (lifecycle extends the service), 3.3 (the

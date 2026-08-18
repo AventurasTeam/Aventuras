@@ -492,6 +492,35 @@ describe('runRetrieval — query embed failure', () => {
     expect(expectOk(await runRetrieval(deps(), params())).ok).toBe(true)
   })
 
+  // distributeQueryVectors fills the present slots positionally, so a short
+  // result would attribute a later query's vector to an earlier slot and every
+  // downstream sim would read as truthful. lib/embedder rejects this already;
+  // RetrievalDeps.embedTexts is a structural type, so the layer states it too.
+  it('fails when the embedder returns fewer vectors than it was given texts', async () => {
+    const { failure, queryAll } = await withQueryEmbed(async (texts) => ({
+      vectors: texts.slice(1).map(() => Float32Array.from([1, 0])),
+      dim: DIM,
+    }))
+    expect(failure.reason).toBe('call')
+    expect(failure.staleCount).toBeNull()
+    // Both counts named: this floor leaves Q3 empty, so two slots are embedded.
+    expect(failure.detail).toContain('served 1 of the 2')
+    expect(knnCalls(queryAll)).toEqual([])
+  })
+
+  // The same check two-sided: a surplus batch is no more positionally
+  // trustworthy than a short one, and only `!==` rejects both.
+  it('fails when the embedder returns more vectors than it was given texts', async () => {
+    const { failure, queryAll } = await withQueryEmbed(async (texts) => ({
+      vectors: [...texts, 'surplus'].map(() => Float32Array.from([1, 0])),
+      dim: DIM,
+    }))
+    expect(failure.reason).toBe('call')
+    expect(failure.staleCount).toBeNull()
+    expect(failure.detail).toContain('served 3 of the 2')
+    expect(knnCalls(queryAll)).toEqual([])
+  })
+
   // A stored vector that is not unit-norm means this branch's vectors do not
   // match the model the pass reads, which is an embedder problem: escaping as a
   // raw throw would bucket it as an orchestrator error, whose only affordance is
@@ -789,29 +818,6 @@ describe('runRetrieval — query stack', () => {
     // The floor never consults a vector, so it survives a fully absent query stack.
     expect(ok.floor.alwaysLore.map((l) => l.id)).toEqual(['lore_1'])
     expect(Object.values(ok.bundles).every((b) => b.selected.length === 0)).toBe(true)
-  })
-
-  it('scores against the surviving queries when the embedder returns fewer vectors', async () => {
-    const out = await runRetrieval(
-      deps({
-        embedTexts: vi.fn(async () => ({
-          vectors: [Float32Array.from([1, 0]), Float32Array.from([1, 0])],
-          dim: DIM,
-        })),
-        queryAll: makeQueryAll({
-          entities: [entityRow('char_a', 'Kara Vex'), entityRow('char_b', 'Mira')],
-          knn: [hit('char_b')],
-        }),
-      }),
-      params(),
-    )
-
-    const trace = expectOk(out).bundles.entities.traces.find((t) => t.id === 'char_b')
-    expect(trace).toBeDefined()
-    expect(trace?.simQ3).toBeNull()
-    // Q3 produced no vector, so the blend renormalizes over Q1 + Q2 only.
-    // Counting the absent slot as a zero similarity would give 0.7.
-    expect(trace?.simBlend).toBe(1)
   })
 })
 

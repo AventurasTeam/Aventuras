@@ -77,7 +77,7 @@ export type { DropReason }
 
 /**
  * Per-candidate trace, contract C4. camelCase here; Slice 3.5 maps to the
- * snake_case CaptureCandidate in lib/db/world-json-types.ts. Adding a field is
+ * snake_case CaptureCandidate in lib/db/probe-capture-types.ts. Adding a field is
  * a contract change. Every scoring field is the value the scorer read,
  * post-clamp.
  */

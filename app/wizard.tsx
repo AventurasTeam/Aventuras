@@ -24,7 +24,7 @@ import {
 } from '@/components/wizard/wizard-nav-logic'
 import { WizardShell } from '@/components/wizard/wizard-shell'
 import { clearLiveSession, saveLiveSession, saveStoryDraft } from '@/lib/actions'
-import { DEFAULT_CALENDAR_ID, getCalendar } from '@/lib/calendar'
+import { resolveCalendar } from '@/lib/calendar'
 import { db, emptyWorkingState, execRaw, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { listInstalledLocal, resolveEmbedderGate } from '@/lib/embedder'
@@ -212,7 +212,7 @@ export default function WizardRoute() {
     )
   }
 
-  const selectedCalendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
+  const selectedCalendar = resolveCalendar(calendarSystemId)
   const validityParams: StepValidityParams = {
     mode,
     narration,

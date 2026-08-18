@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -10,6 +11,9 @@ const dirname =
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+  // A worktree that symlinks node_modules resolves the storybook addon's setup
+  // file to its real path, outside the vite root, where the browser 404s it.
+  server: { fs: { allow: [dirname, fs.realpathSync(path.join(dirname, 'node_modules'))] } },
   // react-native-web imports `react`; if vitest's dep optimizer bundles its
   // own copy, RNW's hooks hit a null React dispatcher. Dedupe keeps one copy.
   resolve: {

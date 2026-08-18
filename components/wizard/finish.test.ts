@@ -240,6 +240,103 @@ describe('finishWizard', () => {
     expect(storyRow.definition!.setting).toBe('A drowned coastal empire in slow collapse.')
   })
 
+  // createStoryWithBranch raw-inserts `state`, so an out-of-bounds row used to
+  // commit and only fail later on the first full-state updateEntity. The
+  // editors now cap every string field; this is the backstop for a draft
+  // written before those caps.
+  it('blocks Finish when a cast row carries state outside its per-kind bounds', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Overlong',
+        opening: { content: 'Once.' },
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), voice: 'x'.repeat(2001) }],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['cast'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+  })
+
+  it('accepts a cast row exactly at its per-kind bound', async () => {
+    const { ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'At the bound',
+        opening: { content: 'Once.' },
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), voice: 'x'.repeat(2000) }],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+  })
+
+  it('trims hand-typed title, description, genre, tone, and setting at commit', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: '  World-shaped  ',
+        description: '  Nine wells ring the coast.  ',
+        opening: { content: 'Once.' },
+        genre: { label: '  Grimdark fantasy  ', promptBody: '\n Write it bleak. \n' },
+        tone: { label: ' Wry ', promptBody: '  Keep it dry.  ' },
+        setting: '  A drowned coastal empire.  ',
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.title).toBe('World-shaped')
+    expect(storyRow.description).toBe('Nine wells ring the coast.')
+    expect(storyRow.definition!.genre).toEqual({
+      label: 'Grimdark fantasy',
+      promptBody: 'Write it bleak.',
+    })
+    expect(storyRow.definition!.tone).toEqual({ label: 'Wry', promptBody: 'Keep it dry.' })
+    expect(storyRow.definition!.setting).toBe('A drowned coastal empire.')
+  })
+
+  // The column carries no separate unset marker, so a blank has to land as NULL
+  // rather than round-tripping as a present, empty description.
+  it('commits a whitespace-only description as NULL', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({ title: 'Tideless', description: '   ', opening: { content: 'Once.' } }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.description).toBeNull()
+  })
+
   it('adventure+first: writes the lead entity, definition.leadEntityId, and opening refs to one id', async () => {
     const { db, ctx } = await setup()
     const navigate = vi.fn()

@@ -273,4 +273,91 @@ describe('resetStorySettings', () => {
 
     expect(storiesStore.getStories().openFailures.story_1).toBe('definition-corrupt')
   })
+
+  // retrieval.md → Matryoshka effective dim locks the trio at creation: every
+  // stored vector is under that model at that dim, and a relabel leaves nothing
+  // to re-derive staleness from.
+  it('preserves the creation-locked embedding trio while rebuilding everything else', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const locked = buildStorySettings(
+      'adventure',
+      {
+        defaultStorySettings: { classifierCadence: 2 },
+        embeddingModelId: 'locked-embed',
+        embeddingProviderId: 'provider_locked',
+        defaultSuggestionCategories: { adventure: [], creative: [] },
+      },
+      1024,
+    )
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Locked',
+      status: 'active',
+      definition: STORY_DEFINITION,
+      settings: locked,
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    await hydrateCurrentDefaults()
+
+    await resetStorySettings('story_1', { db, runInTransaction }, 99)
+
+    const [recovered] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(recovered.settings?.embedding_model_id).toBe('locked-embed')
+    expect(recovered.settings?.embedding_provider_id).toBe('provider_locked')
+    expect(recovered.settings?.effectiveDim).toBe(1024)
+    // The rest still rebuilds: seeded cadence was 2, current app default is 11.
+    expect(recovered.settings?.classifierCadence).toBe(11)
+    expect(recovered.settings?.suggestionCategories).toEqual(
+      CURRENT_SUGGESTION_CATEGORIES.adventure,
+    )
+  })
+
+  it('preserves a locked trio that survives inside an otherwise-corrupt blob', async () => {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Broken',
+      status: 'active',
+      definition: STORY_DEFINITION,
+      settings: seedSettings('adventure', 2, 'old-embed'),
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    sqlite.exec(
+      `UPDATE stories SET settings = '{"classifierCadence":"broken","embedding_model_id":"locked-embed","embedding_provider_id":"provider_locked","effectiveDim":1024}' WHERE id = 'story_1'`,
+    )
+    await hydrateCurrentDefaults()
+
+    await resetStorySettings('story_1', { db, runInTransaction }, 99)
+
+    const [recovered] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(recovered.settings?.embedding_model_id).toBe('locked-embed')
+    expect(recovered.settings?.embedding_provider_id).toBe('provider_locked')
+    expect(recovered.settings?.effectiveDim).toBe(1024)
+    expect(recovered.settings?.classifierCadence).toBe(11)
+  })
+
+  it('falls back to app defaults when the corrupt blob has no usable trio', async () => {
+    const { db, sqlite, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({
+      id: 'story_1',
+      title: 'Broken',
+      status: 'active',
+      definition: STORY_DEFINITION,
+      settings: seedSettings('adventure', 2, 'old-embed'),
+      createdAt: 1,
+      updatedAt: 1,
+    })
+    sqlite.exec(
+      `UPDATE stories SET settings = '{"embedding_model_id":42,"effectiveDim":-8}' WHERE id = 'story_1'`,
+    )
+    await hydrateCurrentDefaults()
+
+    await resetStorySettings('story_1', { db, runInTransaction }, 99)
+
+    const [recovered] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(recovered.settings?.embedding_model_id).toBe('app-embed')
+    expect(recovered.settings?.effectiveDim).toBeUndefined()
+  })
 })

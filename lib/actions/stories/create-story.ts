@@ -165,8 +165,18 @@ export async function createStoryWithBranch(
       .toSQL(),
   )
 
-  for (const row of input.lore ?? []) {
-    const category = row.category.trim()
+  // Trimmed once, up front: the insert below and the embed further down both
+  // read these, and the AI-import path already trims at its Zod parse boundary
+  // (lib/wizard/assist-schemas.ts). Untrimmed, a hand-typed row embeds a
+  // composite that differs from what the reader renders.
+  const loreRows = (input.lore ?? []).map((row) => ({
+    ...row,
+    title: row.title.trim(),
+    body: row.body.trim(),
+    category: row.category.trim(),
+  }))
+
+  for (const row of loreRows) {
     ops.push(
       ctx.db
         .insert(lore)
@@ -175,7 +185,7 @@ export async function createStoryWithBranch(
           branchId,
           title: row.title,
           body: row.body,
-          category: category.length > 0 ? category : null,
+          category: row.category.length > 0 ? row.category : null,
           tags: [...row.tags],
           keywords: [],
           injectionMode: row.injectionMode,
@@ -198,7 +208,7 @@ export async function createStoryWithBranch(
     for (const row of input.cast ?? []) {
       rows.push({ kind: 'entity', id: row.id, branchId, fields: [row.name, row.description] })
     }
-    for (const row of input.lore ?? []) {
+    for (const row of loreRows) {
       rows.push({ kind: 'lore', id: row.id, branchId, fields: [row.title, row.body] })
     }
     if (rows.length > 0) {

@@ -6,12 +6,7 @@ import {
   type WorldTimeDecoration,
 } from '@/components/reader/worldtime-decoration'
 import { updateEntryWorldTime, type DbCtx } from '@/lib/actions'
-import {
-  DEFAULT_CALENDAR_ID,
-  getCalendar,
-  type CalendarFrame,
-  type TierTuple,
-} from '@/lib/calendar'
+import { resolveCalendar, type CalendarFrame, type TierTuple } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
@@ -41,13 +36,14 @@ export function useWorldTimeEditing(
   origin: TierTuple | undefined,
   ctx: DbCtx,
 ): WorldTimeEditing {
-  // Unknown ids resolve to the default, mirroring the wizard's own fallback.
   // Memoized as a pair so the seam sees one identity, not two nullables.
-  const worldTimeFrame = useMemo((): CalendarFrame | null => {
-    if (calendarSystemId == null || origin == null) return null
-    const calendar = getCalendar(calendarSystemId) ?? getCalendar(DEFAULT_CALENDAR_ID)
-    return calendar != null ? { calendar, origin } : null
-  }, [calendarSystemId, origin])
+  const worldTimeFrame = useMemo(
+    (): CalendarFrame | null =>
+      calendarSystemId == null || origin == null
+        ? null
+        : { calendar: resolveCalendar(calendarSystemId), origin },
+    [calendarSystemId, origin],
+  )
   // One walk per entries-collection identity. A side table leaves row identity
   // untouched, so ReaderRow's memo still short-circuits unchanged rows.
   const worldTimeDecorations = useMemo(

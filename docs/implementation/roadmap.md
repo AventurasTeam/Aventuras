@@ -207,6 +207,73 @@ chapter-management is M5.
 M4.6 once the M4.1 / M4.3 shells exist to host the import
 affordances.
 
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. The swap-prompt item is
+placed provisionally: it names only "a future reader/settings slice",
+and story-open is not owned by any M4 slice as sketched.
+
+- **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**
+  Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
+  names a second dialog entry point: a prompt when opening a story whose
+  embedding model differs from the current app default; accepting it fires
+  the swap dialog. Slice 3.1b shipped only the Story Settings entry point
+  (planning decision 2026-07-24) — the prompt needs its own "stops nagging
+  until the next manual swap attempt" persistence decision. Owner: a future
+  reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
+- **M4.4 — The phone list state hides a dirty save bar.** `StorySettingsShell`
+  renders the bar inside the detail pane, and `MasterDetailLayout`
+  drops that pane on phone when no tab is selected. No data loss —
+  panels stay mounted, and `←` and window-close both route through
+  the guard — but the unsaved state is invisible. Canon argues
+  against the obvious fix:
+  [`save-sessions.md → Save bar`](../ui/patterns/save-sessions.md#save-bar--the-visible-ui)
+  says the bar "spans the editable pane only — never the rail," and
+  [`story-settings.md → Mobile expression`](../ui/screens/story-settings/story-settings.md#mobile-expression)
+  puts it at "the bottom edge of the detail-route's scroll region."
+  Accepted at M3.7b planning; the call belongs to M4.4, the surface's
+  real owner. Surfaced by M3.7b implementation (2026-07-31).
+- **M4.4 — M2.5's composer modes are unreachable on every real story.**
+  `composerModesEnabled` defaults to `false` in
+  `lib/db/stories/story-settings-defaults.ts`, and app-level
+  `defaultStorySettings` carries only `activePackId`, so no story is
+  ever created with it on and no UI can flip it — the same
+  dead-feature shape M3.7b just fixed for `suggestionsEnabled`. Canon
+  puts its toggle and wrap-POV in the same Authoring aids grouping
+  M3.7b's section lives in, so M4.4 completing that grouping is the
+  natural owner. Surfaced by M3.7b implementation (2026-07-31).
+- **M4.2 — The wizard commits `parent_location_id` without the documented
+  cycle guard.**
+  [`data-model.md → LocationState shape`](../data-model.md#locationstate-shape)
+  assigns cycle prevention to the action-layer mutator that writes
+  the field: walk the proposed parent chain, depth-cap 100, reject
+  with `reason: 'parent-cycle'`. Finish is such a writer and does no
+  walk, and neither authoring path blocks it — the editor's picker
+  and `cast-import.ts` each exclude only self, so `A → B` plus
+  `B → A` authors and commits cleanly. Inert today: nothing walks the
+  chain, and the only reader canon names is M4's prompt rendering
+  (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
+  shared guard rather than writing a wizard-local copy of it. Raised
+  2026-08-14.
+- **M4.5 — Custody of a failed turn's text rests on one deletable system entry.**
+  A failed or refused turn reverse-replays its own `user_action` with the
+  rest of its action group (`abortRun` → `reverseReplayDeltas`, and
+  `submitTurn`'s own rejected arm), so the text the user typed survives
+  only as `metadata.systemFailure.submission` on the failure entry that
+  replaces it — pinned by `submit-turn.test.ts`'s
+  `expect(branchEntries('b1')).toHaveLength(0)`. Two paths then delete
+  that entry with no restore: **Dismiss** (`dismissSystemEntry` is a bare
+  `clearSystemEntry` plus `reload`, and dismissing an error is not a
+  request to discard the draft behind it), and the pre-dispatch tail clear
+  (fixed for regenerate's rejected arm in M3.10, still uncompensated when
+  the dispatch throws). In-session `lastSubmission` masks both; after a
+  restart the text is gone. The alternative shape to weigh: keep the
+  `user_action` standing on failure and let Retry re-dispatch against it —
+  which is exactly what regenerate already does — so only an explicit
+  cancel reverses it, returning the text to the composer. That would make
+  the failure entry a pure notice with no custody role and delete this
+  class of bug rather than patching its instances. Wants a reader-composer
+  design pass, not a local fix. Raised 2026-08-16.
+
 **Gates.** M3 for real-data validation (no entities without the
 classifier; no awareness without it; no retrieval scores without
 retrieval). The UI build itself can look ahead against seeded mock
@@ -306,6 +373,87 @@ warning once M5.2's real close output exists.
 M5.5's deep-rollback surface — pin that surface's API as a slice
 contract so the two parallel slices don't collide.
 
+Carried deferrals, routed out of
+[`followups.md`](../followups.md) 2026-08-18, verified against the
+code first. The four token-progress entries are one work item: a
+DB-backed `openRegionTokens` resolves all of them.
+
+- **M5.1 — `metadata.tokens.completion` is the wrong measure for the chapter
+  threshold, on four independent counts.** M5 needs
+  `openRegionTokens(branchId)` as a DB read
+  ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)),
+  and `story_entries.metadata.tokens` already looks like the answer.
+  It is not. (1) **Stale on edit** — `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts:45`) sets only `{ content }`,
+  so the count survives a rewrite unchanged. (2) **Wrong text even when
+  fresh** — it is provider `usage.outputTokens`
+  (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
+  model emitted, including the state block stripped before persist; the
+  world-state-block work under [UX](../followups.md#ux) widens that gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
+  one that provider uses, while `chapterTokenThreshold` and the
+  token-progress strip measure in o200k via `countTokens`. A story that
+  switches providers mid-run would sum two incompatible token scales.
+  (4) **AI entries only** — `usage` exists only on a generation call, so
+  `user_action` rows carry no count at all, and they are part of the open
+  region (`kind !== 'system'`). A SUM over `completion` undercounts by
+  every user turn. The decision is therefore a **new field, not a
+  rename**: `tokens.{prompt, completion, reasoning}` is a coherent
+  provider-usage triple worth keeping for cost provenance, and
+  repurposing one leg of it to mean "o200k count of the stored content"
+  makes the other two incoherent. Open sub-questions: a real
+  `story_entries` column (SUM-able and indexable, which a JSON field is
+  not — and M5's trigger reads this per turn) versus another metadata
+  key; which write paths must maintain it (generation, edit, prose
+  reversal, system entries, import/seed); backfill for existing rows;
+  whether a translated story counts the original or the translation
+  (the original feeds the prompt buffer, so presumably that); and which
+  number the entry card shows now that "reply tokens" and "content
+  tokens" diverge
+  ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
+  Sits with the three token-progress-strip entries below, which the same
+  change would resolve. Surfaced by review discussion (2026-08-06).
+- **M5.1 — The token-progress strip reads a 50-entry window, so it cannot
+  reach its own threshold.** `useOpenRegionTokens` sums the open region
+  out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
+  (50) slice rather than the branch. Measured: 50 entries at realistic
+  length is **37.7%** of the default 24 000 `chapterTokenThreshold`, and
+  reaching 100% would need ~132 entries. Once the open region exceeds 50
+  — the normal state, since nothing closes a chapter before M5 — the
+  strip reports a fraction of the truth and reads "plenty of room" while
+  chapter-close is overdue. `generation-pipeline.md → Chapter close`
+  sketches `openRegionTokens(branchId)` reading from the **DB**, so the
+  two will diverge the moment M5 wires the real trigger. The strip is
+  still better than the hardcoded `0` it replaced; the number is not
+  trustworthy. Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — The same strip is non-monotonic across a reload.** `entriesStore`
+  grows within a session (`patch` never evicts) but `reload()`
+  re-hydrates to the trailing 50, discarding paged-in older rows.
+  `reload()` fires on turn failure, on submit-with-system-tail, and on
+  system-entry dismissal — so **dismissing a system entry visibly
+  shrinks the progress strip**, as does restarting the app. Same story,
+  same open region, different number. Follows from the entry above and
+  is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — `countEntryTokens` now runs on the reader's first render, adding a
+  synchronous tiktoken encoder build before first paint.** It had zero
+  production callers before M3.4 Task 19 — `countTokens` was reached
+  only through the ranker, inside the async per-turn retrieval phase.
+  The BPE map build measured **116ms** on desktop under Node
+  (`lib/retrieval/tokens.ts` documents ~135ms) and will be worse on
+  Android. If story-open shows a hitch, this is it, and the fix is to
+  warm the encoder during story open rather than to change the hook.
+  **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — `countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
+  keys an unbounded module-level `Map` on entry id and holds it for the
+  process lifetime, across deletes, rollbacks, branch switches and story
+  switches; `__resetTokenCache` has no production caller. Deleting an
+  entry and later reinstating that id — reverse-replay of a delete
+  re-inserts with the original id — resurrects a memo entry written
+  before the deletion. The content check on read bounds the damage to a
+  stale-content miss rather than a wrong count, so this is a leak rather
+  than a defect today, but it is precisely the shape
+  [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
+  records. Surfaced by the M3.4 whole-slice review (2026-08-03).
+
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
 
@@ -366,6 +514,26 @@ reads work; M6.6 follows M6.1.
 **Slice-authoring notes.** M6.1 and M6.6 share a copy-core — either
 M6.1 owns it and M6.6 sequences after, or authoring extracts the
 core as a pinned contract and M6.6 parallelizes too.
+
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Resolve with the slice
+each names.
+
+- **M6.1 — The fork-exclusion guard is structural and goes stale the moment
+  fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
+  not test the real behavior: `lib/probe/fork.test.ts` instead
+  source-scans `lib/**` for `probe_captures` references outside an
+  audited list, plus a direct query assertion that a sibling branch
+  stays empty. Neither catches the regression most likely to actually
+  happen — if M6.1 copies branches **generically** (iterating a manifest
+  or introspecting branch-scoped tables from the schema), the fork code
+  will never contain the literal `probe_captures`, the scan stays green,
+  and captures copy anyway. The manifest row now exists in
+  [`data-model.md → Branch model`](../data-model.md#branch-model), so
+  a generic copier has a canonical exclusion to read. **When M6.1 lands
+  branch fork, replace the structural scan with the both-sides
+  behavioral test** the slice AC originally described. Surfaced by the
+  Slice 3.5 Task 14 review (2026-08-09).
 
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
@@ -481,6 +649,159 @@ long before M7 opens (see
 tab is the canonical _don't_ — M3.1's implementation will refine
 its spec.
 
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18. Each was verified against the code before it moved;
+resolve with the slice it names.
+
+- **M7.1 — Every future model-removal path must evict the native session cache.**
+  `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
+  `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
+  its dir, so without eviction the cache keeps serving inferences from the
+  deleted model — and the resulting vectors land tagged with the _new_
+  model id, so nothing marks them for re-embedding. The hook now exists
+  (`evictBundle`) and is wired into the native driver's `deletePartial`,
+  mirroring desktop's `evictPipeline`; what remains is that the M7.1
+  model-remove flow, and any other future deletion path, must call it too.
+  Nothing enforces that mechanically. Surfaced by M3.1a implementation
+  (2026-07-20), partially resolved during M3.1a review (2026-07-21).
+- **M7.1 — Custom-import file set may need `config.json` on desktop.**
+  [`model-management.md → Custom file import`](../memory/model-management.md#custom-file-import)
+  specifies three files (`model.onnx`, `tokenizer.json`,
+  `tokenizer_config.json`), but M3.1a found transformers.js fatally
+  requires `config.json` to build a pipeline, which is why the curated
+  catalog entries carry it. The native runtime constructs its tokenizer
+  directly and does its own pooling, so it may not need the file at all —
+  making the required set platform-dependent, which the custom-import
+  spec doesn't model. Resolve when M7.1 plans the import flow; verify the
+  native requirement rather than assuming symmetry. Surfaced by M3.1a
+  device review (2026-07-21).
+- **M7.1 — A local model whose files are gone still resolves as healthy.**
+  `resolveEmbedderConfig` validates a local backend by looking the model id
+  up in the bundled catalog (`localModelDim`); it never checks that the
+  model's directory exists. So a model removed from disk resolves `ok`, is
+  offered as a swap candidate, and produces no reason line — the Memory
+  panel's `modelMissing` reason only fires for an id absent from the
+  _catalog_, which is the one shape a real removal never produces.
+  [`model-management.md → Removal`](../memory/model-management.md#removal)
+  expects the panel to explain "model missing"; today the failure surfaces
+  only per-embed, as a generic `That didn't work` toast with the cause in
+  a `logger.error` the user cannot see. Wants a files-exist check in the
+  resolution path (or an `installed`-set intersection at the panel), which
+  also gates the swap picker from offering an uninstallable target. Owner
+  is plausibly the M7.1 removal flow, but the gap is live now, since the
+  directory can vanish without going through any app flow. Surfaced by
+  M3.1b manual smoke (2026-07-25).
+- **M7.1 — The swap resume dialog can trap the user when the target cannot
+  embed.** A staging failure leaves the marker set — `runStagingSwap`
+  reaches `refreshStores` only on success — so the story-open resume
+  prompt fires correctly. But the dialog is non-dismissible and its
+  primary action re-runs the identical embed, so when the target model is
+  the reason staging failed (files removed, provider unreachable), Resume
+  can never succeed and each attempt reports only the generic
+  `actionFailed` toast. The escape exists and is correct — `Cancel switch`
+  never embeds, so it clears the marker and re-flags rows — but nothing in
+  the copy distinguishes "retry a transient failure" from "this target is
+  unusable, abandon it", and the failure reason is never surfaced.
+  Confirmed by hand on desktop (2026-07-25): resume → generic toast →
+  dialog persists. Wants the dialog to carry the last failure reason, or
+  Resume to pre-flight the target's resolvability and steer to Cancel when
+  it can't be met. Pairs with the files-exist gap above — a resolvability
+  pre-flight fixes both surfaces at once. Surfaced by M3.1b manual smoke
+  (2026-07-25).
+- **M7.1 — Native-dim-dependent M7 validation remains.** M3.1b now persists a
+  provider model's successful native probe as `embeddingDim` and threads
+  it through production config resolution. The wizard still does not bound
+  Custom by that value; an over-declared dim can therefore make its storage
+  preview overpromise even though the service clamps to native. The local
+  side also still needs a dim source for future custom imports:
+  `InstalledModelInfo` carries only `id` and `sizeBytes`, so a non-catalog
+  model cannot be tested. M7 owns both UI-facing gaps. The original provider
+  persistence defect was surfaced by M3.1b manual smoke (2026-07-25) and
+  resolved by the 2026-07-28 review followup.
+- **M7.1 — Matryoshka support is not detectable, so M7 should let the user
+  assert it.** No OpenAI-compatible endpoint advertises MRL training, and
+  the obvious probe is a false-positive machine: sending `dimensions: N`
+  and getting N floats back proves only that the _server_ honoured the
+  parameter, which a naive slice of a non-MRL model satisfies identically
+  while returning quality-destroyed vectors. The property that actually
+  distinguishes MRL is rank preservation under truncation, which is
+  measurable — embed a fixed probe set at native and at candidate dims,
+  then rank-correlate the pairwise-similarity matrices — but it yields a
+  statistical result against a judgment threshold, not a boolean, and a
+  wrong answer degrades retrieval silently. So the contract stays capability
+  flag plus user assertion (matching the relabel disclaimer this slice
+  already ships), with **manual override as the primary path**: an advanced
+  user who knows a model is Matryoshka-trained enables the flag and fills in
+  the dims directly. A rank-preservation sweep, if built, belongs beside that
+  control as evidence shown to the user rather than a gate that decides for
+  them — and the sweep is also how the curated ladder's rungs would be found
+  rather than assumed. Deferred to **M7** (developer decision 2026-07-25):
+  the override needs the model-capability editing surface to host it, and
+  most users will never touch the feature. Note for whoever builds it:
+  `dimLadder`'s hardcoded `[512, 1024, 2048]` fallback becomes wrong under
+  a user-assertion model, since enabling the flag would always come with
+  user-supplied dims — the fallback currently fabricates rungs nobody
+  asserted, and can offer dims above the model's native size. Surfaced by
+  M3.1b manual smoke (2026-07-25).
+- **M7.1 — Tighten the unprobed-dim escape hatches once M7 makes probing
+  mandatory.** `validateCustomDim` skips its `above-native` check and
+  `clampEffectiveDim` returns the value untouched whenever the model's
+  native dim is unknown (`components/wizard/memory-cost-logic.ts`),
+  both deliberately — rejecting on a ceiling nobody has measured would
+  block valid picks. The cost is one representable cell: an unprobed
+  provider with `effectiveDim` above native. There the pass reads the
+  dim family named by `effectiveDim` while the embed service clamps
+  the vectors it writes to the native dim, so the sync commits one
+  family and clears the flags before the query embed refuses on the
+  mismatch. The story has no in-app recovery — no post-creation
+  `effectiveDim` editor exists, and a swap reuses the locked dim. M7
+  is slated to force a probe before a model is selectable, which
+  removes the cell; when it lands, both permissive branches should go
+  with it rather than being left as a latent re-opening. Surfaced by
+  the M3.4 review (2026-08-07).
+- **M7.5 — `RankAllInput` carries no `capturedTokens`, so a whole-bundle probe
+  replay is impossible.** `rankPerType` takes it; `rankAll` does not,
+  and object-literal excess-property checking rejects passing it
+  through. Slice 3.5's parity test replays per type, so nothing is
+  blocked today — but this is deliberate-by-omission rather than
+  designed, and an M7.5 simulator that wants to re-run a whole captured
+  pass at once will need `RankAllInput` widened. Surfaced by the Slice
+  3.5 Task 2 review (2026-08-08).
+- **M7.3 — A non-embedder retrieval fault writes no capture, which is the
+  case the probe most wants.** `runRetrieval` converts only
+  `VectorInvariantError` into a captured failure and rethrows
+  everything else — correctly, since routing a SQL fault to the
+  "Switch embedder" surface would offer a re-index as the fix for a
+  locked database. But the rethrow escapes `retrievalPhase` before the
+  capture site, so a vec0/SQLite error, a dead IPC bridge or a ranker
+  bug produces no capture at all. `failure_reason` is an
+  `EmbedderErrorKind`, and `lib/embedder/types.ts` deliberately ties
+  that union to the IPC envelope's own tag, so a third tier cannot be
+  added to one side only — closing this needs a **capture-failure
+  taxonomy separate from the embedder's**, threaded through
+  `RetrievalPartial`, plus a capture-then-rethrow in the phase.
+  `probe.md` was narrowed to state the gap rather than promise the
+  behavior. Surfaced by the Slice 3.5 review (2026-08-09).
+- **M7.5 — The classifier's tuning signal is `unresolvedRefs`, not
+  `window_head_fallback`.**
+  [Slice 3.3](./milestones/03-memory-floor/slices/03-classifier.md) called
+  head-fallback warnings dominating the log the trigger for the M7.5 prompt
+  tuning pass. The first real-provider run says otherwise: against a local
+  4B-class Q4 model the pass logged 7 and 19 `classifier.unresolved_refs`
+  against a single `classifier.window_head_fallback`. The model invents its
+  own handles rather than reusing the `[c1]` placeholders the prompt hands
+  it, so the refs it emits point at nothing. These are refs to entities that
+  already exist, so the reserved `new:` namespace does not cover them.
+  Consequence: the graph gains happenings with sound titles, descriptions
+  and resolved `occurredAtTurn` anchors, but almost no edges — involvements
+  and awareness are what get dropped. **Caveat: two runs, one model.** Enough
+  to redirect what M7.5 measures, not to set a threshold — and small-model
+  placeholder compliance may not generalise to the frontier models the
+  tuning pass will target. Route into the M7.5 slice's Open questions once
+  that milestone is authored; it has no owner today. Surfaced by the Slice
+  3.3 real-provider smoke (2026-07-31), reproducible via
+  `e2e/tests/classifier-real-provider.smoke.spec.ts`.
+
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
 flows).
@@ -543,6 +864,38 @@ reactive `useTranslation` subscription and language picker sit over
 the M1.5 store and story settings, not the pipeline; only its
 miss-toast and sticky retry pill (which invoke `translation-retry`)
 wait on M8.1. M8.4 follows M8.1, parallel with M8.3.
+
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Resolve with the slice
+each names.
+
+- **M8.1 — `abortRun` reverse-replays every delta under a run's `actionId`,
+  which would reverse a `suggestion-refresh` run's already-committed
+  stage-1 emission.**
+  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)'s
+  "Re-roll cancel during translation stage" edge case states that on a
+  translation-stage cancel "the stage-1 emission has already
+  committed" — but `abortRun` (`lib/pipeline/runtime/orchestrator.ts`)
+  doesn't distinguish committed-and-chained-forward deltas from
+  in-flight ones; it reverses everything tagged with the run's
+  `actionId`. Unobservable today because `suggestionTranslationPhase`
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) is a synchronous
+  no-op — there's no window between stage 1 committing and stage 2
+  finishing for a cancel to land in. Becomes real once the M8.1
+  translation call replaces that no-op. Surfaced by M3.7a Task 7
+  (2026-07-25).
+- **M8.3 — `getCalendar` consults only code builtins, never the
+  `vault_calendars` table.** The seeded story sets `calendarSystemId:
+'cal_default'` and a matching `vault_calendars` row exists, but the
+  registry holds only `earth-gregorian`, so every story falls through
+  to the default and renders Gregorian dates regardless of the
+  calendar it was configured with. Slice 3.8 relies on that fallback
+  being load-bearing and correct, so nothing is broken today — but it
+  means the registry-hit path is unexercised by seed data and a
+  user-authored calendar would be silently ignored once the vault can
+  hold one. Decide whether resolution is meant to be registry-only,
+  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
+  Slice 3.8 Task 6 implementation.
 
 **Gates.** M7 (settings surfaces translation toggles).
 
@@ -619,6 +972,81 @@ inherits.
 **Slice-authoring notes.** M9.2 shards naturally per screen-group —
 author it as 2–3 slices so the audit spreads across contributors
 instead of serializing on one.
+
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Two are a11y-contract
+rather than visual, so M9.2's audit has to widen past glyphs and
+spacing to own them — or they need a slice of their own.
+
+- **M9.2 — `disabledReason` never reaches the accessibility tree on web.**
+  `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
+  `ColorPicker` all pass the reason to `accessibilityHint`, which RN
+  Web drops outright — probed in Chromium, a disabled `Button` carries
+  no `title`, `aria-describedby` or `aria-label` of its own. The web
+  tooltip works (the `ReasonTooltip` ancestor is reachable by
+  hit-test from every point on the control, verified), but an ancestor
+  `title` is not a dependable accessible-description source, so screen
+  reader users get "dimmed and unavailable" with no reason. Button's
+  own prop doc claims both channels; on web only the tooltip half is
+  true. RN Web does forward `aria-describedby` (verified), so the fix
+  is a visually-hidden reason node plus `useId` in the shared wrapper —
+  modest, but it needs a hidden-text primitive the repo lacks and it
+  changes a shared UI contract, so it wants a design pass rather than a
+  drive-by. Cross-cutting: every `disabledReason` consumer, present and
+  future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+- **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
+  User-facing chrome carries literal emoji and glyphs where the
+  design system has an icon primitive — `✨` prefixes every AI-assist
+  heading and several trigger labels, `⭐ Set as lead` and the
+  `▼ More options` / `▼ Visual` disclosures are specced as glyphs in
+  `wizard.md`, and arrows like `→` are baked into locale strings
+  (`common:calendarPicker.manageInVault`, and entries across
+  `settings`, `embedder`, `landing`, `reader`). Emoji render
+  inconsistently across platforms and font stacks, cannot be themed
+  or sized with the rest of the chrome, and land inside translatable
+  strings where they are not translatable content. Sweep `components/`,
+  `app/`, and `locales/` together: replace with `Icon`/`IconAction`
+  where the glyph is decoration or an affordance, keep it only where
+  it is genuinely textual. Canon in `wizard.md` specifies some of
+  these as glyphs, so amending the doc is part of the work rather
+  than a follow-on. Raised 2026-08-11.
+- **M9.2 — `Select`'s dropdown trigger drops the current value from its
+  accessible name once `label` is set.** `@rn-primitives/select`
+  forces `role="button"` on the web trigger, overriding Radix's
+  `combobox`, so the element carries no value semantic at all — the
+  selected option reaches assistive tech only as the trigger's text
+  content. Adding `aria-label` (the fix for triggers that renamed
+  themselves on every pick) then suppresses that content: the month
+  picker in `tier-tuple-input.tsx` announces "Month, button,
+  collapsed" and never "January". Neither state is complete —
+  before the label there was a value and no field identity, after it
+  there is identity and no value. Reviewed and deliberately kept as
+  identity-only: the value is one open away (Radix renders options
+  with `role="option"` / `aria-selected` and focuses the selected one),
+  while identity is unrecoverable because `FormRow` renders its label
+  as plain `Text` with no `htmlFor` / `aria-labelledby`. The real fix
+  is a `combobox` role on the trigger, where content is read as the
+  value beside the label. Plausible-but-unverified path: the web build
+  destructures `role: _role` out of the trigger's props and hardcodes
+  `role='button'`, so a `patches/` one-liner deleting that destructure
+  would let a caller-supplied `role="combobox"` through — nobody has
+  applied or tested it. Applies to every `dropdown`-mode `Select` that
+  carries a `label`. Raised 2026-08-13.
+- **M9.5 — The retrieval pass has never been measured on mobile.** Every
+  figure in
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  is desktop. The only mobile evidence is the PoC's per-query KNN
+  numbers, which predate the shipped pass — that PoC issued three KNN
+  queries against one family, where the pass issues fifteen across five
+  plus a by-id vector fetch. The ranker has never run on-device at all,
+  and `retrieval.md`'s own PoC section puts a 384-dim Hermes dot at
+  ~24-30 µs, which would make MMR's 19,900 dots ~500 ms per type if it
+  holds. That is not turn-dominating against a narrative call measured
+  in tens of seconds, but it is unknown rather than small, and it
+  cannot be settled from a desktop runner. `bench/retrieval-cost.test.ts`
+  is the harness to port. Owner is whoever does Android bring-up;
+  desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
+  (2026-08-08), whose desktop half is now canon.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through

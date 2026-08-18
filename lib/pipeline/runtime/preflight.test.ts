@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { APP_SETTINGS_DEFAULTS } from '@/lib/db'
+import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS } from '@/lib/db'
 
 import type { PhaseFn, Pipeline, PreflightSnapshot, ResolverInput } from '../types'
 import { runPreflight } from './preflight'
@@ -173,5 +173,36 @@ describe('runPreflight', () => {
     expect(runPreflight(pipeline, snap)).toBeNull()
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
+  })
+
+  // Pre-flight took the assignments path while every phase takes the override
+  // path, so it disagreed with the call it gates — in both directions.
+  it('accepts a story override when app assignments cannot resolve', () => {
+    const snap = wiredSnapshot()
+    snap.appSettings.assignments = {}
+    const pipeline = pipelineOf([{ name: 'classify', resolves: [{ target: 'classifier' }] }])
+    expect(runPreflight(pipeline, snap)).toMatchObject({
+      kind: 'config-resolver',
+      failure: 'no-profile-assigned',
+    })
+
+    snap.storySettings = { ...STORY_SETTINGS_DEFAULTS, models: { classifier: 'm' } }
+    expect(runPreflight(pipeline, snap)).toBeNull()
+  })
+
+  it('rejects a story override that cannot resolve, even when assignments could', () => {
+    const snap = wiredSnapshot()
+    const pipeline = pipelineOf([{ name: 'classify', resolves: [{ target: 'classifier' }] }])
+    // Assignments alone resolve, which is what pre-flight used to check.
+    expect(runPreflight(pipeline, snap)).toBeNull()
+
+    // The override runs on the default provider, and there is none.
+    snap.appSettings.defaultProviderId = null
+    snap.storySettings = { ...STORY_SETTINGS_DEFAULTS, models: { classifier: 'm' } }
+    expect(runPreflight(pipeline, snap)).toMatchObject({
+      kind: 'config-resolver',
+      failure: 'provider-missing',
+      target: 'classifier',
+    })
   })
 })

@@ -1,6 +1,6 @@
 import { AlertTriangle } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import { Platform, View } from 'react-native'
+import { Platform, View, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
@@ -8,6 +8,12 @@ import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+
+// Hoisted so the decorative overlay does not allocate a new style object per
+// render. props.pointerEvents is deprecated in favour of style.pointerEvents.
+const STATIC_STYLES = {
+  pointerEventsNone: { pointerEvents: 'none' } satisfies ViewStyle,
+}
 
 type SaveBarProps = {
   /**
@@ -89,8 +95,7 @@ export function SaveBar({
 
   return (
     <View
-      role="status"
-      aria-live="polite"
+      testID="save-bar"
       className={cn(
         'relative flex-row items-center justify-between gap-3 border-t border-border px-row-x-md py-row-y-sm',
         className,
@@ -99,10 +104,12 @@ export function SaveBar({
       <View
         className="absolute inset-0 bg-warning opacity-[.12]"
         aria-hidden
-        pointerEvents="none"
+        style={STATIC_STYLES.pointerEventsNone}
       />
 
-      <View className="min-w-0 shrink flex-row items-center gap-2">
+      {/* Scoped to the message: role="status" implies aria-atomic, so a region
+          spanning the bar would re-announce both button labels per keystroke. */}
+      <View role="status" aria-live="polite" className="min-w-0 shrink flex-row items-center gap-2">
         <View className="h-2 w-2 shrink-0 rounded-full bg-warning" aria-hidden />
         <Text size="xs" numberOfLines={1} className="shrink">
           <Text size="xs" className="font-semibold text-fg-primary">

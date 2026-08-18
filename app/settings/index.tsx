@@ -117,6 +117,9 @@ export default function SettingsRoute() {
                 key={tab.id}
                 accessibilityRole="tab"
                 accessibilityState={{ selected }}
+                // RN-Web doesn't map accessibilityState.selected to
+                // aria-selected, so AT reports every tab unselected without it.
+                aria-selected={selected}
                 onPress={() => setSelectedTab(tab.id)}
                 className={cn(
                   'rounded-md px-row-x-md py-row-y-md',

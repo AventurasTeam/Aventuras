@@ -1706,7 +1706,7 @@ story_entries.metadata: {
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
 
-  // Scene presence — classifier-authored
+  // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)
   currentLocationId: string | null  // location entity that IS the current scene; singleton
 
@@ -1721,6 +1721,17 @@ story_entries.metadata: {
     items: { categoryId: string; text: string }[]  // 1..suggestionCount; categoryId references stories.settings.suggestionCategories[].id (orphans render with neutral fallback per reader-composer.md)
     source: 'piggyback' | 'classifier' | 'refresh' // emission path that wrote this (diagnostic; dev-mode surfacing)
     refreshGuidance?: string                        // present when source === 'refresh' and the composer-partial was passed; persisted so reload faithfully shows refresh-influenced chips
+  }
+
+  // System-entry error surface — app-authored, only on kind 'system'
+  systemFailure?: {
+    kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
+    failure?: string                // provider- or pipeline-supplied failure tag, when one was given
+    detail?: string                 // human-readable cause, rendered in the reader's error surface
+    submission?: {                  // the reversed user action's text, so Retry survives a restart
+      content: string
+      composerMode: string
+    }
   }
 }
 ```
@@ -1893,6 +1904,7 @@ and opening entries (see
 The classifier's "delta added to prev `worldTime`" rule on the next
 AI reply picks up the inherited — or user-edited — base naturally,
 which is what enables a future user-triggered time-advance affordance
+([parked.md → Time-advance selection at user-entry submit](./parked.md#time-advance-selection-at-user-entry-submit))
 without a structural exception.
 
 `stories.definition.worldTimeOrigin: TierTuple` — a `Record<string,
