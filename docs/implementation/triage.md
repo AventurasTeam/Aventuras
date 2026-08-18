@@ -992,19 +992,6 @@ slice-planning gate forces its resolution before that slice is planned.
   template's group — cheap, and it would make the context map a real
   contract instead of documentation. Surfaced by the Slice 3.6a Task
   9b review (2026-08-10).
-- **`wizard.md` says forward-jump is disabled; the shipped nav has
-  allowed forward-jump-to-visited since M2.3.**
-  [`wizard.md → Step indicator`](../ui/screens/wizard/wizard.md#step-indicator)
-  reads "Forward-jump disabled — must advance via `Next →` (which
-  validates current step)", but `canJumpToStep` permits a forward
-  jump whenever the target has already been visited
-  (`target <= furthestStep`) and every gating step before it is still
-  valid. The code's behavior is the better one — it is how a user
-  returns to where they were after a back-jump, and it re-validates
-  rather than trusting the visit — so the likely fix is amending
-  canon, not the code. Predates Slice 3.6a, which only extended the
-  existing rule to step 3. Surfaced by the Slice 3.6a Task 11 review
-  (2026-08-10).
 - **Four assist result types are hand-redeclared beside their
   schema-inferred equivalents, and the inferred ones are dead.**
   `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
