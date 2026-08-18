@@ -20,12 +20,23 @@ afterAll(async () => {
 
 const base = (): string => mock.url.replace(/\/v1$/, '')
 
-async function post(body: unknown): Promise<Response> {
+async function post(body: unknown, signal?: AbortSignal): Promise<Response> {
   return fetch(`${mock.url}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
   })
+}
+
+/** The first log entry to land, however long the handler's own delay runs. */
+async function waitForEntry(): Promise<{ outcome: string }> {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const [entry] = mock.ctx.log.list()
+    if (entry) return entry
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error('no log entry arrived')
 }
 
 /** The prompt the app would send for `schema` on the default (auto) path. */
@@ -65,9 +76,11 @@ describe('structured calls', () => {
     expect(body.choices[0]?.message.content).toBe('{}')
 
     const discovered = [...mock.ctx.discovered.values()]
-    expect(discovered).toHaveLength(1)
-    expect(discovered[0]?.block).toContain('mood: string;')
-    expect(mock.ctx.state.lanes[discovered[0]?.key ?? '']).toBeDefined()
+    const entry = discovered.find((d) => d.block?.includes('mood: string;'))
+    expect(entry).toBeDefined()
+    expect(mock.ctx.state.lanes[entry?.key ?? '']).toBeDefined()
+    // A registered shape routes to its own lane and must never be discovered.
+    expect(discovered.some((d) => d.key === 'per-turn-classifier')).toBe(false)
   })
 })
 
@@ -165,6 +178,32 @@ describe('failure injection', () => {
     expect(lane.sequence.cursor).toBe(1)
 
     lane.sequence.enabled = false
+  })
+})
+
+describe('client abort', () => {
+  it('leaves the failure budget intact for a call nobody waited for', async () => {
+    mock.ctx.log.clear()
+    const lane = mock.ctx.lane('narrative')
+    lane.delay = { ttfbMs: 300, jitterMs: 0 }
+    lane.failure = { kind: 'http', status: 503, remaining: 1 }
+
+    const abort = new AbortController()
+    const inflight = post({ model: 'seed/narrative', stream: true, messages: [] }, abort.signal)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    abort.abort()
+    await inflight.catch(() => null)
+
+    // The handler is still sleeping out its TTFB; it logs when that finishes.
+    const entry = await waitForEntry()
+    expect(entry.outcome).toBe('aborted')
+    // The whole point of the one-shot budget: it belongs to the next call that
+    // is actually served, not to one that was abandoned before it was answered.
+    expect(lane.failure.remaining).toBe(1)
+
+    lane.delay = { ttfbMs: 0, jitterMs: 0 }
+    expect((await post({ model: 'seed/narrative', stream: true, messages: [] })).status).toBe(503)
+    lane.failure = { kind: 'none', status: 500, remaining: 0 }
   })
 })
 

@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http'
 
-import { contentFrame, roleFrame, stopFrames } from './wire'
+import { contentFrame, roleFrame, stopFrames, write } from './wire'
 
 export type StreamPacing = {
   /** 0 delivers the whole reply in a single frame. */
@@ -42,15 +42,6 @@ export function chunkContent(content: string, chunkSize: number): string[] {
 function jittered(ms: number, jitterMs: number): number {
   if (jitterMs <= 0) return ms
   return Math.max(0, ms + (Math.random() * 2 - 1) * jitterMs)
-}
-
-// res.write returns false once the socket buffer is full; ignoring it lets a
-// slow client build an unbounded backlog instead of pacing to its own speed.
-function write(res: ServerResponse, frame: string): Promise<void> {
-  return new Promise((resolve) => {
-    if (res.write(frame)) resolve()
-    else res.once('drain', resolve)
-  })
 }
 
 /** Emits the SSE body. Headers must already be written by the caller. */

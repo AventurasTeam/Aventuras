@@ -1,6 +1,6 @@
 import type { ServerResponse } from 'node:http'
 
-import { CORS_HEADERS, SSE_HEADERS, errorBody } from './respond/wire'
+import { CORS_HEADERS, SSE_HEADERS, errorBody, write } from './respond/wire'
 import type { Upstream } from './state'
 
 export type PassthroughResult = {
@@ -28,7 +28,8 @@ export function collectSseContent(buffer: string): string {
       }
       content += parsed.choices?.[0]?.delta?.content ?? ''
     } catch {
-      // A partial frame at a chunk boundary is normal; the next pass sees it whole.
+      // The whole buffer is parsed at once, so this is a final frame the
+      // upstream truncated; its text is simply not part of what was served.
     }
   }
   return content
@@ -74,7 +75,9 @@ export async function passthrough(opts: {
     const detail = err instanceof Error ? err.message : String(err)
     if (!res.headersSent) {
       res.writeHead(502, { ...CORS_HEADERS, 'content-type': 'application/json' })
-      res.end(errorBody(`mock passthrough to ${upstream.label} failed: ${detail}`))
+      res.end(
+        errorBody(`mock passthrough to ${upstream.label} failed: ${detail}`, 'upstream_error'),
+      )
     } else {
       res.end()
     }
@@ -107,7 +110,7 @@ export async function passthrough(opts: {
     if (signal.aborted) break
     const text = decoder.decode(chunk, { stream: true })
     raw += text
-    res.write(text)
+    await write(res, text)
   }
   res.end()
 

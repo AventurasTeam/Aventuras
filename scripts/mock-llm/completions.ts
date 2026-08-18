@@ -81,7 +81,15 @@ export async function handleCompletion(
 ): Promise<void> {
   const startedAt = Date.now()
   const raw = await readBody(req)
-  const body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>
+  let body: Record<string, unknown>
+  try {
+    body = (raw ? JSON.parse(raw) : {}) as Record<string, unknown>
+  } catch {
+    // The caller's error, not the mock's — a 500 reads as the mock falling over.
+    res.writeHead(400, { ...CORS_HEADERS, 'content-type': 'application/json' })
+    res.end(errorBody('mock could not parse the request body as JSON', 'invalid_request_error'))
+    return
+  }
 
   const route = classifyRequest(body)
   const key = laneKeyOf(route)
@@ -96,7 +104,11 @@ export async function handleCompletion(
 
   const controller = new AbortController()
   let clientGone = false
-  req.on('close', () => {
+  // Not req 'close': IncomingMessage closes as soon as the body has arrived, so
+  // a listener attached after readBody never fires. writableFinished separates
+  // a reply that completed from a client that walked away mid-call.
+  res.on('close', () => {
+    if (res.writableFinished) return
     clientGone = true
     controller.abort()
   })
@@ -126,17 +138,20 @@ export async function handleCompletion(
     ctx.save()
   }
 
-  const failure: FailureKind = takeFailure(lane)
-  if (failure !== 'none') {
-    entry.failureKind = failure
-    entry.outcome = 'failed'
-  }
-
   await sleep(jittered(lane.delay.ttfbMs, lane.delay.jitterMs))
   if (clientGone) {
     entry.outcome = 'aborted'
     finish()
     return
+  }
+
+  // Spent only once the call is going to be answered: a budget claimed by a
+  // request abandoned during the delay leaves the lane looking armed while the
+  // next call sails through.
+  const failure: FailureKind = takeFailure(lane)
+  if (failure !== 'none') {
+    entry.failureKind = failure
+    entry.outcome = 'failed'
   }
 
   if (failure === 'http') {
@@ -155,7 +170,7 @@ export async function handleCompletion(
     } else {
       res.writeHead(200, { ...CORS_HEADERS, 'content-type': 'application/json' })
     }
-    req.on('close', finish)
+    res.on('close', finish)
     return
   }
 
@@ -176,7 +191,12 @@ export async function handleCompletion(
     entry.status = 503
     entry.note = 'lane is set to passthrough but has no upstream selected'
     res.writeHead(503, { ...CORS_HEADERS, 'content-type': 'application/json' })
-    res.end(errorBody('mock lane is set to passthrough but no upstream is selected'))
+    res.end(
+      errorBody(
+        'mock lane is set to passthrough but no upstream is selected',
+        'mock_lane_misconfigured',
+      ),
+    )
     finish()
     return
   }
