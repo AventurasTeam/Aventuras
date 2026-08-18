@@ -1047,39 +1047,6 @@ v++)` never runs), so the era is silently lost. Observed with origin
   entry named `handleCommitEdit`, which is not one of the bare-`void`
   sites — it is awaited, and it already carries failure in its result
   channel. Split out of the post-3.8 tidy 2026-08-18.
-- **`per-turn-retrieval.test.ts` fails intermittently, but only when
-  `pnpm test:run` runs the unit and storybook projects in one
-  invocation.** Originally observed 2 failures in 4 consecutive
-  `pnpm test:run` invocations while closing Slice 3.8. The failing pair is
-  always `retrieval phase — embedder config > fails blocking when the
-embedder config does not resolve` (hits the default 5 s test timeout at
-  ~5020 ms, so `runRetrievalPhase()` hangs) and `retrieval phase — abort >
-survives a post-sync recount that rejects, warning instead of failing`
-  (fails in ~11 ms, consistent with a cascade). What was ruled out: the
-  file passes 60/60 five times run alone, 3/3 more while a full storybook
-  run saturates the machine concurrently, and the storybook project alone
-  passes 3/3 — so plain CPU contention is not the trigger.
-  **Mechanism identified, fix unverified (2026-08-18).** `retrievalPhase`
-  imports `@/lib/actions` lazily, to break a require cycle, and that import
-  sits _after_ the working-set guards — so the first test to get past those
-  guards is exactly the one that flakes, and it is the one that pays the
-  cold resolution of that barrel plus, through the `vi.mock` factory's
-  `importOriginal`, the real module graph behind it. Ten other unit test
-  files import the same barrel **statically**, resolving it at module load
-  where no test timeout applies; only this file and
-  `lib/boot/classifier-scheduler.test.ts` defer it into a test body. That
-  asymmetry is the only structural difference that explains why this one
-  test, in a combined invocation, exceeds a budget it otherwise uses 204 ms
-  of (measured in isolation — a 24x margin). A `beforeAll` now resolves the
-  barrel ahead of the tests. **This is mechanism-directed hardening, not a
-  verified fix: the flake did not reproduce here (4/4 combined runs green,
-  3970 tests), so the hardening could not be shown to change an
-  observed failure.** If it recurs after this, the mechanism is wrong and
-  the next suspect is shared state across the two projects rather than
-  module-resolution latency. Raised 2026-08-15 while closing Slice 3.8.
-  Separately and still open: a git worktree with a symlinked `node_modules`
-  cannot run the storybook project at all (the addon setup file 404s outside
-  the vite root), which blocks every reviewer working from a worktree.
 - **`patches/js-tiktoken.patch` is load-bearing for Android and nothing
   fails if it is dropped.** `js-tiktoken`'s `Tiktoken` constructor stages
   the decompressed BPE ranks in a plain object before copying them into
