@@ -804,31 +804,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cannot build against the unqualified promise. Surfaced during Slice
   3.5 planning (2026-08-08), sharpened during Task 15 (2026-08-09),
   budgets verified 2026-08-09.
-- **`distributeQueryVectors` assumes a short embed result dropped its
-  trailing texts, and that tolerance is deliberate.** It fills present
-  slots positionally (`out[i] = vectors[next++] ?? null`,
-  `lib/retrieval/queries.ts`), so a provider returning all-but-the-middle
-  would record Q3's vector as Q2's. `sims` would still be truthful about
-  _which slots hold a vector_, and blend replay stays exact because it
-  reconstructs from `sims` itself — so this does not threaten probe
-  parity.
-  **The leniency is designed, not an oversight (verified 2026-08-18).**
-  Two unit tests pin it (`queries.test.ts` — short arrays null the
-  unfillable slots, extra vectors are discarded) and an integration test
-  pins the consequence: `run.test.ts` → "scores against the surviving
-  queries when the embedder returns fewer vectors" asserts the blend
-  renormalizes over Q1+Q2 and gives `simBlend` 1 rather than counting the
-  absent slot as a zero. So the graceful-degradation half is intentional.
-  What is unverifiable is the _positional_ assumption underneath it —
-  that the dropped text was trailing. Making the count a
-  `VectorInvariantError` would remove the silent misattribution (and
-  `runRetrieval` already maps that error to a captured failure pointing
-  at the embedder, which is the right surface), but it **reverses the
-  designed tolerance** and fails all three tests. That is a decision
-  about which risk is preferred — confidently-wrong retrieval on a
-  middle-drop, versus a hard failure on any short result — not a
-  mechanical fix. Surfaced by the Slice 3.5 Task 1 review (2026-08-08),
-  reclassified 2026-08-18.
 - **`RankAllInput` carries no `capturedTokens`, so a whole-bundle probe
   replay is impossible.** `rankPerType` takes it; `rankAll` does not,
   and object-literal excess-property checking rejects passing it

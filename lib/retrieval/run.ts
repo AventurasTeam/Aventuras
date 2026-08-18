@@ -413,6 +413,23 @@ async function embedQueries(
     return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
   }
 
+  // distributeQueryVectors fills the present slots positionally, so a short
+  // result silently records a later query's vector under an earlier slot —
+  // truthfully, as far as `sims` can tell. lib/embedder's embedTexts already
+  // rejects a count mismatch, but RetrievalDeps.embedTexts is a structural
+  // type: this states the contract the layer depends on rather than inheriting
+  // it from whichever function happens to be bound.
+  if (embedded.vectors.length !== texts.length) {
+    return {
+      ok: false,
+      failure: {
+        reason: 'call',
+        detail: `query embed served ${embedded.vectors.length} of the ${texts.length} query vectors it was asked for`,
+        staleCount: null,
+      },
+    }
+  }
+
   // A provider may serve a dim other than the one requested (lib/embedder →
   // embedTexts): the sync wrote the served family while the KNN below reads
   // params.dim, and vec0 rejects the mismatched blob with an opaque error.
