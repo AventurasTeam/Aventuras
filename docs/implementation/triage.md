@@ -475,19 +475,6 @@ slice-planning gate forces its resolution before that slice is planned.
   until the next manual swap attempt" persistence decision. Owner: a future
   reader/settings slice. Surfaced by M3.1b Task 14 (2026-07-24).
 
-- **`resetStorySettings` drops creation-locked embedding fields.**
-  `lib/actions` reset flow rebuilds settings via `buildStorySettings` from
-  current app defaults, which (a) relabels `embedding_model_id` to the
-  current app default and (b) drops `effectiveDim` — both violate the
-  locked-at-creation invariant ([`retrieval.md → Matryoshka effective dim`](../memory/retrieval.md#matryoshka-effective-dim))
-  and would silently invalidate every stored vector without a re-index.
-  Pre-existing gap surfaced by M3.1b Task 11 review (2026-07-24); more
-  consequential now that `effectiveDim` is actually written. Fix belongs
-  with whoever next touches the reset flow: preserve the locked trio
-  (`embedding_model_id`, `embedding_provider_id`, `effectiveDim`) across
-  reset, or route a model change through the swap flow. Surfaced by M3.1b
-  Task 11 review (2026-07-24).
-
 - **Cross-model swap re-index has no E2E coverage.**
   The E2E suite exercises the staging engine via same-model re-index and the
   dialog wiring via relabel, but the `swap-reindex` dialog action's full
