@@ -612,16 +612,6 @@ slice-planning gate forces its resolution before that slice is planned.
   background-hiding on this stack is unsafe. Surfaced by M3.7b
   implementation (2026-07-31).
 
-- **`action_layer.story_settings_save_blocked` logs a localized
-  string.** The event's `reason` payload
-  (`components/story-settings/save-session.tsx`) carries translated
-  UI text, so it can't be aggregated or grepped across locales. The
-  producing section has a stable discriminant
-  (`validateDraft`'s `problem` field,
-  `'empty-label' | 'duplicate-label'`) and discards it at the channel
-  boundary; carrying a code alongside the reason would need the C7
-  contract widened. Surfaced by M3.7b implementation (2026-07-31).
-
 - **Twelve `pointerEvents="..."` prop-form call sites remain across
   `components/`.** React Native flags the prop form as deprecated in favour
   of `style.pointerEvents` on every render, so the warning is in every test
