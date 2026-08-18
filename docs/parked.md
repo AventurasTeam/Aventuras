@@ -2100,3 +2100,46 @@ scenario on record, and so the silent-abort gap is not rediscovered
 as a bug. Surfaced by M3.7a Task 8, 2026-07-25; rewritten 2026-07-31
 when the kind moved from `no-gate` to `hard-gate` and the original
 stranding scenario became unreachable.
+
+#### Nested dialog roles in Popover
+
+Every `Popover` renders two nested `role="dialog"` elements on web. The
+outer is Radix's own content element (`data-side`, `data-align`,
+`data-state`), which sets the role itself and carries no accessible
+name; the inner is the react-native-web `View` our props land on, which
+takes `role` from `PopoverContent`'s `accessibilityRole` default and
+carries the `aria-label`. The outer contains the inner. Confirmed by
+probe, 2026-08-18.
+
+Two consequences, differing in kind. Assistive technology meets an
+unnamed dialog wrapping the named one on every open, for every Popover
+consumer — that one is live, not conditional. Separately, an unfiltered
+`getByRole('dialog')` resolves to two elements and trips Playwright's
+strict mode and Testing Library's multiple-match error; that half is
+latent, since all six dialog queries in the repo are name-filtered.
+
+Neither obvious fix works. Dropping our `role` leaves the outer as the
+only dialog and it has no name, so every name-filtered dialog query
+breaks. The name cannot be moved onto the outer either: that element
+belongs to `@rn-primitives/popover`, whose `Content` forwards only
+positioning and callback props to Radix and spreads everything else
+onto the inner `View`. Verified against 1.4.0, and 1.5.2 is
+byte-identical, so a version bump does not close it.
+
+That leaves a `patches/` change so the caller's a11y props reach
+Radix's element, or a lighter web-only lift: the wrapper holds a ref to
+the inner node, whose `parentElement` is Radix's element, so an effect
+could carry the name up and drop the inner role. The lift is roughly
+eight lines in one file and avoids a patch to re-verify on every bump,
+but it assumes Radix's element is reliably the direct parent and must
+be web-guarded, since native has no Radix wrapper and needs both
+attributes to stay on our `View`. Neither option is verified. No
+consumer passes `accessibilityRole="menu"`, so every Popover today is
+the same dialog-on-dialog shape.
+
+Parked as accepted for v1 rather than dissolved: the degradation is
+real, but it costs announcement quality rather than function. Revisit
+on a deliberate a11y pass, on any report from real assistive-technology
+use, or the first time someone needs an unfiltered dialog query. Raised
+2026-08-15 by the Slice 3.8 Task 5 and Task 7 reviews, diagnosed and
+parked 2026-08-18.
