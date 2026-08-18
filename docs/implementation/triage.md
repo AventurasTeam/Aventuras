@@ -29,34 +29,6 @@ slice-planning gate forces its resolution before that slice is planned.
   re-verified on every ORT-RN bump until they land upstream. Decide whether to
   file them against microsoft/onnxruntime. Surfaced by M3.1a review
   (2026-07-21).
-- **Story settings has no unset affordance for optional keys.**
-  `updateStorySettings` ignores `undefined`-valued patch keys, so an
-  explicit `undefined` reads as "leave untouched" rather than "clear
-  this key". The three optional fields in
-  [`stories.settings`](../data-model.md#story-settings-shape) —
-  `embedding_swap_target`, `embedding_provider_id`, `effectiveDim` —
-  therefore have no clear path through the action. Nothing reads or
-  writes them today, so nothing regresses; but
-  [Slice 3.1b](./milestones/03-memory-floor/slices/01b-embedder-lifecycle.md)
-  clears `embedding_swap_target` atomically at its swap phase-2 commit
-  and will need an explicit affordance (a `null` sentinel, or a
-  dedicated clear action). The shape is already specced:
-  [`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux)
-  writes that commit as
-  `UPDATE stories SET settings = jsonb_remove(settings, '$.embedding_swap_target')`.
-  Suggested shape is a `StorySettingsPatch` type distinct from
-  `Partial<StorySettings>`, widening those three keys to `T | null`
-  with `null` meaning clear and `undefined` still meaning leave
-  untouched — deliberately left to 3.1b, which owns the semantics and
-  is the only consumer. Nullable fields are unaffected — the filter
-  drops only `undefined`, so `null` still writes. Resolved for the
-  swap flow 2026-07-24 by dedicated raw json ops in
-  `lib/db/stories/settings-ops.ts` (`json_set`/`json_remove`, committed
-  atomically with vec0 ops); the swap flow never routes through
-  `updateStorySettings`, so the `StorySettingsPatch` widening remains
-  unneeded until some other writer needs a clear affordance through the
-  action layer. Surfaced by M3.11 Task 1 (2026-07-22), scoped to 3.1b
-  2026-07-22.
 - **`compositeText` space-joins fields, diverging silently from its
   spec.** `lib/db/embeddings/source-hash.ts:104` joins embedded fields
   with a space. `.impl-plans/M03-01a-embedder-core.md:187` specified
@@ -77,43 +49,6 @@ slice-planning gate forces its resolution before that slice is planned.
   visible, the clean split is to hash a NUL-joined composite and embed
   a space-joined one, which also decouples the two uses. Needs the
   M3.1a owner. Surfaced by M3.11 Task 4 review (2026-07-22).
-- **The unsaved-changes guard lives in a single-domain folder.**
-  [`save-sessions.md → Navigate-away guard`](../ui/patterns/save-sessions.md#navigate-away-guard--global-intercept)
-  specifies the intercept as **global** — "same modal, same copy, same
-  actions across every surface that uses the save-session pattern" —
-  but M3.11 shipped `UnsavedChangesDialog` under
-  `components/story-settings/`, a single-domain folder, with its copy
-  in the `storySettings` i18n namespace. World, Plot, App Settings,
-  the Vault calendar editor, and the chapter-timeline cards all
-  inherit the same pattern and would have to reach across domains or
-  duplicate it. Taxonomy-correct home is `components/compounds/`, with
-  the four `save.unsaved*` keys moving to `common`. Deliberately
-  deferred in M3.11 rather than churning the route's import path for a
-  surface with no second consumer yet; the move is a `git mv` plus a
-  key relocation whenever the second guard lands. Surfaced by M3.11
-  Task 6 (2026-07-22).
-- **Story Settings section `id` has no uniqueness guard, and same-tab
-  siblings tie on `order`.** `save-session-state.ts` sorts sections by
-  `order`, tie-breaking on `id.localeCompare`. `order` now derives
-  from the route's tab map (`storySettingsTabOrder`), so a tab
-  insertion can no longer desync it — but two sections sharing a tab
-  still tie, and the tie-break is alphabetical by internal slug,
-  unrelated to on-screen position, so the save bar lists same-tab
-  siblings in the wrong order with nothing looking broken. Separately,
-  `id` uniqueness is an unstated invariant, and the two helpers
-  disagree about duplicates in a way that hides the symptom:
-  `upsertSection` matches with `findIndex`, so a second registrant
-  overwrites the first's slot rather than both surviving, while
-  `removeSection` filters _every_ match, so one section unmounting
-  takes its twin's dirty state with it. The result presents as "the
-  save bar forgot my edits", not as a visible duplicate. **Partly
-  closed by M3.11 review:** `attach`'s cleanup is now identity-checked,
-  so a twin unmounting no longer detaches the survivor's callbacks, and
-  `SectionDirtyState` carries `tab` rather than a raw `order`. The
-  `__DEV__` collision guard also landed: `attach` throws on a duplicate
-  `id` (2026-07-23, 281c9a2a). What remains is only the intra-tab rank
-  for same-tab siblings. Surfaced by M3.11 Task 4 review (2026-07-22),
-  narrowed 2026-07-22 and 2026-08-18.
 - **`AppActionsMenu`'s Ctrl-K is not focus-gated.** The reader and
   Story Settings both mount `AppActionsMenu`, and expo-router's Stack
   keeps the pushed-under screen alive — so with Story Settings open
@@ -217,35 +152,6 @@ slice-planning gate forces its resolution before that slice is planned.
   so it isn't an obvious config split. Mechanism unresolved; worth ten
   minutes with `pnpm storybook` open. Surfaced by M3.7a Task 9
   (2026-07-26).
-- **A typed `PipelineInputMap` via declaration merging is the shape to
-  reach for once a second pipeline needs caller inputs.**
-  `suggestion-refresh` is the first pipeline kind to give a phase
-  a caller-supplied parameter (`refreshGuidance`), and
-  it rides the base `PhaseContext.inputs?: unknown`
-  (`lib/pipeline/types.ts`) narrowed by its own type guard
-  (`readRefreshInput` in `lib/pipeline/definitions/suggestion-refresh.ts`)
-  rather than a typed per-kind context. That's the right amount of
-  machinery for one consumer. `lib/actions/action-map.ts`'s
-  `PipelineActionMap` already establishes the declaration-merging idiom
-  this repo uses for the analogous per-domain-additive problem; a
-  `PipelineInputMap` keyed by pipeline kind is the natural generic seam
-  once a second pipeline kind needs its own caller inputs. Not needed
-  yet — recorded so the next consumer doesn't have to rediscover the
-  idiom. Surfaced by M3.7a Task 7 (2026-07-25).
-- **`lib/actions/entities/register.ts` carries the same null-flattening
-  shape that produced this slice's undo defect, but lands on the safe
-  side of it.** Task 7 fixed a real bug in
-  `lib/actions/story-entries/register.ts`: a field-wise undo partial
-  can't express "this column was NULL," so reversing onto a NULL
-  `metadata` produced an unparseable blob. `entities/register.ts` has
-  the analogous shape for entity `state`, but its flattened default is
-  a schema-valid empty object rather than an invalid one, so undo there
-  restores an empty-but-parseable `state` rather than breaking the next
-  read — and a NULL `state` row is only reachable via legacy import or
-  a manual DB edit, not any path this slice touches. Deliberately left
-  alone; recorded so the asymmetry with `story_entries.metadata` is a
-  known, chosen difference rather than an oversight the next reader
-  "fixes" into inconsistency. Surfaced by M3.7a Task 7 (2026-07-25).
 - **The reversal barrier (`awaitRunTerminal(kind, 'cancel')`) is
   specified in `generation-pipeline.md` but never invoked by any
   reversal path, and `applyDeltaAction` never consults
@@ -275,26 +181,6 @@ slice-planning gate forces its resolution before that slice is planned.
   (`story-settings-defaults.ts → buildStorySettings`) rather than a defect,
   but it means existing users see nothing new until 3.7b ships, and nothing
   records that today. Surfaced by the M3.7a whole-slice review (2026-07-26).
-
-- **Cross-model swap re-index has no E2E coverage.**
-  The E2E suite exercises the staging engine via same-model re-index and the
-  dialog wiring via relabel, but the `swap-reindex` dialog action's full
-  cross-model path is uncovered: the harness's second model is an id-copy of
-  MiniLM, and a synthetic id fails catalog dim resolution, while real
-  cross-model coverage needs the 768-dim catalog model (~330 MB) downloaded
-  per CI run. Unit coverage: the engine's cross-model matrix in
-  `lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
-  catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
-  Task 12 (2026-07-24).
-
-- **Staleness pill can stay lit for stale rows on non-open branches.**
-  The drain worker warms only the open branch while the pill's mount
-  refresh counts story-wide; a story with stale embeddable rows on a
-  non-open branch keeps a lit pill the drain never clears (the blocking
-  sync stage still covers correctness on read; `Re-index this story now`
-  clears it). Cosmetic-only; resolve if per-branch status or a
-  story-wide drain scope lands. Surfaced by M3.1b final review
-  (2026-07-25).
 
 - **`buildGenerationContext` should own the store reads, not receive a
   finished dataset.** The planned shape is a unified **data source**: call
@@ -370,17 +256,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cycle with `lib/embedder`, which is the thing to check first. No M3
   slice owns this. Surfaced by a 2026-08-01 read of the folder.
 
-- **Background content behind an open `AlertDialog` is not
-  `aria-hidden`.** Contrary to the usual Radix `hideOthers`
-  assumption, an E2E locator scoped only by role matched both the
-  save bar's Discard button and the unsaved-changes dialog's Discard
-  button while the dialog was open — confirmed by an actual run
-  (`e2e/locators/story-settings.ts`). Fixed in the spec by scoping
-  through the dialog, but the root cause (portal nesting?) was never
-  investigated, and any future locator or a11y assumption about
-  background-hiding on this stack is unsafe. Surfaced by M3.7b
-  implementation (2026-07-31).
-
 - **Twelve `pointerEvents="..."` prop-form call sites remain across
   `components/`.** React Native flags the prop form as deprecated in favour
   of `style.pointerEvents` on every render, so the warning is in every test
@@ -395,15 +270,6 @@ slice-planning gate forces its resolution before that slice is planned.
   the reader tooltip) where nothing tests pointer behaviour — so this wants
   its own change with a look at each overlay, not a drive-by regex. Split
   out of the save-bar entry 2026-08-18.
-- **The save bar's invalid-reason notice is not tab-qualified.**
-  `computeSnapshot` (`components/story-settings/save-session-state.ts`)
-  reports the first dirty-and-invalid section in rail order, and the
-  bar lists dirty fields from every tab — so once M4.4 adds more
-  sections, a user on one tab can be shown a blocking reason sourced
-  from another with nothing indicating where to go. Moot at one
-  section; `{ tab, reason }` would be a single optional field on the
-  existing `SaveSessionSnapshot` type. Surfaced by M3.7b
-  implementation (2026-07-31).
 
 - **The two suggestion-emission macros diverge on the worked
   example, so the first category is privileged on one emission path
@@ -432,31 +298,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this exemplar is the only place list position does real work.
   Surfaced while reviewing the reorder affordance's justification
   after M3.7b (2026-08-01).
-- **Q3's dialogue signal mis-pairs across unbalanced quotes.**
-  `lib/retrieval/prose-extract.ts` finds quoted spans over the whole
-  narrative entry (needed, because a quote legitimately opens in one
-  sentence and closes in a later one) and awards
-  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)'s
-  Medium "dialogue" weight to any sentence overlapping a span. On
-  well-formed prose this is correct. On an **unclosed** opener it
-  mis-pairs: that opener binds to the _opening_ quote of the next
-  speech, so the pure narration between them collects a spurious +2,
-  and every subsequent quote in the entry is off by one. Measured:
-  `'"Run, she said. He left the room. "Wait." Done here.'` yields one
-  span covering the first two sentences, flagging `He left the room.`
-  as dialogue. Two things bound the damage — a lone stray `"` with no
-  later quote produces **no** span at all (it does not swallow the rest
-  of the entry), and the multi-paragraph dialogue convention (each
-  paragraph opening a quote, only the last closing it) happens to flag
-  correctly. LLM narrative does emit unbalanced quotes, so this is
-  reachable. A stateful open-quote tracker was considered and rejected
-  during M3.4 as needing its own pairing and nesting logic per quote
-  style; any regex pairing degrades on unbalanced input, and the
-  shipped version is strictly better than the per-sentence one it
-  replaced, which lost the signal entirely whenever a quote spanned a
-  sentence break. Worth revisiting only if probe captures show the
-  dialogue weight firing on obvious narration. Surfaced by M3.4 Task 8
-  review (2026-08-02).
 - **`loadHappeningRows`' OR-ed predicate cannot use an index.**
   `lib/retrieval/source-rows.ts` filters happenings with
   `branch_id = ? AND (id IN (...) OR occurred_at_entry_id IN (...))`.
@@ -527,41 +368,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cannot build against the unqualified promise. Surfaced during Slice
   3.5 planning (2026-08-08), sharpened during Task 15 (2026-08-09),
   budgets verified 2026-08-09.
-- **The probe browse route decodes every payload in the story to
-  render a list that shows none of them.** `capturesForStoryQuery`
-  selects `pc.payload`, `decodeCaptures` gunzips and `JSON.parse`s all
-  of them, and `app/dev/probe-captures.tsx` retains the lot — while the
-  list rows render only column data (`id`, `branch_id`, `capture_mode`,
-  `payload_size`, `failure_reason`). Harmless at light-capture scale
-  (~3-6 kB each, measured on a real dev story), but a deep capture runs
-  ~18 MB uncompressed at dim 768 on a scale-assumption pool, and the
-  slice's own manual AC asks for deep captures to be browsed. Failure
-  is self-trapping: Delete is unreachable without loading first. Fix is
-  a payload-free list query plus decode-on-View, which also moves
-  corruption detection onto the specific row. Deferred as latent.
-  Surfaced by the Slice 3.5 review (2026-08-09).
-- **The desktop-Popover / phone-Sheet tier wrap is written twice.**
-  `components/wizard/ai-assist.tsx` and
-  `components/ui/searchable-overlay-list.tsx` each carry the same
-  phone branch — a single `View` wrapping the trigger plus a
-  `Sheet`, with its own copy of the reasoning for why the wrap
-  exists (the `@rn-primitives/dialog` Root renders a real portaled
-  sibling while closed, so a Fragment leaks two layout children into
-  the consumer's row). Only the phone half is a genuine duplicate:
-  the desktop halves legitimately differ, because
-  `SearchableOverlayList` drives raw `PopoverPrimitive` for a
-  controlled-open bridge and trigger-width matching that the shared
-  `Popover` wrapper does not support, so unifying that half would
-  either bloat the wrapper or strip its escape hatches. The drift
-  cost is already demonstrated rather than hypothetical: the preset
-  browser's first commit diverged from the assist component's
-  already-correct trigger-labelling pattern and needed a follow-up
-  fix to re-derive it — it has since been rebuilt on
-  `SearchableOverlayList` and no longer carries a copy, which is why
-  this counts two rather than three. Extract a small shared
-  phone-wrap helper when a third caller appears, or the next time
-  both need the same change in lockstep — not before. Surfaced by
-  the Slice 3.6a Task 8 review (2026-08-10).
 - **`validateRegistry` cannot catch a template using an undeclared
   variable.** It checks two things — every `TemplateId` has a
   `TEMPLATE_GROUPS` mapping, and every name in `DISPLAY_GROUPS`
@@ -615,17 +421,6 @@ on hover`; the shipped rows render label and tagline only, so the
   cycle arithmetic), which took the same 50-row walk from 24.0 ms to
   3.4 ms — re-measure before treating the Liquid parse as the small half.
   Raised 2026-08-15 by the Slice 3.8 Task 2 review.
-- **`worldTime === 0` is overloaded: story origin and flashback
-  sentinel.** The opening entry and every user action that inherits
-  from it sit at 0, `lib/calendar/render.ts` special-cases 0, and the
-  classifier emits 0 for flashbacks. The monotonicity check therefore
-  cannot see a genuine backwards jump that lands exactly on 0 — it is
-  indistinguishable from a flashback and stays unflagged.
-  `docs/ui/patterns/entry-card.md` prescribes this convention, so
-  Slice 3.8 implements it as specified; the note exists so the next
-  person to ask "why is this regression not warned about?" finds the
-  answer. Revisit if flashbacks ever get their own marker.
-  Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 - **A narrow story decorator silently detaches nodes captured in
   `play`, turning interaction assertions vacuous.** `FormRow` guesses
   `stacked` from `useTier()` (which reads the window: 1200 px in the
@@ -665,22 +460,6 @@ width }}` does, so a class-width decorator and a style-width
   read to `ReaderSurface` and pass it down, or give `EntryCard` a tier
   override prop defaulting to its own read. Raised 2026-08-15 by the
   Slice 3.8 Task 5 review.
-- **A BC-style origin renders every non-opening entry in the wrong
-  era.** `formatWorldTime` short-circuits at `worldTime === 0` and
-  renders the origin tuple directly, which is the only path that can
-  express a year below a tier's `startValue`. One second later the
-  normal path takes over, and `tupleToBaseUnits` cannot represent
-  `year < 1` for `earth-gregorian` (its loop `for (v = 1; v < -43;
-v++)` never runs), so the era is silently lost. Observed with origin
-  `{year: -43, month: 3, day: 15}`: `worldTime 0` renders
-  `"March 15, 44 BC 0:0"` and `worldTime 1` renders
-  `"March 15, 1 AD 0:0"` — a hard discontinuity one second past the
-  origin. The zero short-circuit is not the bug, it is the mask; the
-  real fix is in `tupleToBaseUnits` / `baseUnitsToTuple`, which have no
-  representation for values below a tier's `startValue`. Nothing in v1
-  ships a BC origin, and Slice 3.8 deliberately left the guard intact
-  rather than widening its scope. Raised 2026-08-15 by the Slice 3.8
-  calendar fix.
 - **The reader route never uses `runAction`, and nothing catches a
   rejected action.** `lib/utils.ts` exports `runAction` specifically to
   replace bare `void action(...)` — it logs the rejection and raises a
@@ -762,15 +541,3 @@ v++)` never runs), so the era is silently lost. Observed with origin
   element-wise salvage pattern to copy already exists at
   `decodeCaptures` in `lib/probe/read.ts`, which isolates a corrupt
   row instead of failing the list. Raised 2026-08-14.
-- **`text-transparent` was never proven to apply to `Text` on Android.**
-  The composer's lint overlay stacks an invisible copy of the whole draft
-  over the input to carry underlines, and it was the codebase's only user
-  of `text-transparent`. On Android that copy painted, showing as doubled
-  glyphs. The overlay now renders only when lints exist, which is never
-  on native (harper needs WebAssembly, Hermes has none), so nothing
-  depends on the class there today and the visible bug is gone — but the
-  cause was not diagnosed on-device, only routed around. Anything that
-  later wants invisible native text (a native linter restoring this
-  overlay, a measurement mirror, a fade-through) must verify on hardware
-  that the class resolves rather than assuming parity with RN-Web, which
-  handles it correctly. Raised 2026-08-17.
