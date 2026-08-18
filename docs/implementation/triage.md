@@ -348,40 +348,6 @@ slice-planning gate forces its resolution before that slice is planned.
   to it is fixed (2026-08-18), but there is still no clean in-app route to
   a non-existent branch. Surfaced by the M3 E2E harness work (2026-07-24),
   narrowed by the coverage-expansion pass (2026-07-24).
-- **`PER_TURN_NARRATIVE`'s "Story so far" loop echoes each entry's raw
-  `content`, tags and all.** `lib/prompts/bundled/per-turn.ts`'s
-  `{{ entry.content }}` (inside the `recentEntries` loop) renders the
-  persisted `story_entries.content` column verbatim; nothing strips a
-  trailing `<state>` or `<suggestions>` block before it's re-injected —
-  those blocks are stripped only for display, by `stripTrailingBlocks`
-  in `entry-card.tsx`, which never touches what's stored. So every
-  prior AI turn's trailing block(s) re-enter the next prompt as if they
-  were narrative prose. Pre-existing for `<state>`; this slice's
-  `<suggestions>` block is a second instance of the same leak.
-  Stripping in the `recent` filter that windows entries into
-  `recentEntries` would fix it but changes what already-merged piggyback
-  behavior sends the model, so it needs an owner and a token-cost
-  measurement before anyone touches it. Surfaced by M3.7a Task 1
-  (2026-07-25). **M3.4 added two more consumers of the same raw
-  column, both in retrieval.** (1) Q3's prose extract runs over
-  `lastNarrative.content`, and the tail survives sentence splitting as
-  a single pseudo-sentence — `splitSentences` needs terminator plus
-  whitespace, which `</summary>` and `</state>` never provide — that
-  scores above real narrative (measured 5 against 0–3 on the shipped
-  scorer, since the `<summary>` line names entities and the XML
-  attribute quotes register as dialogue). One of Q3's four slots is
-  spent on tags, opaque ids, and suggested actions the story did not
-  take, which is what
-  [`retrieval.md → Q3`](../memory/retrieval.md#q3-heuristic-prose-extract)
-  exists to avoid. (2) Layer-A same-name suppression scans
-  `composePromptBuffer(...).content`, so a reader clicking a
-  suggestion that names a staged entity suppresses that entity from
-  the pool on the very turn it is introduced — the "who is this
-  person" failure the structural floor exists to prevent, arriving
-  through the mechanism meant to prevent collisions. Stripping at the
-  caller fixes all three consumers at once; the retrieval module
-  cannot do it itself, since it has no way to know which tags a pack
-  emits. Surfaced by the M3.4 review (2026-08-06).
 - **`runPreflight` omits `storyModels` from the `ResolveModelConfig` it
   builds, so a story-level model override can't satisfy pre-flight even
   though the runtime call resolves fine.** `lib/pipeline/runtime/preflight.ts`
