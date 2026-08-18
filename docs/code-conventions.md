@@ -200,6 +200,19 @@ bar). Coverage settings live exclusively in `vitest.config.ts` —
 CLI `--coverage.*` dot-overrides crash the storybook project's
 preset loader, so never pass them; change the config instead.
 
+**Give `beforeEach` a block body.** Vitest treats a **callable**
+return value from `beforeEach` as a teardown callback and invokes it
+after each test. A concise arrow hides one: `mockReset` / `mockClear`
+return the mock for chaining, and a mock is callable — so
+`beforeEach(() => someMock.mockReset())` runs the mock's own
+implementation after every test. When that implementation throws, the
+throw is reported as a test failure whose stack points at the `throw`
+statement, reading exactly like "the code under test mishandles
+errors" while the code is fine. Returning a non-callable is harmless
+(`vi.useFakeTimers()` and `vi.clearAllMocks()` both return `vi`),
+which is why the trap is rare enough to be surprising. Write
+`beforeEach(() => { someMock.mockReset() })`.
+
 End-to-end (Playwright + Electron) coverage of the cross-subsystem
 seams is a separate layer with its own spec:
 [`testing.md`](./testing.md).

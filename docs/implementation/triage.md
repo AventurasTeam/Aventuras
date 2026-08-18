@@ -1108,16 +1108,6 @@ v++)` never runs), so the era is silently lost. Observed with origin
   hold one. Decide whether resolution is meant to be registry-only,
   DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
   Slice 3.8 Task 6 implementation.
-- **Vitest treats a value returned from `beforeEach` as a teardown
-  callback.** A concise arrow body — `beforeEach(() => mock.mockReset())`
-  — implicitly returns the mock, which Vitest then _invokes_ after each
-  test. When the mock's implementation throws, the throw surfaces as a
-  test failure whose stack points at the `throw` statement, reading
-  exactly like "the code under test does not handle errors" when the
-  code is fine. Cost real debugging time during Slice 3.8. Use a block
-  body in `beforeEach`. Worth a line in the testing conventions or a
-  lint rule, since the failure mode actively misdirects. Raised
-  2026-08-15 by the Slice 3.8 Task 6 fixes.
 - **Post-3.8 tidy in the reader and UI layers.** Four small items, none
   behavioural. The reader route still uses bare `void action(...)` on
   `handleCommitEdit` despite `runAction` existing in `lib/utils.ts`
