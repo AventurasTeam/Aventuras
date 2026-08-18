@@ -754,6 +754,66 @@ inherits.
 author it as 2–3 slices so the audit spreads across contributors
 instead of serializing on one.
 
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Two are a11y-contract
+rather than visual, so M9.2's audit has to widen past glyphs and
+spacing to own them — or they need a slice of their own.
+
+- **M9.2 — `disabledReason` never reaches the accessibility tree on web.**
+  `Button`, `SwitchRow`, `swap-dialog`'s `CandidateRow` and
+  `ColorPicker` all pass the reason to `accessibilityHint`, which RN
+  Web drops outright — probed in Chromium, a disabled `Button` carries
+  no `title`, `aria-describedby` or `aria-label` of its own. The web
+  tooltip works (the `ReasonTooltip` ancestor is reachable by
+  hit-test from every point on the control, verified), but an ancestor
+  `title` is not a dependable accessible-description source, so screen
+  reader users get "dimmed and unavailable" with no reason. Button's
+  own prop doc claims both channels; on web only the tooltip half is
+  true. RN Web does forward `aria-describedby` (verified), so the fix
+  is a visually-hidden reason node plus `useId` in the shared wrapper —
+  modest, but it needs a hidden-text primitive the repo lacks and it
+  changes a shared UI contract, so it wants a design pass rather than a
+  drive-by. Cross-cutting: every `disabledReason` consumer, present and
+  future. Predates M3.7b; surfaced by the M3.7b review (2026-08-01).
+- **M9.2 — Emoji stand in for icons across the app; sweep and replace.**
+  User-facing chrome carries literal emoji and glyphs where the
+  design system has an icon primitive — `✨` prefixes every AI-assist
+  heading and several trigger labels, `⭐ Set as lead` and the
+  `▼ More options` / `▼ Visual` disclosures are specced as glyphs in
+  `wizard.md`, and arrows like `→` are baked into locale strings
+  (`common:calendarPicker.manageInVault`, and entries across
+  `settings`, `embedder`, `landing`, `reader`). Emoji render
+  inconsistently across platforms and font stacks, cannot be themed
+  or sized with the rest of the chrome, and land inside translatable
+  strings where they are not translatable content. Sweep `components/`,
+  `app/`, and `locales/` together: replace with `Icon`/`IconAction`
+  where the glyph is decoration or an affordance, keep it only where
+  it is genuinely textual. Canon in `wizard.md` specifies some of
+  these as glyphs, so amending the doc is part of the work rather
+  than a follow-on. Raised 2026-08-11.
+- **M9.2 — `Select`'s dropdown trigger drops the current value from its
+  accessible name once `label` is set.** `@rn-primitives/select`
+  forces `role="button"` on the web trigger, overriding Radix's
+  `combobox`, so the element carries no value semantic at all — the
+  selected option reaches assistive tech only as the trigger's text
+  content. Adding `aria-label` (the fix for triggers that renamed
+  themselves on every pick) then suppresses that content: the month
+  picker in `tier-tuple-input.tsx` announces "Month, button,
+  collapsed" and never "January". Neither state is complete —
+  before the label there was a value and no field identity, after it
+  there is identity and no value. Reviewed and deliberately kept as
+  identity-only: the value is one open away (Radix renders options
+  with `role="option"` / `aria-selected` and focuses the selected one),
+  while identity is unrecoverable because `FormRow` renders its label
+  as plain `Text` with no `htmlFor` / `aria-labelledby`. The real fix
+  is a `combobox` role on the trigger, where content is read as the
+  value beside the label. Plausible-but-unverified path: the web build
+  destructures `role: _role` out of the trigger's props and hardcodes
+  `role='button'`, so a `patches/` one-liner deleting that destructure
+  would let a caller-supplied `role="combobox"` through — nobody has
+  applied or tested it. Applies to every `dropdown`-mode `Select` that
+  carries a `label`. Raised 2026-08-13.
+
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through
 backup / export).
