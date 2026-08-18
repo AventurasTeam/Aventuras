@@ -593,14 +593,24 @@ slice-planning gate forces its resolution before that slice is planned.
   M3.7b's section lives in, so M4.4 completing that grouping is the
   natural owner. Surfaced by M3.7b implementation (2026-07-31).
 
-- **The Generation tab renders two `role="status"` live regions at
-  once.** `@dnd-kit` mounts its own inside
-  `SuggestionCategoriesEditor`'s web branch, while `SaveBar`
-  (`components/compounds/save-bar.tsx`) uses that role for its
-  unsaved-changes notice — so a screen reader sees two competing
-  status regions, and role-based queries against the save bar are
-  ambiguous. Surfaced by M3.7b implementation (2026-07-31).
-
+- **`SaveBar` makes the whole bar a live region, and the Generation tab
+  then carries two.** `@dnd-kit` mounts its own `role="status"` inside
+  `SuggestionCategoriesEditor`'s web branch — legitimate, that is how it
+  announces drag position. The other one is ours and is the questionable
+  half: `components/compounds/save-bar.tsx` puts `role="status"` plus
+  `aria-live="polite"` on the bar's **outer container**, so the Save and
+  Discard buttons sit inside a live region and their disabled-state flips
+  are announced along with the unsaved-changes count. The narrower shape
+  is to move both attributes onto the message group — the dot-plus-count
+  cluster, which is the only part whose text actually changes — leaving
+  dnd-kit's as the sole other region and making a role-based query for the
+  notice unambiguous. **Not a drive-by:** it changes a shared compound's
+  a11y contract for every save surface, and it breaks
+  `authoring-aids-panel.stories.tsx`'s `findSaveBar`, which anchors on
+  `discard.closest('[role="status"]')` precisely because the bar's own
+  role was ambiguous — Discard would no longer be inside the region.
+  Wants an a11y decision, not a mechanical edit. Surfaced by M3.7b
+  implementation (2026-07-31), narrowed 2026-08-18.
 - **Background content behind an open `AlertDialog` is not
   `aria-hidden`.** Contrary to the usual Radix `hideOthers`
   assumption, an E2E locator scoped only by role matched both the
