@@ -1,6 +1,6 @@
 import type { WizardLoreDraft, WizardWorkingState } from '@/lib/db'
 
-function blank(value: string): boolean {
+export function blank(value: string): boolean {
   return value.trim().length === 0
 }
 

@@ -31,7 +31,7 @@ import {
   mergePages,
   type AssistListItem,
   type DedupeKey,
-} from './assist-list-logic'
+} from './ai-assist-logic'
 
 const GUIDANCE_MAX_LENGTH = 200
 

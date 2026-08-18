@@ -281,11 +281,11 @@ export const EachFieldsAssistSeamsRouteToItsOwnField: Story = {
       assist={{
         resolveModelId: () => MODEL_ID,
         genre: okRun(GENRE_RUN),
-        genreRefine: okRefine(GENRE_REFINE),
+        refineGenre: okRefine(GENRE_REFINE),
         tone: okRun(TONE_RUN),
-        toneRefine: okRefine(TONE_REFINE),
+        refineTone: okRefine(TONE_REFINE),
         setting: okRun(SETTING_RUN),
-        settingRefine: okRefine(SETTING_REFINE),
+        refineSetting: okRefine(SETTING_REFINE),
       }}
     />
   ),

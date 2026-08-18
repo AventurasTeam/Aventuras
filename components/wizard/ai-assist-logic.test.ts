@@ -8,7 +8,7 @@ import {
   nameKey,
   type AssistListItem,
   type DedupeKey,
-} from './assist-list-logic'
+} from './ai-assist-logic'
 
 const item = (name: string): AssistListItem => ({ name, detail: `${name} detail`, payload: null })
 

@@ -20,7 +20,7 @@ import { wizardStore } from '@/lib/stores'
 import { GENRE_PRESETS, presetValue, TONE_PRESETS } from '@/lib/wizard'
 
 import { AiAssist } from './ai-assist'
-import { nameKey } from './assist-list-logic'
+import { nameKey } from './ai-assist-logic'
 import { LoreList } from './lore-list'
 import { PresetBrowser } from './preset-browser'
 import {
@@ -53,11 +53,11 @@ import {
 export type StepWorldAssistSeams = {
   resolveModelId?: () => string | null
   genre?: WizardAssistRun<GenreAssistValue>
-  genreRefine?: WizardAssistRefine<GenreAssistValue>
+  refineGenre?: WizardAssistRefine<GenreAssistValue>
   tone?: WizardAssistRun<ToneAssistValue>
-  toneRefine?: WizardAssistRefine<ToneAssistValue>
+  refineTone?: WizardAssistRefine<ToneAssistValue>
   setting?: WizardAssistRun<SettingAssistValue>
-  settingRefine?: WizardAssistRefine<SettingAssistValue>
+  refineSetting?: WizardAssistRefine<SettingAssistValue>
   lore?: WizardAssistListRun<LoreAssistValue>
 }
 
@@ -138,7 +138,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             ariaLabel={t('wizard:world.genre.assist')}
             guidancePlaceholder={t('wizard:world.genre.guidance')}
             run={assist?.genre ?? runGenreAssist}
-            refine={assist?.genreRefine ?? refineGenreAssist}
+            refine={assist?.refineGenre ?? refineGenreAssist}
             committed={definition.genre}
             resolveModelId={resolveModelId}
             result="prose"
@@ -180,7 +180,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             ariaLabel={t('wizard:world.tone.assist')}
             guidancePlaceholder={t('wizard:world.tone.guidance')}
             run={assist?.tone ?? runToneAssist}
-            refine={assist?.toneRefine ?? refineToneAssist}
+            refine={assist?.refineTone ?? refineToneAssist}
             committed={definition.tone}
             resolveModelId={resolveModelId}
             result="prose"
@@ -207,7 +207,7 @@ export function StepWorld({ onSetupAssist, assist }: StepWorldProps) {
             ariaLabel={t('wizard:world.setting.assist')}
             guidancePlaceholder={t('wizard:world.setting.guidance')}
             run={assist?.setting ?? runSettingAssist}
-            refine={assist?.settingRefine ?? refineSettingAssist}
+            refine={assist?.refineSetting ?? refineSettingAssist}
             committed={{ setting: definition.setting }}
             resolveModelId={resolveModelId}
             result="prose"

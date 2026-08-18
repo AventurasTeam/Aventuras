@@ -926,15 +926,6 @@ on hover`; the shipped rows render label and tagline only, so the
   which is exactly the pick the replace-confirm exists to protect.
   Either build the hover preview or amend canon. Surfaced by the
   Slice 3.6a whole-slice review.
-- **Post-3.6a tidy in `components/wizard/`.** Three small
-  consistency items, none behavioral: the refine seams are named
-  `refineOpening` / `refineDescription` in one file and
-  `genreRefine` / `toneRefine` / `settingRefine` in another, and
-  3.6b has to pick one; `blank()` is defined twice in the folder
-  (`step-world-logic.ts` and `lore-list.tsx`); and
-  `assist-list-logic.ts` breaks the folder's `<component>-logic.ts`
-  pairing convention since it belongs to `ai-assist.tsx`. Surfaced
-  by the Slice 3.6a whole-slice review.
 - **Emoji stand in for icons across the app; sweep and replace.**
   User-facing chrome carries literal emoji and glyphs where the
   design system has an icon primitive — `✨` prefixes every AI-assist
