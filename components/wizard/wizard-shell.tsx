@@ -43,10 +43,7 @@ const STEP_LABEL_KEYS = {
   5: 'wizard:steps.opening',
 } as const
 
-// rn-primitives-disabled lesson: className-based pointer-events-none is
-// unreliable on web; the inline style is the gate that actually blocks clicks.
 const STATIC_STYLES = {
-  pointerEventsNone: { pointerEvents: 'none' as const } satisfies ViewStyle,
   flex1: { flex: 1 } satisfies ViewStyle,
 }
 
@@ -79,7 +76,6 @@ function StepPill({ stepNumber, activeStep, showLabel, canJumpTo, onJump }: Step
       accessibilityState={{ disabled: !interactive, selected: state === 'active' }}
       disabled={!interactive}
       onPress={interactive ? () => onJump(stepNumber) : undefined}
-      style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
       className={cn(
         'h-control-xs flex-row items-center gap-1.5 rounded-full border px-2.5',
         state === 'active' ? 'border-fg-primary bg-fg-primary' : 'border-border-strong bg-bg-base',

@@ -1015,17 +1015,6 @@ slice-planning gate forces its resolution before that slice is planned.
   canon, not the code. Predates Slice 3.6a, which only extended the
   existing rule to step 3. Surfaced by the Slice 3.6a Task 11 review
   (2026-08-10).
-- **`StepPill`'s inline `pointerEvents: 'none'` is dead code.** The
-  `rn-primitives-disabled` gate was applied to
-  `components/wizard/wizard-shell.tsx`'s step pill, but the pill is a
-  plain RN-Web `Pressable`, not an `@rn-primitives` `asChild`
-  trigger — so there is no second Radix `onClick` bypassing the
-  disabled check, which that lesson's "Not universal" section names
-  as the required precondition. Proven by removing the style and
-  re-running all six `wizard-shell` stories green. Predates Slice
-  3.6a. Removing it is a two-line cleanup; the value is in not
-  leaving a gate that reads as load-bearing when nothing depends on
-  it. Surfaced by the Slice 3.6a Task 11 review (2026-08-10).
 - **Four assist result types are hand-redeclared beside their
   schema-inferred equivalents, and the inferred ones are dead.**
   `components/wizard/wizard-assist.ts` declares `LoreAssistValue`,
