@@ -79,10 +79,12 @@ function stateLines(block: ParsedStateBlock): string[] {
   const lines: string[] = []
 
   const scene = block.sceneEntities ?? []
-  if (scene.length > 0) lines.push(tag(STATE_TAGS.sceneEntities, scene.join(', ')))
+  if (scene.length > 0)
+    lines.push(tag(STATE_TAGS.sceneEntities, text(scene.join(', '), STATE_TAGS.sceneEntities)))
 
   const location = block.currentLocation?.trim()
-  if (location) lines.push(tag(STATE_TAGS.currentLocation, location))
+  if (location)
+    lines.push(tag(STATE_TAGS.currentLocation, text(location, STATE_TAGS.currentLocation)))
 
   if (block.worldTimeDelta !== undefined)
     lines.push(tag(STATE_TAGS.worldTimeDelta, String(block.worldTimeDelta)))
@@ -104,7 +106,11 @@ export function hasStateContent(block: ParsedStateBlock | undefined): boolean {
 }
 
 export function renderStateBlock(block: ParsedStateBlock): string {
-  return `<${STATE_ROOT_TAG}>\n${stateLines(block).join('\n')}\n</${STATE_ROOT_TAG}>`
+  const lines = stateLines(block)
+  // An empty root reads to the app's parser as a truncated block, not as
+  // "nothing to report" — the same reason stateLines omits empty inner tags.
+  if (lines.length === 0) return ''
+  return `<${STATE_ROOT_TAG}>\n${lines.join('\n')}\n</${STATE_ROOT_TAG}>`
 }
 
 export function renderSuggestionsBlock(items: SuggestionRef[]): string {
