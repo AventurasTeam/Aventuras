@@ -35,8 +35,12 @@ export async function startMockServer(
     void (async () => {
       const pathname = new URL(req.url ?? '/', 'http://localhost').pathname
 
+      // The control API is same-origin only (see control.ts); preflight is
+      // answered for the OpenAI-compatible surface the app calls cross-origin.
+      const isControl = pathname.startsWith('/api/')
+
       if (req.method === 'OPTIONS') {
-        res.writeHead(204, CORS_HEADERS).end()
+        res.writeHead(204, isControl ? {} : CORS_HEADERS).end()
         return
       }
 
@@ -57,7 +61,7 @@ export async function startMockServer(
           return
         }
 
-        if (pathname.startsWith('/api/')) {
+        if (isControl) {
           await handleControl(req, res, ctx, pathname)
           return
         }
@@ -74,7 +78,10 @@ export async function startMockServer(
         const detail = err instanceof Error ? (err.stack ?? err.message) : String(err)
         console.error('[mock-llm] request failed:', detail)
         if (!res.headersSent) {
-          res.writeHead(500, { ...CORS_HEADERS, 'content-type': 'application/json' })
+          res.writeHead(500, {
+            ...(isControl ? {} : CORS_HEADERS),
+            'content-type': 'application/json',
+          })
           res.end(JSON.stringify({ error: { message: detail } }))
         } else {
           res.end()

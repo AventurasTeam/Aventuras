@@ -19,7 +19,7 @@ const cannedResponseSchema = z.object({
   value: z.unknown(),
 })
 
-const laneSchema = z.object({
+export const laneSchema = z.object({
   mode: z.enum(['mock', 'passthrough']).default('mock'),
   upstreamId: z.string().nullable().default(null),
   responses: z.array(cannedResponseSchema).default([]),

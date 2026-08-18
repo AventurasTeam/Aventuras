@@ -7,14 +7,16 @@ import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/l
 
 import { readBody } from './completions'
 import { laneCatalog, type MockContext } from './context'
-import { CORS_HEADERS } from './respond/wire'
 import { NARRATIVE_LANE } from './routing'
 import { STRUCTURED_SHAPES } from './shapes'
-import { defaultState, flushState, upstreamSchema, type CannedResponse } from './state'
+import { defaultState, flushState, laneSchema, upstreamSchema, type CannedResponse } from './state'
 import { validateLaneValue } from './validate'
 
+// No CORS headers anywhere in this file: the panel is served from this same
+// origin, and the request log carries whole prompts — a page in another tab
+// must not be able to read it or re-arm a lane.
 function json(res: ServerResponse, status: number, value: unknown): void {
-  res.writeHead(status, { ...CORS_HEADERS, 'content-type': 'application/json' })
+  res.writeHead(status, { 'content-type': 'application/json' })
   res.end(JSON.stringify(value))
 }
 
@@ -55,7 +57,6 @@ function recordedValue(laneKey: string, served: unknown): unknown {
 
 function sendEvents(req: IncomingMessage, res: ServerResponse, ctx: MockContext): void {
   res.writeHead(200, {
-    ...CORS_HEADERS,
     'content-type': 'text/event-stream',
     'cache-control': 'no-cache',
     connection: 'keep-alive',
@@ -135,12 +136,24 @@ export async function handleControl(
 
     if (segments[2] === undefined && method === 'PUT') {
       const payload = await body()
+      // Merged into a candidate and validated whole before it touches the lane:
+      // an unchecked patch persists to state.json and the next boot refuses to
+      // load it, so the panel would break the server it configures.
+      const candidate: Record<string, unknown> = { ...lane }
       for (const field of ['mode', 'upstreamId', 'activeId'] as const) {
-        if (field in payload) Object.assign(lane, { [field]: payload[field] })
+        if (field in payload) candidate[field] = payload[field]
       }
       for (const group of ['sequence', 'delay', 'failure', 'stream'] as const) {
-        if (group in payload) Object.assign(lane[group], payload[group])
+        if (!(group in payload)) continue
+        const patch = payload[group]
+        candidate[group] =
+          typeof patch === 'object' && patch !== null && !Array.isArray(patch)
+            ? { ...lane[group], ...patch }
+            : patch
       }
+      const parsed = laneSchema.safeParse(candidate)
+      if (!parsed.success) return json(res, 400, { error: parsed.error.message })
+      Object.assign(lane, parsed.data)
       return commit()
     }
 
