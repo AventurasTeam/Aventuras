@@ -1722,6 +1722,17 @@ story_entries.metadata: {
     source: 'piggyback' | 'classifier' | 'refresh' // emission path that wrote this (diagnostic; dev-mode surfacing)
     refreshGuidance?: string                        // present when source === 'refresh' and the composer-partial was passed; persisted so reload faithfully shows refresh-influenced chips
   }
+
+  // System-entry error surface — app-authored, only on kind 'system'
+  systemFailure?: {
+    kind: string                    // open string, not an enum: the taxonomy spans pipeline errors, provider errors and refusals, and each side evolves on its own release cadence
+    failure?: string                // provider- or pipeline-supplied failure tag, when one was given
+    detail?: string                 // human-readable cause, rendered in the reader's error surface
+    submission?: {                  // the reversed user action's text, so Retry survives a restart
+      content: string
+      composerMode: string
+    }
+  }
 }
 ```
 

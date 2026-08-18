@@ -252,19 +252,6 @@ slice-planning gate forces its resolution before that slice is planned.
   dialog, or an in-app reload command that routes through
   `requestLeave`. Browsers are unaffected: they get the native
   `beforeunload` prompt. Surfaced by M3.11 review (2026-07-22).
-- **`systemFailure` is missing from the canonical entry-metadata
-  shape.** `entryMetadataSchema` (`lib/db/story-entries/entry-metadata.ts`)
-  carries a `systemFailure` object — `kind` / `failure` / `detail` /
-  `submission` — that appears nowhere in
-  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape),
-  nor anywhere else in that file. It backs the reader's system-entry
-  error surface and preserves the reversed user action's text so Retry
-  survives a restart. Confirmed as intentional and worth documenting
-  (2026-07-23) — the fix is adding it to the shape block with its
-  open-string rationale, not deleting the field. Surfaced while auditing
-  metadata editability during M3.2 review. Canonical edit — route through
-  a design / cleanup pass.
-
 - **`piggyback.md` understates the accepted new-location tolerance.**
   The `currentLocationId` row in
   [`piggyback.md → What piggyback writes`](../memory/piggyback.md) says a
