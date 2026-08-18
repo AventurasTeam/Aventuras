@@ -240,22 +240,6 @@ slice-planning gate forces its resolution before that slice is planned.
   dialog, or an in-app reload command that routes through
   `requestLeave`. Browsers are unaffected: they get the native
   `beforeunload` prompt. Surfaced by M3.11 review (2026-07-22).
-- **`piggyback.md` understates the accepted new-location tolerance.**
-  The `currentLocationId` row in
-  [`piggyback.md → What piggyback writes`](../memory/piggyback.md) says a
-  location introduced this turn that has no entity yet "leaves this field
-  unchanged (stale/null)… retrieval for that location is degraded for a
-  few turns." The staleness does not stay in that field: `apply.ts`
-  inherits the previous location and the computed bookkeeping then writes
-  it as `current_location_id` on every in-scene character, so entity rows
-  carry an affirmatively false location, not merely a missing one — and
-  the next turn's `wasInScene` comparison builds on it. The fix angle is
-  already parked
-  ([`parked.md → Early classifier trigger on new-entity introduction`](../parked.md#early-classifier-trigger-on-new-entity-introduction-introducednewrelevantentity)),
-  so this is purely a canon-accuracy edit: state the tolerance's real
-  blast radius so accepting it stays an informed decision. Surfaced
-  during M3.2 review 2026-07-23.
-
 - **A profile's `structuredOutput: 'force-on'` never reaches the
   provider.** The flag exists on the profile schema
   (`modelProfileSchema.structuredOutput`, `auto | force-on | force-off`)
