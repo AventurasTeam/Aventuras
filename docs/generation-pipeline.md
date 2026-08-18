@@ -366,7 +366,7 @@ template-rendering code.
 
 #### New-entity emission
 
-The classifier (or piggyback) creating a brand-new entity emits a
+The classifier creating a brand-new entity emits a
 full object — name, description, etc. — with **no `id` field**.
 Parse allocates the UUID. If the same response references the new
 entity again (e.g., new char appears in `<scene_entities>` AND in

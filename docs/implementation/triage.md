@@ -19,16 +19,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **`generation-pipeline.md → New-entity emission` "(or piggyback)"
-  parenthetical contradicts the memory write-set canon.** The section
-  opens "The classifier (or piggyback) creating a brand-new entity…", but
-  [`cadence.md → Concurrency`](../memory/cadence.md#concurrency) and
-  [`piggyback.md`](../memory/piggyback.md) give piggyback zero creation
-  rights — creation is classifier-only (disambiguation lives there by
-  design). Surfaced by the M3 promotion audit (2026-07-20). The
-  id-allocation mechanic the section describes is correct either way; the
-  fix is dropping or rewording the parenthetical. Canonical edit — route
-  through a design / cleanup pass, not a planning commit.
 - **Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
