@@ -434,6 +434,26 @@ reads work; M6.6 follows M6.1.
 M6.1 owns it and M6.6 sequences after, or authoring extracts the
 core as a pinned contract and M6.6 parallelizes too.
 
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Resolve with the slice
+each names.
+
+- **M6.1 — The fork-exclusion guard is structural and goes stale the moment
+  fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
+  not test the real behavior: `lib/probe/fork.test.ts` instead
+  source-scans `lib/**` for `probe_captures` references outside an
+  audited list, plus a direct query assertion that a sibling branch
+  stays empty. Neither catches the regression most likely to actually
+  happen — if M6.1 copies branches **generically** (iterating a manifest
+  or introspecting branch-scoped tables from the schema), the fork code
+  will never contain the literal `probe_captures`, the scan stays green,
+  and captures copy anyway. The manifest row now exists in
+  [`data-model.md → Branch model`](../data-model.md#branch-model), so
+  a generic copier has a canonical exclusion to read. **When M6.1 lands
+  branch fork, replace the structural scan with the both-sides
+  behavioral test** the slice AC originally described. Surfaced by the
+  Slice 3.5 Task 14 review (2026-08-09).
+
 **Gates.** M5 (chapter-close writes that branches must respect
 need to exist first).
 
@@ -681,6 +701,25 @@ resolve with the slice it names.
   `RetrievalPartial`, plus a capture-then-rethrow in the phase.
   `probe.md` was narrowed to state the gap rather than promise the
   behavior. Surfaced by the Slice 3.5 review (2026-08-09).
+- **M7.5 — The classifier's tuning signal is `unresolvedRefs`, not
+  `window_head_fallback`.**
+  [Slice 3.3](./milestones/03-memory-floor/slices/03-classifier.md) called
+  head-fallback warnings dominating the log the trigger for the M7.5 prompt
+  tuning pass. The first real-provider run says otherwise: against a local
+  4B-class Q4 model the pass logged 7 and 19 `classifier.unresolved_refs`
+  against a single `classifier.window_head_fallback`. The model invents its
+  own handles rather than reusing the `[c1]` placeholders the prompt hands
+  it, so the refs it emits point at nothing. These are refs to entities that
+  already exist, so the reserved `new:` namespace does not cover them.
+  Consequence: the graph gains happenings with sound titles, descriptions
+  and resolved `occurredAtTurn` anchors, but almost no edges — involvements
+  and awareness are what get dropped. **Caveat: two runs, one model.** Enough
+  to redirect what M7.5 measures, not to set a threshold — and small-model
+  placeholder compliance may not generalise to the frontier models the
+  tuning pass will target. Route into the M7.5 slice's Open questions once
+  that milestone is authored; it has no owner today. Surfaced by the Slice
+  3.3 real-provider smoke (2026-07-31), reproducible via
+  `e2e/tests/classifier-real-provider.smoke.spec.ts`.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -744,6 +783,38 @@ reactive `useTranslation` subscription and language picker sit over
 the M1.5 store and story settings, not the pipeline; only its
 miss-toast and sticky retry pill (which invoke `translation-retry`)
 wait on M8.1. M8.4 follows M8.1, parallel with M8.3.
+
+Carried deferrals, routed out of [`triage.md`](./triage.md)
+2026-08-18, verified against the code first. Resolve with the slice
+each names.
+
+- **M8.1 — `abortRun` reverse-replays every delta under a run's `actionId`,
+  which would reverse a `suggestion-refresh` run's already-committed
+  stage-1 emission.**
+  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)'s
+  "Re-roll cancel during translation stage" edge case states that on a
+  translation-stage cancel "the stage-1 emission has already
+  committed" — but `abortRun` (`lib/pipeline/runtime/orchestrator.ts`)
+  doesn't distinguish committed-and-chained-forward deltas from
+  in-flight ones; it reverses everything tagged with the run's
+  `actionId`. Unobservable today because `suggestionTranslationPhase`
+  (`lib/pipeline/definitions/suggestion-refresh.ts`) is a synchronous
+  no-op — there's no window between stage 1 committing and stage 2
+  finishing for a cancel to land in. Becomes real once the M8.1
+  translation call replaces that no-op. Surfaced by M3.7a Task 7
+  (2026-07-25).
+- **M8.3 — `getCalendar` consults only code builtins, never the
+  `vault_calendars` table.** The seeded story sets `calendarSystemId:
+'cal_default'` and a matching `vault_calendars` row exists, but the
+  registry holds only `earth-gregorian`, so every story falls through
+  to the default and renders Gregorian dates regardless of the
+  calendar it was configured with. Slice 3.8 relies on that fallback
+  being load-bearing and correct, so nothing is broken today — but it
+  means the registry-hit path is unexercised by seed data and a
+  user-authored calendar would be silently ignored once the vault can
+  hold one. Decide whether resolution is meant to be registry-only,
+  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
+  Slice 3.8 Task 6 implementation.
 
 **Gates.** M7 (settings surfaces translation toggles).
 
@@ -880,6 +951,21 @@ spacing to own them — or they need a slice of their own.
   would let a caller-supplied `role="combobox"` through — nobody has
   applied or tested it. Applies to every `dropdown`-mode `Select` that
   carries a `label`. Raised 2026-08-13.
+- **M9.5 — The retrieval pass has never been measured on mobile.** Every
+  figure in
+  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
+  is desktop. The only mobile evidence is the PoC's per-query KNN
+  numbers, which predate the shipped pass — that PoC issued three KNN
+  queries against one family, where the pass issues fifteen across five
+  plus a by-id vector fetch. The ranker has never run on-device at all,
+  and `retrieval.md`'s own PoC section puts a 384-dim Hermes dot at
+  ~24-30 µs, which would make MMR's 19,900 dots ~500 ms per type if it
+  holds. That is not turn-dominating against a narrative call measured
+  in tens of seconds, but it is unknown rather than small, and it
+  cannot be settled from a desktop runner. `bench/retrieval-cost.test.ts`
+  is the harness to port. Owner is whoever does Android bring-up;
+  desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
+  (2026-08-08), whose desktop half is now canon.
 
 **Gates.** M8 (every user-facing surface must exist before the
 visual audit, and translation must round-trip cleanly through

@@ -264,21 +264,6 @@ slice-planning gate forces its resolution before that slice is planned.
   equivalent — it proves the row survived, not that the context the
   call was built from did. Surfaced by M3.7a Task 7 (2026-07-25),
   re-scoped when the gate flipped (2026-07-30).
-- **`abortRun` reverse-replays every delta under a run's `actionId`,
-  which would reverse a `suggestion-refresh` run's already-committed
-  stage-1 emission.**
-  [`reader-composer.md → Next-turn suggestions`](../ui/screens/reader-composer/reader-composer.md#next-turn-suggestions)'s
-  "Re-roll cancel during translation stage" edge case states that on a
-  translation-stage cancel "the stage-1 emission has already
-  committed" — but `abortRun` (`lib/pipeline/runtime/orchestrator.ts`)
-  doesn't distinguish committed-and-chained-forward deltas from
-  in-flight ones; it reverses everything tagged with the run's
-  `actionId`. Unobservable today because `suggestionTranslationPhase`
-  (`lib/pipeline/definitions/suggestion-refresh.ts`) is a synchronous
-  no-op — there's no window between stage 1 committing and stage 2
-  finishing for a cancel to land in. Becomes real once the M8.1
-  translation call replaces that no-op. Surfaced by M3.7a Task 7
-  (2026-07-25).
 - **The next-turn-suggestions feature is invisible to every story created
   before this slice.** `suggestionsEnabled` (`stories.settings`) is a
   non-optional persisted boolean, so pre-slice stories carry whatever
@@ -342,25 +327,6 @@ slice-planning gate forces its resolution before that slice is planned.
   whose "a phase reads the domain stores directly" no longer holds (the
   "calls the group's context builder per render" half is unchanged).
   Surfaced by M3.7a post-merge review (2026-07-30).
-- **The classifier's tuning signal is `unresolvedRefs`, not
-  `window_head_fallback`.**
-  [Slice 3.3](./milestones/03-memory-floor/slices/03-classifier.md) called
-  head-fallback warnings dominating the log the trigger for the M7.5 prompt
-  tuning pass. The first real-provider run says otherwise: against a local
-  4B-class Q4 model the pass logged 7 and 19 `classifier.unresolved_refs`
-  against a single `classifier.window_head_fallback`. The model invents its
-  own handles rather than reusing the `[c1]` placeholders the prompt hands
-  it, so the refs it emits point at nothing. These are refs to entities that
-  already exist, so the reserved `new:` namespace does not cover them.
-  Consequence: the graph gains happenings with sound titles, descriptions
-  and resolved `occurredAtTurn` anchors, but almost no edges — involvements
-  and awareness are what get dropped. **Caveat: two runs, one model.** Enough
-  to redirect what M7.5 measures, not to set a threshold — and small-model
-  placeholder compliance may not generalise to the frontier models the
-  tuning pass will target. Route into the M7.5 slice's Open questions once
-  that milestone is authored; it has no owner today. Surfaced by the Slice
-  3.3 real-provider smoke (2026-07-31), reproducible via
-  `e2e/tests/classifier-real-provider.smoke.spec.ts`.
 
 - **`lib/actions/` has drifted from a transactional write layer into
   the app's general command surface, and wants an extraction pass.**
@@ -466,21 +432,6 @@ slice-planning gate forces its resolution before that slice is planned.
   this exemplar is the only place list position does real work.
   Surfaced while reviewing the reorder affordance's justification
   after M3.7b (2026-08-01).
-- **The retrieval pass has never been measured on mobile.** Every
-  figure in
-  [`retrieval.md → Per-turn cost budget`](../memory/retrieval.md#per-turn-cost-budget)
-  is desktop. The only mobile evidence is the PoC's per-query KNN
-  numbers, which predate the shipped pass — that PoC issued three KNN
-  queries against one family, where the pass issues fifteen across five
-  plus a by-id vector fetch. The ranker has never run on-device at all,
-  and `retrieval.md`'s own PoC section puts a 384-dim Hermes dot at
-  ~24-30 µs, which would make MMR's 19,900 dots ~500 ms per type if it
-  holds. That is not turn-dominating against a narrative call measured
-  in tens of seconds, but it is unknown rather than small, and it
-  cannot be settled from a desktop runner. `bench/retrieval-cost.test.ts`
-  is the harness to port. Owner is whoever does Android bring-up;
-  desktop is v1 prod alongside it. Re-derived from the M3.4 MMR entry
-  (2026-08-08), whose desktop half is now canon.
 - **Q3's dialogue signal mis-pairs across unbalanced quotes.**
   `lib/retrieval/prose-extract.ts` finds quoted spans over the whole
   narrative entry (needed, because a quote legitimately opens in one
@@ -576,21 +527,6 @@ slice-planning gate forces its resolution before that slice is planned.
   cannot build against the unqualified promise. Surfaced during Slice
   3.5 planning (2026-08-08), sharpened during Task 15 (2026-08-09),
   budgets verified 2026-08-09.
-- **The fork-exclusion guard is structural and goes stale the moment
-  fork lands.** Branch fork is unimplemented (M6.1), so Slice 3.5 could
-  not test the real behavior: `lib/probe/fork.test.ts` instead
-  source-scans `lib/**` for `probe_captures` references outside an
-  audited list, plus a direct query assertion that a sibling branch
-  stays empty. Neither catches the regression most likely to actually
-  happen — if M6.1 copies branches **generically** (iterating a manifest
-  or introspecting branch-scoped tables from the schema), the fork code
-  will never contain the literal `probe_captures`, the scan stays green,
-  and captures copy anyway. The manifest row now exists in
-  [`data-model.md → Branch model`](../data-model.md#branch-model), so
-  a generic copier has a canonical exclusion to read. **When M6.1 lands
-  branch fork, replace the structural scan with the both-sides
-  behavioral test** the slice AC originally described. Surfaced by the
-  Slice 3.5 Task 14 review (2026-08-09).
 - **The probe browse route decodes every payload in the story to
   render a list that shows none of them.** `capturesForStoryQuery`
   selects `pc.payload`, `decodeCaptures` gunzips and `JSON.parse`s all
@@ -745,18 +681,6 @@ v++)` never runs), so the era is silently lost. Observed with origin
   ships a BC origin, and Slice 3.8 deliberately left the guard intact
   rather than widening its scope. Raised 2026-08-15 by the Slice 3.8
   calendar fix.
-- **`getCalendar` consults only code builtins, never the
-  `vault_calendars` table.** The seeded story sets `calendarSystemId:
-'cal_default'` and a matching `vault_calendars` row exists, but the
-  registry holds only `earth-gregorian`, so every story falls through
-  to the default and renders Gregorian dates regardless of the
-  calendar it was configured with. Slice 3.8 relies on that fallback
-  being load-bearing and correct, so nothing is broken today — but it
-  means the registry-hit path is unexercised by seed data and a
-  user-authored calendar would be silently ignored once the vault can
-  hold one. Decide whether resolution is meant to be registry-only,
-  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
-  Slice 3.8 Task 6 implementation.
 - **The reader route never uses `runAction`, and nothing catches a
   rejected action.** `lib/utils.ts` exports `runAction` specifically to
   replace bare `void action(...)` — it logs the rejection and raises a
