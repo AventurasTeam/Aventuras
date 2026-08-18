@@ -1067,16 +1067,28 @@ v++)` never runs), so the era is silently lost. Observed with origin
   rather than widening its scope. Raised 2026-08-15 by the Slice 3.8
   calendar fix.
 - **`components/ui/popover.tsx` renders nested `role="dialog"`
-  elements.** Radix's own content wrapper plus `NativeAwareContent`'s
-  inner View both carry the role, so an unfiltered
-  `getByRole('dialog')` resolves to two elements and trips Playwright's
-  strict mode and Testing Library's multiple-match error. Only the
-  inner node carries an accessible name, so a name-filtered query
-  happens to resolve uniquely today — which means the hazard is
-  invisible until someone writes the unfiltered form. Affects every
-  Popover consumer, not one slice. Either drop the role from the inner
-  View or stop `NativeAwareContent` re-declaring it. Raised 2026-08-15
-  by the Slice 3.8 Task 5 and Task 7 reviews.
+  elements.** An unfiltered `getByRole('dialog')` resolves to two and
+  trips Playwright's strict mode and Testing Library's multiple-match
+  error. Confirmed by probe (2026-08-18) with the two elements
+  identified: the **outer** is Radix's own content element
+  (`data-side` / `data-align` / `data-state`), which sets
+  `role="dialog"` itself and carries **no** accessible name; the
+  **inner** is the react-native-web `View` our props land on, which
+  gets `role` from `PopoverContent`'s `accessibilityRole` default and
+  carries the `aria-label`. The outer contains the inner.
+  **Neither obvious fix works.** Dropping our `role` leaves the outer
+  as the only dialog and it has no name, so every
+  `getByRole('dialog', { name })` in the suite breaks; and the name
+  cannot be moved onto the outer, because that element belongs to
+  `@rn-primitives/popover` and is not reachable from this wrapper
+  (`aria-label` on a child does not name its parent, and
+  `aria-labelledby` would need an id we cannot set there). Closing this
+  properly means a `patches/` change to `@rn-primitives/popover` so the
+  caller's a11y props reach Radix's element, or a different composition
+  — not a local edit. Until then the hazard is latent: a name-filtered
+  query resolves uniquely, so it only bites whoever first writes the
+  unfiltered form. Affects every Popover consumer. Raised 2026-08-15 by
+  the Slice 3.8 Task 5 and Task 7 reviews, diagnosed 2026-08-18.
 - **`getCalendar` consults only code builtins, never the
   `vault_calendars` table.** The seeded story sets `calendarSystemId:
 'cal_default'` and a matching `vault_calendars` row exists, but the
