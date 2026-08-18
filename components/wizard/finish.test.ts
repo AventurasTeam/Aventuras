@@ -240,6 +240,51 @@ describe('finishWizard', () => {
     expect(storyRow.definition!.setting).toBe('A drowned coastal empire in slow collapse.')
   })
 
+  // createStoryWithBranch raw-inserts `state`, so an out-of-bounds row used to
+  // commit and only fail later on the first full-state updateEntity. The
+  // editors now cap every string field; this is the backstop for a draft
+  // written before those caps.
+  it('blocks Finish when a cast row carries state outside its per-kind bounds', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'Overlong',
+        opening: { content: 'Once.' },
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), voice: 'x'.repeat(2001) }],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result).toEqual({ status: 'invalid', reasons: ['cast'] })
+    expect(await db.select().from(stories)).toHaveLength(0)
+  })
+
+  it('accepts a cast row exactly at its per-kind bound', async () => {
+    const { ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: 'At the bound',
+        opening: { content: 'Once.' },
+        leadEntityId: LEAD_ID,
+        cast: [{ ...leadCast(), voice: 'x'.repeat(2000) }],
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+  })
+
   it('trims hand-typed title, genre, tone, and setting at commit', async () => {
     const { db, ctx } = await setup()
 

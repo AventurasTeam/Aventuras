@@ -29,6 +29,7 @@ import { toast } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 import { CAST_SOFT_CAPS } from '@/lib/wizard'
 
+import { FIELD_MAX, VOICE_MAX } from './cast-import'
 import { canSetLead } from './step-cast-logic'
 
 const STATUS_OPTIONS: SelectOption[] = [
@@ -198,6 +199,7 @@ export function CharacterEditor({
           onChangeText={(voice) => wizardStore.patchCast(row, { voice })}
           placeholder={t('wizard:cast.editor.speechPlaceholder')}
           aria-label={t('wizard:cast.editor.speech')}
+          maxLength={VOICE_MAX}
         />
       </FormRow>
       <FormRow label={t('wizard:cast.editor.traits')}>
@@ -233,6 +235,7 @@ export function CharacterEditor({
                   }
                   placeholder={t(`wizard:cast.editor.${field}Placeholder`)}
                   aria-label={t(`wizard:cast.editor.${field}`)}
+                  maxLength={FIELD_MAX}
                 />
               </FormRow>
             ))}
@@ -289,6 +292,7 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
                 onChangeText={(condition) => wizardStore.patchCast(row, { condition })}
                 placeholder={t('wizard:cast.editor.conditionPlaceholderLocation')}
                 aria-label={t('wizard:cast.editor.condition')}
+                maxLength={FIELD_MAX}
               />
             </FormRow>
           </AccordionContent>
@@ -316,6 +320,7 @@ export function ItemEditor({ row, invalid }: CommonEditorProps<WizardItemDraft>)
                 onChangeText={(condition) => wizardStore.patchCast(row, { condition })}
                 placeholder={t('wizard:cast.editor.conditionPlaceholderItem')}
                 aria-label={t('wizard:cast.editor.condition')}
+                maxLength={FIELD_MAX}
               />
             </FormRow>
           </AccordionContent>
@@ -352,6 +357,7 @@ export function FactionEditor({ row, invalid }: CommonEditorProps<WizardFactionD
                 onChangeText={(standing) => wizardStore.patchCast(row, { standing })}
                 placeholder={t('wizard:cast.editor.standingPlaceholder')}
                 aria-label={t('wizard:cast.editor.standing')}
+                maxLength={FIELD_MAX}
               />
             </FormRow>
           </AccordionContent>

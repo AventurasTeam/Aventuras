@@ -15,6 +15,7 @@ import {
   type LocationState,
   type ProviderInstance,
   type StoryDefinition,
+  entityStateSchemaForKind,
   type StorySettings,
   type SuggestionCategory,
   type WizardCastDraft,
@@ -227,9 +228,22 @@ export async function finishWizard(
   // working state must never commit a dim that truncates vectors to garbage.
   if (effectiveDim != null && (!Number.isInteger(effectiveDim) || effectiveDim < 1))
     reasons.push('effectiveDim')
-  if (reasons.length > 0) return { status: 'invalid', reasons }
-
   const castRows: WizardCastEntityInput[] = s.cast.map((draft) => castEntityInput(draft, s.cast))
+
+  // createStoryWithBranch raw-inserts `state` without running the per-kind
+  // schema, so an out-of-bounds row commits here and is only rejected later, by
+  // the first full-state updateEntity. The editors cap every string field, so
+  // this is a backstop for a resumed draft written before those caps (or a
+  // hand-edited DB) — block Finish rather than silently truncating authored
+  // content.
+  if (
+    !reasons.includes('cast') &&
+    castRows.some((row) => !entityStateSchemaForKind(row.kind).safeParse(row.state).success)
+  ) {
+    reasons.push('cast')
+  }
+
+  if (reasons.length > 0) return { status: 'invalid', reasons }
 
   const definition: StoryDefinition = {
     mode: s.definition.mode,

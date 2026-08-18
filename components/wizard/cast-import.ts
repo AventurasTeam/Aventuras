@@ -4,9 +4,10 @@ import { CAST_ID_PREFIX } from '@/lib/stores'
 import { CAST_SOFT_CAPS, type CastSuggestion } from '@/lib/wizard'
 
 // AI-imported strings use the entity-state degradation bounds; arrays use the
-// lower wizard soft caps, with ARRAY_MAX as a hard backstop. Nothing downstream
-// re-checks them: Finish raw-inserts state without entityStateSchemaForKind.
-// The hand-typed editors still enforce no string bounds.
+// lower wizard soft caps, with ARRAY_MAX as a hard backstop. The hand-typed
+// editors share these two string caps as their input maxLength, and Finish
+// re-checks every built state against entityStateSchemaForKind before insert —
+// createStoryWithBranch itself still raw-inserts without validating.
 export const VOICE_MAX = 2000
 export const ARRAY_MAX = 50
 export const FIELD_MAX = 500
