@@ -1072,23 +1072,24 @@ v++)` never runs), so the era is silently lost. Observed with origin
   hold one. Decide whether resolution is meant to be registry-only,
   DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
   Slice 3.8 Task 6 implementation.
-- **Post-3.8 tidy in the reader and UI layers.** Four small items, none
-  behavioural. The reader route still uses bare `void action(...)` on
-  `handleCommitEdit` despite `runAction` existing in `lib/utils.ts`
-  specifically to replace it, and there is no global unhandled-rejection
-  handler, so a thrown action error produces no toast and no log. The
-  calendar-fallback expression is duplicated verbatim between the
-  reader route's world-time hook and `app/wizard.tsx`, and belongs in
-  `lib/calendar` as a `resolveCalendar` policy alongside the registry;
-  its trailing `?? null` is unreachable and its `useMemo` is
-  unnecessary, both of which dissolve in that move.
-  `DisabledReasonTooltip` is now used for a warning on an _enabled_
-  control, so its name and TSDoc no longer describe it — a rename or a
-  thin generic alias would fix it. And `saveEdit` in
-  `e2e/locators/reader.ts` is page-scoped, which was unambiguous until
-  3.8 added a second Save button to the reader; not reachable today
-  since the two overlays cannot both be open, but it is one strict-mode
-  violation away. Raised 2026-08-15 by the Slice 3.8 reviews.
+- **The reader route never uses `runAction`, and nothing catches a
+  rejected action.** `lib/utils.ts` exports `runAction` specifically to
+  replace bare `void action(...)` — it logs the rejection and raises a
+  toast — and `app/reader-composer/[branchId].tsx` calls it zero times
+  while carrying about a dozen bare `void` dispatches (`loadOpenStory`,
+  `refreshEmbeddingStatus`, `rehydrateStories`, `undoLastAction` /
+  `redoLastAction`, `refreshSuggestions`, `awaitRunTerminal`,
+  `runSubmit`, the menu undo/redo). There is also no global
+  unhandled-rejection handler, so a throw from any of them produces no
+  toast and no log. **Not the mechanical swap it looks like:** each
+  conversion turns a silent failure into a user-visible toast, so it
+  needs a per-call-site decision about which failures deserve one — a
+  background `refreshEmbeddingStatus` that fails is not the same event as
+  a failed undo — plus copy for each. The global handler is the separable
+  half and is worth landing on its own. Corrected 2026-08-18: the original
+  entry named `handleCommitEdit`, which is not one of the bare-`void`
+  sites — it is awaited, and it already carries failure in its result
+  channel. Split out of the post-3.8 tidy 2026-08-18.
 - **`per-turn-retrieval.test.ts` fails intermittently, but only when
   `pnpm test:run` runs the unit and storybook projects in one
   invocation.** Originally observed 2 failures in 4 consecutive

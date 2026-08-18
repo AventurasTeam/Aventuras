@@ -27,9 +27,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
-import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
 import { useTier } from '@/hooks/use-tier'
@@ -271,11 +271,11 @@ function WorldTimeFooter({
   return (
     <View className="mt-3 flex-row items-center justify-end gap-1.5">
       {breakText != null ? (
-        <DisabledReasonTooltip reason={breakText}>
+        <ReasonTooltip reason={breakText}>
           <View role="img" aria-label={breakText}>
             <Icon as={AlertTriangle} size="sm" className="text-warning" />
           </View>
-        </DisabledReasonTooltip>
+        </ReasonTooltip>
       ) : null}
       {control}
     </View>

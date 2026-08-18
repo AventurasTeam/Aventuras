@@ -5,11 +5,11 @@ import { Pressable, StyleSheet, View, type ViewStyle } from 'react-native'
 import LibColorPicker, { HueSlider, Panel1 } from 'reanimated-color-picker'
 
 import { Button } from '@/components/ui/button'
-import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
 import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
 import { useTier } from '@/hooks/use-tier'
@@ -266,7 +266,7 @@ function CustomPopoverApplyAction({
   copy: string
 }) {
   return (
-    <DisabledReasonTooltip reason={disabled ? disabledReason : undefined}>
+    <ReasonTooltip reason={disabled ? disabledReason : undefined}>
       <PopoverPrimitive.Close asChild>
         <Button
           disabled={disabled || !valid}
@@ -276,7 +276,7 @@ function CustomPopoverApplyAction({
           <Text>{copy}</Text>
         </Button>
       </PopoverPrimitive.Close>
-    </DisabledReasonTooltip>
+    </ReasonTooltip>
   )
 }
 

@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
-import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { SwitchVisual } from '@/components/ui/switch-visual'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
@@ -38,7 +38,7 @@ export function SwitchRow({
 }: SwitchRowProps) {
   const hasLeading = leading != null
   return (
-    <DisabledReasonTooltip reason={disabled ? disabledReason : undefined}>
+    <ReasonTooltip reason={disabled ? disabledReason : undefined}>
       <Pressable
         role="switch"
         aria-checked={checked}
@@ -72,7 +72,7 @@ export function SwitchRow({
           className={hasLeading ? 'mt-0.5' : ''}
         />
       </Pressable>
-    </DisabledReasonTooltip>
+    </ReasonTooltip>
   )
 }
 

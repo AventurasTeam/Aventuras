@@ -10,7 +10,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
-import { DisabledReasonTooltip } from '@/components/ui/disabled-reason-tooltip'
+import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Text } from '@/components/ui/text'
 import { embeddingTargetKey, type EmbeddingTarget } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -184,7 +184,7 @@ function CandidateRow({
 }: CandidateRowProps) {
   const disabled = blocked || candidate.isCurrent
   return (
-    <DisabledReasonTooltip reason={blocked ? disabledReason : undefined}>
+    <ReasonTooltip reason={blocked ? disabledReason : undefined}>
       <Pressable
         testID={`swap-candidate-${embeddingTargetKey(candidate.target)}`}
         role="radio"
@@ -231,7 +231,7 @@ function CandidateRow({
           </Text>
         ) : null}
       </Pressable>
-    </DisabledReasonTooltip>
+    </ReasonTooltip>
   )
 }
 
