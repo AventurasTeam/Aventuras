@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import { themes } from '@/lib/themes'
@@ -269,5 +269,28 @@ export const InvalidDraftDisablesSaveOnly: Story = {
     // Discard still works
     await userEvent.click(discard)
     await waitFor(() => expect(args.onDiscard).toHaveBeenCalled())
+  },
+}
+
+export const LiveRegionCoversOnlyTheMessage: Story = {
+  args: {
+    dirtyFields: ['description', 'visual.hair'],
+    notice: 'Two categories share a label',
+    onSave: fn(),
+    onDiscard: fn(),
+  },
+  play: async () => {
+    const region = await screen.findByRole('status')
+    // role="status" carries an implicit aria-atomic, so anything inside is
+    // re-announced whole on every count change.
+    expect(region).toHaveTextContent(/2 unsaved changes/)
+    expect(within(region).getByLabelText('Two categories share a label')).toBeInTheDocument()
+    expect(within(region).queryAllByRole('button')).toEqual([])
+
+    const bar = await screen.findByTestId('save-bar')
+    for (const name of [/^Save/, 'Discard']) {
+      const button = within(bar).getByRole('button', { name })
+      expect(region.contains(button)).toBe(false)
+    }
   },
 }
