@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   APP_SETTINGS_DEFAULTS,
@@ -341,6 +341,16 @@ function lastParams(): RetrievalParams {
   if (!call) throw new Error('runRetrieval was never called')
   return call[1] as RetrievalParams
 }
+
+// The phase imports @/lib/actions lazily, to break a require cycle — so unlike
+// the ten test files that import that barrel statically, this file resolves it
+// (and, through the mock factory's importOriginal, the real module graph behind
+// it) inside the first test that gets past the working-set guards. That puts
+// module resolution inside a 5s test timeout instead of ahead of it. Resolve it
+// here, where no test timeout applies.
+beforeAll(async () => {
+  await import('@/lib/actions')
+}, 60_000)
 
 beforeEach(() => {
   vi.restoreAllMocks()
