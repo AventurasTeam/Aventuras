@@ -265,21 +265,6 @@ slice-planning gate forces its resolution before that slice is planned.
   metadata editability during M3.2 review. Canonical edit — route through
   a design / cleanup pass.
 
-- **Entry-metadata shape annotations contradict the user-editability
-  prose.** The shape block in
-  [`data-model.md → Entry metadata shape`](../data-model.md#entry-metadata-shape)
-  annotates `sceneEntities` and `currentLocationId` as "classifier-authored"
-  while marking only `worldTime` "classifier-authored, user-editable" —
-  but the "Metadata edits are delta-logged" paragraph forty lines below
-  explicitly sanctions `sceneEntities` and `currentLocationId` user-edits
-  and gives them the same reversible-delta treatment. A planner reading
-  only the shape block would conclude the scene fields are off-limits,
-  which is the wrong premise for the scheduled world-state-block edit
-  surface (see [`followups.md`](../followups.md)). Prose is the more
-  specific statement; the annotations should be brought in line.
-  Surfaced 2026-07-23. Canonical edit — route through a design / cleanup
-  pass.
-
 - **`piggyback.md` understates the accepted new-location tolerance.**
   The `currentLocationId` row in
   [`piggyback.md → What piggyback writes`](../memory/piggyback.md) says a

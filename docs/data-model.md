@@ -1706,7 +1706,7 @@ story_entries.metadata: {
   generationTimingMs?: number
   reasoning?: string                // persisted reasoning text from providers that expose it; mirrors `tokens.reasoning` (the count). Optional — undefined when the provider doesn't surface reasoning.
 
-  // Scene presence — classifier-authored
+  // Scene presence — classifier-authored, user-editable
   sceneEntities: string[]           // entity IDs present in this entry's scene (characters + items)
   currentLocationId: string | null  // location entity that IS the current scene; singleton
 
