@@ -229,9 +229,16 @@
         cursor: pointer;
         background: var(--panel-2);
       }
-      .chip[aria-pressed='true'] {
+      .chip:has(.pick[aria-pressed='true']) {
         border-color: var(--accent);
         color: var(--accent);
+      }
+      .chip .pick {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        padding: 0;
       }
       .chip .x {
         border: 0;
@@ -412,7 +419,7 @@
                 ? `<span class="badge bad">${esc(l.failure.kind)}</span>`
                 : '',
               l.sequence.enabled ? '<span class="badge on">seq</span>' : '',
-              l.delay.ttfbMs > 0 ? `<span class="badge">${l.delay.ttfbMs}ms</span>` : '',
+              l.delay.ttfbMs > 0 ? `<span class="badge">${esc(l.delay.ttfbMs)}ms</span>` : '',
               meta.kind === 'unknown' ? '<span class="badge bad">unregistered</span>' : '',
             ].join('')
             return `<button class="lane-btn" data-lane="${esc(meta.key)}" aria-current="${meta.key === selected}">
@@ -522,21 +529,21 @@
               </div>
               <div class="field">
                 <label for="ttfb">Delay before reply (ms)</label>
-                <input type="number" id="ttfb" min="0" value="${lane.delay.ttfbMs}" />
+                <input type="number" id="ttfb" min="0" value="${esc(lane.delay.ttfbMs)}" />
               </div>
               <div class="field">
                 <label for="jitter">Jitter (± ms)</label>
-                <input type="number" id="jitter" min="0" value="${lane.delay.jitterMs}" />
+                <input type="number" id="jitter" min="0" value="${esc(lane.delay.jitterMs)}" />
               </div>
               ${
                 isNarrative
                   ? `<div class="field">
                        <label for="cps">Stream speed (chars/sec, 0 = instant)</label>
-                       <input type="number" id="cps" min="0" value="${lane.stream.charsPerSecond}" />
+                       <input type="number" id="cps" min="0" value="${esc(lane.stream.charsPerSecond)}" />
                      </div>
                      <div class="field">
                        <label for="chunk">Chunk size</label>
-                       <input type="number" id="chunk" min="1" value="${lane.stream.chunkSize}" />
+                       <input type="number" id="chunk" min="1" value="${esc(lane.stream.chunkSize)}" />
                      </div>
                      <div class="field">
                        <label>Presets</label>
@@ -550,7 +557,7 @@
               <div class="field">
                 <label for="failKind">Inject failure</label>
                 <select id="failKind">
-                  ${kinds.map((k) => `<option value="${k}" ${lane.failure.kind === k ? 'selected' : ''}>${k}</option>`).join('')}
+                  ${kinds.map((k) => `<option value="${esc(k)}" ${lane.failure.kind === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
                 </select>
               </div>
               <div class="field">
@@ -561,7 +568,7 @@
               </div>
               <div class="field">
                 <label for="failCount">For how many calls (-1 = always)</label>
-                <input type="number" id="failCount" min="-1" value="${lane.failure.remaining}" />
+                <input type="number" id="failCount" min="-1" value="${esc(lane.failure.remaining)}" />
               </div>
               <div class="field">
                 <label for="seq">Sequence</label>
@@ -572,7 +579,7 @@
                   <label style="display:inline;text-transform:none;letter-spacing:0;margin-left:8px">
                     <input type="checkbox" id="seqLoop" ${lane.sequence.loop ? 'checked' : ''} /> loop
                   </label>
-                  <button id="seqReset" style="margin-left:8px">reset (at ${lane.sequence.cursor})</button>
+                  <button id="seqReset" style="margin-left:8px">reset (at ${esc(lane.sequence.cursor)})</button>
                 </div>
               </div>
             </div>
@@ -588,8 +595,8 @@
               ${lane.responses
                 .map(
                   (r) =>
-                    `<span class="chip" aria-pressed="${r.id === lane.activeId}">
-                       <span data-activate="${esc(r.id)}">${esc(r.name)}</span>
+                    `<span class="chip">
+                       <button class="pick" data-activate="${esc(r.id)}" aria-pressed="${r.id === lane.activeId}">${esc(r.name)}</button>
                        <button class="x" data-delete="${esc(r.id)}" title="Delete">×</button>
                      </span>`,
                 )
@@ -617,13 +624,13 @@
         const rows = log
           .map((e) => {
             const time = new Date(e.at).toLocaleTimeString()
-            const row = `<tr class="entry" data-entry="${e.id}">
+            const row = `<tr class="entry" data-entry="${esc(e.id)}">
                 <td class="mono">${time}</td>
                 <td class="mono">${esc(e.lane)}${e.streamed ? ' <span class="badge">stream</span>' : ''}</td>
                 <td>${esc(e.mode)}</td>
                 <td>${esc(e.responseName ?? '—')}${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}</td>
-                <td class="${e.outcome}">${esc(e.outcome)}${e.failureKind ? ` (${esc(e.failureKind)})` : ''} · ${e.status}</td>
-                <td class="mono">${e.durationMs}ms</td>
+                <td class="${e.outcome}">${esc(e.outcome)}${e.failureKind ? ` (${esc(e.failureKind)})` : ''} · ${esc(e.status)}</td>
+                <td class="mono">${esc(e.durationMs)}ms</td>
               </tr>`
             if (expanded !== e.id) return row
             const served =
@@ -632,8 +639,8 @@
               row +
               `<tr class="detail"><td colspan="6">
                  <div class="row" style="margin-bottom:8px">
-                   <button data-save-entry="${e.id}">Save reply as a response</button>
-                   <button data-goto="${esc(e.lane)}" data-entry-ph="${e.id}">Open this lane with its placeholders</button>
+                   <button data-save-entry="${esc(e.id)}">Save reply as a response</button>
+                   <button data-goto="${esc(e.lane)}" data-entry-ph="${esc(e.id)}">Open this lane with its placeholders</button>
                  </div>
                  <label>Served</label><pre>${esc(served ?? '')}</pre>
                  <label>Prompt</label><pre>${esc(e.prompt)}</pre>
@@ -754,7 +761,7 @@
         const id = event.target.id
         const value = event.target.value
         const map = {
-          mode: () => ({ mode: value, ...(value === 'mock' ? {} : {}) }),
+          mode: () => ({ mode: value }),
           upstream: () => ({ upstreamId: value || null }),
           ttfb: () => ({ delay: { ttfbMs: Number(value) } }),
           jitter: () => ({ delay: { jitterMs: Number(value) } }),
@@ -793,7 +800,11 @@
         await refresh()
       }
 
-      void boot()
+      // renderEditor needs a snapshot, so a failed boot has to report itself.
+      void boot().catch((err) => {
+        $('editor').innerHTML =
+          `<div class="empty">Could not reach the mock control API: ${esc(err.message)}</div>`
+      })
     </script>
   </body>
 </html>
