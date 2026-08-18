@@ -155,18 +155,6 @@ slice-planning gate forces its resolution before that slice is planned.
   warning on `id` collision — the shared-`id` publish slot is still
   last-writer-wins. Surfaced by M3.11 Task 4 review (2026-07-22),
   narrowed 2026-07-22.
-- **`save-sessions.md` overstates delta participation.**
-  [`save-sessions.md → Session semantics`](../ui/patterns/save-sessions.md#session-semantics)
-  says "Save commits all session changes as deltas under a single
-  shared `action_id`. CTRL-Z reverses the entire session as one step."
-  That holds for the World / Plot detail panes it was written from,
-  but not for either settings surface: `stories` and `app_settings`
-  are both absent from the twelve tables
-  [`deltas.target_table`](../data-model.md#diagram) enumerates, so
-  settings saves are direct writes with no delta and no CTRL-Z. The
-  sentence needs a scope qualifier. Cross-cutting (App Settings is
-  equally affected), so not 3.11's to own. Surfaced by M3.11 planning
-  (2026-07-22).
 - **`AppActionsMenu`'s Ctrl-K is not focus-gated.** The reader and
   Story Settings both mount `AppActionsMenu`, and expo-router's Stack
   keeps the pushed-under screen alive — so with Story Settings open
