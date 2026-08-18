@@ -773,6 +773,76 @@ describe('createStoryWithBranch — embed step', () => {
     ])
   })
 
+  // The AI-import path trims at its Zod parse boundary; hand-typed rows reach
+  // the same columns through here, so an untrimmed row embedded a composite
+  // that differed from what the reader renders.
+  it('trims hand-typed lore in both the stored row and the embedded composite', async () => {
+    const { db, ctx } = await setup()
+    const row = loreRow({
+      title: '  The Deep Archive  ',
+      body: '\n  Kept below the tide line.\n',
+      category: '  places  ',
+    })
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Padded',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake.',
+        openingMetadata: metadata,
+        cast: [characterRow()],
+        lore: [row],
+        embed: { config: LOCAL_CONFIG, exec: async () => {} },
+      },
+      ctx,
+      9200,
+    )
+
+    const [stored] = await db.select().from(lore).where(eq(lore.branchId, branchId))
+    expect(stored.title).toBe('The Deep Archive')
+    expect(stored.body).toBe('Kept below the tide line.')
+    expect(stored.category).toBe('places')
+
+    expect(mockedEmbed.mock.calls[0][1]).toContainEqual({
+      kind: 'lore',
+      id: row.id,
+      branchId,
+      fields: ['The Deep Archive', 'Kept below the tide line.'],
+    })
+  })
+
+  // A category that is only whitespace is absent, not a blank string.
+  it('persists a whitespace-only lore category as NULL', async () => {
+    const { db, ctx } = await setup()
+    const row = loreRow({ title: 'T', body: 'B', category: '   ' })
+
+    const { branchId } = await createStoryWithBranch(
+      {
+        title: 'Blank category',
+        definition: makeDefinition({
+          mode: 'adventure',
+          narration: 'first',
+          leadEntityId: LEAD_ID,
+        }),
+        settings: buildStorySettings('adventure', NO_APP_DEFAULTS),
+        openingContent: 'You wake.',
+        openingMetadata: metadata,
+        cast: [characterRow()],
+        lore: [row],
+      },
+      ctx,
+      9300,
+    )
+
+    const [stored] = await db.select().from(lore).where(eq(lore.branchId, branchId))
+    expect(stored.category).toBeNull()
+  })
+
   it('lore INSERTs precede the spliced lore vec ops and clear the stale flag', async () => {
     const { db, sqlite, ctx } = await setup()
     realVecOps()

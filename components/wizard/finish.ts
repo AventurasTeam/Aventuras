@@ -75,6 +75,16 @@ export type FinishEmbedCtx = {
 // guard against a reachable producer: both authoring paths already reject a
 // self-reference (the editor's picker excludes self, cast-import.ts excludes
 // selfId before resolving refs).
+// Hand-typed definition text reaches the same columns the AI-import path
+// writes, and that path trims at its Zod parse boundary
+// (lib/wizard/assist-schemas.ts). Normalize here so the two agree.
+function trimLabeledPrompt(v: { label: string; promptBody: string }): {
+  label: string
+  promptBody: string
+} {
+  return { label: v.label.trim(), promptBody: v.promptBody.trim() }
+}
+
 function castRef(
   cast: readonly WizardCastDraft[],
   self: WizardCastDraft,
@@ -225,9 +235,9 @@ export async function finishWizard(
     mode: s.definition.mode,
     leadEntityId: lead?.id ?? null,
     narration: s.definition.narration,
-    genre: s.definition.genre,
-    tone: s.definition.tone,
-    setting: s.definition.setting,
+    genre: trimLabeledPrompt(s.definition.genre),
+    tone: trimLabeledPrompt(s.definition.tone),
+    setting: s.definition.setting.trim(),
     calendarSystemId: s.definition.calendarSystemId,
     worldTimeOrigin: s.definition.worldTimeOrigin,
   }
@@ -305,9 +315,8 @@ export async function finishWizard(
       {
         storyId: promoteDraftStoryId,
         replaceExistingStoryId: promoteDraftStoryId != null,
-        title: s.definition.title,
-        description:
-          s.definition.description.trim().length > 0 ? s.definition.description : undefined,
+        title: s.definition.title.trim(),
+        description: s.definition.description.trim() || undefined,
         definition,
         settings,
         openingContent: s.opening.content,

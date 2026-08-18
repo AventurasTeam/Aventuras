@@ -1056,16 +1056,6 @@ slice-planning gate forces its resolution before that slice is planned.
   3.6a. Removing it is a two-line cleanup; the value is in not
   leaving a gate that reads as load-bearing when nothing depends on
   it. Surfaced by the Slice 3.6a Task 11 review (2026-08-10).
-- **Hand-typed lore commits untrimmed while AI-imported lore does
-  not.** `loreSuggestionsSchema` trims `title` / `body` / `category`
-  at the parse boundary, but the Finish insert in
-  `lib/actions/stories/create-story.ts` trims only `category` — so a
-  user who types `"  Foo  "` gets it stored and embedded with the
-  padding, while the AI-suggested equivalent is clean. The same
-  asymmetry applies to `definition.genre.label` / `promptBody`. Fix
-  is trimming in the insert alongside `category`, which also makes
-  the embedded composite match what the UI renders. Surfaced by the
-  Slice 3.6a whole-slice review (2026-08-10).
 - **Hand-authored cast can commit schema-invalid entity state while
   AI-imported cast is clamped.** The Speech input accepts more than
   2,000 characters, and the visual, condition, and standing inputs

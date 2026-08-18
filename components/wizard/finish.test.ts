@@ -240,6 +240,36 @@ describe('finishWizard', () => {
     expect(storyRow.definition!.setting).toBe('A drowned coastal empire in slow collapse.')
   })
 
+  it('trims hand-typed title, genre, tone, and setting at commit', async () => {
+    const { db, ctx } = await setup()
+
+    const result = await finishWizard(
+      makeState({
+        title: '  World-shaped  ',
+        opening: { content: 'Once.' },
+        genre: { label: '  Grimdark fantasy  ', promptBody: '\n Write it bleak. \n' },
+        tone: { label: ' Wry ', promptBody: '  Keep it dry.  ' },
+        setting: '  A drowned coastal empire.  ',
+      }),
+      ctx,
+      vi.fn(),
+      APP_DEFAULTS,
+      EMBED_CTX,
+      1500,
+    )
+
+    expect(result.status).toBe('ok')
+    const storyId = result.status === 'ok' ? result.storyId : ''
+    const storyRow = (await db.select().from(stories).where(eq(stories.id, storyId)))[0]
+    expect(storyRow.title).toBe('World-shaped')
+    expect(storyRow.definition!.genre).toEqual({
+      label: 'Grimdark fantasy',
+      promptBody: 'Write it bleak.',
+    })
+    expect(storyRow.definition!.tone).toEqual({ label: 'Wry', promptBody: 'Keep it dry.' })
+    expect(storyRow.definition!.setting).toBe('A drowned coastal empire.')
+  })
+
   it('adventure+first: writes the lead entity, definition.leadEntityId, and opening refs to one id', async () => {
     const { db, ctx } = await setup()
     const navigate = vi.fn()
