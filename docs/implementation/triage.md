@@ -210,19 +210,6 @@ slice-planning gate forces its resolution before that slice is planned.
   `display: none` in the real app. Any future visual-regression or
   style assertion needs this fixed first. Surfaced by M3.11 Task 7
   (2026-07-22).
-- **`accessibilityState={{ selected }}` emits no `aria-selected` on
-  web.** `app/settings/index.tsx:119` sets `accessibilityRole="tab"`
-  with `accessibilityState={{ selected }}`, but react-native-web does
-  not translate that into an `aria-selected` attribute — verified, the
-  attribute is `null`. This is **not** an axe finding: axe-core's
-  `tab` role lists `aria-selected` under `allowedAttrs` with no
-  `requiredAttrs`, so no rule fires. The damage is real anyway — a
-  screen reader cannot tell which tab is active, and because no
-  linter flags it the bug is invisible. M3.11's Story Settings rail was lifted from
-  this JSX and adds `aria-selected={selected}` alongside (a valid RN
-  prop, so it is correct on native too). App Settings still ships the
-  bug and wants the same one-line fix. Surfaced by M3.11 Task 7
-  (2026-07-22).
 - **A settings save is not atomic against a concurrent writer.**
   `updateStorySettings` reads `stories.settings`, merges, then writes
   in a separate `runInTransaction` call. `stories.settings` is one
