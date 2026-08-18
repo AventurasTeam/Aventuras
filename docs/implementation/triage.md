@@ -173,38 +173,6 @@ slice-planning gate forces its resolution before that slice is planned.
   focus state has to be threaded down as a prop from each route, or the
   compound needs a navigator-optional focus hook. Surfaced by M3.11
   Task 9 (2026-07-22).
-- **Storybook vitest project applies no NativeWind classNames, so every
-  style assertion in a story passes vacuously.** Components render with
-  only react-native-web's own generated class — no `rounded-md`, no
-  `hidden`, no theme tokens — so the repo has zero style-level test
-  coverage in CI. The Storybook dev server is unaffected. Confirmed by
-  probe (2026-08-18): a `<View className="hidden rounded-md">` renders
-  `class="css-view-g5y9jx"`, `style="null"`, computed `display: flex`,
-  `border-radius: 0px`.
-  **The obvious fix is disproven.** Carrying
-  `framework.options.pluginReactOptions.jsxImportSource: 'nativewind'`
-  into the vitest project does not work: adding
-  `rnw({ jsxRuntime: 'automatic', jsxImportSource: 'nativewind' })` to the
-  storybook project's plugins changes nothing, in either plugin order, and
-  `esbuild.jsxImportSource` changes nothing either. The plugin genuinely
-  runs — pointing it at a nonexistent module fails the build on
-  `<module>/jsx-runtime` — so the option is read but the transform that
-  actually compiles the story is not the one it configures.
-  **Root cause is the interop registration, not the JSX transform.** The
-  stylesheets are fine (6 sheets, 861 rules, the `.hidden` rule present).
-  What is missing is `cssInterop` registration for the RN core components:
-  adding `cssInterop(View, { className: 'style' })` by hand makes the same
-  probe render `class="css-view-g5y9jx hidden rounded-md"` with
-  `display: none` and `border-radius: 6px`. A bare `import 'nativewind'`
-  does **not** register — the explicit call is the lever.
-  `components/wizard/cast-row-layout.stories.tsx:16` already carries that
-  hand-registration as a local workaround. Closing this properly means
-  either winning the transform so `nativewind/jsx-runtime` compiles the
-  stories, or a storybook-project setup file that registers the core
-  components — the latter duplicates a list NativeWind owns and can drift.
-  Revisit when style or visual-regression assertions are wanted; until
-  then, treat any style assertion in a story as unproven. Surfaced by
-  M3.11 Task 7 (2026-07-22), root-caused 2026-08-18.
 - **A settings save is not atomic against a concurrent writer.**
   `updateStorySettings` reads `stories.settings`, merges, then writes
   in a separate `runInTransaction` call. `stories.settings` is one
