@@ -37,6 +37,19 @@ const provider = (): Parameters<typeof createProviderModel>[0] => ({
   endpoint: mock.url,
 })
 
+/** A structured call wrapped the way lib/ai wraps it. */
+function classifierModel(): Parameters<typeof runProviderCall>[0]['model'] {
+  return wrapLanguageModel({
+    model: createProviderModel(provider(), 'seed/narrative') as Parameters<
+      typeof wrapLanguageModel
+    >[0]['model'],
+    middleware: [
+      jsonResponseFormatMiddleware(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
+      promptSchemaMiddleware(),
+    ],
+  })
+}
+
 describe('the app transport against the mock', () => {
   it('assembles a paced narrative stream back into prose and its trailing blocks', async () => {
     const lane = mock.ctx.lane('narrative')
@@ -68,15 +81,7 @@ describe('the app transport against the mock', () => {
   })
 
   it('round-trips a structured call through the real middleware and parser', async () => {
-    const model = wrapLanguageModel({
-      model: createProviderModel(provider(), 'seed/narrative') as Parameters<
-        typeof wrapLanguageModel
-      >[0]['model'],
-      middleware: [
-        jsonResponseFormatMiddleware(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
-        promptSchemaMiddleware(),
-      ],
-    })
+    const model = classifierModel()
 
     const result = await runProviderCall({ model, prompt: 'Classify the turn.' })
     const value = parseStructured(result.text, fallbackClassifierSchema)
@@ -90,15 +95,7 @@ describe('the app transport against the mock', () => {
   it('surfaces an injected HTTP failure to the transport as an error', async () => {
     mock.ctx.lane('per-turn-classifier').failure = { kind: 'http', status: 503, remaining: 1 }
 
-    const model = wrapLanguageModel({
-      model: createProviderModel(provider(), 'seed/narrative') as Parameters<
-        typeof wrapLanguageModel
-      >[0]['model'],
-      middleware: [
-        jsonResponseFormatMiddleware(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
-        promptSchemaMiddleware(),
-      ],
-    })
+    const model = classifierModel()
 
     await expect(runProviderCall({ model, prompt: 'Classify the turn.' })).rejects.toThrow()
   })

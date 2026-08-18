@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
-import { STRUCTURED_SHAPES } from '../../scripts/mock-llm/shapes'
+import { matchShape } from '../../scripts/mock-llm/routing'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -217,7 +217,7 @@ export async function startMockLlm(): Promise<MockLlm> {
       }
 
       const text = promptText(body)
-      const agent = STRUCTURED_SHAPES.find((a) => text.includes(a.block)) ?? null
+      const agent = matchShape(null, text)
       requests.push({ body, streamed, agent: agent?.name ?? null })
       const value = agent ? (overrides.get(agent.name) ?? EXAMPLES[agent.name]) : {}
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
