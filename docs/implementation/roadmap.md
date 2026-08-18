@@ -373,6 +373,87 @@ warning once M5.2's real close output exists.
 M5.5's deep-rollback surface — pin that surface's API as a slice
 contract so the two parallel slices don't collide.
 
+Carried deferrals, routed out of
+[`followups.md`](../followups.md) 2026-08-18, verified against the
+code first. The four token-progress entries are one work item: a
+DB-backed `openRegionTokens` resolves all of them.
+
+- **M5.1 — `metadata.tokens.completion` is the wrong measure for the chapter
+  threshold, on four independent counts.** M5 needs
+  `openRegionTokens(branchId)` as a DB read
+  ([`generation-pipeline.md → chainsTo on predecessor`](../generation-pipeline.md#chainsto-on-predecessor)),
+  and `story_entries.metadata.tokens` already looks like the answer.
+  It is not. (1) **Stale on edit** — `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts:45`) sets only `{ content }`,
+  so the count survives a rewrite unchanged. (2) **Wrong text even when
+  fresh** — it is provider `usage.outputTokens`
+  (`lib/pipeline/definitions/per-turn.ts:256`), counting everything the
+  model emitted, including the state block stripped before persist; the
+  world-state-block work under [UX](../followups.md#ux) widens that gap deliberately. (3) **Wrong tokenizer** — provider-side, whichever
+  one that provider uses, while `chapterTokenThreshold` and the
+  token-progress strip measure in o200k via `countTokens`. A story that
+  switches providers mid-run would sum two incompatible token scales.
+  (4) **AI entries only** — `usage` exists only on a generation call, so
+  `user_action` rows carry no count at all, and they are part of the open
+  region (`kind !== 'system'`). A SUM over `completion` undercounts by
+  every user turn. The decision is therefore a **new field, not a
+  rename**: `tokens.{prompt, completion, reasoning}` is a coherent
+  provider-usage triple worth keeping for cost provenance, and
+  repurposing one leg of it to mean "o200k count of the stored content"
+  makes the other two incoherent. Open sub-questions: a real
+  `story_entries` column (SUM-able and indexable, which a JSON field is
+  not — and M5's trigger reads this per turn) versus another metadata
+  key; which write paths must maintain it (generation, edit, prose
+  reversal, system entries, import/seed); backfill for existing rows;
+  whether a translated story counts the original or the translation
+  (the original feeds the prompt buffer, so presumably that); and which
+  number the entry card shows now that "reply tokens" and "content
+  tokens" diverge
+  ([`entry-card.md`](../ui/patterns/entry-card.md#reasoning-expansion)).
+  Sits with the three token-progress-strip entries below, which the same
+  change would resolve. Surfaced by review discussion (2026-08-06).
+- **M5.1 — The token-progress strip reads a 50-entry window, so it cannot
+  reach its own threshold.** `useOpenRegionTokens` sums the open region
+  out of `entriesStore`, which holds a trailing `ENTRIES_WINDOW_SIZE`
+  (50) slice rather than the branch. Measured: 50 entries at realistic
+  length is **37.7%** of the default 24 000 `chapterTokenThreshold`, and
+  reaching 100% would need ~132 entries. Once the open region exceeds 50
+  — the normal state, since nothing closes a chapter before M5 — the
+  strip reports a fraction of the truth and reads "plenty of room" while
+  chapter-close is overdue. `generation-pipeline.md → Chapter close`
+  sketches `openRegionTokens(branchId)` reading from the **DB**, so the
+  two will diverge the moment M5 wires the real trigger. The strip is
+  still better than the hardcoded `0` it replaced; the number is not
+  trustworthy. Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — The same strip is non-monotonic across a reload.** `entriesStore`
+  grows within a session (`patch` never evicts) but `reload()`
+  re-hydrates to the trailing 50, discarding paged-in older rows.
+  `reload()` fires on turn failure, on submit-with-system-tail, and on
+  system-entry dismissal — so **dismissing a system entry visibly
+  shrinks the progress strip**, as does restarting the app. Same story,
+  same open region, different number. Follows from the entry above and
+  is fixed by the same change. Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — `countEntryTokens` now runs on the reader's first render, adding a
+  synchronous tiktoken encoder build before first paint.** It had zero
+  production callers before M3.4 Task 19 — `countTokens` was reached
+  only through the ranker, inside the async per-turn retrieval phase.
+  The BPE map build measured **116ms** on desktop under Node
+  (`lib/retrieval/tokens.ts` documents ~135ms) and will be worse on
+  Android. If story-open shows a hitch, this is it, and the fix is to
+  warm the encoder during story open rather than to change the hook.
+  **Unmeasured on device.** Surfaced by M3.4 Task 19 (2026-08-02).
+- **M5.1 — `countEntryTokens`' memo is never pruned.** `lib/retrieval/tokens.ts`
+  keys an unbounded module-level `Map` on entry id and holds it for the
+  process lifetime, across deletes, rollbacks, branch switches and story
+  switches; `__resetTokenCache` has no production caller. Deleting an
+  entry and later reinstating that id — reverse-replay of a delete
+  re-inserts with the original id — resurrects a memo entry written
+  before the deletion. The content check on read bounds the damage to a
+  stale-content miss rather than a wrong count, so this is a leak rather
+  than a defect today, but it is precisely the shape
+  [lessons-learned → No "harmless" id leaks](./lessons-learned/no-harmless-id-leaks.md)
+  records. Surfaced by the M3.4 whole-slice review (2026-08-03).
+
 **Gates.** M4 (chapter-close compacts entities + lore the world
 panel renders; surfaces would be invisible without M4).
 
