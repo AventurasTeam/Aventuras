@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aventuras mock LLM</title>
+    <style>
+      :root {
+        --bg: #0e1116;
+        --panel: #161b22;
+        --panel-2: #1c232c;
+        --line: #2a323d;
+        --text: #d8dee6;
+        --dim: #8b96a5;
+        --accent: #6aa6ff;
+        --ok: #56b98a;
+        --warn: #d9a441;
+        --bad: #e0616e;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font:
+          14px/1.5 system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+        background: var(--panel);
+        border-bottom: 1px solid var(--line);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+      }
+      header h1 {
+        font-size: 14px;
+        margin: 0;
+        letter-spacing: 0.02em;
+      }
+      header code {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--dim);
+      }
+      .spacer {
+        flex: 1;
+      }
+      button {
+        font: inherit;
+        font-size: 12px;
+        color: var(--text);
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 5px 10px;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: var(--accent);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #0b1017;
+        font-weight: 600;
+      }
+      button.danger:hover {
+        border-color: var(--bad);
+        color: var(--bad);
+      }
+      main {
+        display: grid;
+        grid-template-columns: 240px minmax(0, 1fr);
+        align-items: start;
+        gap: 16px;
+        padding: 16px;
+      }
+      nav {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        position: sticky;
+        top: 62px;
+      }
+      nav h2,
+      section h2 {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--dim);
+        margin: 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .lane-btn {
+        display: block;
+        width: 100%;
+        text-align: left;
+        border: 0;
+        border-radius: 0;
+        border-bottom: 1px solid var(--line);
+        background: transparent;
+        padding: 9px 12px;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .lane-btn:hover {
+        background: var(--panel-2);
+      }
+      .lane-btn[aria-current='true'] {
+        background: var(--panel-2);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      .lane-badges {
+        display: flex;
+        gap: 4px;
+        margin-top: 4px;
+        flex-wrap: wrap;
+      }
+      .badge {
+        font-family: var(--mono);
+        font-size: 10px;
+        padding: 1px 5px;
+        border-radius: 4px;
+        border: 1px solid var(--line);
+        color: var(--dim);
+      }
+      .badge.on {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .badge.bad {
+        color: var(--bad);
+        border-color: var(--bad);
+      }
+      .badge.warn {
+        color: var(--warn);
+        border-color: var(--warn);
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin-bottom: 16px;
+      }
+      .body {
+        padding: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        align-items: flex-end;
+      }
+      label {
+        display: block;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--dim);
+        margin-bottom: 4px;
+      }
+      input,
+      select,
+      textarea {
+        font: inherit;
+        color: var(--text);
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 6px 8px;
+      }
+      input:focus,
+      select:focus,
+      textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      textarea {
+        width: 100%;
+        font-family: var(--mono);
+        font-size: 12px;
+        resize: vertical;
+      }
+      input[type='number'] {
+        width: 90px;
+      }
+      .field {
+        min-width: 0;
+      }
+      .grow {
+        flex: 1;
+        min-width: 240px;
+      }
+      .hint {
+        color: var(--dim);
+        font-size: 12px;
+        margin: 0 0 10px;
+      }
+      .hint code,
+      .mono {
+        font-family: var(--mono);
+      }
+      .responses {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 12px;
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 4px 6px 4px 10px;
+        font-size: 12px;
+        cursor: pointer;
+        background: var(--panel-2);
+      }
+      .chip:has(.pick[aria-pressed='true']) {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      .chip .pick {
+        border: 0;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        padding: 0;
+      }
+      .chip .x {
+        border: 0;
+        background: transparent;
+        color: var(--dim);
+        padding: 0 4px;
+        border-radius: 999px;
+      }
+      .chip .x:hover {
+        color: var(--bad);
+      }
+      .error {
+        white-space: pre-wrap;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--bad);
+        margin: 8px 0 0;
+      }
+      .ph {
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-bottom: 10px;
+      }
+      .ph button {
+        font-family: var(--mono);
+        font-size: 11px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th {
+        text-align: left;
+        font-weight: 500;
+        color: var(--dim);
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--line);
+      }
+      td {
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--line);
+        vertical-align: top;
+      }
+      tr.entry {
+        cursor: pointer;
+      }
+      tr.entry:hover td {
+        background: var(--panel-2);
+      }
+      .detail td {
+        background: var(--bg);
+      }
+      .detail pre {
+        margin: 0 0 8px;
+        max-height: 260px;
+        overflow: auto;
+        font-family: var(--mono);
+        font-size: 11px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--dim);
+      }
+      .log-wrap {
+        overflow-x: auto;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .failed {
+        color: var(--bad);
+      }
+      .aborted {
+        color: var(--warn);
+      }
+      .note {
+        color: var(--warn);
+        font-size: 11px;
+      }
+      .empty {
+        color: var(--dim);
+        padding: 16px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Aventuras mock LLM</h1>
+      <code id="endpoint"></code>
+      <span class="spacer"></span>
+      <button data-bulk='{"mode":"mock"}'>All → mock</button>
+      <button data-bulk='{"mode":"passthrough"}'>All → passthrough</button>
+      <button data-bulk='{"resetSequences":true}'>Reset sequences</button>
+      <button data-bulk='{"clearFailures":true}'>Clear failures</button>
+      <button class="danger" id="reset">Reset to defaults</button>
+    </header>
+
+    <main>
+      <nav>
+        <h2>Lanes</h2>
+        <div id="lanes"></div>
+      </nav>
+
+      <div>
+        <section id="editor"></section>
+        <section>
+          <h2>Requests</h2>
+          <div class="log-wrap"><table id="log"></table></div>
+        </section>
+      </div>
+    </main>
+
+    <script>
+      const PRESETS = [
+        ['Instant', 0],
+        ['Fast', 200],
+        ['Realistic', 40],
+        ['Slow', 10],
+      ]
+      const FAILURES = {
+        narrative: ['none', 'http', 'stream-cut', 'malformed', 'hang'],
+        structured: ['none', 'http', 'malformed', 'hang'],
+      }
+
+      let snap = null
+      let selected = 'narrative'
+      let log = []
+      let expanded = null
+      let pinned = null
+      let laneError = ''
+
+      const $ = (id) => document.getElementById(id)
+      const esc = (s) =>
+        String(s).replace(
+          /[&<>"]/g,
+          (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+        )
+
+      async function api(path, options) {
+        const res = await fetch(path, {
+          headers: { 'content-type': 'application/json' },
+          ...options,
+        })
+        const body = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(body.error || `${res.status} ${path}`)
+        return body
+      }
+
+      async function refresh() {
+        snap = await api('/api/state')
+        render()
+      }
+
+      async function patchLane(patch) {
+        snap = await api(`/api/lanes/${encodeURIComponent(selected)}`, {
+          method: 'PUT',
+          body: JSON.stringify(patch),
+        })
+        render()
+      }
+
+      const currentLane = () => snap?.lanes.find((l) => l.key === selected)
+
+      // ---------- lane list ----------
+
+      function renderLanes() {
+        $('lanes').innerHTML = snap.lanes
+          .map((meta) => {
+            const l = meta.lane
+            const badges = [
+              l.mode === 'passthrough' ? '<span class="badge warn">passthrough</span>' : '',
+              l.failure.kind !== 'none' && l.failure.remaining !== 0
+                ? `<span class="badge bad">${esc(l.failure.kind)}</span>`
+                : '',
+              l.sequence.enabled ? '<span class="badge on">seq</span>' : '',
+              l.delay.ttfbMs > 0 ? `<span class="badge">${esc(l.delay.ttfbMs)}ms</span>` : '',
+              meta.kind === 'unknown' ? '<span class="badge bad">unregistered</span>' : '',
+            ].join('')
+            return `<button class="lane-btn" data-lane="${esc(meta.key)}" aria-current="${meta.key === selected}">
+              ${esc(meta.title)}
+              <div class="lane-badges">${badges}</div>
+            </button>`
+          })
+          .join('')
+      }
+
+      // ---------- editor ----------
+
+      function responseEditor(lane) {
+        const active = lane.responses.find((r) => r.id === lane.activeId) ?? lane.responses[0]
+        if (!active) return '<p class="hint">No responses yet — add one below.</p>'
+
+        if (selected === 'narrative') {
+          const v = active.value ?? {}
+          return `
+            <label for="prose">Prose</label>
+            <textarea id="prose" rows="10">${esc(v.prose ?? '')}</textarea>
+            <div class="row" style="margin-top:10px">
+              <div class="grow">
+                <label for="stateJson">&lt;state&gt; block (JSON, omit for none)</label>
+                <textarea id="stateJson" rows="7">${esc(v.state ? JSON.stringify(v.state, null, 2) : '')}</textarea>
+              </div>
+              <div class="grow">
+                <label for="suggestionsJson">&lt;suggestions&gt; block (JSON array)</label>
+                <textarea id="suggestionsJson" rows="7">${esc(v.suggestions ? JSON.stringify(v.suggestions, null, 2) : '')}</textarea>
+              </div>
+            </div>`
+        }
+
+        return `
+          <label for="valueJson">Reply (JSON, validated against this shape's schema)</label>
+          <textarea id="valueJson" rows="16">${esc(JSON.stringify(active.value ?? {}, null, 2))}</textarea>`
+      }
+
+      function collectValue() {
+        if (selected === 'narrative') {
+          const parse = (id, fallback) => {
+            const raw = $(id).value.trim()
+            return raw === '' ? fallback : JSON.parse(raw)
+          }
+          const value = { prose: $('prose').value }
+          const state = parse('stateJson', undefined)
+          const suggestions = parse('suggestionsJson', undefined)
+          if (state !== undefined) value.state = state
+          if (suggestions !== undefined) value.suggestions = suggestions
+          return value
+        }
+        return JSON.parse($('valueJson').value)
+      }
+
+      function renderEditor() {
+        const meta = snap.lanes.find((l) => l.key === selected)
+        if (!meta) {
+          $('editor').innerHTML = '<div class="empty">Lane not found.</div>'
+          return
+        }
+        const lane = meta.lane
+        const isNarrative = selected === 'narrative'
+        const kinds = FAILURES[isNarrative ? 'narrative' : 'structured']
+        const upstreamOptions = snap.upstreams
+          .map(
+            (u) =>
+              `<option value="${esc(u.id)}" ${lane.upstreamId === u.id ? 'selected' : ''}>${esc(u.label)}${u.apiKeyEnv && !u.apiKeyPresent ? ` — ${esc(u.apiKeyEnv)} unset` : ''}</option>`,
+          )
+          .join('')
+
+        const discovered = snap.discovered.find((d) => d.key === selected)
+
+        $('editor').innerHTML = `
+          <h2>${esc(meta.title)}</h2>
+          <div class="body">
+            ${
+              meta.kind === 'unknown'
+                ? `<p class="hint">This shape is not in <code>scripts/mock-llm/shapes.ts</code>, so replies here are not schema-checked. Its TypeScript block:</p>
+                   <pre class="mono" style="max-height:180px;overflow:auto;font-size:11px;color:var(--dim)">${esc(discovered?.block ?? '(none declared)')}</pre>`
+                : ''
+            }
+            ${
+              pinned
+                ? `<label>Placeholders from the selected request — click to copy</label>
+                   <div class="ph">${pinned
+                     .map(
+                       (p) =>
+                         `<button data-copy="${esc(p.ref)}" title="${esc(p.label)}">${esc(p.ref)} · ${esc(p.label.slice(0, 28))}</button>`,
+                     )
+                     .join('')}</div>`
+                : ''
+            }
+
+            <div class="row" style="margin-bottom:12px">
+              <div class="field">
+                <label for="mode">Mode</label>
+                <select id="mode">
+                  <option value="mock" ${lane.mode === 'mock' ? 'selected' : ''}>mock</option>
+                  <option value="passthrough" ${lane.mode === 'passthrough' ? 'selected' : ''}>passthrough</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="upstream">Upstream</label>
+                <select id="upstream" ${lane.mode !== 'passthrough' ? 'disabled' : ''}>
+                  <option value="">— none —</option>${upstreamOptions}
+                </select>
+              </div>
+              <div class="field">
+                <label for="ttfb">Delay before reply (ms)</label>
+                <input type="number" id="ttfb" min="0" value="${esc(lane.delay.ttfbMs)}" />
+              </div>
+              <div class="field">
+                <label for="jitter">Jitter (± ms)</label>
+                <input type="number" id="jitter" min="0" value="${esc(lane.delay.jitterMs)}" />
+              </div>
+              ${
+                isNarrative
+                  ? `<div class="field">
+                       <label for="cps">Stream speed (chars/sec, 0 = instant)</label>
+                       <input type="number" id="cps" min="0" value="${esc(lane.stream.charsPerSecond)}" />
+                     </div>
+                     <div class="field">
+                       <label for="chunk">Chunk size</label>
+                       <input type="number" id="chunk" min="1" value="${esc(lane.stream.chunkSize)}" />
+                     </div>
+                     <div class="field">
+                       <label>Presets</label>
+                       <div>${PRESETS.map(([name, cps]) => `<button data-cps="${cps}">${name}</button>`).join(' ')}</div>
+                     </div>`
+                  : ''
+              }
+            </div>
+
+            <div class="row" style="margin-bottom:12px">
+              <div class="field">
+                <label for="failKind">Inject failure</label>
+                <select id="failKind">
+                  ${kinds.map((k) => `<option value="${esc(k)}" ${lane.failure.kind === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label for="failStatus">HTTP status</label>
+                <select id="failStatus" ${lane.failure.kind !== 'http' ? 'disabled' : ''}>
+                  ${[401, 403, 429, 500, 502, 503].map((s) => `<option value="${s}" ${lane.failure.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+                </select>
+              </div>
+              <div class="field">
+                <label for="failCount">For how many calls (-1 = always)</label>
+                <input type="number" id="failCount" min="-1" value="${esc(lane.failure.remaining)}" />
+              </div>
+              <div class="field">
+                <label for="seq">Sequence</label>
+                <div>
+                  <label style="display:inline;text-transform:none;letter-spacing:0">
+                    <input type="checkbox" id="seq" ${lane.sequence.enabled ? 'checked' : ''} /> cycle
+                  </label>
+                  <label style="display:inline;text-transform:none;letter-spacing:0;margin-left:8px">
+                    <input type="checkbox" id="seqLoop" ${lane.sequence.loop ? 'checked' : ''} /> loop
+                  </label>
+                  <button id="seqReset" style="margin-left:8px">reset (at ${esc(lane.sequence.cursor)})</button>
+                </div>
+              </div>
+            </div>
+
+            ${
+              !isNarrative && lane.failure.kind !== 'none' && lane.failure.remaining === 1
+                ? `<p class="hint" style="color:var(--warn)">Structured calls retry once (<code>maxProviderAttempts: 2</code>), so a single injected failure is swallowed before the app sees it. Use 2 or more.</p>`
+                : ''
+            }
+
+            <label>Responses</label>
+            <div class="responses">
+              ${lane.responses
+                .map(
+                  (r) =>
+                    `<span class="chip">
+                       <button class="pick" data-activate="${esc(r.id)}" aria-pressed="${r.id === lane.activeId}">${esc(r.name)}</button>
+                       <button class="x" data-delete="${esc(r.id)}" title="Delete">×</button>
+                     </span>`,
+                )
+                .join('')}
+              <button id="addResponse">+ new</button>
+            </div>
+
+            ${responseEditor(lane)}
+            ${laneError ? `<p class="error">${esc(laneError)}</p>` : ''}
+            <div class="row" style="margin-top:10px">
+              <button class="primary" id="save">Save response</button>
+              <button id="rename">Rename</button>
+            </div>
+          </div>`
+      }
+
+      // ---------- log ----------
+
+      function renderLog() {
+        if (log.length === 0) {
+          $('log').innerHTML = '<tr><td class="empty">No requests yet.</td></tr>'
+          return
+        }
+        const head = `<tr><th>Time</th><th>Lane</th><th>Mode</th><th>Served</th><th>Outcome</th><th>Took</th></tr>`
+        const rows = log
+          .map((e) => {
+            const time = new Date(e.at).toLocaleTimeString()
+            const row = `<tr class="entry" data-entry="${esc(e.id)}">
+                <td class="mono">${time}</td>
+                <td class="mono">${esc(e.lane)}${e.streamed ? ' <span class="badge">stream</span>' : ''}</td>
+                <td>${esc(e.mode)}</td>
+                <td>${esc(e.responseName ?? '—')}${e.note ? `<div class="note">${esc(e.note)}</div>` : ''}</td>
+                <td class="${e.outcome}">${esc(e.outcome)}${e.failureKind ? ` (${esc(e.failureKind)})` : ''} · ${esc(e.status)}</td>
+                <td class="mono">${esc(e.durationMs)}ms</td>
+              </tr>`
+            if (expanded !== e.id) return row
+            const served =
+              typeof e.served === 'string' ? e.served : JSON.stringify(e.served, null, 2)
+            return (
+              row +
+              `<tr class="detail"><td colspan="6">
+                 <div class="row" style="margin-bottom:8px">
+                   <button data-save-entry="${esc(e.id)}">Save reply as a response</button>
+                   <button data-goto="${esc(e.lane)}" data-entry-ph="${esc(e.id)}">Open this lane with its placeholders</button>
+                 </div>
+                 <label>Served</label><pre>${esc(served ?? '')}</pre>
+                 <label>Prompt</label><pre>${esc(e.prompt)}</pre>
+               </td></tr>`
+            )
+          })
+          .join('')
+        $('log').innerHTML = head + rows
+      }
+
+      function render() {
+        renderLanes()
+        renderEditor()
+        renderLog()
+      }
+
+      // ---------- events ----------
+
+      document.addEventListener('click', async (event) => {
+        const t = event.target.closest(
+          '[data-lane],[data-bulk],[data-cps],[data-activate],[data-delete],[data-entry],[data-save-entry],[data-goto],[data-copy],#reset,#addResponse,#save,#rename,#seqReset',
+        )
+        if (!t) return
+
+        try {
+          if (t.dataset.lane) {
+            selected = t.dataset.lane
+            laneError = ''
+            pinned = null
+            return render()
+          }
+          if (t.dataset.copy) return navigator.clipboard.writeText(t.dataset.copy)
+          if (t.dataset.bulk) {
+            snap = await api('/api/bulk', { method: 'POST', body: t.dataset.bulk })
+            return render()
+          }
+          if (t.id === 'reset') {
+            if (!confirm('Discard all lanes and responses, restoring shipped defaults?')) return
+            snap = await api('/api/reset', { method: 'POST' })
+            return render()
+          }
+          if (t.dataset.cps !== undefined) {
+            return patchLane({ stream: { charsPerSecond: Number(t.dataset.cps) } })
+          }
+          if (t.dataset.activate) return patchLane({ activeId: t.dataset.activate })
+          if (t.dataset.delete) {
+            snap = await api(
+              `/api/lanes/${encodeURIComponent(selected)}/responses/${t.dataset.delete}`,
+              { method: 'DELETE' },
+            )
+            return render()
+          }
+          if (t.id === 'seqReset') {
+            snap = await api(`/api/lanes/${encodeURIComponent(selected)}/sequence/reset`, {
+              method: 'POST',
+            })
+            return render()
+          }
+          if (t.id === 'addResponse') {
+            const name = prompt('Name for the new response?')
+            if (!name) return
+            const lane = currentLane().lane
+            const template =
+              lane.responses.find((r) => r.id === lane.activeId)?.value ??
+              (selected === 'narrative' ? { prose: '' } : {})
+            snap = await api(`/api/lanes/${encodeURIComponent(selected)}/responses`, {
+              method: 'POST',
+              body: JSON.stringify({ name, value: template }),
+            })
+            laneError = ''
+            return render()
+          }
+          if (t.id === 'save' || t.id === 'rename') {
+            const lane = currentLane().lane
+            const active = lane.responses.find((r) => r.id === lane.activeId) ?? lane.responses[0]
+            if (!active) return
+            const payload =
+              t.id === 'rename'
+                ? { name: prompt('New name?', active.name) }
+                : { value: collectValue() }
+            if (t.id === 'rename' && !payload.name) return
+            snap = await api(`/api/lanes/${encodeURIComponent(selected)}/responses/${active.id}`, {
+              method: 'PUT',
+              body: JSON.stringify(payload),
+            })
+            laneError = ''
+            return render()
+          }
+          if (t.dataset.saveEntry) {
+            const name = prompt('Name for the recorded response?', 'Recorded')
+            if (!name) return
+            snap = await api(`/api/log/${t.dataset.saveEntry}/save`, {
+              method: 'POST',
+              body: JSON.stringify({ name }),
+            })
+            const entry = log.find((e) => e.id === t.dataset.saveEntry)
+            selected = entry?.lane ?? selected
+            laneError = ''
+            return render()
+          }
+          if (t.dataset.goto) {
+            selected = t.dataset.goto
+            pinned = log.find((e) => e.id === t.dataset.entryPh)?.placeholders ?? null
+            laneError = ''
+            return render()
+          }
+          if (t.dataset.entry) {
+            expanded = expanded === t.dataset.entry ? null : t.dataset.entry
+            return renderLog()
+          }
+        } catch (err) {
+          laneError = err.message
+          render()
+        }
+      })
+
+      document.addEventListener('change', (event) => {
+        const id = event.target.id
+        const value = event.target.value
+        const map = {
+          mode: () => ({ mode: value }),
+          upstream: () => ({ upstreamId: value || null }),
+          ttfb: () => ({ delay: { ttfbMs: Number(value) } }),
+          jitter: () => ({ delay: { jitterMs: Number(value) } }),
+          cps: () => ({ stream: { charsPerSecond: Number(value) } }),
+          chunk: () => ({ stream: { chunkSize: Number(value) } }),
+          failKind: () => ({
+            failure: {
+              kind: value,
+              // A kind picked from the menu is meant to fire; without a budget
+              // it would sit inert and read as a broken control.
+              remaining: value === 'none' ? 0 : currentLane().lane.failure.remaining || 1,
+            },
+          }),
+          failStatus: () => ({ failure: { status: Number(value) } }),
+          failCount: () => ({ failure: { remaining: Number(value) } }),
+          seq: () => ({ sequence: { enabled: event.target.checked } }),
+          seqLoop: () => ({ sequence: { loop: event.target.checked } }),
+        }
+        if (map[id]) void patchLane(map[id]())
+      })
+
+      const events = new EventSource('/api/events')
+      events.onmessage = (event) => {
+        log.unshift(JSON.parse(event.data))
+        log = log.slice(0, 200)
+        renderLog()
+        // The served call may have advanced a sequence cursor or spent a
+        // failure budget, so the lane panel is stale until re-fetched.
+        void refresh()
+      }
+
+      async function boot() {
+        const url = new URL('/v1', location.href)
+        $('endpoint').textContent = url.href
+        log = await api('/api/log')
+        await refresh()
+      }
+
+      // renderEditor needs a snapshot, so a failed boot has to report itself.
+      void boot().catch((err) => {
+        $('editor').innerHTML =
+          `<div class="empty">Could not reach the mock control API: ${esc(err.message)}</div>`
+      })
+    </script>
+  </body>
+</html>

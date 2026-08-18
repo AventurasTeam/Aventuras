@@ -1,15 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
-import { z } from 'zod'
-
-import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
-import { classifierExtractionSchema } from '@/lib/classifier'
-import {
-  fallbackClassifierSchema,
-  fallbackClassifierWithSuggestionsSchema,
-  suggestionRefreshSchema,
-} from '@/lib/pipeline'
+import { matchShape } from '../../scripts/mock-llm/routing'
 
 // A local OpenAI-compatible endpoint. The whole pipeline talks to one URL
 // (POST …/chat/completions) but a turn fans out into calls with different
@@ -18,12 +10,17 @@ import {
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
 //     (schemaToTypeScriptBlock over the agent's zod schema). Each reply shape
-//     is one STRUCTURED_AGENTS entry — an agent with more than one possible
+//     is one STRUCTURED_SHAPES entry — an agent with more than one possible
 //     schema (e.g. the classifier with/without suggestions) gets one entry per
 //     shape; adding one is mechanical and the match can't drift because it
 //     reuses the app's own renderer.
 // Exercises the real transport (lib/ai/transport), unlike the __DEV__-gated
 // stub provider. See docs/testing.md → Mock LLM.
+//
+// The shape registry is shared with the dev mock server (scripts/mock-llm).
+// The default replies below are NOT: these are deliberately inert so a spec
+// that never calls setStructured writes nothing, whereas the dev tool's
+// defaults are chosen to make a hand-driven turn visibly do something.
 
 export type MockRequest = {
   body: Record<string, unknown>
@@ -32,54 +29,32 @@ export type MockRequest = {
   agent: string | null
 }
 
-// One entry per reply shape; `name` is unique per entry (`overrides` and
-// `MockRequest.agent` both key on it) even when two shapes belong to the same
-// logical agent. `block` is the exact string the app renders into the prompt
-// for this schema; `example` is a schema-valid default reply.
-type StructuredAgent = { name: string; block: string; example: unknown }
-
-const STRUCTURED_AGENTS: StructuredAgent[] = [
-  {
-    name: 'per-turn-classifier',
-    block: schemaToTypeScriptBlock(z.toJSONSchema(fallbackClassifierSchema) as JsonSchema),
-    // No-op: empty scene, no time change — parses and applies cleanly.
-    example: { sceneEntities: [], worldTimeDelta: 0 },
+// Exported so scripts/mock-llm/shapes.test.ts can assert every registered shape
+// still has one and that each is schema-valid — a shape added to the shared
+// registry without an entry here would otherwise serve `undefined` mid-suite.
+export const EXAMPLES: Record<string, unknown> = {
+  // No-op: empty scene, no time change — parses and applies cleanly.
+  'per-turn-classifier': { sceneEntities: [], worldTimeDelta: 0 },
+  // Silence is valid: the default reply must not write anything, so specs opt
+  // in to graph writes via setStructured.
+  'periodic-classifier': {
+    happenings: [],
+    relationships: [],
+    statusFlips: [],
+    newCharacters: [],
   },
-  {
-    name: 'periodic-classifier',
-    block: schemaToTypeScriptBlock(z.toJSONSchema(classifierExtractionSchema) as JsonSchema),
-    // Silence is valid: the default reply must not write anything, so specs opt
-    // in to graph writes via setStructured.
-    example: { happenings: [], relationships: [], statusFlips: [], newCharacters: [] },
-  },
-  {
-    // Same logical agent, second reply shape: the classifier's schema grows a
-    // `suggestions` field whenever the run asks for chips (suggestionsEnabled
-    // AND at least one enabled category, and no chips already in hand), which
-    // changes the injected TS block enough
-    // that it no longer matches the entry above (see per-turn-piggyback.ts).
-    // Distinct name so setStructured can target this shape without also
-    // overriding the base-schema entry's reply.
-    name: 'per-turn-classifier-suggestions',
-    block: schemaToTypeScriptBlock(
-      z.toJSONSchema(fallbackClassifierWithSuggestionsSchema) as JsonSchema,
-    ),
-    example: { sceneEntities: [], worldTimeDelta: 0, suggestions: [] },
-  },
-  {
-    // The ⟳ refresh pipeline's own agent target ('suggestion'), a distinct
-    // schema from both classifier shapes above. Its own entry because an
-    // unmatched structured request answers 200 with `{}` (not a 404 — that is
-    // only for a wrong URL or method), and `{}` fails this schema, which has no
-    // suggestions.catch([]) to absorb it (suggestion-refresh.ts).
-    name: 'suggestion-refresh',
-    block: schemaToTypeScriptBlock(z.toJSONSchema(suggestionRefreshSchema) as JsonSchema),
-    // One resolvable chip, NOT zero: a refresh that resolves nothing is now a
-    // run failure, so an empty default would fail any spec that reaches ⟳
-    // without calling setStructured. cat1 is the first enabled category.
-    example: { suggestions: [{ categoryRef: 'cat1', text: 'You press on.' }] },
-  },
-]
+  // Same logical agent as per-turn-classifier, second reply shape: the
+  // classifier's schema grows a `suggestions` field whenever the run asks for
+  // chips (suggestionsEnabled AND at least one enabled category, and no chips
+  // already in hand), which changes the injected TS block enough that it no
+  // longer matches the base entry (see per-turn-piggyback.ts). Distinct name so
+  // setStructured can target this shape without also overriding the base one.
+  'per-turn-classifier-suggestions': { sceneEntities: [], worldTimeDelta: 0, suggestions: [] },
+  // One resolvable chip, NOT zero: a refresh that resolves nothing is now a
+  // run failure, so an empty default would fail any spec that reaches ⟳
+  // without calling setStructured. cat1 is the first enabled category.
+  'suggestion-refresh': { suggestions: [{ categoryRef: 'cat1', text: 'You press on.' }] },
+}
 
 export type MockLlm = {
   /** baseURL to seed as the provider endpoint (already includes /v1). */
@@ -242,9 +217,9 @@ export async function startMockLlm(): Promise<MockLlm> {
       }
 
       const text = promptText(body)
-      const agent = STRUCTURED_AGENTS.find((a) => text.includes(a.block)) ?? null
+      const agent = matchShape(null, text)
       requests.push({ body, streamed, agent: agent?.name ?? null })
-      const value = agent ? (overrides.get(agent.name) ?? agent.example) : {}
+      const value = agent ? (overrides.get(agent.name) ?? EXAMPLES[agent.name]) : {}
       res.writeHead(200, { ...cors, 'content-type': 'application/json' })
       res.end(structuredCompletion(value))
     })()
