@@ -124,6 +124,7 @@ describe('buildLandmarks', () => {
     const landmarks = buildLandmarks(
       branchView,
       [checkpoint('cp-late', 'b4'), checkpoint('cp-early', 'b2')],
+      [br1],
       br1,
     )
     expect(landmarks.map((l) => [l.kind, l.number])).toEqual([
@@ -137,49 +138,87 @@ describe('buildLandmarks', () => {
     const landmarks = buildLandmarks(
       branchView,
       [checkpoint('cp-origin', 'm1', 'Council of five')],
+      [br1],
       br1,
     )
     expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
-    expect(landmarks[0].preview).toBe('Council of five preview')
+    expect(landmarks[0].branchName).toBe('Main')
   })
 
   it('falls back to a generic origin label when that checkpoint is gone', () => {
     // `checkpointId` is nullable for imported and legacy branches, and a checkpoint can be
     // deleted after the branch that came from it.
-    const orphaned = buildLandmarks(branchView, [], branch('br1', 'm1', 'Betrayal', 'deleted-cp'))
+    const orphaned = buildLandmarks(
+      branchView,
+      [],
+      [br1],
+      branch('br1', 'm1', 'Betrayal', 'deleted-cp'),
+    )
     expect(orphaned.map((l) => [l.kind, l.label])).toEqual([['origin', 'Branch origin']])
   })
 
   it('omits the origin row on the main branch', () => {
     const mainView = [entry('m0', 0), entry('m1', 1)]
-    const landmarks = buildLandmarks(mainView, [checkpoint('cp', 'm1')], null)
+    const landmarks = buildLandmarks(mainView, [checkpoint('cp', 'm1')], [], null)
     expect(landmarks.map((l) => l.kind)).toEqual(['checkpoint'])
   })
 
   it('omits an origin whose entry is not loaded', () => {
-    const landmarks = buildLandmarks(branchView, [], branch('br1', 'not-loaded', 'Betrayal'))
+    const landmarks = buildLandmarks(
+      branchView,
+      [],
+      [br1],
+      branch('br1', 'not-loaded', 'Betrayal'),
+    )
     expect(landmarks).toEqual([])
   })
 
-  it('excludes checkpoints inherited from an ancestor branch', () => {
-    // m1 is in view, but it belongs to main -- a new branch cannot be forked from it
-    // while reading br1.
-    const landmarks = buildLandmarks(branchView, [checkpoint('cp-main', 'm1')], br1)
-    expect(landmarks.map((l) => l.kind)).toEqual(['origin'])
+  it('includes checkpoints inherited from every branch in the visible lineage', () => {
+    const ancestor = branch('ancestor', 'm0', 'First path')
+    const lineageView = [
+      entry('m0', 0),
+      entry('a1', 1, 'ancestor'),
+      entry('a2', 2, 'ancestor'),
+      entry('b3', 3, 'br1'),
+    ]
+    const current = { ...br1, forkEntryId: 'a2', checkpointId: 'cp-origin' }
+    const landmarks = buildLandmarks(
+      lineageView,
+      [
+        checkpoint('cp-main', 'm0', 'Departure'),
+        checkpoint('cp-ancestor', 'a1', 'Crossroads'),
+        checkpoint('cp-origin', 'a2', 'Final choice'),
+        checkpoint('cp-current', 'b3', 'Arrival'),
+      ],
+      [ancestor, current],
+      current,
+    )
+
+    expect(landmarks.map((l) => [l.label, l.branchName])).toEqual([
+      ['Departure', 'Main'],
+      ['Crossroads', 'First path'],
+      ['Final choice', 'First path'],
+      ['Arrival', 'Betrayal'],
+    ])
   })
 
   it('excludes a checkpoint whose entry a rollback has deleted', () => {
-    const landmarks = buildLandmarks(branchView, [checkpoint('cp', 'gone')], br1)
+    const landmarks = buildLandmarks(branchView, [checkpoint('cp', 'gone')], [br1], br1)
     expect(landmarks.map((l) => l.kind)).toEqual(['origin'])
   })
 
   it('returns nothing for a main branch with no checkpoints', () => {
-    expect(buildLandmarks([entry('m0', 0)], [], null)).toEqual([])
+    expect(buildLandmarks([entry('m0', 0)], [], [], null)).toEqual([])
   })
 
-  it('carries the checkpoint name and preview onto the row', () => {
-    const [, row] = buildLandmarks(branchView, [checkpoint('cp', 'b2', 'Before the duel')], br1)
+  it('carries the checkpoint and branch names onto the row', () => {
+    const [, row] = buildLandmarks(
+      branchView,
+      [checkpoint('cp', 'b2', 'Before the duel')],
+      [br1],
+      br1,
+    )
     expect(row.label).toBe('Before the duel')
-    expect(row.preview).toBe('Before the duel preview')
+    expect(row.branchName).toBe('Betrayal')
   })
 })

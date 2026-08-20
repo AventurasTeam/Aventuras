@@ -17,7 +17,9 @@
     return story.branches.find((b) => b.id === branchId) ?? null
   })
 
-  const landmarks = $derived(buildLandmarks(story.entries, story.checkpoints, activeBranch))
+  const landmarks = $derived(
+    buildLandmarks(story.entries, story.checkpoints, story.branches, activeBranch),
+  )
 
   const lastNumber = $derived(
     story.entries.length > 0 ? entryNumber(story.entries[story.entries.length - 1]) : 0,
@@ -118,9 +120,7 @@
                    telling these rows apart, and a touch device has no tooltip to fall back
                    on. The list is a handful of rows, so the vertical space is affordable. -->
               <span class="text-surface-200 block text-sm break-words">{landmark.label}</span>
-              {#if landmark.preview}
-                <span class="text-surface-500 block truncate text-xs">{landmark.preview}</span>
-              {/if}
+              <span class="text-surface-500 block truncate text-xs">{landmark.branchName}</span>
             </span>
           </button>
         {/each}

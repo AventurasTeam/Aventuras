@@ -55,27 +55,31 @@ export interface Landmark {
   number: number
   kind: LandmarkKind
   label: string
-  preview: string | null
+  branchName: string
 }
 
 /**
  * The places in the branch being read that are worth returning to: where it began, and every
- * checkpoint a new branch can be forked from here.
+ * checkpoint along the lineage that produced its current state.
  *
- * A checkpoint is forkable only from the branch its entry belongs to, so checkpoints inherited
- * from an ancestor are left out — they are visible in the story but cannot be branched from
- * while reading this branch. Resolution goes through `entries` rather than each checkpoint's
- * `entriesSnapshot` (a full deep copy of the story), which also drops checkpoints whose entry a
- * rollback has since deleted.
+ * Resolution goes through `entries` rather than each checkpoint's `entriesSnapshot` (a full deep
+ * copy of the story). This both includes inherited checkpoints in the visible lineage and drops
+ * checkpoints whose entry a rollback has since deleted.
  */
 export function buildLandmarks(
   entries: StoryEntry[],
   checkpoints: Checkpoint[],
+  branches: Branch[],
   activeBranch: Branch | null,
 ): Landmark[] {
   const byId = new Map(entries.map((entry) => [entry.id, entry]))
-  const branchId = activeBranch?.id ?? null
+  const branchNames = new Map(branches.map((branch) => [branch.id, branch.name]))
   const landmarks: Landmark[] = []
+
+  function getBranchName(branchId: string | null): string {
+    if (!branchId) return 'Main'
+    return branchNames.get(branchId) ?? 'Unknown branch'
+  }
 
   if (activeBranch) {
     const forkEntry = byId.get(activeBranch.forkEntryId)
@@ -90,20 +94,20 @@ export function buildLandmarks(
         number: entryNumber(forkEntry),
         kind: 'origin',
         label: origin?.name ?? 'Branch origin',
-        preview: origin?.lastEntryPreview ?? null,
+        branchName: getBranchName(forkEntry.branchId),
       })
     }
   }
 
   for (const checkpoint of checkpoints) {
     const entry = byId.get(checkpoint.lastEntryId)
-    if (!entry || entry.branchId !== branchId) continue
+    if (!entry || checkpoint.id === activeBranch?.checkpointId) continue
     landmarks.push({
       entryId: entry.id,
       number: entryNumber(entry),
       kind: 'checkpoint',
       label: checkpoint.name,
-      preview: checkpoint.lastEntryPreview,
+      branchName: getBranchName(entry.branchId),
     })
   }
 
