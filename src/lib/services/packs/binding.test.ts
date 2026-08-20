@@ -55,6 +55,17 @@ describe('matchPack', () => {
     expect(match.pack?.id).toBe('local-1')
   })
 
+  it('does not silently choose between duplicate normalized name-and-author matches', async () => {
+    db.packs = [
+      pack({ id: 'local-1', name: 'Grimdark', author: 'Ada' }),
+      pack({ id: 'local-2', name: ' grimdark ', author: 'ada' }),
+    ]
+
+    const match = await matchPack({ name: 'GRIMDARK', author: 'Ada' })
+
+    expect(match.confidence).toBe('name-only')
+  })
+
   it('treats a null author and an empty one as the same value', async () => {
     db.packs = [pack({ id: 'local-1', author: null })]
     await expect(matchPack({ name: 'Grimdark', author: '' })).resolves.toMatchObject({

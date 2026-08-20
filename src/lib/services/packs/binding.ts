@@ -62,11 +62,14 @@ export async function matchPack(
   if (!name) return { pack: null, confidence: 'none' }
 
   const candidates = packs ?? (await database.getAllPacks())
-  const byName = candidates.find((p) => normalize(p.name) === name)
-  if (!byName) return { pack: null, confidence: 'none' }
+  const byName = candidates.filter((p) => normalize(p.name) === name)
+  if (byName.length === 0) return { pack: null, confidence: 'none' }
 
-  const authorMatches = normalize(byName.author) === normalize(identity?.author)
-  return { pack: byName, confidence: authorMatches ? 'exact' : 'name-only' }
+  const author = normalize(identity?.author)
+  const authorMatches = byName.filter((p) => normalize(p.author) === author)
+  // One candidate on name *and* author is the only unambiguous reading.
+  if (authorMatches.length === 1) return { pack: authorMatches[0], confidence: 'exact' }
+  return { pack: byName[0], confidence: 'name-only' }
 }
 
 /** The subset of a runtime variable definition that matching needs, from either side. */

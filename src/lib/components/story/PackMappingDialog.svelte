@@ -13,8 +13,8 @@
   import { Button } from '$lib/components/ui/button'
   import StepPackSelection from '../wizard/steps/StepPackSelection.svelte'
   import { database } from '$lib/services/database'
-  import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
-  import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+  import { DEFAULT_PACK_ID } from '$lib/services/packs'
+  import type { PresetPack, CustomVariable } from '$lib/services/packs'
   import { customVariableValue, mergeCustomVariableValues } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
 
@@ -45,6 +45,7 @@
   let variableValues = $state<Record<string, string>>({})
   let editedValues = $state<Record<string, string>>({})
   let loading = $state(true)
+  let loadToken = 0
 
   /** The file's own answers, kept so switching packs can re-apply them to matching names. */
   const fileValues = $derived(context.binding?.customVariableValues ?? {})
@@ -74,7 +75,9 @@
    * author chose is more likely right than a default they never saw — and stays editable here.
    */
   async function loadVariables(packId: string) {
+    const token = ++loadToken
     const all = await database.getPackVariables(packId)
+    if (token !== loadToken) return
     targetPackVariables = all
     packVariables = onlyVariables ? all.filter((v) => onlyVariables.includes(v.variableName)) : all
     const seeded: Record<string, string> = {}

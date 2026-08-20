@@ -60,8 +60,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-const { gatherStoryData } = await import('./ExportCoordinationService')
-const { exportService } = await import('../export')
+const { gatherStoryData, exportService } = await import('$lib/services/export')
 
 beforeEach(() => {
   invoke.mockClear()

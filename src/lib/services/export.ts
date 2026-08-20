@@ -4,9 +4,9 @@ import { writeTextFile } from '@tauri-apps/plugin-fs'
 import { resolveSaveTarget } from './exportTarget'
 import { errMessage } from '$lib/utils/error'
 import { openFilters } from '$lib/utils/dialogFilters'
-import { importFromJson, importFromFile, previewPackBinding, EXPORT_FORMAT_VERSION } from './import'
+import { importFromJson, importFromFile, EXPORT_FORMAT_VERSION } from './import'
 import type { AventuraExport, ImportResult, RunImportOptions } from './import'
-import type { PackBindingExport } from './import/types'
+import type { PackBindingExport } from './import'
 
 // Re-exported for the modules that imported these from here before the import logic moved.
 export type { AventuraExport } from './import'
@@ -243,10 +243,6 @@ class ExportService {
   }
 
   /** What a payload says about its pack, so a caller can settle it before importing. */
-  async previewPackBinding(content: string) {
-    return previewPackBinding(content)
-  }
-
   private sanitizeFilename(name: string): string {
     return name
       .replace(/[<>:"/\\|?*]/g, '')
@@ -258,4 +254,8 @@ class ExportService {
 export const exportService = new ExportService()
 
 // Re-export coordination service
-export { gatherStoryData, type StoryExportData } from './export/ExportCoordinationService'
+export {
+  gatherPackBinding,
+  gatherStoryData,
+  type StoryExportData,
+} from './export/ExportCoordinationService'

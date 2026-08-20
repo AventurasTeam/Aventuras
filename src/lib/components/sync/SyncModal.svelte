@@ -19,9 +19,8 @@
   import { onDestroy, untrack } from 'svelte'
   import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
-  import type { PresetPack } from '$lib/services/packs/types'
-  import { planPackBinding } from '$lib/services/import'
+  import type { PresetPack } from '$lib/services/packs'
+  import { planPackBinding, previewImport } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -50,10 +49,12 @@
    * Returns the resolution, or `null` if the user backed out — in which case the caller must
    * return without touching anything.
    */
-  async function resolveIncomingPack(storyJson: string): Promise<PackBindingResolution | null> {
-    const context = await exportService.previewPackBinding(storyJson)
-    // Unparseable: let the import produce the real error rather than inventing one here.
-    if (!context) return { packId: DEFAULT_PACK_ID }
+  async function resolveIncomingPack(
+    storyJson: string,
+  ): Promise<PackBindingResolution | null | { error: string }> {
+    const preview = await previewImport(storyJson)
+    if ('error' in preview) return preview
+    const { context } = preview
 
     const plan = await planPackBinding(
       context,
@@ -93,6 +94,7 @@
   let receivedStoryPreview = $state<SyncStoryPreview | null>(null)
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
+  let receivingStory = false
 
   // State for version mismatch warning
   let remoteVersion = $state<string | null>(null)
@@ -132,6 +134,7 @@
     receivedStoryJson = null
     receivedStoryPreview = null
     showReceivedConflict = false
+    receivingStory = false
     remoteVersion = null
     localVersion = null
     showVersionWarning = false
@@ -159,6 +162,7 @@
     try {
       const received = await syncService.getReceivedStories()
       if (received.length > 0) {
+        if (receivedStoryJson || receivingStory) return
         // Take the first received story
         const storyJson = received[0]
         const preview = syncService.getStoryPreview(storyJson)
@@ -166,6 +170,10 @@
         if (preview) {
           receivedStoryJson = storyJson
           receivedStoryPreview = preview
+          // Claim this payload before awaiting any database work or a pack choice. Otherwise a
+          // later poll can replace the resolver while the first import is suspended.
+          stopPolling()
+          await syncService.clearReceivedStories()
 
           // Check for conflict
           const exists = await syncService.checkStoryExists(preview.title)
@@ -177,9 +185,7 @@
           }
         }
 
-        // Clear received stories from server
-        await syncService.clearReceivedStories()
-        stopPolling()
+        if (!preview) await syncService.clearReceivedStories()
       }
     } catch {
       // Ignore polling errors
@@ -187,14 +193,23 @@
   }
 
   async function importReceivedStory() {
-    if (!receivedStoryJson || !receivedStoryPreview) return
+    if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
+    receivingStory = true
 
     // Pack first — and deliberately outside the block below, whose `finally` discards the
     // received payload. The poller has already cleared the server's copy, so a cancel that fell
     // through to it would lose the story outright; backing out must leave it pending so the user
     // can go install the pack and click again.
     const packBinding = await resolveIncomingPack(receivedStoryJson)
-    if (!packBinding) return
+    if (packBinding && 'error' in packBinding) {
+      error = packBinding.error
+      receivingStory = false
+      return
+    }
+    if (!packBinding) {
+      receivingStory = false
+      return
+    }
 
     loading = true
     error = null
@@ -223,13 +238,15 @@
       error = e instanceof Error ? e.message : 'Import failed'
     } finally {
       loading = false
+      receivingStory = false
       receivedStoryJson = null
       receivedStoryPreview = null
     }
   }
 
-  function cancelReceivedImport() {
+  function discardReceivedStory() {
     showReceivedConflict = false
+    receivingStory = false
     receivedStoryJson = null
     receivedStoryPreview = null
     // Resume polling for more stories
@@ -435,6 +452,11 @@
       const storyJson = await syncService.pullStory(pullConnection, selectedRemoteStory.id)
 
       const packBinding = await resolveIncomingPack(storyJson)
+      if (packBinding && 'error' in packBinding) {
+        error = packBinding.error
+        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
+        return
+      }
       if (!packBinding) {
         // A user cancellation keeps the established connection usable. A lifecycle cancellation
         // from close/reset must not resurrect an old session over freshly reset state.
@@ -619,8 +641,18 @@
               it will create a "Pre-sync backup" checkpoint first. Continue?
             </p>
             <div class="flex gap-3">
-              <Button variant="outline" onclick={cancelReceivedImport}>Cancel</Button>
+              <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
               <Button onclick={importReceivedStory}>Replace</Button>
+            </div>
+          </div>
+        {:else if receivedStoryPreview}
+          <div class="flex flex-col items-center py-4 text-center">
+            <p class="text-muted-foreground mb-4">
+              Received "{receivedStoryPreview.title}". Choose a prompt pack to continue.
+            </p>
+            <div class="flex gap-3">
+              <Button variant="outline" onclick={discardReceivedStory}>Discard</Button>
+              <Button onclick={importReceivedStory}>Continue import</Button>
             </div>
           </div>
         {:else if loading}

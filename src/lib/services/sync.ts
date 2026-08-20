@@ -1,10 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
 import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
 import type { AventuraExport } from './export'
-// The one piece of the `.avt` exporter sync shares. Imported from its own module rather than the
-// `./export` barrel, which pulls in the Tauri dialog/fs plugins at module scope that sync has no
-// use for. See the note on `exportStoryToJson` for what is deliberately *not* shared.
-import { gatherPackBinding } from './export/ExportCoordinationService'
+// The one piece of the `.avt` exporter sync shares. See the note on `exportStoryToJson` for what
+// is deliberately *not* shared.
+import { gatherPackBinding } from './export'
 import { database } from './database'
 import { story } from '$lib/stores/story.svelte'
 

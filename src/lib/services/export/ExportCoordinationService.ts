@@ -16,7 +16,7 @@ import type {
   Branch,
   EmbeddedImageMeta,
 } from '$lib/types'
-import type { PackBindingExport } from '$lib/services/import/types'
+import type { PackBindingExport } from '$lib/services/import'
 
 /** Complete story data for export */
 export interface StoryExportData {

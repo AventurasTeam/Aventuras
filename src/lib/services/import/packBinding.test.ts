@@ -172,6 +172,17 @@ describe('runImport — resolving the pack binding', () => {
     expect(calls.deleted).toEqual([])
   })
 
+  it('returns an import failure when pack resolution throws before the first write', async () => {
+    const result = await runImport(sampleExport(namedBinding), {
+      resolvePackBinding: async () => {
+        throw new Error('pack database unavailable')
+      },
+    })
+
+    expect(result).toMatchObject({ success: false, error: 'pack database unavailable' })
+    expect(calls.stories).toEqual([])
+  })
+
   it('hands the resolver the file binding and the auto-match to pre-select', async () => {
     db.packs.push(pack({ id: 'local-grimdark' }))
     const seen: any[] = []
@@ -569,6 +580,7 @@ describe('sync — the decision is made before anything is written', () => {
     })
 
     expect(calls.stories[0].packId).toBe('picked-by-user')
+    expect(calls.stories[1].packId).toBe('picked-by-user')
     expect(asked).toBe(1)
   })
 

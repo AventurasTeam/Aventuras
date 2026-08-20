@@ -9,7 +9,7 @@
 
 import { database } from '$lib/services/database'
 import { errMessage } from '$lib/utils/error'
-import type { AventuraExport, ImportResult, IdMaps } from './types'
+import type { AventuraExport, ImportResult, IdMaps, PackBindingExport } from './types'
 import { validateExport, logVersionCompatibilityWarnings } from './validate'
 import { buildIdMaps } from './idMaps'
 import { importStructure } from './structure'
@@ -18,7 +18,7 @@ import { importImagesInline } from './images'
 import { autoMatchPackBinding, buildBindingContext } from './packBinding'
 import type { PackBindingContext, PackBindingResolution } from './packBinding'
 
-export type { AventuraExport, ImportResult, IdMaps } from './types'
+export type { AventuraExport, ImportResult, IdMaps, PackBindingExport } from './types'
 export { EXPORT_FORMAT_VERSION } from './types'
 export { validateExport, logVersionCompatibilityWarnings, compareVersions } from './validate'
 export { buildIdMaps, createMappers } from './idMaps'
@@ -88,20 +88,20 @@ export async function runImport(
   const invalid = validateExport(data)
   if (invalid) return { success: false, error: invalid }
 
-  logVersionCompatibilityWarnings(data.version)
-
-  // Before the first write: a cancel here costs nothing to undo, and the story never exists
-  // bound to a pack the user did not pick.
-  const context = await buildBindingContext(data.packBinding)
-  const resolution = await resolvePackBinding(context)
-  if (!resolution) return { success: false }
-
-  const packBinding = await loadTargetDefinitions(context, resolution)
-
-  const maps = buildIdMaps(data)
   let storyCreated = false
+  let maps: IdMaps | null = null
 
   try {
+    logVersionCompatibilityWarnings(data)
+
+    // Before the first write: a cancel here costs nothing to undo, and the story never exists
+    // bound to a pack the user did not pick.
+    const context = await buildBindingContext(data.packBinding)
+    const resolution = await resolvePackBinding(context)
+    if (!resolution) return { success: false }
+
+    const packBinding = await loadTargetDefinitions(context, resolution)
+    maps = buildIdMaps(data)
     await importStructure(data, maps, {
       skipImportedSuffix,
       packBinding,
@@ -113,7 +113,7 @@ export async function runImport(
     return { success: true, storyId: maps.newStoryId }
   } catch (error) {
     console.error('Import failed:', error)
-    if (storyCreated) await rollbackStory(maps.newStoryId)
+    if (storyCreated && maps) await rollbackStory(maps.newStoryId)
     return { success: false, error: errMessage(error) }
   }
 }
@@ -149,20 +149,24 @@ async function rollbackStory(storyId: string): Promise<void> {
   }
 }
 
-/**
- * Work out what a story payload says about its pack, without importing it.
- *
- * Sync needs this because it deletes the story it is replacing before importing: the pack
- * question has to be asked and answered while that story is still there, which means before
- * `runImport` is reached. Returns `null` if the content is not parseable — the import will
- * produce the real error message a moment later, and there is nothing to ask about either way.
- */
-export async function previewPackBinding(content: string): Promise<PackBindingContext | null> {
+/** Parse and validate a sync payload before any replacement work begins. */
+export async function previewImport(
+  content: string,
+): Promise<{ context: PackBindingContext } | { error: string }> {
+  let data: AventuraExport
   try {
-    const data: AventuraExport = JSON.parse(content)
-    return await buildBindingContext(data.packBinding)
+    data = JSON.parse(content)
   } catch {
-    return null
+    return { error: 'Invalid file: Not a valid JSON file.' }
+  }
+
+  const invalid = validateExport(data)
+  if (invalid) return { error: invalid }
+
+  try {
+    return { context: await buildBindingContext(data.packBinding) }
+  } catch (error) {
+    return { error: errMessage(error) }
   }
 }
 

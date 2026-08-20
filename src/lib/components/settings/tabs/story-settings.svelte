@@ -124,11 +124,14 @@
 
   /** The story's bound pack, for display. `null` until loaded. */
   let boundPack = $state<PresetPack | null>(null)
+  let boundPackLoaded = $state(false)
 
   $effect(() => {
     const storyId = story.currentStory?.id
     if (!storyId) return
 
+    boundPack = null
+    boundPackLoaded = false
     let cancelled = false
     void (async () => {
       // Mirrors ContextBuilder.forStory: a NULL column means the built-in pack narrates.
@@ -136,6 +139,7 @@
       const pack = await database.getPack(packId)
       if (cancelled) return
       boundPack = pack
+      boundPackLoaded = true
     })()
 
     return () => {
@@ -159,7 +163,7 @@
     let cancelled = false
     const resolve = async () => {
       if (override) return templateUsesLengthInstruction(override)
-      const packId = (await database.getStoryPackId(storyId)) || 'default-pack'
+      const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
       const template = await new ContextBuilder(packId).resolveTemplate(templateId)
       return templateUsesLengthInstruction(template?.content)
     }
@@ -308,6 +312,8 @@
         {#if isActive}
           <span>— overridden for this story by the custom prompt below.</span>
         {/if}
+      {:else if boundPackLoaded}
+        <span class="opacity-70">not found</span>
       {:else}
         <span class="opacity-70">loading…</span>
       {/if}

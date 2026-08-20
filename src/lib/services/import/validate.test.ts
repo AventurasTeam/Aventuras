@@ -123,6 +123,16 @@ describe('logVersionCompatibilityWarnings', () => {
     expect(warn).not.toHaveBeenCalled()
   })
 
+  it('does not warn about a missing pack binding when an older sync payload carries one', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    logVersionCompatibilityWarnings({
+      version: '1.7.0',
+      packBinding: { pack: { name: 'Grimdark', author: 'Ada' } },
+    })
+
+    expect(warn.mock.calls.map(String).join('\n')).not.toContain('prompt pack information')
+  })
+
   it('warns about every feature for the oldest possible file', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logVersionCompatibilityWarnings('1.0.0')

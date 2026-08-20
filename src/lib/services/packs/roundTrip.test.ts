@@ -108,7 +108,7 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-const { gatherStoryData } = await import('../export/ExportCoordinationService')
+const { gatherStoryData } = await import('$lib/services/export')
 const { exportService } = await import('../export')
 const { runImport } = await import('../import')
 const { remapRuntimeVars } = await import('./binding')

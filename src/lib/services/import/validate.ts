@@ -65,9 +65,15 @@ const FEATURE_HISTORY: { version: string; warning: string }[] = [
 ]
 
 /** Log warnings for imports from older versions that may be missing features. */
-export function logVersionCompatibilityWarnings(importVersion: string): void {
+export function logVersionCompatibilityWarnings(
+  data: Pick<AventuraExport, 'version' | 'packBinding'> | string,
+): void {
+  // Keep the version-only form for callers that cannot inspect the payload yet.
+  const importVersion = typeof data === 'string' ? data : data.version
+  const hasPackBinding = typeof data !== 'string' && !!data.packBinding
   for (const { version, warning } of FEATURE_HISTORY) {
     if (compareVersions(importVersion, version) < 0) {
+      if (version === '1.9.0' && hasPackBinding) continue
       console.warn(`[Import] File from v${importVersion} predates ${warning}`)
     }
   }

@@ -42,6 +42,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function isPackVariableExport(value: unknown): value is PackVariableExport {
+  return (
+    isRecord(value) &&
+    typeof value.variableName === 'string' &&
+    typeof value.displayName === 'string' &&
+    ['text', 'textarea', 'enum', 'number', 'boolean'].includes(value.variableType as string) &&
+    typeof value.isRequired === 'boolean' &&
+    typeof value.sortOrder === 'number'
+  )
+}
+
 /**
  * Read a file's `packBinding`, tolerating anything.
  *
@@ -66,7 +77,7 @@ export function sanitizePackBinding(
   return {
     pack: { name: pack.name, author: typeof pack.author === 'string' ? pack.author : null },
     ...(values && Object.keys(values).length > 0 ? { customVariableValues: values } : {}),
-    variables: Array.isArray(raw.variables) ? raw.variables.filter(isRecord) : [],
+    variables: Array.isArray(raw.variables) ? raw.variables.filter(isPackVariableExport) : [],
     runtimeVariables: Array.isArray(raw.runtimeVariables)
       ? raw.runtimeVariables.filter(
           (v): v is PackRuntimeVariableExport =>

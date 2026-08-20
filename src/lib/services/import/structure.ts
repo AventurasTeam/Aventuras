@@ -5,6 +5,7 @@
  */
 
 import { database } from '$lib/services/database'
+import type { CreateStoryInput } from '$lib/services/database'
 import type {
   Story,
   StoryEntry,
@@ -18,8 +19,8 @@ import type {
   WorldStateDelta,
 } from '$lib/types'
 import type { AventuraExport, IdMaps, PackRuntimeVariableExport } from './types'
-import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs/types'
-import { remapRuntimeVars } from '$lib/services/packs/binding'
+import { remapRuntimeVars } from '$lib/services/packs'
+import type { RuntimeVariable, RuntimeEntityType } from '$lib/services/packs'
 import type { PackBindingResolution } from './packBinding'
 import { createMappers } from './idMaps'
 
@@ -71,10 +72,7 @@ export async function importStructure(
       packBinding?.targetRuntimeVars,
     ) as T
 
-  const importedStory: Omit<Story, 'createdAt' | 'updatedAt'> & {
-    packId?: string | null
-    customVariableValues?: Record<string, string> | null
-  } = {
+  const importedStory: CreateStoryInput = {
     id: newStoryId,
     title: skipImportedSuffix ? data.story.title : `${data.story.title} (Imported)`,
     description: data.story.description,

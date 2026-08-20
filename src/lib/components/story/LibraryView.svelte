@@ -9,7 +9,7 @@
   import STImportWizard from '../wizard/STImportWizard.svelte'
   import PackMappingDialog from './PackMappingDialog.svelte'
   import { settings } from '$lib/stores/settings.svelte'
-  import type { PresetPack } from '$lib/services/packs/types'
+  import type { PresetPack } from '$lib/services/packs'
   import { planPackBinding } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
 
@@ -122,9 +122,9 @@
       ui.showToast(errMessage(error), 'error')
     } finally {
       isImporting = false
-      // A throw while the dialog is open would otherwise leave it on screen with nothing behind
-      // it to answer to.
-      packMapping = null
+      // A throw while the dialog is open would otherwise leave it on screen, and leave
+      // resolvePackBinding suspended forever.
+      packMapping?.resolve(null)
     }
   }
 </script>

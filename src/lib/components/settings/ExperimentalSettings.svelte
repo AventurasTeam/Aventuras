@@ -490,7 +490,8 @@
         <p class="text-muted-foreground text-xs">
           Story files saved before Aventuras recorded prompt packs carry no pack of their own, and
           import using the built-in one. Turn this on to be asked which of your packs such a file
-          should use. Files that do record a pack always ask, whatever this is set to.
+          should use. Files that do record a pack bind to a matching installed pack, and ask only
+          when the match is uncertain or a required value is missing, whatever this is set to.
         </p>
         <p class="text-muted-foreground pt-1 text-xs italic">
           No effect if you only have one pack installed — there would be nothing to choose.
