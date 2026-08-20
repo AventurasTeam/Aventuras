@@ -9,7 +9,7 @@
 
 import { database } from '$lib/services/database'
 import { errMessage } from '$lib/utils/error'
-import type { AventuraExport, ImportResult, IdMaps, PackBindingExport } from './types'
+import type { AventuraExport, ImportResult, IdMaps } from './types'
 import { validateExport, logVersionCompatibilityWarnings } from './validate'
 import { buildIdMaps } from './idMaps'
 import { importStructure } from './structure'

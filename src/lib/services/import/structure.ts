@@ -7,7 +7,6 @@
 import { database } from '$lib/services/database'
 import type { CreateStoryInput } from '$lib/services/database'
 import type {
-  Story,
   StoryEntry,
   Character,
   Location,
