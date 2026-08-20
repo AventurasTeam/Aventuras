@@ -1,10 +1,17 @@
 <script lang="ts">
   import { story } from '$lib/stores/story.svelte'
   import { ui } from '$lib/stores/ui.svelte'
-  import { buildLandmarks, entryNumber, resolveEntryByNumber } from '$lib/utils/storyNavigation'
+  import {
+    buildLandmarks,
+    entryNumber,
+    resolveEntryByNumber,
+    type Landmark,
+  } from '$lib/utils/storyNavigation'
   import { supportsHover } from '$lib/utils/platform'
   import { Button } from '$lib/components/ui/button'
   import { Input } from '$lib/components/ui/input'
+  import { Label } from '$lib/components/ui/label'
+  import { RadioGroup, RadioGroupItem } from '$lib/components/ui/radio-group'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import { swipe } from '$lib/utils/swipe'
   import { Bookmark, Check, CornerDownLeft, Edit2, GitBranch, Milestone, X } from '@lucide/svelte'
@@ -12,6 +19,7 @@
   let numberInput = $state('')
   let renamingCheckpointId = $state<string | null>(null)
   let renameValue = $state('')
+  let landmarkNavigationMode = $state<'current-branch' | 'checkpoint-branch'>('current-branch')
 
   const activeBranch = $derived.by(() => {
     const branchId = story.currentStory?.currentBranchId ?? null
@@ -46,6 +54,27 @@
     const entry = resolveEntryByNumber(story.entries, numberInput)
     if (!entry) return
     goTo(entry.id, `Jumped to entry ${entryNumber(entry)}`)
+  }
+
+  function setLandmarkNavigationMode(value: string) {
+    if (value === 'current-branch' || value === 'checkpoint-branch') {
+      landmarkNavigationMode = value
+    }
+  }
+
+  async function goToLandmark(landmark: Landmark) {
+    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
+      try {
+        await story.switchBranch(landmark.branchId)
+      } catch (error) {
+        console.error('Failed to switch to landmark branch:', error)
+        ui.showToast(error instanceof Error ? error.message : 'Failed to switch branch', 'error')
+        return
+      }
+    }
+
+    goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)
   }
 
   function startRename(checkpointId: string, name: string) {
@@ -128,9 +157,10 @@
         {#each landmarks as landmark (landmark.checkpointId ?? `origin:${landmark.entryId}`)}
           <div
             class="group hover:bg-surface-700/50 flex min-h-[40px] w-full cursor-pointer items-start gap-2 rounded-lg p-2 text-left transition-colors sm:min-h-0"
-            onclick={() => goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)}
-            onkeydown={(e) =>
-              e.key === 'Enter' && goTo(landmark.entryId, `Jumped to entry ${landmark.number}`)}
+            onclick={() => void goToLandmark(landmark)}
+            onkeydown={(e) => {
+              if (e.key === 'Enter') void goToLandmark(landmark)
+            }}
             role="button"
             tabindex="0"
             title="Go to entry {landmark.number}:&#10;{landmark.label}"
@@ -203,5 +233,30 @@
         {/each}
       </div>
     {/if}
+  </div>
+
+  <div class="border-border border-t p-3">
+    <p class="text-muted-foreground mb-2 text-xs font-medium tracking-wider uppercase">
+      Landmark navigation
+    </p>
+    <RadioGroup
+      value={landmarkNavigationMode}
+      onValueChange={setLandmarkNavigationMode}
+      class="gap-2"
+      aria-label="Landmark navigation behavior"
+    >
+      <div class="flex items-center gap-2">
+        <RadioGroupItem value="current-branch" id="landmark-current-branch" />
+        <Label for="landmark-current-branch" class="cursor-pointer text-xs font-normal">
+          Stay on current branch
+        </Label>
+      </div>
+      <div class="flex items-center gap-2">
+        <RadioGroupItem value="checkpoint-branch" id="landmark-checkpoint-branch" />
+        <Label for="landmark-checkpoint-branch" class="cursor-pointer text-xs font-normal">
+          Switch to checkpoint branch
+        </Label>
+      </div>
+    </RadioGroup>
   </div>
 </aside>

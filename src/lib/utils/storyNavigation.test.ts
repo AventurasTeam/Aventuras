@@ -143,6 +143,7 @@ describe('buildLandmarks', () => {
     )
     expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
     expect(landmarks[0].checkpointId).toBe('cp-origin')
+    expect(landmarks[0].branchId).toBeNull()
     expect(landmarks[0].branchName).toBe('Main')
   })
 
@@ -217,6 +218,7 @@ describe('buildLandmarks', () => {
     )
     expect(row.label).toBe('Before the duel')
     expect(row.checkpointId).toBe('cp')
+    expect(row.branchId).toBe('br1')
     expect(row.branchName).toBe('Betrayal')
   })
 })
