@@ -142,6 +142,7 @@ describe('buildLandmarks', () => {
       br1,
     )
     expect(landmarks.map((l) => [l.kind, l.label])).toEqual([['origin', 'Council of five']])
+    expect(landmarks[0].checkpointId).toBe('cp-origin')
     expect(landmarks[0].branchName).toBe('Main')
   })
 
@@ -155,6 +156,7 @@ describe('buildLandmarks', () => {
       branch('br1', 'm1', 'Betrayal', 'deleted-cp'),
     )
     expect(orphaned.map((l) => [l.kind, l.label])).toEqual([['origin', 'Branch origin']])
+    expect(orphaned[0].checkpointId).toBeNull()
   })
 
   it('omits the origin row on the main branch', () => {
@@ -164,12 +166,7 @@ describe('buildLandmarks', () => {
   })
 
   it('omits an origin whose entry is not loaded', () => {
-    const landmarks = buildLandmarks(
-      branchView,
-      [],
-      [br1],
-      branch('br1', 'not-loaded', 'Betrayal'),
-    )
+    const landmarks = buildLandmarks(branchView, [], [br1], branch('br1', 'not-loaded', 'Betrayal'))
     expect(landmarks).toEqual([])
   })
 
@@ -219,6 +216,7 @@ describe('buildLandmarks', () => {
       br1,
     )
     expect(row.label).toBe('Before the duel')
+    expect(row.checkpointId).toBe('cp')
     expect(row.branchName).toBe('Betrayal')
   })
 })

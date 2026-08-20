@@ -52,6 +52,7 @@ export type LandmarkKind = 'origin' | 'checkpoint'
 
 export interface Landmark {
   entryId: string
+  checkpointId: string | null
   number: number
   kind: LandmarkKind
   label: string
@@ -91,6 +92,7 @@ export function buildLandmarks(
       const origin = checkpoints.find((c) => c.id === activeBranch.checkpointId)
       landmarks.push({
         entryId: forkEntry.id,
+        checkpointId: origin?.id ?? null,
         number: entryNumber(forkEntry),
         kind: 'origin',
         label: origin?.name ?? 'Branch origin',
@@ -104,6 +106,7 @@ export function buildLandmarks(
     if (!entry || checkpoint.id === activeBranch?.checkpointId) continue
     landmarks.push({
       entryId: entry.id,
+      checkpointId: checkpoint.id,
       number: entryNumber(entry),
       kind: 'checkpoint',
       label: checkpoint.name,

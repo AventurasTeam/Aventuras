@@ -3559,6 +3559,14 @@ class StoryStore {
     return checkpoint
   }
 
+  async renameCheckpoint(checkpointId: string, newName: string): Promise<void> {
+    await database.renameCheckpoint(checkpointId, newName)
+    this.checkpoints = this.checkpoints.map((checkpoint) =>
+      checkpoint.id === checkpointId ? { ...checkpoint, name: newName } : checkpoint,
+    )
+    log('Checkpoint renamed:', checkpointId, 'to', newName)
+  }
+
   /**
    * @deprecated Checkpoint restoration is no longer supported.
    * Use createBranchFromCheckpoint() instead to explore alternate timelines.
