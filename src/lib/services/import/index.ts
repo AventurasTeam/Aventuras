@@ -30,7 +30,10 @@ export { importFromFile } from './native'
 export {
   autoMatchPackBinding,
   buildBindingContext,
+  canonicalizeCustomVariableValues,
+  customVariableValue,
   decidePackPrompt,
+  mergeCustomVariableValues,
   planPackBinding,
   sanitizePackBinding,
   unansweredRequiredVariables,

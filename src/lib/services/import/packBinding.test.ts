@@ -22,17 +22,19 @@ const db = {
 
 const calls = {
   stories: [] as any[],
+  entries: [] as any[],
   characters: [] as any[],
   locations: [] as any[],
   items: [] as any[],
   beats: [] as any[],
+  checkpoints: [] as any[],
   deleted: [] as string[],
 }
 
 vi.mock('$lib/services/database', () => ({
   database: {
     createStory: vi.fn(async (s: any) => void calls.stories.push(s)),
-    addStoryEntry: vi.fn(async () => {}),
+    addStoryEntry: vi.fn(async (e: any) => void calls.entries.push(e)),
     addCharacter: vi.fn(async (c: any) => void calls.characters.push(c)),
     addLocation: vi.fn(async (l: any) => void calls.locations.push(l)),
     addItem: vi.fn(async (i: any) => void calls.items.push(i)),
@@ -40,7 +42,7 @@ vi.mock('$lib/services/database', () => ({
     addEntry: vi.fn(async () => {}),
     addChapter: vi.fn(async () => {}),
     addBranch: vi.fn(async () => {}),
-    createCheckpoint: vi.fn(async () => {}),
+    createCheckpoint: vi.fn(async (c: any) => void calls.checkpoints.push(c)),
     createEmbeddedImage: vi.fn(async () => {}),
     updateBranch: vi.fn(async () => {}),
     setStoryCurrentBranch: vi.fn(async () => {}),
@@ -51,8 +53,13 @@ vi.mock('$lib/services/database', () => ({
   },
 }))
 
-const { runImport, decidePackPrompt, planPackBinding, buildBindingContext } =
-  await import('./index')
+const {
+  runImport,
+  decidePackPrompt,
+  planPackBinding,
+  buildBindingContext,
+  mergeCustomVariableValues,
+} = await import('./index')
 const { importFromFile } = await import('./native')
 
 function pack(overrides: Partial<PresetPack>): PresetPack {
@@ -281,6 +288,15 @@ describe('decidePackPrompt — what the interactive import asks about', () => {
       ).toEqual({ prompt: 'none' })
     })
 
+    it('matches a story answer using the same normalized name as pack binding', () => {
+      expect(
+        decidePackPrompt(
+          file('exact', { ' Writing_Style ': 'terse' }),
+          device({ matchedPackVariables: required() }),
+        ),
+      ).toEqual({ prompt: 'none' })
+    })
+
     it('does not ask when the pack supplies a default', () => {
       // A default is a usable value. Stopping an import to have someone retype it is exactly the
       // prompt this design removes.
@@ -335,6 +351,25 @@ describe('planPackBinding — the one policy both callers use', () => {
     expect(plan).toEqual({
       ask: false,
       resolution: { packId: 'local-grimdark', customVariableValues: { writing_style: 'terse' } },
+    })
+  })
+
+  it("adds the selected pack's canonical variable spelling on a confident match", async () => {
+    db.packs.push(pack({ id: 'local-grimdark' }))
+    db.packVariables = [{ variableName: 'mood', isRequired: false }]
+    const ctx = await buildBindingContext({
+      pack: named.pack,
+      customVariableValues: { Mood: 'somber' },
+    } as never)
+
+    const plan = await planPackBinding(ctx, false)
+
+    expect(plan).toEqual({
+      ask: false,
+      resolution: {
+        packId: 'local-grimdark',
+        customVariableValues: { Mood: 'somber', mood: 'somber' },
+      },
     })
   })
 
@@ -397,6 +432,102 @@ describe('runImport — re-keying entity values', () => {
 
     expect(calls.characters[0].metadata.runtimeVars).toEqual({
       'src-morale': { variableName: 'morale', v: 7 },
+    })
+  })
+
+  it('re-keys rollback deltas and checkpoint snapshots as well as live rows', async () => {
+    db.packs.push(pack({ id: 'local-grimdark' }))
+    const entityTypes = ['character', 'location', 'item', 'story_beat'] as const
+    db.runtimeVars = entityTypes.map((entityType) => ({
+      id: `local-${entityType}`,
+      packId: 'local-grimdark',
+      entityType,
+      variableName: 'state',
+      displayName: 'State',
+      variableType: 'text',
+      color: '#fff',
+      pinned: false,
+      sortOrder: 0,
+      createdAt: 0,
+    }))
+    const binding = {
+      ...namedBinding,
+      runtimeVariables: entityTypes.map((entityType) => ({ entityType, variableName: 'state' })),
+    }
+    const data = sampleExport(binding)
+    const metadata = (entityType: string) => ({
+      runtimeVars: { [`src-${entityType}`]: { variableName: 'state', v: entityType } },
+    })
+    data.characters[0].metadata = metadata('character')
+    data.locations = [
+      { id: 'loc-1', name: 'Cave', connections: [], metadata: metadata('location') },
+    ]
+    data.items = [
+      { id: 'item-1', name: 'Blade', location: 'inventory', metadata: metadata('item') },
+    ]
+    data.storyBeats = [{ id: 'beat-1', title: 'Quest', metadata: metadata('story_beat') }]
+    data.entries[0].worldStateDelta = {
+      classificationResult: {},
+      previousState: {
+        characters: [{ id: 'char-1', metadata: metadata('character') }],
+        locations: [{ id: 'loc-1', metadata: metadata('location') }],
+        items: [{ id: 'item-1', location: 'inventory', metadata: metadata('item') }],
+        storyBeats: [{ id: 'beat-1', metadata: metadata('story_beat') }],
+        currentLocationId: null,
+        timeTracker: null,
+      },
+      createdEntities: { characterIds: [], locationIds: [], itemIds: [], storyBeatIds: [] },
+    }
+    data.checkpoints = [
+      {
+        id: 'checkpoint-1',
+        storyId: 'story-old',
+        name: 'Before',
+        lastEntryId: 'entry-1',
+        lastEntryPreview: 'c',
+        entryCount: 1,
+        entriesSnapshot: [],
+        charactersSnapshot: [structuredClone(data.characters[0])],
+        locationsSnapshot: [structuredClone(data.locations[0])],
+        itemsSnapshot: [structuredClone(data.items[0])],
+        storyBeatsSnapshot: [structuredClone(data.storyBeats[0])],
+        chaptersSnapshot: [],
+        timeTrackerSnapshot: null,
+      },
+    ]
+
+    expect((await runImport(data)).success).toBe(true)
+    const deltaEntities = calls.entries[0].worldStateDelta.previousState
+    const checkpoint = calls.checkpoints[0]
+    const pairs = [
+      [deltaEntities.characters[0], checkpoint.charactersSnapshot[0], 'character'],
+      [deltaEntities.locations[0], checkpoint.locationsSnapshot[0], 'location'],
+      [deltaEntities.items[0], checkpoint.itemsSnapshot[0], 'item'],
+      [deltaEntities.storyBeats[0], checkpoint.storyBeatsSnapshot[0], 'story_beat'],
+    ] as const
+    for (const [deltaEntity, snapshotEntity, entityType] of pairs) {
+      expect(deltaEntity.metadata.runtimeVars[`local-${entityType}`]).toEqual({
+        variableName: 'state',
+        v: entityType,
+      })
+      expect(snapshotEntity.metadata.runtimeVars[`local-${entityType}`]).toEqual({
+        variableName: 'state',
+        v: entityType,
+      })
+    }
+  })
+})
+
+describe('dialog custom-variable persistence', () => {
+  it('keeps file answers and edits without materialising untouched pack defaults', () => {
+    const variables = [{ variableName: 'mood', defaultValue: 'bright' }]
+    expect(mergeCustomVariableValues(undefined, variables, {})).toEqual({})
+    expect(mergeCustomVariableValues({ Mood: 'somber' }, variables, {})).toEqual({
+      Mood: 'somber',
+      mood: 'somber',
+    })
+    expect(mergeCustomVariableValues(undefined, variables, { mood: 'stormy' })).toEqual({
+      mood: 'stormy',
     })
   })
 })

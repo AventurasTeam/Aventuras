@@ -16,7 +16,7 @@
   } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
   import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
   import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
   import { settings } from '$lib/stores/settings.svelte'
   import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
@@ -107,11 +107,16 @@
   // Reset state when modal opens
   $effect(() => {
     if (ui.syncModalOpen) {
-      resetState()
+      // resetState reads packMapping to cancel stale work. Do not make that read a dependency or
+      // opening a new pack dialog would retrigger this effect and immediately cancel itself.
+      untrack(resetState)
     }
   })
 
   function resetState() {
+    // Settle an older transfer before discarding the state it was waiting on. Merely removing the
+    // dialog would leave resolveIncomingPack suspended forever.
+    cancelPendingPackMapping()
     serverInfo = null
     connection = null
     remoteStories = []
@@ -132,6 +137,10 @@
     showVersionWarning = false
     pendingConnection = null
     stopPolling()
+  }
+
+  function cancelPendingPackMapping() {
+    packMapping?.resolve(null)
   }
 
   function stopPolling() {
@@ -229,6 +238,7 @@
 
   // Cleanup on destroy
   onDestroy(() => {
+    cancelPendingPackMapping()
     cleanup()
   })
 
@@ -403,6 +413,7 @@
 
   async function pullStory() {
     if (!connection || !selectedRemoteStory) return
+    const pullConnection = connection
 
     // Check for conflict
     const exists = await syncService.checkStoryExists(selectedRemoteStory.title)
@@ -421,11 +432,13 @@
       // Download first, then settle the pack, and only then delete what we are replacing. The
       // pull used to sit between the delete and the import, which meant both a failed download
       // and a cancelled pack choice left the user with neither copy.
-      const storyJson = await syncService.pullStory(connection, selectedRemoteStory.id)
+      const storyJson = await syncService.pullStory(pullConnection, selectedRemoteStory.id)
 
       const packBinding = await resolveIncomingPack(storyJson)
       if (!packBinding) {
-        ui.setSyncMode('select')
+        // A user cancellation keeps the established connection usable. A lifecycle cancellation
+        // from close/reset must not resurrect an old session over freshly reset state.
+        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
         return
       }
 
@@ -488,8 +501,11 @@
   }
 
   async function close() {
-    await cleanup()
+    // Mark the modal closed before settling the promise so the suspended pull cannot switch the
+    // hidden modal back to its connected state while cleanup is running.
     ui.closeSyncModal()
+    cancelPendingPackMapping()
+    await cleanup()
   }
 
   function formatDate(timestamp: number): string {

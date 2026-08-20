@@ -92,6 +92,49 @@ export interface RequiredVariableDef {
   defaultValue?: string
 }
 
+/** Variable names cross devices as user-authored strings, so compare them consistently. */
+function normalizeVariableName(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+/** Find a story value by the same case-insensitive, trimmed name used for pack matching. */
+export function customVariableValue(
+  values: Record<string, string> | undefined,
+  variableName: string,
+): string | undefined {
+  if (!values) return undefined
+  if (Object.prototype.hasOwnProperty.call(values, variableName)) return values[variableName]
+
+  const wanted = normalizeVariableName(variableName)
+  return Object.entries(values).find(([name]) => normalizeVariableName(name) === wanted)?.[1]
+}
+
+/**
+ * Add values under the selected pack's canonical spelling while retaining the source spelling.
+ * Keeping both makes a later re-bind reversible, just like runtime-variable re-keying.
+ */
+export function canonicalizeCustomVariableValues(
+  values: Record<string, string> | undefined,
+  variables: Array<{ variableName: string }>,
+): Record<string, string> {
+  const canonical = { ...(values ?? {}) }
+  for (const variable of variables) {
+    if (Object.prototype.hasOwnProperty.call(canonical, variable.variableName)) continue
+    const value = customVariableValue(values, variable.variableName)
+    if (value !== undefined) canonical[variable.variableName] = value
+  }
+  return canonical
+}
+
+/** Persist imported answers plus fields the user actually edited, never untouched pack defaults. */
+export function mergeCustomVariableValues(
+  fileValues: Record<string, string> | undefined,
+  variables: Array<{ variableName: string }>,
+  editedValues: Record<string, string>,
+): Record<string, string> {
+  return { ...canonicalizeCustomVariableValues(fileValues, variables), ...editedValues }
+}
+
 /**
  * Required variables of the target pack that the story has no answer for.
  *
@@ -109,7 +152,7 @@ export function unansweredRequiredVariables(
 ): string[] {
   return variables
     .filter((v) => v.isRequired)
-    .filter((v) => !values?.[v.variableName]?.trim() && !v.defaultValue?.trim())
+    .filter((v) => !customVariableValue(values, v.variableName)?.trim() && !v.defaultValue?.trim())
     .map((v) => v.variableName)
 }
 
@@ -200,7 +243,12 @@ export async function planPackBinding(
     matchedPackVariables,
   })
 
-  if (decision.prompt === 'none') return { ask: false, resolution: await autoMatchPackBinding(ctx) }
+  if (decision.prompt === 'none') {
+    return {
+      ask: false,
+      resolution: await autoMatchPackBinding(ctx, matchedPackVariables),
+    }
+  }
 
   // On `fill-values` the pack is settled; only the gap is up for discussion.
   return decision.prompt === 'fill-values'
@@ -221,12 +269,14 @@ export async function planPackBinding(
  */
 export async function autoMatchPackBinding(
   ctx: PackBindingContext,
+  knownTargetVariables?: Array<{ variableName: string }>,
 ): Promise<PackBindingResolution> {
   const values = ctx.binding?.customVariableValues
+  const packId =
+    ctx.match.confidence === 'exact' && ctx.match.pack ? ctx.match.pack.id : DEFAULT_PACK_ID
+  if (!values) return { packId }
 
-  if (ctx.match.confidence === 'exact' && ctx.match.pack) {
-    return { packId: ctx.match.pack.id, ...(values ? { customVariableValues: values } : {}) }
-  }
-
-  return { packId: DEFAULT_PACK_ID, ...(values ? { customVariableValues: values } : {}) }
+  const targetVariables = knownTargetVariables ?? (await database.getPackVariables(packId))
+  const canonicalValues = canonicalizeCustomVariableValues(values, targetVariables)
+  return { packId, customVariableValues: canonicalValues }
 }

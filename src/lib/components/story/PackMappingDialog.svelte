@@ -15,6 +15,7 @@
   import { database } from '$lib/services/database'
   import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
   import type { PresetPack, CustomVariable } from '$lib/services/packs/types'
+  import { customVariableValue, mergeCustomVariableValues } from '$lib/services/import'
   import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
 
   interface Props {
@@ -39,8 +40,10 @@
   let open = $state(true)
   let availablePacks = $state<PresetPack[]>([])
   let selectedPackId = $state(DEFAULT_PACK_ID)
+  let targetPackVariables = $state<CustomVariable[]>([])
   let packVariables = $state<CustomVariable[]>([])
   let variableValues = $state<Record<string, string>>({})
+  let editedValues = $state<Record<string, string>>({})
   let loading = $state(true)
 
   /** The file's own answers, kept so switching packs can re-apply them to matching names. */
@@ -72,31 +75,39 @@
    */
   async function loadVariables(packId: string) {
     const all = await database.getPackVariables(packId)
+    targetPackVariables = all
     packVariables = onlyVariables ? all.filter((v) => onlyVariables.includes(v.variableName)) : all
     const seeded: Record<string, string> = {}
     for (const variable of packVariables) {
       seeded[variable.variableName] =
-        fileValues[variable.variableName] ?? variable.defaultValue ?? ''
+        customVariableValue(fileValues, variable.variableName) ?? variable.defaultValue ?? ''
     }
     variableValues = seeded
   }
 
   async function selectPack(packId: string) {
     selectedPackId = packId
+    editedValues = {}
     await loadVariables(packId)
   }
 
   function setVariable(variableName: string, value: string) {
     variableValues = { ...variableValues, [variableName]: value }
+    editedValues = { ...editedValues, [variableName]: value }
   }
 
   function confirm() {
+    const customVariableValues = mergeCustomVariableValues(
+      fileValues,
+      targetPackVariables,
+      editedValues,
+    )
     open = false
     onResolve({
       packId: selectedPackId,
       // Keep every answer the file carried, not just the ones this pack defines: a value with no
       // counterpart here is retained so re-binding to a pack that does define it brings it back.
-      customVariableValues: { ...fileValues, ...variableValues },
+      ...(Object.keys(customVariableValues).length > 0 ? { customVariableValues } : {}),
     })
   }
 

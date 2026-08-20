@@ -178,17 +178,24 @@ export async function importStructure(
         characters: (previousState?.characters ?? []).map((c) => ({
           ...c,
           id: remapEntityId(c.id),
+          metadata: remapMetadata(c.metadata, 'character'),
         })),
-        locations: (previousState?.locations ?? []).map((l) => ({ ...l, id: remapEntityId(l.id) })),
+        locations: (previousState?.locations ?? []).map((l) => ({
+          ...l,
+          id: remapEntityId(l.id),
+          metadata: remapMetadata(l.metadata, 'location'),
+        })),
         items: (previousState?.items ?? []).map((i) => ({
           ...i,
           id: remapEntityId(i.id),
+          metadata: remapMetadata(i.metadata, 'item'),
           // 'inventory' is a sentinel, not an id — same rule as the item loop below.
           location: i.location === 'inventory' ? 'inventory' : remapEntityId(i.location),
         })),
         storyBeats: (previousState?.storyBeats ?? []).map((b) => ({
           ...b,
           id: remapEntityId(b.id),
+          metadata: remapMetadata(b.metadata, 'story_beat'),
         })),
         currentLocationId: previousState?.currentLocationId
           ? remapEntityId(previousState.currentLocationId)
@@ -365,6 +372,7 @@ export async function importStructure(
       id: remapEntityId(char.id),
       storyId: newStoryId,
       branchId: mapBranchId(char.branchId ?? null),
+      metadata: remapMetadata(char.metadata, 'character'),
     })
     const remapLocation = (loc: Location): Location => ({
       ...loc,
@@ -372,6 +380,7 @@ export async function importStructure(
       storyId: newStoryId,
       branchId: mapBranchId(loc.branchId ?? null),
       connections: loc.connections.map((id) => oldToNewId.get(id) ?? id),
+      metadata: remapMetadata(loc.metadata, 'location'),
     })
     const remapItem = (item: Item): Item => ({
       ...item,
@@ -382,12 +391,14 @@ export async function importStructure(
         item.location === 'inventory'
           ? 'inventory'
           : (oldToNewId.get(item.location) ?? item.location),
+      metadata: remapMetadata(item.metadata, 'item'),
     })
     const remapStoryBeat = (beat: StoryBeat): StoryBeat => ({
       ...beat,
       id: remapEntityId(beat.id),
       storyId: newStoryId,
       branchId: mapBranchId(beat.branchId ?? null),
+      metadata: remapMetadata(beat.metadata, 'story_beat'),
     })
     const remapChapter = (chapter: Chapter): Chapter => ({
       ...chapter,
