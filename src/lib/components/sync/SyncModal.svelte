@@ -92,6 +92,7 @@
   // State for receiving pushed stories (when in generate mode)
   let receivedStoryJson = $state<string | null>(null)
   let receivedStoryPreview = $state<SyncStoryPreview | null>(null)
+  let receivedStoryQueue = $state<string[]>([])
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
   let receivingStory = false
@@ -133,6 +134,7 @@
     syncMessage = null
     receivedStoryJson = null
     receivedStoryPreview = null
+    receivedStoryQueue = []
     showReceivedConflict = false
     receivingStory = false
     remoteVersion = null
@@ -163,32 +165,44 @@
       const received = await syncService.getReceivedStories()
       if (received.length > 0) {
         if (receivedStoryJson || receivingStory) return
-        // Take the first received story
-        const storyJson = received[0]
-        const preview = syncService.getStoryPreview(storyJson)
-
-        if (preview) {
-          receivedStoryJson = storyJson
-          receivedStoryPreview = preview
-          // Claim this payload before awaiting any database work or a pack choice. Otherwise a
-          // later poll can replace the resolver while the first import is suspended.
-          stopPolling()
-          await syncService.clearReceivedStories()
-
-          // Check for conflict
-          const exists = await syncService.checkStoryExists(preview.title)
-          if (exists) {
-            showReceivedConflict = true
-          } else {
-            // No conflict, import directly
-            await importReceivedStory()
-          }
-        }
-
-        if (!preview) await syncService.clearReceivedStories()
+        // The native API clears its whole queue at once. Keep every payload after the claimed
+        // one locally, then process them in order after the active transfer finishes.
+        const [storyJson, ...queuedStories] = received
+        receivedStoryQueue = queuedStories
+        stopPolling()
+        await syncService.clearReceivedStories()
+        await claimReceivedStory(storyJson)
       }
     } catch {
       // Ignore polling errors
+    }
+  }
+
+  async function claimReceivedStory(storyJson: string) {
+    const preview = syncService.getStoryPreview(storyJson)
+    if (!preview) {
+      error = 'Received an invalid story payload'
+      resumeReceivedStories()
+      return
+    }
+
+    receivedStoryJson = storyJson
+    receivedStoryPreview = preview
+    const exists = await syncService.checkStoryExists(preview.title)
+    if (exists) {
+      showReceivedConflict = true
+    } else {
+      await importReceivedStory()
+    }
+  }
+
+  function resumeReceivedStories() {
+    const [next, ...remaining] = receivedStoryQueue
+    if (next) {
+      receivedStoryQueue = remaining
+      void claimReceivedStory(next)
+    } else {
+      startPolling()
     }
   }
 
@@ -241,6 +255,7 @@
       receivingStory = false
       receivedStoryJson = null
       receivedStoryPreview = null
+      resumeReceivedStories()
     }
   }
 
@@ -249,8 +264,7 @@
     receivingStory = false
     receivedStoryJson = null
     receivedStoryPreview = null
-    // Resume polling for more stories
-    startPolling()
+    resumeReceivedStories()
   }
 
   // Cleanup on destroy

@@ -66,13 +66,13 @@ describe('matchPack', () => {
     expect(match.confidence).toBe('name-only')
   })
 
-  it('treats a null author and an empty one as the same value', async () => {
+  it('does not silently bind a source pack with no author', async () => {
     db.packs = [pack({ id: 'local-1', author: null })]
     await expect(matchPack({ name: 'Grimdark', author: '' })).resolves.toMatchObject({
-      confidence: 'exact',
+      confidence: 'name-only',
     })
     await expect(matchPack({ name: 'Grimdark', author: null })).resolves.toMatchObject({
-      confidence: 'exact',
+      confidence: 'name-only',
     })
   })
 

@@ -66,6 +66,7 @@ export async function matchPack(
   if (byName.length === 0) return { pack: null, confidence: 'none' }
 
   const author = normalize(identity?.author)
+  if (!author) return { pack: byName[0], confidence: 'name-only' }
   const authorMatches = byName.filter((p) => normalize(p.author) === author)
   // One candidate on name *and* author is the only unambiguous reading.
   if (authorMatches.length === 1) return { pack: authorMatches[0], confidence: 'exact' }

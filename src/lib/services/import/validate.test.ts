@@ -133,6 +133,13 @@ describe('logVersionCompatibilityWarnings', () => {
     expect(warn.mock.calls.map(String).join('\n')).not.toContain('prompt pack information')
   })
 
+  it('warns when an older payload carries a malformed pack binding', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    logVersionCompatibilityWarnings({ version: '1.7.0', packBinding: {} as never })
+
+    expect(warn.mock.calls.map(String).join('\n')).toContain('prompt pack information')
+  })
+
   it('warns about every feature for the oldest possible file', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     logVersionCompatibilityWarnings('1.0.0')

@@ -59,6 +59,7 @@ const {
   planPackBinding,
   buildBindingContext,
   mergeCustomVariableValues,
+  sanitizePackBinding,
 } = await import('./index')
 const { importFromFile } = await import('./native')
 
@@ -202,6 +203,43 @@ describe('runImport — resolving the pack binding', () => {
       packId: 'chosen-by-user',
       customVariableValues: { writing_style: 'lush' },
     })
+  })
+})
+
+describe('sanitizePackBinding', () => {
+  it('drops variable definitions with malformed optional fields', () => {
+    const binding = sanitizePackBinding({
+      pack: { name: 'Grimdark', author: 'Ada' },
+      variables: [
+        {
+          variableName: 'mood',
+          displayName: 'Mood',
+          variableType: 'text',
+          isRequired: false,
+          sortOrder: 0,
+          description: 3,
+        },
+        {
+          variableName: 'tone',
+          displayName: 'Tone',
+          variableType: 'enum',
+          isRequired: false,
+          sortOrder: 1,
+          enumOptions: [{ label: 'Warm', value: 'warm' }],
+        },
+      ],
+    } as never)
+
+    expect(binding?.variables).toEqual([
+      {
+        variableName: 'tone',
+        displayName: 'Tone',
+        variableType: 'enum',
+        isRequired: false,
+        sortOrder: 1,
+        enumOptions: [{ label: 'Warm', value: 'warm' }],
+      },
+    ])
   })
 })
 

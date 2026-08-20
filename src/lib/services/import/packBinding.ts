@@ -49,7 +49,17 @@ function isPackVariableExport(value: unknown): value is PackVariableExport {
     typeof value.displayName === 'string' &&
     ['text', 'textarea', 'enum', 'number', 'boolean'].includes(value.variableType as string) &&
     typeof value.isRequired === 'boolean' &&
-    typeof value.sortOrder === 'number'
+    typeof value.sortOrder === 'number' &&
+    (value.description === undefined || typeof value.description === 'string') &&
+    (value.defaultValue === undefined || typeof value.defaultValue === 'string') &&
+    (value.enumOptions === undefined ||
+      (Array.isArray(value.enumOptions) &&
+        value.enumOptions.every(
+          (option) =>
+            isRecord(option) &&
+            typeof option.label === 'string' &&
+            typeof option.value === 'string',
+        )))
   )
 }
 

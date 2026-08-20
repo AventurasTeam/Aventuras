@@ -1,6 +1,7 @@
 /** Shape checks and version warnings for an incoming `.avt`. */
 
 import type { AventuraExport } from './types'
+import { sanitizePackBinding } from './packBinding'
 
 /**
  * Compare semantic versions. Returns negative if a < b, 0 if equal, positive if a > b.
@@ -70,7 +71,7 @@ export function logVersionCompatibilityWarnings(
 ): void {
   // Keep the version-only form for callers that cannot inspect the payload yet.
   const importVersion = typeof data === 'string' ? data : data.version
-  const hasPackBinding = typeof data !== 'string' && !!data.packBinding
+  const hasPackBinding = typeof data !== 'string' && sanitizePackBinding(data.packBinding) !== null
   for (const { version, warning } of FEATURE_HISTORY) {
     if (compareVersions(importVersion, version) < 0) {
       if (version === '1.9.0' && hasPackBinding) continue
