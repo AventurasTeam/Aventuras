@@ -45,10 +45,15 @@
     showSTImportWizard = true
   }
 
+  // The panel is switched before the load, not after. `loadStory` publishes `currentStory`
+  // early and keeps working for the rest of its awaits, and the sidebars are gated on it — so
+  // switching afterwards mounted them over the library first and the story view a beat later,
+  // each pushing the layout in its own frame. Setting it first costs nothing (the library keeps
+  // rendering while `currentStory` is null) and lands everything in one pass.
   async function openStory(storyId: string) {
     ui.resetScrollBreak()
-    await story.loadStory(storyId)
     ui.setActivePanel('story')
+    await story.loadStory(storyId)
   }
 
   async function deleteStory(storyId: string, event: MouseEvent) {
@@ -113,8 +118,8 @@
 
       if (result.success && result.storyId) {
         await story.loadAllStories()
-        await story.loadStory(result.storyId)
         ui.setActivePanel('story')
+        await story.loadStory(result.storyId)
       } else if (result.error) {
         ui.showToast(result.error, 'error')
       }

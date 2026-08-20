@@ -114,8 +114,8 @@ class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
-  // Not persisted, unlike `sidebarOpen`: opened to make one jump and dismissed again, so a
-  // remembered state would only ever be stale. Cleared by `story.closeStory()`.
+  // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
+  // reader opts into, not an ambient reference the way the sidebar is.
   navPanelOpen = $state(false)
   settingsModalOpen = $state(false)
   isGenerating = $state(false)
@@ -390,6 +390,9 @@ class UIStore {
       // No DB persist — this is a layout constraint, not a user preference.
       // Persisting here would overwrite the desktop sidebar preference.
     }
+    // Where the panel overlays rather than sits beside the story, a remembered "open" would
+    // put the reader in front of the panel instead of the story they just opened.
+    this.closeNavPanelOnMobile()
   }
 
   /**
@@ -406,14 +409,26 @@ class UIStore {
   }
 
   toggleNavPanel() {
-    this.navPanelOpen = !this.navPanelOpen
+    this.setNavPanelOpen(!this.navPanelOpen)
   }
 
+  /** Dismissal the reader asked for — the close button, the scrim, the swipe — so it sticks. */
   closeNavPanel() {
-    this.navPanelOpen = false
+    this.setNavPanelOpen(false)
   }
 
-  /** The story navigation panel's twin of `closeSidebarOnMobile`, for the same reason. */
+  private setNavPanelOpen(open: boolean) {
+    this.navPanelOpen = open
+    database
+      .setSetting('nav_panel_open', open.toString())
+      .catch((err) => console.warn('[UI] Failed to persist nav panel state:', err))
+  }
+
+  /**
+   * The story navigation panel's twin of `closeSidebarOnMobile`, for the same reason — and
+   * likewise not persisted: getting out of the way of a jump on a narrow screen is a layout
+   * constraint, and must not overwrite the width where the panel sits beside the story.
+   */
   closeNavPanelOnMobile() {
     if (typeof window !== 'undefined' && window.innerWidth <= DESKTOP_BREAKPOINT) {
       this.navPanelOpen = false

@@ -1602,6 +1602,9 @@ class SettingsStore {
       const sidebarOpen = await database.getSetting('sidebar_open')
       if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
 
+      const navPanelOpen = await database.getSetting('nav_panel_open')
+      if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
+
       const manualMode = await database.getSetting('advanced_manual_mode')
       if (manualMode !== null) {
         this.advancedRequestSettings.manualMode = manualMode === 'true'

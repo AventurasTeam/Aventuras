@@ -534,9 +534,6 @@ class StoryStore {
     // Late `ImageReady` events from those generations clamp at zero rather than going
     // negative.
     ui.resetImageGenerationState()
-    // Every exit from a story runs through here, including the Android hardware back
-    // handler, so the panel cannot survive to spring open on the next story.
-    ui.closeNavPanel()
     log('Story closed')
   }
 
