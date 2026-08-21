@@ -406,28 +406,33 @@ export function seedOpeningOnlyStory(dbPath: string): void {
       )
     }
     db.exec('BEGIN IMMEDIATE')
-    db.prepare(
-      `INSERT INTO stories (id, title, description, status, definition, settings, created_at, updated_at, current_branch_id)
-       VALUES (?, ?, NULL, 'active', ?, ?, 1, 1, ?)`,
-    ).run(
-      OPENING_ONLY_STORY_ID,
-      OPENING_ONLY_TITLE,
-      donor.definition,
-      donor.settings,
-      OPENING_ONLY_BRANCH_ID,
-    )
-    db.prepare(
-      `INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, 'main', 1)`,
-    ).run(OPENING_ONLY_BRANCH_ID, OPENING_ONLY_STORY_ID)
-    db.prepare(
-      `INSERT INTO story_entries (id, branch_id, position, kind, content, metadata, created_at)
-       VALUES ('entry_e2e_opening', ?, 1, 'opening', ?, ?, 1)`,
-    ).run(
-      OPENING_ONLY_BRANCH_ID,
-      'The tide has gone out and left the parish standing. Nobody has written back yet.',
-      JSON.stringify({ sceneEntities: [], currentLocationId: null, worldTime: 0 }),
-    )
-    db.exec('COMMIT')
+    try {
+      db.prepare(
+        `INSERT INTO stories (id, title, description, status, definition, settings, created_at, updated_at, current_branch_id)
+         VALUES (?, ?, NULL, 'active', ?, ?, 1, 1, ?)`,
+      ).run(
+        OPENING_ONLY_STORY_ID,
+        OPENING_ONLY_TITLE,
+        donor.definition,
+        donor.settings,
+        OPENING_ONLY_BRANCH_ID,
+      )
+      db.prepare(
+        `INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, 'main', 1)`,
+      ).run(OPENING_ONLY_BRANCH_ID, OPENING_ONLY_STORY_ID)
+      db.prepare(
+        `INSERT INTO story_entries (id, branch_id, position, kind, content, metadata, created_at)
+         VALUES ('entry_e2e_opening', ?, 1, 'opening', ?, ?, 1)`,
+      ).run(
+        OPENING_ONLY_BRANCH_ID,
+        'The tide has gone out and left the parish standing. Nobody has written back yet.',
+        JSON.stringify({ sceneEntities: [], currentLocationId: null, worldTime: 0 }),
+      )
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
   } finally {
     db.close()
   }
@@ -442,9 +447,14 @@ export function corruptAppSettings(dbPath: string): void {
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')
-    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
-      JSON.stringify({ not: 'an array' }),
-    )
+    const { changes } = db
+      .prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`)
+      .run(JSON.stringify({ not: 'an array' }))
+    // A zero-row UPDATE would leave the fixture healthy, and the spec that
+    // depends on this would boot fine and assert nothing.
+    if (changes !== 1) {
+      throw new Error(`cannot corrupt app_settings: expected 1 row, updated ${changes}`)
+    }
   } finally {
     db.close()
   }
