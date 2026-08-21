@@ -32,16 +32,19 @@ const LINT_UNDERLINE_CLASS = Platform.select({
   default: 'underline decoration-dotted decoration-danger',
 })
 
-// Container above is style={OVERLAY_BOX_NONE_STYLE} so plain text passes clicks
-// through to the Textarea underneath; lint spans opt back in to catch
-// hover/tap.
+// The overlay container is click-through, so plain text falls to the Textarea
+// underneath; lint spans opt back in to catch hover/tap.
 const LINT_HIT_STYLE = { pointerEvents: 'auto' as const }
 
 // box-none only restores pointer-events on its direct DOM child (this root
 // Text) — it must opt back out itself, or the whole block would catch
 // clicks meant for the Textarea underneath instead of just the lint spans.
 const OVERLAY_ROOT_STYLE = { pointerEvents: 'none' as const }
-const OVERLAY_BOX_NONE_STYLE = { pointerEvents: 'box-none' as const }
+const OVERLAY_CONTAINER_STYLE = { pointerEvents: 'box-none' as const }
+
+// A sibling of the overlay, not inside it: nothing to opt back out of here,
+// the tooltip just must not eat clicks meant for the Textarea.
+const TOOLTIP_STYLE = { pointerEvents: 'none' as const }
 
 function boundingRectOf(node: unknown): DOMRect | null {
   const el = node as { getBoundingClientRect?: () => DOMRect } | null
@@ -128,7 +131,7 @@ export function SpellcheckTextarea({
       <Textarea value={value} onScroll={handleScroll} {...textareaProps} />
 
       {hasLints ? (
-        <View style={OVERLAY_BOX_NONE_STYLE} className="absolute inset-0 overflow-hidden">
+        <View style={OVERLAY_CONTAINER_STYLE} className="absolute inset-0 overflow-hidden">
           <TextClassContext.Provider value="text-transparent">
             <Text
               className={OVERLAY_TEXT_CLASS}
@@ -157,7 +160,7 @@ export function SpellcheckTextarea({
       {tooltip ? (
         <View
           className="absolute z-10 max-w-60 gap-1 rounded-md border border-border bg-bg-overlay p-2"
-          style={[OVERLAY_ROOT_STYLE, tooltip.position]}
+          style={[tooltip.position, TOOLTIP_STYLE]}
         >
           <Text size="xs">{tooltip.lint.message()}</Text>
           {(() => {
