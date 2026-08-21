@@ -187,6 +187,9 @@ slice plans when relevant.
 
 ### Native deps / install ritual
 
+- [`beforeunload` cancellation is ignored without sticky user activation](./beforeunload-needs-sticky-activation.md)
+  — no gesture means no `will-prevent-unload` at all, which looks exactly like
+  a missing guard; tests must click before they type.
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)
   — `pnpm add` alone crashes Android for libs with native
   modules; config-plugin step is per-library, not universal.

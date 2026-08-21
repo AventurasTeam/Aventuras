@@ -176,10 +176,24 @@ function createWindow(): void {
   // the unload through. A close already confirmed over IPC and a reload the
   // renderer just confirmed both go through; anything else asks the renderer.
   win.webContents.on('will-prevent-unload', (event) => {
-    if (confirmedCloses.has(win.id) || confirmedReloads.delete(win.id)) {
+    // Consumed before the branch, not inside it: `||` would short-circuit past
+    // the delete whenever a close was already confirmed, stranding the flag.
+    const confirmedReload = confirmedReloads.delete(win.id)
+    // Fail-open on the same rule as `close` below. Only a renderer that armed
+    // the guard can answer this, so an unload nobody will confirm has to go
+    // through — otherwise a renderer that cancels its own unload without
+    // arming (a bridge probe that failed, so the browser path registered
+    // `beforeunload` and nothing else) leaves the window unquittable, with no
+    // dialog and nothing logged.
+    if (confirmedReload || confirmedCloses.has(win.id) || !closeGuards.has(win.id)) {
       event.preventDefault()
       return
     }
+    // Named for the only cause that reaches it today: every other source of a
+    // prevented unload (a post-init `loadURL`, an off-origin navigation) is
+    // either blocked by `will-navigate` or happens before a guard is armed. A
+    // new hard-navigation path would be asked about — and confirm into the
+    // `reload()` below, not into itself.
     win.webContents.send('native:reload-requested')
   })
   // A committed cross-document navigation means the renderer that armed the
