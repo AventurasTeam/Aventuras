@@ -82,7 +82,7 @@ function Toast({ item }: ToastProps) {
   const toastHeight = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(
     () => ({ transform: [{ translateY: dragOffset.value }] }),
-    [],
+    [dragOffset],
   )
   const panGesture = useMemo(
     () =>

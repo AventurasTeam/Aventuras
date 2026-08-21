@@ -66,6 +66,29 @@ slice-planning gate forces its resolution before that slice is planned.
   needed. Slice 3.12b scaled the majority spelling from 2 files to 10 without
   surveying the other three — deliberately, to keep an API migration separate
   from a cross-cutting refactor. Surfaced 2026-08-21.
+- **Storybook's Vite build never reads `babel.config.js`, so Reanimated hooks
+  need explicit deps.** `@storybook/react-native-web-vite` passes
+  `babel: { babelrc: false, configFile: false }`, so
+  `react-native-worklets/plugin` never injects `updater.__closure`. A deps-less
+  `useAnimatedStyle` then throws under `__DEV__` (dev server) and silently
+  builds `dependencies = [undefined]` under `mode: test`, where the animation
+  renders but never runs — CI only ever sees the quiet half
+  (`ci.yml` runs `pnpm test:run` alone). Cost one capable-model debugging
+  session in Slice 3.12b; `useDerivedValue` has no `__DEV__` guard at all, so a
+  web-reachable one would fail silently in both modes. Fix candidate: pass
+  `pluginReactOptions.babel.plugins: ['react-native-worklets/plugin']` in
+  `.storybook/main.ts` — the preset spreads `...pluginReactOptions.babel` after
+  its own `babelrc: false`, so it merges cleanly and cannot pull in
+  `babel.config.js`. Note the cost is **not** "adds a whole-graph Babel pass":
+  `vite-plugin-rnw` already Babel-passes every first-party file
+  (`defaultIncludeRE = /\.[tj]sx?$/`); the real cost is the worklets plugin's
+  own AST walk in Storybook builds, plus plugin-ordering risk. An
+  `additionalHooks` setting on `react-hooks/exhaustive-deps` is only a half
+  guard — the rule returns early when the deps argument is absent entirely
+  (`isEffect` is false for these hooks), so it catches a wrong array but not a
+  missing one; a `no-restricted-syntax` selector covers that half. Deferred out
+  of Slice 3.12b because it changes every story's build output and wants its
+  own verification. Surfaced 2026-08-21.
 
 Drained 2026-08-20. Four items were fixed on the branch that surfaced
 them — the corrupt-draft clobber, the suggestion re-roll's reversal
