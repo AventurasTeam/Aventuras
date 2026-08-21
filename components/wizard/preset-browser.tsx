@@ -62,7 +62,9 @@ export function PresetBrowser({ presets, ariaLabel, onPick }: PresetBrowserProps
         <Text variant="muted" size="sm" numberOfLines={2}>
           {row.data.tagline}
         </Text>
-        <Text variant="muted" size="xs" numberOfLines={1}>
+        {/* The clamp is visual only, so without this the row's accessible name —
+            it is a role="option" named by its contents — carries the whole body. */}
+        <Text variant="muted" size="xs" numberOfLines={1} aria-hidden>
           {row.data.promptBody}
         </Text>
       </View>

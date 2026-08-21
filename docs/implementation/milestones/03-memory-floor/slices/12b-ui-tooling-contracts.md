@@ -290,7 +290,7 @@ taken, one bullet each:
   (`replayType` refuses light captures) — the field is there so
   captures written before M7.5 are not second-class when it lands.
 
-- **Preset-browser preview — first line of `promptBody` as a third
+- **Preset-browser preview — the prompt body clamped onto a third
   row line.** Canon's `preview body on hover` cannot exist on the
   phone Sheet, and the shipped rows showed label and tagline only,
   so the replace-confirm guarded an uninformed pick. A clamped third

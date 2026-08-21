@@ -255,9 +255,12 @@ Three input paths per field, all writing into `{ label, promptBody }`:
 2. **Browse presets** (`📚`) — opens the picker (popover on desktop,
    Sheet on phone) with bundled presets. Each row stacks three
    lines: the preset's display name, its one-line tagline, then the
-   first line of its prompt body. The body is clamped to one line so
-   every platform previews the same thing — a hover preview cannot
-   exist on touch. Picking copies the display name into the label
+   prompt body on a single clamped line — the whole body is in the
+   row and CSS ellipsises everything past one line's width, so only
+   its opening words show. Clamping rather than slicing keeps every
+   platform previewing the same thing; a hover preview cannot exist
+   on touch. The clamped line is `aria-hidden`, because the clip is
+   visual and the row is named by its contents. Picking copies the display name into the label
    and the preset's prose into the prompt body; the replace-confirm
    below guards an existing value.
 3. **AI-suggest** (`✨`) — see [AI-assist pattern](#ai-assist-pattern).
