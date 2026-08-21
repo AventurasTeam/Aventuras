@@ -289,7 +289,9 @@ function Pulsing({ children }: { children: ReactNode }) {
   useEffect(() => {
     opacity.set(withRepeat(withTiming(0.3, { duration: 600 }), -1, true))
   }, [opacity])
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }))
+  // Storybook's Vite build disables babelrc, so the worklets plugin never
+  // auto-injects these deps and Reanimated throws at render without them.
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }), [opacity])
   return <Animated.View style={style}>{children}</Animated.View>
 }
 

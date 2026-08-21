@@ -138,6 +138,15 @@ export const StreamingReasoning: StoryT = {
     content: '',
     reasoning: 'Thinking about how the warden would respond to direct aggression…',
   },
+  // The toggle is the only control this state renders, so its absence is the
+  // whole "card body is blank" symptom.
+  play: async () => {
+    const toggle = await screen.findByRole('button', { name: 'Show reasoning' })
+    // Reanimated resolves an empty dependency set to a frozen style rather
+    // than an error outside dev mode, so presence alone would not catch it.
+    const pulsing = toggle.closest<HTMLElement>('[style*="opacity"]')
+    await waitFor(() => expect(Number(pulsing?.style.opacity)).toBeLessThan(0.9))
+  },
 }
 
 export const StreamingReply: StoryT = {
