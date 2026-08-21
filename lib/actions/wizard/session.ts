@@ -167,7 +167,12 @@ export async function loadDraft(storyId: string, ctx: DbCtx): Promise<DraftSessi
   return { state, sourceDraftId: ok ? storyId : null, droppedRows: dropped }
 }
 
-type LiveSession = { state: WizardWorkingState; sourceStoryId: string | null }
+type LiveSession = {
+  state: WizardWorkingState
+  sourceStoryId: string | null
+  /** Unreadable rows this blob lost on load, as loadDraft reports for a draft. */
+  droppedRows: number
+}
 
 // The live singleton's state must be re-hydrated into wizardStore on Continue —
 // the in-memory store resets on every app boot, so without this a restart's
@@ -180,8 +185,8 @@ export async function loadLiveSession(ctx: DbCtx): Promise<LiveSession | null> {
     .from(wizardSessions)
     .where(eq(wizardSessions.id, LIVE_SESSION_ID))
   if (!row) return null
-  const { state, ok } = parsePersistedState(row.state, 'live')
+  const { state, ok, dropped } = parsePersistedState(row.state, 'live')
   // A corrupt blob resets to a fresh state; keeping the draft pointer would
   // let Finish overwrite the original draft with that fresh state.
-  return { state, sourceStoryId: ok ? row.storyId : null }
+  return { state, sourceStoryId: ok ? row.storyId : null, droppedRows: dropped }
 }

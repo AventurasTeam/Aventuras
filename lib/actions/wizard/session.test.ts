@@ -174,8 +174,33 @@ describe('wizard session/draft actions', () => {
 
     // sourceStoryId must drop with the corrupt blob — a fresh state finishing
     // into the original draft would silently overwrite it.
-    expect(loaded).toEqual({ state: emptyWorkingState(), sourceStoryId: null })
+    expect(loaded).toEqual({
+      state: emptyWorkingState(),
+      sourceStoryId: null,
+      // A shell failure resets wholesale, so no per-row count is meaningful.
+      droppedRows: 0,
+    })
     expect(sawError).toBe(true)
+  })
+
+  it('loadLiveSession reports rows the live blob itself lost, as loadDraft does', async () => {
+    const good = emptyWorkingState()
+    await ctx.db.insert(wizardSessions).values({
+      id: 'live',
+      storyId: 'story_orig',
+      state: {
+        ...good,
+        lore: [{ id: 'lore_a', title: 'Kept lore' }, { title: 'Missing id' }],
+      } as never,
+      updatedAt: 1,
+    })
+
+    const loaded = await loadLiveSession(ctx)
+
+    // Resume hydrates the store from this, and the Save confirm reads the count
+    // off the store: dropping it here is a Save that discards without asking.
+    expect(loaded?.droppedRows).toBe(1)
+    expect(loaded?.sourceStoryId).toBe('story_orig')
   })
 
   it('loadDraft recovers to a fresh state and orphans the pointer on a shell failure', async () => {

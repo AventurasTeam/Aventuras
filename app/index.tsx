@@ -227,7 +227,7 @@ export default function Index() {
           // opening the wizard, or a resumed session would render blank.
           runAction(
             loadLiveSession(ctx).then((session) => {
-              if (session) wizardStore.hydrate(session.state)
+              if (session) wizardStore.hydrate(session.state, session.droppedRows)
               setPrompt(null)
               // Carry the draft pointer back into the wizard route so a
               // session that began as a resumed draft still promotes that
