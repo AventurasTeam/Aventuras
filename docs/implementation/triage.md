@@ -114,6 +114,21 @@ slice-planning gate forces its resolution before that slice is planned.
   and `AppActionsMenuPure` but not for the connected wrapper, which has no
   story. Deferred from Slice 3.12b as an approach change to an
   already-signed-off decision. Surfaced 2026-08-21.
+- **Hardware back on a phone `Sheet` bypasses `onOpenChange`, so no sheet can
+  guard it.** `@rn-primitives/dialog` registers the
+  `hardwareBackPress` → `onOpenChange(false)` handler on its `Content`
+  (`dist/dialog.js:147`), but `SheetContent anchor="bottom"` routes to
+  `BottomSheetContent` (`components/ui/sheet.tsx:205`), which renders a bare
+  `BottomSheetModal` — and `@gorhom/bottom-sheet` registers no `BackHandler`
+  at all. The press therefore reaches whatever the screen registered; in the
+  wizard that is `app/wizard.tsx:159`, which calls `router.back()` and returns
+  true, popping the route out from under the open sheet. Surfaced by Slice
+  3.12b's AiAssist discard-confirm, where it is the one dismiss path the
+  confirm cannot intercept — on Android phone, the platform the decision record
+  singled out as unrecoverable. Fix candidate: register a guarded
+  `BackHandler` in `BottomSheetContent` mirroring the dialog primitive, which
+  would benefit every sheet consumer; deferred because it changes back-button
+  behaviour app-wide, not just for AiAssist. Surfaced 2026-08-21.
 
 Drained 2026-08-20. Four items were fixed on the branch that surfaced
 them — the corrupt-draft clobber, the suggestion re-roll's reversal
