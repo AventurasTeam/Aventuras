@@ -6,6 +6,7 @@ import type { RunState } from '@/lib/stores'
 import { checkConcurrencyContract } from './concurrency'
 import { definePipeline } from '../authoring/define'
 import { __resetRegistry } from '../authoring/registry'
+import { SUGGESTION_REFRESH_KIND } from '../definitions/suggestion-refresh'
 import type { PhaseResult } from '../types'
 
 async function* ok(): AsyncGenerator<never, PhaseResult> {
@@ -78,6 +79,14 @@ describe('checkConcurrencyContract', () => {
   it('blocks a periodic-classifier start while a reversal is in progress', () => {
     define('periodic-classifier', { blockedBy: ['periodic-classifier'] })
     expect(checkConcurrencyContract('periodic-classifier', runs(), true)).toEqual({
+      kind: 'blocked',
+      by: 'reversal',
+    })
+  })
+
+  it('blocks a suggestion-refresh start while a reversal is in progress', () => {
+    define(SUGGESTION_REFRESH_KIND, { blockedBy: [SUGGESTION_REFRESH_KIND] })
+    expect(checkConcurrencyContract(SUGGESTION_REFRESH_KIND, runs(), true)).toEqual({
       kind: 'blocked',
       by: 'reversal',
     })

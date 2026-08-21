@@ -7,6 +7,7 @@ import {
   happeningWriteSchema,
   happeningInvolvements,
   happeningAwareness,
+  KIND_FIELDS,
 } from '@/lib/db'
 import { happeningsStore } from '@/lib/stores'
 
@@ -63,7 +64,7 @@ function fullRow(entry: NewHappening): Happening {
     temporal: nullifyRef(entry.temporal),
     occurredAtEntryId: nullifyRef(entry.occurredAtEntryId),
     commonKnowledge: entry.commonKnowledge ?? 0,
-    embeddingStale: entry.embeddingStale ?? 0,
+    embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -125,6 +126,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `update patch for happening ${bid}:${id} has no updatable fields`,
     }
+
   const merged = { ...current, ...set } as Happening
   // Friendly graceful-reject surface over the DDL CHECK constraint.
   if (merged.occurredAtEntryId != null && merged.temporal != null)
@@ -132,6 +134,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: 'occurred_at_entry_id and temporal are mutually exclusive',
     }
+
+  // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
+  const [firstField, secondField] = KIND_FIELDS.happening
+  if (
+    (firstField in set && set[firstField] !== (current[firstField] ?? null)) ||
+    (secondField in set && set[secondField] !== (current[secondField] ?? null))
+  ) {
+    set.embeddingStale = 1
+  }
 
   return {
     status: 'ok',

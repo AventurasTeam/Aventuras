@@ -49,6 +49,17 @@ async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   })
 }
 
+const OPENING_ROW = {
+  id: 'e_opening',
+  branchId: 'b1',
+  position: 1,
+  kind: 'opening' as const,
+  content: 'once upon a time',
+  chapterId: null,
+  metadata: null,
+  createdAt: 1,
+}
+
 function hydrateOpeningAndTurn() {
   entriesStore.hydrate('b1', [
     {
@@ -250,8 +261,15 @@ describe('undoLastAction / redoLastAction', () => {
     const ctx = { db, runInTransaction }
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
+    // Loaded but empty: the branch-not-loaded guard would answer first otherwise.
+    entriesStore.hydrate('b1', [])
+
     const result = await undoLastAction('b1', ctx)
+
     expect(result.status).toBe('rejected')
+    // Hardcoded, not read off the union: this is the code the reader shows
+    // "Nothing to undo." for, and the one an integrity failure must not borrow.
+    if (result.status === 'rejected') expect(result.code).toBe('nothing-to-apply')
   })
 
   it('does not pop the redo stack when applyRedo throws (retry still works)', async () => {
@@ -295,12 +313,21 @@ describe('undoLastAction / redoLastAction', () => {
     expect((await undoLastAction('b1', ctx)).status).toBe('ok')
     expect(undoRedoStore.hasRedo()).toBe(true)
 
+    // b_other must be the LOADED branch to reach the snapshot guard at all:
+    // branch-not-loaded answers first, and the mismatch goes unexercised.
+    entriesStore.hydrate('b_other', [])
     const wrong = await redoLastAction('b_other', ctx)
     expect(wrong.status).toBe('rejected')
-    if (wrong.status === 'rejected') expect(wrong.reason).toMatch(/branch/i)
+    if (wrong.status === 'rejected') {
+      expect(wrong.reason).toMatch(/redo stack/i)
+      // A snapshot belonging to another branch is a broken redo stack, not an
+      // empty one — the reader must surface it rather than say "Nothing to redo."
+      expect(wrong.code).toBe('integrity')
+    }
 
     // The mismatch must not consume branch b1's own redo.
     expect(undoRedoStore.hasRedo()).toBe(true)
+    entriesStore.hydrate('b1', [OPENING_ROW])
     expect((await redoLastAction('b1', ctx)).status).toBe('ok')
     expect(entriesStore.getById('e_turn')).toBeDefined()
     expect(undoRedoStore.hasRedo()).toBe(false)
@@ -334,8 +361,10 @@ describe('undoLastAction / redoLastAction', () => {
 
     const undoResult = await undoLastAction('b1', ctx)
     expect(undoResult.status).toBe('rejected')
+    if (undoResult.status === 'rejected') expect(undoResult.code).toBe('gated')
     const redoResult = await redoLastAction('b1', ctx)
     expect(redoResult.status).toBe('rejected')
+    if (redoResult.status === 'rejected') expect(redoResult.code).toBe('gated')
   })
 
   it('brackets the sweep with reversalInProgress (set then cleared)', async () => {

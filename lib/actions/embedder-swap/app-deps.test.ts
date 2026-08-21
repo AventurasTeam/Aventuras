@@ -17,6 +17,7 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
+import { logger } from '@/lib/diagnostics'
 import {
   createDrainController,
   embedRowsToVecOps,
@@ -55,6 +56,7 @@ import {
   resumeSwap,
   startSwap,
   SwapNotInProgressError,
+  SwapStoryMissingError,
   type SwapParams,
 } from './engine'
 
@@ -478,6 +480,27 @@ describe('relabelStory', () => {
     await relabelStory('s1', { modelId: 'e2e/minilm-copy', backend: 'local' }, ctx)
 
     expect(settingsOf(sqlite)).toMatchObject({ embedding_model_id: 'e2e/minilm-copy' })
+  })
+
+  // SwapStoryMissingError cannot tell a deleted story from a settings blob that
+  // failed its schema, so the second one reports as the first: without this log,
+  // an unreadable blob leaves no record of why the swap refused.
+  it('logs a settings blob that failed its schema before reporting the story missing', async () => {
+    const { ctx, sqlite } = await seedStores(
+      storySettings({ embeddingBackend: 'local' }, MINILM, null),
+    )
+    sqlite
+      .prepare('UPDATE stories SET settings = ? WHERE id = ?')
+      .run(JSON.stringify({ embeddingBackend: 'not-a-backend' }), 's1')
+    const warn = vi.spyOn(logger, 'warn')
+
+    await expect(
+      relabelStory('s1', { modelId: MINILM, backend: 'local' }, ctx),
+    ).rejects.toBeInstanceOf(SwapStoryMissingError)
+    expect(warn).toHaveBeenCalledWith(
+      'embedder.swap_settings_unreadable',
+      expect.objectContaining({ storyId: 's1' }),
+    )
   })
 
   it('refuses while a swap marker is set', async () => {

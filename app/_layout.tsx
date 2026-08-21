@@ -14,7 +14,7 @@ import { CrashRecoveryModalHost } from '@/components/story/crash-recovery-modal-
 import { Toaster } from '@/components/ui/toast'
 import '@/global.css'
 import { setAppearanceThemeId } from '@/lib/actions'
-import { useBootstrap } from '@/lib/boot'
+import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
 import { DrizzleStudioDevTools, db, ensureAppSettingsSingleton, useDbMigrations } from '@/lib/db'
 import { DensityProvider } from '@/lib/density'
@@ -39,6 +39,10 @@ function AndroidResizeMode() {
 export default function RootLayout() {
   const { success, error } = useDbMigrations()
   const { phase, resetSettings } = useBootstrap(success)
+
+  // ALWAYS_RECORDED kinds bypass the diagnostics gate, so this doesn't depend
+  // on app_settings being hydrated and can run before migrations finish.
+  useEffect(() => registerRejectionHandler(), [])
 
   // Seed the app_settings singleton (idempotent) once migrations are applied.
   useEffect(() => {

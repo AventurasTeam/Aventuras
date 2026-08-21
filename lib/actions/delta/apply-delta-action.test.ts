@@ -1,9 +1,9 @@
 import { eq } from 'drizzle-orm'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { undoRedoStore } from '@/lib/stores'
+import { generationStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
 import { applyDeltaAction } from './apply-delta-action'
 
@@ -13,6 +13,9 @@ async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
 }
 
 describe('applyDeltaAction', () => {
+  beforeEach(() => resetAllStores())
+  afterEach(() => resetAllStores())
+
   it('op=create: writes target row + delta(undo_payload=null) + log_position 1', async () => {
     const { db, runInTransaction } = await createTestDb()
     await seed(db)
@@ -181,5 +184,43 @@ describe('applyDeltaAction', () => {
     const [entry] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_1'))
     expect((entry.metadata as { currentLocationId: string }).currentLocationId).toBe('loc_a')
     expect(await db.select().from(deltas)).toHaveLength(0)
+  })
+
+  it('rejects delta dispatch while a prose reversal is in progress', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    generationStore.setReversalInProgress(true)
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'createEntity',
+          source: 'user_edit',
+          payload: {
+            entry: {
+              id: 'char_1',
+              branchId: 'b1',
+              kind: 'character',
+              name: 'Kara',
+              status: 'active',
+              injectionMode: 'auto',
+              createdAt: 1,
+              updatedAt: 1,
+            },
+          },
+        },
+        actionId: 'act_1',
+        branchId: 'b1',
+      },
+      { db, runInTransaction },
+    )
+
+    // Asserts `code`, not just the reason: it is the only field a caller can tell this
+    // transient barrier from a failed write by; `reason` is free-form prose.
+    expect(result).toEqual({
+      status: 'rejected',
+      code: 'reversal-in-progress',
+      reason: 'prose reversal in progress',
+    })
   })
 })

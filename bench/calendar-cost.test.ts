@@ -1,6 +1,7 @@
 import { describe, it } from 'vitest'
 
 import { EARTH_GREGORIAN } from '@/lib/calendar/builtins/earth-gregorian'
+import { formatWorldTime } from '@/lib/calendar/render'
 import {
   __resetCache,
   tupleToBaseUnits,
@@ -66,6 +67,21 @@ describe('calendar conversion cost', () => {
         }
       })}`,
     )
+
+    // Every row in a painted window is a distinct worldTime, so a call-site memo
+    // misses on all of them — the walk a parsed-template cache would target.
+    lines.push(`formatWorldTime — ${READER_WINDOW} distinct values (worst case: memo misses)`)
+    {
+      __resetCache()
+      const origin = { year: 2024, month: 1, day: 1, hour: 0, minute: 0, second: 0 }
+      lines.push(
+        `  50 rows: ${ms(() => {
+          for (let k = 0; k < READER_WINDOW; k++) {
+            formatWorldTime(k * 86_400, EARTH_GREGORIAN, origin)
+          }
+        })}`,
+      )
+    }
 
     process.stdout.write(`\n${lines.join('\n')}\n\n`)
   })

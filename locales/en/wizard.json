@@ -344,5 +344,13 @@
       }
     },
     "guidance": "e.g. \"6 characters; 2 introduced later\""
+  },
+  "discardDropped": {
+    "title_one": "Discard {{count}} unreadable row?",
+    "title_other": "Discard {{count}} unreadable rows?",
+    "body_one": "{{count}} row in this draft couldn't be read when you opened it. Saving replaces the draft and discards it permanently.",
+    "body_other": "{{count}} rows in this draft couldn't be read when you opened it. Saving replaces the draft and discards them permanently.",
+    "cancel": "Keep the draft",
+    "confirm": "Save and discard"
   }
 }

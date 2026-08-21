@@ -26,6 +26,19 @@ engine.registerFilter('pad', (value: unknown, width: unknown) => {
   return String(value).padStart(parsed, '0')
 })
 
+// Unbounded is safe: one displayFormat per calendar, immutable per story
+// config. A parse failure throws before the set, so it is retried, never cached.
+const parsedTemplates = new Map<string, ReturnType<Liquid['parse']>>()
+
+function parsedTemplate(displayFormat: string): ReturnType<Liquid['parse']> {
+  let tpl = parsedTemplates.get(displayFormat)
+  if (!tpl) {
+    tpl = engine.parse(displayFormat)
+    parsedTemplates.set(displayFormat, tpl)
+  }
+  return tpl
+}
+
 function monthName(calendar: CalendarSystem, tuple: TierTuple): string | undefined {
   const monthTier = calendar.tiers.find((t) => t.name === 'month')
   if (!monthTier?.labels) return undefined
@@ -69,7 +82,7 @@ export function formatWorldTime(
       era: era.era,
       eraYear: era.eraYear,
     }
-    return engine.parseAndRenderSync(calendar.displayFormat, scope) as string
+    return engine.renderSync(parsedTemplate(calendar.displayFormat), scope) as string
   } catch (err) {
     return new FormatMiss(err instanceof Error ? err.message : String(err))
   }

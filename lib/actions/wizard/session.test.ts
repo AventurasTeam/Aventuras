@@ -78,8 +78,9 @@ describe('wizard session/draft actions', () => {
     s.step = 5
     const { storyId } = await saveStoryDraft(s, ctx, 1)
     const loaded = await loadDraft(storyId, ctx)
-    expect(loaded?.definition.title).toBe('Aria')
-    expect(loaded?.step).toBe(5)
+    expect(loaded?.state.definition.title).toBe('Aria')
+    expect(loaded?.state.step).toBe(5)
+    expect(loaded?.sourceDraftId).toBe(storyId)
   })
 
   it('clearLiveSession removes only the live singleton', async () => {
@@ -125,7 +126,7 @@ describe('wizard session/draft actions', () => {
     expect(storyRows).toHaveLength(1)
     expect(storyRows[0].title).toBe('Second save')
     const loaded = await loadDraft(storyId, ctx)
-    expect(loaded?.definition.title).toBe('Second save')
+    expect(loaded?.state.definition.title).toBe('Second save')
   })
 
   it('saveStoryDraft re-save preserves the original createdAt', async () => {
@@ -173,15 +174,166 @@ describe('wizard session/draft actions', () => {
 
     // sourceStoryId must drop with the corrupt blob — a fresh state finishing
     // into the original draft would silently overwrite it.
-    expect(loaded).toEqual({ state: emptyWorkingState(), sourceStoryId: null })
+    expect(loaded).toEqual({
+      state: emptyWorkingState(),
+      sourceStoryId: null,
+      // A shell failure resets wholesale, so no per-row count is meaningful.
+      droppedRows: 0,
+    })
     expect(sawError).toBe(true)
   })
 
-  it('loadDraft recovers to a fresh state when the blob fails validation', async () => {
+  it('loadLiveSession reports rows the live blob itself lost, as loadDraft does', async () => {
+    const good = emptyWorkingState()
+    await ctx.db.insert(wizardSessions).values({
+      id: 'live',
+      storyId: 'story_orig',
+      state: {
+        ...good,
+        lore: [{ id: 'lore_a', title: 'Kept lore' }, { title: 'Missing id' }],
+      } as never,
+      updatedAt: 1,
+    })
+
+    const loaded = await loadLiveSession(ctx)
+
+    // Resume hydrates the store from this, and the Save confirm reads the count
+    // off the store: dropping it here is a Save that discards without asking.
+    expect(loaded?.droppedRows).toBe(1)
+    expect(loaded?.sourceStoryId).toBe('story_orig')
+  })
+
+  it('loadDraft recovers to a fresh state and orphans the pointer on a shell failure', async () => {
     await ctx.db
       .insert(wizardSessions)
       .values({ id: 'story_x', storyId: 'story_x', state: { step: 99 } as never, updatedAt: 1 })
 
-    expect(await loadDraft('story_x', ctx)).toEqual(emptyWorkingState())
+    // sourceDraftId must drop with the corrupt blob: a fresh state saving back into
+    // the original draft would replace the only copy of it with a blank one.
+    expect(await loadDraft('story_x', ctx)).toEqual({
+      state: emptyWorkingState(),
+      sourceDraftId: null,
+      // A shell failure resets wholesale, so no per-row count is meaningful —
+      // and with no pointer there is no Save to confirm against.
+      droppedRows: 0,
+    })
+  })
+
+  it('loadDraft keeps the pointer when rows salvage under a healthy shell', async () => {
+    const good = emptyWorkingState()
+    const state = {
+      ...good,
+      definition: { ...good.definition, title: 'Kept title' },
+      lore: [{ id: 'lore_a', title: 'Kept lore' }, { title: 'Missing id' }],
+    }
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'story_y', storyId: 'story_y', state: state as never, updatedAt: 1 })
+
+    const loaded = await loadDraft('story_y', ctx)
+
+    expect(loaded?.state.lore.map((row) => row.id)).toEqual(['lore_a'])
+    // A partial salvage is still a resumable draft, so the pointer survives.
+    // Without this the orphan rule degenerates into "never resume a draft".
+    expect(loaded?.sourceDraftId).toBe('story_y')
+    // Reported rather than merely toasted: the pointer means Save will replace
+    // the row these rows are still in, and the wizard confirms that first.
+    expect(loaded?.droppedRows).toBe(1)
+  })
+
+  it('reports no dropped rows for a draft that parses whole', async () => {
+    const good = emptyWorkingState()
+    await ctx.db.insert(wizardSessions).values({
+      id: 'story_whole',
+      storyId: 'story_whole',
+      state: { ...good, definition: { ...good.definition, title: 'Whole' } } as never,
+      updatedAt: 1,
+    })
+
+    const loaded = await loadDraft('story_whole', ctx)
+
+    expect(loaded?.droppedRows).toBe(0)
+    expect(loaded?.sourceDraftId).toBe('story_whole')
+  })
+
+  it('loadDraft orphans the pointer when a row container is unreadable', async () => {
+    const good = emptyWorkingState()
+    await ctx.db.insert(wizardSessions).values({
+      id: 'story_z',
+      storyId: 'story_z',
+      state: { ...good, definition: { ...good.definition, title: 'Kept' }, cast: 'oops' } as never,
+      updatedAt: 1,
+    })
+
+    const loaded = await loadDraft('story_z', ctx)
+
+    expect(loaded?.state.definition.title).toBe('Kept')
+    expect(loaded?.state.cast).toEqual([])
+    expect(loaded?.sourceDraftId).toBeNull()
+  })
+
+  it('salvages healthy rows when a cast row and a lore row are malformed', async () => {
+    let sawError = false
+    const unsub = toastStore.subscribe((items) => {
+      sawError = items.some((item) => item.severity === 'error')
+    })
+    const good = emptyWorkingState()
+    const state = {
+      ...good,
+      definition: { ...good.definition, title: 'Kept title' },
+      cast: [
+        { id: 'char_a', kind: 'character', name: 'Kara' },
+        { id: 'char_b', kind: 'not-a-kind', name: 42 },
+      ],
+      lore: [{ id: 'lore_a', title: 'Kept lore' }, { title: 'Missing id' }],
+    }
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'live', storyId: 'story_orig', state: state as never, updatedAt: 1 })
+
+    const loaded = await loadLiveSession(ctx)
+    unsub()
+
+    expect(loaded?.state.definition.title).toBe('Kept title')
+    expect(loaded?.state.cast.map((row) => row.id)).toEqual(['char_a'])
+    expect(loaded?.state.lore.map((row) => row.id)).toEqual(['lore_a'])
+    // Salvaged rows go through the schema, not a raw passthrough — an
+    // un-defaulted row is exactly what later crashes the wizard (row.tags.map).
+    expect(loaded?.state.cast[0]?.status).toBe('active')
+    expect(loaded?.state.lore[0]?.injectionMode).toBe('auto')
+    // A partial salvage keeps ok true, so the draft pointer survives — only a
+    // shell failure orphans it.
+    expect(loaded?.sourceStoryId).toBe('story_orig')
+    expect(sawError).toBe(true)
+  })
+
+  it('clears an unreadable section, toasts, and orphans the draft pointer', async () => {
+    let sawError = false
+    const unsub = toastStore.subscribe((items) => {
+      sawError = items.some((item) => item.severity === 'error')
+    })
+    const good = emptyWorkingState()
+    const state = {
+      ...good,
+      definition: { ...good.definition, title: 'Kept title' },
+      opening: { ...good.opening, content: 'Kept prose' },
+      cast: 'oops',
+    }
+    await ctx.db
+      .insert(wizardSessions)
+      .values({ id: 'live', storyId: 'story_orig', state: state as never, updatedAt: 1 })
+
+    const loaded = await loadLiveSession(ctx)
+    unsub()
+
+    // Shell fields survive a structural row-container failure — only the
+    // unreadable section is cleared.
+    expect(loaded?.state.definition.title).toBe('Kept title')
+    expect(loaded?.state.opening.content).toBe('Kept prose')
+    expect(loaded?.state.cast).toEqual([])
+    // Unknown-size loss can't claim a count, but it must still orphan the
+    // draft pointer so the next save can't overwrite the original with it.
+    expect(loaded?.sourceStoryId).toBeNull()
+    expect(sawError).toBe(true)
   })
 })

@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { Lore, NewLore } from '@/lib/db'
-import { lore, loreWriteSchema } from '@/lib/db'
+import { KIND_FIELDS, lore, loreWriteSchema } from '@/lib/db'
 import { loreStore } from '@/lib/stores'
 
 import { register, type ActionHandler } from '../delta/registry'
@@ -51,7 +51,7 @@ function fullRow(entry: NewLore): Lore {
     keywords: entry.keywords ?? [],
     injectionMode: entry.injectionMode,
     priority: entry.priority ?? 0,
-    embeddingStale: entry.embeddingStale ?? 0,
+    embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -111,6 +111,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `update patch for lore ${bid}:${id} has no updatable fields`,
     }
+
+  // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
+  const [firstField, secondField] = KIND_FIELDS.lore
+  if (
+    (firstField in set && set[firstField] !== (current[firstField] ?? null)) ||
+    (secondField in set && set[secondField] !== (current[secondField] ?? null))
+  ) {
+    set.embeddingStale = 1
+  }
 
   return {
     status: 'ok',

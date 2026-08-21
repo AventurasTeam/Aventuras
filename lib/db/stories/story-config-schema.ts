@@ -96,6 +96,12 @@ const modelsSchema = z.object({
   ...storyAgentModelShape,
 })
 
+/**
+ * Adding a key with a `.default()` here needs a backfill migration: settings
+ * writes are key-scoped (`json_set`, settings-ops.ts), so the default never
+ * materialises in an existing story's blob. Reads still apply it, so the gap
+ * shows only where something reads the raw column.
+ */
 export const storySettingsSchema = z.object({
   chapterTokenThreshold: z.number().default(24000),
   chapterAutoClose: z.boolean().default(true),

@@ -200,14 +200,28 @@ for the placement rule.
     _failed_ parse leaves neither — no fields written and no prose
     remnant to inspect. Keep the raw text for that case; `reasoning` is
     the precedent for a large optional string on metadata.
+  - **Serialize the entry-metadata writers before this pass adds a
+    second ungated one.** Routed here from the Slice 3.12 split
+    (2026-08-19): `updateStoryEntryMetadata`'s handler is a
+    whole-column replace, `updateEntryWorldTime` reads
+    `current.metadata` outside the transaction, and its `withKeyLock`
+    key is per-action — the interleave is unreachable today only
+    because both pipeline writers run `hard-gate` (verified at both
+    gate checks, 2026-08-19). This pass's scene-field editor is the
+    first ungated second writer, so it inherits the fix and should
+    design it with both writers in hand: field-merge inside the
+    handler plus a shared per-row lock key (sharing a key with the
+    current outer lock deadlocks — `withKeyLock` is not reentrant),
+    or the payload built inside the transaction, which needs a
+    callback-shaped bridge transaction and is much larger. Raised
+    2026-08-16 by the Slice 3.8 review.
   - **Legacy rows keep their inline block.** Prefer a tolerant reader
     (retain `stripTrailingBlocks` as a display-time fallback) over a
     migration.
 
-  Named by the now-emptied Post-M3 reconciliation section as belonging
-  to that pass, so
-  [Slice 3.12](./implementation/milestones/03-memory-floor/slices/12-reconciliation.md)
-  is its plausible owner; left here pending that call (2026-08-18).
+  Ownership settled during the Slice 3.12 split (2026-08-19): this
+  is its own pass, run outside the slice-shaped workflow rather than
+  under Slice 3.12.
 
 - **Happening involvements drift when scene membership is edited after
   the fact.** Involvements record who was present at an entry, so a later
@@ -380,3 +394,81 @@ for the placement rule.
   assertions going forward. Until it lands, treat any style assertion in
   a story as unproven. Surfaced by M3.11 Task 7 (2026-07-22), root-caused
   and priced 2026-08-18.
+
+## Code structure
+
+Near-future refactors routed out of the Slice 3.12 split
+(2026-08-19); both were re-verified against the code that day.
+
+- **`buildGenerationContext` should own the store reads — the
+  unified data-source refactor.** The planned shape is a data
+  source: call sites hand the builder identity and it reads
+  `entriesStore` / `entitiesStore` itself, with templates doing the
+  shaping in Liquid per
+  [`architecture.md → Formatting lives in Liquid`](./architecture.md#formatting-lives-in-liquid-not-in-the-context-builder).
+  Today the builder flattens entries to `{ content }`, so a template
+  can reach neither `entry.position` nor `entry.metadata`. Verified
+  state: two of the three phases already share
+  `loadPerTurnWorkingSet`; only `suggestion-refresh` duplicates the
+  branch-filter-and-sort and both store guards inline. Four things
+  the implementer must handle: (a) `sceneEntities` derives from
+  `.at(-1)` of the caller's array, so template-side truncation
+  silently retargets the scene block — it must become
+  template-derived in the same change; (b) `entry` is absent from
+  `SUBSTITUTABLE_PREFIXES`, so raw entries would expose real UUIDs
+  against
+  [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout);
+  (c) — the load-bearing question an earlier record got wrong — **no
+  bundled template uses the `recent` filter**: per-turn's windowing
+  is `composePromptBuffer` inside the builder, and the pack contract
+  says "render it whole", so "templates do the shaping" cannot be
+  taken literally for the narrative phase. Decide first whether the
+  two-mode window stays in the builder, becomes a Liquid-reachable
+  filter, or the context exposes both windowed and raw collections —
+  a canonical-spec decision for a design session, not an
+  implementation choice; (d) the mechanical cost is 45 direct test
+  call sites (not the 17 once recorded) in
+  `generation-context.test.ts`, and the builder is currently pure —
+  consider an injectable store port so tests stay pure. Also needs
+  the clause edit to
+  [`architecture.md → The single-context principle`](./architecture.md#the-single-context-principle),
+  whose "a phase reads the domain stores directly" no longer holds.
+  Zero user-visible impact until a custom pack or a fourth consumer
+  exists. Surfaced by M3.7a post-merge review (2026-07-30);
+  re-verified and re-sized during the Slice 3.12 split (2026-08-19).
+
+- **`lib/actions/` extraction pass — pipeline triggers, classifier
+  deps, and the embedder-swap module move.** The layer's bar
+  ([`code-conventions.md → Action layer`](./code-conventions.md#action-layer))
+  is writes that persist to SQLite or cross stores; three resident
+  groups miss it. Verified state, correcting the original framing:
+  **(a) triggers** — `suggestions/refresh-suggestions.ts` writes
+  nothing, but `classifier/run-now.ts` is _not_ a pure trigger (it
+  records the classifier preflight failure, a real write, which must
+  split out before any move). The stated payoff "extracting the
+  triggers lets the eslint exception go" is dead: four action files
+  runtime-import `@/lib/pipeline`, and two of them
+  (`turns/submit-turn.ts`, `turns/regenerate-turn.ts`) are genuine
+  delta-logged writes that stay — either alone keeps the import
+  alive; the eslint `boundaries/dependencies` exception covers
+  **type-only** imports that never produced a runtime cycle (the
+  actual cycle workaround is the `configureDeltaActionPort` runtime
+  port wired in bootstrap). Argue the trigger move on taxonomy alone
+  or drop it. **(b) `classifier/deps.ts`** — three of five exports
+  are not writes; the two genuine writes bypass `defineAction` with
+  raw `ctx.db.run(sql...)`. Splits three ways: a lib read module, a
+  `defineAction`-conformant writer pair, and
+  `embedClassifierDescriptions` following `resolveDrainConfig`
+  wherever it lands. **(c) `embedder-swap/`** — 1,267 non-test lines
+  plus 1,953 test lines and eight exported error classes; the feared
+  cycle with `lib/embedder` checks clean (the dependency is
+  one-directional), so the `lib/embedder-swap` move is decidable
+  now. The barrel's uncurated re-export of the raw engine primitives
+  is being fixed in
+  [Slice 3.12a](./implementation/milestones/03-memory-floor/slices/12a-runtime-integrity.md);
+  this pass is the remaining structure half. What stays put: the
+  `register.ts` versus `operational.ts` split is the layer's real
+  organizing rule, and reads deliberately colocated to pin a shared
+  invariant (`story-entries/recent-window.ts`) are correct where
+  they are. Surfaced by a 2026-08-01 read of the folder; re-verified
+  during the Slice 3.12 split (2026-08-19).

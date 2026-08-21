@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { EmbeddedFieldRow } from '@/lib/db'
-import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
+import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
 
 import { KNN_K } from './constants'
 import {
@@ -547,6 +547,27 @@ describe('runRetrieval — query embed failure', () => {
     expect(partial.floor?.sceneEntities.map((e) => e.id)).toEqual(['char_a'])
     expect(partial.queries?.q1.text).toBe('I ask about the amulet.')
     expect(partial.bundles).toEqual({})
+  })
+
+  // The sync stage already carries a cancel on its own arm; the query embed is the
+  // other place the shared abortSignal can land, and 'Switch embedder' is the wrong
+  // fix to offer for a user stop.
+  it('carries a cancel during the query embed as a cancellation, not a failure', async () => {
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_a', 'Kara Vex')] }),
+        embedTexts: async () => {
+          throw new EmbedderCancelledError('embed cancelled')
+        },
+      }),
+      params(),
+    )
+
+    expect(out.ok).toBe(false)
+    if (out.ok) throw new Error('expected a cancellation')
+    expect(out.cancelled).toBe(true)
+    // The partial still reports how far the pass got, exactly as the failure arm does.
+    expect(out.partial.queries?.q1.text).toBe('I ask about the amulet.')
   })
 
   it('reports a typed call failure when the embed request itself fails', async () => {

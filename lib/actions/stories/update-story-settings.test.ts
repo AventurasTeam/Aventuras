@@ -1,7 +1,13 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { branches, buildStorySettings, stories, storyDefinitionSchema } from '@/lib/db'
+import {
+  branches,
+  buildStorySettings,
+  setSwapTargetOp,
+  stories,
+  storyDefinitionSchema,
+} from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { PER_TURN_KIND, SUGGESTION_REFRESH_KIND } from '@/lib/pipeline'
 import {
@@ -156,6 +162,60 @@ describe('updateStorySettings', () => {
     expect(next.settings.models).toEqual({ narrative: 'model-c' })
   })
 
+  it('a save landing mid-swap leaves the swap marker keys intact', async () => {
+    const { db, runInTransaction } = await seed()
+
+    // Injects the swap's phase-1 marker write between the action's validation
+    // and its own write — the exact interleave a read-merge-write loses.
+    const interleaved: typeof runInTransaction = async (ops) => {
+      await runInTransaction([
+        setSwapTargetOp(
+          'story_1',
+          { modelId: 'target-model', backend: 'provider', providerId: 'prov_1' },
+          50,
+        ),
+      ])
+      await runInTransaction(ops)
+    }
+
+    const result = await updateStorySettings(
+      'story_1',
+      { suggestionCount: 2 },
+      { db, runInTransaction: interleaved },
+      99,
+    )
+
+    expect(result).toMatchObject({ status: 'ok' })
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.suggestionCount).toBe(2)
+    expect(row.settings?.embedding_swap_target).toBe('target-model')
+    expect(row.settings?.embedding_swap_backend).toBe('provider')
+    expect(row.settings?.embedding_swap_provider_id).toBe('prov_1')
+  })
+
+  // json_patch would delete the key, and activePackId is required-nullable, so
+  // the next read would report the whole blob corrupt.
+  it('writes an explicit null without deleting the key', async () => {
+    const { db, sqlite, runInTransaction } = await seed()
+
+    const result = await updateStorySettings(
+      'story_1',
+      { activePackId: null },
+      { db, runInTransaction },
+      99,
+    )
+
+    expect(result).toMatchObject({ status: 'ok', settings: { activePackId: null } })
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.settings?.activePackId).toBeNull()
+    const [stored] = sqlite
+      .prepare(
+        `SELECT json_type(settings, '$.activePackId') AS t FROM stories WHERE id = 'story_1'`,
+      )
+      .all() as { t: string | null }[]
+    expect(stored.t).toBe('null')
+  })
+
   it('refreshes currentStoryStore when the updated story is open', async () => {
     const { db, runInTransaction, settings } = await seed()
     currentStoryStore.set({
@@ -212,17 +272,55 @@ describe('updateStorySettings', () => {
     expect(row.settings?.suggestionCount).toBe(6)
   })
 
+  // json_set needs at least one path/value pair: without the guard an empty
+  // patch emits `json_set(settings, )`, a SQL syntax error.
+  it('emits no UPDATE when the patch has nothing to set', async () => {
+    const { db, runInTransaction } = await seed()
+
+    const next = await updateStorySettings('story_1', {}, { db, runInTransaction }, 99)
+
+    expect(next).toMatchObject({ status: 'ok' })
+    const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
+    expect(row.updatedAt).toBe(1)
+  })
+
   it('rejects rather than self-heals when the stored settings are corrupt', async () => {
     const { db, sqlite, runInTransaction, settings } = await seed()
     const corrupt = JSON.stringify({ ...settings, classifierCadence: 'broken' })
     sqlite.exec(`UPDATE stories SET settings = '${corrupt}' WHERE id = 'story_1'`)
 
     await expect(
-      updateStorySettings('story_1', { classifierCadence: 7 }, { db, runInTransaction }, 99),
+      updateStorySettings('story_1', { suggestionCount: 5 }, { db, runInTransaction }, 99),
     ).rejects.toThrow()
 
+    // The corrupt key is outside the patch, so it must survive rather than be
+    // rebuilt from defaults by a save that reports failure.
     const [row] = await db.select().from(stories).where(eq(stories.id, 'story_1'))
-    expect(row.updatedAt).toBe(1)
+    expect(row.settings?.classifierCadence).toBe('broken')
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+  })
+
+  // The write is key-scoped, so overwriting the corrupt key leaves a readable
+  // blob; a stale repair flag strands the story behind attemptOpenStory's gate.
+  it('clears the repair flag when the save makes the settings readable again', async () => {
+    const { db, sqlite, runInTransaction, settings } = await seed()
+    const corrupt = JSON.stringify({ ...settings, classifierCadence: 'broken' })
+    sqlite.exec(`UPDATE stories SET settings = '${corrupt}' WHERE id = 'story_1'`)
+
+    await expect(
+      updateStorySettings('story_1', { suggestionCount: 5 }, { db, runInTransaction }, 99),
+    ).rejects.toThrow()
+    expect(storiesStore.getStories().openFailures.story_1).toBe('settings-corrupt')
+
+    const next = await updateStorySettings(
+      'story_1',
+      { classifierCadence: 7 },
+      { db, runInTransaction },
+      100,
+    )
+
+    expect(next).toMatchObject({ status: 'ok', settings: { classifierCadence: 7 } })
+    expect(storiesStore.getStories().openFailures.story_1).toBeUndefined()
   })
 
   it('throws for an unknown story', async () => {

@@ -1,7 +1,7 @@
 import { desc, eq } from 'drizzle-orm'
 
 import type { Delta, SqlOp } from '@/lib/db'
-import { deltas } from '@/lib/db'
+import { deltas, embeddedFieldsForTable, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { applyUndoPayload } from './delta-encoding'
@@ -21,6 +21,13 @@ export class DeltaReplayError extends Error {
 }
 
 type PatchEmission = { table: string; branchId: string; patch: StorePatch }
+
+// Membership only, never a value compare: an undo restores a prior value by
+// construction, and a degenerate value-equal undo costs one revalidation hash.
+function undoDirtiesVector(targetTable: string, payloadKeys: readonly string[]): boolean {
+  const fields = embeddedFieldsForTable(targetTable)
+  return fields !== undefined && payloadKeys.some((key) => fields.includes(key))
+}
 
 // Build undo ops for one action's deltas (already in log_position DESC order).
 // A per-row working copy threads each op=update undo onto the prior one so multiple
@@ -61,6 +68,9 @@ async function buildUndoOps(
       for (const key of cascadeKeys) {
         delete rowData[key]
       }
+      // The payload's flag was accurate at delete time, but an embedder swap since
+      // then re-embeds only LIVE rows, so the vector can be gone while it reads clean.
+      if (isEmbeddedSourceTable(delta.targetTable)) rowData.embeddingStale = 1
 
       working.set(key, { ...rowData })
       ops.push(ctx.db.insert(table).values(rowData).toSQL())
@@ -77,8 +87,12 @@ async function buildUndoOps(
         const childEntry = resolveByTable(childTableName)
         if (!childEntry) throw new Error(`reverse-replay: unknown child table ${childTableName}`)
         const { table: childTable } = childEntry.descriptor
-        ops.push(ctx.db.insert(childTable).values(childRows).toSQL())
-        for (const childRow of childRows) {
+        const childIsEmbedded = isEmbeddedSourceTable(childTableName)
+        const restoredChildren: Record<string, unknown>[] = childIsEmbedded
+          ? childRows.map((childRow) => ({ ...childRow, embeddingStale: 1 }))
+          : childRows
+        ops.push(ctx.db.insert(childTable).values(restoredChildren).toSQL())
+        for (const childRow of restoredChildren) {
           patches.push({
             table: childTableName,
             branchId: delta.branchId,
@@ -115,6 +129,12 @@ async function buildUndoOps(
           : partial
       restored[col] = value
       row[col] = value // thread into the working copy for later-in-DESC undos
+    }
+    // Revalidation (app-deps.ts) only ever CLEARS this flag, so nothing outside a writer
+    // like this one sets it back to 1 — erring dirty is the self-correcting direction.
+    if (undoDirtiesVector(delta.targetTable, Object.keys(payload))) {
+      restored.embeddingStale = 1
+      row.embeddingStale = 1
     }
     ops.push(ctx.db.update(table).set(restored).where(where).toSQL())
     patches.push({

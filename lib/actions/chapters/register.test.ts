@@ -196,4 +196,79 @@ describe('chapters CRUD arms', () => {
     expect((await rowFor(db, 'chap_1')).title).toBe('The Gathering Storm')
     expect(chaptersStore.getById('chap_1')?.title).toBe('The Gathering Storm')
   })
+
+  it('defaults embedding_stale to 1 on create', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createChapter', source: 'chapter_close', payload: { entry: CHAPTER } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'chap_1')).embeddingStale).toBe(1)
+  })
+
+  it('flips embedding_stale only when an embedded column changes', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createChapter',
+          source: 'chapter_close',
+          payload: { entry: { ...CHAPTER, embeddingStale: 0 } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'chap_1', patch: { tokenCount: 99999 } },
+        },
+        actionId: 'act_u1',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'chap_1')).embeddingStale).toBe(0) // non-embedded columns don't flip
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'user_edit',
+          payload: {
+            branchId: 'br_1',
+            id: 'chap_1',
+            patch: { summary: 'Heroes assemble as war looms.' },
+          },
+        },
+        actionId: 'act_u2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'chap_1')).embeddingStale).toBe(0) // resubmitting an unchanged value compares equal
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateChapter',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'chap_1', patch: { theme: 'new theme' } },
+        },
+        actionId: 'act_u3',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'chap_1')).embeddingStale).toBe(1) // embedded column changed
+  })
 })

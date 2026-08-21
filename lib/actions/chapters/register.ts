@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { Chapter, NewChapter } from '@/lib/db'
-import { chapterWriteSchema, chapters } from '@/lib/db'
+import { chapterWriteSchema, chapters, KIND_FIELDS } from '@/lib/db'
 import { chaptersStore } from '@/lib/stores'
 
 import { register, type ActionHandler } from '../delta/registry'
@@ -56,7 +56,7 @@ function fullRow(entry: NewChapter): Chapter {
     endEntryId: entry.endEntryId,
     tokenCount: entry.tokenCount,
     closedAt: entry.closedAt,
-    embeddingStale: entry.embeddingStale ?? 0,
+    embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -117,6 +117,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `update patch for chapters ${bid}:${id} has no updatable fields`,
     }
+
+  // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
+  const [firstField, secondField] = KIND_FIELDS.chapter
+  if (
+    (firstField in set && set[firstField] !== (current[firstField] ?? null)) ||
+    (secondField in set && set[secondField] !== (current[secondField] ?? null))
+  ) {
+    set.embeddingStale = 1
+  }
 
   return {
     status: 'ok',

@@ -91,6 +91,8 @@ async function updateEntryWorldTimeLocked(
     },
     ctx,
   )
+  // Not branched on applyDeltaAction's reversal code: the re-check above reads the
+  // same flag with no await between, so anything reaching here is a write failure.
   if (result.status !== 'ok') return rejected(STORY_ENTRY_REJECTION.deltaFailed, result.reason)
   return { status: 'ok' }
 }

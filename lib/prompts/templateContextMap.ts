@@ -54,11 +54,11 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
     },
     {
       name: 'calendarVocabulary',
-      type: 'CalendarVocabulary | null',
+      type: 'CalendarVocabulary',
       category: 'Story Config',
       description:
-        'Vocabulary descriptor (base units, tier names/labels, era names) for the active calendar system.',
-      required: false,
+        'Vocabulary descriptor (base units, tier names/labels, era names) for the active calendar system; falls back to earth-gregorian for an unresolved id, matching the reader.',
+      required: true,
     },
     {
       name: 'userSettings',

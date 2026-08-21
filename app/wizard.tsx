@@ -5,6 +5,7 @@ import { BackHandler, Platform, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { DiscardDroppedRowsDialog } from '@/components/wizard/discard-dropped-rows-dialog'
 import {
   EmbedderGateBlocked,
   EmbedderGateUnresolved,
@@ -90,9 +91,13 @@ async function resolveEntryGate(): Promise<GateState> {
 export default function WizardRoute() {
   const router = useRouter()
   const { draftId } = useLocalSearchParams<{ draftId?: string }>()
-  const [sourceDraftId] = useState<string | null>(() =>
-    typeof draftId === 'string' ? draftId : null,
+  const [sourceDraftId] = useState<string | undefined>(() =>
+    typeof draftId === 'string' ? draftId : undefined,
   )
+
+  const droppedRows = wizardStore.useWizard((s) => s.droppedRows)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const [discardConfirmed, setDiscardConfirmed] = useState(false)
 
   const step = wizardStore.useWizard((s) => s.state.step)
   const furthestStep = wizardStore.useWizard((s) => s.furthestStep)
@@ -174,17 +179,9 @@ export default function WizardRoute() {
       if (autosaveSuppressedRef.current) return
       if (JSON.stringify(s.state) === EMPTY_STATE_JSON) return
       autosaveTimerRef.current = setTimeout(() => {
-        runAction(
-          saveLiveSession(
-            wizardStore.getWizard().state,
-            ctx,
-            undefined,
-            sourceDraftId ?? undefined,
-          ),
-          {
-            event: 'action_layer.wizard_autosave_failed',
-          },
-        )
+        runAction(saveLiveSession(wizardStore.getWizard().state, ctx, undefined, sourceDraftId), {
+          event: 'action_layer.wizard_autosave_failed',
+        })
       }, AUTOSAVE_DEBOUNCE_MS)
     })
     return () => {
@@ -206,10 +203,9 @@ export default function WizardRoute() {
   const flushAutosave = () => {
     autosaveSuppressedRef.current = false
     if (JSON.stringify(wizardStore.getWizard().state) === EMPTY_STATE_JSON) return
-    runAction(
-      saveLiveSession(wizardStore.getWizard().state, ctx, undefined, sourceDraftId ?? undefined),
-      { event: 'action_layer.wizard_autosave_failed' },
-    )
+    runAction(saveLiveSession(wizardStore.getWizard().state, ctx, undefined, sourceDraftId), {
+      event: 'action_layer.wizard_autosave_failed',
+    })
   }
 
   const selectedCalendar = resolveCalendar(calendarSystemId)
@@ -219,7 +215,7 @@ export default function WizardRoute() {
     cast,
     leadEntityId,
     worldTimeOrigin,
-    calendar: selectedCalendar ?? null,
+    calendar: selectedCalendar,
     lore,
   }
   const canGoNext = stepForwardValid(step, validityParams)
@@ -272,7 +268,7 @@ export default function WizardRoute() {
             },
             embedCtx,
             undefined,
-            sourceDraftId ?? undefined,
+            sourceDraftId,
           ),
         )
         .then((result) => {
@@ -343,10 +339,20 @@ export default function WizardRoute() {
     )
   }
 
+  // Save is the write that discards the unreadable rows — the pointer survives a
+  // per-row loss so a partial salvage stays resumable. Last moment to decline it.
   const saveDraft = () => {
+    if (droppedRows > 0 && !discardConfirmed) {
+      setConfirmDiscard(true)
+      return
+    }
+    commitDraft()
+  }
+
+  const commitDraft = () => {
     suppressAutosave()
     runAction(
-      saveStoryDraft(wizardStore.getWizard().state, ctx, undefined, sourceDraftId ?? undefined)
+      saveStoryDraft(wizardStore.getWizard().state, ctx, undefined, sourceDraftId)
         .then(() => {
           wizardStore.reset()
           autosaveSuppressedRef.current = false
@@ -434,6 +440,18 @@ export default function WizardRoute() {
       {gate.status === 'unresolved' && isFocused ? (
         <EmbedderGateUnresolved message={gate.message} onRetry={runEntryGate} />
       ) : null}
+      <DiscardDroppedRowsDialog
+        open={confirmDiscard && isFocused}
+        count={droppedRows}
+        onCancel={() => setConfirmDiscard(false)}
+        onConfirm={() => {
+          setConfirmDiscard(false)
+          // Latched so a user who has already accepted the loss is not asked
+          // again on every later Save in the same session.
+          setDiscardConfirmed(true)
+          commitDraft()
+        }}
+      />
     </WizardShell>
   )
 }
