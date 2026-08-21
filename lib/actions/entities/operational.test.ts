@@ -18,6 +18,8 @@ async function setup() {
     name: 'Kael',
     status: 'active',
     injectionMode: 'auto',
+    // Explicit: the no-op case asserts a clean row stays clean; the default is dirty.
+    embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
   })
@@ -49,7 +51,7 @@ describe('setEntityOperationalFlags', () => {
     const { db, ctx } = await setup()
     await setEntityOperationalFlags('br_1', 'char_1', {}, ctx)
     const [row] = await db.select().from(entities).where(eq(entities.id, 'char_1'))
-    expect(row.embeddingStale).toBe(0) // unchanged from the insert default
+    expect(row.embeddingStale).toBe(0)
     expect(entitiesStore.getById('char_1')?.embeddingStale).toBe(0)
   })
 })

@@ -7,7 +7,17 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { SqlOp } from '../types'
 import { upsertVecOps } from './ops'
 import { compositeText, sourceHash } from './source-hash'
-import { clearEmbeddingStaleOp, flagEmbeddingStaleOps, recomputeStaleOps } from './stale'
+import {
+  clearEmbeddingStaleFlagsOps,
+  clearEmbeddingStaleOp,
+  flagEmbeddingStaleOps,
+  KIND_COLUMNS,
+  partitionByStoredVector,
+  recomputeStaleOps,
+  SOURCE_TABLES,
+  sqlColumnFor,
+  type EmbeddedFieldRow,
+} from './stale'
 import { ensureVecTablesSql } from './vec-tables'
 
 const MIGRATIONS_DIR = 'lib/db/migrations'
@@ -103,11 +113,55 @@ describe('recomputeStaleOps', () => {
     )
   }
 
-  function insertEntity(id: string, name: string): void {
+  function insertEntity(id: string, name: string, description: string | null = null): void {
+    db.prepare(
+      `insert into entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+       values (?, ?, 'character', ?, ?, 'active', 'always', 0, ?, ?)`,
+    ).run(id, 'b1', name, description, now, now)
+  }
+
+  function insertEntityIn(branchId: string, id: string, name: string): void {
     db.prepare(
       `insert into entities (id, branch_id, kind, name, status, injection_mode, embedding_stale, created_at, updated_at)
        values (?, ?, 'character', ?, 'active', 'always', 0, ?, ?)`,
-    ).run(id, 'b1', name, now, now)
+    ).run(id, branchId, name, now, now)
+  }
+
+  function insertLore(branchId: string, id: string, title: string): void {
+    db.prepare(
+      `insert into lore (id, branch_id, title, injection_mode, embedding_stale, created_at, updated_at)
+       values (?, ?, ?, 'always', 0, ?, ?)`,
+    ).run(id, branchId, title, now, now)
+  }
+
+  function seedVectorFor(
+    kind: EmbeddedFieldRow['kind'],
+    branchId: string,
+    id: string,
+    fields: (string | null)[],
+    modelId: string,
+    dim = 384,
+  ): void {
+    for (const sql of ensureVecTablesSql(dim)) db.exec(sql)
+    runOps(
+      db,
+      upsertVecOps({
+        kind,
+        id,
+        branchId,
+        modelId,
+        dim,
+        sourceHash: sourceHash(compositeText(fields)),
+        vector: vec(dim, 0),
+      }),
+    )
+  }
+
+  function staleFlagIn(table: string, branchId: string, id: string): number {
+    const row = db
+      .prepare(`select embedding_stale from ${table} where branch_id = ? and id = ?`)
+      .get(branchId, id) as { embedding_stale: number }
+    return row.embedding_stale
   }
 
   beforeEach(() => {
@@ -124,7 +178,7 @@ describe('recomputeStaleOps', () => {
       'main',
       now,
     )
-    insertEntity('e1', 'Kara')
+    insertEntity('e1', 'Kara', 'a scout')
   })
 
   it('flags dirty when no vec row exists yet (create has no vector)', async () => {
@@ -161,8 +215,8 @@ describe('recomputeStaleOps', () => {
   })
 
   it('partitions a mixed set in one pass, clearing and flagging independently', async () => {
-    insertEntity('e2', 'Bram')
-    insertEntity('e3', 'Cass')
+    insertEntity('e2', 'Bram', 'a master smith')
+    insertEntity('e3', 'Cass', 'a rider')
     seedVector('e1', ['Kara', 'a scout'], 'm1')
     seedVector('e2', ['Bram', 'a smith'], 'm1')
     // e3 never embedded. e2's content has since moved on.
@@ -183,6 +237,98 @@ describe('recomputeStaleOps', () => {
     expect(embeddingStaleOf(db, 'e1')).toBe(0)
     expect(embeddingStaleOf(db, 'e2')).toBe(1)
     expect(embeddingStaleOf(db, 'e3')).toBe(1)
+  })
+
+  // A swap registers no RunState, so edits are ungated while a cancel queries per
+  // chunk: a blind clear leaves new text, an old vector and a clean flag forever.
+  it('leaves a revalidated-fresh row dirty when it moved on before the commit', async () => {
+    seedVector('e1', ['Kara', 'a scout'], 'm1')
+    db.prepare('update entities set embedding_stale = 1 where id = ?').run('e1')
+    const ops = await recompute([entity('e1', ['Kara', 'a scout'])], 'm1')
+
+    db.prepare('update entities set description = ?, embedding_stale = 1 where id = ?').run(
+      'a veteran scout',
+      'e1',
+    )
+    runOps(db, ops)
+
+    expect(embeddingStaleOf(db, 'e1')).toBe(1)
+  })
+
+  it('does not conflate rows that share an id across branches and kinds', async () => {
+    // Every other case here is single-kind, single-branch: only this one fails an
+    // implementation that looks an id up outside its own group. Id reuse across
+    // branches is real — see clearEmbeddingStaleOp's shared-id test.
+    db.prepare(`insert into branches (id, story_id, name, created_at) values (?, ?, ?, ?)`).run(
+      'b2',
+      's1',
+      'other',
+      now,
+    )
+    insertEntityIn('b2', 'e1', 'Vex')
+    insertLore('b1', 'e1', 'Kara')
+
+    seedVector('e1', ['Kara', 'a scout'], 'm1') // entity/b1/e1: unchanged
+    seedVectorFor('entity', 'b2', 'e1', ['Vex', 'old text'], 'm1') // entity/b2/e1: moved on
+    seedVectorFor('lore', 'b1', 'e1', ['Kara', null], 'm1') // lore/b1/e1: unchanged
+
+    const rows: EmbeddedFieldRow[] = [
+      entity('e1', ['Kara', 'a scout']),
+      { kind: 'entity', id: 'e1', branchId: 'b2', fields: ['Vex', 'new text'] },
+      { kind: 'lore', id: 'e1', branchId: 'b1', fields: ['Kara', null] },
+    ]
+
+    runOps(db, await recomputeStaleOps(rows, 'm1', tableNamesOf(db), queryAllFor(db)))
+
+    expect(staleFlagIn('entities', 'b1', 'e1')).toBe(0)
+    expect(staleFlagIn('entities', 'b2', 'e1')).toBe(1)
+    expect(staleFlagIn('lore', 'b1', 'e1')).toBe(0)
+  })
+})
+
+describe('partitionByStoredVector', () => {
+  it('partitions rows by stored-vector hash match, no stored vector reads as stale', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+      { kind: 'entity', id: 'e2', branchId: 'b1', fields: ['Vex', 'changed text'] },
+      { kind: 'entity', id: 'e3', branchId: 'b1', fields: ['Nim', null] }, // no stored vector
+    ]
+    const stored = new Map([
+      ['e1', sourceHash(compositeText(['Kara', 'a scout']))], // matches -> fresh
+      ['e2', sourceHash(compositeText(['Vex', 'old text']))], // moved on -> stale
+    ])
+    const queryAll = async () => [...stored.entries()]
+
+    const { staleRows, freshRows } = await partitionByStoredVector(
+      rows,
+      'model-a',
+      ['entities_vec_384'],
+      queryAll,
+    )
+
+    expect(freshRows).toHaveLength(1)
+    expect(freshRows.map((r) => r.id)).toEqual(['e1'])
+    expect(staleRows).toHaveLength(2)
+    expect(staleRows.map((r) => r.id).sort()).toEqual(['e2', 'e3'])
+  })
+
+  it('ignores tables outside the row kind family', async () => {
+    const rows: EmbeddedFieldRow[] = [
+      { kind: 'entity', id: 'e1', branchId: 'b1', fields: ['Kara', 'a scout'] },
+    ]
+    // A same-hash hit under lore_vec_384 must not count for an entity row:
+    // familyTablesFor filters by kind, so no family table is queried at all.
+    const queryAll = async () => [['e1', sourceHash(compositeText(['Kara', 'a scout']))]]
+
+    const { staleRows, freshRows } = await partitionByStoredVector(
+      rows,
+      'model-a',
+      ['lore_vec_384'],
+      queryAll,
+    )
+
+    expect(freshRows).toHaveLength(0)
+    expect(staleRows.map((r) => r.id)).toEqual(['e1'])
   })
 })
 
@@ -273,9 +419,69 @@ describe('clearEmbeddingStaleOp', () => {
   })
 })
 
+describe('clearEmbeddingStaleFlagsOps', () => {
+  let db: DatabaseSync
+  const now = Date.now()
+
+  const insert = (id: string, name: string, description: string | null) =>
+    db
+      .prepare(
+        `insert into entities (id, branch_id, kind, name, description, status, injection_mode, embedding_stale, created_at, updated_at)
+         values (?, ?, 'character', ?, ?, 'active', 'always', 1, ?, ?)`,
+      )
+      .run(id, 'b1', name, description, now, now)
+
+  const row = (id: string, fields: (string | null)[]) => ({
+    kind: 'entity' as const,
+    id,
+    branchId: 'b1',
+    fields,
+  })
+
+  beforeEach(() => {
+    db = makeDb()
+    db.prepare(`insert into stories (id, title, created_at, updated_at) values (?, ?, ?, ?)`).run(
+      's1',
+      'Story',
+      now,
+      now,
+    )
+    db.prepare(`insert into branches (id, story_id, name, created_at) values (?, ?, ?, ?)`).run(
+      'b1',
+      's1',
+      'main',
+      now,
+    )
+  })
+
+  it('clears every row whose content still matches what revalidation read', () => {
+    insert('e1', 'Kara', 'a scout')
+    insert('e2', 'Bram', 'a smith')
+
+    runOps(
+      db,
+      clearEmbeddingStaleFlagsOps([row('e1', ['Kara', 'a scout']), row('e2', ['Bram', 'a smith'])]),
+    )
+
+    expect(embeddingStaleOf(db, 'e1')).toBe(0)
+    expect(embeddingStaleOf(db, 'e2')).toBe(0)
+  })
+
+  // Same lost-update hazard as clearEmbeddingStaleOp: a writer racing
+  // revalidation's read must not have its flag clobbered by a blind clear.
+  it('leaves the flag set on a row that moved on after revalidation read it', () => {
+    insert('e1', 'Kara', 'a scout')
+    db.prepare('update entities set description = ? where id = ?').run('a spy', 'e1')
+
+    runOps(db, clearEmbeddingStaleFlagsOps([row('e1', ['Kara', 'a scout'])]))
+
+    expect(embeddingStaleOf(db, 'e1')).toBe(1)
+  })
+})
+
 describe('flagEmbeddingStaleOps chunking', () => {
-  it('splits past the SQLite variable floor instead of emitting one huge IN list', () => {
-    const rows = Array.from({ length: 401 }, (_, i) => ({
+  it('splits past the bind ceiling instead of emitting one huge IN list', () => {
+    const rows = Array.from({ length: 8193 }, (_, i) => ({
       kind: 'entity' as const,
       id: `e${i}`,
       branchId: 'b1',
@@ -283,11 +489,40 @@ describe('flagEmbeddingStaleOps chunking', () => {
 
     const ops = flagEmbeddingStaleOps(rows)
 
-    // 400 ids + the branch param is the ceiling; a single statement here would
-    // blow the 999-variable limit on a large story's cancel and throw at commit.
+    // 8192 ids + the branch param, then the 8193rd alone. A boundary probe: the
+    // split keeps an arbitrarily large story off the 32766 both runtimes throw at.
     expect(ops).toHaveLength(2)
-    expect(ops[0].params).toHaveLength(401)
+    expect(ops[0].params).toHaveLength(8193)
     expect(ops[1].params).toHaveLength(2)
     expect(ops.flatMap((op) => op.params.slice(1))).toEqual(rows.map((row) => row.id))
+  })
+})
+
+describe('KIND_COLUMNS', () => {
+  // KIND_FIELDS is typed to camelCase row keys while both splice sites
+  // interpolate a COLUMN name; splicing the row key emits `no such column`,
+  // surfacing only as a drain warn that never clears.
+  it('maps a row key to its SQL column name, not back to itself', () => {
+    expect(sqlColumnFor('entity', 'retiredReason')).toBe('retired_reason')
+  })
+
+  it('throws on a field the table has no column for', () => {
+    expect(() => sqlColumnFor('entity', 'notAColumn')).toThrow(/entities/)
+  })
+
+  // Derived from SOURCE_TABLES rather than listed, so a sixth kind cannot be
+  // added without this covering it.
+  it('names a real column on every kind, checked against the migrated schema', () => {
+    const db = makeDb()
+    try {
+      for (const kind of Object.keys(SOURCE_TABLES) as (keyof typeof SOURCE_TABLES)[]) {
+        const present = (
+          db.prepare(`PRAGMA table_info(${SOURCE_TABLES[kind]})`).all() as { name: string }[]
+        ).map((column) => column.name)
+        for (const column of KIND_COLUMNS[kind]) expect(present).toContain(column)
+      }
+    } finally {
+      db.close()
+    }
   })
 })

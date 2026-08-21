@@ -355,6 +355,7 @@ export function passInputs(
       dim,
     }),
     loadStaleRows: async () => [],
+    revalidateRows: async (rows: unknown[]) => ({ staleRows: rows, freshOps: [] }),
     embedRows: async () => [],
     runInTransaction: async () => {},
   }

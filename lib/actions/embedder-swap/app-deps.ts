@@ -4,11 +4,14 @@ import type { ProviderInstanceWithStub } from '@/lib/ai'
 import { resolveModelCapabilities } from '@/lib/ai'
 import {
   branches,
+  clearEmbeddingStaleFlagsOps,
   countEmbeddableRows,
   countStaleRows,
   db,
   execRaw,
+  isVecFamilyTable,
   listTableNames,
+  partitionByStoredVector,
   queryRows,
   runInTransaction,
   staleRowsQuery,
@@ -196,13 +199,13 @@ async function runUserEmbedderAction<T>(
   fn: () => Promise<T>,
 ): Promise<T | StoryEmbedderActionRejection> {
   if (storyAdmissions.get(storyId)?.owner === 'turn') {
-    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+    return GENERATION_IN_FLIGHT_REJECTION
   }
   const releaseAdmission = acquireEmbedderAdmission(storyId)
   if (releaseAdmission == null) throw new SwapBusyError(storyId)
   if (generationStore.isUserEditBlocked()) {
     releaseAdmission()
-    return Promise.resolve(GENERATION_IN_FLIGHT_REJECTION)
+    return GENERATION_IN_FLIGHT_REJECTION
   }
   return runAdmittedEmbedder(storyId, fn, releaseAdmission)
 }
@@ -307,11 +310,45 @@ function providerFor(config: EmbedderConfig): ProviderInstanceWithStub | undefin
 // the blocking sync stage: raw DDL through execRaw, provider instance resolved
 // from the config's own providerId. Only a swap's phase-2 sweep needs the dim its
 // staging landed on; the other two take the ops alone.
-const makeEmbedRows = (): SwapDeps['embedRows'] => (config, rows) =>
+const swapEmbedRows: SwapDeps['embedRows'] = (config, rows) =>
   embedRowsToVecOps(config, rows, execRaw, providerFor(config))
 
-const makeDrainEmbedRows = (): DrainDeps['embedRows'] => async (config, rows) =>
+const drainEmbedRows: DrainDeps['embedRows'] = async (config, rows) =>
   (await embedRowsToVecOps(config, rows, execRaw, providerFor(config))).ops
+
+/**
+ * Narrowed to the dim retrieval reads: a match in another dim family would clear the
+ * flag on a row whose served-family vector is absent, and nothing re-derives that. An
+ * unknown dim narrows to nothing — revalidating nothing only costs a re-embed. Filtered
+ * by name, not `vecTableName`, whose dim assertion would throw on a malformed config.
+ */
+async function revalidationTables(config: EmbedderConfig): Promise<string[]> {
+  // Ahead of the table listing: an unknown dim needs no sqlite_master scan, and
+  // this runs on the blocking sync path as well as the drain's idle pass.
+  const dim = embedderReadDim(config)
+  if (dim === null) return []
+  const tableNames = await listTableNames()
+  return tableNames.filter((name) => isVecFamilyTable(name) && name.endsWith(`_${dim}`))
+}
+
+/**
+ * `embedding_stale` says "a writer touched this row", not "the stored vector is
+ * wrong": content restored to where its vector already is clears rather than
+ * re-embeds (retrieval.md → Compute lifecycle).
+ */
+async function revalidateAgainstStoredVectors(
+  config: EmbedderConfig,
+  rows: EmbeddedFieldRow[],
+): Promise<{ staleRows: EmbeddedFieldRow[]; freshOps: SqlOp[] }> {
+  if (rows.length === 0) return { staleRows: [], freshOps: [] }
+  const { staleRows, freshRows } = await partitionByStoredVector(
+    rows,
+    config.modelId,
+    await revalidationTables(config),
+    queryRows,
+  )
+  return { staleRows, freshOps: clearEmbeddingStaleFlagsOps(freshRows) }
+}
 
 /**
  * The embed surface a retrieval pass needs, resolved off the open story. Unlike
@@ -325,6 +362,9 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
   ) => Promise<{ vectors: Float32Array[]; dim: number }>
   embedRows: (rows: EmbeddedFieldRow[], abortSignal?: AbortSignal) => Promise<SqlOp[]>
   loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
+  revalidateRows: (
+    rows: EmbeddedFieldRow[],
+  ) => Promise<{ staleRows: EmbeddedFieldRow[]; freshOps: SqlOp[] }>
 } {
   return {
     // 'query' intent, not 'document': the local model's query prefix is what
@@ -334,6 +374,7 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
     embedRows: async (rows, abortSignal) =>
       (await embedRowsToVecOps(config, rows, execRaw, providerFor(config), abortSignal)).ops,
     loadStaleRows,
+    revalidateRows: (rows) => revalidateAgainstStoredVectors(config, rows),
   }
 }
 
@@ -342,7 +383,7 @@ function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
     runInTransaction: ctx.runInTransaction,
     queryAll: queryRows,
     listVecTables: listTableNames,
-    embedRows: makeEmbedRows(),
+    embedRows: swapEmbedRows,
     now: () => Date.now(),
     ...makeCallbackGuards(storyId),
   }
@@ -352,21 +393,27 @@ function defaultCtx(): DbCtx {
   return { db, runInTransaction }
 }
 
-async function loadSwapContext(
-  storyId: string,
-  ctx: DbCtx,
-): Promise<{ settings: StorySettings; branchIds: string[] }> {
+// A missing row and a Zod-rejected row are one answer: no settings blob to swap.
+async function readStorySettings(storyId: string, ctx: DbCtx): Promise<StorySettings | null> {
   const [row] = await ctx.db
     .select({ settings: stories.settings })
     .from(stories)
     .where(eq(stories.id, storyId))
   const parsed = row ? storySettingsSchema.safeParse(row.settings) : undefined
-  if (!parsed?.success) throw new SwapStoryMissingError(storyId)
+  return parsed?.success ? parsed.data : null
+}
+
+async function loadSwapContext(
+  storyId: string,
+  ctx: DbCtx,
+): Promise<{ settings: StorySettings; branchIds: string[] }> {
+  const settings = await readStorySettings(storyId, ctx)
+  if (!settings) throw new SwapStoryMissingError(storyId)
   const branchRows = await ctx.db
     .select({ id: branches.id })
     .from(branches)
     .where(eq(branches.storyId, storyId))
-  return { settings: parsed.data, branchIds: branchRows.map((branch) => branch.id) }
+  return { settings, branchIds: branchRows.map((branch) => branch.id) }
 }
 
 /**
@@ -396,12 +443,8 @@ async function refreshStores(storyId: string, ctx: DbCtx): Promise<void> {
   }
   const open = currentStoryStore.getCurrentStory()
   if (open?.storyId !== storyId) return
-  const [row] = await ctx.db
-    .select({ settings: stories.settings })
-    .from(stories)
-    .where(eq(stories.id, storyId))
-  const parsed = row ? storySettingsSchema.safeParse(row.settings) : undefined
-  if (parsed?.success) currentStoryStore.set({ ...open, settings: parsed.data })
+  const settings = await readStorySettings(storyId, ctx)
+  if (settings) currentStoryStore.set({ ...open, settings })
 }
 
 // Global, not per-story: embeddingStatusStore is a single slot, so the only
@@ -532,13 +575,7 @@ export async function cancelStorySwap(
   // The loop owns its own unwind (delete NEW rows, clear marker, re-flag), so
   // wait for it — but take its verdict from the resolved value rather than from
   // the fact that awaiting returned. A rejection tells us nothing was unwound.
-  const loopOutcome =
-    active != null
-      ? await active.then(
-          (value) => value,
-          () => undefined,
-        )
-      : undefined
+  const loopOutcome = active != null ? await active.catch(() => undefined) : undefined
   if (loopOutcome === 'cancelled') return 'cancelled'
   if (loopOutcome === 'completed') return 'already-completed'
 
@@ -654,8 +691,7 @@ export function resolveDrainConfig(storyId: string): EmbedderConfigResolution {
   // previous process. Draining under the old model during a swap would clear
   // embedding_stale on rows phase 2 then deletes — vectors gone, flags clean,
   // and nothing re-derives staleness today.
-  if (inFlight.has(storyId)) return { ok: false, reason: 'no-model' }
-  if (open.settings.embedding_swap_target != null) return { ok: false, reason: 'no-model' }
+  if (isStorySwapPending(storyId)) return { ok: false, reason: 'no-model' }
   return resolveStorySwapConfig(storyId, {
     modelId: open.settings.embedding_model_id,
     backend: open.settings.embeddingBackend,
@@ -688,7 +724,8 @@ export function buildDrainController(
     },
     loadStaleRows,
     resolveConfig: resolveDrainConfig,
-    embedRows: makeDrainEmbedRows(),
+    revalidateRows: revalidateAgainstStoredVectors,
+    embedRows: drainEmbedRows,
     runInTransaction: ctx.runInTransaction,
     onDrained: (storyId) => {
       drainStatusSink?.(storyId)

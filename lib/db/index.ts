@@ -64,10 +64,12 @@ export {
 export { buildStorySettings, STORY_SETTINGS_DEFAULTS } from './stories/story-settings-defaults'
 export { DEFAULT_SUGGESTION_CATEGORIES } from './stories/default-suggestion-categories'
 export {
+  assertKnownSettingsKeys,
   clearSwapTargetOp,
   embeddingTargetKey,
   sameEmbeddingTarget,
   setEmbeddingTargetOp,
+  setSettingsKeysOps,
   setSwapTargetDimOp,
   setSwapTargetOp,
   type EmbeddingTarget,
@@ -171,6 +173,7 @@ export type {
   VaultCalendar,
   WizardSession,
 } from './types'
+export { BIND_CHUNK } from './bind-limit'
 export { runInTransaction } from './runtime/transaction'
 export { execRaw, listTableNames, queryRows } from './runtime/exec'
 export { rowQuery } from './types'
@@ -180,6 +183,7 @@ export type { EmbeddedFieldRow, StaleTargetRow, VecTargetKind, VecWrite } from '
 export {
   VEC_FAMILIES,
   branchRowsQuery,
+  clearEmbeddingStaleFlagsOps,
   clearEmbeddingStaleOp,
   compositeText,
   countStaleRows,
@@ -187,6 +191,8 @@ export {
   deleteBranchModelVecOps,
   deleteBranchVecOps,
   deleteVecOps,
+  embeddedFieldsForTable,
+  isEmbeddedSourceTable,
   isVecFamilyTable,
   ensureVecTables,
   ensureVecTablesSql,
@@ -194,8 +200,11 @@ export {
   familyTablesFor,
   findVecDims,
   flagEmbeddingStaleOps,
+  flagBranchesEmbeddingStaleOps,
+  KIND_FIELDS,
   knnQuery,
   packFloat32,
+  partitionByStoredVector,
   recomputeStaleOps,
   SOURCE_TABLES,
   sourceHash,
@@ -211,6 +220,7 @@ export {
   emptyCastDraft,
   emptyWorkingState,
   wizardCastDraftSchema,
+  wizardLoreDraftSchema,
   wizardWorkingStateSchema,
 } from './wizard-sessions/working-state'
 export type {

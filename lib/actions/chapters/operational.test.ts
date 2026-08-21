@@ -22,6 +22,9 @@ async function setup() {
     endEntryId: 'se_2',
     tokenCount: 1000,
     closedAt: 1,
+    // Explicit: the no-op case below asserts a clean row stays clean, which the
+    // column default (dirty) would otherwise decide for it.
+    embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
   })

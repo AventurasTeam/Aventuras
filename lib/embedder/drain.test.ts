@@ -32,6 +32,10 @@ function makeController(over: Partial<DrainDeps> = {}) {
     branchIdsFor: () => ['b1'],
     loadStaleRows: async () => [],
     resolveConfig: () => ({ ok: true, config: cfg }),
+    revalidateRows: async (_config: EmbedderConfig, rows: EmbeddedFieldRow[]) => ({
+      staleRows: rows,
+      freshOps: [],
+    }),
     embedRows,
     runInTransaction: runInTransaction as unknown as DrainDeps['runInTransaction'],
     onDrained,
@@ -75,6 +79,178 @@ describe('drain controller', () => {
     expect(onDrained).toHaveBeenCalledWith('s1')
   })
 
+  // retrieval.md → Compute lifecycle: "revalidates to 0 with no re-embed".
+  it('embeds only what revalidation still finds stale, committing the rest as clears', async () => {
+    const clear: SqlOp = { sql: 'CLEAR e1', params: [] }
+    const { ctrl, embedRows, runInTransaction, onDrained } = makeController({
+      loadStaleRows: async () => [row('e1'), row('e2')],
+      revalidateRows: async (_config, loaded) => ({
+        staleRows: loaded.filter((r) => r.id === 'e2'),
+        freshOps: [clear],
+      }),
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(embedRows).toHaveBeenCalledExactlyOnceWith(cfg, [row('e2')])
+    // The clears commit ahead of the batch, in their own transaction.
+    expect(runInTransaction).toHaveBeenCalledTimes(2)
+    expect(runInTransaction.mock.calls[0][0]).toEqual([clear])
+    expect(onDrained).toHaveBeenCalledWith('s1')
+  })
+
+  it('spends no embed call when every loaded row revalidates fresh', async () => {
+    const clears: SqlOp[] = [
+      { sql: 'CLEAR e1', params: [] },
+      { sql: 'CLEAR e2', params: [] },
+    ]
+    const { ctrl, embedRows, runInTransaction, onDrained } = makeController({
+      loadStaleRows: async () => [row('e1'), row('e2')],
+      revalidateRows: async () => ({ staleRows: [], freshOps: clears }),
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(embedRows).not.toHaveBeenCalled()
+    expect(runInTransaction).toHaveBeenCalledExactlyOnceWith(clears)
+    // No batch ran, so this pass is the only thing that will ever recount the
+    // rows it just cleaned — the status sink has to hear about it anyway.
+    expect(onDrained).toHaveBeenCalledExactlyOnceWith('s1')
+  })
+
+  // Revalidation is wide enough for a swap, a turn or a teardown to land inside
+  // it — and phase 2 then deletes the vectors those clears vouch for.
+  const clearsWithheldWhen = async (over: Partial<DrainDeps>) => {
+    const { ctrl, runInTransaction, onDrained, embedRows } = makeController({
+      loadStaleRows: async () => [row('e1')],
+      revalidateRows: async () => ({
+        staleRows: [],
+        freshOps: [{ sql: 'CLEAR e1', params: [] }],
+      }),
+      ...over,
+    })
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+    ctrl.stop()
+    return { runInTransaction, onDrained, embedRows }
+  }
+
+  it('withholds the clears when a swap starts during revalidation', async () => {
+    let calls = 0
+    const { runInTransaction, onDrained } = await clearsWithheldWhen({
+      resolveConfig: () => {
+        calls += 1
+        return calls === 1 ? { ok: true, config: cfg } : { ok: false, reason: 'no-model' }
+      },
+    })
+
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+  })
+
+  // The interleave `.ok` alone cannot see: a swap that starts AND settles inside
+  // one pass resolves ok again, under a different embedder.
+  it('withholds the clears when a swap completes onto another model mid-pass', async () => {
+    let calls = 0
+    const swapped: EmbedderConfig = { backend: 'local', modelId: 'Xenova/bge-small-en', dim: 384 }
+    const { runInTransaction, onDrained } = await clearsWithheldWhen({
+      resolveConfig: () => {
+        calls += 1
+        return { ok: true, config: calls === 1 ? cfg : swapped }
+      },
+    })
+
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+  })
+
+  // Same model at a different effective dim lands in another vec family, so a
+  // clear from the old one describes nothing retrieval reads.
+  it('withholds the clears when only the served dim changed mid-pass', async () => {
+    let calls = 0
+    const retruncated: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'prov1',
+      modelId: 'text-embedding-3-small',
+      dim: 1536,
+      truncation: { effectiveDim: 512, serverSide: false },
+    }
+    const native: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'prov1',
+      modelId: 'text-embedding-3-small',
+      dim: 1536,
+      truncation: null,
+    }
+    const { runInTransaction, onDrained } = await clearsWithheldWhen({
+      resolveConfig: () => {
+        calls += 1
+        return { ok: true, config: calls === 1 ? retruncated : native }
+      },
+    })
+
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+  })
+
+  it('withholds the clears when a run starts during revalidation', async () => {
+    let calls = 0
+    const { runInTransaction, onDrained } = await clearsWithheldWhen({
+      hasActiveRun: () => {
+        calls += 1
+        return calls > 1
+      },
+    })
+
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+  })
+
+  it('withholds the clears when the controller is torn down during revalidation', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { ctrl, runInTransaction, onDrained } = makeController({
+      loadStaleRows: async () => [row('e1')],
+      revalidateRows: async () => {
+        await gate
+        return { staleRows: [], freshOps: [{ sql: 'CLEAR e1', params: [] }] }
+      },
+    })
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+    ctrl.stop()
+    release()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+  })
+
+  it('leaves the status sink alone on a pass that cleans nothing', async () => {
+    const embedRows = vi.fn(async () => {
+      throw new Error('embedder down')
+    })
+    const { ctrl, runInTransaction, onDrained } = makeController({
+      loadStaleRows: async () => [row('e1')],
+      revalidateRows: async (_config, loaded) => ({ staleRows: loaded, freshOps: [] }),
+      embedRows,
+    })
+    vi.spyOn(logger, 'warn').mockImplementation(() => {})
+
+    ctrl.noteIdle('s1')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(embedRows).toHaveBeenCalled()
+    expect(runInTransaction).not.toHaveBeenCalled()
+    expect(onDrained).not.toHaveBeenCalled()
+    ctrl.stop()
+  })
+
   it('skips while a run is active and retries after the next noteIdle', async () => {
     let active = true
     const { ctrl, embedRows } = makeController({
@@ -98,11 +274,9 @@ describe('drain controller', () => {
       if (fail) throw new Error('embedder down')
       return [] as SqlOp[]
     })
-    const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
-    const { ctrl } = makeController({
+    const { ctrl, setTimer } = makeController({
       loadStaleRows: async () => [row('e1')],
       embedRows,
-      setTimer,
     })
 
     ctrl.noteIdle('s1')
@@ -128,14 +302,12 @@ describe('drain controller', () => {
 
   it('never throws to the caller when embed fails (logs and re-schedules)', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
     const embedRows = vi.fn(async () => {
       throw new Error('boom')
     })
-    const { ctrl } = makeController({
+    const { ctrl, setTimer } = makeController({
       loadStaleRows: async () => [row('e1')],
       embedRows,
-      setTimer,
     })
 
     ctrl.noteIdle('s1')
@@ -233,15 +405,13 @@ describe('drain controller', () => {
 
   it('kick() drains immediately and resets backoff', async () => {
     let fail = true
-    const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
     const embedRows = vi.fn(async () => {
       if (fail) throw new Error('down')
       return [] as SqlOp[]
     })
-    const { ctrl } = makeController({
+    const { ctrl, setTimer } = makeController({
       loadStaleRows: async () => [row('e1')],
       embedRows,
-      setTimer,
     })
 
     ctrl.noteIdle('s1')
@@ -365,11 +535,9 @@ describe('drain controller', () => {
       await embedGate
       throw new Error('embedder down')
     })
-    const setTimer = vi.fn((fn: () => void, ms: number) => setTimeout(fn, ms))
-    const { ctrl } = makeController({
+    const { ctrl, setTimer } = makeController({
       loadStaleRows: async () => [row('e1')],
       embedRows,
-      setTimer,
     })
 
     ctrl.noteIdle('s1')

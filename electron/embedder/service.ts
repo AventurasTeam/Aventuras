@@ -92,7 +92,26 @@ async function buildPipeline(modelDir: string): Promise<FeaturePipeline> {
   })
 }
 
-export async function embed(args: { modelDir: string; texts: string[] }): Promise<EmbedResult> {
+// One pipeline call is an un-interruptible ONNX run holding every text's activations, so a
+// chunk boundary bounds peak memory and is the only point a cancel can land.
+// Duplicates drain.ts's BATCH_SIZE because electron/tsconfig.json scopes rootDir to
+// electron/ with no path aliases: the two drift independently, and the fixture size in
+// e2e/tests/embedder-cancel.spec.ts derives from this one.
+const EMBED_CHUNK = 16
+
+// onnxruntime-node@1.21 calls the native session synchronously inside a setImmediate
+// (dist/backend.js), so a chunk settles in a microtask while a cancel IPC is still a queued
+// macrotask. Yielding before the abort check keeps cancel latency at the running chunk.
+const yieldToMacrotasks = (): Promise<void> =>
+  new Promise((resolve) => {
+    setImmediate(resolve)
+  })
+
+export async function embed(args: {
+  modelDir: string
+  texts: string[]
+  signal?: AbortSignal
+}): Promise<EmbedResult> {
   if (args.texts.length === 0) return { ok: true, vectors: [], dim: 0 }
 
   let pipe: FeaturePipeline
@@ -103,9 +122,33 @@ export async function embed(args: { modelDir: string; texts: string[] }): Promis
   }
 
   try {
-    const output = await pipe(args.texts, { pooling: 'mean', normalize: true })
-    const vectors = output.tolist() as number[][]
-    const dim = output.dims[output.dims.length - 1] ?? 0
+    const vectors: number[][] = []
+    let dim = 0
+    for (let i = 0; i < args.texts.length; i += EMBED_CHUNK) {
+      if (i > 0) await yieldToMacrotasks()
+      if (args.signal?.aborted) {
+        return { ok: false, error: { kind: 'cancelled', message: 'embed cancelled' } }
+      }
+      const output = await pipe(args.texts.slice(i, i + EMBED_CHUNK), {
+        pooling: 'mean',
+        normalize: true,
+      })
+      vectors.push(...output.tolist())
+      // The first chunk fixes the dim: a later disagreeing one would return a width
+      // describing none of the vectors ahead of it and still pass the facade's dim check.
+      const chunkDim = output.dims[output.dims.length - 1] ?? 0
+      if (i === 0) {
+        dim = chunkDim
+      } else if (chunkDim !== dim) {
+        return {
+          ok: false,
+          error: {
+            kind: 'call',
+            message: `embedding dim changed mid-embed: expected ${dim}, got ${chunkDim}`,
+          },
+        }
+      }
+    }
     return { ok: true, vectors, dim }
   } catch (error) {
     return { ok: false, error: { kind: 'call', message: messageOf(error) } }

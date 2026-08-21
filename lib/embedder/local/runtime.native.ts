@@ -3,10 +3,11 @@ import type { InferenceSession, Tensor } from 'onnxruntime-react-native'
 
 import { logger } from '@/lib/diagnostics'
 
+import { abortedEmbedError } from './cancel'
 import { embeddersRoot, modelDir } from './paths.native'
 import { meanPoolAndNormalize } from './pooling'
 import { lazyModule } from '../lazy-module'
-import { EmbedderCallError, EmbedderInitError } from '../types'
+import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '../types'
 
 export type LocalEmbedResult = { vectors: Float32Array[]; dim: number }
 
@@ -128,7 +129,11 @@ async function embedOne(
   return { vector: meanPoolAndNormalize(hiddenData, mask, dim), dim }
 }
 
-export async function embedLocal(modelId: string, texts: string[]): Promise<LocalEmbedResult> {
+export async function embedLocal(
+  modelId: string,
+  texts: string[],
+  signal?: AbortSignal,
+): Promise<LocalEmbedResult> {
   if (texts.length === 0) return { vectors: [], dim: 0 }
 
   let bundle: SessionBundle
@@ -140,15 +145,32 @@ export async function embedLocal(modelId: string, texts: string[]): Promise<Loca
 
   try {
     const vectors: Float32Array[] = []
-    let dim = 0
-    // ORT-RN batch=1 is fine for v1; per-text loop is deliberate.
+    let dim: number | null = null
+    // ORT-RN batch=1 is fine for v1; per-text loop is deliberate, and one
+    // session.run is un-interruptible, so its top is where a cancel can land.
     for (const text of texts) {
+      if (signal?.aborted) throw abortedEmbedError(signal)
       const { vector, dim: d } = await embedOne(bundle, text)
+      // Fixed by the FIRST vector, never the last, as in desktop's chunk loop: a
+      // later disagreeing width would describe none of them yet still pass the dim check.
+      if (dim === null) dim = d
+      else if (d !== dim) {
+        throw new EmbedderCallError(`embedding dim changed mid-embed: expected ${dim}, got ${d}`)
+      }
       vectors.push(vector)
-      dim = d
     }
-    return { vectors, dim }
+    // texts is non-empty past the guard above, so dim is set by now.
+    return { vectors, dim: dim ?? 0 }
   } catch (error) {
+    // Already classified — re-wrapping would relabel a user stop as a generic call fault.
+    // Keep EmbedderCancelledError listed: sync.ts separates the tiers by class, not message.
+    if (
+      error instanceof EmbedderCallError ||
+      error instanceof EmbedderInitError ||
+      error instanceof EmbedderCancelledError
+    ) {
+      throw error
+    }
     throw new EmbedderCallError(error instanceof Error ? error.message : String(error), error)
   }
 }
@@ -174,7 +196,6 @@ export async function listInstalledLocal(): Promise<{ id: string; sizeBytes: num
   for (const entry of root.list()) {
     if (!(entry instanceof Directory)) continue
     if (!new File(entry, 'model.onnx').exists || !new File(entry, 'meta.json').exists) continue
-    // A corrupt meta.json in one folder must not sink the whole list.
     try {
       const meta = JSON.parse(await new File(entry, 'meta.json').text()) as { id: string }
       installed.push({ id: meta.id, sizeBytes: folderSizeBytes(entry) })
@@ -185,7 +206,6 @@ export async function listInstalledLocal(): Promise<{ id: string; sizeBytes: num
         dir: entry.name,
         error: error instanceof Error ? error.message : String(error),
       })
-      continue
     }
   }
   return installed

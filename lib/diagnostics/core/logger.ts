@@ -13,13 +13,22 @@ type LogOpts = { actionId?: string }
 type LogFn = (kind: LogKind, fields?: Record<string, unknown>, opts?: LogOpts) => void
 export type Logger = { error: LogFn; warn: LogFn; debug: LogFn }
 
+// Bypasses the master gate on both surfaces — store write and console mirror — so the Logs
+// tab and console never disagree. Unhandled rejections can't be reproduced on request, and
+// their retraction signals must bypass with them. Policy: docs/observability.md#console-mirroring.
+const ALWAYS_RECORDED: ReadonlySet<LogKind> = new Set([
+  'app.unhandled_rejection',
+  'app.rejection_handled_late',
+  'app.rejection_tracker_unavailable',
+])
+
 function emit(
   level: LogLevel,
   kind: LogKind,
   fields: Record<string, unknown>,
   actionId: string | undefined,
 ): void {
-  if (!isDiagnosticsEnabled()) return
+  if (!isDiagnosticsEnabled() && !ALWAYS_RECORDED.has(kind)) return
   if (level === 'debug' && !isDiagnosticsDebugEnabled()) return
 
   const state = diagnosticsStore.getState()
@@ -39,7 +48,8 @@ function emit(
   }
   state.pushLog(entry)
 
-  // Mirror after the store write; swallow mirror failures (spec).
+  // Mirrors on the same terms as the store write, bypassing kinds included: re-gating here
+  // would leave the Logs tab holding a rejection the console never saw.
   try {
     console[level](kind, fields)
   } catch {

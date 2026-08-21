@@ -61,7 +61,7 @@ describe('embedTexts routing + prefixing', () => {
     const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 2 }
     const result = await embedTexts(config, ['hello'], 'document')
 
-    expect(embedLocal).toHaveBeenCalledWith(MINILM, ['hello'])
+    expect(embedLocal).toHaveBeenCalledWith(MINILM, ['hello'], undefined)
     expect(normOf(result.vectors[0])).toBeCloseTo(1, 6)
     expect(result.dim).toBe(2)
   })
@@ -71,10 +71,24 @@ describe('embedTexts routing + prefixing', () => {
     const config: EmbedderConfig = { backend: 'local', modelId: GEMMA, dim: 2 }
 
     await embedTexts(config, ['world'], 'document')
-    expect(embedLocal).toHaveBeenLastCalledWith(GEMMA, ['title: none | text: world'])
+    expect(embedLocal).toHaveBeenLastCalledWith(GEMMA, ['title: none | text: world'], undefined)
 
     await embedTexts(config, ['world'], 'query')
-    expect(embedLocal).toHaveBeenLastCalledWith(GEMMA, ['task: search result | query: world'])
+    expect(embedLocal).toHaveBeenLastCalledWith(
+      GEMMA,
+      ['task: search result | query: world'],
+      undefined,
+    )
+  })
+
+  it('forwards the abort signal to the local runtime', async () => {
+    vi.mocked(embedLocal).mockResolvedValue({ vectors: [unit([1, 0])], dim: 2 })
+    const config: EmbedderConfig = { backend: 'local', modelId: MINILM, dim: 2 }
+    const controller = new AbortController()
+
+    await embedTexts(config, ['hello'], 'document', undefined, controller.signal)
+
+    expect(embedLocal).toHaveBeenCalledWith(MINILM, ['hello'], controller.signal)
   })
 
   it('routes provider configs to embedViaProvider (no prefix) and normalizes returned vectors', async () => {

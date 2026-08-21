@@ -95,6 +95,29 @@ describe('embedViaProvider', () => {
     expect(requestBody).not.toHaveProperty('dimensions')
   })
 
+  // 4097 texts is the smallest input making three 2048-row chunks (maxEmbeddingsPerCall),
+  // so an uncapped run would peak at 3 concurrent requests where the cap holds it to 2.
+  it('caps provider fan-out instead of firing every chunk at once', async () => {
+    const texts = Array.from({ length: 4097 }, (_, i) => `t${i}`)
+    let inFlight = 0
+    let peak = 0
+    let calls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      calls += 1
+      inFlight += 1
+      peak = Math.max(peak, inFlight)
+      const body = (await new Request(input, init).json()) as { input: string[] }
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      inFlight -= 1
+      return embeddingsResponse(body.input.map(() => [0.1, 0.2]))
+    })
+
+    await embedViaProvider(provider, 'text-embedding-3-small', texts)
+
+    expect(calls).toBe(3)
+    expect(peak).toBe(2)
+  })
+
   it('rejects anthropic providers with an init error (no embedding endpoint)', async () => {
     const anthropicProvider: ProviderInstanceWithStub = {
       id: 'prov-anthropic',

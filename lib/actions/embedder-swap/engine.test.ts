@@ -1006,15 +1006,14 @@ describe('embedder-swap engine', () => {
     expect(callsPatching(runSpy, flipsModel)).toHaveLength(0)
   })
 
-  it('10c. a settings write dropping the marker mid-phase-1 blocks the flip', async () => {
+  it('10c. a whole-column write dropping the marker mid-phase-1 blocks the flip', async () => {
     const { sqlite, runInTransaction, embedded } = await setup()
     seedOldVectors(sqlite, embedded)
     const { fn } = makeEmbedRows(sqlite, {
       beforeBatch: (call) => {
         if (call !== 1) return
-        // updateStorySettings merges the whole settings blob in a separate
-        // transaction, so a save that read before the marker was written commits
-        // a snapshot without it (docs/implementation/triage.md).
+        // What a whole-column write leaves: `resetStorySettings`' repair branch or a
+        // hand-edited row replacing the blob with one that never carried the marker.
         sqlite
           .prepare('UPDATE stories SET settings = ? WHERE id = ?')
           .run(JSON.stringify({ embedding_model_id: OLD }), 's1')

@@ -1,10 +1,12 @@
 import {
+  BIND_CHUNK,
   knnQuery,
   unpackFloat32,
   vecTableName,
   vectorsByIdQuery,
   type VecTargetKind,
 } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import type { EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
@@ -172,7 +174,12 @@ export type RetrievalOutcome =
       selectedLocationIds: string[]
       timings: RetrievalTimings
     }
-  | { ok: false; failure: RetrievalFailure; partial: RetrievalPartial }
+  /**
+   * The user stopped the turn. Its own arm so "a cancel is not an embedder fault" is
+   * the compiler's rule to keep: reading `failure` means handling this first.
+   */
+  | { ok: false; cancelled: true; partial: RetrievalPartial }
+  | { ok: false; cancelled?: false; failure: RetrievalFailure; partial: RetrievalPartial }
 
 /** The ok arm alone — what a caller holds once it has checked `ok`. */
 export type RetrievalSuccess = Extract<RetrievalOutcome, { ok: true }>
@@ -188,6 +195,7 @@ async function loadExistingVecTables(
   queryAll: RetrievalDeps['queryAll'],
   dim: number,
 ): Promise<ReadonlySet<string>> {
+  // Unchunked: one bind per VecTargetKind, so this list is five long.
   const names = KINDS.map((kind) => vecTableName(kind, dim))
   const rows = await queryAll(
     `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${names.map(() => '?').join(', ')})`,
@@ -233,14 +241,27 @@ async function runRetrievalPass(
   // every read below depends on the embedding_stale flags this clears.
   const sync = await runSyncStage({ ...deps, branchIds: [params.branchId] })
   const syncMs = performance.now() - startedAt
+  // Ahead of the failure return, and revalidated rows count: both a failed embed and a
+  // revalidate-only pass leave cleaned rows with no later recount, stranding a stale total.
+  if (sync.revalidated > 0 || (sync.ok && sync.embedded > 0)) {
+    try {
+      await deps.onRowsSynced?.()
+    } catch (error) {
+      // Reporting, not a gate: the rows are committed either way, and letting a
+      // recount fault escape would replace the embedder diagnosis below with it.
+      logger.warn('retrieval.status_sink_failed', {
+        detail: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
   if (!sync.ok) {
+    if (sync.cancelled) return { ok: false, cancelled: true, partial }
     return {
       ok: false,
       failure: { reason: sync.reason, detail: sync.detail, staleCount: sync.staleCount },
       partial,
     }
   }
-  if (sync.embedded > 0) await deps.onRowsSynced?.()
 
   // Independent of one another and of the query embed: only the sync above has
   // to precede them. Sequential awaits cost a full IPC round trip each on
@@ -460,13 +481,6 @@ type PoolCtx = {
   queryText: string
 }
 
-// As wide as the 999-variable floor of older SQLite builds allows, leaving room
-// for the branch and model params. Deliberately NOT lib/db/embeddings' 400:
-// vectorsByIdQuery scans the whole branch partition and its cost is near-flat in
-// the id count (14ms at 1 id, 20ms at 800, over 6k rows), so every extra chunk
-// is another full scan. Narrowing this multiplies the cost; it does not spread it.
-const ADMIT_ID_CHUNK = 990
-
 /**
  * Vectors for admitted ids the KNN passes did not return. Absent ids are dropped
  * rather than defaulted: a row with no vector in this family was never embedded
@@ -479,13 +493,12 @@ async function loadAdmittedVectors(
   ids: readonly string[],
   into: Map<string, Float32Array>,
 ): Promise<void> {
+  // Chunked only for the bind limit, never narrower: vectorsByIdQuery scans the whole
+  // branch partition either way (see its docblock), so a second chunk is another full scan.
   const chunks: string[][] = []
-  for (let i = 0; i < ids.length; i += ADMIT_ID_CHUNK) {
-    chunks.push(ids.slice(i, i + ADMIT_ID_CHUNK))
+  for (let i = 0; i < ids.length; i += BIND_CHUNK) {
+    chunks.push(ids.slice(i, i + BIND_CHUNK))
   }
-  // Concurrent for the same reason the rest of the pass is: each chunk is an
-  // independent partition scan, and serializing them adds a full scan of latency
-  // per chunk on a path that only reaches two chunks at the top of canon's scale.
   const results = await Promise.all(
     chunks.map((chunk) => {
       const query = vectorsByIdQuery(kind, params.dim, {

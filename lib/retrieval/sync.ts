@@ -1,17 +1,40 @@
 import type { DbCtx, EmbeddedFieldRow, SqlOp } from '@/lib/db'
-import { EmbedderCallError, EmbedderInitError, type EmbedderErrorKind } from '@/lib/embedder'
+import {
+  EmbedderCallError,
+  EmbedderCancelledError,
+  EmbedderInitError,
+  type EmbedderErrorKind,
+} from '@/lib/embedder'
 
 export type SyncStageDeps = {
   branchIds: readonly string[]
   abortSignal?: AbortSignal
   loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
+  /** Splits the dirty set: the rows that genuinely drifted, plus flag-clear ops
+   *  for the rest (retrieval.md → Compute lifecycle). */
+  revalidateRows: (
+    rows: EmbeddedFieldRow[],
+  ) => Promise<{ staleRows: EmbeddedFieldRow[]; freshOps: SqlOp[] }>
   embedRows: (rows: EmbeddedFieldRow[], abortSignal?: AbortSignal) => Promise<SqlOp[]>
   runInTransaction: DbCtx['runInTransaction']
 }
 
-export type SyncStageResult =
+export type SyncStageResult = {
+  /**
+   * Rows cleared on a matching stored vector, no embed spent. Reported on the
+   * failure arm too: the clears commit ahead of the embed and outlive it.
+   */
+  revalidated: number
+} & (
   | { ok: true; embedded: number }
-  | { ok: false; reason: EmbedderErrorKind; detail: string; staleCount: number }
+  /**
+   * Its own arm, not a reason on the failure one: a user-asked stop is no
+   * embedder fault, and "no Switch embedder on a cancel" must not rest on a
+   * caller's own outer-signal check.
+   */
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled?: false; reason: EmbedderErrorKind; detail: string; staleCount: number }
+)
 
 /**
  * Typed embedder errors carry their own kind. Anything else the embed call
@@ -33,34 +56,34 @@ export function classifyEmbedderFailure(error: unknown): {
 }
 
 /**
- * Embeds every dirty row in ONE batch and clears their flags in one transaction,
- * satisfying retrieval.md → Compute lifecycle: "no KNN without a preceding sync".
- *
- * Blocking, where the drain worker is opportunistic: a row this cannot embed
- * fails the turn (model-management.md → Embed failure is blocking). There is no
- * partial-success path — a half-synced index silently mis-ranks or drops the
- * un-embedded rows instead of reporting anything.
- *
- * Only the embed call takes the embedder surface. Reading the dirty set and
- * committing the ops are database work, and model-management.md → Failure
- * surfaces knows two embedder faults, neither of them a SQL one — so a locked
- * database escapes here exactly as it does from the KNN stage (run.ts →
- * runRetrieval) rather than offering a re-index as the fix.
+ * Embeds every row still dirty after revalidation in ONE batch and clears their
+ * flags in one transaction (retrieval.md → Compute lifecycle). Blocking where the
+ * drain worker is opportunistic (model-management.md → Embed failure is blocking),
+ * with no partial-success path — a half-synced index mis-ranks silently. Only the
+ * embed call is an embedder fault; a SQL error escapes uncaught, as in the KNN stage.
  */
 export async function runSyncStage(deps: SyncStageDeps): Promise<SyncStageResult> {
   const rows = await deps.loadStaleRows(deps.branchIds)
-  if (rows.length === 0) return { ok: true, embedded: 0 }
-  // Captured before embedRows sees the array: reading rows.length afterwards
+  if (rows.length === 0) return { ok: true, embedded: 0, revalidated: 0 }
+
+  const { staleRows, freshOps } = await deps.revalidateRows(rows)
+  // Committed ahead of the embed: a stored vector that already matches justifies
+  // the clear on its own, whatever happens to the rows that did drift.
+  if (freshOps.length > 0) await deps.runInTransaction(freshOps)
+  const revalidated = rows.length - staleRows.length
+  if (staleRows.length === 0) return { ok: true, embedded: 0, revalidated }
+  // Captured before embedRows sees the array: reading staleRows.length afterwards
   // would let a dep that drains its argument report a confident zero.
-  const staleCount = rows.length
+  const staleCount = staleRows.length
 
   let ops: SqlOp[]
   try {
-    ops = await deps.embedRows(rows, deps.abortSignal)
+    ops = await deps.embedRows(staleRows, deps.abortSignal)
   } catch (error) {
-    return { ok: false, ...classifyEmbedderFailure(error), staleCount }
+    if (error instanceof EmbedderCancelledError) return { ok: false, cancelled: true, revalidated }
+    return { ok: false, ...classifyEmbedderFailure(error), staleCount, revalidated }
   }
 
   await deps.runInTransaction(ops)
-  return { ok: true, embedded: staleCount }
+  return { ok: true, embedded: staleCount, revalidated }
 }

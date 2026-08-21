@@ -64,7 +64,8 @@ export type VectorsByIdParams = {
  * 6k, 60ms over 20k, 179ms over 60k — linear in partition size, and near-flat in
  * the id count (14ms at 1 id against 20ms at 800, over 6k rows). So issue it ONCE
  * for the whole set: splitting the ids buys nothing and costs another full scan.
- * Only ask for ids a KNN pass did not already return.
+ * Only ask for ids a KNN pass did not already return. Unchunked by design:
+ * a caller whose set can outgrow BIND_CHUNK owns the split.
  *
  * `pk` is unusable here despite being the declared primary key: a single
  * `pk = ?` does push down, but vec0 answers `pk IN (...)` with **zero rows**

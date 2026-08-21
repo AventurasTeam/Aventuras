@@ -79,6 +79,8 @@ export const reader = {
     page.getByRole('button', { name: t('reader:systemEntry.retry') }),
   dismissSystemEntry: (page: Page): Locator =>
     page.getByRole('button', { name: t('reader:systemEntry.dismiss') }),
+  switchEmbedderFix: (page: Page): Locator =>
+    page.getByRole('button', { name: t('reader:systemEntry.switchEmbedder') }),
 
   // The chrome actions menu (IconAction trigger; on web the accessible name
   // carries the "(Ctrl+K)" shortcut hint, so match on the base label). Undo /

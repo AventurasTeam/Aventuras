@@ -17,6 +17,8 @@ async function setup() {
     title: 'Quest',
     status: 'active',
     injectionMode: 'auto',
+    // Explicit: the no-op case asserts a clean row stays clean; the default is dirty.
+    embeddingStale: 0,
     createdAt: 1,
     updatedAt: 1,
   })

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { branchStaleTotal, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { t } from '../harness/i18n'
 import { launchApp, type LaunchedApp } from '../harness/launch'
@@ -17,13 +17,6 @@ const USER_MARKER = 'E2E-EMBEDFAIL-USER'
 const REPLY_MARKER = 'E2E-EMBEDFAIL-REPLY'
 const REPLY = `${REPLY_MARKER} the amulet answers, memory restored.`
 const ACTION = `${USER_MARKER} I reach for the amulet.`
-
-// The five embeddable source tables (lib/db → SOURCE_TABLES). The seed leaves
-// two rows on this branch dirty, and runSyncStage reports one EmbeddedFieldRow
-// per record — so this sum IS the staleCount the failure detail must carry.
-const STALE_SUM_SQL = `SELECT ${['entities', 'lore', 'happenings', 'threads', 'chapters']
-  .map((table) => `(SELECT count(*) FROM "${table}" WHERE branch_id = ? AND embedding_stale = 1)`)
-  .join(' + ')}`
 
 const MARKER_ENTRY_SQL = `SELECT count(*) FROM story_entries WHERE branch_id = ? AND content LIKE '%${USER_MARKER}%'`
 
@@ -92,7 +85,10 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     await home.openStory(app.window, HERO_TITLE).click()
     await expect(reader.composer(app.window)).toBeVisible({ timeout: 20_000 })
 
-    const staleBefore = await scalar(STALE_SUM_SQL, [HERO_BRANCH, ...Array(4).fill(HERO_BRANCH)])
+    // This sum IS the detail's staleCount only because no embedder is installed —
+    // staleCount is counted AFTER revalidation, which drops rows whose vector still
+    // matches. Read live through the harness so seed drift or a new table can't be missed.
+    const staleBefore = await branchStaleTotal(app.window, HERO_BRANCH)
     // Without dirty rows runSyncStage short-circuits before the embedder and the
     // magnitude below has nothing to report.
     expect(staleBefore, 'the seed leaves the branch with rows to embed').toBeGreaterThan(0)
@@ -151,9 +147,9 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     const [[storyId]] = await queryApp(app.window, `SELECT story_id FROM branches WHERE id = ?`, [
       HERO_BRANCH,
     ])
-    await app.window
-      .getByRole('button', { name: t('reader:systemEntry.switchEmbedder') })
-      .click({ timeout: 15_000 })
+    // Locator, not an inline selector (testing.md → Selector strategy). Also the positive
+    // control for embedder-cancel's toHaveCount(0): a renamed i18n key leaves it green.
+    await reader.switchEmbedderFix(app.window).click({ timeout: 15_000 })
 
     await expect(app.window, 'lands on this story’s memory tab').toHaveURL(
       new RegExp(`/story-settings/${String(storyId)}\\?tab=memory$`),
@@ -200,7 +196,7 @@ test.describe.serial('retrieval — a failed embed blocks the turn', () => {
     // (The opportunistic drain can reach the same rows, so this pins the state,
     // not which writer got there first.)
     expect(
-      await scalar(STALE_SUM_SQL, [HERO_BRANCH, ...Array(4).fill(HERO_BRANCH)]),
+      await branchStaleTotal(app.window, HERO_BRANCH),
       'the branch it refused to generate on is embedded',
     ).toBe(0)
     await expect

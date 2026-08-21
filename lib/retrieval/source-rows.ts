@@ -1,4 +1,4 @@
-import { SOURCE_TABLES, type VecTargetKind } from '@/lib/db'
+import { BIND_CHUNK, SOURCE_TABLES, type VecTargetKind } from '@/lib/db'
 
 import { parseKeywords } from './name-index'
 import type { EntityRow, LoreRow, ThreadRow } from './pools'
@@ -195,22 +195,26 @@ export async function loadHappeningRows(
   if (scope.ids.length === 0 && scope.entryIds.length === 0) return []
 
   const columns = SOURCE_COLUMNS.happening.join(', ')
-  const clauses: string[] = []
-  const bound: unknown[] = [branchId]
+  const statements: [string, unknown[]][] = []
+  // Unchunked: the KNN cut caps this at three query vectors' worth of KNN_K.
   if (scope.ids.length > 0) {
-    clauses.push(`id IN (${scope.ids.map(() => '?').join(', ')})`)
-    bound.push(...scope.ids)
+    statements.push([
+      `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND id IN (${scope.ids.map(() => '?').join(', ')})`,
+      [branchId, ...scope.ids],
+    ])
   }
-  if (scope.entryIds.length > 0) {
-    clauses.push(`occurred_at_entry_id IN (${scope.entryIds.map(() => '?').join(', ')})`)
-    bound.push(...scope.entryIds)
+  // Chunked: a seated chapter's range grows with the chapter, under no pool-sized cap.
+  for (let i = 0; i < scope.entryIds.length; i += BIND_CHUNK) {
+    const entryIds = scope.entryIds.slice(i, i + BIND_CHUNK)
+    statements.push([
+      `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND occurred_at_entry_id IN (${entryIds.map(() => '?').join(', ')})`,
+      [branchId, ...entryIds],
+    ])
   }
-
-  const rows = await queryAll(
-    `SELECT ${columns} FROM ${SOURCE_TABLES.happening} WHERE branch_id = ? AND (${clauses.join(' OR ')})`,
-    bound,
-  )
-  return rows.map((row) => {
+  // Two indexed seeks, not one OR: MULTI-INDEX OR needs ANALYZE stats this app never
+  // builds and degrades to a full branch scan anyway. The dedupe below absorbs overlap.
+  const raw = (await Promise.all(statements.map(([sql, params]) => queryAll(sql, params)))).flat()
+  const mapped = raw.map((row) => {
     const c = cellsOf('happening', row)
     return {
       id: c.id as string,
@@ -221,6 +225,7 @@ export async function loadHappeningRows(
       embeddingStale: flagged(c.embedding_stale),
     }
   })
+  return [...new Map(mapped.map((r) => [r.id, r])).values()]
 }
 
 /** Entry ids each closed chapter covers, for the chapter-match boost. */

@@ -24,7 +24,7 @@ const wizardOpeningDraftSchema = z.object({
   model: z.string().nullable().default(null),
 })
 
-const wizardLoreDraftSchema = z.object({
+export const wizardLoreDraftSchema = z.object({
   // Minted at add time (generateId('lore')) so the row keeps identity across
   // autosave round-trips and lands in the commit under the same id.
   id: z.string(),

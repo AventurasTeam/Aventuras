@@ -5,8 +5,10 @@ import {
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   buildStorySettings,
+  compositeText,
   execRaw,
   setSwapTargetOp,
+  sourceHash,
   storyDefinitionSchema,
   VEC_FAMILIES,
   type DbCtx,
@@ -15,7 +17,12 @@ import {
   type StorySettings,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { embedRowsToVecOps, embedTexts, type EmbedderConfig } from '@/lib/embedder'
+import {
+  createDrainController,
+  embedRowsToVecOps,
+  embedTexts,
+  type EmbedderConfig,
+} from '@/lib/embedder'
 import {
   currentStoryStore,
   embedderSwapStore,
@@ -27,8 +34,10 @@ import {
 } from '@/lib/stores'
 
 import {
+  buildDrainController,
   cancelStorySwap,
   composeRetrievalEmbedDeps,
+  setDrainStatusSink,
   makeCallbackGuards,
   reindexStoryNow,
   RelabelBlockedError,
@@ -58,6 +67,7 @@ vi.mock('@/lib/embedder', async (importOriginal) => {
     ...actual,
     embedTexts: vi.fn(actual.embedTexts as typeof embedTexts),
     embedRowsToVecOps: vi.fn(actual.embedRowsToVecOps as typeof embedRowsToVecOps),
+    createDrainController: vi.fn(actual.createDrainController as typeof createDrainController),
   }
 })
 
@@ -113,11 +123,21 @@ function storySettings(
   )
 }
 
-describe('runExclusive single-flight lock', () => {
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
+// resetAllMocks BEFORE restoreAllMocks: restoreAllMocks only undoes vi.spyOn spies,
+// so only reset restores the vi.fn(actual.x) factories below — without it one test's
+// mockImplementation leaks into every later describe.
+afterEach(() => {
+  vi.resetAllMocks()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  setDrainStatusSink(null)
+  generationStore.__reset()
+  storiesStore.__reset()
+  currentStoryStore.__reset()
+  embedderSwapStore.__reset()
+})
 
+describe('runExclusive single-flight lock', () => {
   it('rejects a concurrent second call for the same story with SwapBusyError', async () => {
     let release: () => void = () => {}
     const gate = new Promise<void>((resolve) => {
@@ -157,11 +177,6 @@ describe('runExclusive single-flight lock', () => {
 })
 
 describe('callback guards', () => {
-  afterEach(() => {
-    embedderSwapStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('a throwing onProgress never propagates out of the guard', () => {
     vi.spyOn(embedderSwapStore, 'setProgress').mockImplementation(() => {
       throw new Error('ui blew up')
@@ -192,13 +207,6 @@ describe('callback guards', () => {
 })
 
 describe('stale cancel-flag isolation across operations', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   async function seedStory(): Promise<DbCtx> {
     const { db, sqlite, runInTransaction } = await createTestDb()
     const settings = storySettings({}, MINILM, null)
@@ -276,15 +284,6 @@ async function seedStores(
 }
 
 describe('user-origin hard gate', () => {
-  afterEach(() => {
-    generationStore.__reset()
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.clearAllMocks()
-    vi.restoreAllMocks()
-  })
-
   it.each([
     ['start', (ctx: DbCtx) => startStorySwap('s1', { modelId: MINILM, backend: 'local' }, ctx)],
     ['resume', (ctx: DbCtx) => resumeStorySwap('s1', ctx)],
@@ -318,12 +317,6 @@ function settingsOf(
 }
 
 describe('resolveStorySwapConfig cross-backend targets', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('resolves a provider target for a local-backend story', async () => {
     await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null), [
       cachedProvider('prov1', [{ id: TARGET_MODEL }]),
@@ -442,13 +435,6 @@ describe('resolveStorySwapConfig cross-backend targets', () => {
 })
 
 describe('relabelStory', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('writes model id, backend and provider id as one triple', async () => {
     // Branch-less on purpose: relabelModel's vec identity rewrite is pinned by the
     // engine tests, so this isolates the settings write the app layer owns.
@@ -535,13 +521,6 @@ describe('relabelStory', () => {
 })
 
 describe('store refresh on every engine exit', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('publishes a marker committed by a swap that then failed', async () => {
     const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
@@ -566,13 +545,6 @@ describe('store refresh on every engine exit', () => {
 })
 
 describe('cancelStorySwap outcome', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('reports nothing-pending when no swap is in flight and no marker is set', async () => {
     const { ctx } = await seedStores(storySettings({ embeddingBackend: 'local' }, MINILM, null))
 
@@ -626,12 +598,6 @@ describe('resolveDrainConfig swap guards', () => {
     worldTimeOrigin: { year: 0 },
   })
 
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    vi.restoreAllMocks()
-  })
-
   it('refuses to drain while an embedder op holds the story lock', async () => {
     const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
     await seedStores(settings)
@@ -667,14 +633,6 @@ describe('resolveDrainConfig swap guards', () => {
 })
 
 describe('crash recovery resolves its target from the marker', () => {
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    embedderSwapStore.__reset()
-    vi.clearAllMocks()
-    vi.restoreAllMocks()
-  })
-
   function captureResume(): { seen: () => SwapParams | undefined } {
     let params: SwapParams | undefined
     vi.mocked(resumeSwap).mockImplementation(async (_deps, p) => {
@@ -809,13 +767,6 @@ describe('composeRetrievalEmbedDeps', () => {
     truncation: null,
   }
 
-  afterEach(() => {
-    storiesStore.__reset()
-    currentStoryStore.__reset()
-    vi.unstubAllGlobals()
-    vi.restoreAllMocks()
-  })
-
   it('embeds the query stack at query intent, never document', async () => {
     vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 384 })
 
@@ -890,5 +841,171 @@ describe('composeRetrievalEmbedDeps', () => {
     expect(seen).toHaveLength(Object.keys(VEC_FAMILIES).length)
     expect(seen.every((q) => q.params.includes('b1'))).toBe(true)
     expect(seen.every((q) => q.sql.includes('embedding_stale'))).toBe(true)
+  })
+
+  // `embedding_stale` only says a writer touched the row: without the hash split, a
+  // rollback that restored the old content still costs a full re-embed.
+  it('splits the dirty set against the stored hashes and clears the fresh half', async () => {
+    const fresh: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_fresh',
+      branchId: 'b1',
+      fields: ['Kael', 'A knight.'],
+    }
+    const drifted: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_drifted',
+      branchId: 'b1',
+      fields: ['Vex', 'A rewritten sellsword.'],
+    }
+    const seen: { sql: string; params: unknown[] }[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string, params: unknown[]) => {
+          seen.push({ sql, params })
+          if (sql.includes('sqlite_master')) return { rows: [['entities_vec_384']] }
+          return { rows: [['ent_fresh', sourceHash(compositeText(fresh.fields))]] }
+        },
+      },
+    })
+
+    const out = await composeRetrievalEmbedDeps(LOCAL_CONFIG).revalidateRows([fresh, drifted])
+
+    expect(out.staleRows).toEqual([drifted])
+    // clearEmbeddingStaleOp's optimistic guard, not a blind flag wipe: the params
+    // carry the embedded columns the revalidation actually read.
+    expect(out.freshOps.map((op) => op.params)).toEqual([['ent_fresh', 'b1', 'Kael', 'A knight.']])
+    // Scoped to the config's model: a hash stored under another model belongs to
+    // vectors this story's KNN never reads.
+    expect(seen.at(-1)?.params).toEqual(['b1', MINILM, 'ent_fresh', 'ent_drifted'])
+  })
+
+  // The drain has no dim gate, so an unprobed provider arrives with no read dim.
+  // Clearing on any family's match strands the flag — nothing re-derives it outside a swap.
+  it('revalidates against nothing when the read dim is unknown', async () => {
+    const UNPROBED: EmbedderConfig = {
+      backend: 'provider',
+      providerId: 'prov1',
+      modelId: PROVIDER_MODEL,
+      dim: null,
+      truncation: null,
+    }
+    const row: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_1',
+      branchId: 'b1',
+      fields: ['Kael', 'A knight.'],
+    }
+    const seen: string[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string) => {
+          seen.push(sql)
+          // A stale 768-family row whose hash still matches — must not clear the flag.
+          if (sql.includes('sqlite_master')) return { rows: [['entities_vec_768']] }
+          return { rows: [['ent_1', sourceHash(compositeText(row.fields))]] }
+        },
+      },
+    })
+
+    const out = await composeRetrievalEmbedDeps(UNPROBED).revalidateRows([row])
+
+    expect(out.staleRows).toEqual([row])
+    expect(out.freshOps).toEqual([])
+    // Not even the table listing: with no dim there is no family to accept from,
+    // so the sqlite_master scan is skipped on every drain pass too.
+    expect(seen).toEqual([])
+  })
+
+  it('reads nothing at all when the dirty set is empty', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string) => {
+          seen.push(sql)
+          return { rows: [] }
+        },
+      },
+    })
+
+    await expect(composeRetrievalEmbedDeps(LOCAL_CONFIG).revalidateRows([])).resolves.toEqual({
+      staleRows: [],
+      freshOps: [],
+    })
+
+    // Not even the table listing: the drain calls this on every idle pass, and
+    // most of them find nothing dirty.
+    expect(seen).toEqual([])
+  })
+
+  // A hash from another dim family says nothing about the family retrieval reads, and
+  // embedding_stale is the only drift signal — clearing on it hides the gap for good.
+  it('takes a hash only from the dim family retrieval reads', async () => {
+    const seen: string[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string) => {
+          seen.push(sql)
+          if (sql.includes('sqlite_master'))
+            return { rows: [['entities_vec_384'], ['entities_vec_768']] }
+          return sql.includes('entities_vec_768')
+            ? { rows: [['ent_1', sourceHash(compositeText(['Kael', 'A knight.']))]] }
+            : { rows: [] }
+        },
+      },
+    })
+    const row: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_1',
+      branchId: 'b1',
+      fields: ['Kael', 'A knight.'],
+    }
+
+    const out = await composeRetrievalEmbedDeps(LOCAL_CONFIG).revalidateRows([row])
+
+    expect(out.staleRows).toEqual([row])
+    expect(out.freshOps).toEqual([])
+    expect(seen.some((sql) => sql.includes('entities_vec_768'))).toBe(false)
+  })
+})
+
+// buildDrainController wires the background embed path by hand and nothing else pins
+// it: a dropped dep silently disables drain revalidation while retrieval tests stay green.
+describe('buildDrainController', () => {
+  it('revalidates the drain against the same model-scoped query as retrieval', async () => {
+    const fresh: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_fresh',
+      branchId: 'b1',
+      fields: ['Kael', 'A knight.'],
+    }
+    const drifted: EmbeddedFieldRow = {
+      kind: 'entity',
+      id: 'ent_drifted',
+      branchId: 'b1',
+      fields: ['Vex', 'A rewritten sellsword.'],
+    }
+    const seen: { sql: string; params: unknown[] }[] = []
+    vi.stubGlobal('window', {
+      aventurasDb: {
+        query: async (sql: string, params: unknown[]) => {
+          seen.push({ sql, params })
+          if (sql.includes('sqlite_master')) return { rows: [['entities_vec_384']] }
+          return { rows: [['ent_fresh', sourceHash(compositeText(fresh.fields))]] }
+        },
+      },
+    })
+
+    buildDrainController({ db: {} as DbCtx['db'], runInTransaction: vi.fn() })
+    const drainDeps = vi.mocked(createDrainController).mock.calls.at(-1)?.[0]
+
+    const out = await drainDeps!.revalidateRows({ backend: 'local', modelId: MINILM, dim: 384 }, [
+      fresh,
+      drifted,
+    ])
+
+    expect(out.staleRows).toEqual([drifted])
+    expect(out.freshOps.map((op) => op.params)).toEqual([['ent_fresh', 'b1', 'Kael', 'A knight.']])
+    expect(seen.at(-1)?.params).toEqual(['b1', MINILM, 'ent_fresh', 'ent_drifted'])
   })
 })

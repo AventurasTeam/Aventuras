@@ -44,7 +44,7 @@ export const chapters = sqliteTable(
     endEntryId: text('end_entry_id').notNull(),
     tokenCount: integer('token_count').notNull(),
     closedAt: integer('closed_at').notNull(),
-    embeddingStale: integer('embedding_stale').notNull().default(0),
+    embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

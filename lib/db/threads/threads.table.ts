@@ -19,7 +19,7 @@ export const threads = sqliteTable(
     injectionMode: text('injection_mode', { enum: INJECTION_MODES }).notNull(),
     triggeredAtEntryId: text('triggered_at_entry_id'),
     resolvedAtEntryId: text('resolved_at_entry_id'),
-    embeddingStale: integer('embedding_stale').notNull().default(0),
+    embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

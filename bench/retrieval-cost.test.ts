@@ -61,7 +61,7 @@ async function measure(
   let funnels = ''
   for (let i = 0; i < 9; i += 1) {
     const out = await runRetrieval(deps as never, params)
-    if (!out.ok) throw new Error(`pass failed: ${out.failure.detail}`)
+    if (!out.ok) throw new Error(`pass failed: ${out.cancelled ? 'cancelled' : out.failure.detail}`)
     if (i >= 2) samples.push(out.timings as unknown as Record<string, number>)
     funnels = Object.entries(out.bundles)
       .map(([t, b]) => `${t}:${b.funnel.poolSize}/${b.funnel.selectedCount}`)

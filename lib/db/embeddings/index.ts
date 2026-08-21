@@ -18,8 +18,14 @@ export type { KnnParams } from './knn'
 export { knnQuery, unpackFloat32, vectorsByIdQuery } from './knn'
 export type { EmbeddedFieldRow, StaleTargetRow } from './stale'
 export {
+  clearEmbeddingStaleFlagsOps,
   clearEmbeddingStaleOp,
+  embeddedFieldsForTable,
   flagEmbeddingStaleOps,
+  isEmbeddedSourceTable,
+  flagBranchesEmbeddingStaleOps,
+  KIND_FIELDS,
+  partitionByStoredVector,
   recomputeStaleOps,
   SOURCE_TABLES,
 } from './stale'

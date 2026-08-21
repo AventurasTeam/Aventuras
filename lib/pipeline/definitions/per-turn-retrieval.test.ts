@@ -639,9 +639,18 @@ describe('retrieval phase — success', () => {
       'loadStaleRows',
       'onRowsSynced',
       'queryAll',
+      'revalidateRows',
       'runInTransaction',
     ])
-    for (const key of ['embedRows', 'embedTexts', 'loadStaleRows', 'queryAll', 'runInTransaction'])
+    for (const key of [
+      'embedRows',
+      'embedTexts',
+      'loadStaleRows',
+      'queryAll',
+      // Without it the sync stage re-embeds rows whose vector already matches, silently.
+      'revalidateRows',
+      'runInTransaction',
+    ])
       expect(typeof deps[key]).toBe('function')
   })
 })

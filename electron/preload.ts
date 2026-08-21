@@ -39,6 +39,7 @@ const embedderBridge: EmbedderBridge & {
   downloadFile: (args) => ipcRenderer.invoke('embedder:download-file', args),
   persistInstall: (args) => ipcRenderer.invoke('embedder:persist-install', args),
   cancelDownload: (args) => ipcRenderer.invoke('embedder:cancel-download', args),
+  cancelEmbed: (args) => ipcRenderer.invoke('embedder:cancel-embed', args),
   deletePartial: (args) => ipcRenderer.invoke('embedder:delete-partial', args),
   onDownloadProgress: (cb) => {
     const listener = (_e: unknown, progress: EmbedderDownloadProgress): void => cb(progress)

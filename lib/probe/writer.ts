@@ -38,7 +38,8 @@ export async function writeProbeCapture(
   if (!input.appGateOn || !input.storyGateOn) return 'gated'
 
   try {
-    const { bytes, uncompressedSize } = compressPayload(buildCapturePayload(input))
+    const payload = buildCapturePayload(input)
+    const { bytes, uncompressedSize } = compressPayload(payload)
     await deps.runInTransaction([
       {
         sql: INSERT_SQL,
@@ -49,7 +50,9 @@ export async function writeProbeCapture(
           input.capturedAt,
           input.mode,
           input.embeddingModelId,
-          input.outcome.ok ? null : input.outcome.failure.reason,
+          // Read off the payload, not re-derived: column and payload field are one
+          // value, and a new RetrievalOutcome arm must not teach only one of them.
+          payload.failure_reason,
           bytes,
           uncompressedSize,
         ],

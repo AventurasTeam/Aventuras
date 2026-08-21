@@ -1,0 +1,1 @@
+CREATE INDEX `happenings_occurred_idx` ON `happenings` (`branch_id`,`occurred_at_entry_id`);
