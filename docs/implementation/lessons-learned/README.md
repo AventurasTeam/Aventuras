@@ -178,6 +178,12 @@ slice plans when relevant.
   `lucide-react-native` / `nativewind`'s externalized `require('react-native')`
   both fail outside Storybook's full `vite-plugin-rnw` combination; component
   behavior belongs in Storybook, not `unit`.
+- [A narrow-wrapped `FormRow` story remounts its control after the first frame](./formrow-narrow-story-remount.md)
+  — the onLayout correction swaps element trees; pin `stacked` or select
+  the viewport tier in any play story below 640 px.
+- [`useAnimatedStyle` needs an explicit dependency array under Vite-built targets](./useanimatedstyle-needs-deps-under-vite.md)
+  — Metro's Babel plugin injects the closure Vite never reads; a deps-less
+  call throws under the dev server and silently no-ops under `mode: test`.
 
 ### Native deps / install ritual
 

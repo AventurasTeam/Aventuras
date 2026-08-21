@@ -38,10 +38,8 @@ const meta: Meta<typeof WorldTimeEditForm> = {
 export default meta
 type StoryT = StoryObj<typeof WorldTimeEditForm>
 
-// Harness constraint, not a product boundary: NativeWind classes don't compute
-// in the vitest storybook browser, so FormRow measures this inline width against
-// its window-derived first guess. Below 640px the two disagree and the
-// correcting re-render swaps JSX branches, remounting every field mid-play.
+// 720 px keeps FormRow's window guess and its measured width on the same
+// side of 640 — lessons-learned/formrow-narrow-story-remount.md.
 const wrapDecorator = (Story: () => ReactElement) => (
   <View style={{ width: 720 }}>
     <Story />

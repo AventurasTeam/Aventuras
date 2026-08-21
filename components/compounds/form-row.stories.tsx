@@ -170,9 +170,8 @@ export const LabelRendersInBothLayouts: Story = {
  */
 export const ErrorSitsBelowTheControl: Story = {
   render: () => (
-    // `stacked` is pinned, not inferred from the 360 px wrapper: the auto
-    // heuristic only flips after an async onLayout, which lands too late for a
-    // play function and would leave this asserting the 2-col branch instead.
+    // Pinned, not inferred from the 360 px wrapper —
+    // lessons-learned/formrow-narrow-story-remount.md.
     <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
       <FormRow label="Email" stacked error="Enter a valid email address">
         <ControlledInput placeholder="you@example.com" aria-invalid />
