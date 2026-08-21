@@ -253,11 +253,13 @@ Three input paths per field, all writing into `{ label, promptBody }`:
 
 1. **Manual** — user types both directly.
 2. **Browse presets** (`📚`) — opens the picker (popover on desktop,
-   Sheet on phone) with bundled presets. Each row: `displayName ·
-1-line tagline · first line of promptBody`, the body clamped to
-   one line so every platform previews the same thing — a hover
-   preview cannot exist on touch. Pick → copies to label +
-   promptBody; the replace-confirm below guards an existing value.
+   Sheet on phone) with bundled presets. Each row stacks three
+   lines: the preset's display name, its one-line tagline, then the
+   first line of its prompt body. The body is clamped to one line so
+   every platform previews the same thing — a hover preview cannot
+   exist on touch. Picking copies the display name into the label
+   and the preset's prose into the prompt body; the replace-confirm
+   below guards an existing value.
 3. **AI-suggest** (`✨`) — see [AI-assist pattern](#ai-assist-pattern).
    Result is **prose** (label preview + body preview together).
 
