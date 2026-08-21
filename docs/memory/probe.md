@@ -157,7 +157,8 @@ Per capture:
     four types. The ranker forces `pin_signal = 0` and
     `recency_factor = 1` on those rows, which the captured pair alone
     cannot tell apart from an unpinned recent one.
-  - `final_score`, `mmr_rank` (or null if pre-filtered out).
+  - `final_score` (pre-MMR), `mmr_score` (post-MMR; null if
+    pre-filtered out), `mmr_rank` (or null if pre-filtered out).
   - `selected` (bool), `drop_reason` (enum):
     `pre_filtered | below_threshold | over_budget |`
     `candidate_too_large | not_dropped`.
@@ -335,28 +336,32 @@ not a UX one — but it determines whether the probe is trustworthy.
 
 ### Simulatable parameters
 
-**The light-mode list below is under review.** Slice 3.5's parity
-work found most of it unreachable from a light capture. Every
+Light mode reproduces only what a light capture stores. Every
 parameter that feeds `score` changes MMR's greedy pick order, and
-recomputing that order needs the candidate-vs-candidate cosines only
-a deep capture's per-row vectors carry.
-`min_score_threshold` is further out of reach: it compares against
-the post-MMR `mmr_score`, and no capture stores one — `final_score`
-is the **pre-MMR** raw score.
-
-**Per-type budgets are the confirmed-surviving case.** The
-below-threshold latch is monotone over the MMR order, so the first
-captured `below_threshold` row pins the partition and no budget
-change can move it; re-walking `mmr_rank` order against
-`tokens_estimated` then reproduces the fill exactly.
-
-What light mode should actually offer — accept the narrower list,
-capture an `mmr_score` per row (one float, recovers the threshold),
-or store the kept-set pairwise cosines (recovers everything) — is an
-open product call, to settle before the simulator is built. Until
-then read the list as design intent, not as shipped capability.
+recomputing that order needs the candidate-vs-candidate cosines that
+only a deep capture's per-row vectors carry — so the blend weights,
+decay rates, boosts, `τ_revive`, `k_pin` and `pin_signal` overrides
+are deep-mode parameters. Settled during Slice 3.12b planning after
+Slice 3.5's parity work found the earlier light-mode list
+unreachable; `mmr_score` was added to the capture (format version 3)
+to recover the threshold.
 
 From a light capture:
+
+- **Per-type budgets** — re-run greedy budget-fill against stored
+  `tokens_estimated` in `mmr_rank` order. The below-threshold latch
+  is monotone over the MMR order, so the first captured
+  `below_threshold` row pins the partition and no budget change can
+  move it; the fill re-walks exactly.
+- **`min_score_threshold`** — re-walk `mmr_rank` order and re-latch
+  where the stored `mmr_score` first falls below the new threshold.
+  MMR runs before the threshold walk, so the order itself does not
+  move; `bypass_triggered` rows stay exempt from the latch, as in the
+  ranker. Captures written before format version 3 carry no
+  `mmr_score` and cannot simulate this; the reader already warns on
+  the version drift.
+
+Adds in a deep capture, where the per-row vectors let MMR re-run:
 
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
   sims into a new `sim_blend`.
@@ -367,9 +372,6 @@ From a light capture:
   `sim_blend`.
 - `chapter_boost` magnitude — re-apply where stored
   `chapter_boost_applied=1`.
-- `min_score_threshold` — re-run budget-fill termination.
-- Per-type budgets — re-run greedy budget-fill against stored
-  `tokens_estimated`.
 - `k_pin` per-type — re-scale the pin multiplier against stored
   `sim_blend`, `recency_factor` and `pin_signal`. Needs no field the
   capture does not already carry.
@@ -379,11 +381,8 @@ From a light capture:
   and the captured `(recency_factor, pin_signal)` pair pins down the
   underlying age only while `pin_signal < 1` — at exactly 1 the factor
   is 1 regardless of age. `chapters_old` is what closes that.
-
-Adds in a deep capture:
-
-- `λ_div` (MMR diversity) — requires candidate-vs-candidate
-  cosines, which require the per-row vectors.
+- `λ_div` (MMR diversity) — the candidate-vs-candidate cosines
+  themselves.
 
 ### Non-simulatable parameters
 

@@ -315,6 +315,9 @@ describe('buildCapturePayload', () => {
       chapter_boost_applied: false,
       bypass_triggered: true,
       final_score: 1.09275,
+      // Single candidate: MMR's first pick is lambdaDiv × score with no
+      // diversity penalty (RANKER_DEFAULTS.lambdaDiv = 0.75).
+      mmr_score: expect.closeTo(0.8195625, 6),
       mmr_rank: 0,
       selected: true,
       drop_reason: 'not_dropped',

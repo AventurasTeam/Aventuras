@@ -57,6 +57,7 @@ const candidateOf = (
   chapter_boost_applied: t.chapterBoostApplied,
   bypass_triggered: t.bypassTriggered,
   final_score: t.finalScore,
+  mmr_score: t.mmrScore,
   mmr_rank: t.mmrRank,
   selected: t.selected,
   drop_reason: t.dropReason,

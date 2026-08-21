@@ -40,6 +40,7 @@ const traceOf = (c: Candidate, mmrRank: number): CandidateTrace => ({
   chapterBoostApplied: false,
   bypassTriggered: false,
   finalScore: 0,
+  mmrScore: 0,
   mmrRank,
   selected: true,
   dropReason: 'not_dropped',
