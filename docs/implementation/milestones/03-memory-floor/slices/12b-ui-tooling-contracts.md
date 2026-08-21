@@ -283,8 +283,9 @@ taken, one bullet each:
   `min_score_threshold` compares against `mmrScore`. The list now
   names budgets and the threshold as light-simulatable and moves the
   rest to deep mode. The threshold is recovered by one float per row
-  (`mmr_score`, `CAPTURE_VERSION` 2 → 3); the read side already
-  warned on version drift, so older captures degrade to that warning
-  rather than a misread. No light-mode simulate path exists yet
+  (`mmr_score`, `CAPTURE_VERSION` 2 → 3); the read side's version-drift
+  warning is advisory only — `assertCaptureShape` tolerates
+  field-level drift by design — so a light-mode simulator has to gate
+  on `capture_version` itself; `probe.md` records why. No light-mode simulate path exists yet
   (`replayType` refuses light captures) — the field is there so
   captures written before M7.5 are not second-class when it lands.

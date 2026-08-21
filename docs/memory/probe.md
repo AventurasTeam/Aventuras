@@ -349,31 +349,18 @@ to recover the threshold.
 From a light capture:
 
 - **Per-type budgets** — re-run greedy budget-fill against stored
-  `tokens_estimated` in `mmr_rank` order. The latch itself is sticky,
-  never re-cleared once armed, so the captured `below_threshold`
-  partition is fixed and no budget change can move it; the fill
-  re-walks exactly.
+  `tokens_estimated` in `mmr_rank` order. Neither the latch condition
+  nor the bypass test reads a budget, so the captured
+  `below_threshold` classification holds under any budget; read each
+  row's stored `drop_reason` rather than reconstructing a suffix.
+  `typeOverhead` is not listed here or below because it is measured
+  rather than tuned, so it is not a knob to simulate.
 - **`min_score_threshold`** — re-walk `mmr_rank` order and re-latch
   where the stored `mmr_score` first falls below the new threshold.
   MMR runs before the threshold walk, so the order itself does not
-  move. Mind the exact bypass rule: a `bypass_triggered` row is
-  exempt from the `below_threshold` **drop**, but it still **arms**
-  the latch on its way past, because the ranker tests the floor
-  before it tests the bypass. Treating a bypassed row as not arming
-  the latch diverges from the ranker for every later row.
-
-  That divergence is reachable, not theoretical: `mmr_score` is
-  **not** monotone over `mmr_rank`. Cosine is clamped to `[-1, 1]`,
-  so a negative similarity to an earlier pick raises a later row's
-  MMR score — with scores 1.0 / 0.9 / 0.55 and
-  `cos(a, b) = -1`, the emitted sequence is 0.75, 0.925, 0.4125,
-  and rank 1 sits above rank 0. So a bypassed row below the floor
-  can be followed by a row scoring above it, which the ranker still
-  drops.
-
-  Captures written before format version 3 carry no `mmr_score` and
-  cannot simulate this; the reader already warns on the version
-  drift.
+  move. A `bypass_triggered` row is exempt from the
+  `below_threshold` drop but still arms the latch. See
+  [Two traps in re-walking the threshold](#two-traps-in-re-walking-the-threshold).
 
 Adds in a deep capture, where the per-row vectors let MMR re-run:
 
@@ -397,6 +384,37 @@ Adds in a deep capture, where the per-row vectors let MMR re-run:
   is 1 regardless of age. `chapters_old` is what closes that.
 - `λ_div` (MMR diversity) — the candidate-vs-candidate cosines
   themselves.
+
+#### Two traps in re-walking the threshold
+
+**The bypass exempts the drop, not the arming.** The ranker updates
+`belowFloor` unconditionally and only then tests `bypassTriggered`
+(`lib/retrieval/ranker.ts`), so a bypassed row seats itself while
+still arming the latch for every row after it. Note the mechanism is
+that the latch update is unconditional, not that one statement
+precedes the other — reordering the two tests would change nothing.
+
+**`mmr_score` is not monotone over `mmr_rank`.** Cosine is clamped to
+`[-1, 1]`, so a negative similarity to an already-picked row raises a
+later row's MMR score. With scores 1.0 and 0.9 on two candidates at
+`cos(a, b) = -1` and `λ_div = 0.75`, the emitted sequence is 0.75
+then 0.925 — rank 1 above rank 0. Together with the rule above, a
+bypassed row below the floor can be followed by a row scoring above
+it that the ranker nonetheless drops, so a simulator that skips
+arming diverges on real inputs rather than only in principle.
+
+**A pre-v3 capture must be refused, not branched on.** `mmr_score` is
+typed `number | null`, where `null` means "never reached MMR" — but a
+format-version-2 payload carries the field as **absent**, so it
+decodes as `undefined`. `assertCaptureShape` tolerates field-level
+drift by design and the reader's version-drift log line is advisory,
+neither of them a gate. A simulator that branches on
+`mmr_score === null` therefore reads a v2 row as scored, compares
+`undefined < threshold` as `false`, and never arms the latch —
+returning a plausible, wrong selection with no error. Gate the
+simulate path on `capture_version >= 3` and refuse below it, the way
+`replayType` already refuses a row whose `common_knowledge` is
+`undefined`.
 
 ### Non-simulatable parameters
 
