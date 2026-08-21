@@ -60,6 +60,8 @@ const FG_BY_SEVERITY: Record<ToastSeverity, string> = {
 // is smaller — so short toasts dismiss on a proportionally shorter swipe.
 const DRAG_DISMISS_THRESHOLD_PX = 50
 
+const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
+
 type ToastProps = {
   item: ToastItem
 }
@@ -199,15 +201,14 @@ export function Toaster() {
 
   return (
     <View
-      pointerEvents="box-none"
       // top-4 alone sits under the status bar / notch on device; pad past the inset.
-      style={{ paddingTop: insets.top }}
+      style={[{ paddingTop: insets.top }, POINTER_EVENTS_BOX_NONE]}
       className={cn(
         'absolute left-0 right-0 top-4 z-[100] mx-4 items-center gap-2',
         Platform.select({ web: 'fixed' }),
       )}
     >
-      <View pointerEvents="box-none" className="w-full max-w-[400px] gap-2">
+      <View style={POINTER_EVENTS_BOX_NONE} className="w-full max-w-[400px] gap-2">
         {items.map((item) => (
           <Toast key={item.id} item={item} />
         ))}

@@ -5,6 +5,8 @@ import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
 import { cn } from '@/lib/utils'
 
+const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
+
 type BannerProps = {
   message: string
   ctaLabel: string
@@ -24,7 +26,7 @@ export function Banner({ message, ctaLabel, onCta, className }: BannerProps) {
     >
       <View
         aria-hidden
-        pointerEvents="none"
+        style={POINTER_EVENTS_NONE}
         className="absolute inset-0 bg-warning opacity-[.12]"
       />
       <Icon as={TriangleAlert} size="sm" className="text-warning" />

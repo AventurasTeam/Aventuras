@@ -33,6 +33,8 @@ import {
   type DedupeKey,
 } from './ai-assist-logic'
 
+const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
+
 const GUIDANCE_MAX_LENGTH = 200
 
 /**
@@ -445,7 +447,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                             where its click bubbles to the row Pressable and the two
                             toggles cancel out. */}
                         <View
-                          pointerEvents="none"
+                          style={POINTER_EVENTS_NONE}
                           aria-hidden={Platform.OS === 'web' ? true : undefined}
                           accessibilityElementsHidden
                           importantForAccessibility="no-hide-descendants"

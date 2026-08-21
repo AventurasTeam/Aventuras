@@ -32,7 +32,7 @@ const LINT_UNDERLINE_CLASS = Platform.select({
   default: 'underline decoration-dotted decoration-danger',
 })
 
-// Container above is pointerEvents="box-none" so plain text passes clicks
+// Container above is style={OVERLAY_BOX_NONE_STYLE} so plain text passes clicks
 // through to the Textarea underneath; lint spans opt back in to catch
 // hover/tap.
 const LINT_HIT_STYLE = { pointerEvents: 'auto' as const }
@@ -41,6 +41,7 @@ const LINT_HIT_STYLE = { pointerEvents: 'auto' as const }
 // Text) — it must opt back out itself, or the whole block would catch
 // clicks meant for the Textarea underneath instead of just the lint spans.
 const OVERLAY_ROOT_STYLE = { pointerEvents: 'none' as const }
+const OVERLAY_BOX_NONE_STYLE = { pointerEvents: 'box-none' as const }
 
 function boundingRectOf(node: unknown): DOMRect | null {
   const el = node as { getBoundingClientRect?: () => DOMRect } | null
@@ -127,7 +128,7 @@ export function SpellcheckTextarea({
       <Textarea value={value} onScroll={handleScroll} {...textareaProps} />
 
       {hasLints ? (
-        <View pointerEvents="box-none" className="absolute inset-0 overflow-hidden">
+        <View style={OVERLAY_BOX_NONE_STYLE} className="absolute inset-0 overflow-hidden">
           <TextClassContext.Provider value="text-transparent">
             <Text
               className={OVERLAY_TEXT_CLASS}
@@ -155,9 +156,8 @@ export function SpellcheckTextarea({
 
       {tooltip ? (
         <View
-          pointerEvents="none"
           className="absolute z-10 max-w-60 gap-1 rounded-md border border-border bg-bg-overlay p-2"
-          style={tooltip.position}
+          style={[OVERLAY_ROOT_STYLE, tooltip.position]}
         >
           <Text size="xs">{tooltip.lint.message()}</Text>
           {(() => {

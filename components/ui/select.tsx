@@ -29,6 +29,9 @@ import { cn } from '@/lib/utils'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
 
+const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
+const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
+
 const Root = SelectBase.Root
 const Group = SelectBase.Group
 
@@ -150,7 +153,9 @@ function PhoneSheetContent({
     // Root context lookup happy. BottomSheetModal would portal again and lose it.
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
+        <View
+          style={[StyleSheet.absoluteFill, open ? POINTER_EVENTS_BOX_NONE : POINTER_EVENTS_NONE]}
+        >
           <BottomSheet
             ref={sheetRef}
             // Derived inline, never via state. The portal mounts fresh on open,

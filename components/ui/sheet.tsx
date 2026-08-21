@@ -41,6 +41,8 @@ type SheetA11yValue = {
   onCloseAutoFocus?: AutoFocusHandler
 }
 
+const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
+
 const SheetA11yContext = createContext<SheetA11yValue | null>(null)
 
 function useSheetA11y(): SheetA11yValue {
@@ -298,8 +300,7 @@ function RightSheetContent({
       <FullWindowOverlay>
         <View
           className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
-          style={Platform.select({ native: StyleSheet.absoluteFill })}
-          pointerEvents="box-none"
+          style={[Platform.select({ native: StyleSheet.absoluteFill }), POINTER_EVENTS_BOX_NONE]}
         >
           <NativeOnlyAnimatedView
             entering={FadeIn.duration(200)}

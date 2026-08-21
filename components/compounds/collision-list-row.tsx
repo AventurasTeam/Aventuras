@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils'
 
 import { ListRow, type ListRowProps } from './list-row'
 
+const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
+
 type CollisionListRowProps = {
   row: ListRowProps
   collision: {
@@ -28,7 +30,7 @@ export function CollisionListRow({ row, collision }: CollisionListRowProps) {
       >
         <View
           aria-hidden
-          pointerEvents="none"
+          style={POINTER_EVENTS_NONE}
           className="absolute inset-0 bg-warning opacity-[.12]"
         />
         <Pressable
