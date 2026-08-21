@@ -89,6 +89,31 @@ slice-planning gate forces its resolution before that slice is planned.
   missing one; a `no-restricted-syntax` selector covers that half. Deferred out
   of Slice 3.12b because it changes every story's build output and wants its
   own verification. Surfaced 2026-08-21.
+- **`blocked` is unreachable from every production Actions-menu mount, so a
+  canonical rule cannot be honoured.**
+  [`actions-menu.md`](../ui/patterns/actions-menu.md) states that
+  `Cmd/Ctrl-K` and the trigger "do nothing while a modal, AlertDialog, or
+  other Sheet owns the surface", but neither `AppActionsMenu` nor
+  `AppActionsMenuPure` forwards `blocked` — only `app/dev/actions-menu.tsx`
+  and stories pass it. Blocking overlays do sit over focused routes
+  (`app/index.tsx`'s delete AlertDialog and `StoryConfigRecoveryDialog`, the
+  reader's `WorldTimeEditSheet`), and `useIsFocused` stays true under all of
+  them; a Radix modal blocks pointer events on the trigger but not a
+  `capture: true` window keydown listener. Pre-existing, surfaced by Slice
+  3.12b's focus-gating work. Fix is to pipe `blocked` through both wrappers.
+- **The Actions-menu focus gate is fail-open, and a fifth mount is already
+  planned.** `hotkeyEnabled` defaults to `true` at three layers, so a new
+  route that mounts `<AppActionsMenu />` and forgets the prop silently
+  re-opens the bug with no type, lint, or test failure —
+  `app/diagnostics/index.tsx` is a stub that `actions-menu.md` already lists
+  as an app-level surface. A navigator-optional hook reading
+  `NavigationContext` (re-exported from `@react-navigation/native`, so no
+  try/catch) inside the **connected** `AppActionsMenu` would delete all four
+  route-side edits and make future mounts correct by default; the plan's
+  "Storybook mounts without a navigator" objection holds for `ActionsMenu`
+  and `AppActionsMenuPure` but not for the connected wrapper, which has no
+  story. Deferred from Slice 3.12b as an approach change to an
+  already-signed-off decision. Surfaced 2026-08-21.
 
 Drained 2026-08-20. Four items were fixed on the branch that surfaced
 them — the corrupt-draft clobber, the suggestion re-roll's reversal

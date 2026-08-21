@@ -166,14 +166,16 @@ function ActionsMenu({
   const shortcutHint = useShortcutHint()
 
   const matchesMenuShortcut = useCallback(
-    (e: KeyboardEvent) => !blocked && (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
-    [blocked],
+    (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
+    [],
   )
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
+  // Both reasons the shortcut can be off live here rather than one here and one
+  // in the matcher, so a third reason has a single place to go.
   useGlobalHotkey(matchesMenuShortcut, toggleOpen, {
     capture: true,
     stopPropagation: true,
-    enabled: hotkeyEnabled,
+    enabled: hotkeyEnabled && !blocked,
   })
 
   const sections = useMemo<Section<MenuRowData>[]>(() => {

@@ -179,6 +179,10 @@ export const Blocked: Story = {
   render: () => (
     <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} blocked />
   ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+  },
 }
 
 // Cmd/Ctrl-K is a window-level listener; these two pin that the focus gate, not

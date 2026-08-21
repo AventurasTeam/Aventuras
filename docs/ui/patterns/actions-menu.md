@@ -199,6 +199,13 @@ Popover; `Esc`, outside-click, or activating any entry closes it,
 returning focus to `⚲`. Phone: `⚲` tap opens the Sheet; drag-down,
 scrim-tap, system-back, or activating an entry closes it.
 
+**Only the focused screen answers the shortcut.** `Cmd/Ctrl-K` is a
+window-level listener and a pushed-under screen stays mounted — on
+web the stack hides it with `display: none` rather than freezing it —
+so every screen that mounts the menu must gate the shortcut on its
+own focus state. A mount that omits the gate answers from behind the
+screen on top.
+
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
 trigger do nothing while a modal, AlertDialog, or other Sheet owns
 the surface — Sheet-over-Sheet is disallowed per
