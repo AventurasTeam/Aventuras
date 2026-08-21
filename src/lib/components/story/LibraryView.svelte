@@ -45,11 +45,7 @@
     showSTImportWizard = true
   }
 
-  // The panel is switched before the load, not after. `loadStory` publishes `currentStory`
-  // early and keeps working for the rest of its awaits, and the sidebars are gated on it — so
-  // switching afterwards mounted them over the library first and the story view a beat later,
-  // each pushing the layout in its own frame. Setting it first costs nothing (the library keeps
-  // rendering while `currentStory` is null) and lands everything in one pass.
+  // Switch before loading so the story view mounts with its sidebars in one pass.
   async function openStory(storyId: string) {
     ui.resetScrollBreak()
     ui.setActivePanel('story')
@@ -129,6 +125,7 @@
         ui.showToast(result.error, 'error')
       }
     } catch (error) {
+      ui.setActivePanel('library')
       ui.showToast(errMessage(error), 'error')
     } finally {
       isImporting = false

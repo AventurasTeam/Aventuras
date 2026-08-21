@@ -38,6 +38,7 @@ import {
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
+import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '$lib/constants/layout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import { applyIncognitoKeyboard } from '$lib/utils/platform'
@@ -1600,7 +1601,10 @@ class SettingsStore {
       if (navPanelWidth) {
         const parsedNavPanelWidth = parseInt(navPanelWidth, 10)
         if (Number.isFinite(parsedNavPanelWidth)) {
-          this.uiSettings.navPanelWidth = parsedNavPanelWidth
+          this.uiSettings.navPanelWidth = Math.min(
+            MAX_SIDEBAR_WIDTH,
+            Math.max(MIN_SIDEBAR_WIDTH, parsedNavPanelWidth),
+          )
         }
       }
 
@@ -2718,8 +2722,9 @@ class SettingsStore {
   }
 
   async setNavPanelWidth(width: number) {
-    this.uiSettings.navPanelWidth = width
-    await database.setSetting('nav_panel_width', width.toString())
+    const clampedWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+    this.uiSettings.navPanelWidth = clampedWidth
+    await database.setSetting('nav_panel_width', clampedWidth.toString())
   }
 
   async setDebugMode(enabled: boolean) {
@@ -3101,6 +3106,8 @@ class SettingsStore {
 
     // Reset UI settings
     this.uiSettings = getDefaultUISettings()
+    await this.setNavPanelWidth(this.uiSettings.navPanelWidth)
+    await ui.setNavPanelOpen(false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')

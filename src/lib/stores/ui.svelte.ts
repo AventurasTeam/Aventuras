@@ -417,9 +417,9 @@ class UIStore {
     this.setNavPanelOpen(false)
   }
 
-  private setNavPanelOpen(open: boolean) {
+  setNavPanelOpen(open: boolean): Promise<void> {
     this.navPanelOpen = open
-    database
+    return database
       .setSetting('nav_panel_open', open.toString())
       .catch((err) => console.warn('[UI] Failed to persist nav panel state:', err))
   }

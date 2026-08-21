@@ -95,6 +95,11 @@ function mergeRuntimeVars(
 
 // Story Store using Svelte 5 runes
 class StoryStore {
+  /** Tail of the story-load queue — see loadStory. */
+  private storyLoadChain: Promise<unknown> = Promise.resolve()
+  /** Sequence of the most recently requested story load. */
+  private storyLoadSeq = 0
+
   // Current active story
   currentStory = $state<Story | null>(null)
   entries = $state<StoryEntry[]>([])
@@ -526,6 +531,7 @@ class StoryStore {
 
   // Close the current story and reset state
   closeStory(): void {
+    this.storyLoadSeq++
     this.resetStoryState()
     this.currentBgImage = null
     this.branches = []
@@ -544,7 +550,22 @@ class StoryStore {
 
   // Load a specific story with all its data
   async loadStory(storyId: string): Promise<void> {
+    const seq = ++this.storyLoadSeq
+    const run = this.storyLoadChain.then(
+      () => this.performStoryLoad(storyId, seq),
+      () => this.performStoryLoad(storyId, seq),
+    )
+    this.storyLoadChain = run.catch(() => {})
+    return run
+  }
+
+  private async performStoryLoad(storyId: string, seq: number): Promise<void> {
+    // Serialize loads and let the most recent request win. This prevents a slower
+    // earlier selection from publishing after the story the reader selected last.
+    if (seq !== this.storyLoadSeq) return
+
     const story = await database.getStory(storyId)
+    if (seq !== this.storyLoadSeq) return
     if (!story) {
       throw new Error(`Story not found: ${storyId}`)
     }
@@ -552,6 +573,7 @@ class StoryStore {
     // Clean up any orphaned embedded_images before loading
     // (fixes FK constraint issues from older data)
     await database.cleanupOrphanedEmbeddedImages()
+    if (seq !== this.storyLoadSeq) return
 
     // Whatever the previous story left cached is about a pool this one does not have.
     clearTier3SelectionCache()
@@ -561,7 +583,9 @@ class StoryStore {
     // narrow display. Do this before publishing `currentStory`, which mounts those panels.
     ui.setMobileDefaults()
     this.currentStory = story
-    this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+    const backgroundImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+    if (seq !== this.storyLoadSeq) return
+    this.currentBgImage = backgroundImage
 
     // Load branch-independent data first
     const [characters, locations, items, storyBeats, checkpoints, lorebookEntries, branches] =
@@ -574,6 +598,7 @@ class StoryStore {
         database.getEntries(storyId),
         database.getBranches(storyId),
       ])
+    if (seq !== this.storyLoadSeq) return
 
     this.characters = characters
     this.locations = locations
@@ -595,6 +620,7 @@ class StoryStore {
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
+    if (seq !== this.storyLoadSeq) return
 
     // Reset all caches after loading
     this.invalidateWordCountCache()
@@ -613,6 +639,7 @@ class StoryStore {
 
     // Load persisted activation data for this story (stickiness tracking)
     await ui.loadActivationData(storyId)
+    if (seq !== this.storyLoadSeq) return
 
     // Clear stale lorebook retrieval from previous story to prevent cross-story contamination
     ui.setLastLorebookRetrieval(null)
@@ -630,15 +657,18 @@ class StoryStore {
 
     // Validate and repair chapter integrity (handles orphaned references)
     await this.validateChapterIntegrity()
+    if (seq !== this.storyLoadSeq) return
 
     // Load persisted action choices for adventure mode
     if (story.mode === 'adventure') {
       await ui.loadActionChoices(storyId)
+      if (seq !== this.storyLoadSeq) return
     }
 
     // Load persisted suggestions for creative-writing mode
     if (story.mode === 'creative-writing') {
       await ui.loadSuggestions(storyId)
+      if (seq !== this.storyLoadSeq) return
     }
 
     // The settings-keyed cache above is empty for a story that never generated choices in this
@@ -2988,6 +3018,7 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
+    this.storyLoadSeq++
     this.resetStoryState()
 
     // Clear current retry story ID (backups are kept per-story)
