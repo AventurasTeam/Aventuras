@@ -62,6 +62,9 @@ export function PresetBrowser({ presets, ariaLabel, onPick }: PresetBrowserProps
         <Text variant="muted" size="sm" numberOfLines={2}>
           {row.data.tagline}
         </Text>
+        <Text variant="muted" size="xs" numberOfLines={1}>
+          {row.data.promptBody}
+        </Text>
       </View>
     )
   }

@@ -289,3 +289,11 @@ taken, one bullet each:
   on `capture_version` itself; `probe.md` records why. No light-mode simulate path exists yet
   (`replayType` refuses light captures) — the field is there so
   captures written before M7.5 are not second-class when it lands.
+
+- **Preset-browser preview — first line of `promptBody` as a third
+  row line.** Canon's `preview body on hover` cannot exist on the
+  phone Sheet, and the shipped rows showed label and tagline only,
+  so the replace-confirm guarded an uninformed pick. A clamped third
+  line previews the same thing on every platform; no substrate change
+  was needed — `SearchableOverlayList` takes a `renderRow` slot, its
+  rows are `min-h`, and the web virtualizer re-measures.

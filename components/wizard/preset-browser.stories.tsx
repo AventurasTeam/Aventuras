@@ -55,7 +55,7 @@ export const TriggerOpensOverlay: Story = {
   },
 }
 
-export const AllPresetsRenderNameAndTagline: Story = {
+export const AllPresetsRenderNameTaglineAndBodyLead: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
@@ -63,6 +63,11 @@ export const AllPresetsRenderNameAndTagline: Story = {
     for (const preset of GENRE_PRESETS) {
       expect(screen.getByText(preset.displayName)).toBeInTheDocument()
       expect(screen.getByText(preset.tagline)).toBeInTheDocument()
+      // numberOfLines clamps visually via CSS, so the text node still carries
+      // the whole body — but Testing Library normalizes whitespace in the DOM
+      // while comparing against the raw string, and every promptBody is a
+      // multi-line template literal. Normalize the expectation to match.
+      expect(screen.getByText(preset.promptBody.replace(/\s+/g, ' ').trim())).toBeInTheDocument()
     }
   },
 }
