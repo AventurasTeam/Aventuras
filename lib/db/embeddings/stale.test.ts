@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite'
 
 import { getLoadablePath } from 'sqlite-vec'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SqlOp } from '../types'
 import { upsertVecOps } from './ops'
@@ -318,7 +318,7 @@ describe('partitionByStoredVector', () => {
     ]
     // A same-hash hit under lore_vec_384 must not count for an entity row:
     // familyTablesFor filters by kind, so no family table is queried at all.
-    const queryAll = async () => [['e1', sourceHash(compositeText(['Kara', 'a scout']))]]
+    const queryAll = vi.fn(async () => [['e1', sourceHash(compositeText(['Kara', 'a scout']))]])
 
     const { staleRows, freshRows } = await partitionByStoredVector(
       rows,
@@ -329,6 +329,9 @@ describe('partitionByStoredVector', () => {
 
     expect(freshRows).toHaveLength(0)
     expect(staleRows.map((r) => r.id)).toEqual(['e1'])
+    // The outcome above also holds if the read happened and its hit was discarded;
+    // this pins the filter as a read that never runs, which is what the comment claims.
+    expect(queryAll).not.toHaveBeenCalled()
   })
 })
 

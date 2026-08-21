@@ -40,19 +40,21 @@ const staleEntities = (app: LaunchedApp): Promise<number> =>
     HERO_BRANCH,
   ])
 
+// GLOB, not LIKE: the prefix's own underscores are single-character wildcards to
+// LIKE, so it would also count rows no filler wrote.
 const fillerRows = (app: LaunchedApp, stale: 0 | 1): Promise<number> =>
   countApp(
     app,
-    `SELECT count(*) FROM lore WHERE branch_id = ? AND id LIKE ? AND embedding_stale = ?`,
-    [HERO_BRANCH, `${LORE_FILLER_ID_PREFIX}%`, stale],
+    `SELECT count(*) FROM lore WHERE branch_id = ? AND id GLOB ? AND embedding_stale = ?`,
+    [HERO_BRANCH, `${LORE_FILLER_ID_PREFIX}*`, stale],
   )
 
 // The flag count alone cannot see a partial commit: a chunk loop that wrote
 // vectors then failed to clear reads identically to one that wrote none.
 const fillerVectors = (app: LaunchedApp): Promise<number> =>
-  countApp(app, `SELECT count(*) FROM lore_vec_384 WHERE branch_id = ? AND id LIKE ?`, [
+  countApp(app, `SELECT count(*) FROM lore_vec_384 WHERE branch_id = ? AND id GLOB ?`, [
     HERO_BRANCH,
-    `${LORE_FILLER_ID_PREFIX}%`,
+    `${LORE_FILLER_ID_PREFIX}*`,
   ])
 
 test.describe('embedder — cancel a local embed mid-turn', () => {

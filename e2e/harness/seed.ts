@@ -145,10 +145,10 @@ function loreFillerBody(index: number): string {
 
 /**
  * Append `count` stale lore rows to `branchId`, each body long enough that one
- * 16-text embed chunk costs real inference time. Runs AFTER launch, and has to:
- * seeded earlier, the drain a story open kicks would embed these rows itself.
- * Sound because the app rereads lore per retrieval pass over its own connection.
- * Call it only once the drain has settled, or the two race for the same rows.
+ * 16-text embed chunk costs real inference time. Must run AFTER launch, and only
+ * once the story-open drain has settled: seeded before launch, that drain embeds
+ * these rows itself, and seeded while it runs, the two race for them. Sound
+ * because the app rereads lore per retrieval pass over its own connection.
  */
 export function insertEmbeddableLoreRows(dbPath: string, branchId: string, count: number): void {
   const db = new DatabaseSync(dbPath)
@@ -159,7 +159,9 @@ export function insertEmbeddableLoreRows(dbPath: string, branchId: string, count
       `INSERT INTO lore (id, branch_id, title, body, tags, keywords, injection_mode, priority, embedding_stale, created_at, updated_at)
        VALUES (?, ?, ?, ?, '[]', '[]', 'auto', 0, 1, 1, 1)`,
     )
-    db.exec('BEGIN')
+    // IMMEDIATE, not deferred: the write lock is taken at BEGIN, so busy_timeout
+    // covers the wait for it. A deferred upgrade mid-transaction does not.
+    db.exec('BEGIN IMMEDIATE')
     try {
       for (let i = 0; i < count; i++) {
         insert.run(
@@ -328,6 +330,20 @@ export const CORRUPT_DRAFT_ID = 'e2e_corrupt_draft'
 
 export const LOSSY_DRAFT_ID = 'story_lossy_draft'
 
+// Both draft seeders borrow a definition from whichever story the seed wrote first:
+// only the wizard_sessions blob is meant to be unreadable, so the story row itself
+// must stay valid. An empty stories table is a broken fixture, not a draft case.
+function insertDraftStory(db: DatabaseSync, id: string, title: string): void {
+  const donor = db.prepare(`SELECT definition FROM stories LIMIT 1`).get() as
+    | { definition: string }
+    | undefined
+  if (!donor) throw new Error(`cannot seed draft ${id}: the fixture has no story to borrow from`)
+  db.prepare(
+    `INSERT INTO stories (id, title, description, status, definition, created_at, updated_at)
+     VALUES (?, ?, NULL, 'draft', ?, 1, 1)`,
+  ).run(id, title, donor.definition)
+}
+
 /**
  * A draft whose shell parses but whose lore array holds one unreadable row —
  * unlike `seedCorruptDraft`, this branch keeps its draft pointer, so Save
@@ -338,13 +354,7 @@ export function seedLossyDraft(dbPath: string, title: string): void {
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')
-    const donor = db.prepare(`SELECT definition FROM stories LIMIT 1`).get() as {
-      definition: string
-    }
-    db.prepare(
-      `INSERT INTO stories (id, title, description, status, definition, created_at, updated_at)
-       VALUES (?, ?, NULL, 'draft', ?, 1, 1)`,
-    ).run(LOSSY_DRAFT_ID, title, donor.definition)
+    insertDraftStory(db, LOSSY_DRAFT_ID, title)
     const state = {
       lore: [
         { id: 'lore_readable', title: 'The Tin Almanac', body: 'Kept.' },
@@ -365,13 +375,7 @@ export function seedCorruptDraft(dbPath: string, title: string): void {
   const db = new DatabaseSync(dbPath)
   try {
     db.exec('PRAGMA busy_timeout = 10000')
-    const donor = db.prepare(`SELECT definition FROM stories LIMIT 1`).get() as {
-      definition: string
-    }
-    db.prepare(
-      `INSERT INTO stories (id, title, description, status, definition, created_at, updated_at)
-       VALUES (?, ?, NULL, 'draft', ?, 1, 1)`,
-    ).run(CORRUPT_DRAFT_ID, title, donor.definition)
+    insertDraftStory(db, CORRUPT_DRAFT_ID, title)
     db.prepare(
       `INSERT INTO wizard_sessions (id, story_id, state, updated_at) VALUES (?, ?, ?, 1)`,
     ).run(CORRUPT_DRAFT_ID, CORRUPT_DRAFT_ID, JSON.stringify({ step: 99 }))

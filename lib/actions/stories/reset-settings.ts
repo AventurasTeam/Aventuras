@@ -39,7 +39,7 @@ const ENGINE_OWNED_KEYS = new Set<keyof StorySettings>([
  * may be absent or wrong-typed. The backend goes through the schema's own enum
  * so the check cannot drift, via `safeParse` so garbage falls back not throws.
  */
-function lockedEmbedding(settings: StorySettings | null): {
+function lockedEmbedding(settings: unknown): {
   backend: StorySettings['embeddingBackend'] | null
   modelId: string | null
   providerId: string | null

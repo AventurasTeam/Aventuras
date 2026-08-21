@@ -394,13 +394,23 @@ function defaultCtx(): DbCtx {
 }
 
 // A missing row and a Zod-rejected row are one answer: no settings blob to swap.
+// They are not one diagnosis — SwapStoryMissingError downstream cannot tell them
+// apart, so the rejected blob says so here or nothing does.
 async function readStorySettings(storyId: string, ctx: DbCtx): Promise<StorySettings | null> {
   const [row] = await ctx.db
     .select({ settings: stories.settings })
     .from(stories)
     .where(eq(stories.id, storyId))
-  const parsed = row ? storySettingsSchema.safeParse(row.settings) : undefined
-  return parsed?.success ? parsed.data : null
+  if (!row) return null
+  const parsed = storySettingsSchema.safeParse(row.settings)
+  if (!parsed.success) {
+    logger.warn('embedder.swap_settings_unreadable', {
+      storyId,
+      issues: parsed.error.issues.length,
+    })
+    return null
+  }
+  return parsed.data
 }
 
 async function loadSwapContext(

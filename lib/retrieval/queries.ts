@@ -43,8 +43,8 @@ function structuralDigest(input: QueryStackInput): string {
   const threads = input.activeThreadTitles.map(trimmed).filter(nonEmpty)
   const era = trimmed(input.eraName)
   const summary = trimmed(input.piggybackSummary)
-  // docs/memory/retrieval.md → Q2: Structural digest. Every line is conditional: an
-  // all-empty one renders as bare punctuation and still spends Q2's share of the blend.
+  // docs/memory/retrieval.md → Q2: Structural digest. Every line is conditional, so an
+  // all-empty one is the empty string — Q2 reads absent and spends none of the blend.
   return [
     ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
     ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),
