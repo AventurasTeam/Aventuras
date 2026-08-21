@@ -341,6 +341,12 @@ describe('rankPerType — MMR and budget fill', () => {
     const dropped = r.traces.filter((t) => t.dropReason === 'pre_filtered')
     expect(dropped).toHaveLength(5)
     expect(dropped.every((t) => t.mmrRank === null)).toBe(true)
+    // null is the marker light-mode simulation branches on, so the absence has
+    // to be asserted as hard as the presence: these rows never reached MMR.
+    expect(dropped.every((t) => t.mmrScore === null)).toBe(true)
+    expect(
+      r.traces.filter((t) => t.dropReason !== 'pre_filtered').every((t) => t.mmrScore !== null),
+    ).toBe(true)
     // The five it drops are the five lowest-scoring, not just any five.
     expect(dropped.map((t) => t.id).sort()).toEqual(['c0', 'c1', 'c2', 'c3', 'c4'])
   })

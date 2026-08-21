@@ -349,17 +349,31 @@ to recover the threshold.
 From a light capture:
 
 - **Per-type budgets** — re-run greedy budget-fill against stored
-  `tokens_estimated` in `mmr_rank` order. The below-threshold latch
-  is monotone over the MMR order, so the first captured
-  `below_threshold` row pins the partition and no budget change can
-  move it; the fill re-walks exactly.
+  `tokens_estimated` in `mmr_rank` order. The latch itself is sticky,
+  never re-cleared once armed, so the captured `below_threshold`
+  partition is fixed and no budget change can move it; the fill
+  re-walks exactly.
 - **`min_score_threshold`** — re-walk `mmr_rank` order and re-latch
   where the stored `mmr_score` first falls below the new threshold.
   MMR runs before the threshold walk, so the order itself does not
-  move; `bypass_triggered` rows stay exempt from the latch, as in the
-  ranker. Captures written before format version 3 carry no
-  `mmr_score` and cannot simulate this; the reader already warns on
-  the version drift.
+  move. Mind the exact bypass rule: a `bypass_triggered` row is
+  exempt from the `below_threshold` **drop**, but it still **arms**
+  the latch on its way past, because the ranker tests the floor
+  before it tests the bypass. Treating a bypassed row as not arming
+  the latch diverges from the ranker for every later row.
+
+  That divergence is reachable, not theoretical: `mmr_score` is
+  **not** monotone over `mmr_rank`. Cosine is clamped to `[-1, 1]`,
+  so a negative similarity to an earlier pick raises a later row's
+  MMR score — with scores 1.0 / 0.9 / 0.55 and
+  `cos(a, b) = -1`, the emitted sequence is 0.75, 0.925, 0.4125,
+  and rank 1 sits above rank 0. So a bypassed row below the floor
+  can be followed by a row scoring above it, which the ranker still
+  drops.
+
+  Captures written before format version 3 carry no `mmr_score` and
+  cannot simulate this; the reader already warns on the version
+  drift.
 
 Adds in a deep capture, where the per-row vectors let MMR re-run:
 
