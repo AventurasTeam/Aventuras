@@ -18,6 +18,14 @@ const api: NativeApi = {
     ipcRenderer.on('native:close-requested', listener)
     return () => ipcRenderer.removeListener('native:close-requested', listener)
   },
+  confirmReload: (): void => {
+    ipcRenderer.send('native:confirm-reload')
+  },
+  onReloadRequested: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('native:reload-requested', listener)
+    return () => ipcRenderer.removeListener('native:reload-requested', listener)
+  },
 }
 
 contextBridge.exposeInMainWorld('native', api)

@@ -8,6 +8,9 @@ export type NativeApi = {
   setCloseGuard(active: boolean): void
   confirmClose(): void
   onCloseRequested(cb: () => void): () => void
+  /** Lets the reload that `onReloadRequested` held go through. */
+  confirmReload(): void
+  onReloadRequested(cb: () => void): () => void
 }
 
 declare global {
