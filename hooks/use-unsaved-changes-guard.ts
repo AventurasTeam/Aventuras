@@ -9,10 +9,9 @@ type CloseBridge = Pick<
   'setCloseGuard' | 'confirmClose' | 'onCloseRequested' | 'confirmReload' | 'onReloadRequested'
 >
 
-// The declared type says nothing about what the running preload exposes: the
-// web build has no `window.native` at all. Probe before trusting it. All or
-// nothing — a partial bridge falls to the browser path, which main lets close
-// unguarded rather than block (`will-prevent-unload`, fail-open).
+// The declared type says nothing about what the preload actually exposes (web has no
+// `window.native`) — probe first. A partial bridge falls back to the unguarded browser path
+// (main's `will-prevent-unload` fail-open).
 function closeBridge(): CloseBridge | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null
   const native = window.native
@@ -111,10 +110,9 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
     }
     if (!dirty) return undefined
 
-    // Per-surface function, not a shared one: `addEventListener` dedupes the
-    // same reference, so one surface going clean would unhook every other.
-    // A browser turns this into its own prompt; Electron turns it into
-    // `will-prevent-unload`, which main answers by asking through the bridge.
+    // Per-surface, not shared: addEventListener dedupes by reference — sharing it would let
+    // one clean surface unhook every other. Browser prompts natively; Electron routes through
+    // the bridge via will-prevent-unload.
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
     }

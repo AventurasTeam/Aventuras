@@ -5,13 +5,10 @@ import { launchApp, type LaunchedApp } from '../harness/launch'
 import { createSeededUserDataDir, removeUserDataDir } from '../harness/seed'
 import { reader } from '../locators/reader'
 
-// Hard navigation, not a click path — the one sanctioned hand-written URL
-// (docs/testing.md → Harness structure). No in-app route can reach the reader
-// with an unknown branch: both entry points (landing open, wizard finish)
-// navigate only after loadOpenStory succeeds. The seam under test is the
-// deep-route fallback re-booting the app on a route whose branch the DB cannot
-// resolve: app://bundle → index.html in packaged mode (electron/bundle-path.ts),
-// serveDist's fallback in dev.
+// Hard navigation is the one sanctioned hand-written URL (docs/testing.md → Harness structure)
+// — no in-app route reaches an unknown branch; both entry points navigate only after
+// loadOpenStory succeeds. Tests the deep-route fallback: app://bundle → index.html (packaged,
+// electron/bundle-path.ts) / serveDist's fallback (dev).
 test.describe('reader hydration failure', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
@@ -32,8 +29,7 @@ test.describe('reader hydration failure', () => {
     await page.goto(new URL('/reader-composer/br_e2e_does_not_exist', page.url()).toString())
 
     await expect(reader.hydrationFailed(page)).toBeVisible({ timeout: 20_000 })
-    // editable={false} renders as readonly on web, which is what "locked" means
-    // for a TextInput — not `disabled`.
+    // editable={false} renders as readonly on web — "locked" means that, not `disabled`.
     await expect(reader.composer(page)).not.toBeEditable()
 
     const [[count]] = await queryApp(

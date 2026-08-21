@@ -114,8 +114,7 @@ function applyContentSecurityPolicy(): void {
 const closeGuards = new Set<number>()
 const confirmedCloses = new Set<number>()
 const pendingQuits = new Set<number>()
-// Windows whose renderer just confirmed a reload; consumed by the next
-// `will-prevent-unload` or cleared when the navigation commits.
+// Confirmed-reload set: consumed by the next `will-prevent-unload`, cleared on nav commit.
 const confirmedReloads = new Set<number>()
 
 // `before-quit` runs before any window's `close`, so a guard that cancels the
@@ -171,33 +170,24 @@ function createWindow(): void {
     confirmedReloads.delete(win.id)
   })
 
-  // A renderer with unsaved work prevents its own unload, and Electron raises
-  // this instead of a prompt. Doing nothing keeps the page; preventDefault lets
-  // the unload through. A close already confirmed over IPC and a reload the
-  // renderer just confirmed both go through; anything else asks the renderer.
+  // will-prevent-unload fires instead of a prompt on a blocked unload. Doing nothing keeps the
+  // page; calling preventDefault() here is what ALLOWS the unload through — inverted from usual.
   win.webContents.on('will-prevent-unload', (event) => {
-    // Consumed before the branch, not inside it: `||` would short-circuit past
-    // the delete whenever a close was already confirmed, stranding the flag.
+    // Consumed before the branch, not inside it — inside a `||` it would short-circuit past
+    // the delete, stranding the flag.
     const confirmedReload = confirmedReloads.delete(win.id)
-    // Fail-open on the same rule as `close` below. Only a renderer that armed
-    // the guard can answer this, so an unload nobody will confirm has to go
-    // through — otherwise a renderer that cancels its own unload without
-    // arming (a bridge probe that failed, so the browser path registered
-    // `beforeunload` and nothing else) leaves the window unquittable, with no
-    // dialog and nothing logged.
+    // Fail-open, same rule as `close` below: only a renderer that armed the guard gets asked.
+    // Otherwise an unguarded beforeunload (e.g. a failed bridge probe registering only the
+    // browser's own listener) leaves the window unquittable — no dialog, nothing logged.
     if (confirmedReload || confirmedCloses.has(win.id) || !closeGuards.has(win.id)) {
       event.preventDefault()
       return
     }
-    // Named for the only cause that reaches it today: every other source of a
-    // prevented unload (a post-init `loadURL`, an off-origin navigation) is
-    // either blocked by `will-navigate` or happens before a guard is armed. A
-    // new hard-navigation path would be asked about — and confirm into the
-    // `reload()` below, not into itself.
+    // Named for the only cause that reaches it today: other prevented-unload sources (post-init
+    // loadURL, off-origin nav) are already blocked by will-navigate or precede the guard arming.
     win.webContents.send('native:reload-requested')
   })
-  // A committed cross-document navigation means the renderer that armed the
-  // guard — and the one that confirmed a reload — is gone.
+  // Cross-document nav commit means the arming renderer — and any confirmed reload — is gone.
   win.webContents.on('did-start-navigation', (details) => {
     if (!details.isMainFrame || details.isSameDocument) return
     closeGuards.delete(win.id)

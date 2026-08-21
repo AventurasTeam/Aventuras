@@ -142,9 +142,8 @@ export const StreamingReasoning: StoryT = {
   // whole "card body is blank" symptom.
   play: async () => {
     expect(await screen.findByRole('button', { name: 'Show reasoning' })).toBeInTheDocument()
-    // Outside dev mode an empty dependency set freezes the style instead of
-    // throwing, so presence alone would not catch it. parseFloat, not Number:
-    // Number('') is 0, which would clear the bound without anything animating.
+    // Outside dev mode this freezes (not throws) with empty deps, so presence alone
+    // won't catch it; parseFloat not Number — Number('') is 0, a false pass with no animation.
     const pulsing = screen.getByTestId('reasoning-pulse')
     await waitFor(() => expect(parseFloat(pulsing.style.opacity)).toBeLessThan(0.9))
   },

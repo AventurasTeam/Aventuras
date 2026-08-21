@@ -1403,11 +1403,9 @@ export const DirtyDismissAsksBeforeDiscarding: Story = {
   },
 }
 
-// The confirm only protects the result if focus is actually inside it. Radix
-// suppresses its own auto-focus and focuses whatever registered as Cancel, so a
-// footer of bare Buttons leaves focus on <body> and the trap never engages —
-// Tab then walks out to the trigger behind the dialog and Enter destroys the
-// result unasked.
+// Radix suppresses its own auto-focus and focuses whatever registered as Cancel; a footer of
+// bare Buttons leaves focus on <body>, so the trap never engages — Tab walks out to the trigger
+// behind the dialog and Enter destroys the result unasked.
 export const DirtyDismissTrapsFocusInTheConfirm: Story = {
   render: () => (
     <ProseDemo

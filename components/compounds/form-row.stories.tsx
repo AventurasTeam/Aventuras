@@ -170,8 +170,7 @@ export const LabelRendersInBothLayouts: Story = {
  */
 export const ErrorSitsBelowTheControl: Story = {
   render: () => (
-    // Pinned, not inferred from the 360 px wrapper —
-    // lessons-learned/formrow-narrow-story-remount.md.
+    // Pinned, not inferred from the wrapper — lessons-learned/formrow-narrow-story-remount.md.
     <View style={{ width: 360 }} className="rounded-md bg-bg-base p-4">
       <FormRow label="Email" stacked error="Enter a valid email address">
         <ControlledInput placeholder="you@example.com" aria-invalid />

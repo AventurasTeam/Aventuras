@@ -289,10 +289,8 @@ function Pulsing({ children }: { children: ReactNode }) {
   useEffect(() => {
     opacity.set(withRepeat(withTiming(0.3, { duration: 600 }), -1, true))
   }, [opacity])
-  // Storybook's Vite build disables babelrc, so the worklets plugin never
-  // auto-injects these deps. Without them Reanimated throws at render in the
-  // dev server and, in the vitest lane where __DEV__ is false, silently
-  // freezes the style instead — the quiet half is what CI would miss.
+  // Storybook's Vite build disables babelrc, so worklets never auto-injects these deps.
+  // Missing them: dev throws at render; vitest (__DEV__ false) freezes silently — CI misses it.
   const style = useAnimatedStyle(() => ({ opacity: opacity.get() }), [opacity])
   return (
     <Animated.View style={style} testID="reasoning-pulse">

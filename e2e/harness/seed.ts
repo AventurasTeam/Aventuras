@@ -388,11 +388,9 @@ export const OPENING_ONLY_STORY_ID = 'story_e2e_opening_only'
 export const OPENING_ONLY_BRANCH_ID = 'br_e2e_opening_only_main'
 export const OPENING_ONLY_TITLE = 'E2E Opening Only'
 
-// A story whose only entry is its opening — the smallest branch a turn can land
-// on, and one no seeded story provides (every fixture branch has ≥ 2 entries).
-// Definition and settings are borrowed from the seeded creative story: no lead,
-// so the new branch needs no entity rows. The opening carries the minimal
-// metadata create-story writes for a fresh story.
+// Only-opening branch — no seeded fixture has one (every fixture branch has ≥ 2 entries).
+// Borrows creative's leadless definition/settings, so no entity rows are needed; the opening
+// carries create-story's minimal metadata.
 export function seedOpeningOnlyStory(dbPath: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -438,11 +436,9 @@ export function seedOpeningOnlyStory(dbPath: string): void {
   }
 }
 
-// Make the app_settings singleton fail its schema parse while staying valid
-// JSON: `providers` must be an array, so an object lands on hydrateAppSettings'
-// parse-failure arm and app/_layout gates the tree on SettingsRecoveryScreen.
-// A missing row is treated as defaults and a bad `diagnostics` blob is
-// swallowed, so neither would reach the gate; no app route writes this state.
+// `providers` must be an array — an object hits hydrateAppSettings' parse-failure arm, gating
+// app/_layout on SettingsRecoveryScreen. Missing rows / bad `diagnostics` blobs don't reach it,
+// and no app route writes this state.
 export function corruptAppSettings(dbPath: string): void {
   const db = new DatabaseSync(dbPath)
   try {

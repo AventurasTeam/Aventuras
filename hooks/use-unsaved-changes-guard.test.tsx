@@ -167,9 +167,8 @@ describe('useUnsavedChangesGuard', () => {
     expect(add).toHaveBeenCalledWith('beforeunload', expect.any(Function))
   })
 
-  // Electron fires no prompt of its own: the renderer has to prevent the unload
-  // so main gets a `will-prevent-unload` to answer. Without this listener
-  // Ctrl-R on a dirty surface reloads straight through.
+  // Electron has no unload prompt of its own — the renderer must prevent it so
+  // main gets `will-prevent-unload`, or Ctrl-R on a dirty surface reloads through.
   it('prevents the unload itself on the desktop bridge while dirty', () => {
     stubBridge()
     const view = render(<Guard dirty requestLeave={vi.fn()} />)

@@ -63,10 +63,8 @@ export const AllPresetsRenderNameTaglineAndBodyLead: Story = {
     for (const preset of GENRE_PRESETS) {
       expect(screen.getByText(preset.displayName)).toBeInTheDocument()
       expect(screen.getByText(preset.tagline)).toBeInTheDocument()
-      // numberOfLines clamps visually via CSS, so the text node still carries
-      // the whole body — but Testing Library normalizes whitespace in the DOM
-      // while comparing against the raw string, and every promptBody is a
-      // multi-line template literal. Normalize the expectation to match.
+      // numberOfLines only clamps display — the DOM text is unclamped, and RTL
+      // normalizes whitespace, so match promptBody normalized the same way.
       expect(screen.getByText(preset.promptBody.replace(/\s+/g, ' ').trim())).toBeInTheDocument()
     }
   },

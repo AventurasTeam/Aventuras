@@ -216,12 +216,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
   }
 
-  // Catches dismiss paths that bypass closeOverlay(): Escape and tap-outside on
-  // web, swipe-down on the phone sheet, hardware back on the native dialog.
-  // Hardware back on the phone sheet does not reach here — see triage.md.
-  // A swiped sheet is already gone when this
-  // fires, so a dirty overlay closes and asks from a sibling dialog; Keep
-  // editing re-opens it with nothing cleared, Discard is the only reset.
+  // Catches every dismiss path that bypasses closeOverlay() — Escape, tap-outside, swipe-down —
+  // except phone-sheet hardware back, which never reaches here (see triage.md). A dirty overlay
+  // re-opens via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
   function handleOpenChange(next: boolean) {
     setOpen(next)
     if (next) return

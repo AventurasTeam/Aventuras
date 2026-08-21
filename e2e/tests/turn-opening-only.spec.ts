@@ -15,10 +15,8 @@ import {
 import { home } from '../locators/home'
 import { reader } from '../locators/reader'
 
-// testing.md → Coverage names "a turn on an opening-only branch" as a seam edge
-// case: the scene tail the turn inherits metadata from IS the opening, the
-// suggestion anchor has exactly one candidate, and the new action must seat at
-// position 2 directly behind it. Everything else about the turn is turn.spec.ts.
+// testing.md → Coverage: opening-only seam edge case — tail metadata inherits from the
+// opening, one suggestion-anchor candidate, seats at position 2; rest is turn.spec.ts.
 const REPLY = 'E2E-OPENING-REPLY — the first letter arrives with the tide.'
 
 test.describe('reader turn on an opening-only branch', () => {

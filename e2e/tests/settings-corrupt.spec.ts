@@ -6,11 +6,9 @@ import { corruptAppSettings, createSeededUserDataDir, removeUserDataDir } from '
 import { home } from '../locators/home'
 import { recovery } from '../locators/recovery'
 
-// app/_layout.tsx halts boot pre-Router on a config-corrupt app_settings row and
-// renders SettingsRecoveryScreen. The seam: migrations → rehydrateAppSettings'
-// parse failure → the gate, then resetAppSettings → a second hydrate → the
-// Router mounts. The harness always seeds a healthy DB, so the corruption is a
-// knob; no app route writes it.
+// app/_layout.tsx halts boot pre-Router on a corrupt app_settings row → SettingsRecoveryScreen.
+// Seam: migrations → rehydrateAppSettings parse failure → gate → resetAppSettings → re-hydrate
+// → Router mounts. Corruption is a test-only knob; no app route writes it.
 test.describe('settings-corrupt recovery', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined

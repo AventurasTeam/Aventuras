@@ -341,9 +341,8 @@ describe('rankPerType — MMR and budget fill', () => {
     const dropped = r.traces.filter((t) => t.dropReason === 'pre_filtered')
     expect(dropped).toHaveLength(5)
     expect(dropped.every((t) => t.mmrRank === null)).toBe(true)
-    // null distinguishes "never reached MMR" from a real score, so the absence
-    // needs asserting as hard as the presence. A consumer must still gate on
-    // capture_version: a pre-v3 payload carries the field absent, not null.
+    // null means "never reached MMR" (vs a real score) — assert absence as hard as presence.
+    // Consumers must still gate on capture_version: pre-v3 payloads have it absent, not null.
     expect(dropped.every((t) => t.mmrScore === null)).toBe(true)
     const ranked = r.traces.filter((t) => t.dropReason !== 'pre_filtered')
     // Length first: `every` on an empty array is vacuously true.

@@ -37,10 +37,8 @@ export function AiAssistDiscardDialog({ open, onKeep, onDiscard }: AiAssistDisca
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          {/* AlertDialogCancel, not a bare Button: Radix suppresses its own
-              auto-focus and focuses whatever registered as Cancel, so without
-              this nothing is focused and the trap never engages — Tab then
-              walks out to the trigger behind the dialog. */}
+          {/* AlertDialogCancel, not a bare Button: Radix focuses whatever registers as Cancel;
+              without it nothing is focused, so Tab walks a keyboard user past the confirm. */}
           <AlertDialogCancel asChild>
             <Button variant="secondary">
               <Text>{t('wizard:aiAssist.discardConfirm.keep')}</Text>

@@ -3,14 +3,11 @@ import { readFileSync } from 'node:fs'
 import fg from 'fast-glob'
 import { describe, expect, it } from 'vitest'
 
-// patches/js-tiktoken.patch replaces the object-literal accumulator in
-// _Tiktoken's bpe_ranks decode with Map staging, and switches the consuming
-// loop off Object.entries to match. Hermes caps properties-per-object below
-// o200k_base's ~200k entries, so the unpatched form throws RangeError on
-// Android at `new Tiktoken(o200kBase)` — every countTokens consumer. Node has
-// no such cap, CI has no Android lane, and this repo's patch keys are
-// version-less, which makes pnpm warn rather than fail when a patch stops
-// applying: the shape of the installed dist is the only automatable signal.
+// patches/js-tiktoken.patch swaps the object-literal bpe_ranks accumulator for Map staging:
+// Hermes caps properties-per-object below o200k_base's ~200k entries, throwing RangeError on
+// Android at every countTokens call — Node has no such cap, CI has no Android lane. Patch keys
+// are version-less (pnpm warns, not fails, on a stale patch), so the installed dist's shape is
+// the only automatable signal it's still applied.
 const OBJECT_FORM = /tokens\.forEach\(\(token, i\) => memo\[token\] = offset \+ i\)/
 const MAP_FORM = /tokens\.forEach\(\(token, i\) => memo\.set\(token, offset \+ i\)\)/
 // The other half of the same hunk. Map staging without it degrades to an empty
@@ -58,9 +55,8 @@ const PATCHED = `
     for (const [token, rank] of uncompressed) {
 `
 
-// Both stable cjs entry points plus the hash-named ESM chunk. The names are
-// deliberately not pinned — the chunk's is a build hash — so the count is what
-// catches a bundle silently leaving the scan.
+// Counts both stable cjs entry points plus the hash-named ESM chunk (its name isn't pinned —
+// it's a build hash); the count is what catches a bundle silently leaving the scan.
 const KNOWN_DECODE_SITES = 3
 
 describe('js-tiktoken patch guard', () => {
@@ -76,19 +72,18 @@ describe('js-tiktoken patch guard', () => {
   })
 
   it('every installed dist bundle stages the ranks through a Map, none through an object', async () => {
-    // No filename is pinned: the ESM chunk the app runs through is hash-named
-    // (dist/chunk-*.js today) and a version bump renames it, while Metro may
-    // resolve the cjs entry on Android. Whatever files define the decode are
-    // the ones that must carry the patch.
+    // No filename pinned: the ESM chunk is hash-named (renamed on version bumps), and Metro
+    // may resolve the cjs entry on Android instead — whichever file defines the decode must
+    // carry the patch.
     const paths = await fg(['node_modules/js-tiktoken/dist/**/*.{js,cjs,mjs}'], {
       cwd: process.cwd(),
     })
     const files = paths.map((path) => ({ path, src: readFileSync(path, 'utf8') }))
     const audit = auditRanksDecode(files)
 
-    // Shrinkage is the dangerous direction: a bundle that leaves the glob or
-    // renames the decode drops out silently and every other assertion still
-    // holds. Re-derive patches/js-tiktoken.patch if this moves.
+    // Shrinkage is the dangerous direction — a bundle leaving the glob or renaming the decode
+    // drops out silently with every other assertion still passing. Re-derive the patch if this
+    // moves.
     expect(
       audit.decodeSites.length,
       'dist bundles that build the rank table — re-derive patches/js-tiktoken.patch if this changed',

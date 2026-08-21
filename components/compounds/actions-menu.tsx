@@ -170,8 +170,7 @@ function ActionsMenu({
     [],
   )
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
-  // Both reasons the shortcut can be off live here rather than one here and one
-  // in the matcher, so a third reason has a single place to go.
+  // Both off-reasons live here, not split with the matcher, so a third has one place to go.
   useGlobalHotkey(matchesMenuShortcut, toggleOpen, {
     capture: true,
     stopPropagation: true,
