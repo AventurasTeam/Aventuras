@@ -383,3 +383,69 @@ export function seedCorruptDraft(dbPath: string, title: string): void {
     db.close()
   }
 }
+
+export const OPENING_ONLY_STORY_ID = 'story_e2e_opening_only'
+export const OPENING_ONLY_BRANCH_ID = 'br_e2e_opening_only_main'
+export const OPENING_ONLY_TITLE = 'E2E Opening Only'
+
+// A story whose only entry is its opening — the smallest branch a turn can land
+// on, and one no seeded story provides (every fixture branch has ≥ 2 entries).
+// Definition and settings are borrowed from the seeded creative story: no lead,
+// so the new branch needs no entity rows. The opening carries the minimal
+// metadata create-story writes for a fresh story.
+export function seedOpeningOnlyStory(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const donor = db
+      .prepare(`SELECT definition, settings FROM stories WHERE id = 'story_creative'`)
+      .get() as { definition: string; settings: string } | undefined
+    if (!donor) {
+      throw new Error(
+        'cannot seed the opening-only story: story_creative is missing from the fixture',
+      )
+    }
+    db.exec('BEGIN IMMEDIATE')
+    db.prepare(
+      `INSERT INTO stories (id, title, description, status, definition, settings, created_at, updated_at, current_branch_id)
+       VALUES (?, ?, NULL, 'active', ?, ?, 1, 1, ?)`,
+    ).run(
+      OPENING_ONLY_STORY_ID,
+      OPENING_ONLY_TITLE,
+      donor.definition,
+      donor.settings,
+      OPENING_ONLY_BRANCH_ID,
+    )
+    db.prepare(
+      `INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, 'main', 1)`,
+    ).run(OPENING_ONLY_BRANCH_ID, OPENING_ONLY_STORY_ID)
+    db.prepare(
+      `INSERT INTO story_entries (id, branch_id, position, kind, content, metadata, created_at)
+       VALUES ('entry_e2e_opening', ?, 1, 'opening', ?, ?, 1)`,
+    ).run(
+      OPENING_ONLY_BRANCH_ID,
+      'The tide has gone out and left the parish standing. Nobody has written back yet.',
+      JSON.stringify({ sceneEntities: [], currentLocationId: null, worldTime: 0 }),
+    )
+    db.exec('COMMIT')
+  } finally {
+    db.close()
+  }
+}
+
+// Make the app_settings singleton fail its schema parse while staying valid
+// JSON: `providers` must be an array, so an object lands on hydrateAppSettings'
+// parse-failure arm and app/_layout gates the tree on SettingsRecoveryScreen.
+// A missing row is treated as defaults and a bad `diagnostics` blob is
+// swallowed, so neither would reach the gate; no app route writes this state.
+export function corruptAppSettings(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
+      JSON.stringify({ not: 'an array' }),
+    )
+  } finally {
+    db.close()
+  }
+}
