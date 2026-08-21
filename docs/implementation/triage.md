@@ -129,6 +129,27 @@ slice-planning gate forces its resolution before that slice is planned.
   `BackHandler` in `BottomSheetContent` mirroring the dialog primitive, which
   would benefit every sheet consumer; deferred because it changes back-button
   behaviour app-wide, not just for AiAssist. Surfaced 2026-08-21.
+- **AiAssist's failure-card "Cancel" still drops a non-empty suggestion list
+  silently.** Slice 3.12b gated the implicit dismiss paths behind a confirm, but
+  `closeOverlay()` stays unconfirmed by design — correct for Discard, Use this
+  and Import, arguably not for the Cancel on a **failure** card. Reachable
+  deterministically: generate a list, press Generate more, let that call fail;
+  `listItems` survives (only the ok branch writes it) and the card offers
+  Cancel / Try again. Cancel then resets the list without a word, while Escape
+  from the same state now raises a modal. Before the slice both paths were
+  silently destructive and at least consistent. Either route that one button
+  through the confirm or accept the divergence deliberately. Surfaced
+  2026-08-21.
+- **Two confirm dialogs omitted `AlertDialogCancel`, so Radix focused nothing
+  and the trap never engaged.** Fixed in Slice 3.12b for
+  `ai-assist-discard-dialog.tsx` and `discard-dropped-rows-dialog.tsx`, but the
+  substrate still permits it: `components/ui/alert-dialog.tsx` happily renders a
+  footer of bare `Button`s, and Radix's `AlertDialogContent` suppresses its own
+  auto-focus then focuses whatever registered as Cancel — nothing, in that case.
+  Five other call sites use the `AlertDialogCancel asChild` idiom correctly, so
+  the omission is the outlier rather than the rule; a substrate guard (or a lint
+  selector) would stop the sixth. Note `discard-dropped-rows-dialog.tsx` has no
+  stories, so its fix is verified by inspection only. Surfaced 2026-08-21.
 
 Drained 2026-08-20. Four items were fixed on the branch that surfaced
 them — the corrupt-draft clobber, the suggestion re-roll's reversal

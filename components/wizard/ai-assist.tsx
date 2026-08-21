@@ -199,18 +199,27 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // Only a candidate the user has not committed counts: a seeded preview is
   // the field's own value, a fresh generate in flight has produced nothing yet.
   function hasUnsavedCandidate(): boolean {
+    // `selected` is redundant today — its keys only ever come from `listItems`
+    // — but it is kept: the cost of this guard being wrong is a lost list.
     if (listItems.length > 0 || selected.size > 0) return true
-    const preview =
-      assist.kind === 'loading'
-        ? assist.from
-        : assist.kind === 'result' || assist.kind === 'refine'
-          ? assist
-          : undefined
-    return preview !== undefined && preview.seeded !== true
+    switch (assist.kind) {
+      // A regenerate carries the previous candidate; a first generate has
+      // produced nothing yet, so there is nothing to lose by closing.
+      case 'loading':
+        return assist.from !== undefined && !assist.from.seeded
+      // A seeded preview is the field's own committed prose, not a candidate.
+      case 'result':
+      case 'refine':
+        return !assist.seeded
+      default:
+        return false
+    }
   }
 
-  // Catches dismiss paths that bypass closeOverlay() — tap-outside, Escape,
-  // hardware back, sheet swipe-down. A swiped sheet is already gone when this
+  // Catches dismiss paths that bypass closeOverlay(): Escape and tap-outside on
+  // web, swipe-down on the phone sheet, hardware back on the native dialog.
+  // Hardware back on the phone sheet does not reach here — see triage.md.
+  // A swiped sheet is already gone when this
   // fires, so a dirty overlay closes and asks from a sibling dialog; Keep
   // editing re-opens it with nothing cleared, Discard is the only reset.
   function handleOpenChange(next: boolean) {

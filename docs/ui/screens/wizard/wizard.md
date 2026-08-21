@@ -266,6 +266,15 @@ Three input paths per field, all writing into `{ label, promptBody }`:
 3. **AI-suggest** (`✨`) — see [AI-assist pattern](#ai-assist-pattern).
    Result is **prose** (label preview + body preview together).
 
+**Dismiss-on-dirty.** Closing the AI-assist surface without committing —
+Escape, tap-outside, or a swipe-down on the phone Sheet — confirms first
+whenever it holds an uncommitted candidate: a generated result the user
+has not accepted, or a non-empty suggestion list. Keep editing reopens the
+panel with nothing cleared; Discard is the only thing that resets it. A
+preview seeded from the field's own committed prose is not a candidate and
+closes without asking, and neither is a first generate still in flight.
+The explicit Discard, Cancel and Use-this buttons stay unconfirmed.
+
 **Replace-on-existing.** If the user picks a preset OR accepts an
 AI-suggest while `label` or `promptBody` is non-empty, a confirm
 modal fires:

@@ -1403,6 +1403,76 @@ export const DirtyDismissAsksBeforeDiscarding: Story = {
   },
 }
 
+// The confirm only protects the result if focus is actually inside it. Radix
+// suppresses its own auto-focus and focuses whatever registered as Cancel, so a
+// footer of bare Buttons leaves focus on <body> and the trap never engages —
+// Tab then walks out to the trigger behind the dialog and Enter destroys the
+// result unasked.
+export const DirtyDismissTrapsFocusInTheConfirm: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'Focus-trap suggestion text.' })}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Focus-trap suggestion text.')
+
+    await userEvent.keyboard('{Escape}')
+    const dialog = await screen.findByRole('alertdialog')
+    const focusIsInDialog = () => dialog.contains(document.activeElement)
+    await waitFor(() => expect(focusIsInDialog()).toBe(true))
+
+    // Tabbing cannot reach the trigger behind it, so Enter cannot discard blind.
+    await userEvent.tab()
+    expect(focusIsInDialog()).toBe(true)
+    await userEvent.tab()
+    expect(focusIsInDialog()).toBe(true)
+  },
+}
+
+// The two carve-outs the dirty predicate leads with, each on its own: a seeded
+// preview is the field's own prose, and a first generate has produced nothing.
+export const SeededPreviewDismissesWithoutAsking: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'should not be reached' })}
+      committed={COMMITTED}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await screen.findByText(COMMITTED.description)
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText(COMMITTED.description)).not.toBeInTheDocument())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  },
+}
+
+export const FirstGenerateInFlightDismissesWithoutAsking: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={neverResolvingRun<DescriptionValue>()}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument())
+  },
+}
+
 export const CleanDismissClosesWithoutAsking: Story = {
   render: () => (
     <ProseDemo

@@ -1,5 +1,6 @@
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -42,9 +43,11 @@ export function DiscardDroppedRowsDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button variant="secondary" onPress={onCancel}>
-            <Text>{t('wizard:discardDropped.cancel')}</Text>
-          </Button>
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>{t('wizard:discardDropped.cancel')}</Text>
+            </Button>
+          </AlertDialogCancel>
           <Button variant="destructive" onPress={onConfirm}>
             <Text>{t('wizard:discardDropped.confirm')}</Text>
           </Button>

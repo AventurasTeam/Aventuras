@@ -199,7 +199,7 @@
     },
     "discardConfirm": {
       "title": "Discard what was generated?",
-      "body": "Closing throws away the generated suggestion. Keep editing to return to it.",
+      "body": "Closing throws away the generated suggestion. Keep editing to reopen the panel.",
       "keep": "Keep editing",
       "discard": "Discard"
     },

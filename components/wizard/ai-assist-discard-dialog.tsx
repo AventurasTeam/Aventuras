@@ -1,5 +1,6 @@
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -16,6 +17,10 @@ type AiAssistDiscardDialogProps = {
   onDiscard: () => void
 }
 
+/**
+ * Dismissing this confirm is the non-destructive answer — Escape and
+ * outside-click resolve to Keep, and only the destructive button discards.
+ */
 export function AiAssistDiscardDialog({ open, onKeep, onDiscard }: AiAssistDiscardDialogProps) {
   return (
     <AlertDialog
@@ -32,9 +37,15 @@ export function AiAssistDiscardDialog({ open, onKeep, onDiscard }: AiAssistDisca
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button variant="secondary" onPress={onKeep}>
-            <Text>{t('wizard:aiAssist.discardConfirm.keep')}</Text>
-          </Button>
+          {/* AlertDialogCancel, not a bare Button: Radix suppresses its own
+              auto-focus and focuses whatever registered as Cancel, so without
+              this nothing is focused and the trap never engages — Tab then
+              walks out to the trigger behind the dialog. */}
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>{t('wizard:aiAssist.discardConfirm.keep')}</Text>
+            </Button>
+          </AlertDialogCancel>
           <Button variant="destructive" onPress={onDiscard}>
             <Text>{t('wizard:aiAssist.discardConfirm.discard')}</Text>
           </Button>
