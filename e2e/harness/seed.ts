@@ -96,9 +96,10 @@ export function setProfileStructuredOutput(
   }
 }
 
-// The seed marks one lore row and one chapter row stale and no entity, so a
-// spec that needs entities_vec_* populated by a drain has to flip them itself.
-// Runs before launch.
+// Before launch: a no-op today (the seed already leaves entities stale), kept
+// idempotent for the day it doesn't. After launch it is not: rows an embed pass
+// cleared go dirty again with their vectors intact, so the next pass revalidates
+// them rather than re-embeds them.
 export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): void {
   const db = new DatabaseSync(dbPath)
   try {
@@ -108,10 +109,8 @@ export function markEntitiesEmbeddingStale(dbPath: string, branchId: string): vo
   }
 }
 
-// Every embeddable table at once. The seed leaves happenings, threads and
-// entities fresh, so their vec0 families stay empty and KNN returns nothing —
-// a retrieval spec that needs a ranked bundle has to give the embed path
-// something to embed. Runs before launch.
+// Every embeddable table at once. A no-op today for the same reason as
+// markEntitiesEmbeddingStale above. Runs before launch.
 const EMBEDDABLE_TABLES = ['entities', 'lore', 'chapters', 'threads', 'happenings'] as const
 
 export function markBranchEmbeddingStale(dbPath: string, branchId: string): void {
@@ -119,6 +118,61 @@ export function markBranchEmbeddingStale(dbPath: string, branchId: string): void
   try {
     for (const table of EMBEDDABLE_TABLES) {
       db.prepare(`UPDATE "${table}" SET embedding_stale = 1 WHERE branch_id = ?`).run(branchId)
+    }
+  } finally {
+    db.close()
+  }
+}
+
+/** Prefix on every id `insertEmbeddableLoreRows` writes, so a spec can count the
+ *  rows it handed a turn. Hazard: mnemonic lore ids under a substitutable prefix
+ *  — the shape docs/testing.md → Fixture + seed contract exists to prevent —
+ *  inert only while no prompt renders a lore id and no such turn completes. */
+export const LORE_FILLER_ID_PREFIX = 'e2e_embed_filler_'
+
+// ~2400 chars reaches the default model's 512-token truncation; longer buys no time.
+const LORE_FILLER_BODY_CHARS = 2400
+const LORE_FILLER_WORDS =
+  'veilstone courier ledger sealed parcel bridge ward sigil toll coin bearer tally'.split(' ')
+
+// Rotated at a constant token count: identical composites are the one shape a cache
+// down the embed path could serve cheaply, and this fixture exists to be slow.
+function loreFillerBody(index: number): string {
+  const offset = index % LORE_FILLER_WORDS.length
+  const phrase = `${[...LORE_FILLER_WORDS.slice(offset), ...LORE_FILLER_WORDS.slice(0, offset)].join(' ')} `
+  return `${phrase.repeat(Math.ceil(LORE_FILLER_BODY_CHARS / phrase.length)).slice(0, LORE_FILLER_BODY_CHARS)} entry ${index}.`
+}
+
+/**
+ * Append `count` stale lore rows to `branchId`, each body long enough that one
+ * 16-text embed chunk costs real inference time. Runs AFTER launch, and has to:
+ * seeded earlier, the drain a story open kicks would embed these rows itself.
+ * Sound because the app rereads lore per retrieval pass over its own connection.
+ * Call it only once the drain has settled, or the two race for the same rows.
+ */
+export function insertEmbeddableLoreRows(dbPath: string, branchId: string, count: number): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    // The app owns the other connection; wait it out rather than fail mid-write.
+    db.exec('PRAGMA busy_timeout = 10000')
+    const insert = db.prepare(
+      `INSERT INTO lore (id, branch_id, title, body, tags, keywords, injection_mode, priority, embedding_stale, created_at, updated_at)
+       VALUES (?, ?, ?, ?, '[]', '[]', 'auto', 0, 1, 1, 1)`,
+    )
+    db.exec('BEGIN')
+    try {
+      for (let i = 0; i < count; i++) {
+        insert.run(
+          `${LORE_FILLER_ID_PREFIX}${i}`,
+          branchId,
+          `Filler dossier ${i}`,
+          loreFillerBody(i),
+        )
+      }
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
     }
   } finally {
     db.close()
@@ -265,6 +319,62 @@ export function disablePiggybackCapability(dbPath: string): void {
     db.prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`).run(
       JSON.stringify(providers),
     )
+  } finally {
+    db.close()
+  }
+}
+
+export const CORRUPT_DRAFT_ID = 'e2e_corrupt_draft'
+
+export const LOSSY_DRAFT_ID = 'story_lossy_draft'
+
+/**
+ * A draft whose shell parses but whose lore array holds one unreadable row —
+ * unlike `seedCorruptDraft`, this branch keeps its draft pointer, so Save
+ * replaces the row those rows are still sitting in. `priority: 150` breaks the
+ * schema's 0-100 bound while every other field is fine, the realistic shape.
+ */
+export function seedLossyDraft(dbPath: string, title: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const donor = db.prepare(`SELECT definition FROM stories LIMIT 1`).get() as {
+      definition: string
+    }
+    db.prepare(
+      `INSERT INTO stories (id, title, description, status, definition, created_at, updated_at)
+       VALUES (?, ?, NULL, 'draft', ?, 1, 1)`,
+    ).run(LOSSY_DRAFT_ID, title, donor.definition)
+    const state = {
+      lore: [
+        { id: 'lore_readable', title: 'The Tin Almanac', body: 'Kept.' },
+        { id: 'lore_unreadable', title: 'Out of range', priority: 150 },
+      ],
+    }
+    db.prepare(
+      `INSERT INTO wizard_sessions (id, story_id, state, updated_at) VALUES (?, ?, ?, 1)`,
+    ).run(LOSSY_DRAFT_ID, LOSSY_DRAFT_ID, JSON.stringify(state))
+  } finally {
+    db.close()
+  }
+}
+
+// A draft whose wizard_sessions blob fails the shell schema; the definition is
+// borrowed so only the blob is unreadable. No app route produces this state.
+export function seedCorruptDraft(dbPath: string, title: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const donor = db.prepare(`SELECT definition FROM stories LIMIT 1`).get() as {
+      definition: string
+    }
+    db.prepare(
+      `INSERT INTO stories (id, title, description, status, definition, created_at, updated_at)
+       VALUES (?, ?, NULL, 'draft', ?, 1, 1)`,
+    ).run(CORRUPT_DRAFT_ID, title, donor.definition)
+    db.prepare(
+      `INSERT INTO wizard_sessions (id, story_id, state, updated_at) VALUES (?, ?, ?, 1)`,
+    ).run(CORRUPT_DRAFT_ID, CORRUPT_DRAFT_ID, JSON.stringify({ step: 99 }))
   } finally {
     db.close()
   }

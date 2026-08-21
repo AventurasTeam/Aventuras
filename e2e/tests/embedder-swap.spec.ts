@@ -31,6 +31,38 @@ const VEC_ROWS_FOR_MODEL_SQL = `SELECT (SELECT count(*) FROM entities_vec_384 WH
                                      + (SELECT count(*) FROM threads_vec_384 WHERE model_id = ?)
                                      + (SELECT count(*) FROM happenings_vec_384 WHERE model_id = ?)`
 
+// Drops one family's vectors without touching embedding_stale: the drain selects on
+// the flag, so only a re-index — which ignores the flag — can refill the hole.
+async function dropEntityVectors(app: LaunchedApp, modelId: string): Promise<void> {
+  await queryApp(app.window, `DELETE FROM entities_vec_384 WHERE model_id = ?`, [modelId])
+}
+
+// Rewrites a row's embedded text behind the flag's back, so a re-index that skipped
+// rows already holding a vector for this model would leave the old source_hash.
+async function driftOneLoreRow(app: LaunchedApp): Promise<{ id: string; hash: string }> {
+  const [[id]] = await queryApp(
+    app.window,
+    `SELECT id FROM lore WHERE branch_id = ? ORDER BY id LIMIT 1`,
+    [HERO_BRANCH],
+  )
+  const [[hash]] = await queryApp(app.window, `SELECT source_hash FROM lore_vec_384 WHERE id = ?`, [
+    id,
+  ])
+  await queryApp(app.window, `UPDATE lore SET body = ? WHERE branch_id = ? AND id = ?`, [
+    'Rewritten behind the staleness flag, which stays clean on purpose.',
+    HERO_BRANCH,
+    id,
+  ])
+  return { id: String(id), hash: String(hash) }
+}
+
+async function loreHashOf(app: LaunchedApp, id: string): Promise<string> {
+  const [[hash]] = await queryApp(app.window, `SELECT source_hash FROM lore_vec_384 WHERE id = ?`, [
+    id,
+  ])
+  return String(hash)
+}
+
 async function staleTotal(app: LaunchedApp): Promise<number> {
   const [[n]] = await queryApp(app.window, STALE_TOTAL_SQL, Array<string>(5).fill(HERO_BRANCH))
   return Number(n)
@@ -106,14 +138,17 @@ test.describe('embedder — story settings swap flow', () => {
     await storySettings.memoryTab(app.window).click()
     await expect(storySettings.memoryPanel(app.window)).toBeVisible()
 
+    // Punch a hole the drain is structurally blind to, so only the re-index can refill
+    // it. Counting growth would prove nothing: the drain has already embedded every row.
+    await dropEntityVectors(app, originalModelId)
+    const holed = await vecRowsFor(app, originalModelId)
+    expect(holed, 'the drop should remove vectors the re-index must restore').toBeLessThan(drained)
+    const drifted = await driftOneLoreRow(app)
+    expect(await staleTotal(app), 'neither edit may flip a flag').toBe(0)
+
     await storySettings.reindexNow(app.window).click()
     await storySettings.reindexConfirmStart(app.window).click()
 
-    // The drain only embeds stale rows on the open branch; re-index re-embeds
-    // every row of every branch, so a completed run strictly grows the vec set.
-    // Pairing that with the cleared marker rules out sampling before the marker
-    // was ever written — rows can only grow after it is.
-    //
     // Polled as a shape rather than a boolean so a timeout names the condition
     // that never held and prints its actual, instead of a bare `false`.
     await expect
@@ -124,16 +159,25 @@ test.describe('embedder — story settings swap flow', () => {
           return {
             swapPending: 'embedding_swap_target' in settings,
             stale: await staleTotal(app),
-            vecRows: rows > drained ? 'grew' : `stuck at ${rows} (drain left ${drained})`,
+            vecRows: rows === drained ? 'refilled' : `stuck at ${rows} (want ${drained})`,
+            driftedRow:
+              (await loreHashOf(app, drifted.id)) === drifted.hash
+                ? 'not re-embedded'
+                : 'rewritten',
           }
         },
         {
           message:
-            'reindex-now should clear the swap marker, leave nothing stale and re-embed every row',
+            'reindex-now should clear the swap marker, leave nothing stale and re-embed rows the drain skips',
           timeout: 90_000,
         },
       )
-      .toEqual({ swapPending: false, stale: 0, vecRows: 'grew' })
+      .toEqual({
+        swapPending: false,
+        stale: 0,
+        vecRows: 'refilled',
+        driftedRow: 'rewritten',
+      })
 
     const reindexed = await readStorySettings(app)
     expect(reindexed.embedding_model_id).toBe(originalModelId)

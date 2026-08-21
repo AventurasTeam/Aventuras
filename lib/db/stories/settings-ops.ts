@@ -1,3 +1,4 @@
+import { storySettingsSchema, type StorySettings } from './story-config-schema'
 import type { SqlOp } from '../types'
 
 /**
@@ -43,17 +44,68 @@ export type SwapDimensions = {
   targetDim?: number | null
 }
 
-// json_patch, not json_set: these writes have to CLEAR a key as well as set one
-// (a local target carries no provider id), and merge-patch semantics delete on a
-// null value where json_set would write a JSON null the settings Zod rejects.
-// Raw ops rather than updateStorySettings because every swap transition commits
-// atomically WITH its vec0 ops in one transaction, and the action's
-// read-merge-write is a separate-transaction race (docs/implementation/triage.md).
+// json_patch, not json_set: these writes must CLEAR keys, and merge-patch deletes
+// on null where json_set writes a JSON null the settings Zod rejects. Raw ops
+// rather than updateStorySettings: swap transitions commit with their vec0 ops.
 function patchSettingsOp(storyId: string, patch: Record<string, unknown>, nowMs: number): SqlOp {
   return {
     sql: `UPDATE stories SET settings = json_patch(settings, json(?)), updated_at = ? WHERE id = ?`,
     params: [JSON.stringify(patch), nowMs, storyId],
   }
+}
+
+/**
+ * Guards both settings-write paths: this module's key interpolation, and
+ * `updateStorySettings`, where zod would silently strip a typo'd key instead.
+ *
+ * @throws naming every offending key.
+ */
+export function assertKnownSettingsKeys(keys: readonly string[]): void {
+  // `hasOwn`, not `in`: `in` walks the prototype chain, so `constructor` and
+  // `toString` would pass the guard.
+  const unknown = keys.filter((key) => !Object.hasOwn(storySettingsSchema.shape, key))
+  if (unknown.length > 0) {
+    throw new Error(`Unknown story-settings key(s): ${unknown.join(', ')}`)
+  }
+}
+
+/**
+ * The settings write for everything that is not a swap transition. Key-scoped, so
+ * a concurrent writer cannot lose to it. json_set, not the json_patch above:
+ * merge-patch would delete a required-nullable key like `activePackId` on an
+ * explicit null and would merge nested objects callers mean to replace. Returns no
+ * op for an empty patch — `json_set(settings, )` is a syntax error.
+ *
+ * @throws if a key is absent from `storySettingsSchema`, which is what makes the
+ * unparameterised key interpolation safe.
+ * @throws if a value is `undefined` — no bindable SQL form, so "leave this key
+ * alone" means dropping it.
+ */
+export function setSettingsKeysOps(
+  storyId: string,
+  values: Partial<StorySettings>,
+  nowMs: number,
+): SqlOp[] {
+  const entries = Object.entries(values)
+  assertKnownSettingsKeys(entries.map(([key]) => key))
+  // `JSON.stringify(undefined)` is `undefined`, which node:sqlite rejects as an
+  // unbindable parameter — naming the key beats that opaque TypeError.
+  const missing = entries.filter(([, value]) => value === undefined)
+  if (missing.length > 0) {
+    throw new Error(
+      `Undefined value for story-settings key(s): ${missing.map(([key]) => key).join(', ')}`,
+    )
+  }
+  if (entries.length === 0) return []
+  // Every key costs two of json_set's arguments plus one for the column, so even
+  // the whole schema is 55 — well inside SQLite's function-argument ceiling.
+  const setArgs = entries.map(([key]) => `'$.${key}', json(?)`).join(', ')
+  return [
+    {
+      sql: `UPDATE stories SET settings = json_set(settings, ${setArgs}), updated_at = ? WHERE id = ?`,
+      params: [...entries.map(([, value]) => JSON.stringify(value)), nowMs, storyId],
+    },
+  ]
 }
 
 export function setSwapTargetOp(

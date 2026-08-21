@@ -1,10 +1,7 @@
+// Engine primitives aren't re-exported: each assumes the caller holds the per-story admission
+// lock, which only the app-deps wrappers take. Import from './engine' inside this module only.
 export {
-  cancelSwap,
-  reindexStory,
-  relabelModel,
   RelabelDimMismatchError,
-  resumeSwap,
-  startSwap,
   SwapInProgressError,
   SwapMarkerChangedError,
   SwapNotInProgressError,

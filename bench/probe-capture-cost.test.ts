@@ -80,7 +80,10 @@ describe('probe capture cost', () => {
 
         const { deps, params } = passInputs(fixture, dim)
         const outcome = await runRetrieval(deps as never, params)
-        if (!outcome.ok) throw new Error(`pass failed: ${outcome.failure.detail}`)
+        if (!outcome.ok)
+          throw new Error(
+            `pass failed: ${outcome.cancelled ? 'cancelled' : outcome.failure.detail}`,
+          )
         const poolSize = Object.values(outcome.bundles).reduce((n, b) => n + b.funnel.poolSize, 0)
 
         for (const mode of ['light', 'deep'] as const) {

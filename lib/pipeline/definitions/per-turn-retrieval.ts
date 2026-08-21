@@ -18,6 +18,12 @@ import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
 export const RETRIEVAL_PHASE_NAME = 'retrieval'
 
+// The two ways retrieval can find no usable embedder: unconfigured, and
+// configured but never probed for its dim. Same tier, same envelope.
+function embedderInitFailure(detail: string): PhaseResult {
+  return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
+}
+
 /** Where this phase parks its outcome; consumers re-narrow to `RetrievalSuccess`. */
 export const RETRIEVAL_INTERMEDIATE_KEY = 'retrieval'
 
@@ -44,29 +50,12 @@ export async function* retrievalPhase(
     backend: open.settings.embeddingBackend,
     providerId: open.settings.embedding_provider_id,
   })
-  if (!resolution.ok)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'embedder',
-        reason: 'init',
-        detail: `embedder not configured: ${resolution.reason}`,
-        staleCount: null,
-      },
-    }
+  if (!resolution.ok) return embedderInitFailure(`embedder not configured: ${resolution.reason}`)
   const dim = embedderReadDim(resolution.config)
   // Only an unprobed provider lands here. Guessing would KNN the wrong vec0 dim
   // family, which vec0 rejects with an opaque error rather than an empty result.
   if (dim === null)
-    return {
-      status: 'failed',
-      error: {
-        kind: 'embedder',
-        reason: 'init',
-        detail: `embedder dim unknown for model ${resolution.config.modelId}`,
-        staleCount: null,
-      },
-    }
+    return embedderInitFailure(`embedder dim unknown for model ${resolution.config.modelId}`)
 
   const tail = entries.at(-1)
   const scene = inheritedEntryMetadata(tail?.metadata)
@@ -147,10 +136,9 @@ export async function* retrievalPhase(
     bounded.dispose()
   }
 
-  // The OUTER signal, not the bounded one: an expiry aborts the pass the same
-  // way a cancel does, but it is a provider fault. Reading the bounded signal
-  // here would report every timeout as a phantom user-cancel — draft restored,
-  // no error, no Switch embedder, retrying into the same dead provider.
+  // The OUTER signal, not the bounded one: reading the bounded one reports every
+  // provider timeout as a phantom user-cancel. Still needed alongside the cancelled
+  // arm below — an abort raised outside the embed has no outcome to carry it.
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const captureProbe = async (probed: RetrievalOutcome): Promise<void> => {
@@ -204,6 +192,8 @@ export async function* retrievalPhase(
   }
 
   if (!outcome.ok) {
+    // Keeps a cancel off the failure surface even if a caller never checks the signal.
+    if (outcome.cancelled) return { status: 'aborted' }
     const failure = bounded.expired()
       ? { ...outcome.failure, detail: `embed timed out after ${EMBED_TIMEOUT_MS}ms` }
       : outcome.failure

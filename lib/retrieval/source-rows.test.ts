@@ -22,7 +22,9 @@ import {
 } from './source-rows'
 import type { QueryAll } from './types'
 
-const TS = { createdAt: 1, updatedAt: 1 }
+// embeddingStale rides along because the column defaults to dirty: every fixture
+// row states its value, and ent_1 overrides after the spread.
+const TS = { createdAt: 1, updatedAt: 1, embeddingStale: 0 as const }
 
 /**
  * Seeded against the committed migrations rather than a fixture, so a renamed
@@ -47,8 +49,8 @@ async function setup(): Promise<QueryAll> {
       description: 'A sunken vale.',
       status: 'staged',
       injectionMode: 'always',
-      embeddingStale: 1,
       ...TS,
+      embeddingStale: 1,
     },
     {
       id: 'ent_other',
@@ -92,6 +94,15 @@ async function setup(): Promise<QueryAll> {
       ...TS,
     },
     { id: 'hap_other', branchId: 'br_2', title: 'Offbranch', ...TS },
+    // Same occurred_at_entry_id as hap_1 on another branch (the column is FK-less):
+    // the entryId path's cross-branch negative control.
+    {
+      id: 'hap_other2',
+      branchId: 'br_2',
+      title: 'Offbranch same entry',
+      occurredAtEntryId: 'ent_a',
+      ...TS,
+    },
   ])
 
   await db.insert(threads).values([
@@ -326,6 +337,83 @@ describe('loadHappeningRows', () => {
     })
 
     expect(rows.map((r) => r.id)).toEqual(['hap_1'])
+  })
+
+  it('matches by entry id alone when the id set is empty', async () => {
+    const queryAll = await setup()
+
+    const rows = await loadHappeningRows(queryAll, 'br_1', { ids: [], entryIds: ['ent_a'] })
+
+    // Positive control: hap_other2 shares this entry id, but on br_2 — must not leak in.
+    expect(rows.map((r) => r.id)).toEqual(['hap_1'])
+    expect(rows).toEqual([
+      {
+        id: 'hap_1',
+        title: 'The bell rang',
+        description: 'It rang twice.',
+        commonKnowledge: true,
+        occurredAtEntryId: 'ent_a',
+        embeddingStale: false,
+      },
+    ])
+  })
+
+  it('returns a row matched by both the id set and the entry-id set exactly once', async () => {
+    const queryAll = await setup()
+
+    // hap_1 matches on id AND on entry id (its own occurredAtEntryId is 'ent_a') —
+    // the overlap the id-set/entry-set split has to dedupe back down to one row.
+    const rows = await loadHappeningRows(queryAll, 'br_1', {
+      ids: ['hap_1'],
+      entryIds: ['ent_a'],
+    })
+
+    expect(rows).toEqual([
+      {
+        id: 'hap_1',
+        title: 'The bell rang',
+        description: 'It rang twice.',
+        commonKnowledge: true,
+        occurredAtEntryId: 'ent_a',
+        embeddingStale: false,
+      },
+    ])
+  })
+
+  it('dedupes an overlap by last write, not by dropping either side', async () => {
+    // Synthetic content per query: real data can never disagree with itself, so a
+    // same-content fixture couldn't tell a first-wins flip from a dropped dedupe.
+    const idRow = ['hap_1', 'From id query', null, 0, 'ent_a', 0]
+    const entryRow = ['hap_1', 'From entry query', null, 0, 'ent_a', 0]
+    const queryAll = vi.fn(
+      async (sql: string): Promise<unknown[][]> =>
+        sql.includes('occurred_at_entry_id IN') ? [entryRow] : [idRow],
+    )
+
+    const rows = await loadHappeningRows(queryAll, 'br_1', { ids: ['hap_1'], entryIds: ['ent_a'] })
+
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.title).toBe('From entry query')
+  })
+
+  it('splits the chapter-range half across statements rather than one IN list', async () => {
+    const entryIds = Array.from({ length: 8193 }, (_, i) => `ent_${i}`)
+    const paramCounts: number[] = []
+    let call = 0
+    const queryAll = vi.fn(async (_sql: string, params: unknown[]): Promise<unknown[][]> => {
+      paramCounts.push(params.length)
+      call += 1
+      return [[`hap_${call}`, 'T', null, 0, 'ent_0', 0]]
+    })
+
+    const rows = await loadHappeningRows(queryAll, 'br_1', { ids: [], entryIds })
+
+    // 8192 entry ids + the branch param, then the 8193rd on its own; one
+    // statement for the lot would bind 8194 variables.
+    expect(paramCounts).toEqual([8193, 2])
+    // Every chunk's rows survive the flatten — dropping one silently loses every
+    // happening in that slice of the chapter range.
+    expect(rows.map((r) => r.id)).toEqual(['hap_1', 'hap_2'])
   })
 
   // `id IN ()` is a SQLite syntax error, so an empty scope must not build one.

@@ -73,6 +73,9 @@ export async function embedViaProvider(
       await embedMany({
         model,
         values: texts,
+        // SDK default is Infinity: a large dirty set fires every 2048-row chunk
+        // at once, risking rate limits and socket exhaustion in a fail-fast stage.
+        maxParallelCalls: 2,
         ...(abortSignal != null ? { abortSignal } : {}),
         // Literal key, not the provider's display name: the SDK resolves its
         // lookup as `provider.split('.')[0].trim()` over `<displayName>.embedding`,

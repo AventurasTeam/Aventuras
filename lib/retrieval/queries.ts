@@ -43,9 +43,8 @@ function structuralDigest(input: QueryStackInput): string {
   const threads = input.activeThreadTitles.map(trimmed).filter(nonEmpty)
   const era = trimmed(input.eraName)
   const summary = trimmed(input.piggybackSummary)
-  // Canon renders the first three lines unconditionally (retrieval.md → Q2);
-  // omitting empty ones is a deliberate deviation, filed in
-  // docs/implementation/triage.md.
+  // docs/memory/retrieval.md → Q2: Structural digest. Every line is conditional: an
+  // all-empty one renders as bare punctuation and still spends Q2's share of the blend.
   return [
     ...(scene.length > 0 ? [`${scene.join(', ')}.`] : []),
     ...(threads.length > 0 ? [`Active threads: ${threads.join(', ')}.`] : []),

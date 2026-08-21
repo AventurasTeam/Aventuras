@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import type { EmbeddedFieldRow } from '@/lib/db'
 import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
 
 import { KNN_K } from './constants'
@@ -184,6 +185,9 @@ const deps = (over: Partial<RetrievalDeps> = {}): RetrievalDeps => ({
   embedTexts: embedder(),
   embedRows: vi.fn(async () => []),
   loadStaleRows: vi.fn(async () => []),
+  // Pass-through: revalidation has its own suite in sync.test.ts, and a pass
+  // that drops rows here would silently shrink every dirty set under test.
+  revalidateRows: vi.fn(async (rows: EmbeddedFieldRow[]) => ({ staleRows: rows, freshOps: [] })),
   runInTransaction: vi.fn(async () => undefined),
   ...over,
 })
@@ -212,12 +216,18 @@ const params = (
 ): RetrievalParams => ({ ...BASE, ...over, query: { ...BASE.query, ...over.query } })
 
 function expectOk(out: RetrievalOutcome): RetrievalSuccess {
-  if (!out.ok) throw new Error(`expected a successful pass, got ${out.failure.reason}`)
+  if (!out.ok)
+    throw new Error(
+      `expected a successful pass, got ${out.cancelled ? 'a cancellation' : out.failure.reason}`,
+    )
   return out
 }
 
-function expectBlocking(out: RetrievalOutcome): Extract<RetrievalOutcome, { ok: false }> {
+// Narrows past the cancelled arm too: a cancel is `ok: false` and carries no
+// failure, so a test reaching for `.failure` has to say it meant a fault.
+function expectBlocking(out: RetrievalOutcome): Extract<RetrievalOutcome, { failure: unknown }> {
   if (out.ok) throw new Error('expected a blocking outcome, got a successful pass')
+  if (out.cancelled) throw new Error('expected an embedder failure, got a cancellation')
   return out
 }
 
@@ -414,6 +424,89 @@ describe('runRetrieval — sync ordering', () => {
     expectOk(out)
     expect(onRowsSynced).toHaveBeenCalledTimes(1)
     expect(order.slice(0, 3)).toEqual(['sync', 'status', 'knn'])
+  })
+
+  // Gating the recount on the embed count would leave the pill claiming rows pending
+  // that a revalidation-only pass just cleaned, with no later embed to correct it.
+  it('refreshes stale-row status after a pass that only revalidates', async () => {
+    const onRowsSynced = vi.fn(async () => {})
+
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }),
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+        ],
+        revalidateRows: async () => ({ staleRows: [], freshOps: [{ sql: 'CLEAR', params: [] }] }),
+        embedRows: async () => {
+          throw new Error('a revalidated-fresh pass must not reach the embedder')
+        },
+        onRowsSynced,
+      }),
+      params(),
+    )
+
+    expectOk(out)
+    expect(onRowsSynced).toHaveBeenCalledTimes(1)
+  })
+
+  // Clears commit ahead of the embed, so a failed embed still leaves rows this pass
+  // cleaned; a dismissed blocked turn would hold an inflated pending total forever.
+  const withClearsThenFailedEmbed = (over: Partial<RetrievalDeps> = {}) =>
+    runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }),
+        loadStaleRows: async () => [
+          { kind: 'lore', id: 'l1', branchId: 'br_1', fields: ['t', 'b'] },
+          { kind: 'lore', id: 'l2', branchId: 'br_1', fields: ['t2', 'b2'] },
+        ],
+        revalidateRows: async (rows) => ({
+          staleRows: rows.filter((r) => r.id === 'l2'),
+          freshOps: [{ sql: 'CLEAR l1', params: [] }],
+        }),
+        embedRows: async () => {
+          throw new EmbedderInitError('embedder down')
+        },
+        ...over,
+      }),
+      params(),
+    )
+
+  it('refreshes stale-row status when the embed fails after clears committed', async () => {
+    const onRowsSynced = vi.fn(async () => {})
+
+    const out = await withClearsThenFailedEmbed({ onRowsSynced })
+
+    expect(expectBlocking(out).failure.reason).toBe('init')
+    expect(onRowsSynced).toHaveBeenCalledTimes(1)
+  })
+
+  // The sink is a structural dep, so the type permits a throw the shipped one cannot;
+  // losing the embedder diagnosis would leave the reader offering no Switch embedder.
+  it('keeps the embedder diagnosis when the status sink throws', async () => {
+    const out = await withClearsThenFailedEmbed({
+      onRowsSynced: async () => {
+        throw new Error('status sink exploded')
+      },
+    })
+
+    expect(expectBlocking(out).failure.detail).toBe('embedder down')
+  })
+
+  it('leaves the status alone when the pass neither embedded nor revalidated', async () => {
+    const onRowsSynced = vi.fn(async () => {})
+
+    const out = await runRetrieval(
+      deps({
+        queryAll: makeQueryAll({ entities: [entityRow('char_b', 'Mira')], knn: [hit('char_b')] }),
+        loadStaleRows: async () => [],
+        onRowsSynced,
+      }),
+      params(),
+    )
+
+    expectOk(out)
+    expect(onRowsSynced).not.toHaveBeenCalled()
   })
 })
 
@@ -1256,9 +1349,6 @@ describe('runRetrieval — pools', () => {
   })
 })
 
-// The index is derived from the source rows the pass already loaded, so these
-// pin that derivation through its two consumers: the happening keyword surface
-// and Q3 sentence selection.
 describe('runRetrieval — timings', () => {
   const STAGES = ['syncMs', 'embedMs', 'knnMs', 'rankMs'] as const
 
@@ -1385,6 +1475,8 @@ describe('runRetrieval — selected location ids', () => {
   })
 })
 
+// The index derives from source rows the pass already loaded; these pin that derivation
+// through both consumers: the happening keyword surface and Q3 sentence selection.
 describe('runRetrieval — name/keyword index', () => {
   it('boosts a happening whose awareness source names a branch entity', async () => {
     const out = await runRetrieval(

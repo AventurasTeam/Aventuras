@@ -17,7 +17,7 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
-import { EmbedderCallError, EmbedderInitError } from '@/lib/embedder'
+import { EmbedderCallError, EmbedderCancelledError, EmbedderInitError } from '@/lib/embedder'
 
 import { runSyncStage, type SyncStageDeps } from './sync'
 
@@ -96,6 +96,7 @@ function depsFor(
     branchIds?: readonly string[]
     embedRows?: SyncStageDeps['embedRows']
     loadStaleRows?: SyncStageDeps['loadStaleRows']
+    revalidateRows?: SyncStageDeps['revalidateRows']
     abortSignal?: AbortSignal
   } = {},
 ) {
@@ -106,6 +107,9 @@ function depsFor(
   return {
     branchIds: opts.branchIds ?? ['br_1'],
     loadStaleRows: opts.loadStaleRows ?? loaderOf(sqlite),
+    revalidateRows:
+      opts.revalidateRows ??
+      (async (rows: EmbeddedFieldRow[]) => ({ staleRows: rows, freshOps: [] })),
     embedRows,
     runInTransaction: tx,
     ...(opts.abortSignal != null ? { abortSignal: opts.abortSignal } : {}),
@@ -137,7 +141,7 @@ describe('runSyncStage', () => {
     ])
     const d = depsFor(sqlite, runInTransaction)
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 3 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 3, revalidated: 0 })
     expect(d.embedRows).toHaveBeenCalledTimes(1)
     expect(embeddedIds(d.embedRows)).toEqual(['en_a', 'lo_a', 'lo_b'])
     expect(d.runInTransaction).toHaveBeenCalledTimes(1)
@@ -153,7 +157,7 @@ describe('runSyncStage', () => {
     ])
     const d = depsFor(sqlite, runInTransaction, { branchIds: ['br_1', 'br_2'] })
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 2 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 2, revalidated: 0 })
     expect(embeddedIds(d.embedRows)).toEqual(['lo_alt', 'lo_main'])
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_alt: 0, lo_main: 0 })
   })
@@ -165,7 +169,7 @@ describe('runSyncStage', () => {
     ])
     const d = depsFor(sqlite, runInTransaction, { branchIds: ['br_1'] })
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1, revalidated: 0 })
     expect(embeddedIds(d.embedRows)).toEqual(['lo_here'])
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_elsewhere: 1, lo_here: 0 })
   })
@@ -174,9 +178,78 @@ describe('runSyncStage', () => {
     const { sqlite, runInTransaction } = await setup([{ kind: 'lore', id: 'lo_a', stale: 0 }])
     const d = depsFor(sqlite, runInTransaction)
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 0 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 0, revalidated: 0 })
     expect(d.embedRows).not.toHaveBeenCalled()
     expect(d.runInTransaction).not.toHaveBeenCalled()
+  })
+
+  // retrieval.md → Compute lifecycle: a restored row "revalidates to 0 with no re-embed".
+  it('clears a revalidated-fresh row instead of paying to re-embed it', async () => {
+    const { sqlite, runInTransaction } = await setup([
+      { kind: 'lore', id: 'lo_restored' },
+      { kind: 'lore', id: 'lo_drifted' },
+    ])
+    const d = depsFor(sqlite, runInTransaction, {
+      revalidateRows: async (rows) => ({
+        staleRows: rows.filter((r) => r.id === 'lo_drifted'),
+        freshOps: rows.filter((r) => r.id === 'lo_restored').map(clearEmbeddingStaleOp),
+      }),
+    })
+
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1, revalidated: 1 })
+    expect(embeddedIds(d.embedRows)).toEqual(['lo_drifted'])
+    // The clears land in their own commit, ahead of the embed's ops.
+    expect(d.runInTransaction).toHaveBeenCalledTimes(2)
+    expect(d.runInTransaction.mock.calls[0][0].map((op) => op.params)).toEqual([
+      ['lo_restored', 'br_1', 'Title lo_restored', 'Body lo_restored'],
+    ])
+    expect(staleFlags(sqlite, 'lore')).toEqual({ lo_drifted: 0, lo_restored: 0 })
+  })
+
+  it('spends no embed call when every dirty row revalidates fresh', async () => {
+    const { sqlite, runInTransaction } = await setup([
+      { kind: 'lore', id: 'lo_a' },
+      { kind: 'lore', id: 'lo_b' },
+    ])
+    const d = depsFor(sqlite, runInTransaction, {
+      revalidateRows: async (rows) => ({
+        staleRows: [],
+        freshOps: rows.map(clearEmbeddingStaleOp),
+      }),
+    })
+
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 0, revalidated: 2 })
+    expect(d.embedRows).not.toHaveBeenCalled()
+    expect(d.runInTransaction).toHaveBeenCalledOnce()
+    expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 0, lo_b: 0 })
+  })
+
+  // A matching stored vector justifies the clear on its own, so the rows that did
+  // NOT drift stay clean through a failure of the embed for the rows that did.
+  it('keeps the fresh clears and reports the revalidated count when the embed fails', async () => {
+    const { sqlite, runInTransaction } = await setup([
+      { kind: 'lore', id: 'lo_a' },
+      { kind: 'lore', id: 'lo_b' },
+      { kind: 'lore', id: 'lo_c' },
+    ])
+    const d = depsFor(sqlite, runInTransaction, {
+      revalidateRows: async (rows) => ({
+        staleRows: rows.filter((r) => r.id !== 'lo_a'),
+        freshOps: rows.filter((r) => r.id === 'lo_a').map(clearEmbeddingStaleOp),
+      }),
+      embedRows: async () => {
+        throw new EmbedderCallError('provider 503')
+      },
+    })
+
+    expect(await runSyncStage(d)).toEqual({
+      ok: false,
+      reason: 'call',
+      detail: 'provider 503',
+      staleCount: 2,
+      revalidated: 1,
+    })
+    expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 0, lo_b: 1, lo_c: 1 })
   })
 
   it('sends the whole dirty set in one call rather than the drain worker chunks', async () => {
@@ -187,7 +260,7 @@ describe('runSyncStage', () => {
     const { sqlite, runInTransaction } = await setup(seeds)
     const d = depsFor(sqlite, runInTransaction)
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 40 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 40, revalidated: 0 })
     expect(d.embedRows).toHaveBeenCalledTimes(1)
     expect(embeddedIds(d.embedRows)).toEqual(seeds.map((s) => s.id))
   })
@@ -208,9 +281,29 @@ describe('runSyncStage', () => {
       reason: 'init',
       detail: 'model file missing',
       staleCount: 2,
+      revalidated: 0,
     })
     expect(d.runInTransaction).not.toHaveBeenCalled()
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 1, lo_b: 1 })
+  })
+
+  // The whole point of the cancelled arm: a stop must not arrive as a `reason` the
+  // failure surface can render, indistinguishable from a dead provider.
+  it('reports a cancellation as its own arm, carrying no failure reason', async () => {
+    const { sqlite, runInTransaction } = await setup([{ kind: 'lore', id: 'lo_a' }])
+    const d = depsFor(sqlite, runInTransaction, {
+      embedRows: async () => {
+        throw new EmbedderCancelledError('embed cancelled')
+      },
+    })
+
+    const result = await runSyncStage(d)
+
+    expect(result).toEqual({ ok: false, cancelled: true, revalidated: 0 })
+    // Spelled out because it is the property the failure surface reads: there is
+    // no reason on this arm to render, and no staleCount to report as a fault.
+    expect(result).not.toHaveProperty('reason')
+    expect(result).not.toHaveProperty('staleCount')
   })
 
   it('reports a call failure with its own reason', async () => {
@@ -226,6 +319,7 @@ describe('runSyncStage', () => {
       reason: 'call',
       detail: 'provider 503',
       staleCount: 1,
+      revalidated: 0,
     })
     expect(staleFlags(sqlite, 'lore')).toEqual({ lo_a: 1 })
   })
@@ -247,6 +341,7 @@ describe('runSyncStage', () => {
       reason: 'call',
       detail: 'drained then failed',
       staleCount: 2,
+      revalidated: 0,
     })
   })
 
@@ -263,6 +358,7 @@ describe('runSyncStage', () => {
       reason: 'init',
       detail: 'something else',
       staleCount: 1,
+      revalidated: 0,
     })
   })
 
@@ -279,6 +375,7 @@ describe('runSyncStage', () => {
       reason: 'init',
       detail: 'embedder worker vanished',
       staleCount: 1,
+      revalidated: 0,
     })
   })
 
@@ -337,7 +434,7 @@ describe('runSyncStage', () => {
     const abortSignal = new AbortController().signal
     const d = depsFor(sqlite, runInTransaction, { abortSignal })
 
-    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1 })
+    expect(await runSyncStage(d)).toEqual({ ok: true, embedded: 1, revalidated: 0 })
     expect(d.embedRows).toHaveBeenCalledWith(expect.anything(), abortSignal)
   })
 })

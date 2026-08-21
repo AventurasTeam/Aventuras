@@ -2,6 +2,7 @@ export {
   redactHeaderValue,
   redactHeaders,
   redactResponseHeaders,
+  redactSecretsInText,
   redactUrl,
   setHttpCallKnownSecretValues,
 } from './sinks/http-redaction'

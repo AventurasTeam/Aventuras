@@ -26,6 +26,19 @@ export async function queryApp(
   return result.rows
 }
 
+// Branch-scoped because both writers are: the drain warms only the open branch, a
+// turn's sync stage only its own — an unscoped total waits on rows nothing drains.
+const BRANCH_STALE_TOTAL_SQL = `SELECT (SELECT count(*) FROM entities WHERE branch_id = ? AND embedding_stale = 1)
+                              + (SELECT count(*) FROM lore WHERE branch_id = ? AND embedding_stale = 1)
+                              + (SELECT count(*) FROM chapters WHERE branch_id = ? AND embedding_stale = 1)
+                              + (SELECT count(*) FROM threads WHERE branch_id = ? AND embedding_stale = 1)
+                              + (SELECT count(*) FROM happenings WHERE branch_id = ? AND embedding_stale = 1)`
+
+export async function branchStaleTotal(page: Page, branchId: string): Promise<number> {
+  const [[total]] = await queryApp(page, BRANCH_STALE_TOTAL_SQL, Array<string>(5).fill(branchId))
+  return Number(total)
+}
+
 // Read-only assertion handle over the fixture DB file. E2E drives the app
 // through the UI and asserts the outcome here — the DB is the source of truth
 // for "did the write actually land" (docs/testing.md → Selector strategy,

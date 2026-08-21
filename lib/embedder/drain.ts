@@ -1,7 +1,7 @@
-import type { DbCtx, EmbeddedFieldRow, SqlOp } from '@/lib/db'
+import { embeddingTargetKey, type DbCtx, type EmbeddedFieldRow, type SqlOp } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import type { EmbedderConfigResolution } from './resolve-config'
+import { embedderReadDim, type EmbedderConfigResolution } from './resolve-config'
 import type { EmbedderConfig } from './types'
 
 export type DrainDeps = {
@@ -9,9 +9,16 @@ export type DrainDeps = {
   branchIdsFor: (storyId: string) => readonly string[]
   loadStaleRows: (branchIds: readonly string[]) => Promise<EmbeddedFieldRow[]>
   resolveConfig: (storyId: string) => EmbedderConfigResolution
+  /** Splits the dirty set: the rows that genuinely drifted, plus flag-clear ops
+   *  for the rest (retrieval.md → Compute lifecycle). */
+  revalidateRows: (
+    config: EmbedderConfig,
+    rows: EmbeddedFieldRow[],
+  ) => Promise<{ staleRows: EmbeddedFieldRow[]; freshOps: SqlOp[] }>
   embedRows: (config: EmbedderConfig, rows: EmbeddedFieldRow[]) => Promise<SqlOp[]>
   runInTransaction: DbCtx['runInTransaction']
-  /** A batch landed. Carries no count: the story-wide total has one owner. */
+  /** Rows went clean — an embedded batch, or a revalidation's clears. Carries no
+   *  count: the story-wide total has one owner. */
   onDrained: (storyId: string) => void
   setTimer: (fn: () => void, ms: number) => unknown
   clearTimer: (handle: unknown) => void
@@ -21,6 +28,11 @@ const BACKOFF_MS = [5_000, 30_000, 120_000] as const
 const BATCH_SIZE = 16
 
 const rowKey = (row: EmbeddedFieldRow): string => `${row.kind}:${row.branchId}:${row.id}`
+
+// "Still the embedder this pass started under". The target key alone misses a
+// same-model re-index at another effective dim — that writes a different vec family.
+const configIdentity = (config: EmbedderConfig): string =>
+  `${embeddingTargetKey(config)}@${embedderReadDim(config) ?? 'unprobed'}`
 
 export function createDrainController(deps: DrainDeps) {
   let backoffIdx = -1
@@ -83,6 +95,17 @@ export function createDrainController(deps: DrainDeps) {
     return failed.length
   }
 
+  function stillServedBy(storyId: string, servedBy: string): boolean {
+    const current = deps.resolveConfig(storyId)
+    return current.ok && configIdentity(current.config) === servedBy
+  }
+
+  // The window a commit may still land in. Named once so the positive and negated
+  // readings below cannot drift apart.
+  function stillOursToWrite(storyId: string, servedBy: string): boolean {
+    return !stopped && !deps.hasActiveRun() && stillServedBy(storyId, servedBy)
+  }
+
   async function drain(storyId: string): Promise<void> {
     timer = null
     timerStoryId = null
@@ -96,20 +119,26 @@ export function createDrainController(deps: DrainDeps) {
         lastStoryId = storyId
         resetQuarantine()
       }
-      const rows = (await deps.loadStaleRows(branchIds)).filter(
+      const loaded = (await deps.loadStaleRows(branchIds)).filter(
         (row) => !quarantined.has(rowKey(row)),
       )
+      const servedBy = configIdentity(resolution.config)
+      const { staleRows: rows, freshOps } = await deps.revalidateRows(resolution.config, loaded)
+      // Own commit ahead of the batches: a matching stored vector justifies the
+      // clear regardless, and an all-fresh pass runs no batch that would report it.
+      // Re-checked like the batches — a swap mid-revalidation strands the clears.
+      if (freshOps.length > 0 && stillOursToWrite(storyId, servedBy)) {
+        await deps.runInTransaction(freshOps)
+        deps.onDrained(storyId)
+      }
       let failedRows = 0
       let firstError: string | null = null
 
       for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-        // A torn-down controller (HMR / re-boot) must not keep draining; bail
-        // like the hasActiveRun guard so no further batches or retries fire.
-        //
-        // resolveConfig is re-read per batch, not just at entry: a swap can start
-        // mid-drain, and further batches would embed under the outgoing model and
-        // clear embedding_stale on rows the swap's phase-2 flip then deletes.
-        if (stopped || deps.hasActiveRun() || !deps.resolveConfig(storyId).ok) return
+        // Per batch, not just at entry: a torn-down controller must stop draining,
+        // and a mid-drain swap would clear flags its phase-2 flip then deletes.
+        // By identity, not `.ok` — a swap can settle mid-pass and resolve ok again.
+        if (!stillOursToWrite(storyId, servedBy)) return
         const batch = rows.slice(i, i + BATCH_SIZE)
         try {
           const ops = await deps.embedRows(resolution.config, batch)

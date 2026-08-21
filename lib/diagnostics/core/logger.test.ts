@@ -37,6 +37,29 @@ describe('logger', () => {
     expect(warnSpy).not.toHaveBeenCalled()
   })
 
+  it('records app.unhandled_rejection when master is OFF, but nothing else', () => {
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    logger.error('app.unhandled_rejection', { error: 'boom' })
+    logger.error('pipeline.run_aborted', {})
+    const { logEntries } = diagnosticsStore.getState()
+    expect(logEntries, 'only the bypassing kind is recorded').toHaveLength(1)
+    expect(logEntries[0].kind).toBe('app.unhandled_rejection')
+    expect(errSpy, 'the gated kind reached neither surface').toHaveBeenCalledTimes(1)
+  })
+
+  // Store write and console mirror bypass on the same condition: a bypassing kind
+  // lands on both surfaces or neither. Per-surface asserts localize a regression.
+  it.each([
+    ['app.unhandled_rejection', 'error'],
+    ['app.rejection_handled_late', 'warn'],
+    ['app.rejection_tracker_unavailable', 'error'],
+  ] as const)('mirrors %s to console when master is OFF', (kind, level) => {
+    const spy = vi.spyOn(console, level).mockImplementation(() => {})
+    logger[level](kind, { error: 'boom' })
+    expect(diagnosticsStore.getState().logEntries, 'store entry').toHaveLength(1)
+    expect(spy, 'console mirror').toHaveBeenCalledWith(kind, { error: 'boom' })
+  })
+
   it('debug no-ops when debug_level is OFF, but warn/error emit', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => false })
     vi.spyOn(console, 'debug').mockImplementation(() => {})

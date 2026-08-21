@@ -1,3 +1,5 @@
+import type { EmbedderErrorEnvelope } from '@/types/embedder-bridge'
+
 export type EmbedderBackend = 'local' | 'provider'
 
 /**
@@ -51,6 +53,39 @@ export class EmbedderCallError extends Error {
   }
 }
 
-// Ties the envelope's tag to the classes' own, so a third tier can't be added
-// to one side of the IPC boundary only.
-export type EmbedderErrorKind = EmbedderInitError['kind'] | EmbedderCallError['kind']
+/**
+ * Not a failure: the user stopped the run, or a bounded signal relayed a stop.
+ * Separate from EmbedderCallError so a cancel cannot be handled as a fault by
+ * a consumer that only knows the two failure tiers.
+ */
+export class EmbedderCancelledError extends Error {
+  readonly kind = 'cancelled'
+
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause })
+    this.name = 'EmbedderCancelledError'
+  }
+}
+
+/** Every tier the IPC envelope can carry, cancellation included. */
+export type EmbedderOutcomeKind =
+  | EmbedderInitError['kind']
+  | EmbedderCallError['kind']
+  | EmbedderCancelledError['kind']
+
+/**
+ * The FAILURE subset. 'cancelled' is deliberately absent: this type is what a
+ * probe capture's failure_reason column stores, and a stop the user asked for is
+ * not a fault to record as one. Cancellation travels as its own arm on
+ * `SyncStageResult` / `RetrievalOutcome` instead.
+ */
+export type EmbedderErrorKind = Exclude<EmbedderOutcomeKind, 'cancelled'>
+
+/**
+ * Bidirectional on purpose: a one-way derivation from the classes constrains
+ * nothing, letting the envelope gain a tier on its own and still compile clean.
+ */
+type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : never
+const _envelopeTiersMatchTheClasses: Exact<EmbedderErrorEnvelope['kind'], EmbedderOutcomeKind> =
+  true
+void _envelopeTiersMatchTheClasses

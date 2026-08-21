@@ -9,6 +9,8 @@ export type LogSubsystem =
   | 'memory'
   | 'bootstrap'
   | 'calendar'
+  | 'app'
+  | 'reader'
 
 export type LogKind = `${LogSubsystem}.${string}`
 

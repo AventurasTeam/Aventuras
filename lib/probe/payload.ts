@@ -206,6 +206,8 @@ export function buildCapturePayload(input: CapturePayloadInput): ProbeCapturePay
     stale_counts: outcome.ok
       ? { ...outcome.staleCounts }
       : { entities: 0, lore: 0, happenings: 0, threads: 0, chapters: 0 },
-    failure_reason: outcome.ok ? null : outcome.failure.reason,
+    // Null for a cancel as for a success: failure_reason records a FAULT and a user
+    // stop is not one. Unreachable today; it is why cancelled is not an EmbedderErrorKind.
+    failure_reason: outcome.ok || outcome.cancelled ? null : outcome.failure.reason,
   }
 }

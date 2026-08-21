@@ -28,6 +28,7 @@ export async function loadAwarenessForScene(
   sceneCharacterIds: readonly string[],
 ): Promise<AwarenessRow[]> {
   if (sceneCharacterIds.length === 0) return []
+  // Unchunked: one bind per character the tail entry puts in the scene.
   const placeholders = sceneCharacterIds.map(() => '?').join(', ')
   // branch_id leads the predicate because it also leads haw_natural_uniq
   // (branch_id, character_id, happening_id).

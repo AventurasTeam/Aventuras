@@ -1,41 +1,45 @@
 import { rowQuery, type RowQuery } from '../types'
-import { KIND_FIELDS, SOURCE_TABLES } from './stale'
+import { KIND_COLUMNS, KIND_FIELDS, SOURCE_TABLES } from './stale'
 import type { EmbeddedFieldRow } from './stale'
 import type { VecTargetKind } from './vec-tables'
 
 // Module-private: a WHERE-less full scan is only a building block for the two
 // filtered queries below; callers should never run it unfiltered against a DB.
-function embeddedRowQuery(kind: VecTargetKind): RowQuery {
+function embeddedRowSql(kind: VecTargetKind): string {
   const table = SOURCE_TABLES[kind]
-  const [a, b] = KIND_FIELDS[kind]
-  return rowQuery(`SELECT id, branch_id, ${a}, ${b} FROM ${table}`, [])
+  // KIND_COLUMNS, not KIND_FIELDS: these are spliced as column names, and the
+  // row keys only spell the same while every embedded field is single-word.
+  const [a, b] = KIND_COLUMNS[kind]
+  return `SELECT id, branch_id, ${a}, ${b} FROM ${table}`
 }
 
+// Both builders bind one variable per branch and neither chunks: a story's
+// branch set only grows by an explicit user fork, never with its content.
 export function staleRowsQuery(kind: VecTargetKind, branchIds: readonly string[]): RowQuery {
-  const base = embeddedRowQuery(kind)
+  const base = embeddedRowSql(kind)
   // `IN ()` is a SQLite syntax error, so an empty branch set falls back to an
   // always-false predicate that still parses and yields zero rows.
   if (branchIds.length === 0) {
-    return rowQuery(`${base.sql} WHERE 0`, [])
+    return rowQuery(`${base} WHERE 0`, [])
   }
   const placeholders = branchIds.map(() => '?').join(', ')
-  return rowQuery(`${base.sql} WHERE embedding_stale = 1 AND branch_id IN (${placeholders})`, [
+  return rowQuery(`${base} WHERE embedding_stale = 1 AND branch_id IN (${placeholders})`, [
     ...branchIds,
   ])
 }
 
 export function branchRowsQuery(kind: VecTargetKind, branchIds: readonly string[]): RowQuery {
-  const base = embeddedRowQuery(kind)
+  const base = embeddedRowSql(kind)
   if (branchIds.length === 0) {
-    return rowQuery(`${base.sql} WHERE 0`, [])
+    return rowQuery(`${base} WHERE 0`, [])
   }
   const placeholders = branchIds.map(() => '?').join(', ')
-  return rowQuery(`${base.sql} WHERE branch_id IN (${placeholders})`, [...branchIds])
+  return rowQuery(`${base} WHERE branch_id IN (${placeholders})`, [...branchIds])
 }
 
 /**
  * `raw` must be a positional value-array — the sqlite-proxy row shape (see
- * `lib/db/runtime/exec.ts`'s `listTableNames`), matching `embeddedRowQuery`'s
+ * `lib/db/runtime/exec.ts`'s `listTableNames`), matching `embeddedRowSql`'s
  * column order: id, branch_id, field[0], field[1]. A native/expo-sqlite caller
  * returning object rows must normalize to that shape first.
  */

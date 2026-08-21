@@ -7,11 +7,11 @@ import {
   findVecDims,
   flagEmbeddingStaleOps,
   isVecFamilyTable,
+  flagBranchesEmbeddingStaleOps,
   recomputeStaleOps,
   setEmbeddingTargetOp,
   setSwapTargetDimOp,
   setSwapTargetOp,
-  SOURCE_TABLES,
   toEmbeddedFieldRow,
   VEC_FAMILIES,
   type DbCtx,
@@ -358,6 +358,8 @@ export async function relabelModel(
   const ops: SqlOp[] = []
   if (newModelId !== oldModelId && branchIds.length > 0) {
     const tables = (await deps.listVecTables()).filter(isVecFamilyTable)
+    // Unchunked, as every branch-keyed list here is: one bind per branch, and a
+    // story's branch set only grows by an explicit user fork.
     const ph = branchIds.map(() => '?').join(', ')
     // Rewrite identity in place — new pk + model_id, same source_hash + embedding —
     // preserving "no recompute" while keeping the story and its rows consistent.
@@ -441,12 +443,9 @@ async function stagedIds(
 }
 
 /**
- * Phase-2 preflight. Beyond "the story still exists", this re-reads the marker:
- * `updateStorySettings` merges the whole settings blob in a separate transaction
- * (docs/implementation/triage.md), so a save that landed during phase 1 can carry
- * a pre-swap snapshot that the flip would then silently overwrite — vectors gone,
- * flags clean, settings naming the old model. Failing here instead leaves the
- * marker intact and the swap resumable.
+ * Phase-2 preflight. Re-reads the marker, not just the row: a settings repair or hand edit
+ * can drop it, and flipping without it deletes every old vector while the settings still
+ * name the old model — nothing to re-derive from. Holds no lock: narrows the window only.
  */
 async function assertStoryLive(
   deps: SwapDeps,
@@ -517,14 +516,6 @@ async function cancelStaleOps(
   // A same-model re-embed leaves nothing to recover the split from — same
   // model_id, and unchanged content hashes to the same source_hash — so a cancel
   // with no live run state (crash recovery) queues the whole story instead.
-  if (unprocessed == null) return reflagAllOps(branchIds)
+  if (unprocessed == null) return flagBranchesEmbeddingStaleOps(branchIds)
   return flagEmbeddingStaleOps(unprocessed)
-}
-
-function reflagAllOps(branchIds: readonly string[]): SqlOp[] {
-  const ph = branchIds.map(() => '?').join(', ')
-  return Object.values(SOURCE_TABLES).map((table) => ({
-    sql: `UPDATE ${table} SET embedding_stale = 1 WHERE branch_id IN (${ph})`,
-    params: [...branchIds],
-  }))
 }

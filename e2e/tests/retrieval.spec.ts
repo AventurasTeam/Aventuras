@@ -43,9 +43,8 @@ test.describe('retrieval — a turn injects a retrieved bundle', () => {
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
     ;({ dim } = await installEmbedderModel(userDataDir))
-    // The seed leaves every happening fresh, so happenings_vec_* would stay
-    // empty and the ranked-happening path — the only one with a DB-observable
-    // side effect — could never fire.
+    // Redundant while the seed leaves every happening stale — kept so a clean seed can't
+    // silently stop this spec populating happenings_vec_*, its only DB-observable effect.
     markBranchEmbeddingStale(seeded.dbPath, HERO_BRANCH)
     mock = await startMockLlm()
     mock.setNarrative(REPLY)

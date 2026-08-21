@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-import { queryApp } from '../harness/db'
+import { branchStaleTotal, queryApp } from '../harness/db'
 import { installEmbedderModel } from '../harness/embedder'
 import { launchApp, type LaunchedApp } from '../harness/launch'
 import {
@@ -17,18 +17,7 @@ const HERO_TITLE = 'The Veilstone Courier'
 const HERO_BRANCH = 'br_hero_main'
 const HERO_STORY = 'story_hero'
 
-// Scoped to the branch the drain warms: the worker only covers the open branch,
-// so an unscoped count would also wait on rows nothing in this spec drains.
-const STALE_TOTAL_SQL = `SELECT (SELECT count(*) FROM entities WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM lore WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM chapters WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM threads WHERE branch_id = ? AND embedding_stale = 1)
-                              + (SELECT count(*) FROM happenings WHERE branch_id = ? AND embedding_stale = 1)`
-
-async function staleTotal(app: LaunchedApp): Promise<number> {
-  const [[n]] = await queryApp(app.window, STALE_TOTAL_SQL, Array<string>(5).fill(HERO_BRANCH))
-  return Number(n)
-}
+const staleTotal = (app: LaunchedApp): Promise<number> => branchStaleTotal(app.window, HERO_BRANCH)
 
 // Opening a story kicks a background drain of its stale embedded rows
 // (lib/embedder/drain.ts) — a real transformers.js embed pass over the seeded
@@ -38,14 +27,16 @@ test.describe('embedder — drain on story open', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
   let dim: number
+  let modelId: string
 
   test.beforeAll(async () => {
     // Cold cache downloads ~24 MB from Hugging Face before launch.
     test.setTimeout(180_000)
     const seeded = createSeededUserDataDir()
     userDataDir = seeded.userDataDir
-    ;({ dim } = await installEmbedderModel(userDataDir))
-    // The seed leaves every entity fresh, so entities_vec_* would stay empty.
+    ;({ dim, modelId } = await installEmbedderModel(userDataDir))
+    // Redundant now that the seed leaves every entity stale — kept so this spec
+    // doesn't silently stop populating entities_vec_* if the seed goes clean again.
     markEntitiesEmbeddingStale(seeded.dbPath, HERO_BRANCH)
     app = await launchApp({ userDataDir, cleanupUserData: true })
   })
@@ -66,11 +57,21 @@ test.describe('embedder — drain on story open', () => {
 
     await expect.poll(async () => staleTotal(app), { timeout: 60_000 }).toBe(0)
 
-    const [[entityVecRows]] = await queryApp(app.window, `SELECT count(*) FROM entities_vec_384`)
-    expect(Number(entityVecRows)).toBeGreaterThan(0)
+    // Scoped to branch AND model id: knnQuery filters on model_id, so vectors written
+    // under the wrong one break retrieval while a bare `count(*) > 0` still passes.
+    const vecRows = async (table: string): Promise<number> =>
+      Number(
+        (
+          await queryApp(
+            app.window,
+            `SELECT count(*) FROM ${table} WHERE branch_id = ? AND model_id = ?`,
+            [HERO_BRANCH, modelId],
+          )
+        )[0][0],
+      )
 
-    const [[loreVecRows]] = await queryApp(app.window, `SELECT count(*) FROM lore_vec_384`)
-    expect(Number(loreVecRows)).toBeGreaterThan(0)
+    expect(await vecRows('entities_vec_384')).toBeGreaterThan(0)
+    expect(await vecRows('lore_vec_384')).toBeGreaterThan(0)
 
     // Assert only the post-drain state — the pill's pre-drain visibility
     // depends on how much of the drain has already run by the time the composer

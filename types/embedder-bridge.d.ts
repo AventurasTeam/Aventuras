@@ -3,7 +3,9 @@
 // (Electron main/preload get their own copy in electron/embedder/types.ts — the
 // two compile units are separate tsconfigs, so the duplication is intentional and
 // mirrors types/db-bridge.d.ts.)
-export type EmbedderErrorEnvelope = { kind: 'init' | 'call'; message: string }
+// 'cancelled' is a deliberate stop, not a fault: it keeps a user pressing Cancel
+// out of the error-level diagnostics a real embedder failure writes.
+export type EmbedderErrorEnvelope = { kind: 'init' | 'call' | 'cancelled'; message: string }
 
 export type EmbedderDownloadReason =
   | 'hash-mismatch'
@@ -34,6 +36,8 @@ export type EmbedderBridge = {
   embed(args: {
     modelId: string
     texts: string[]
+    /** Handle for `cancelEmbed`. Omitted means the run cannot be cancelled. */
+    requestId?: string
   }): Promise<
     { ok: true; vectors: number[][]; dim: number } | { ok: false; error: EmbedderErrorEnvelope }
   >
@@ -53,6 +57,9 @@ export type EmbedderBridge = {
     attestation: EmbedderAttestation
   }): Promise<void>
   cancelDownload(args: { modelId: string }): Promise<void>
+  /** Cancels at the embed's next chunk boundary; a completed or unknown
+   *  `requestId` is a no-op. */
+  cancelEmbed(args: { requestId: string }): Promise<void>
   deletePartial(args: { modelId: string }): Promise<void>
   onDownloadProgress(cb: (progress: EmbedderDownloadProgress) => void): () => void
 }

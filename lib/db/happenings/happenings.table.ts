@@ -26,7 +26,7 @@ export const happenings = sqliteTable(
     temporal: text('temporal'),
     occurredAtEntryId: text('occurred_at_entry_id'),
     commonKnowledge: integer('common_knowledge').notNull().default(0),
-    embeddingStale: integer('embedding_stale').notNull().default(0),
+    embeddingStale: integer('embedding_stale').notNull().default(1).$type<0 | 1>(),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
@@ -36,6 +36,8 @@ export const happenings = sqliteTable(
     index('happenings_stale_idx')
       .on(t.branchId)
       .where(sql`${t.embeddingStale} = 1`),
+    // Leading branch_id lets loadHappeningRows' entry-id query seek this index directly.
+    index('happenings_occurred_idx').on(t.branchId, t.occurredAtEntryId),
   ],
 )
 

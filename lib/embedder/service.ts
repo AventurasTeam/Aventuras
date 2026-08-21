@@ -38,11 +38,11 @@ async function embedRaw(
   abortSignal?: AbortSignal,
 ): Promise<RawEmbedding> {
   if (config.backend === 'local') {
-    // The local bridge is one IPC call with no cancellation channel, so a signal
-    // cannot interrupt it — see the local-embed cancellation item in triage.md.
     const prefix = localPrefix(config.modelId, intent)
     const prefixed = prefix === '' ? texts : texts.map((text) => prefix + text)
-    return embedLocal(config.modelId, prefixed)
+    // A local cancel lands at the runtime's next batch boundary, never
+    // mid-inference: one ONNX run cannot be interrupted.
+    return embedLocal(config.modelId, prefixed, abortSignal)
   }
 
   if (provider === undefined) {

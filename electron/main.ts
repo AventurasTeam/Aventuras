@@ -26,6 +26,10 @@ import type { EmbedderAttestation } from './embedder/types'
 // the transfer instead of only hiding its progress.
 const downloadAborts = new Map<string, AbortController>()
 
+// Abort handles for in-flight embeds, keyed by the renderer's per-call requestId
+// so a cancel can land on the service's next chunk boundary.
+const embedAborts = new Map<string, AbortController>()
+
 const isDev = !app.isPackaged
 
 // Dev runs get their own userData dir (~/.config/aventuras-dev) so dev DB/cache
@@ -241,9 +245,31 @@ app.whenReady().then(async () => {
     dbTransaction(ops),
   )
 
-  ipcMain.handle('embedder:embed', (_e, args: { modelId: string; texts: string[] }) =>
-    embedderEmbed({ modelDir: requireModelDir(args.modelId), texts: args.texts }),
+  ipcMain.handle(
+    'embedder:embed',
+    async (_e, args: { modelId: string; texts: string[]; requestId?: string }) => {
+      const controller = new AbortController()
+      // Registered before the first await, so a cancel that follows this call on
+      // the renderer's ordered IPC channel always finds the controller.
+      if (args.requestId != null) embedAborts.set(args.requestId, controller)
+      try {
+        return await embedderEmbed({
+          modelDir: requireModelDir(args.modelId),
+          texts: args.texts,
+          signal: controller.signal,
+        })
+      } finally {
+        // Identity-checked: a renderer that reused a requestId must not have the
+        // live entry torn down by the earlier call's exit.
+        if (args.requestId != null && embedAborts.get(args.requestId) === controller) {
+          embedAborts.delete(args.requestId)
+        }
+      }
+    },
   )
+  ipcMain.handle('embedder:cancel-embed', (_e, args: { requestId: string }) => {
+    embedAborts.get(args.requestId)?.abort()
+  })
   ipcMain.handle('embedder:smoke-test', (_e, args: { modelId: string }) =>
     smokeTest({ modelDir: requireModelDir(args.modelId) }),
   )

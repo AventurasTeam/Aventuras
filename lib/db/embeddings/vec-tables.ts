@@ -28,6 +28,8 @@ export function isVecFamilyTable(name: string): boolean {
  * vec0 tables are virtual, so they are absent from dbSchema and no Drizzle
  * cascade or DB-level FK reaches them — a caller deleting source rows must call
  * this or the vectors outlive them permanently.
+ *
+ * Unchunked: one bind per branch, and a branch set grows only by an explicit fork.
  */
 export function deleteBranchVecOps(
   tableNames: readonly string[],
