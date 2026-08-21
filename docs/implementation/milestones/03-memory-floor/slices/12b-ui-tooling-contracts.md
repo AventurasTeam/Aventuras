@@ -259,3 +259,19 @@ edits have no behavior to pin.
 Created 2026-08-19 by the Slice 3.12 split; the split record and
 routing table live in
 [Slice 3.12a → Implementation notes](./12a-runtime-integrity.md#implementation-notes).
+
+**Planning resolutions (2026-08-21).** Every item was re-verified
+against the code at pickup; the premise corrections and the calls
+taken, one bullet each:
+
+- **`compositeText` separator — space, pinned in canon.** Canon had
+  no separator rule at all (`retrieval.md` said
+  `xxhash(title + description) or similar`), so this is a first-time
+  addition rather than an amendment, and there was never a staleness
+  bug: `lib/embedder/service.ts` embeds and hashes the same string.
+  NUL — for the hash alone or for both — was rejected because it
+  forces a full re-index for an unmeasured field-boundary effect and
+  puts a control character on the provider wire. The original NUL
+  rationale survives only in a gitignored plan file, which is why
+  [`plan-file-nul-corruption.md`](../../../lessons-learned/plan-file-nul-corruption.md)
+  exists.

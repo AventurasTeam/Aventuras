@@ -102,11 +102,21 @@ mismatch with the branch's recorded model id, signalling bug or
 ungated swap).
 
 **Source-hash tripwire.** `source_hash` stores the content hash of
-the embedded fields at embed time (`xxhash(title + description)` or
-similar). Per the [Compute lifecycle](#compute-lifecycle) contract it
-is the reference for the per-row `embedding_stale` flip: an
-embedded-field write recomputes the row's hash and compares against
-it to set or clear the dirty flag.
+the embedded fields at embed time. The input is the row's
+**composite text**: the type's embedded fields in their declared
+order, each `null` coerced to the empty string, joined by a **single
+space** — and the very same string is what the embedder receives, so
+the hash and the vector can never describe different bytes. The hash
+is xxh32 over the UTF-8 bytes of that string, seed 0, rendered as
+eight lowercase hex characters (`lib/db/embeddings/source-hash.ts`).
+A NUL separator was considered and rejected: it would make field
+boundaries visible to the embedder only at the cost of a control
+character on every provider request, and changing the join in either
+role forces a full re-index. Per the
+[Compute lifecycle](#compute-lifecycle) contract the hash is the
+reference for the per-row `embedding_stale` flip: an embedded-field
+write recomputes the row's hash and compares against it to set or
+clear the dirty flag.
 
 The two are not redundant, and they differ in cardinality.
 `embedding_stale` is one boolean on the source row, answering "does
