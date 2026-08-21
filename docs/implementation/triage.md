@@ -150,6 +150,22 @@ slice-planning gate forces its resolution before that slice is planned.
   the omission is the outlier rather than the rule; a substrate guard (or a lint
   selector) would stop the sixth. Note `discard-dropped-rows-dialog.tsx` has no
   stories, so its fix is verified by inspection only. Surfaced 2026-08-21.
+- **`confirmedReloads`' lifecycle in `electron/main.ts` is unverified, and one
+  of its two clears may be dead code.** Slice 3.12b added
+  `e2e/tests/reload-guard.spec.ts` as the only automated evidence for the reload
+  guard (there is no unit harness for `main.ts`). Mutation testing on
+  2026-08-22 found the spec catches a **disabled** `will-prevent-unload` handler
+  — though as a hang rather than a clean failure, because the confirmed close
+  then never completes and the suite burns its per-test timeouts — but it does
+  **not** catch: removing `confirmedReloads.delete(win.id)` from
+  `did-start-navigation`; removing the `!closeGuards.has(win.id)` fail-open
+  clause; or disabling _both_ flag-clears at once, which should leave the flag
+  permanently set. All four tests stay green in each case. The reviewer's stated
+  rationale — that the Save path drops the renderer's `beforeunload` listener
+  before `confirmReload()` fires, so no `will-prevent-unload` is raised and
+  `did-start-navigation` is the sole consumer — does not reproduce. Worth
+  determining whether the flag is ever set on the Save path at all before
+  trusting either clear. Surfaced 2026-08-22.
 
 Drained 2026-08-20. Four items were fixed on the branch that surfaced
 them — the corrupt-draft clobber, the suggestion re-roll's reversal
