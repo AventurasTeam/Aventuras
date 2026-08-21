@@ -25,6 +25,7 @@ import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
+import { AiAssistDiscardDialog } from './ai-assist-discard-dialog'
 import {
   itemKey,
   markExisting,
@@ -162,6 +163,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // itemKey rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
   // Guards against a stale in-flight response clobbering state set by a
@@ -194,12 +196,31 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     resetOnClose()
   }
 
+  // Only a candidate the user has not committed counts: a seeded preview is
+  // the field's own value, a fresh generate in flight has produced nothing yet.
+  function hasUnsavedCandidate(): boolean {
+    if (listItems.length > 0 || selected.size > 0) return true
+    const preview =
+      assist.kind === 'loading'
+        ? assist.from
+        : assist.kind === 'result' || assist.kind === 'refine'
+          ? assist
+          : undefined
+    return preview !== undefined && preview.seeded !== true
+  }
+
   // Catches dismiss paths that bypass closeOverlay() — tap-outside, Escape,
-  // hardware back, sheet swipe-down — so an in-flight request still aborts
-  // and stale result/failure state doesn't survive to the next open.
+  // hardware back, sheet swipe-down. A swiped sheet is already gone when this
+  // fires, so a dirty overlay closes and asks from a sibling dialog; Keep
+  // editing re-opens it with nothing cleared, Discard is the only reset.
   function handleOpenChange(next: boolean) {
     setOpen(next)
-    if (!next) resetOnClose()
+    if (next) return
+    if (hasUnsavedCandidate()) {
+      setConfirmDiscard(true)
+      return
+    }
+    resetOnClose()
   }
 
   // The committed value only counts as a seed once it actually carries prose —
@@ -837,6 +858,17 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
           </DialogContent>
         </Dialog>
       )}
+      <AiAssistDiscardDialog
+        open={confirmDiscard}
+        onKeep={() => {
+          setConfirmDiscard(false)
+          setOpen(true)
+        }}
+        onDiscard={() => {
+          setConfirmDiscard(false)
+          resetOnClose()
+        }}
+      />
     </View>
   )
 }

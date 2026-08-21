@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useEffect, useState } from 'react'
 import { View } from 'react-native'
-import { expect, fn, screen, userEvent, waitFor } from 'storybook/test'
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test'
 
 import { Text } from '@/components/ui/text'
 import type { GenerateStructuredResult } from '@/lib/ai'
@@ -1368,5 +1368,55 @@ export const ListResult_CheckedRowLaterMarkedExistingStaysBlocked: Story = {
     // nothing left to import: the button must not offer an import that would
     // pass an empty array and close the overlay as if it had done something.
     expect(screen.getByRole('button', { name: 'Import selected' })).toBeDisabled()
+  },
+}
+
+// Escape / tap-outside / swipe all arrive as onOpenChange(false). A landed
+// result is the user's work; it is confirmed away, not lost to a stray key.
+export const DirtyDismissAsksBeforeDiscarding: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okRun<DescriptionValue>({ description: 'Kept suggestion text.' })}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Kept suggestion text.')
+
+    await userEvent.keyboard('{Escape}')
+    const dialog = await screen.findByRole('alertdialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    // The overlay comes back with the result still in it.
+    expect(await screen.findByText('Kept suggestion text.')).toBeInTheDocument()
+
+    await userEvent.keyboard('{Escape}')
+    const again = await screen.findByRole('alertdialog')
+    await userEvent.click(within(again).getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(screen.queryByText('Kept suggestion text.')).not.toBeInTheDocument())
+    // Reopening starts clean — the discard really cleared the state.
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    expect(await screen.findByText('Optional guidance')).toBeInTheDocument()
+  },
+}
+
+export const CleanDismissClosesWithoutAsking: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={neverResolvingRun<DescriptionValue>()}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await screen.findByText('Optional guidance')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByText('Optional guidance')).not.toBeInTheDocument())
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
   },
 }
