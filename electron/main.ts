@@ -114,6 +114,9 @@ function applyContentSecurityPolicy(): void {
 const closeGuards = new Set<number>()
 const confirmedCloses = new Set<number>()
 const pendingQuits = new Set<number>()
+// Windows whose renderer just confirmed a reload; consumed by the next
+// `will-prevent-unload` or cleared when the navigation commits.
+const confirmedReloads = new Set<number>()
 
 // `before-quit` runs before any window's `close`, so a guard that cancels the
 // close also cancels this quit. Recorded per window so confirming resumes it.
@@ -165,6 +168,26 @@ function createWindow(): void {
   // every later quit is blocked too.
   win.webContents.on('render-process-gone', () => {
     closeGuards.delete(win.id)
+    confirmedReloads.delete(win.id)
+  })
+
+  // A renderer with unsaved work prevents its own unload, and Electron raises
+  // this instead of a prompt. Doing nothing keeps the page; preventDefault lets
+  // the unload through. A close already confirmed over IPC and a reload the
+  // renderer just confirmed both go through; anything else asks the renderer.
+  win.webContents.on('will-prevent-unload', (event) => {
+    if (confirmedCloses.has(win.id) || confirmedReloads.delete(win.id)) {
+      event.preventDefault()
+      return
+    }
+    win.webContents.send('native:reload-requested')
+  })
+  // A committed cross-document navigation means the renderer that armed the
+  // guard — and the one that confirmed a reload — is gone.
+  win.webContents.on('did-start-navigation', (details) => {
+    if (!details.isMainFrame || details.isSameDocument) return
+    closeGuards.delete(win.id)
+    confirmedReloads.delete(win.id)
   })
 
   // Fail-open: only a live renderer that armed the guard gets asked.
@@ -184,6 +207,7 @@ function createWindow(): void {
     // unrelated future window.
     closeGuards.delete(win.id)
     confirmedCloses.delete(win.id)
+    confirmedReloads.delete(win.id)
     pendingQuits.delete(win.id)
   })
 
@@ -236,6 +260,12 @@ app.whenReady().then(async () => {
     const resumeQuit = pendingQuits.delete(win.id)
     win.close()
     if (resumeQuit) app.quit()
+  })
+  ipcMain.on('native:confirm-reload', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win == null) return
+    confirmedReloads.add(win.id)
+    win.webContents.reload()
   })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),
