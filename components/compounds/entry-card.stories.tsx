@@ -144,8 +144,11 @@ export const StreamingReasoning: StoryT = {
     const toggle = await screen.findByRole('button', { name: 'Show reasoning' })
     // Reanimated resolves an empty dependency set to a frozen style rather
     // than an error outside dev mode, so presence alone would not catch it.
+    // parseFloat, not Number: the selector matches the style *attribute*, so an
+    // ancestor carrying only an opacity-named custom property would read back ''
+    // — and Number('') is 0, which would satisfy the bound without animating.
     const pulsing = toggle.closest<HTMLElement>('[style*="opacity"]')
-    await waitFor(() => expect(Number(pulsing?.style.opacity)).toBeLessThan(0.9))
+    await waitFor(() => expect(parseFloat(pulsing?.style.opacity ?? '')).toBeLessThan(0.9))
   },
 }
 
