@@ -53,7 +53,12 @@
   async function openStory(storyId: string) {
     ui.resetScrollBreak()
     ui.setActivePanel('story')
-    await story.loadStory(storyId)
+    try {
+      await story.loadStory(storyId)
+    } catch (error) {
+      ui.setActivePanel('library')
+      ui.showToast(errMessage(error), 'error')
+    }
   }
 
   async function deleteStory(storyId: string, event: MouseEvent) {

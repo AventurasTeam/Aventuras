@@ -557,6 +557,9 @@ class StoryStore {
     clearTier3SelectionCache()
     clearImageMarkerCache()
 
+    // A remembered desktop panel must not briefly cover a story as it starts loading on a
+    // narrow display. Do this before publishing `currentStory`, which mounts those panels.
+    ui.setMobileDefaults()
     this.currentStory = story
     this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
 
@@ -656,9 +659,6 @@ class StoryStore {
     if (!hasPersistedChoices && this.entries[this.entries.length - 1]?.type === 'narration') {
       this.restoreSuggestedActionsFromLastNarration()
     }
-
-    // Set mobile-friendly defaults (close sidebar, etc.)
-    ui.setMobileDefaults()
 
     // Emit event
     emitStoryLoaded(storyId, story.mode)

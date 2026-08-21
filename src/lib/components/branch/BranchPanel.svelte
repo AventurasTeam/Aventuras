@@ -42,7 +42,9 @@
       const next = new SvelteSet(expandedBranches)
       next.add('main')
       let current = branches.find((b) => b.id === branchId)
-      while (current?.parentBranchId) {
+      const visited = new SvelteSet<string>()
+      while (current?.parentBranchId && !visited.has(current.id)) {
+        visited.add(current.id)
         const parentId: string = current.parentBranchId
         next.add(parentId)
         current = branches.find((b) => b.id === parentId)

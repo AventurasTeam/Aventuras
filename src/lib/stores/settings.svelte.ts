@@ -1597,7 +1597,12 @@ class SettingsStore {
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
 
       const navPanelWidth = await database.getSetting('nav_panel_width')
-      if (navPanelWidth) this.uiSettings.navPanelWidth = parseInt(navPanelWidth, 10)
+      if (navPanelWidth) {
+        const parsedNavPanelWidth = parseInt(navPanelWidth, 10)
+        if (Number.isFinite(parsedNavPanelWidth)) {
+          this.uiSettings.navPanelWidth = parsedNavPanelWidth
+        }
+      }
 
       const sidebarOpen = await database.getSetting('sidebar_open')
       if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
