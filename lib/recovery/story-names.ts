@@ -16,6 +16,7 @@ export async function loadRecoveryStoryNames(
 
   if (storyIds.size === 0) return {}
 
+  // Unchunked: per-branch gates hold boot-time in-flight runs to a handful of binds.
   const rows = await db
     .select({ id: stories.id, title: stories.title })
     .from(stories)

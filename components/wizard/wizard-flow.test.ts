@@ -311,8 +311,9 @@ describe('wizard full-flow integration', () => {
 
     const { storyId } = await saveStoryDraft(draftState, ctx, 1000)
 
-    const loaded = await loadDraft(storyId, ctx)
-    expect(loaded).not.toBeNull()
+    const session = await loadDraft(storyId, ctx)
+    expect(session).not.toBeNull()
+    const loaded = session!.state
     expect(loaded!.definition.mode).toBe('adventure')
     expect(loaded!.definition.narration).toBe('first')
     expect(loaded!.definition.genre).toEqual({

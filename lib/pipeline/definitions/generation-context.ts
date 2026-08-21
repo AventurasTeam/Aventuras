@@ -1,4 +1,4 @@
-import { describeCalendarVocabulary, getCalendar } from '@/lib/calendar'
+import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
 import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
 import { substituteIds, type IdBiMap } from '@/lib/ids'
 import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
@@ -160,7 +160,9 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     tone: { ...definition.tone, promptBody: blankIfWhitespace(definition.tone.promptBody) },
   }
 
-  const calendar = getCalendar(definition.calendarSystemId)
+  // Prompt and reader footer must describe the same calendar; both fall back to
+  // earth-gregorian until vault calendars land (M8.3).
+  const calendar = resolveCalendar(definition.calendarSystemId)
 
   // Built unconditionally: the slots are the story's palette, not an
   // instruction to emit. suggestionsFire answers the separate question of
@@ -193,7 +195,7 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
     sceneEntities: tail?.metadata?.sceneEntities ?? [],
     currentLocationId: tail?.metadata?.currentLocationId ?? null,
     definition: normalizedDefinition,
-    calendarVocabulary: calendar ? describeCalendarVocabulary(calendar) : null,
+    calendarVocabulary: describeCalendarVocabulary(calendar),
     userSettings: {
       fullChapterInBuffer: settings.fullChapterInBuffer,
       partialChapterBuffer: settings.partialChapterBuffer,

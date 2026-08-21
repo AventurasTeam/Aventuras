@@ -124,14 +124,21 @@ is deliberately **no** retrieval-time hash comparison — adding one
 would mean hashing every candidate's composite text on every turn to
 re-derive what the flag already carries.
 
-The rule is convention today, not enforcement: the register actions
-default the flag to `0` and leave it to each caller, which makes a
-forgetful writer the one way a stale vector can survive. Moving the
-flip into the action layer, so writing an embedded field sets the
-flag whether or not the caller remembers, is what makes the rule
-load-bearing enough to justify having no tripwire behind it. Tracked
-in [`triage.md`](../implementation/triage.md). Hash is chosen over
-timestamps because
+The rule is enforcement, not convention, as of Slice 3.12a: the
+register actions default the flag to `1` on create — a row with no
+vector is dirty by definition — and derive the flip on update by
+comparing each embedded column against the pre-update row, so
+writing an embedded field sets the flag whether or not the caller
+remembers. `KIND_FIELDS` is the single source of truth for which
+columns those are: the same constant builds the embed `SELECT` and
+types each entry against its own row, so a column that is not
+genuinely embedded cannot be listed and an embedded one cannot be
+silently omitted. That enforcement is what justifies having no
+tripwire behind it. One writer still stands outside it —
+reverse-replay restores prior column values without re-deriving the
+flag — which is why it must flip `embedding_stale` by the same
+per-row checksum rather than inheriting whatever the pre-reversal
+row carried. Hash is chosen over timestamps because
 rollback restores prior `updated_at` along with the rest of the
 row's state — a timestamp-based check would invert post-rollback and
 silently mask the bug it was meant to catch. Content hashes are

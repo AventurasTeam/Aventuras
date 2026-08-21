@@ -23,11 +23,9 @@ export type RunState = {
   resolveTerminal: () => void
 }
 
-// reversalInProgress brackets a prose-reversal's wait->sweep window: while set it
-// blocks a periodic-classifier start and forces isUserEditBlocked true.
-// runs is the live state Map — ReadonlyMap so consumers can't set/delete
-// around the mutators. (RunState.intermediates stays mutable by design: it is
-// the run-scoped scratch phases write through PhaseContext.)
+// reversalInProgress brackets a prose-reversal's wait->sweep window: while set it blocks
+// REVERSAL_BLOCKED scheduling (concurrency.ts) and makes applyDeltaAction reject user
+// dispatch. ReadonlyMap keeps consumers off the mutators; intermediates stays mutable.
 export type TxState = { runs: ReadonlyMap<string, RunState>; reversalInProgress: boolean }
 
 export function isUserEditBlocked(txState: TxState): boolean {
@@ -131,7 +129,7 @@ export function isBackgroundKind(kind: string): boolean {
 
 export function isForegroundGenerating(txState: TxState, branchId: string): boolean {
   return [...txState.runs.values()].some(
-    (r) => r.branchId === branchId && !BACKGROUND_KINDS.includes(r.kind),
+    (r) => r.branchId === branchId && !isBackgroundKind(r.kind),
   )
 }
 

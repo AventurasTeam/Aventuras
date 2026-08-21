@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
 import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
@@ -486,7 +487,7 @@ describe('buildGenerationContext', () => {
     expect(steered.refreshGuidance).toBe('I sneak around the back')
   })
 
-  it('resolves calendarVocabulary for known calendar id and null for unknown', () => {
+  it('resolves calendarVocabulary for a known id, and falls back to earth-gregorian for an unknown one', () => {
     const knownCtx = buildGenerationContext({
       branchId: 'b1',
       entries: [],
@@ -506,7 +507,9 @@ describe('buildGenerationContext', () => {
       settings,
       idMap: new IdBiMap(),
     })
-    expect(unknownCtx.calendarVocabulary).toBeNull()
+    // Same fallback the reader's world-time footer uses (resolveCalendar) —
+    // prompt and footer must describe the same calendar.
+    expect(unknownCtx.calendarVocabulary).toEqual(describeCalendarVocabulary(EARTH_GREGORIAN))
   })
 
   it('emits no runtime key the generationContext registry does not define', () => {

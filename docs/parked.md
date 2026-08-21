@@ -817,6 +817,26 @@ classifier cadence, chapter-close, embedding). All parked-until-
 signal — v1 ships without them and they revisit only when real
 usage produces concrete evidence the gap bites.
 
+#### `runSyncStage`'s embed payload scales with the dirty set
+
+`lib/retrieval/sync.ts` hands its entire revalidated dirty set to a
+single `embedRows` → `embedLocal` → `ipcRenderer.invoke`. Slice 3.12a
+chunked the work _inside_ Electron main at 16, which bounds ONNX
+activation memory, but main still accumulates every resulting vector
+before replying, so peak main-process memory and the structured-clone
+payload both still scale with the dirty set (~1000 rows × 384 dims in
+one message). `lib/embedder/drain.ts` and
+`lib/actions/embedder-swap/engine.ts` already pre-batch at 16, so they
+are unaffected and the chunking is a no-op for them.
+
+Streaming results back per chunk would bound both, but it breaks the
+sync stage's no-partial-success contract — a half-synced index
+silently mis-ranks or drops the un-embedded rows instead of reporting
+anything — so it is a design decision, not a refactor. Signal: a real
+story whose first sync after an import or a long offline stretch is
+large enough that main's memory or the IPC payload actually bites.
+Surfaced by Slice 3.12a Task 16/17 (2026-08-20).
+
 #### vec0 copy-on-fork storage optimization
 
 Each branch owns its own `*_vec` rows per the

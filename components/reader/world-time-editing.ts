@@ -6,9 +6,11 @@ import {
   type WorldTimeDecoration,
 } from '@/components/reader/worldtime-decoration'
 import { updateEntryWorldTime, type DbCtx } from '@/lib/actions'
-import { resolveCalendar, type CalendarFrame, type TierTuple } from '@/lib/calendar'
+import { getCalendar, resolveCalendar, type CalendarFrame, type TierTuple } from '@/lib/calendar'
 import type { StoryEntry } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { t } from '@/lib/i18n'
+import { toast } from '@/lib/toast'
 
 export type WorldTimeEditing = {
   /** Registry-resolved with the default applied; null hides/inerts every footer.
@@ -53,10 +55,9 @@ export function useWorldTimeEditing(
 
   const [timeEditId, setTimeEditId] = useState<string | null>(null)
 
-  // Carries failure in the result channel, never the rejection channel: the
-  // expo-dom bridge re-rejects faithfully, but there is no global
-  // unhandled-rejection handler, so a rejection surfacing in the DOM realm has
-  // nothing to catch it and would leave Save inert.
+  // Failure rides the result channel, never the rejection channel: on native the expo-dom
+  // bridge re-rejects into the WebView's own realm, which lib/boot/rejection-handler.ts
+  // never reaches, so an escaped rejection would leave Save inert.
   const editWorldTime = useCallback(
     async (entryId: string, next: number): Promise<EditResult> => {
       try {
@@ -80,11 +81,23 @@ export function useWorldTimeEditing(
     [branchId, ctx],
   )
 
+  // Reading tolerates the registry fallback; writing does not: the picked tuple is
+  // converted through this frame's tiers, silently storing a time in the wrong calendar.
+  const calendarResolved = calendarSystemId != null && getCalendar(calendarSystemId) != null
+
   // Presented whatever the host's own tier is: EntryCard's useTier() measures
   // the reader document, not the device, so it owns the fork.
-  const requestEditWorldTime = useCallback(async (entryId: string) => {
-    setTimeEditId(entryId)
-  }, [])
+  const requestEditWorldTime = useCallback(
+    async (entryId: string) => {
+      if (!calendarResolved) {
+        logger.warn('calendar.world_time_edit_blocked', { entryId, calendarSystemId })
+        toast.error(t('reader:actions.unknownCalendar'))
+        return
+      }
+      setTimeEditId(entryId)
+    },
+    [calendarResolved, calendarSystemId],
+  )
   const closeTimeEdit = useCallback(() => setTimeEditId(null), [])
 
   const decoration = timeEditId != null ? worldTimeDecorations[timeEditId] : undefined

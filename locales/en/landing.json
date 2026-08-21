@@ -61,10 +61,14 @@
     "archiveFailed": "Couldn't update the story. Please try again.",
     "deleteFailed": "Couldn't delete the story. Please try again.",
     "resetStorySettingsFailed": "Couldn't reset this story's settings. Please try again.",
+    "resetStorySettingsStale": "Settings were reset, but the story list couldn't refresh. Reopen the story to continue.",
     "openDatabaseFileFailed": "Couldn't show the database file. Please try again.",
     "discardSessionFailed": "Couldn't discard the session. Please try again.",
     "draftLoadFailed": "Couldn't open the draft. Please try again.",
     "resumeSessionFailed": "Couldn't resume the session. Please try again.",
-    "sessionStateCorrupt": "Your saved progress couldn't be restored and was reset."
+    "sessionStateCorrupt": "Your saved progress couldn't be restored and was reset.",
+    "sessionRowsDropped_one": "{{count}} saved row couldn't be restored and was skipped.",
+    "sessionRowsDropped_other": "{{count}} saved rows couldn't be restored and were skipped.",
+    "sessionSectionUnreadable": "Part of your saved draft couldn't be read and was cleared."
   }
 }

@@ -147,6 +147,8 @@ type LogSubsystem =
   | 'memory'
   | 'bootstrap'
   | 'calendar'
+  | 'app'
+  | 'reader'
 
 type LogKind = `${LogSubsystem}.${string}`
 ```
@@ -170,11 +172,15 @@ convention, and the expectation that subsystems route through
 `logger` from their first commit:
 
 - `pipeline.*` — `phase_failed`, `run_aborted`, `recovered`
-- `action_layer.*` — `user_write_rejected`, `constraint_violation`
+- `action_layer.*` — `user_write_rejected`, `constraint_violation`,
+  `story_settings_repaired` (the corrupt-blob repair: carries the failing
+  key paths, since the blob it describes is overwritten in the same call)
 - `classifier.*` — `delta_clamped`, `schema_repair`, `empty_output`
 - `retrieval.*` — `row_skipped_stale`, `empty_pool`, `knn_error`
 - `provider.*` — `retry_succeeded`, `rate_limited`,
-  `stream_interrupted`, `request_failed`
+  `stream_interrupted`, `request_failed`, `url_redaction_failed`
+  (the URL pass failed to parse a span and left it unredacted —
+  it fails open, so it must not fail silently)
 - `embedder.*` — `offline`, `compute_failed`, `staleness_detected`
 - `translation.*` — `soft_failed` (when that followup lands)
 - `memory.*` — periodic-classifier + chapter-close phase
@@ -184,19 +190,74 @@ convention, and the expectation that subsystems route through
 - `calendar.*` — `format_miss` (a `displayFormat` that fails or
   renders empty, which silently drops every world-time footer in the
   window), `pad_width_invalid`
+- `app.*` — cross-cutting runtime events not owned by a single
+  subsystem. Currently all three members come from the global
+  rejection handler's backstop (`lib/boot/rejection-handler.ts`) and
+  are all always recorded regardless of the master gate — see
+  Console mirroring, below: `unhandled_rejection`,
+  `rejection_handled_late`, `rejection_tracker_unavailable`
+- `reader.*` — reader-composer dispatches routed through `runAction`
+  (`lib/utils.ts`) instead of a bare `void`: `story_id_load_failed`,
+  `undo_failed`, `redo_failed`, `rollback_failed`, `regenerate_failed`
+  — plus `undo_rejected` / `redo_rejected` at debug for the refusals
+  that are routine (gated, nothing to apply, branch mid-switch), where
+  `undo_failed` / `redo_failed` carry the ones that mean the delta log
+  cannot produce the reversal it should
+  (the rollback-confirm modal's regenerate variant, distinct from the
+  `pipeline.regenerate_*` kinds `runRegenerate` logs internally)
 
 Kinds grow organically as subsystems land.
 
 ### Console mirroring
 
 When the master gate is ON, `logger.<level>` writes the store
-entry AND mirrors to `console.<level>`. Both gated by the same
-master toggle. When OFF, both no-op.
+entry AND mirrors to `console.<level>`. When OFF, both no-op — with
+one exception below, which lifts both together. The store entry and
+the console line always travel as a pair; no gate splits them.
 
 Build-time launch config may override the stored default to ON in
 `pnpm dev` so engineers don't need to flip the toggle every
 session; this is launch-config-detail, not contract. Production
 builds always default OFF at the stored level.
+
+**Three kinds bypass the master gate**, all from
+`lib/boot/rejection-handler.ts`'s backstop, all in `ALWAYS_RECORDED`
+(`lib/diagnostics/core/logger.ts`) for the same reason: each is
+either the one signal a user cannot be asked to reproduce, or a
+signal that corrects or explains one that already bypassed.
+
+- `app.unhandled_rejection` — the backstop itself. Carries `error`
+  (the rejection's stack or message) and `id` — supplied by the
+  tracker on native, minted per-event on web/Electron since the
+  DOM's `unhandledrejection` carries a `Promise`, not a number. Lands
+  regardless of `diagnostics.enabled` so the Logs tab has something
+  to show the moment a problem is reported, not only after the user
+  re-enables diagnostics and hits it again.
+- `app.rejection_handled_late` — a retraction: the rejection was in
+  fact caught, just after the tracker's window closed (a deferred-
+  await pattern routinely triggers this). Logged at **warn**,
+  carrying the same `id` as the entry it corrects. It has to bypass
+  for the same reason its accusation does — a retraction gated out
+  of every configuration that recorded the accusation would read as
+  a permanent false positive instead of a correction.
+- `app.rejection_tracker_unavailable` — no tracker could be
+  installed at all; the signal that the backstop itself isn't
+  running, which matters most in exactly the configuration
+  (production, diagnostics off) where it would otherwise be silent.
+
+The bypass covers **both surfaces**: a bypassing kind writes its
+store entry and mirrors to `console.<level>`, exactly as it would
+with the master gate on. The two are the same record in two places,
+so gating them apart would leave the Logs tab holding a rejection
+the devtools console never saw, and two engineers reading the two
+surfaces would be reasoning from different histories.
+`ALWAYS_RECORDED` stays narrow on purpose: a kind belongs there
+only when a user cannot reasonably be asked to reproduce it, or when
+it corrects/explains a kind that already qualifies — not because
+always-on capture would be convenient. The secondary
+`debug_level_enabled` gate is not bypassed, so a debug-level kind
+added here would still need that toggle on to actually land — in
+practice this keeps membership to error/warn.
 
 ### Direct-console drift
 
@@ -496,8 +557,9 @@ promoted to columns — matches placement pattern for every other
 debug toggle):
 
 - **`enabled: boolean`** — master toggle. Default `false`. When
-  off: every sink and memory probe captures no-op. Console
-  mirroring also off.
+  off: every sink and memory probe captures no-op, and console
+  mirroring is off — with one narrow store-write exception, see
+  Console mirroring above.
 - **`debug_level_enabled: boolean`** — secondary. Default
   `false`. Only meaningful when master is on. When off,
   `logger.debug(...)` no-ops; warn and error still flow.
@@ -565,6 +627,16 @@ Because the gate is a pull-getter (above), nothing in
 the buffers as the off-write's side effect (`clearBuffers()`),
 idempotent so writing an already-off value is harmless.
 
+**Is anything retained while master is off?** Yes — the
+`ALWAYS_RECORDED` kinds (Console mirroring, above) still write. They
+don't escape this wipe, though: once written they're ordinary
+`logEntries` rows, so an explicit master-OFF **action** clears them
+with everything else. What they escape is the gate that decides
+whether they're written in the first place, not the wipe that clears
+what's already there. A toggle that has simply stayed off since boot
+never fires that action, so anything the bypass recorded persists in
+memory until app quit, same as any other entry.
+
 ### UI placement
 
 All toggles live under **App Settings · Diagnostics**. The
@@ -588,9 +660,66 @@ The in-memory-only stance changes the privacy profile materially.
 - HTTP request headers (including provider API keys in
   `Authorization: Bearer ...`) are **redacted at the sink
   boundary** before any store-write. Auth-style headers replaced
-  with `'***'`. Unredacted secrets never reach the Zustand store;
-  they exist only inside the HTTP wrapper's local scope during a
-  single request lifecycle.
+  with `'***'`. Unredacted secrets never reach the Zustand store
+  through this path; they exist only inside the HTTP wrapper's
+  local scope during a single request lifecycle.
+- **One exception**: `app.unhandled_rejection` and its paired
+  `app.rejection_handled_late` / `app.rejection_tracker_unavailable`
+  (Console mirroring, above) write even while the master toggle is
+  off. `report()` passes the rejection's `.stack` / `.message`
+  through `redactSecretsInText`
+  (`lib/diagnostics/sinks/http-redaction.ts`). State the true claim
+  plainly, because it reframes the section: **the substring pass
+  redacts any configured key of 6+ characters found verbatim anywhere
+  in the text, which covers every hosted-provider key shape (OpenAI,
+  Anthropic, Google, ... all run 30-130+ chars); a shorter key — as
+  local `openai-compatible` servers conventionally use (`ollama`,
+  `sk-1234`, `lm-studio`, `token-abc123`) — is redacted only when it
+  sits in a URL query-param value or userinfo the parser can cleanly
+  isolate, and otherwise passes through unredacted.** This is not two
+  co-equal layers. No provider path in this app puts a key in a URL —
+  `lib/ai/providers.ts`, `lib/ai/catalog.ts`, and `lib/ai/embedding.ts`
+  all send it via an `Authorization` or `x-api-key` header through the
+  provider SDKs — so the substring pass is the protection that
+  actually matters here; the URL-aware pass exists because a
+  user-configured endpoint _could_ carry a key, not because one
+  currently does.
+
+  The 6-character floor is a specific choice, not a round number:
+  `ollama` (6 chars) is the shortest documented local-server key
+  shape, so the floor can't sit above it without leaking that exact
+  convention; `providerInstanceSchema.apiKey` is a bare `z.string()`
+  with no minimum, so nothing else stops a user from configuring it.
+  The 3-character key in this file's `does not substring-match`
+  header-redaction test stays excluded either way. **A key shorter
+  than 6 characters is not protected by either pass.**
+
+  The URL-aware pass isolates a secret only when it sits in a query
+  param or userinfo **and** the parser can cleanly isolate it — both
+  conditions matter. It never touches a URL's **path segment**
+  (`/keys/lm-studio/models` passes through untouched regardless of key
+  length), and it recognizes only a specific, enumerated set of
+  trailing terminators — `.` `,` `;` `:` `]` `}` and a V8 `:line:col`
+  stack-frame suffix — stripped so the query value isn't corrupted by
+  what follows it. Any other trailing character (`!` `?` `*` `~` `^`
+  `|` `(` `[` `{` `%` `=` `+` `@` `<`, a zero-width or RTL mark, a `;`
+  or `.` followed by more text rather than ending there, more than one
+  stacked frame suffix) leaves that occurrence unredacted by this
+  pass; a 6+ character key still falls through to the substring pass
+  in that case, but a shorter one reaches the store as-is. Also
+  unprotected either way: a secret present only percent-encoded or
+  JSON-escaped, since neither pass decodes before matching —
+  `decodeURIComponent` or `JSON.parse` recovers the raw value from
+  what's stored. A URL **fragment** (`#access_token=…`, the OAuth
+  implicit-grant shape) isn't structurally parsed at all, though a 6+
+  character fragment secret still falls to the substring pass.
+
+  `knownSecrets` (`setHttpCallKnownSecretValues`) also isn't populated
+  until app-settings hydrates, so a rejection during early boot has
+  nothing to redact against regardless. Same containment as everywhere
+  else in this section: in-memory, capped at 500 entries, and only
+  visible via the Diagnostics Hub.
+
 - Prompt bodies (assembled story context, entity descriptions,
   retrieval results) live in RAM only. Vaporize on app quit.
 - `probe_captures` remains the only diagnostic data that touches
@@ -628,8 +757,11 @@ Ring buffers are bounded arrays with O(1) amortized eviction
 subscribers re-render only when their slice changes — UI cost
 scales with what's visible, not buffer churn.
 
-**Master gate OFF → all sinks no-op at function entry.** O(1)
-regardless of how chatty subsystems become.
+**Master gate OFF → all sinks no-op at function entry**, except the
+`ALWAYS_RECORDED` kinds' store write (Console mirroring, above). A
+rejection loop (e.g. inside a poll) could in principle push a steady
+stream through this path — still O(1) per push and bounded by the
+same 500-entry cap as everything else, just not gate-suppressed.
 
 ## Memory ceiling
 
@@ -656,8 +788,15 @@ ceiling consistently.
   embedder calls), so no IPC needed. Main-process emit can layer
   on later via the existing IPC bus without changing the
   contract.
-- **React Native:** single JS context; Zustand store works
-  identically. No platform-specific paths.
+- **React Native:** the app's own JS context is single, and the
+  Zustand store works identically there — but the reader document
+  renders inside a second, isolated JS realm on native only (a
+  WebView; see
+  [`ui/patterns/reader-document.md`](./ui/patterns/reader-document.md)),
+  and `lib/boot/rejection-handler.ts` forks by platform (DOM
+  `unhandledrejection` / `rejectionhandled` vs Hermes's
+  `enablePromiseRejectionTracker`) to reach the realm this store
+  lives in — the WebView's own rejections aren't covered.
 - **Multi-window on Electron:** each window is its own renderer
   with its own diagnostics store. State is window-local; window
   A doesn't see window B's calls. Acceptable — multi-window is

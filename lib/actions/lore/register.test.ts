@@ -188,4 +188,75 @@ describe('lore CRUD arms', () => {
     expect((await rowFor(db, 'lore_1')).title).toBe('Aether')
     expect(loreStore.getById('lore_1')?.title).toBe('Aether')
   })
+
+  it('defaults embedding_stale to 1 on create', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createLore', source: 'lore_agent', payload: { entry: LORE } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'lore_1')).embeddingStale).toBe(1)
+  })
+
+  it('flips embedding_stale only when an embedded column changes', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createLore',
+          source: 'lore_agent',
+          payload: { entry: { ...LORE, embeddingStale: 0 } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'lore_1', patch: { category: 'astral' } },
+        },
+        actionId: 'act_u1',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'lore_1')).embeddingStale).toBe(0) // non-embedded columns don't flip
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'lore_1', patch: { title: 'Aether' } },
+        },
+        actionId: 'act_u2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'lore_1')).embeddingStale).toBe(0) // same value re-sent compares equal
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateLore',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'lore_1', patch: { body: 'new text' } },
+        },
+        actionId: 'act_u3',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'lore_1')).embeddingStale).toBe(1) // embedded column changed
+  })
 })

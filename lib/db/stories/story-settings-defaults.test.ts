@@ -36,6 +36,17 @@ describe('buildStorySettings', () => {
     expect(s.embedding_model_id).toBe('Xenova/all-MiniLM-L6-v2')
     expect(s.retrievalBudgets.entities).toBe(1200)
   })
+  // `undefined` has no bindable SQL form: a present-but-undefined key throws on write.
+  it('emits no key that is present but undefined', () => {
+    const undefinedKeys = (s: object) =>
+      Object.entries(s)
+        .filter(([, value]) => value === undefined)
+        .map(([key]) => key)
+    expect(undefinedKeys(buildStorySettings('adventure', app()))).toEqual([])
+    expect(
+      undefinedKeys(buildStorySettings('creative', app({ embeddingProviderId: 'p1' }))),
+    ).toEqual([])
+  })
   it('lets the app embedding model id win', () => {
     expect(
       buildStorySettings('adventure', app({ embeddingModelId: 'text-embedding-3-small' }))

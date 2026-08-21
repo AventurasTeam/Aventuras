@@ -492,7 +492,7 @@ export const pipelineEventBus: PipelineEventBus
 ```ts
 type TxState = {
   runs: ReadonlyMap<string /* runId */, RunState>
-  reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates classifier starts + user edits
+  reversalInProgress: boolean // set across a prose reversal's wait→sweep; gates classifier starts + user edits + user-originated delta dispatch
 }
 
 type RunState = {
@@ -1587,8 +1587,18 @@ window: a reversal sets it before
 the sweep commits. While set, `checkConcurrencyContract`
 blocks a `periodic-classifier` start (otherwise a freshly-scheduled run
 could slip in between the wait and the sweep, read pre-sweep prose, and
-commit doomed rows after), and `isUserEditBlocked` returns true (a
-concurrent edit can't insert a delta into the sweep's DB-await windows).
+commit doomed rows after), `isUserEditBlocked` returns true (a
+concurrent edit can't insert a delta into the sweep's DB-await windows),
+and `applyDeltaAction` — the [action layer](./code-conventions.md#action-layer)'s
+delta choke point — rejects any dispatch whose `source` classifies as
+user-originated. Pipeline-sourced writes are deliberately exempt from
+that last check: the in-flight classifier burst this barrier drains
+(the `'cancel'` abort never reaches the commit burst — see above) must
+still reach `applyDeltaAction` and commit. A rejection there instead
+throws inside the phase, aborting the run before it writes
+`classifier_status` back from `'running'` — a plain row, not
+delta-logged, so the sweep can't undo it — wedging `shouldCadenceFire`
+on that branch until the next app restart.
 The synchronous-`setState` invariant (see [Invariants](#invariants))
 closes the check-vs-register race the same way it does for chained
 transitions.

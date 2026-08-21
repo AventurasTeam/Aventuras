@@ -117,7 +117,10 @@
     "redo": "Redo",
     "nothingToUndo": "Nothing to undo.",
     "nothingToRedo": "Nothing to redo.",
+    "undoFailed": "Couldn't undo. Please try again.",
+    "redoFailed": "Couldn't redo. Please try again.",
     "blockedWhileGenerating": "Unavailable while generating.",
-    "blockedWhileSwapping": "Unavailable while the embedder switch finishes."
+    "blockedWhileSwapping": "Unavailable while the embedder switch finishes.",
+    "unknownCalendar": "This story's calendar isn't available, so world time can't be edited."
   }
 }

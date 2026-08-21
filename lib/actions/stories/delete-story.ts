@@ -63,6 +63,7 @@ export async function deleteStory(
 
   const ops: SqlOp[] = []
   if (branchIds.length > 0) {
+    // Unchunked: one bind per branch, and a branch set grows only by an explicit fork.
     for (const table of BRANCH_SCOPED) {
       ops.push(ctx.db.delete(table).where(inArray(table.branchId, branchIds)).toSQL())
     }

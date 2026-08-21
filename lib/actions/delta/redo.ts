@@ -1,5 +1,5 @@
 import type { Delta } from '@/lib/db'
-import { deltas } from '@/lib/db'
+import { deltas, isEmbeddedSourceTable } from '@/lib/db'
 
 import type { DbCtx } from '../types'
 import { resolveByTable, whereForDelta } from './registry'
@@ -28,6 +28,16 @@ export async function snapshotForRedo(rows: Delta[], ctx: DbCtx): Promise<RedoSn
   return snapshots
 }
 
+// A whole-row snapshot carries no diff, so redo errs dirty on membership alone; the
+// live-row compare would cost a query per delta. Copies — the snapshots outlive this call.
+function redoRow(
+  delta: Delta,
+  rowBeforeUndo: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  if (!rowBeforeUndo || !isEmbeddedSourceTable(delta.targetTable)) return rowBeforeUndo
+  return { ...rowBeforeUndo, embeddingStale: 1 }
+}
+
 // Re-inserts the original delta row so a subsequent CTRL-Z can undo the redo again.
 export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx): Promise<void> {
   const ops = []
@@ -37,10 +47,16 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
     const entry = resolveByTable(delta.targetTable)
     if (!entry) throw new Error(`redo apply: unknown target_table ${delta.targetTable}`)
     const where = whereForDelta(entry.descriptor, delta)
+    const row = redoRow(delta, rowBeforeUndo)
 
+    // A delete needs no row; create and update restore one, and a snapshot that
+    // carries none can restore nothing.
+    let restored = false
     if (delta.op === 'create') {
-      if (rowBeforeUndo)
-        ops.push(ctx.db.insert(entry.descriptor.table).values(rowBeforeUndo).toSQL())
+      if (row) {
+        ops.push(ctx.db.insert(entry.descriptor.table).values(row).toSQL())
+        restored = true
+      }
     } else if (delta.op === 'delete') {
       if (entry.cascadeDeleteOps) {
         const { ops: childOps, children } = await entry.cascadeDeleteOps(
@@ -52,10 +68,14 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
         cascadeInfo.set(delta.targetId, children)
       }
       ops.push(ctx.db.delete(entry.descriptor.table).where(where).toSQL())
-    } else if (rowBeforeUndo) {
-      ops.push(ctx.db.update(entry.descriptor.table).set(rowBeforeUndo).where(where).toSQL())
+      restored = true
+    } else if (row) {
+      ops.push(ctx.db.update(entry.descriptor.table).set(row).where(where).toSQL())
+      restored = true
     }
-    ops.push(ctx.db.insert(deltas).values(delta).toSQL())
+    // Inside the guards, not after: a snapshot that wrote nothing would log a restore
+    // that never happened, leaving a later CTRL-Z to reverse a row redo never touched.
+    if (restored) ops.push(ctx.db.insert(deltas).values(delta).toSQL())
   }
   await ctx.runInTransaction(ops)
   // Past this point the redo is committed; a patcher throw is a store-sync
@@ -64,6 +84,7 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
   try {
     for (const { delta, rowBeforeUndo } of snapshots) {
       const entry = resolveByTable(delta.targetTable)
+      const row = redoRow(delta, rowBeforeUndo)
       if (delta.op === 'delete') {
         entry?.patcher?.(delta.branchId, { op: 'delete', id: delta.targetId })
         const children = cascadeInfo.get(delta.targetId)
@@ -75,12 +96,12 @@ export async function applyRedo(snapshots: readonly RedoSnapshot[], ctx: DbCtx):
             }
           }
         }
-      } else if (rowBeforeUndo) {
+      } else if (row) {
         entry?.patcher?.(
           delta.branchId,
           delta.op === 'create'
-            ? { op: 'create', id: delta.targetId, row: rowBeforeUndo }
-            : { op: 'update', id: delta.targetId, columns: rowBeforeUndo },
+            ? { op: 'create', id: delta.targetId, row }
+            : { op: 'update', id: delta.targetId, columns: row },
         )
       }
       // create/update with no rowBeforeUndo wrote nothing to the DB above; skip

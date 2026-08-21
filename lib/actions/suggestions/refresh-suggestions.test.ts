@@ -17,6 +17,7 @@ import {
   currentStoryStore,
   entitiesStore,
   entriesStore,
+  generationStore,
 } from '@/lib/stores'
 
 import { refreshSuggestions } from './refresh-suggestions'
@@ -230,6 +231,7 @@ describe('refreshSuggestions', () => {
 
     expect(await undoLastAction('b1', ctx)).toEqual({
       status: 'rejected',
+      code: 'gated',
       reason: 'generation in flight',
     })
 
@@ -288,6 +290,23 @@ describe('refreshSuggestions', () => {
     release()
     expect((await inflight).outcome).toBe('completed')
     expect(generateStructuredMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a re-roll started inside a prose reversal', async () => {
+    const { db, ctx } = await makeHarness()
+    await seed(db)
+    wireAppSettings()
+    generationStore.setReversalInProgress(true)
+
+    const result = await refreshSuggestions(
+      { storyId: 's1', branchId: 'b1' },
+      { refreshGuidance: '' },
+      ctx,
+    )
+
+    expect(result).toEqual({ outcome: 'rejected', blockedBy: 'reversal' })
+    // Guard's point: no ai_classifier delta lands inside the reversal's DB-await window.
+    expect(generateStructuredMock).not.toHaveBeenCalled()
   })
 
   it('halts before phase 0 with a config-resolver failure when the suggestion agent is unassigned', async () => {

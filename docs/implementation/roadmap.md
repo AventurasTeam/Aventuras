@@ -208,9 +208,10 @@ M4.6 once the M4.1 / M4.3 shells exist to host the import
 affordances.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18, verified against the code first. The swap-prompt item is
-placed provisionally: it names only "a future reader/settings slice",
-and story-open is not owned by any M4 slice as sketched.
+2026-08-18 and 2026-08-20, verified against the code first. The
+swap-prompt item is placed provisionally: it names only "a future
+reader/settings slice", and story-open is not owned by any M4 slice as
+sketched.
 
 - **M4.4 — "Upgrade to current default" story-open prompt deferred from 3.1b.**
   Canon ([`retrieval.md → Model swap UX`](../memory/retrieval.md#model-swap-ux))
@@ -254,6 +255,22 @@ and story-open is not owned by any M4 slice as sketched.
   (`Aria is in [Shop in Town Square in City]`). Close by adopting M4's
   shared guard rather than writing a wizard-local copy of it. Raised
   2026-08-14.
+- **M4.2 — The first delete surface has to sweep the row's vectors.**
+  `deleteVecOps` (`lib/db/embeddings/ops.ts`) exists and is exported
+  through both barrels, but has **no production caller**, and there are
+  no SQL triggers in `lib/db/migrations/`, so nothing else reaches the
+  vec tables per row. Story delete is already covered — it calls the
+  branch-scoped `deleteBranchVecOps` — and `deleteEntity`, `deleteLore`,
+  `deleteHappening` and `deleteChapter` have no production caller yet, so
+  nothing leaks today; the leak starts with the first delete button.
+  Whichever slice ships that button owns wiring the four handlers, and it
+  is not only the delete arm: reverse-replay restores the row and
+  Slice 3.12a already forces it dirty so the drain re-embeds it, but
+  `applyRedo` re-applies the delete and would need to re-sweep. Retrieval
+  never serves orphans — its candidate pools are built from source rows —
+  so this is unbounded dead weight that survives an embedder swap, not
+  wrong results. Surfaced by Slice 3.12a review (2026-08-19), verified and
+  routed 2026-08-20.
 - **M4.5 — Custody of a failed turn's text rests on one deletable system entry.**
   A failed or refused turn reverse-replays its own `user_action` with the
   rest of its action group (`abortRun` → `reverseReplayDeltas`, and
@@ -650,9 +667,21 @@ tab is the canonical _don't_ — M3.1's implementation will refine
 its spec.
 
 Carried deferrals, routed out of [`triage.md`](./triage.md)
-2026-08-18. Each was verified against the code before it moved;
-resolve with the slice it names.
+2026-08-18 and 2026-08-20. Each was verified against the code before it
+moved; resolve with the slice it names.
 
+- **M7.3 — Electron main has no unhandled-rejection handler.**
+  Slice 3.12a installed one in the renderer (`lib/boot/rejection-handler.ts`),
+  but `electron/main.ts` registers no `process.on('unhandledRejection')` —
+  and main is where SQLite and the local embedder actually run, so a
+  rejection escaping a `db:transaction` or `embedder:embed` handler is
+  invisible on the process that owns the data. Not a renderer fix: main
+  has no access to the renderer's diagnostics store, so the entry has to
+  travel over IPC.
+  [`observability.md → Cross-platform`](../observability.md#cross-platform)
+  already anticipates a main-process emit path, which is where the design
+  should start. Surfaced by Slice 3.12a review (2026-08-19), routed
+  2026-08-20.
 - **M7.1 — Every future model-removal path must evict the native session cache.**
   `lib/embedder/local/runtime.native.ts` holds a lazy `bundles`
   `Map<modelId, SessionBundle>`; a removed then re-downloaded model reuses
@@ -801,6 +830,68 @@ resolve with the slice it names.
   that milestone is authored; it has no owner today. Surfaced by the Slice
   3.3 real-provider smoke (2026-07-31), reproducible via
   `e2e/tests/classifier-real-provider.smoke.spec.ts`.
+- **M7.1 — A profile's `structuredOutput: 'force-on'` never reaches the
+  provider.** Routed from the Slice 3.12 split (2026-08-19). The flag
+  round-trips through the DB but has no UI, and `createProviderModel`
+  (`lib/ai/providers.ts`) takes no profile at all, so
+  `supportsStructuredOutputs` is never set — while the generate path
+  skips prompt-schema injection under force-on, so a forced structured
+  call sends a bare `json_object` response format with no schema
+  anywhere. Today reachable only by hand-editing SQLite; it becomes a
+  footgun labelled "force on" the moment M7.1's profile editor ships,
+  which is why it lands with that editor. Wiring: thread the resolved
+  profile into provider creation, capability-gate on `json_schema`
+  support, and convert the structured schemas' optional fields to
+  nullable (the classifier's `currentLocation?` / `summary?` at
+  minimum — that conversion also changes what the auto path accepts,
+  so it needs its own care). `e2e/tests/structured-force-on.spec.ts`
+  pins current behavior and flags the change. Surfaced by the M3 E2E
+  harness work (2026-07-24); verified 2026-08-19.
+- **M7.1 — The blocking embed path has no per-request token budget.**
+  Routed from the Slice 3.12 split (2026-08-19), which keeps the cheap
+  halves (a `maxParallelCalls` cap, chunking the local backend) in
+  Slice 3.12a. What remains: provider chunks split at 2048 rows with
+  no token bound, so a batch of long rows can 413 — and because the
+  sync stage is blocking by design, that fails the turn outright. A
+  real budget needs a per-provider token limit no settings surface
+  carries, which makes M7.1's providers tab the owner; the estimator
+  is free (`countTokens` exists) but sits across a lint-enforced
+  module boundary from `lib/embedder`, so it needs relocating or
+  re-exporting. Surfaced by M3.4 Task 12 review (2026-08-02);
+  narrowed 2026-08-19.
+- **M7.2 — `validateRegistry` cannot catch a template using an
+  undeclared variable.** Routed from the Slice 3.12 split
+  (2026-08-19). It validates template ids and display groups but
+  never reads template Liquid source, so the direction that matters
+  for prompt correctness is unchecked: an undeclared variable renders
+  blank at runtime and passes every test
+  (`templateContextMap.test.ts` documents the gap). M7.2's pack tab
+  gates on this validator, which makes it the owner. Closing it needs
+  scope tracking (`for` / `assign` / `capture` bind loop-locals a
+  naive root-identifier check would flag), include-graph resolution
+  (`lib/prompts/validate-includes.ts` already parses the include
+  graph, so the substrate exists), and a filter allow-list. Surfaced
+  by the Slice 3.6a Task 9b review (2026-08-10); sized 2026-08-19.
+- **M7.2 — Nothing implements the window-level accounting canon
+  describes.** Routed from the Slice 3.12 split (2026-08-19).
+  [`retrieval.md → Structural floor takes budget first`](../memory/retrieval.md#structural-floor-takes-budget-first)
+  wants floor-then-reservation-then-budgets over a tracked context
+  window; verified absent on all three counts — no window figure
+  exists anywhere (model profiles carry no input-window field), no
+  prompt-overhead reservation exists (`promptBufferTokens` is
+  computed only for probe captures), and the budget sliders the
+  original entry described do not ship at all (the Memory tab's
+  retrieval-budgets section is unbuilt). Everyone runs on the
+  conservative 5,500-token defaults, so the failure mode — budgets
+  with no relationship to the model's window overflowing the prompt —
+  arrives with the budget editor, which is why this lands with
+  M7.2's Memory tab rather than sooner. It is also an ordering
+  problem, not just arithmetic: retrieval runs before the prompt is
+  assembled, so overhead has to be estimated ahead of assembly or a
+  pre-pass has to render the scaffolding; and changing what budgets
+  mean moves Slice 3.5's parity test, since captures echo the
+  pre-derivation values. Surfaced by M3.4 Task 17 review
+  (2026-08-02); verified 2026-08-19.
 
 **Gates.** M6 (settings should reflect real branching + multi-
 story behavior; diagnostics should inspect real branch-aware
@@ -895,7 +986,28 @@ each names.
   user-authored calendar would be silently ignored once the vault can
   hold one. Decide whether resolution is meant to be registry-only,
   DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
-  Slice 3.8 Task 6 implementation.
+  Slice 3.8 Task 6 implementation. Extended by the Slice 3.12 split
+  (2026-08-19): the fallback now backs a **write path**, not just
+  rendering — the world-time edit form's tiers and inverse conversion
+  come from the fallback calendar, so on a non-builtin id a user
+  edits Minute/Second fields the story's calendar does not have and
+  Gregorian-rollover seconds are written into `metadata.worldTime`,
+  silently re-meaning if the real calendar ever resolves. Two facts
+  for whoever picks it up: only seeded data can produce a non-builtin
+  id today (the wizard offers builtins only), and DB-backing is not a
+  lookup change — the seeded `cal_default` definition does not match
+  `calendarSystemSchema`, so the persisted shape has to be designed
+  first, and every registry consumer is synchronous (two `useMemo`s
+  and the wizard), so an async or store-backed registry ripples. The
+  reader-versus-prompt disagreement half was fixed in
+  [Slice 3.12a](./milestones/03-memory-floor/slices/12a-runtime-integrity.md):
+  the context builder now resolves through `resolveCalendar`, so a
+  non-builtin id describes the same fallback calendar to the model
+  that the reader already shows. That makes this item's stakes
+  concrete rather than hypothetical — the seeded story's prompt now
+  carries a Gregorian calendar section for a 360-day calendar, and
+  it starts describing the real one the moment the registry consults
+  `vault_calendars`.
 
 **Gates.** M7 (settings surfaces translation toggles).
 

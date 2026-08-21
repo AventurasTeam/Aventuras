@@ -73,7 +73,7 @@ export function buildStorySettings(
   effectiveDim?: number | null,
 ): StorySettings {
   const appPalette = app.defaultSuggestionCategories[mode]
-  return storySettingsSchema.parse({
+  const settings = storySettingsSchema.parse({
     ...STORY_SETTINGS_DEFAULTS,
     ...app.defaultStorySettings,
     // An empty app palette means "not configured", not "the user wants none" —
@@ -89,4 +89,10 @@ export function buildStorySettings(
     // value the tightened positive-int schema would reject.
     ...(effectiveDim != null ? { effectiveDim } : {}),
   })
+  // Zod keeps an `undefined` override as a present own property with no bindable form
+  // in the key-scoped settings write. Pruned here so the overrides stay unconditional.
+  for (const [key, value] of Object.entries(settings)) {
+    if (value === undefined) delete (settings as Record<string, unknown>)[key]
+  }
+  return settings
 }

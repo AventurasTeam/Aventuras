@@ -69,6 +69,29 @@ describe('useWorldTimeEditing → calendar resolution', () => {
     expect(Object.keys(result.current.worldTimeDecorations)).toEqual(['e1', 'e2'])
   })
 
+  // The read/write split: the fallback keeps footers rendered, but a tuple picked
+  // against it would persist under a calendar the story is not using.
+  it('refuses to open the edit sheet for an id the registry does not know', async () => {
+    const { result } = render(ENTRIES, 'cal_default')
+
+    await act(async () => {
+      await result.current.requestEditWorldTime('e1')
+    })
+
+    expect(result.current.timeEdit).toBeNull()
+  })
+
+  it('opens the edit sheet when the calendar resolves', async () => {
+    const { result } = render(ENTRIES, 'earth-gregorian')
+
+    await act(async () => {
+      await result.current.requestEditWorldTime('e1')
+    })
+
+    // Positive control: the refusal above also passes on a hook that never opens.
+    expect(result.current.timeEdit?.entryId).toBe('e1')
+  })
+
   it('pairs the resolved calendar with the story origin', () => {
     const { result } = render(ENTRIES, 'earth-gregorian')
     expect(result.current.worldTimeFrame?.origin).toBe(ORIGIN)
@@ -155,16 +178,10 @@ describe('useWorldTimeEditing → edit result channel', () => {
     )
   })
 
-  it('stays quiet on a successful write', async () => {
+  it('reports a successful write as ok and stays quiet', async () => {
     updateEntryWorldTime.mockResolvedValue({ status: 'ok' })
     const { result } = render(ENTRIES, 'earth-gregorian')
     await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: true })
     expect(toast.error).not.toHaveBeenCalled()
-  })
-
-  it('reports a successful write as ok', async () => {
-    updateEntryWorldTime.mockResolvedValue({ status: 'ok' })
-    const { result } = render(ENTRIES, 'earth-gregorian')
-    await expect(result.current.editWorldTime('e2', 180)).resolves.toEqual({ ok: true })
   })
 })

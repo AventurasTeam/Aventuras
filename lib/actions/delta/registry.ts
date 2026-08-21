@@ -37,6 +37,8 @@ export type CascadeDeleteOps = (
 }>
 
 export type HandlerOutcome =
+  // Deliberately a bare string: each action family funnels its OWN rejection vocabulary
+  // through here, so a single union would couple taxonomies with no reason to agree.
   | { status: 'rejected'; reason: string; code?: string }
   | {
       status: 'ok'

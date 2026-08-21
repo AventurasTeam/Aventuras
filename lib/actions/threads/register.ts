@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { NewThread, Thread } from '@/lib/db'
-import { threadWriteSchema, threads } from '@/lib/db'
+import { KIND_FIELDS, threadWriteSchema, threads } from '@/lib/db'
 import { threadsStore } from '@/lib/stores'
 
 import { nullifyRef } from '../coerce'
@@ -57,7 +57,7 @@ function fullRow(entry: NewThread): Thread {
     injectionMode: entry.injectionMode,
     triggeredAtEntryId: nullifyRef(entry.triggeredAtEntryId),
     resolvedAtEntryId: nullifyRef(entry.resolvedAtEntryId),
-    embeddingStale: entry.embeddingStale ?? 0,
+    embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -118,6 +118,15 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `update patch for threads ${bid}:${id} has no updatable fields`,
     }
+
+  // Embedded-column change flips the flag; see entities/register.ts for the reasoning.
+  const [firstField, secondField] = KIND_FIELDS.thread
+  if (
+    (firstField in set && set[firstField] !== (current[firstField] ?? null)) ||
+    (secondField in set && set[secondField] !== (current[secondField] ?? null))
+  ) {
+    set.embeddingStale = 1
+  }
 
   return {
     status: 'ok',

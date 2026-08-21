@@ -515,4 +515,75 @@ describe('happenings CRUD arms', () => {
     expect(happeningInvolvementsStore.getById('inv_1')).toBeUndefined()
     expect(happeningAwarenessStore.getById('haw_1')).toBeUndefined()
   })
+
+  it('defaults embedding_stale to 1 on create', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: { kind: 'createHappening', source: 'ai_classifier', payload: { entry: HAP } },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'hap_1')).embeddingStale).toBe(1)
+  })
+
+  it('flips embedding_stale only when an embedded column changes', async () => {
+    const { db, ctx } = await setup()
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'createHappening',
+          source: 'ai_classifier',
+          payload: { entry: { ...HAP, embeddingStale: 0 } },
+        },
+        actionId: 'act_c',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'hap_1', patch: { commonKnowledge: 1 } },
+        },
+        actionId: 'act_u1',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'hap_1')).embeddingStale).toBe(0) // non-embedded columns don't flip
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'hap_1', patch: { title: 'The duel' } },
+        },
+        actionId: 'act_u2',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'hap_1')).embeddingStale).toBe(0) // same value re-sent compares equal
+
+    await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateHappening',
+          source: 'user_edit',
+          payload: { branchId: 'br_1', id: 'hap_1', patch: { description: 'new text' } },
+        },
+        actionId: 'act_u3',
+        branchId: 'br_1',
+      },
+      ctx,
+    )
+    expect((await rowFor(db, 'hap_1')).embeddingStale).toBe(1) // embedded column changed
+  })
 })

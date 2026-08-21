@@ -1,8 +1,11 @@
 import { eq } from 'drizzle-orm'
+import type { ZodType } from 'zod'
 
 import {
   emptyWorkingState,
   stories,
+  wizardCastDraftSchema,
+  wizardLoreDraftSchema,
   wizardSessions,
   wizardWorkingStateSchema,
   type StoryDefinition,
@@ -98,29 +101,70 @@ export async function saveStoryDraft(
   return { storyId }
 }
 
-// Persisted rows predate the current schema: a field the wizard now reads may
-// be missing or the wrong shape after an app upgrade, and returning the raw
-// blob would surface that as a crash deep in the wizard. Re-validate on load and
-// fall back to a fresh state, toasting so the reset is visible rather than a
-// silently blanked draft.
+// `structural` (not even an array) stays apart from `dropped` (a per-item
+// parse failure) so a whole missing container is never miscounted as "1 row".
+function salvageRows<T>(
+  raw: unknown,
+  schema: ZodType<T>,
+): { rows: T[]; dropped: number; structural: boolean } {
+  if (raw == null) return { rows: [], dropped: 0, structural: false }
+  if (!Array.isArray(raw)) return { rows: [], dropped: 0, structural: true }
+  const rows: T[] = []
+  let dropped = 0
+  for (const item of raw) {
+    const parsed = schema.safeParse(item)
+    if (parsed.success) rows.push(parsed.data)
+    else dropped++
+  }
+  return { rows, dropped, structural: false }
+}
+
+// Scalar shell resets wholesale; row arrays salvage element-wise, like decodeCaptures.
 function parsePersistedState(
   raw: unknown,
   source: string,
-): { state: WizardWorkingState; ok: boolean } {
-  const parsed = wizardWorkingStateSchema.safeParse(raw)
-  if (parsed.success) return { state: parsed.data, ok: true }
-  logger.warn('action_layer.wizard_session_parse_failed', {
-    source,
-    issues: parsed.error.issues.length,
-  })
-  toast.error(t('landing:errors.sessionStateCorrupt'))
-  return { state: emptyWorkingState(), ok: false }
+): { state: WizardWorkingState; ok: boolean; dropped: number } {
+  const shell = wizardWorkingStateSchema.omit({ lore: true, cast: true }).safeParse(raw)
+  if (!shell.success) {
+    logger.warn('action_layer.wizard_session_parse_failed', {
+      source,
+      issues: shell.error.issues.length,
+    })
+    toast.error(t('landing:errors.sessionStateCorrupt'))
+    return { state: emptyWorkingState(), ok: false, dropped: 0 }
+  }
+  const blob = raw as Record<string, unknown>
+  const lore = salvageRows(blob.lore, wizardLoreDraftSchema)
+  const cast = salvageRows(blob.cast, wizardCastDraftSchema)
+  const dropped = lore.dropped + cast.dropped
+  const structural = lore.structural || cast.structural
+  if (dropped > 0 || structural) {
+    logger.warn('action_layer.wizard_session_rows_dropped', {
+      source,
+      lore: lore.dropped,
+      cast: cast.dropped,
+      structural,
+    })
+  }
+  if (dropped > 0) toast.error(t('landing:errors.sessionRowsDropped', { count: dropped }))
+  if (structural) toast.error(t('landing:errors.sessionSectionUnreadable'))
+  return { state: { ...shell.data, lore: lore.rows, cast: cast.rows }, ok: !structural, dropped }
 }
 
-export async function loadDraft(storyId: string, ctx: DbCtx): Promise<WizardWorkingState | null> {
+type DraftSession = {
+  state: WizardWorkingState
+  sourceDraftId: string | null
+  /** Unreadable rows left behind in the draft row this pointer still targets. */
+  droppedRows: number
+}
+
+// sourceDraftId mirrors loadLiveSession's sourceStoryId: an unparseable blob resets to
+// a fresh state, and keeping the pointer would let Save or Finish overwrite the draft.
+export async function loadDraft(storyId: string, ctx: DbCtx): Promise<DraftSession | null> {
   const [row] = await ctx.db.select().from(wizardSessions).where(eq(wizardSessions.id, storyId))
   if (!row) return null
-  return parsePersistedState(row.state, 'draft').state
+  const { state, ok, dropped } = parsePersistedState(row.state, 'draft')
+  return { state, sourceDraftId: ok ? storyId : null, droppedRows: dropped }
 }
 
 type LiveSession = { state: WizardWorkingState; sourceStoryId: string | null }

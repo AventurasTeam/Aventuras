@@ -27,6 +27,9 @@ type WizardSnapshot = {
   // ephemeral: only a VALID dim ever reaches `state.effectiveDim`, so this flag is
   // what tells Finish the field disagrees with the value it would commit.
   customDimInvalid: boolean
+  // Rows the resumed draft's blob could not parse. Ephemeral, carried only so Save
+  // can say what replacing the draft row discards — no other surface reports them.
+  droppedRows: number
 }
 
 type WizardState = WizardSnapshot & {
@@ -62,7 +65,7 @@ type WizardState = WizardSnapshot & {
   setCastStatus: (id: string, status: 'active' | 'staged') => boolean
   /** Returns whether the removed row was the lead — caller toasts. */
   removeCast: (id: string) => boolean
-  hydrate: (state: WizardWorkingState) => void
+  hydrate: (state: WizardWorkingState, droppedRows?: number) => void
   reset: () => void
 }
 
@@ -126,6 +129,7 @@ const store = createStore<WizardState>()((set) => {
     state: fresh,
     furthestStep: fresh.step,
     customDimInvalid: false,
+    droppedRows: 0,
     setStep: (step) =>
       set((s) => ({ state: { ...s.state, step }, furthestStep: Math.max(s.furthestStep, step) })),
     patchDefinition: (patch) =>
@@ -197,10 +201,11 @@ const store = createStore<WizardState>()((set) => {
       })
       return leadUnset
     },
-    hydrate: (state) => set({ state, furthestStep: state.step, customDimInvalid: false }),
+    hydrate: (state, droppedRows = 0) =>
+      set({ state, furthestStep: state.step, customDimInvalid: false, droppedRows }),
     reset: () => {
       const r = emptyWorkingState()
-      set({ state: r, furthestStep: r.step, customDimInvalid: false })
+      set({ state: r, furthestStep: r.step, customDimInvalid: false, droppedRows: 0 })
     },
   }
 })
@@ -211,7 +216,12 @@ function useWizard<T>(selector: (s: WizardSnapshot) => T): T {
 
 function getWizard(): WizardSnapshot {
   const s = store.getState()
-  return { state: s.state, furthestStep: s.furthestStep, customDimInvalid: s.customDimInvalid }
+  return {
+    state: s.state,
+    furthestStep: s.furthestStep,
+    customDimInvalid: s.customDimInvalid,
+    droppedRows: s.droppedRows,
+  }
 }
 
 const api = store.getState()

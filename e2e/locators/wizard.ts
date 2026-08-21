@@ -76,6 +76,13 @@ export const wizard = {
   saveDraft: (page: Page): Locator =>
     page.getByRole('button', { name: t('wizard:footer.saveDraft') }),
 
+  // The confirm a Save raises when the resumed draft lost rows on load. Its
+  // title is count-plural, so match on the two buttons instead.
+  discardDroppedConfirm: (page: Page): Locator =>
+    page.getByRole('button', { name: t('wizard:discardDropped.confirm') }),
+  discardDroppedCancel: (page: Page): Locator =>
+    page.getByRole('button', { name: t('wizard:discardDropped.cancel') }),
+
   // Hard entry gate (wizard.md → Embedder-unavailable): an AlertDialog over the
   // shell when no usable embedder resolves. The title is reason-independent, so
   // it's the stable assertion target.

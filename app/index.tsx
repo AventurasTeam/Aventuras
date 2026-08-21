@@ -31,6 +31,7 @@ import {
   resetStorySettings,
   setStoryArchived,
   setStoryFavorite,
+  StorySettingsStaleStoreError,
 } from '@/lib/actions'
 import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
@@ -112,6 +113,13 @@ export default function Index() {
     goWizard()
   }
 
+  // One expression, two entry points: openDraft and the discard prompt must resolve
+  // the same target, or a corrupt draft overwrites itself from the second path.
+  const wizardTargetFor = (
+    draft: { sourceDraftId: string | null } | null,
+    storyId: string,
+  ): string | undefined => (draft ? draft.sourceDraftId : storyId) ?? undefined
+
   const openDraft = (storyId: string) => {
     dismissStoryRecovery()
     if (sessionExists) {
@@ -120,8 +128,8 @@ export default function Index() {
     }
     runAction(
       loadDraft(storyId, ctx).then((draft) => {
-        if (draft) wizardStore.hydrate(draft)
-        goWizard(storyId)
+        if (draft) wizardStore.hydrate(draft.state, draft.droppedRows)
+        goWizard(wizardTargetFor(draft, storyId))
       }),
       {
         event: 'action_layer.wizard_draft_load_failed',
@@ -238,10 +246,10 @@ export default function Index() {
             clearLiveSession(ctx).then(async () => {
               if (target?.trigger === 'draft' && target.storyId) {
                 const draft = await loadDraft(target.storyId, ctx)
-                if (draft) wizardStore.hydrate(draft)
+                if (draft) wizardStore.hydrate(draft.state, draft.droppedRows)
                 else wizardStore.reset()
                 setPrompt(null)
-                goWizard(target.storyId)
+                goWizard(wizardTargetFor(draft, target.storyId))
                 return
               }
               wizardStore.reset()
@@ -290,9 +298,16 @@ export default function Index() {
               void operation.then((outcome) => {
                 handleStoryRecoveryResetOutcome(outcome, {
                   onResetFailure: (error) => {
+                    // Stale-store is not a failed reset: the repair committed and
+                    // only the mirror is behind, so "try again" would deny a landed write.
+                    const stale = error instanceof StorySettingsStaleStoreError
                     runAction(Promise.reject(error), {
                       event: 'action_layer.story_settings_reset_failed',
-                      toastMessage: t('landing:errors.resetStorySettingsFailed'),
+                      toastMessage: t(
+                        stale
+                          ? 'landing:errors.resetStorySettingsStale'
+                          : 'landing:errors.resetStorySettingsFailed',
+                      ),
                       context: { storyId },
                     })
                   },

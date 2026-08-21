@@ -7,6 +7,7 @@ import {
   entityStateColumnSchema,
   entityStateSchemaForKind,
   entityWriteSchema,
+  KIND_FIELDS,
 } from '@/lib/db'
 import { entitiesStore } from '@/lib/stores'
 
@@ -67,7 +68,9 @@ function fullRow(entry: NewEntity): Entity {
     nameCollisionFlag: entry.nameCollisionFlag ?? 0,
     state: entry.state ?? emptyEntityState(entry.kind),
     tags: entry.tags ?? [],
-    embeddingStale: entry.embeddingStale ?? 0,
+    // A new row has no vector by definition — default dirty. Clearing happens via a
+    // same-batch stale-clear op once the embed lands, never via an explicit 0.
+    embeddingStale: entry.embeddingStale ?? 1,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt,
   }
@@ -149,6 +152,16 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
       status: 'rejected',
       reason: `update patch for entities ${bid}:${id} has no updatable fields`,
     }
+
+  // Only KIND_FIELDS is embedded — status/tags/state edits deliberately don't flip the flag.
+  // The compare errs dirty on null-vs-'' (compositeText treats them alike): never a stale one.
+  const [firstField, secondField] = KIND_FIELDS.entity
+  if (
+    (firstField in set && set[firstField] !== (current[firstField] ?? null)) ||
+    (secondField in set && set[secondField] !== (current[secondField] ?? null))
+  ) {
+    set.embeddingStale = 1
+  }
 
   return {
     status: 'ok',

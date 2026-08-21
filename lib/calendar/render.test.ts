@@ -59,9 +59,21 @@ describe('formatWorldTime', () => {
     )
     expect(formatWorldTime(ONE_DAY, EARTH_GREGORIAN, partial)).toBe('January 2, 1247 AD 00:00')
   })
+  // The parsed template is cached module-wide, so a cache keyed on anything but
+  // the format string would serve one calendar's layout to another.
+  it('renders each calendar with its own template', () => {
+    const terse = { ...EARTH_GREGORIAN, displayFormat: 'Y{{ year }}' }
+    expect(formatWorldTime(0, terse, ORIGIN)).toBe('Y2024')
+    expect(formatWorldTime(0, EARTH_GREGORIAN, ORIGIN)).toBe('January 1, 2024 AD 00:00')
+    expect(formatWorldTime(0, terse, ORIGIN)).toBe('Y2024')
+  })
+
   it('returns a typed miss on a broken template rather than throwing to the caller', () => {
     const broken = { ...EARTH_GREGORIAN, displayFormat: '{% badtag %}' }
     const out = formatWorldTime(0, broken, ORIGIN)
     expect(out).toBeInstanceOf(FormatMiss)
+    // Second call, not a repeat: a parse failure cached would turn every later
+    // render of that format into an empty string instead of a miss.
+    expect(formatWorldTime(0, broken, ORIGIN)).toBeInstanceOf(FormatMiss)
   })
 })

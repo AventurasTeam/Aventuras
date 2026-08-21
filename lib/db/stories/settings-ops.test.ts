@@ -6,6 +6,7 @@ import {
   clearSwapTargetOp,
   embeddingTargetKey,
   sameEmbeddingTarget,
+  setSettingsKeysOps,
   setSwapTargetOp,
   setSwapTargetDimOp,
   setEmbeddingTargetOp,
@@ -251,6 +252,45 @@ describe('story settings ops', () => {
     await runInTransaction([clearSwapTargetOp('s1', NOW)])
     // readSettings calls storySettingsSchema.parse, which throws if invalid
     expect(() => readSettings('s1')).not.toThrow()
+  })
+
+  it('setSettingsKeysOps touches only the named keys', async () => {
+    await runInTransaction([setSwapTargetOp('s1', LOCAL_TARGET, NOW)])
+
+    await runInTransaction(setSettingsKeysOps('s1', { classifierCadence: 9 }, NOW + 1000))
+
+    const settings = readSettings('s1')
+    expect(settings.classifierCadence).toBe(9)
+    expect(settings.embedding_swap_target).toBe('new-model')
+    expect(settings.embedding_model_id).toBe('old-model')
+    expect(readUpdatedAt('s1')).toBe(NOW + 1000)
+  })
+
+  // Key names are interpolated into the SQL text, not bound — this guard makes that safe.
+  it('setSettingsKeysOps refuses an off-schema key instead of interpolating it', () => {
+    expect(() => setSettingsKeysOps('s1', { "a', json('1')) -- ": 1 } as never, NOW)).toThrow(
+      "a', json('1')) -- ",
+    )
+  })
+
+  // `key in shape` passes for every Object.prototype member.
+  it.each(['constructor', 'toString', 'hasOwnProperty'])(
+    'setSettingsKeysOps refuses the prototype key %s',
+    (key) => {
+      expect(() => setSettingsKeysOps('s1', { [key]: 'x' } as never, NOW)).toThrow(key)
+    },
+  )
+
+  // node:sqlite rejects an undefined-bound value with a parameter TypeError naming no key.
+  it('setSettingsKeysOps names the key behind an undefined value', () => {
+    expect(() => setSettingsKeysOps('s1', { suggestionCount: undefined }, NOW)).toThrow(
+      'suggestionCount',
+    )
+  })
+
+  it('setSettingsKeysOps emits no op at all for an empty patch', () => {
+    // Zero path/value pairs would emit `json_set(settings, )`, a syntax error.
+    expect(setSettingsKeysOps('s1', {}, NOW)).toEqual([])
   })
 })
 

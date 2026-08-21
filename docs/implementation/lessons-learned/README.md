@@ -119,6 +119,11 @@ slice plans when relevant.
   ids from Sets / Maps on disappearance; reset / undo / reload
   can resurrect them and inherit leaked state.
 
+- [Drizzle drops keys the table has no column for, silently](./drizzle-drops-unknown-keys.md)
+  — `.set()` / `.values()` build their column list from the schema, so
+  a "the SQL would fail" gate test proves nothing; assert store/DB
+  equality instead.
+
 ### Desktop / Electron
 
 - [Running ONNX inside Electron main](./onnx-in-electron-main.md)
@@ -159,6 +164,11 @@ slice plans when relevant.
   — `'x'.repeat(4000)` reaches tiktoken's byte-pair loop as one word and
   costs ~620 ms against ~0 ms for prose of the same length; the tell is a
   timeout that only ever fires on CI.
+- [`eslint --fix` merges a module and its `.native` sibling into one import](./eslint-fix-merges-native-sibling-import.md)
+  — the resolver maps both specifiers to one module, so `import/no-duplicates`
+  aliases the native symbol onto the web implementation inside the pre-commit
+  hook; shared-contract assertions then pass vacuously. Split native tests
+  into their own file, and re-run the suite after committing.
 - [`.toThrow(ErrorClass)` only verifies the class if a typecheck runs beside it](./tothrow-errorclass-needs-typecheck.md)
   — a deleted error class resolves to `undefined` under Vitest's ESM
   interop and the assertion silently degrades to "did it throw

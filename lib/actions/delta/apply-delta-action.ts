@@ -4,9 +4,14 @@ import type { SqlOp } from '@/lib/db'
 import { deltas } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { undoRedoStore } from '@/lib/stores'
+import { generationStore, undoRedoStore } from '@/lib/stores'
 
-import type { DbCtx, MutationResult, PipelineAction } from '../types'
+import {
+  isUserOriginatedSource,
+  type DbCtx,
+  type MutationResult,
+  type PipelineAction,
+} from '../types'
 import { withKeyLock } from './key-lock'
 import { resolveByActionKind, resolveByTable } from './registry'
 
@@ -19,6 +24,14 @@ function nextLogPosition(branchId: string) {
 
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action } = args
+  // Defense in depth for the reversal barrier (prose-reversal.ts): rejecting a pipeline
+  // write here would abort it mid-commit, wedging cadence since 'running' isn't delta-logged.
+  if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
+    return {
+      status: 'rejected',
+      code: 'reversal-in-progress',
+      reason: 'prose reversal in progress',
+    }
   // Opting in here covers promoteStagedEntity because its read-then-decide
   // (loadCurrent, then branch on status) lives inside its handler. An action
   // whose read happens before dispatch must take the lock itself.

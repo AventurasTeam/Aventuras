@@ -55,6 +55,7 @@ import {
   rollbackToEntry,
   submitTurn,
   undoLastAction,
+  type UndoRejectionCode,
   updateStoryEntryContent,
   writeSystemEntry,
   type LoadOpenStoryResult,
@@ -105,6 +106,7 @@ import {
 } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { toast } from '@/lib/toast'
+import { runAction } from '@/lib/utils'
 
 const ctx = { db, runInTransaction }
 
@@ -134,6 +136,46 @@ type BranchHydrationState =
       result: Extract<LoadOpenStoryResult, { status: 'ok' }>
     }
   | { branchId: string; status: 'failure'; result: LoadOpenStoryResult | null }
+
+// Module scope, not useCallback([]): useGlobalHotkey lists `matches` in its effect
+// deps, so identity has to hold unconditionally.
+function matchesUndoRedoShortcut(ev: KeyboardEvent): boolean {
+  return (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z')
+}
+
+function matchesJumpToBottomShortcut(ev: KeyboardEvent): boolean {
+  return ev.key === 'End'
+}
+
+type ReaderGateState = {
+  hydrationFailed: boolean
+  hydrationSucceeded: boolean
+  swapPending: boolean
+  actionsBlocked: boolean
+}
+
+// Precedence, not independent conditions: hydration outranks the swap, which
+// outranks a run in flight. An object, so the order can't transpose at the call site.
+function composerDisabledReason(state: ReaderGateState): string | undefined {
+  if (state.hydrationFailed) return t('reader:hydrationFailedBody')
+  if (!state.hydrationSucceeded) return t('reader:hydrationLoading')
+  if (state.swapPending) return t('reader:actions.blockedWhileSwapping')
+  if (state.actionsBlocked) return t('reader:actions.blockedWhileGenerating')
+  return undefined
+}
+
+// Same precedence order as above; null means the reader itself renders.
+function readerPlaceholder(state: {
+  hydrationFailed: boolean
+  hydrationSucceeded: boolean
+  isEmpty: boolean
+}): { title: string; subtext?: string } | null {
+  if (state.hydrationFailed)
+    return { title: t('reader:hydrationFailedTitle'), subtext: t('reader:hydrationFailedBody') }
+  if (!state.hydrationSucceeded) return { title: t('reader:hydrationLoading') }
+  if (state.isEmpty) return { title: t('reader:emptyTitle'), subtext: t('reader:emptyBody') }
+  return null
+}
 
 export default function ReaderComposerRoute() {
   const router = useRouter()
@@ -344,10 +386,8 @@ export default function ReaderComposerRoute() {
   // (reader-composer.md → Edge cases → Branch switch with chips in flight).
   useEffect(
     () => () => {
-      const running = [...generationStore.getTxState().runs.values()].some(
-        (r) => r.kind === SUGGESTION_REFRESH_KIND && r.branchId === branchId,
-      )
-      if (running) void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
+      // Unguarded: awaitRunTerminal resolves on no match, so a pre-flight check repeats it.
+      void awaitRunTerminal(SUGGESTION_REFRESH_KIND, branchId, 'cancel')
     },
     [branchId],
   )
@@ -434,19 +474,23 @@ export default function ReaderComposerRoute() {
 
   useEffect(() => {
     let cancelled = false
-    void db
-      .select({ storyId: branches.storyId })
-      .from(branches)
-      .where(eq(branches.id, branchId))
-      .then((r) => {
-        if (!cancelled) setStoryId(r[0]?.storyId ?? null)
-      })
+    runAction(
+      db
+        .select({ storyId: branches.storyId })
+        .from(branches)
+        .where(eq(branches.id, branchId))
+        .then((r) => {
+          if (!cancelled) setStoryId(r[0]?.storyId ?? null)
+        }),
+      { event: 'reader.story_id_load_failed', context: { branchId } },
+    )
     return () => {
       cancelled = true
     }
   }, [branchId])
 
   useEffect(() => {
+    // Never rejects: internally try/caught, logs embedder.status_refresh_failed on its own.
     if (storyId != null) void refreshEmbeddingStatus(storyId)
   }, [storyId])
 
@@ -482,6 +526,7 @@ export default function ReaderComposerRoute() {
 
   const storyRows = storiesStore.useStories((s) => s.rows)
   useEffect(() => {
+    // Never rejects: internally try/caught, logs bootstrap.stories_hydrate_failed on its own.
     void rehydrateStories(db)
   }, [])
   const storyTitle = useMemo(
@@ -840,13 +885,6 @@ export default function ReaderComposerRoute() {
     [branchId],
   )
 
-  const handleRequestRollback = useCallback(
-    async (entryId: string) => {
-      await openRollback(entryId)
-    },
-    [openRollback],
-  )
-
   const handleRequestRegenerate = useCallback(
     async (entryId: string) => {
       // Opening a confirm whose dispatch the in-flight guard will drop leaves
@@ -987,37 +1025,67 @@ export default function ReaderComposerRoute() {
     return false
   }, [])
 
-  const matchesUndoRedoShortcut = useCallback(
-    (ev: KeyboardEvent) => (ev.metaKey || ev.ctrlKey) && (ev.key === 'z' || ev.key === 'Z'),
-    [],
+  // Every rejection is logged; only the actionable ones are shown. `integrity` means
+  // the delta log cannot produce the reversal it should — an error, not "Nothing to
+  // undo." A branch-not-loaded rejection is a branch-switch race that resolves itself.
+  const reportUndoRejection = useCallback(
+    (
+      op: 'undo' | 'redo',
+      result: { code: UndoRejectionCode; reason: string },
+      silent = false,
+    ): void => {
+      const isUndo = op === 'undo'
+      const fields = { branchId, code: result.code, reason: result.reason }
+      if (result.code === 'integrity')
+        logger.error(isUndo ? 'reader.undo_failed' : 'reader.redo_failed', fields)
+      else logger.debug(isUndo ? 'reader.undo_rejected' : 'reader.redo_rejected', fields)
+      if (silent) return
+      if (result.code === 'integrity')
+        toast.error(t(isUndo ? 'reader:actions.undoFailed' : 'reader:actions.redoFailed'))
+      else if (result.code === 'nothing-to-apply')
+        toast.info(t(isUndo ? 'reader:actions.nothingToUndo' : 'reader:actions.nothingToRedo'))
+      else if (result.code === 'gated') toast.info(t('reader:actions.blockedWhileGenerating'))
+    },
+    [branchId],
   )
+
+  // The one place op maps to its action, log event and toast. Two failure notions
+  // share the flow: a rejection toasts unless `silent` (the keyboard path, by the
+  // native undo convention); a thrown failure toasts on both paths, via runAction.
+  const runUndoRedo = useCallback(
+    (op: 'undo' | 'redo', silent = false) =>
+      runAction(
+        (op === 'redo' ? redoLastAction(branchId, ctx) : undoLastAction(branchId, ctx)).then(
+          (result) => {
+            // Silent to the user, never unlogged: an integrity rejection looks
+            // identical to an empty history.
+            if (result.status === 'rejected') reportUndoRejection(op, result, silent)
+          },
+        ),
+        {
+          event: op === 'redo' ? 'reader.redo_failed' : 'reader.undo_failed',
+          toastMessage: t(
+            op === 'redo' ? 'reader:actions.redoFailed' : 'reader:actions.undoFailed',
+          ),
+        },
+      ),
+    [branchId, reportUndoRejection],
+  )
+
   // Editable-target exclusion lets the browser's native undo/redo win when
   // focus is in a text input — otherwise Ctrl/Cmd+Z on a composer typo
   // reverses the last story turn instead of the typo.
   const handleUndoRedoShortcut = useCallback(
-    (ev: KeyboardEvent) => {
-      if (ev.shiftKey) void redoLastAction(branchId, ctx)
-      else void undoLastAction(branchId, ctx)
-    },
-    [branchId],
+    (ev: KeyboardEvent) => runUndoRedo(ev.shiftKey ? 'redo' : 'undo', true),
+    [runUndoRedo],
   )
   useGlobalHotkey(matchesUndoRedoShortcut, handleUndoRedoShortcut, {
     ignoreEditableTargets: true,
     enabled: isFocused,
   })
 
-  // Touch-tier path to undo/redo (the shortcut is keyboard-only). A tapped menu
-  // item silently doing nothing reads as broken, so rejections toast — unlike
-  // the keyboard path, which stays silent per native undo convention.
+  // Touch-tier path to undo/redo (the shortcut is keyboard-only).
   const hasRedo = undoRedoStore.useUndoRedo((s) => s.redoStack.length > 0)
-  const menuUndo = useCallback(async () => {
-    const result = await undoLastAction(branchId, ctx)
-    if (result.status === 'rejected') toast.info(t('reader:actions.nothingToUndo'))
-  }, [branchId])
-  const menuRedo = useCallback(async () => {
-    const result = await redoLastAction(branchId, ctx)
-    if (result.status === 'rejected') toast.info(t('reader:actions.nothingToRedo'))
-  }, [branchId])
   // Engage/settle semantics live in the surface's own jumpToBottom; the host
   // only routes the request to whichever mount is live on this platform.
   const jumpToBottom = useCallback(() => {
@@ -1026,11 +1094,7 @@ export default function ReaderComposerRoute() {
   }, [])
 
   const handleRetrySystemEntry = useCallback(async () => retrySystemEntry(), [retrySystemEntry])
-  const handleDismissSystemEntry = useCallback(async () => {
-    await dismissSystemEntry()
-  }, [dismissSystemEntry])
   const handleFixSystemEntry = useCallback(async () => fixAction?.onPress(), [fixAction])
-  const matchesJumpToBottomShortcut = useCallback((ev: KeyboardEvent) => ev.key === 'End', [])
   // Editable-target exclusion keeps End moving the caret inside the composer.
   useGlobalHotkey(matchesJumpToBottomShortcut, jumpToBottom, {
     ignoreEditableTargets: true,
@@ -1053,7 +1117,7 @@ export default function ReaderComposerRoute() {
           id: 'undo',
           label: t('reader:actions.undo'),
           ...blocked,
-          onActivate: () => void menuUndo(),
+          onActivate: () => runUndoRedo('undo'),
         },
         // Absent, not disabled, when the stack is empty — the menu doesn't
         // surface dead commands (actions-menu spec); emptiness is store-derived
@@ -1064,7 +1128,7 @@ export default function ReaderComposerRoute() {
                 id: 'redo',
                 label: t('reader:actions.redo'),
                 ...blocked,
-                onActivate: () => void menuRedo(),
+                onActivate: () => runUndoRedo('redo'),
               },
             ]
           : []),
@@ -1073,7 +1137,7 @@ export default function ReaderComposerRoute() {
           : []),
       ],
     }
-  }, [hasRedo, actionsBlocked, menuUndo, menuRedo, entries.length, jumpToBottom])
+  }, [hasRedo, actionsBlocked, runUndoRedo, entries.length, jumpToBottom])
 
   const streamingPayload = useMemo(
     () =>
@@ -1087,6 +1151,12 @@ export default function ReaderComposerRoute() {
   const openRegionPct = useOpenRegionTokens(openForBranch?.storyId)
   const { theme } = useTheme()
 
+  const placeholder = readerPlaceholder({
+    hydrationFailed,
+    hydrationSucceeded,
+    isEmpty: entries.length === 0,
+  })
+
   const surfaceProps = {
     rows: entries,
     worldTimeDecorations,
@@ -1099,12 +1169,12 @@ export default function ReaderComposerRoute() {
     systemFixLabel: fixAction?.label,
     onNearTop: loadOlderEntries,
     onCommitEdit: handleCommitEdit,
-    onRequestRollback: handleRequestRollback,
+    onRequestRollback: openRollback,
     onEditWorldTime: editWorldTime,
     onRequestEditWorldTime: requestEditWorldTime,
     onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
-    onDismissSystemEntry: handleDismissSystemEntry,
+    onDismissSystemEntry: dismissSystemEntry,
     onFixSystemEntry: handleFixSystemEntry,
   }
 
@@ -1149,20 +1219,9 @@ export default function ReaderComposerRoute() {
       <View className="flex-1 flex-row">
         <KeyboardInsetColumn>
           <View className="flex-1">
-            {hydrationFailed ? (
+            {placeholder ? (
               <View className="flex-1 items-center justify-center">
-                <EmptyState
-                  title={t('reader:hydrationFailedTitle')}
-                  subtext={t('reader:hydrationFailedBody')}
-                />
-              </View>
-            ) : !hydrationSucceeded ? (
-              <View className="flex-1 items-center justify-center">
-                <EmptyState title={t('reader:hydrationLoading')} />
-              </View>
-            ) : entries.length === 0 ? (
-              <View className="flex-1 items-center justify-center">
-                <EmptyState title={t('reader:emptyTitle')} subtext={t('reader:emptyBody')} />
+                <EmptyState title={placeholder.title} subtext={placeholder.subtext} />
               </View>
             ) : Platform.OS === 'web' ? (
               <ReaderSurface {...surfaceProps} ref={surfaceRef} />
@@ -1215,17 +1274,12 @@ export default function ReaderComposerRoute() {
                 isGenerating={isGenerating}
                 disabled={!hydrationSucceeded || swapPending}
                 sendBlocked={actionsBlocked}
-                disabledReason={
-                  hydrationFailed
-                    ? t('reader:hydrationFailedBody')
-                    : !hydrationSucceeded
-                      ? t('reader:hydrationLoading')
-                      : swapPending
-                        ? t('reader:actions.blockedWhileSwapping')
-                        : actionsBlocked
-                          ? t('reader:actions.blockedWhileGenerating')
-                          : undefined
-                }
+                disabledReason={composerDisabledReason({
+                  hydrationFailed,
+                  hydrationSucceeded,
+                  swapPending,
+                  actionsBlocked,
+                })}
                 onSend={(rawText, mode) => {
                   const wrapped = wrapComposerText(rawText, { mode, pov: wrapPov, leadName })
                   void runSubmit(wrapped, mode, { text: rawText, mode })
@@ -1254,7 +1308,18 @@ export default function ReaderComposerRoute() {
           targetEntryNumber={rollback.targetNumber}
           counts={rollback.counts}
           variant={rollback.mode}
-          onConfirm={() => void confirmRollback()}
+          onConfirm={() =>
+            runAction(confirmRollback(), {
+              event:
+                rollback.mode === 'regenerate'
+                  ? 'reader.regenerate_failed'
+                  : 'reader.rollback_failed',
+              toastMessage:
+                rollback.mode === 'regenerate'
+                  ? t('reader:regenerateFailed')
+                  : t('reader:rollbackFailed'),
+            })
+          }
         />
       ) : null}
       {timeEdit != null && worldTimeFrame != null ? (

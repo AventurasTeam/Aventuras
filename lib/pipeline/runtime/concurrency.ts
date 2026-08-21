@@ -2,21 +2,27 @@ import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
 import type { RunState } from '@/lib/stores'
 
 import { getPipeline } from '../authoring/registry'
+import { SUGGESTION_REFRESH_KIND } from '../definitions/suggestion-refresh'
 
 export type StartDecision =
   | { kind: 'start' }
   | { kind: 'start-after-yields'; targets: readonly string[] }
   | { kind: 'blocked'; by: string }
 
-// Consulted synchronously on runPipeline(kind) entry. blockedBy rejects the start;
-// yieldsTo aborts the running runs first; reversalInProgress keeps a freshly
-// scheduled periodic-classifier out of a prose-reversal's wait->sweep window.
+// Kinds whose start must not land inside a prose reversal's wait->sweep window: both write
+// an ai_classifier delta the sweep would replay over, and the choke-point guard only covers
+// user-originated sources. Exported constants, not literals — nothing else ties this list
+// to the definePipeline registrations.
+const REVERSAL_BLOCKED: readonly string[] = [PERIODIC_CLASSIFIER_KIND, SUGGESTION_REFRESH_KIND]
+
+// Consulted synchronously on runPipeline(kind) entry; reversalInProgress keeps a freshly
+// scheduled run out of a prose-reversal's wait->sweep window.
 export function checkConcurrencyContract(
   kind: string,
   currentRuns: ReadonlyMap<string, RunState>,
   reversalInProgress: boolean,
 ): StartDecision {
-  if (kind === PERIODIC_CLASSIFIER_KIND && reversalInProgress) {
+  if (reversalInProgress && REVERSAL_BLOCKED.includes(kind)) {
     return { kind: 'blocked', by: 'reversal' }
   }
 
