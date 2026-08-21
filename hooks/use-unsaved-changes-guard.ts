@@ -10,8 +10,15 @@ type CloseBridge = Pick<
 >
 
 // The declared type says nothing about what the running preload exposes: the
-// web build has no `window.native` at all, and an older desktop shell can be
-// missing methods this build expects. Probe before trusting it.
+// web build has no `window.native` at all. Probe before trusting it.
+//
+// All-or-nothing on purpose, and only safe because preload and renderer ship in
+// one bundle. A preload with the close methods but not the reload ones falls to
+// the browser path, where the guard still prevents its own unload but nothing
+// arms `closeGuards` and nothing answers a reload ask — leaving the window
+// unclosable while dirty, with no dialog. That is a stale local
+// `electron:compile`, not a shippable state, and failing loudly beats a silent
+// half-guard.
 function closeBridge(): CloseBridge | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null
   const native = window.native
