@@ -150,6 +150,27 @@ describe('chunked embed', () => {
     expect(calls).toEqual([16, 16])
   })
 
+  // The loop's check runs before each chunk, so a one-chunk embed has no boundary
+  // left for a cancel to land on: without the post-loop re-check it reports success.
+  it('reports a cancel that lands during the only chunk', async () => {
+    const controller = new AbortController()
+    const calls: number[] = []
+    __setPipelineFactoryForTest(
+      recordingFactory(calls, () => {
+        setImmediate(() => controller.abort())
+      }),
+    )
+
+    const result = await embed({
+      modelDir: '/models/single-chunk-abort',
+      texts: numberedTexts(8),
+      signal: controller.signal,
+    })
+
+    expect(result).toEqual({ ok: false, error: { kind: 'cancelled', message: 'embed cancelled' } })
+    expect(calls).toEqual([8])
+  })
+
   it('runs no pipeline call at all when the signal is already aborted', async () => {
     const calls: number[] = []
     __setPipelineFactoryForTest(recordingFactory(calls))

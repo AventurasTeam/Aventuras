@@ -159,6 +159,9 @@ export async function embedLocal(
       }
       vectors.push(vector)
     }
+    // The loop checks before each text, so a cancel landing during the last embedOne
+    // would still report success — a single-text embed being uncancellable outright.
+    if (signal?.aborted) throw abortedEmbedError(signal)
     // texts is non-empty past the guard above, so dim is set by now.
     return { vectors, dim: dim ?? 0 }
   } catch (error) {

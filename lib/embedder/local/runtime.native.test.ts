@@ -114,6 +114,19 @@ describe('embedLocal (native)', () => {
     expect(harness.runCalls).toBe(1)
   })
 
+  // The loop's check runs before each text, so a one-text embed has no boundary left
+  // for a cancel to land on: without the post-loop re-check it resolves as success.
+  it('reports a cancel that lands during the only text', async () => {
+    const controller = new AbortController()
+    harness.onRun = () => controller.abort()
+
+    const error = await rejectionOf(embedLocal('model-single-abort', ['a'], controller.signal))
+
+    expect(error).toBeInstanceOf(EmbedderCancelledError)
+    expect((error as Error).message).toBe('embed cancelled')
+    expect(harness.runCalls).toBe(1)
+  })
+
   it('runs no inference at all when the signal is already aborted', async () => {
     const error = await rejectionOf(embedLocal('model-pre-abort', ['a'], AbortSignal.abort()))
 

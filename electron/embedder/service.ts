@@ -149,6 +149,14 @@ export async function embed(args: {
         }
       }
     }
+    // The loop checks before each chunk, so a cancel landing during the last one
+    // would still report success — a single-chunk embed being uncancellable outright.
+    if (args.signal) {
+      await yieldToMacrotasks()
+      if (args.signal.aborted) {
+        return { ok: false, error: { kind: 'cancelled', message: 'embed cancelled' } }
+      }
+    }
     return { ok: true, vectors, dim }
   } catch (error) {
     return { ok: false, error: { kind: 'call', message: messageOf(error) } }
