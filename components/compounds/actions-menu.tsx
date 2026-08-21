@@ -63,6 +63,13 @@ type ActionsMenuProps = {
    * blocking — Sheet-over-Sheet is disallowed
    */
   blocked?: boolean
+  /**
+   * The owning screen's focus state. A pushed-under expo-router screen stays
+   * mounted, so without this its Cmd/Ctrl-K keeps firing from behind the
+   * screen on top. Gates only the shortcut; `blocked` is what makes the
+   * trigger inert too.
+   */
+  hotkeyEnabled?: boolean
 }
 
 type MenuRowData = {
@@ -152,6 +159,7 @@ function ActionsMenu({
   triggerLabel = DEFAULT_TRIGGER_LABEL,
   triggerSize,
   blocked,
+  hotkeyEnabled = true,
 }: ActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -162,7 +170,11 @@ function ActionsMenu({
     [blocked],
   )
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
-  useGlobalHotkey(matchesMenuShortcut, toggleOpen, { capture: true, stopPropagation: true })
+  useGlobalHotkey(matchesMenuShortcut, toggleOpen, {
+    capture: true,
+    stopPropagation: true,
+    enabled: hotkeyEnabled,
+  })
 
   const sections = useMemo<Section<MenuRowData>[]>(() => {
     const out: Section<MenuRowData>[] = []

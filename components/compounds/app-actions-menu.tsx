@@ -13,12 +13,14 @@ type AppActionsMenuProps = {
    * jumps as a required intercept. Defaults to navigating immediately.
    */
   beforeNavigate?: (proceed: () => void) => void
+  /** Passed through to `ActionsMenu`; the route owns the focus state. */
+  hotkeyEnabled?: boolean
 }
 
 // Connected variant the chrome screens mount as `<AppActionsMenu />`. Reads the
 // diagnostics gate through the selector (never a snapshot) and owns the
 // Diagnostics-Hub navigation; screens pass only their contextual group.
-export function AppActionsMenu({ contextual, beforeNavigate }: AppActionsMenuProps) {
+export function AppActionsMenu({ contextual, beforeNavigate, hotkeyEnabled }: AppActionsMenuProps) {
   const router = useRouter()
   const diagnosticsEnabled = appSettingsStore.useAppSettings((s) => s.diagnostics.enabled)
   return (
@@ -30,6 +32,7 @@ export function AppActionsMenu({ contextual, beforeNavigate }: AppActionsMenuPro
         else go()
       }}
       contextual={contextual}
+      hotkeyEnabled={hotkeyEnabled}
     />
   )
 }

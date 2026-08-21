@@ -1187,7 +1187,7 @@ export default function ReaderComposerRoute() {
       onOpenStorySettings={() => {
         if (storyId != null) router.push(`/story-settings/${storyId}`)
       }}
-      actions={<AppActionsMenu contextual={contextualActions} />}
+      actions={<AppActionsMenu contextual={contextualActions} hotkeyEnabled={isFocused} />}
       statusSlot={
         <GenerationStatusPill
           activePhase={activePhase}

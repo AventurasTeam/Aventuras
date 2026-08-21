@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
 import { Text } from '../ui/text'
@@ -178,4 +179,31 @@ export const Blocked: Story = {
   render: () => (
     <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} blocked />
   ),
+}
+
+// Cmd/Ctrl-K is a window-level listener; these two pin that the focus gate, not
+// the trigger, is what decides whether it fires.
+export const ShortcutOpensTheMenu: Story = {
+  render: () => <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+export const FocusGateSuppressesTheShortcut: Story = {
+  render: () => (
+    <ActionsMenu
+      contextual={READER_CONTEXT}
+      coreGroups={[GO_TO, STORY_TOOLS, APP]}
+      hotkeyEnabled={false}
+    />
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // The trigger itself is untouched — only the listener is gated, unlike `blocked`.
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
 }

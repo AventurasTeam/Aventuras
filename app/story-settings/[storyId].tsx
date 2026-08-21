@@ -256,7 +256,7 @@ function StorySettingsSurface({ storyId }: { storyId: string | undefined }) {
       chapterProgress={openRegionPct}
       hideSelfReferentialIcon
       onBack={handleBack}
-      actions={<AppActionsMenu beforeNavigate={session.requestLeave} />}
+      actions={<AppActionsMenu beforeNavigate={session.requestLeave} hotkeyEnabled={isFocused} />}
       statusSlot={
         <GenerationStatusPill
           activePhase={

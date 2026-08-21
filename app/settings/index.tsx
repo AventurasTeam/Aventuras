@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { useState } from 'react'
 import { Platform, Pressable, ScrollView, View } from 'react-native'
@@ -51,6 +52,7 @@ const SETTINGS_TAB_IDS = [
 
 export default function SettingsRoute() {
   const router = useRouter()
+  const isFocused = useIsFocused()
   const isPhone = useTier() === 'phone'
   const { tab } = useLocalSearchParams<{ tab?: string }>()
   const initialTab = SETTINGS_TAB_IDS.includes(tab as SettingsTabId) ? (tab as SettingsTabId) : null
@@ -177,7 +179,7 @@ export default function SettingsRoute() {
       variant="app"
       title={<Text className="font-semibold">{t('settings:title')}</Text>}
       onBack={onBack}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu hotkeyEnabled={isFocused} />}
     >
       <MasterDetailLayout
         isRowSelected={selectedTab != null}

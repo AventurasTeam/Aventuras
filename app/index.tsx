@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native'
 import { useRouter, type Href } from 'expo-router'
 import { useEffect, useMemo, useState } from 'react'
 
@@ -60,6 +61,7 @@ type PendingStoryRecovery = { storyId: string; kind: OpenFailureKind }
 
 export default function Index() {
   const router = useRouter()
+  const isFocused = useIsFocused()
   const rows = storiesStore.useStories((s) => s.rows)
   const openFailures = storiesStore.useStories((s) => s.openFailures)
   const [query, setQuery] = useState<StoryListQuery>({
@@ -200,7 +202,7 @@ export default function Index() {
       variant="app-root"
       title={<Text className="font-semibold">{t('landing:title')}</Text>}
       onOpenAppSettings={() => router.push('/settings')}
-      actions={<AppActionsMenu />}
+      actions={<AppActionsMenu hotkeyEnabled={isFocused} />}
     >
       <StoryList
         cards={cards}
