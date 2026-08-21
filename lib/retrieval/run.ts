@@ -7,7 +7,7 @@ import {
   type VecTargetKind,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
-import type { EmbedderErrorKind } from '@/lib/embedder'
+import { EmbedderCancelledError, type EmbedderErrorKind } from '@/lib/embedder'
 
 import { loadAwarenessForScene, type AwarenessRow } from './awareness'
 import { KNN_K, RANKER_DEFAULTS } from './constants'
@@ -297,7 +297,10 @@ async function runRetrievalPass(
   const embedStartedAt = performance.now()
   const embed = await embedQueries(deps, params, queries.embedTexts)
   const embedMs = performance.now() - embedStartedAt
-  if (!embed.ok) return { ...embed, partial }
+  if (!embed.ok) {
+    if (embed.cancelled) return { ok: false, cancelled: true, partial }
+    return { ok: false, failure: embed.failure, partial }
+  }
 
   const queryVectors = distributeQueryVectors(embed.vectors, queries.presence)
 
@@ -422,7 +425,9 @@ async function embedQueries(
   params: RetrievalParams,
   texts: string[],
 ): Promise<
-  { ok: true; vectors: readonly Float32Array[] } | { ok: false; failure: RetrievalFailure }
+  | { ok: true; vectors: readonly Float32Array[] }
+  | { ok: false; cancelled: true }
+  | { ok: false; cancelled?: false; failure: RetrievalFailure }
 > {
   // A zero-input embed request is provider-dependent, so it is skipped outright.
   if (texts.length === 0) return { ok: true, vectors: [] }
@@ -431,6 +436,9 @@ async function embedQueries(
   try {
     embedded = await deps.embedTexts(texts, deps.abortSignal)
   } catch (error) {
+    // The same rule the sync stage above follows: a user stop is not an embedder
+    // fault, and routing it to `failure` would offer Switch embedder as its fix.
+    if (error instanceof EmbedderCancelledError) return { ok: false, cancelled: true }
     return { ok: false, failure: { ...classifyEmbedderFailure(error), staleCount: null } }
   }
 
