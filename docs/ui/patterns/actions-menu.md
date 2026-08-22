@@ -208,12 +208,21 @@ than taking it as a prop, so a new mount is gated by default and a
 screen cannot forget.
 
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
-trigger do nothing while a modal, AlertDialog, or other Sheet owns
-the surface — Sheet-over-Sheet is disallowed per
-[`overlays.md`](./overlays.md). Unlike focus this has no context to
-read, so the screen passes it: a screen that mounts a blocking
-overlay declares it, and the menu gates both the shortcut and the
-trigger on it.
+trigger do nothing while another Sheet is open — Sheet-over-Sheet is
+disallowed per [`overlays.md`](./overlays.md) — or while the surface
+is mid-decision.
+
+The two halves are gated differently because only one of them can be
+derived. Open sheets register themselves, so the menu reads the count
+and no screen has to declare anything; this is the only workable
+shape, because a sheet opened inside a primitive (a `Select`, a
+picker) never surfaces to the route at all. The menu discounts its
+own registration, since on phone it is a Sheet too. Mid-decision is
+the judgment half — a confirm the user must answer before navigating
+away — and stays a prop, because nothing distinguishes a confirm
+worth trapping from any other overlay. Popovers deliberately do not
+gate: summoning the menu replaces an open popover, which is the
+intended behaviour.
 
 **Activation** — three outcomes, all of which **close the menu
 first**:

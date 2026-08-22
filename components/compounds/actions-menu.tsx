@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { openSheetsStore } from '@/lib/stores'
+
+import { isActionsMenuInert } from './actions-menu-logic'
 
 type ActionEntry = {
   /** Stable id; unique across all entries the menu surfaces this render. */
@@ -59,8 +62,9 @@ type ActionsMenuProps = {
   triggerSize?: IconActionSize
   /**
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
-   * this from the surface owner whenever a modal / AlertDialog / Sheet is
-   * blocking — Sheet-over-Sheet is disallowed
+   * this while the surface is mid-decision — a confirm the user must answer
+   * before navigating away. Open sheets already gate themselves; this is the
+   * judgment half, which nothing can derive.
    */
   blocked?: boolean
   /**
@@ -169,12 +173,15 @@ function ActionsMenu({
     (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
     [],
   )
+  const openSheets = openSheetsStore.useOpenSheetCount()
+  const inert = isActionsMenuInert(blocked, openSheets, open)
+
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
   // Both off-reasons live here, not split with the matcher, so a third has one place to go.
   useGlobalHotkey(matchesMenuShortcut, toggleOpen, {
     capture: true,
     stopPropagation: true,
-    enabled: hotkeyEnabled && !blocked,
+    enabled: hotkeyEnabled && !inert,
   })
 
   const sections = useMemo<Section<MenuRowData>[]>(() => {
@@ -219,11 +226,11 @@ function ActionsMenu({
         p={p}
         label={triggerLabel}
         shortcutHint={shortcutHint}
-        disabled={blocked}
+        disabled={inert}
         size={triggerSize}
       />
     ),
-    [triggerLabel, shortcutHint, blocked, triggerSize],
+    [triggerLabel, shortcutHint, inert, triggerSize],
   )
 
   const renderEmpty = useCallback(

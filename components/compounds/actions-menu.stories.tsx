@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent } from 'storybook/test'
+
+import { useRegisteredSheet } from '@/hooks/use-registered-sheet'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
 import { Text } from '../ui/text'
@@ -178,6 +181,26 @@ export const InFlight: Story = {
 export const Blocked: Story = {
   render: () => (
     <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} blocked />
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+  },
+}
+
+// A sheet the route cannot see: primitives (a Select, a picker) open their own on
+// phone, so this half is derived from the store rather than passed down. Registered
+// through the real hook so the story covers hook, store and menu as one path.
+function ForeignSheet({ children }: { children: ReactNode }) {
+  useRegisteredSheet(true)
+  return <>{children}</>
+}
+
+export const ForeignSheetSuppressesTheMenu: Story = {
+  render: () => (
+    <ForeignSheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </ForeignSheet>
   ),
   play: async () => {
     await userEvent.keyboard('{Control>}k{/Control}')

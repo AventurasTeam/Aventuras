@@ -15,10 +15,10 @@ type AppActionsMenuProps = {
    */
   beforeNavigate?: (proceed: () => void) => void
   /**
-   * Whether a modal, AlertDialog, or Sheet currently owns the surface, per
-   * [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md). Unlike focus there is no
-   * context to read this from, so it stays route-supplied — a screen that mounts a blocking
-   * overlay must pass it.
+   * Whether the surface is mid-decision — a confirm the user must answer before
+   * navigating away — per [`actions-menu.md`](../../docs/ui/patterns/actions-menu.md).
+   * Open sheets gate themselves; only the judgment half is route-supplied, because
+   * no signal distinguishes a confirm worth trapping from any other overlay.
    */
   blocked?: boolean
 }
