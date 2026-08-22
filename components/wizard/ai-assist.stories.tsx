@@ -1433,6 +1433,66 @@ export const DirtyDismissTrapsFocusInTheConfirm: Story = {
   },
 }
 
+// The failure card's Cancel is an explicit dismiss, but a failure never clears the list —
+// only the ok branch writes it — so it is the one explicit path that can still destroy work.
+export const FailureCancelKeepingAListAsksBeforeDiscarding: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Sunken Archive' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const dialog = await screen.findByRole('alertdialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+
+    // The failure card renders in place of the list, so the surviving page only becomes
+    // visible again on retry — which is also the proof that Keep discarded nothing.
+    await userEvent.click(await screen.findByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('Old Jorin')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Sunken Archive' })).toBeChecked()
+  },
+}
+
+// The other half: with nothing generated there is nothing to lose, so the same button must
+// still close outright — otherwise the guard is just an unconditional prompt.
+export const FailureCancelWithNothingGeneratedClosesOutright: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={failRun<DescriptionValue>('Provider request timed out after 3 retries')}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Couldn't generate. Provider request timed out after 3 retries."),
+      ).not.toBeInTheDocument(),
+    )
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  },
+}
+
 // The two carve-outs the dirty predicate leads with, each on its own: a seeded
 // preview is the field's own prose, and a first generate has produced nothing.
 export const SeededPreviewDismissesWithoutAsking: Story = {

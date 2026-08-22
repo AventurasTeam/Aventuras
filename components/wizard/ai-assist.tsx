@@ -216,17 +216,26 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
   }
 
-  // Catches every dismiss path that bypasses closeOverlay() — Escape, tap-outside, swipe-down —
-  // except phone-sheet hardware back, which never reaches here (see triage.md). A dirty overlay
-  // re-opens via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
-  function handleOpenChange(next: boolean) {
-    setOpen(next)
-    if (next) return
+  // Every dismiss that can still lose work: Escape, tap-outside and swipe-down arrive through
+  // handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
+  // via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
+  function requestClose() {
+    setOpen(false)
     if (hasUnsavedCandidate()) {
       setConfirmDiscard(true)
       return
     }
     resetOnClose()
+  }
+
+  // Phone-sheet hardware back never reaches here — gorhom registers no BackHandler, so the
+  // press falls through to the wizard's own router.back().
+  function handleOpenChange(next: boolean) {
+    if (next) {
+      setOpen(true)
+      return
+    }
+    requestClose()
   }
 
   // The committed value only counts as a seed once it actually carries prose —
@@ -786,7 +795,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             </Text>
             {actionSpacer}
             <View className="flex-row justify-end gap-2">
-              <Button variant="ghost" onPress={closeOverlay}>
+              {/* Not closeOverlay: a failure after a successful generate leaves listItems
+                  intact — only the ok branch overwrites it — so this discards a real list. */}
+              <Button variant="ghost" onPress={requestClose}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
               <Button onPress={assist.retry}>

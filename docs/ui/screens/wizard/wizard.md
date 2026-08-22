@@ -273,7 +273,11 @@ has not accepted, or a non-empty suggestion list. Keep editing reopens the
 panel with nothing cleared; Discard is the only thing that resets it. A
 preview seeded from the field's own committed prose is not a candidate and
 closes without asking, and neither is a first generate still in flight.
-The explicit Discard, Cancel and Use-this buttons stay unconfirmed.
+The explicit Discard and Use-this buttons stay unconfirmed, and so does
+Cancel everywhere but the failure card. A failed generate never clears the
+list — only a successful one writes it — so cancelling there destroys a
+candidate the user already has, and it takes the same confirm as an
+implicit dismiss.
 
 **Replace-on-existing.** If the user picks a preset OR accepts an
 AI-suggest while `label` or `promptBody` is non-empty, a confirm
