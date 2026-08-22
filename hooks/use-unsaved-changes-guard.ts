@@ -102,13 +102,12 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined
 
     const native = closeBridge()
-    if (native != null && !dirty) {
+    if (!dirty) {
       // Still syncs: a reload leaves the main process holding a guard armed
       // by the previous renderer, with no listener behind it.
-      syncBridge(native)
+      if (native != null) syncBridge(native)
       return undefined
     }
-    if (!dirty) return undefined
 
     // Per-surface, not shared: addEventListener dedupes by reference — sharing it would let
     // one clean surface unhook every other. Browser prompts natively; Electron routes through
@@ -117,17 +116,17 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
       event.preventDefault()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
-    if (native == null) {
-      return () => window.removeEventListener('beforeunload', onBeforeUnload)
-    }
-
     const entry = requestLeaveRef
-    armed.add(entry)
-    syncBridge(native)
+    if (native != null) {
+      armed.add(entry)
+      syncBridge(native)
+    }
     return () => {
       window.removeEventListener('beforeunload', onBeforeUnload)
-      armed.delete(entry)
-      syncBridge(native)
+      if (native != null) {
+        armed.delete(entry)
+        syncBridge(native)
+      }
     }
   }, [dirty])
 }
