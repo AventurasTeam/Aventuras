@@ -118,7 +118,7 @@ test.describe('reload guard', () => {
     expect(after.suggestionCategories.find((c) => c.id === original.id)?.label).toBe(original.label)
   })
 
-  // Pins did-start-navigation's `confirmedReloads.delete(win.id)`: Save's path never fires
+  // Pins did-navigate's `guard.confirmedReload = false`: Save's path never fires
   // will-prevent-unload (the hook drops its beforeunload listener before confirmReload()), so
   // this line is the only thing clearing the flag — delete it and the next dirty reload sails
   // through with no dialog at all.
@@ -144,10 +144,10 @@ test.describe('reload guard', () => {
       'E2E Reload Save',
     )
 
-    // This second reload is what pins `confirmedReloads`' lifecycle. Instrumenting main shows
-    // the flag is usually set and NOT consumed by will-prevent-unload — the guard hook drops
-    // its beforeunload listener before main reloads — leaving did-start-navigation's
-    // `confirmedReloads.delete(win.id)` as its only clear. Drop that line, or disable both
+    // This second reload is what pins `guard.confirmedReload`'s lifecycle. Instrumenting main
+    // shows the flag is usually set and NOT consumed by will-prevent-unload — the guard hook
+    // drops its beforeunload listener before main reloads — leaving did-navigate's
+    // `guard.confirmedReload = false` as its only clear. Drop that line, or disable both
     // clears, and the stale flag makes this reload sail through with no dialog.
     await redirtyGenerationTab(app, 'E2E Reload Save Again')
     const secondReload = page.waitForEvent('load')
@@ -232,7 +232,7 @@ test.describe('window close behind the reload guard', () => {
 })
 
 // Its own launch — this one closes the app too. Covers `will-prevent-unload`'s
-// `!closeGuards.has(win.id)` fail-open clause, which nothing else reaches: every other case
+// `!guard.guarded` fail-open clause, which nothing else reaches: every other case
 // arms the guard through a complete preload bridge, and the clause only fires for an unguarded
 // beforeunload — a partial bridge, where `closeBridge()` probes false and the hook registers
 // the browser listener alone. Without it main asks a renderer that has no dialog to show and

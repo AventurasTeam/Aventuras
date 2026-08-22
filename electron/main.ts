@@ -115,7 +115,11 @@ type WindowGuard = {
   guarded: boolean
   /** Already answered the prompt and may close. */
   confirmedClose: boolean
-  /** Consumed by the next `will-prevent-unload`, cleared on nav commit. */
+  /**
+   * Cleared on navigation commit, which is what usually clears it: the guard
+   * hook drops its `beforeunload` listener before main reloads, so the
+   * `will-prevent-unload` that would consume it mostly never fires.
+   */
   confirmedReload: boolean
   /** This window's close cancelled a quit; confirming it resumes the quit. */
   pendingQuit: boolean
@@ -214,9 +218,11 @@ function createWindow(): void {
     // loadURL, off-origin nav) are already blocked by will-navigate or precede the guard arming.
     win.webContents.send('native:reload-requested')
   })
-  // Cross-document nav commit means the arming renderer — and any confirmed reload — is gone.
-  win.webContents.on('did-start-navigation', (details) => {
-    if (!details.isMainFrame || details.isSameDocument) return
+  // A committed main-frame navigation means the arming renderer — and any confirmed
+  // reload — is gone. Not did-start-navigation: that fires before will-navigate can
+  // cancel, disarming a guard whose document is still alive and still holds the draft.
+  // In-page navigations raise did-navigate-in-page instead, so the guard survives them.
+  win.webContents.on('did-navigate', () => {
     guard.guarded = false
     guard.confirmedReload = false
   })

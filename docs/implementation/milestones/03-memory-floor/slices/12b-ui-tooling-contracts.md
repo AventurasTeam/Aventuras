@@ -397,15 +397,19 @@ taken, one bullet each:
   had nothing to prevent it and `will-prevent-unload` never fired. The
   fix is therefore two dependent halves: the renderer must prevent its
   own unload before main can answer. Main's handler fails open on
-  `!closeGuards.has(win.id)` — added after review found that asking
+  `!guard.guarded` — added after review found that asking
   unconditionally leaves a window that cancels its unload without
   arming the guard permanently unquittable, which is worse than the
   bug being fixed. Coverage is honest but partial:
   `e2e/tests/reload-guard.spec.ts` is the only automated evidence
-  (there is no unit harness for `main.ts`) and mutation testing shows
-  it catches a disabled handler but **not** the `confirmedReloads`
-  lifecycle; that gap is filed to
-  [`triage.md`](../../../triage.md) rather than papered over. The
+  (there is no unit harness for `main.ts`). Mutation testing over a
+  freshly recompiled `electron/dist` leaves four `main.ts` mutations
+  alive, and the `confirmedReload ||` arm scores **nondeterministically**
+  — surviving twice and dying once on identical input — because whether
+  the renderer still holds its `beforeunload` listener when main issues
+  the confirmed reload is a race. A single-run verdict on this file is
+  therefore evidence in neither direction; that gap is recorded here
+  rather than papered over. The
   manual desktop smoke was never run — this environment's Wayland
   session is the developer's own display, which Electron connects to
   directly regardless of `DISPLAY`, so `xvfb` cannot isolate it.

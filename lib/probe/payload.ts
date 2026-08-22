@@ -1,4 +1,9 @@
-import { CAPTURE_VERSION, type ProbeCapturePayload, type VecTargetKind } from '@/lib/db'
+import {
+  CAPTURE_VERSION,
+  type CaptureCandidateWrite,
+  type ProbeCapturePayload,
+  type VecTargetKind,
+} from '@/lib/db'
 import {
   countTokens,
   ENTITY_FRAMING,
@@ -40,7 +45,7 @@ const candidateOf = (
   t: CandidateTrace,
   mode: 'light' | 'deep',
   vector: Float32Array | undefined,
-) => ({
+): CaptureCandidateWrite => ({
   target_kind: t.kind,
   target_id: t.id,
   display_name: t.displayName,

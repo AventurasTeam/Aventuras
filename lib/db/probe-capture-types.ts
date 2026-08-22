@@ -39,9 +39,13 @@ type CaptureCandidate = {
   chapter_boost_applied: boolean
   bypass_triggered: boolean
   final_score: number
-  /** Post-MMR; null on a pre-filtered row, which never reached MMR. */
-  mmr_score: number | null
-  mmr_rank: number | null
+  /**
+   * Post-MMR; null on a pre-filtered row, which never reached MMR. Optional
+   * because a pre-v3 payload carries it absent: typing it required would let a
+   * `=== null` guard narrow `undefined` to `number` at every consumer.
+   */
+  mmr_score?: number | null
+  mmr_rank?: number | null
   selected: boolean
   drop_reason: DropReason
   tokens_estimated: number | null
@@ -92,6 +96,16 @@ type CaptureTokenizer = { encoding: string; version: string }
  */
 export const CAPTURE_VERSION = 3 as const
 
+/** First capture version carrying `mmr_score` / `mmr_rank`. */
+export const MMR_CAPTURE_VERSION = 3
+
+/**
+ * What a current-version capture must write: the fields the read shape leaves
+ * optional for older payloads are required here, so the writer cannot drop one.
+ */
+type CaptureCandidateWrite = CaptureCandidate &
+  Required<Pick<CaptureCandidate, 'mmr_score' | 'mmr_rank'>>
+
 export type ProbeCapturePayload = {
   capture_version: number
   branch_id: string
@@ -121,3 +135,5 @@ export type ProbeCapturePayload = {
    */
   failure_reason: EmbedderErrorKind | null
 }
+
+export type { CaptureCandidate, CaptureCandidateWrite }

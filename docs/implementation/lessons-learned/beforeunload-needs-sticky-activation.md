@@ -2,8 +2,18 @@
 
 Chromium ignores a `beforeunload` handler's `preventDefault()` entirely
 unless the frame has **sticky user activation** — at least one real user
-gesture since the document loaded. Without it the unload proceeds and, under
-Electron, `will-prevent-unload` **never fires at all**.
+gesture since the document loaded. Without it the unload proceeds.
+
+**This is path-dependent, and the difference matters when writing tests.**
+Measured on Electron 41.2.2 with a standalone probe:
+
+| Trigger                         | No gesture                                             |
+| ------------------------------- | ------------------------------------------------------ |
+| Reload (`webContents.reload()`) | `will-prevent-unload` never fires; reload proceeds     |
+| Window close (`win.close()`)    | `will-prevent-unload` **does** fire; window stays open |
+
+So a close-path test can exercise main's fail-open clause without landing a
+gesture, while a reload-path test cannot.
 
 This is not a subtle degradation. It is indistinguishable, from the outside,
 from having no guard registered: the page reloads through, no dialog appears,
@@ -28,9 +38,11 @@ Two consequences for `hooks/use-unsaved-changes-guard.ts`:
 
 ## How to apply
 
-- Any test that exercises `beforeunload` must land a real user gesture on the
-  page first. Driving the UI with `click()` before `fill()` is enough, and is
-  what `e2e/tests/reload-guard.spec.ts` relies on.
+- Any test that exercises `beforeunload` **on the reload path** must land a
+  real user gesture on the page first. Driving the UI with `click()` before
+  `fill()` is enough, and is what `e2e/tests/reload-guard.spec.ts`'s reload
+  cases rely on. The close-path case there deliberately lands no gesture —
+  see the table above — which is why it can reach main's fail-open clause.
 - If a future surface can become dirty without a gesture, the guard cannot
   protect it on web. Route that case through an in-app confirm instead of
   relying on the unload.
