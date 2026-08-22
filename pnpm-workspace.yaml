@@ -11,6 +11,11 @@ onlyBuiltDependencies:
 # whose export map breaks the preset loader. Force the tree to a single copy.
 overrides:
   '@storybook/react-dom-shim': '10.3.5'
+# Bare (version-less) keys make pnpm treat each patch as non-strict, and
+# `allowFailure = ignorePatchFailures ?? !strict` then routes a failed apply to a
+# warning on an exit-0 install. These patches are load-bearing on Android, where
+# CI never runs — fail the install instead.
+ignorePatchFailures: false
 patchedDependencies:
   '@gorhom/bottom-sheet': patches/@gorhom__bottom-sheet.patch
   js-tiktoken: patches/js-tiktoken.patch
