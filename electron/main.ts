@@ -22,6 +22,7 @@ import {
 } from './embedder/paths'
 import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
+import { NATIVE_CHANNELS } from './native/channels'
 
 // Abort handles for in-flight downloads, so a renderer cancel actually stops
 // the transfer instead of only hiding its progress.
@@ -216,7 +217,7 @@ function createWindow(): void {
     }
     // Named for the only cause that reaches it today: other prevented-unload sources (post-init
     // loadURL, off-origin nav) are already blocked by will-navigate or precede the guard arming.
-    win.webContents.send('native:reload-requested')
+    win.webContents.send(NATIVE_CHANNELS.reloadRequested)
   })
   // A committed main-frame navigation means the arming renderer — and any confirmed
   // reload — is gone. Not did-start-navigation: that fires before will-navigate can
@@ -236,7 +237,7 @@ function createWindow(): void {
     // intent left behind by a quit the user cancelled.
     guard.pendingQuit = quitRequested
     quitRequested = false
-    win.webContents.send('native:close-requested')
+    win.webContents.send(NATIVE_CHANNELS.closeRequested)
   })
   win.on('closed', () => {
     windowGuards.delete(win.id)
@@ -273,15 +274,15 @@ app.whenReady().then(async () => {
     showSearchWithGoogle: false,
     showInspectElement: isDev,
   })
-  ipcMain.handle('native:reveal-db-file', () => {
+  ipcMain.handle(NATIVE_CHANNELS.revealDbFile, () => {
     shell.showItemInFolder(getDbFilePath())
   })
-  ipcMain.on('native:set-close-guard', (event, active: boolean) => {
+  ipcMain.on(NATIVE_CHANNELS.setCloseGuard, (event, active: boolean) => {
     const target = windowAndGuard(event.sender)
     if (target == null) return
     target.guard.guarded = active
   })
-  ipcMain.on('native:confirm-close', (event) => {
+  ipcMain.on(NATIVE_CHANNELS.confirmClose, (event) => {
     const target = windowAndGuard(event.sender)
     if (target == null) return
     const { win, guard } = target
@@ -293,7 +294,7 @@ app.whenReady().then(async () => {
     win.close()
     if (resumeQuit) app.quit()
   })
-  ipcMain.on('native:confirm-reload', (event) => {
+  ipcMain.on(NATIVE_CHANNELS.confirmReload, (event) => {
     const target = windowAndGuard(event.sender)
     if (target == null) return
     target.guard.confirmedReload = true

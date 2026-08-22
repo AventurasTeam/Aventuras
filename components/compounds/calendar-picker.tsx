@@ -191,7 +191,7 @@ export function CalendarPicker({
           aria-haspopup="dialog"
           aria-expanded={p['aria-expanded']}
           aria-controls={p['aria-controls']}
-          // rn-primitives merges a web click past Pressable.disabled.
+          // className-only disabled styling still takes a web click; the style gates it.
           style={Platform.OS === 'web' && disabled ? POINTER_EVENTS_NONE : undefined}
           className={cn(
             'h-control-md w-full flex-row items-center rounded-md border border-border bg-bg-base px-3',
@@ -376,7 +376,7 @@ function EditAction({
       accessibilityRole="link"
       onPress={onPress}
       disabled={disabled}
-      // rn-primitives wrappers don't gate disabled clicks on web.
+      // className-only disabled styling still takes a web click; the style gates it.
       style={disabled ? POINTER_EVENTS_NONE : undefined}
       className={cn(
         'self-start rounded-sm py-1',

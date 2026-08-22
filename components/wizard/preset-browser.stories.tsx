@@ -147,6 +147,33 @@ export const SearchFiltersToMatchesOnNameAndTagline: Story = {
   },
 }
 
+// The row renders a clamped promptBody lead, so a phrase visible in the list has to
+// be findable — searching name and tagline alone empties the list on what the user
+// is looking straight at.
+export const SearchFindsAPhraseOnlyInThePromptBody: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    const noir = GENRE_PRESETS.find((preset) => preset.id === 'noir')
+    if (noir == null) throw new Error('expected a "noir" fixture in GENRE_PRESETS')
+    // A word the body carries and neither the name nor the tagline does.
+    const bodyOnly = noir.promptBody
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .find(
+        (word) =>
+          word.length > 4 &&
+          !noir.displayName.toLowerCase().includes(word.toLowerCase()) &&
+          !noir.tagline.toLowerCase().includes(word.toLowerCase()),
+      )
+    if (bodyOnly == null) throw new Error('expected a body-only word in the noir promptBody')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, bodyOnly)
+    await waitFor(() => expect(screen.getByText(noir.displayName)).toBeInTheDocument())
+  },
+}
+
 export const SearchWithNoMatchesShowsEmptyState: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {

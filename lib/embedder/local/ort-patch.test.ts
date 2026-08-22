@@ -2,15 +2,9 @@ import { existsSync, readFileSync } from 'node:fs'
 
 import { describe, expect, it } from 'vitest'
 
-// patches/onnxruntime-react-native.patch carries two hunks with no automated signal of
-// their own. Both fail Android-only, and CI has no Android lane.
-//
-// The added-file hunk is the fragile one: `pnpm patch-commit` drops files created in the
-// scratch dir with a successful exit (lessons-learned/pnpm-patch-drops-added-files.md), so
-// a regenerated patch loses it silently — and `ignorePatchFailures: false` cannot catch
-// that, since the patch it applies simply no longer contains the hunk. Without the file,
-// autolinking never registers OnnxruntimePackage and NativeModules.Onnxruntime is null at
-// the JSI install ("Cannot read property 'install' of null").
+// Both hunks fail Android-only and CI has no Android lane; `pnpm patch-commit` can drop the
+// added-file hunk with a successful exit, which `ignorePatchFailures: false` cannot catch.
+// See lessons-learned/pnpm-patch-drops-added-files.md.
 const PATCH_PATH = 'patches/onnxruntime-react-native.patch'
 const PKG_DIR = 'node_modules/onnxruntime-react-native'
 const ADDED_FILE = 'react-native.config.js'

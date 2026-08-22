@@ -36,9 +36,8 @@ export const DiagnosticsOff: Story = {
   },
 }
 
-// The wrapper forwarded neither gate until this slice, so actions-menu.md's "does nothing
-// while a modal owns the surface" rule was unreachable from every production mount. `blocked`
-// gates the trigger as well as the shortcut; `hotkeyEnabled` gates only the shortcut.
+// `blocked` gates the trigger as well as the shortcut; `hotkeyEnabled` gates only
+// the shortcut (actions-menu.md → Inert under a blocking overlay).
 export const BlockedIgnoresShortcutAndTrigger: Story = {
   args: { diagnosticsEnabled: true, onOpenDiagnosticsHub: fn(), blocked: true },
   play: async () => {

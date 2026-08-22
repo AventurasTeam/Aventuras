@@ -856,8 +856,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         </Sheet>
       ) : (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-          {/* No header ×: every state ends in an explicit Cancel or Discard, and
-              those route the close through resetOnClose. */}
+          {/* No header ×: every state ends in an explicit Cancel or Discard, which
+              route the close through requestClose — a dirty overlay asks first. */}
           {/* Explicit width, not the primitive's content-sized default: the body
               swaps per state and the loading line is wider than the guidance
               label, so a content-sized dialog visibly resizes mid-flow. 32rem

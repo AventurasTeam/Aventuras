@@ -111,7 +111,8 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
 
     // Per-surface, not shared: addEventListener dedupes by reference — sharing it would let
     // one clean surface unhook every other. Browser prompts natively; Electron routes through
-    // the bridge via will-prevent-unload.
+    // the bridge via will-prevent-unload. A surface dirtied without a user gesture is
+    // unguarded here (lessons-learned/beforeunload-needs-sticky-activation.md).
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
     }

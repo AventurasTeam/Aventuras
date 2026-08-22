@@ -271,6 +271,8 @@ export function SuggestionStrip({
       // clearing the stack first would flash a loss that may not happen.
       <View>
         {chipStack}
+        {/* Inert on purpose: the chips underneath already refuse taps while locked,
+            so the scrim must not become the thing that swallows them. */}
         {locked ? (
           <View
             style={POINTER_EVENTS_NONE}

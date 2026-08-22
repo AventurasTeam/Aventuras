@@ -5,7 +5,7 @@ export type NativeApi = {
   setCloseGuard(active: boolean): void
   confirmClose(): void
   onCloseRequested(cb: () => void): () => void
-  /** Lets the reload that `onReloadRequested` held go through. */
+  /** Re-issues the reload `onReloadRequested` refused — the original was cancelled, not parked. */
   confirmReload(): void
   onReloadRequested(cb: () => void): () => void
 }

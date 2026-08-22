@@ -387,6 +387,7 @@ function SourceButton({
       aria-busy={loading}
       accessibilityState={loading ? { busy: true } : undefined}
       className={cn(disabled && 'opacity-50')}
+      // className-only disabled styling still takes a web click; the style gates it.
       style={disabled ? POINTER_EVENTS_NONE : undefined}
     >
       {loading ? <Spinner size="sm" /> : <Icon as={icon} size="sm" />}

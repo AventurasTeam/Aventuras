@@ -25,7 +25,10 @@ function matches(preset: WizardPreset, query: string): boolean {
   const needle = query.toLowerCase()
   return (
     preset.displayName.toLowerCase().includes(needle) ||
-    preset.tagline.toLowerCase().includes(needle)
+    preset.tagline.toLowerCase().includes(needle) ||
+    // The row renders a clamped promptBody, so a phrase the user can read there
+    // has to be findable — otherwise typing it empties the list.
+    preset.promptBody.toLowerCase().includes(needle)
   )
 }
 

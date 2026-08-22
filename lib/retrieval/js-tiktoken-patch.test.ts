@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
 
 // patches/js-tiktoken.patch swaps the object-literal bpe_ranks accumulator for Map staging:
 // Hermes caps properties-per-object below o200k_base's ~200k entries, throwing RangeError on
-// Android at every countTokens call — Node has no such cap, CI has no Android lane. Patch keys
-// are version-less (pnpm warns, not fails, on a stale patch), so the installed dist's shape is
-// the only automatable signal it's still applied.
+// Android at every countTokens call — Node has no such cap, CI has no Android lane.
+// `ignorePatchFailures: false` fails a patch that no longer applies, but not one regenerated
+// without the hunk, so the installed dist's shape is the only signal for that.
 const OBJECT_FORM = /tokens\.forEach\(\(token, i\) => memo\[token\] = offset \+ i\)/
 const MAP_FORM = /tokens\.forEach\(\(token, i\) => memo\.set\(token, offset \+ i\)\)/
 // The other half of the same hunk. Map staging without it degrades to an empty
