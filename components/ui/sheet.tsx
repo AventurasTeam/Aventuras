@@ -25,8 +25,8 @@ import { InputComponentContext, type InputComponent } from '@/components/ui/inpu
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
-import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
 import { dismissKeyboard } from '@/lib/keyboard'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 

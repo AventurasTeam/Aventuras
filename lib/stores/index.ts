@@ -16,7 +16,7 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
-import { blockingOverlaysStore } from './ui/blocking-overlays'
+import { blockingOverlaysStore, useRegisteredOverlay } from './ui/blocking-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
 import { recoveryReportStore } from './ui/recovery-report'
@@ -77,6 +77,7 @@ export {
   threadsStore,
   translationsStore,
   undoRedoStore,
+  useRegisteredOverlay,
   wizardStore,
 }
 

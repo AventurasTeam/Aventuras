@@ -7,7 +7,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
-import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 const AlertDialog = AlertDialogPrimitive.Root

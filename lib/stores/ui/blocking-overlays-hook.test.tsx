@@ -2,9 +2,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { blockingOverlaysStore } from '@/lib/stores'
-
-import { useRegisteredOverlay } from './use-registered-overlay'
+import { blockingOverlaysStore, useRegisteredOverlay } from '@/lib/stores'
 
 afterEach(() => {
   cleanup()

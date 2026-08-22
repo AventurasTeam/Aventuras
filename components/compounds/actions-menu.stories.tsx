@@ -9,7 +9,7 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
+import { useRegisteredOverlay } from '@/lib/stores'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
 import { Text } from '../ui/text'
