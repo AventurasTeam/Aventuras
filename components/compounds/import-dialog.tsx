@@ -52,10 +52,6 @@ type ImportDialogProps<TPayload> = {
 const PAYLOAD_DETAILS_MAX_HEIGHT = 200
 const FILE_ACCEPT = '.avts,.json'
 
-// Inline pointer-events gating: rn-primitives wrappers don't fully gate
-// disabled clicks on web, so className-only `disabled:opacity-50` allows
-// stray taps through during reading. Style-level pointerEvents stops that.
-
 // Visually-hidden web file input — rendered always, programmatically clicked.
 // We re-render outside RN's bridge (raw DOM element); RN-Web has no equivalent.
 const HIDDEN_INPUT_STYLE = {

@@ -10,9 +10,6 @@ import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
-// Hoisted so the decorative overlay does not allocate a new style object per
-// render. props.pointerEvents is deprecated in favour of style.pointerEvents.
-
 type SaveBarProps = {
   /**
    * Field labels in user-recognizable copy — comma-separated in

@@ -58,10 +58,6 @@ type SuggestionStripProps = {
 // The overline sits on the chip surface, so the tint has to carry further on dark.
 const OVERLINE_TINT_ALPHA: Record<'light' | 'dark', number> = { light: 0.14, dark: 0.26 }
 
-// Style-level, not the deprecated `pointerEvents` prop. The chips underneath
-// already refuse taps via `locked`; the overlay must not become the thing that
-// swallows them once the run settles.
-
 // One single-line chip row, from the markup in SuggestionChipRow below: 2px
 // borders + 16px (py-2) + a 20px overline (4px py-0.5 over a 16px text-xs
 // line) + 4px (gap-1) + a 20px text-sm line. An upper bound on the overlay
