@@ -174,6 +174,41 @@ export const SearchFindsAPhraseOnlyInThePromptBody: Story = {
   },
 }
 
+// The row collapses the body's paragraph breaks to spaces, so a phrase the user
+// reads as one run of words spans a newline in the source. Matching the raw body
+// would empty the list on a phrase they can see.
+export const SearchFindsAPhraseAcrossAParagraphBreak: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    // Straddles a blank line: last word of one paragraph, first of the next.
+    const straddling = GENRE_PRESETS.map((preset) => {
+      const seam = /(\S+)\n\s*\n(\S+)/.exec(preset.promptBody)
+      return seam == null ? null : { preset, phrase: `${seam[1]} ${seam[2]}` }
+    }).find((hit) => hit != null)
+    if (straddling == null) throw new Error('expected a multi-paragraph promptBody fixture')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, straddling.phrase)
+    await waitFor(() => expect(screen.getByText(straddling.preset.displayName)).toBeInTheDocument())
+  },
+}
+
+// Typing a word then a space is ordinary; without a trimmed needle it empties the
+// list on a query that has matched up to the moment the space lands.
+export const SearchIgnoresATrailingSpace: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    const noir = GENRE_PRESETS.find((preset) => preset.id === 'noir')
+    if (noir == null) throw new Error('expected a "noir" fixture in GENRE_PRESETS')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, `${noir.displayName} `)
+    await waitFor(() => expect(screen.getByText(noir.displayName)).toBeInTheDocument())
+  },
+}
+
 export const SearchWithNoMatchesShowsEmptyState: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {

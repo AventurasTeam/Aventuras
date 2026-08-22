@@ -20,15 +20,22 @@ export type PresetBrowserProps = {
   onPick: (preset: WizardPreset) => void
 }
 
+// Bodies are multi-paragraph, and the row renders them with the paragraph breaks
+// collapsed to single spaces — so a phrase the user reads as one line is two lines
+// in the source. Match what is rendered, not what is stored.
+function normalize(text: string): string {
+  return text.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
 function matches(preset: WizardPreset, query: string): boolean {
-  if (query === '') return true
-  const needle = query.toLowerCase()
+  const needle = normalize(query)
+  if (needle === '') return true
   return (
     preset.displayName.toLowerCase().includes(needle) ||
     preset.tagline.toLowerCase().includes(needle) ||
     // The row renders a clamped promptBody, so a phrase the user can read there
     // has to be findable — otherwise typing it empties the list.
-    preset.promptBody.toLowerCase().includes(needle)
+    normalize(preset.promptBody).includes(needle)
   )
 }
 
