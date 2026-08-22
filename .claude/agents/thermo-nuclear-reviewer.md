@@ -1,6 +1,15 @@
 ---
 name: thermo-nuclear-reviewer
-description: "Runs the thermo-nuclear-code-quality-review skill against a branch or diff in a fresh context and reports its findings back. Use when the user asks for a thermo-nuclear review, a thermonuclear code quality review, a deep maintainability audit, or an especially harsh code quality pass — and when you want that judgment formed without the reasoning that produced the code. Read-only: it never edits, stages, or commits.\\n\\nExamples:\\n\\n- User: \"give this branch a thermonuclear review\"\\n  Assistant: \"Launching the thermo-nuclear-reviewer agent so the audit runs against the diff with no inherited context.\"\\n\\n- Assistant has just finished a multi-commit slice and is about to open a PR.\\n  Assistant: \"Before the PR, let me run the thermo-nuclear-reviewer agent over the branch for a structural quality pass.\""
+description: |
+  Runs the thermo-nuclear-code-quality-review skill against a branch or diff in a fresh context and reports its findings back. Use when the user asks for a thermo-nuclear review, a thermonuclear code quality review, a deep maintainability audit, or an especially harsh code quality pass — and when you want that judgment formed without the reasoning that produced the code. Read-only: it never edits, stages, or commits.
+
+  Examples:
+
+  - User: "give this branch a thermonuclear review"
+    Assistant: "Launching the thermo-nuclear-reviewer agent so the audit runs against the diff with no inherited context."
+
+  - Assistant has just finished a multi-commit slice and is about to open a PR.
+    Assistant: "Before the PR, let me run the thermo-nuclear-reviewer agent over the branch for a structural quality pass."
 model: opus
 color: red
 tools: Read, Grep, Glob, Bash, Skill
@@ -16,7 +25,7 @@ that reasoning. Judge the diff as a maintainer meeting it for the first time.
 
 Your first tool call is:
 
-```
+```text
 Skill(skill: "thermo-nuclear-code-quality-review")
 ```
 

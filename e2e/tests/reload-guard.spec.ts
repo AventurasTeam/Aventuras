@@ -169,10 +169,11 @@ test.describe.serial('reload guard', () => {
     )
   })
 
-  // Pins did-start-navigation's `details.isSameDocument` guard, otherwise unreached: the other
-  // two cases navigate before setCloseGuard(true) is sent, and in-app same-document navigations
-  // already gate elsewhere (story-settings-suggestions.spec.ts). A raw pushState is the only way
-  // to exercise the branch — no DOM event, so it can't be mistaken for a real app navigation.
+  // Pins that a same-document navigation misses main's `did-navigate` disarm: Chromium raises
+  // did-navigate-in-page for those, which nothing listens to, so the guard survives. Otherwise
+  // unreached — the other two cases navigate before setCloseGuard(true) is sent, and in-app
+  // same-document navigations already gate elsewhere (story-settings-suggestions.spec.ts). A raw
+  // pushState is the only way in: no DOM event, so it can't be mistaken for an app navigation.
   test('a same-document navigation does not clear the armed guard', async () => {
     const page = app.window
     const original = await redirtyGenerationTab(app, 'E2E Reload SameDoc')
