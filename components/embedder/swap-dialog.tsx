@@ -89,7 +89,6 @@ export function SwapDialog({
             onReindex={() => onReindex(selected.target)}
             onKeep={onKeep}
             onRelabel={() => onRelabel(selected.target)}
-            onDismiss={onDismiss}
             disabled={disabled}
             disabledReason={disabledReason}
           />
@@ -99,7 +98,6 @@ export function SwapDialog({
             selectedKey={selectedKey}
             onSelect={selectTarget}
             onNext={() => setStage('options')}
-            onDismiss={onDismiss}
             disabled={disabled}
             disabledReason={disabledReason}
           />
@@ -114,7 +112,6 @@ type PickPaneProps = {
   selectedKey: string | null
   onSelect: (key: string) => void
   onNext: () => void
-  onDismiss: () => void
   disabled: boolean
   disabledReason?: string
 }
@@ -124,7 +121,6 @@ function PickPane({
   selectedKey,
   onSelect,
   onNext,
-  onDismiss,
   disabled,
   disabledReason,
 }: PickPaneProps) {
@@ -244,7 +240,6 @@ type OptionsPaneProps = {
   onReindex: () => void
   onKeep: () => void
   onRelabel: () => void
-  onDismiss: () => void
   disabled: boolean
   disabledReason?: string
 }
@@ -255,7 +250,6 @@ function OptionsPane({
   onReindex,
   onKeep,
   onRelabel,
-  onDismiss,
   disabled,
   disabledReason,
 }: OptionsPaneProps) {
