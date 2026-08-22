@@ -247,6 +247,48 @@ export const ModalSuppressesTheMenu: Story = {
   },
 }
 
+// The regression the `open` gate exists for: AlertDialogContent renders the Portal
+// rather than living inside one, so it stays mounted with the surface whether or not
+// the dialog is showing. Registering mount-scoped left every route that merely *has*
+// a confirm dialog with a permanently inert menu.
+export const AClosedModalLeavesTheMenuLive: Story = {
+  render: () => (
+    <>
+      <AlertDialog open={false}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Recover unsaved work?</AlertDialogTitle>
+          <AlertDialogDescription>A draft was left behind.</AlertDialogDescription>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    expect(screen.getByRole('button', { name: /Actions/ })).not.toBeDisabled()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// Same shape as the modal above — a closed right sheet mounts with its surface.
+export const AClosedRightSheetLeavesTheMenuLive: Story = {
+  render: () => (
+    <>
+      <Sheet open={false}>
+        <SheetContent anchor="right" title="Entity details">
+          <Text>Entity details</Text>
+        </SheetContent>
+      </Sheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    expect(screen.getByRole('button', { name: /Actions/ })).not.toBeDisabled()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
 // The right anchor is the desktop side panel: its own branch of SheetContent, and
 // the only one whose registration a `useRegisteredOverlay(true)` stand-in cannot
 // reach. Rendered as a real Sheet so the story covers the component's wiring.

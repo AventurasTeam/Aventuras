@@ -51,9 +51,11 @@ function AlertDialogContent({
 }: ComponentProps<typeof AlertDialogPrimitive.Content> & {
   portalHost?: string
 }) {
-  // Mount-scoped, not keyed on an `open` flag: the Portal only mounts its
-  // children while the root is open, so the mount interval is the open interval.
-  useRegisteredOverlay(true)
+  // Keyed on `open`, not mount-scoped: the Portal unmounts its children while
+  // closed, but this renders the Portal rather than living inside one, so it
+  // stays mounted with the consumer for the life of the surface.
+  const { open } = AlertDialogPrimitive.useRootContext()
+  useRegisteredOverlay(open)
   return (
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>

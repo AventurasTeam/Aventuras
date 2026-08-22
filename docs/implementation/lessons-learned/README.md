@@ -89,6 +89,9 @@ slice plans when relevant.
   — `flex-1` lands on the inner element, not the Header that sits in
   your row; the web tree survives only because the wrapper adds its
   own web-only `flex-1`, and Yoga collapses the native one.
+- [A Content that renders the Portal is always mounted](./portal-owner-mount-is-not-open.md)
+  — the Portal unmounts its children, not its renderer; effects that
+  should last the open interval must read `open` from the root context.
 - [Portaled overlays outlive screen focus](./portaled-overlay-outlives-screen-focus.md)
   — a Stack keeps pushed-under screens mounted, so their portaled
   modals float over the new screen; gate on `useIsFocused()`.
