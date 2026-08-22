@@ -8,13 +8,11 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { type StoryDefinition } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { type OpenFailureKind, type StoryCardData } from '@/lib/stores'
 import { cn } from '@/lib/utils'
-
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
-const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
 
 type StoryMode = StoryDefinition['mode']
 

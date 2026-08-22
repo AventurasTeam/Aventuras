@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/icon'
 import { IconAction } from '@/components/ui/icon-action'
 import { Spinner, SPINNER_PX } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import type { EntryMetadata, SuggestionCategory } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { resolveAccentColor, useTheme, type AccentHex } from '@/lib/themes'
@@ -60,7 +61,6 @@ const OVERLINE_TINT_ALPHA: Record<'light' | 'dark', number> = { light: 0.14, dar
 // Style-level, not the deprecated `pointerEvents` prop. The chips underneath
 // already refuse taps via `locked`; the overlay must not become the thing that
 // swallows them once the run settles.
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 // One single-line chip row, from the markup in SuggestionChipRow below: 2px
 // borders + 16px (py-2) + a 20px overline (4px py-0.5 over a 16px text-xs

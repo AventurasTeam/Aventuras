@@ -24,6 +24,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
@@ -40,8 +41,6 @@ type SheetA11yValue = {
   /** Right-anchor only, web only — forwarded to the Radix dialog's focus-on-close hook. */
   onCloseAutoFocus?: AutoFocusHandler
 }
-
-const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
 
 const SheetA11yContext = createContext<SheetA11yValue | null>(null)
 

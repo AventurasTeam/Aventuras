@@ -2,11 +2,10 @@ import { Platform, Pressable, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 import { ListRow, type ListRowProps } from './list-row'
-
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 type CollisionListRowProps = {
   row: ListRowProps

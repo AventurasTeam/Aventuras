@@ -3,9 +3,8 @@ import { Platform, Pressable, View } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
-
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 type BannerProps = {
   message: string

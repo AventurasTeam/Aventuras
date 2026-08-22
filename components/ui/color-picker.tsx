@@ -12,6 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ReasonTooltip } from '@/components/ui/reason-tooltip'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { useDensity, type DensityValue } from '@/lib/density'
 import { t } from '@/lib/i18n'
@@ -95,7 +96,6 @@ const STATIC_STYLES = StyleSheet.create({
   pickerWrapper: { width: '100%' },
   panel: { height: 160, borderRadius: 8 },
   hueSlider: { marginTop: 12 },
-  pointerEventsNone: { pointerEvents: 'none' },
 })
 
 type SwatchKind = 'none' | 'curated' | 'custom-empty' | 'custom-filled'
@@ -196,7 +196,7 @@ function CustomEditor({
       {/* The editor is portaled out of ColorPicker's wrapper, so it never
           inherits the outer disabled dimming — it has to carry its own. */}
       <View
-        style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
+        style={disabled ? POINTER_EVENTS_NONE : undefined}
         className={cn(disabled && 'opacity-50')}
       >
         <LibColorPicker
@@ -408,7 +408,7 @@ function ColorPicker({
   return (
     <View
       className={cn('flex-row flex-wrap items-center gap-2', disabled && 'opacity-50', className)}
-      style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
+      style={disabled ? POINTER_EVENTS_NONE : undefined}
       testID={testID}
     >
       <SwatchButton

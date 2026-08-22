@@ -14,6 +14,7 @@ import {
 import { Icon } from '@/components/ui/icon'
 import { Spinner } from '@/components/ui/spinner'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -54,7 +55,6 @@ const FILE_ACCEPT = '.avts,.json'
 // Inline pointer-events gating: rn-primitives wrappers don't fully gate
 // disabled clicks on web, so className-only `disabled:opacity-50` allows
 // stray taps through during reading. Style-level pointerEvents stops that.
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 // Visually-hidden web file input — rendered always, programmatically clicked.
 // We re-render outside RN's bridge (raw DOM element); RN-Web has no equivalent.

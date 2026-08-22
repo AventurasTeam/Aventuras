@@ -52,6 +52,7 @@ import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Text } from '@/components/ui/text'
 import { Textarea } from '@/components/ui/textarea'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useDensity } from '@/lib/density'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -864,7 +865,7 @@ type SortablePhoneRowProps = {
   disabled?: boolean
 }
 
-const dragHandleDisabledStyle = { padding: 12, pointerEvents: 'none' } as const
+const dragHandleDisabledStyle = [dragHandleStaticStyle, POINTER_EVENTS_NONE]
 
 const SortablePhoneRow = memo(function SortablePhoneRow({
   item,

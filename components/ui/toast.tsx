@@ -16,6 +16,7 @@ import { runOnJS } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { toastStore, type ToastItem, type ToastSeverity } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
@@ -59,8 +60,6 @@ const FG_BY_SEVERITY: Record<ToastSeverity, string> = {
 // Dismiss fires at 50% of the toast's height or 50px of upward drag, whichever
 // is smaller — so short toasts dismiss on a proportionally shorter swipe.
 const DRAG_DISMISS_THRESHOLD_PX = 50
-
-const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
 
 type ToastProps = {
   item: ToastItem

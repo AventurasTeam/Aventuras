@@ -13,6 +13,7 @@ import Animated, {
 
 import { Icon } from '@/components/ui/icon'
 import { TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 function Accordion({
@@ -77,11 +78,7 @@ function AccordionTrigger({
       <AccordionPrimitive.Header>
         <AccordionPrimitive.Trigger {...props} asChild>
           <Trigger
-            style={
-              Platform.OS === 'web' && props.disabled
-                ? ({ pointerEvents: 'none' } as never)
-                : undefined
-            }
+            style={Platform.OS === 'web' && props.disabled ? POINTER_EVENTS_NONE : undefined}
             className={cn(
               'flex-row items-start justify-between gap-4 rounded-md py-row-y-lg',
               props.disabled && 'opacity-50',

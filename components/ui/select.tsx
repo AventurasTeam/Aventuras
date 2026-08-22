@@ -23,14 +23,12 @@ import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
 const FullWindowOverlay = Platform.OS === 'ios' ? RNFullWindowOverlay : Fragment
-
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
-const POINTER_EVENTS_BOX_NONE = { pointerEvents: 'box-none' as const }
 
 const Root = SelectBase.Root
 const Group = SelectBase.Group

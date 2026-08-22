@@ -19,6 +19,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
 import { logger } from '@/lib/diagnostics'
@@ -33,8 +34,6 @@ import {
   type AssistListItem,
   type DedupeKey,
 } from './ai-assist-logic'
-
-const POINTER_EVENTS_NONE = { pointerEvents: 'none' as const }
 
 const GUIDANCE_MAX_LENGTH = 200
 

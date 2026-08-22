@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -97,8 +98,8 @@ function ImporterMenuItem({
       accessibilityState={{ disabled: isDisabled }}
       disabled={isDisabled}
       onPress={onSelect}
-      // eslint-disable-next-line react-native/no-inline-styles -- rn-primitives wrappers don't gate disabled clicks on web; inline pointerEvents is the documented workaround.
-      style={isDisabled ? { pointerEvents: 'none' } : undefined}
+      // rn-primitives wrappers don't gate disabled clicks on web.
+      style={isDisabled ? POINTER_EVENTS_NONE : undefined}
       className={cn(
         'justify-center rounded-sm px-row-x-md py-row-y-md',
         isPhone ? 'min-h-control-lg' : 'min-h-control-md',
