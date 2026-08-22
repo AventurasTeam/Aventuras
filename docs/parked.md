@@ -2100,6 +2100,26 @@ wireframe state, and the wireframes still communicate the right UX
 shape. Surface again when wireframes are next on the touch list
 or when a visual-identity sweep ships.
 
+#### Patching `@gorhom/bottom-sheet`'s deprecated `pointerEvents` prop
+
+RN-Web keys its `props.pointerEvents` deprecation warning on the bare
+string, so one vendor caller warns for the whole app: converting all
+seventeen first-party sites left the console unchanged, because a
+`BottomSheetModalProvider` is mounted globally in both
+`app/_layout.tsx` and `.storybook/preview.tsx`.
+
+Larger than it first looked. The prop form appears at five sites in
+`lib/commonjs` — `BottomSheetHostingContainer.js`,
+`bottomSheetBackground/BottomSheetBackgroundContainer.js`,
+`BottomSheet.js`, `BottomSheetBackground.js`, `BottomSheetBackdrop.js`
+— and again in `lib/module`, so a patch is roughly ten hunks against
+compiled output that shifts on every version bump. That is a real
+maintenance cost for a console warning with no behavioural effect.
+
+Surface again if RN-Web actually removes the prop rather than warning
+on it, at which point sheets break for real and the patch pays for
+itself; or if the warning starts masking a first-party regression.
+
 #### Toast — visibility-API tab pause (web)
 
 The web Toast timer keeps running while the browser tab is hidden,
