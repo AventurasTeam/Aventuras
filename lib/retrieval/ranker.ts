@@ -128,8 +128,9 @@ function costTokens(s: Scored, type: RetrievalType, input: RankTypeInput): Coste
 
 function trace(
   s: Scored,
-  mmrRankIndex: number | null,
-  mmrScore: number | null,
+  // One parameter, not two: rank and score are null together or set together, and adjacent
+  // same-typed nullables transpose silently.
+  mmr: { rank: number; score: number } | null,
   dropReason: DropReason,
   tokensEstimated: number | null,
 ): CandidateTrace {
@@ -150,8 +151,8 @@ function trace(
     chapterBoostApplied: s.chapterBoostApplied,
     bypassTriggered: s.bypassTriggered,
     finalScore: s.score,
-    mmrScore,
-    mmrRank: mmrRankIndex,
+    mmrScore: mmr?.score ?? null,
+    mmrRank: mmr?.rank ?? null,
     selected: dropReason === 'not_dropped',
     dropReason,
     tokensEstimated,
@@ -210,11 +211,11 @@ export function rankPerType(
       selected.push(r.candidate)
       remaining -= r.tokensEstimated
     }
-    traces.push(trace(r, i, r.mmrScore, dropReason, r.tokensEstimated))
+    traces.push(trace(r, { rank: i, score: r.mmrScore }, dropReason, r.tokensEstimated))
   }
 
   for (const s of scored.slice(input.params.preFilterTopN)) {
-    traces.push(trace(s, null, null, 'pre_filtered', null))
+    traces.push(trace(s, null, 'pre_filtered', null))
   }
 
   return {
