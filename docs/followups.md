@@ -39,8 +39,8 @@ for the placement rule.
 
 - **Hardware back on a phone `Sheet` bypasses `onOpenChange`, so no
   sheet can guard it.** `@rn-primitives/dialog` registers its
-  `hardwareBackPress` handler on `Content`, but `SheetContent
-anchor="bottom"` routes to `BottomSheetContent`
+  `hardwareBackPress` handler on `Content`, but a bottom-anchored
+  `SheetContent` routes to `BottomSheetContent`
   (`components/ui/sheet.tsx`), which renders a bare `BottomSheetModal`
   — and `@gorhom/bottom-sheet` registers no `BackHandler` anywhere.
   The press reaches whatever the screen registered instead; in the
