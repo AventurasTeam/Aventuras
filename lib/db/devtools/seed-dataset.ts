@@ -1,5 +1,6 @@
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core'
 
+import { DEFAULT_CALENDAR_ID } from '@/lib/calendar'
 import { BUNDLED_PACK_ID } from '@/lib/prompts'
 
 import { remapSeedIds } from './seed-ids'
@@ -88,6 +89,8 @@ const HERO = 'story_hero'
 const MAIN = 'br_hero_main'
 const FORK = 'br_hero_fork'
 
+// Vault-only. The registry holds builtins alone until M8.3, so a story pointing here
+// resolves to nothing and `getCalendar` blocks the world-time editor.
 const CAL = 'cal_default'
 
 // Entities (branch: MAIN). IDs are referenced across state, scenes, relationships,
@@ -135,8 +138,8 @@ function definition(input: {
     genre: { label: input.genre, promptBody: `Write in the ${input.genre} tradition.` },
     tone: { label: input.tone, promptBody: `Keep a ${input.tone} tone.` },
     setting: input.setting,
-    calendarSystemId: CAL,
-    worldTimeOrigin: { year: 1247, day: 1 },
+    calendarSystemId: DEFAULT_CALENDAR_ID,
+    worldTimeOrigin: { year: 1247, month: 1, day: 1, hour: 0, minute: 0, second: 0 },
   })
 }
 
@@ -1563,7 +1566,7 @@ const appSettingsRow: NewAppSettings = {
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',
   embeddingProviderId: 'prov_local',
   defaultStorySettings: { activePackId: BUNDLED_PACK_ID },
-  defaultCalendarId: CAL,
+  defaultCalendarId: DEFAULT_CALENDAR_ID,
   defaultSuggestionCategories: {
     adventure: [...DEFAULT_SUGGESTION_CATEGORIES.adventure],
     creative: [...DEFAULT_SUGGESTION_CATEGORIES.creative],

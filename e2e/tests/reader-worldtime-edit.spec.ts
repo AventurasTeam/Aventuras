@@ -22,10 +22,9 @@ const PREVIOUS_ID = 'entry_hero_0070'
 const SEEDED_WORLD_TIME = 210 // (71 - 1) * 3
 const PREVIOUS_WORLD_TIME = 207 // (70 - 1) * 3
 
-// The seeded story's calendarSystemId (`cal_default`) is absent from
-// lib/calendar's registry, so the reader resolves it through the earth-gregorian
-// fallback: one second per base unit, tiers year/month/day/hour/minute/second,
-// origin `{ year: 1247, day: 1 }` = 1247-01-01 00:00:00. 210 s past that origin
+// The seeded story is configured with the `earth-gregorian` builtin: one second
+// per base unit, tiers year/month/day/hour/minute/second, origin
+// 1247-01-01 00:00:00. 210 s past that origin
 // is 00:03:30, so rewriting the minute tier 3 → 1 leaves 1*60 + 30 seconds —
 // below the predecessor's 207 (the indicator fires) and above 0 (not a
 // flashback, which is never flagged).
