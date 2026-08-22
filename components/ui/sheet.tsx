@@ -280,9 +280,11 @@ function RightSheetContent({
   title = 'Sheet',
   children,
   enablePanDownToClose: _enablePanDownToClose,
-  suppressOverlayRegistration: _suppressOverlayRegistration,
+  suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
+  const { open } = DialogPrimitive.useRootContext()
+  useRegisteredOverlay(open && !suppressOverlayRegistration)
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)

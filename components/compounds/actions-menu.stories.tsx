@@ -9,6 +9,7 @@ import {
   AlertDialogDescription,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useRegisteredOverlay } from '@/lib/stores'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
@@ -240,6 +241,31 @@ export const ModalSuppressesTheMenu: Story = {
     // `hidden: true` because the modal aria-hides its siblings. That covers the
     // trigger for assistive tech but not the shortcut, which is a window-level
     // listener outside the focus trap — hence the assertion above.
+    expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+// The right anchor is the desktop side panel: its own branch of SheetContent, and
+// the only one whose registration a `useRegisteredOverlay(true)` stand-in cannot
+// reach. Rendered as a real Sheet so the story covers the component's wiring.
+export const RightSheetSuppressesTheMenu: Story = {
+  render: () => (
+    <>
+      <Sheet open>
+        <SheetContent anchor="right" title="Entity details">
+          <Text>Entity details</Text>
+        </SheetContent>
+      </Sheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // `hidden: true` for the same reason ModalSuppressesTheMenu needs it — the
+    // right sheet is a Radix dialog, so it aria-hides the chrome behind it.
     expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
       pointerEvents: 'none',
     })
