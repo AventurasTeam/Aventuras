@@ -202,14 +202,18 @@ scrim-tap, system-back, or activating an entry closes it.
 **Only the focused screen answers the shortcut.** `Cmd/Ctrl-K` is a
 window-level listener and a pushed-under screen stays mounted — on
 web the stack hides it with `display: none` rather than freezing it —
-so every screen that mounts the menu must gate the shortcut on its
-own focus state. A mount that omits the gate answers from behind the
-screen on top.
+so an ungated mount answers from behind the screen on top. The
+connected menu reads its own focus state from the navigator rather
+than taking it as a prop, so a new mount is gated by default and a
+screen cannot forget.
 
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
 trigger do nothing while a modal, AlertDialog, or other Sheet owns
 the surface — Sheet-over-Sheet is disallowed per
-[`overlays.md`](./overlays.md).
+[`overlays.md`](./overlays.md). Unlike focus this has no context to
+read, so the screen passes it: a screen that mounts a blocking
+overlay declares it, and the menu gates both the shortcut and the
+trigger on it.
 
 **Activation** — three outcomes, all of which **close the menu
 first**:
