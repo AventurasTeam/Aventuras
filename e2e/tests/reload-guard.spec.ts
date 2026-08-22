@@ -144,12 +144,11 @@ test.describe('reload guard', () => {
       'E2E Reload Save',
     )
 
-    // Second reload covers the Save flow end to end but does NOT pin `confirmedReloads`'
-    // lifecycle — the original reason it was added. Mutation-tested 2026-08-22: deleting
-    // `confirmedReloads.delete(win.id)` from `did-start-navigation`, even making
-    // `will-prevent-unload` non-consuming too, leaves all four tests green. Whatever guards
-    // this second reload, this spec does not observe it — don't claim otherwise here without
-    // re-running that mutation. See triage.md.
+    // This second reload is what pins `confirmedReloads`' lifecycle. Instrumenting main shows
+    // the flag is usually set and NOT consumed by will-prevent-unload — the guard hook drops
+    // its beforeunload listener before main reloads — leaving did-start-navigation's
+    // `confirmedReloads.delete(win.id)` as its only clear. Drop that line, or disable both
+    // clears, and the stale flag makes this reload sail through with no dialog.
     await redirtyGenerationTab(app, 'E2E Reload Save Again')
     const secondReload = page.waitForEvent('load')
     await reloadFromMain(app)
@@ -228,6 +227,45 @@ test.describe('window close behind the reload guard', () => {
     })
     await expect(storySettings.unsavedDialog(page)).toBeVisible()
     await storySettings.unsavedDiscard(page).click()
+    await closed
+  })
+})
+
+// Its own launch — this one closes the app too. Covers `will-prevent-unload`'s
+// `!closeGuards.has(win.id)` fail-open clause, which nothing else reaches: every other case
+// arms the guard through a complete preload bridge, and the clause only fires for an unguarded
+// beforeunload — a partial bridge, where `closeBridge()` probes false and the hook registers
+// the browser listener alone. Without it main asks a renderer that has no dialog to show and
+// the close never completes, so removing the clause fails this as a hang rather than an
+// assertion — an unquittable window has nothing to assert against.
+test.describe('an unguarded beforeunload does not make the window unquittable', () => {
+  let app: LaunchedApp
+  let userDataDir: string | undefined
+
+  test.beforeAll(async () => {
+    const seeded = createSeededUserDataDir()
+    userDataDir = seeded.userDataDir
+    app = await launchApp({ userDataDir, cleanupUserData: true })
+    suppressNativeUnloadDialogRace(app)
+  })
+
+  test.afterAll(async () => {
+    await app?.close().catch(() => {})
+    removeUserDataDir(userDataDir)
+  })
+
+  test('a close still completes with no guard armed', async () => {
+    const page = app.window
+    await expect(home.openStory(page, HERO_TITLE)).toBeVisible({ timeout: 20_000 })
+    // Raw listener, no setCloseGuard: stands in for a renderer whose bridge probe failed.
+    await page.evaluate(() => {
+      window.addEventListener('beforeunload', (event) => event.preventDefault())
+    })
+
+    const closed = app.app.waitForEvent('close')
+    await app.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0].close()
+    })
     await closed
   })
 })

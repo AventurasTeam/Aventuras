@@ -117,6 +117,11 @@ harness absorbs:
   `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
   the `dev` suite, and steps 1-3 of [CI](#ci) before the packaged one.
   CI itself is safe, because its job always builds first.
+  **Mutation-testing `electron/` has no tell at all.** A mutation left
+  uncompiled simply never runs, so the suite passes and the reading is
+  "this branch is uncovered" — the opposite of the truth, and a
+  conclusion that then gets written down. Recompile between every
+  mutation and its run.
 - **A running `pnpm desktop` breaks the whole suite.** The dev app holds
   the default remote-debugging port (`127.0.0.1:9222`), and a suite
   launched alongside it fails **every** spec in `beforeAll` — Electron

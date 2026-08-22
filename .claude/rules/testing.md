@@ -69,13 +69,15 @@ collision. Check `ss -tlnp | grep 9222` when launches time out, and
 `pgrep -f electron/dist/main.js` for an orphan from a killed run. See
 [testing.md → Launch modes](../../docs/testing.md#launch-modes).
 
-## `dev` mode needs a rebuild to see renderer changes
+## E2E runs the artifact, not your edit
 
-Both `dev` and `packaged` E2E modes load the same `pnpm build:web`
-output; neither runs `expo start`. A renderer source edit has no
-effect on a `dev`-mode run until `pnpm build:web` re-runs — this
-caused a real false pass in Slice 3.7a. Rebuild before trusting a
-`dev`-mode result that touches renderer code. See
+Both `dev` and `packaged` modes load the same `pnpm build:web`
+output; neither runs `expo start`. A renderer edit needs
+`pnpm build:web`, and an `electron/` edit needs
+`pnpm electron:compile`, before a run means anything — the renderer
+half caused a real false pass in Slice 3.7a. The main-process half is
+worse under mutation testing: an uncompiled mutation never runs, the
+suite passes, and it reads as "this branch is uncovered". See
 [testing.md → Launch modes](../../docs/testing.md#launch-modes).
 
 ## Selectors: DB first, then i18n role/name, then testID
