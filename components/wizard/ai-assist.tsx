@@ -203,7 +203,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     if (listItems.length > 0 || selected.size > 0) return true
     switch (assist.kind) {
       // A regenerate carries the previous candidate; a first generate has
-      // produced nothing yet, so there is nothing to lose by closing.
+      // produced nothing yet, so there is nothing to lose by closing. A seeded
+      // `from` is unreachable today: only prose seeds, and a seeded Regenerate
+      // routes to the guidance form rather than into 'loading'.
       case 'loading':
         return assist.from !== undefined && !assist.from.seeded
       // A seeded preview is the field's own committed prose, not a candidate.

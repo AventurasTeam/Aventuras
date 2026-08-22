@@ -142,8 +142,10 @@ export const StreamingReasoning: StoryT = {
   // whole "card body is blank" symptom.
   play: async () => {
     expect(await screen.findByRole('button', { name: 'Show reasoning' })).toBeInTheDocument()
-    // Outside dev mode this freezes (not throws) with empty deps, so presence alone
-    // won't catch it; parseFloat not Number — Number('') is 0, a false pass with no animation.
+    // parseFloat not Number: Number('') is 0, which passes with no animation at
+    // all. This pins that the pulse animates, NOT the deps array — the freeze an
+    // empty deps array causes is environment-dependent and does not reproduce
+    // under the browser test project, where the mutation survives.
     const pulsing = screen.getByTestId('reasoning-pulse')
     await waitFor(() => expect(parseFloat(pulsing.style.opacity)).toBeLessThan(0.9))
   },

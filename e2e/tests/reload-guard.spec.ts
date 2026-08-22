@@ -73,7 +73,11 @@ function suppressNativeUnloadDialogRace(app: LaunchedApp): void {
   })
 }
 
-test.describe('reload guard', () => {
+// Serial: these share one app AND each other's end state — `redirtyGenerationTab`
+// assumes the previous test left the app on story-settings. With `retries: 1` a
+// retry runs beforeAll in a fresh worker, so the app is back at the home screen
+// and the later tests fail on a misleading "generationTab not visible".
+test.describe.serial('reload guard', () => {
   let app: LaunchedApp
   let userDataDir: string | undefined
 

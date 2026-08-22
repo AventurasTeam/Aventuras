@@ -1222,9 +1222,10 @@ export const ListResult_DismissalClearsSelectionForNextOpen: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(screen.queryByText('Sunken Archive')).not.toBeInTheDocument())
 
-    // Reopen and generate the SAME name again — if `selected` had leaked past
-    // the dismissal, this row would render pre-checked even though the user
-    // never touched it this session (lessons-learned/no-harmless-id-leaks.md).
+    // Reopen and generate the SAME name again — if `selected` leaked past the
+    // dismissal, this row would render pre-checked (lessons-learned/no-harmless-id-leaks.md).
+    // Two clears cover this — `resetOnClose` and the replace branch of `runCall`
+    // — so this pins the outcome, not either one alone; each survives removal.
     await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     expect(await screen.findByRole('checkbox', { name: 'Sunken Archive' })).not.toBeChecked()
@@ -1546,5 +1547,98 @@ export const CleanDismissClosesWithoutAsking: Story = {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByText('Optional guidance')).not.toBeInTheDocument())
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  },
+}
+
+// A generated page with nothing ticked is still work: `selected` only ever holds
+// keys that came from `listItems`, so the list half of the dirty test is the half
+// that has to hold on its own.
+export const FailureCancelKeepingAnUntouchedListAsksBeforeDiscarding: Story = {
+  render: () => (
+    <ListDemo
+      resolveModelId={() => MODEL_ID}
+      run={sequentialRun<ListItemValue>([
+        { status: 'ok', value: { items: [RUIN_ITEM] } },
+        { status: 'failed', detail: 'Provider request timed out after 3 retries' },
+        { status: 'ok', value: { items: [PAGE_TWO_ITEM] } },
+      ])}
+      onSetup={fn()}
+      onImport={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Sunken Archive')
+    // Deliberately no checkbox click — the page exists, the selection is empty.
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+    await screen.findByText("Couldn't generate. Provider request timed out after 3 retries.")
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
+  },
+}
+
+// The confirm's Discard is a separate reset path, and reopening re-seeds `assist`
+// while a fresh Generate re-clears `selected` — so the abort is the only part of
+// the reset that nothing downstream redoes.
+let discardAbortSignals: AbortSignal[] = []
+
+export const ConfirmDiscardAbortsTheInFlightCall: Story = {
+  render: () => {
+    discardAbortSignals = []
+    let call = 0
+    return (
+      <ListDemo
+        resolveModelId={() => MODEL_ID}
+        run={(_guidance, signal) => {
+          discardAbortSignals.push(signal)
+          call += 1
+          // Page one lands so the overlay is dirty; the Generate more behind the
+          // confirm is what must still be in flight when Discard runs.
+          if (call === 1) return Promise.resolve({ status: 'ok', value: { items: [RUIN_ITEM] } })
+          return new Promise(() => {})
+        }}
+        onSetup={fn()}
+        onImport={fn()}
+      />
+    )
+  },
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest lore' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('Sunken Archive')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate more' }))
+
+    await userEvent.keyboard('{Escape}')
+    const dialog = await screen.findByRole('alertdialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard' }))
+
+    await waitFor(() => expect(discardAbortSignals.at(-1)?.aborted).toBe(true))
+  },
+}
+
+// The 'loading' arm carries the previous candidate in `from`, and both of its
+// clauses decide alone: an uncommitted candidate is still losable mid-regenerate…
+export const RegenerateInFlightOverACandidateAsksBeforeDiscarding: Story = {
+  render: () => (
+    <ProseDemo
+      resolveModelId={() => MODEL_ID}
+      run={okHangThenOkRun<DescriptionValue>(
+        { description: 'First candidate.' },
+        { description: 'unreachable — the regenerate never settles' },
+      )}
+      onSetup={fn()}
+      onUse={fn()}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest description' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await screen.findByText('First candidate.')
+    await userEvent.click(screen.getByRole('button', { name: 'Regenerate' }))
+
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('alertdialog')).toBeInTheDocument()
   },
 }

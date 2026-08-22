@@ -25,6 +25,27 @@ export function findFootersWithoutCancel(files: { path: string; src: string }[])
   return offenders
 }
 
+// The other half of the same contract: a Cancel with no `onPress` routes its side
+// effect through the root's `onOpenChange`. A root held permanently `open` with no
+// handler has nowhere for that to go, so every dismissal silently does nothing.
+const ROOT_OPEN_TAG = /<AlertDialog(\s[^>]*)?>/g
+
+export function findAlwaysOpenDialogsWithoutHandler(
+  files: { path: string; src: string }[],
+): string[] {
+  const offenders: string[] = []
+  for (const { path, src } of files) {
+    const roots = src.match(ROOT_OPEN_TAG) ?? []
+    roots.forEach((root, index) => {
+      const alwaysOpen = /\sopen\s*(?=[/>\s])/.test(root)
+      if (alwaysOpen && !root.includes('onOpenChange')) {
+        offenders.push(`${path}: root #${index + 1}`)
+      }
+    })
+  }
+  return offenders
+}
+
 const WITH_CANCEL = `
   <AlertDialogFooter>
     <AlertDialogCancel asChild><Button /></AlertDialogCancel>
@@ -37,6 +58,36 @@ const WITHOUT_CANCEL = `
     <Button onPress={go} />
   </AlertDialogFooter>
 `
+
+const ALWAYS_OPEN_HANDLED = `<AlertDialog open onOpenChange={(n) => { if (!n) back() }}>`
+const ALWAYS_OPEN_UNHANDLED = `<AlertDialog open>`
+const CONTROLLED = `<AlertDialog open={isOpen}>`
+
+describe('an always-open AlertDialog wires onOpenChange', () => {
+  it('tells a handled root from an unhandled one, and ignores a controlled root', () => {
+    expect(
+      findAlwaysOpenDialogsWithoutHandler([
+        { path: 'components/a.tsx', src: ALWAYS_OPEN_HANDLED },
+        { path: 'components/b.tsx', src: ALWAYS_OPEN_UNHANDLED },
+        { path: 'components/c.tsx', src: CONTROLLED },
+      ]),
+    ).toEqual(['components/b.tsx: root #1'])
+  })
+
+  // Stories are excluded: one deliberately holds a dialog open as scenery for
+  // another component's gate, and a fixture has no dismissal to answer.
+  it('no shipped dialog holds itself open with no way to answer it', async () => {
+    const paths = await fg(['app/**/*.tsx', 'components/**/*.tsx'], {
+      ignore: ['**/node_modules/**', '**/*.stories.tsx'],
+      cwd: process.cwd(),
+    })
+    const files = paths.map((path) => ({ path, src: readFileSync(path, 'utf8') }))
+    expect(
+      findAlwaysOpenDialogsWithoutHandler(files),
+      'an AlertDialogCancel with no onPress needs the root to carry the side effect — give the root onOpenChange',
+    ).toEqual([])
+  })
+})
 
 describe('every AlertDialog footer offers a Cancel for Radix to focus', () => {
   it('tells a bare-Button footer from a Cancel-bearing one (detector is not vacuous)', () => {
