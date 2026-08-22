@@ -6,6 +6,7 @@ import { SuggestionCategoriesEditor } from '@/components/compounds/suggestion-ca
 import { SwitchRow } from '@/components/compounds/switch-row'
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -236,9 +237,11 @@ export function AuthoringAidsPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button variant="secondary" onPress={() => setPendingDeleteId(null)}>
-              <Text>{t('cancel')}</Text>
-            </Button>
+            <AlertDialogCancel asChild>
+              <Button variant="secondary">
+                <Text>{t('cancel')}</Text>
+              </Button>
+            </AlertDialogCancel>
             <Button
               testID="confirm-delete-category"
               variant="destructive"
@@ -261,9 +264,11 @@ export function AuthoringAidsPanel({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <Button variant="secondary" onPress={() => setResetConfirmOpen(false)}>
-              <Text>{t('cancel')}</Text>
-            </Button>
+            <AlertDialogCancel asChild>
+              <Button variant="secondary">
+                <Text>{t('cancel')}</Text>
+              </Button>
+            </AlertDialogCancel>
             <Button
               testID="confirm-reset-categories"
               variant="primary"

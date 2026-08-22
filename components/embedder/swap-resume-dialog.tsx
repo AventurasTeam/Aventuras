@@ -2,6 +2,7 @@ import { Platform, View } from 'react-native'
 
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -45,9 +46,11 @@ export function SwapResumeDialog({
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className={Platform.select({ web: 'sm:justify-between' })}>
-          <Button testID="swap-resume-later" variant="ghost" onPress={onLater}>
-            <Text>{t('storySettings:swap.resumeLater')}</Text>
-          </Button>
+          <AlertDialogCancel asChild>
+            <Button testID="swap-resume-later" variant="ghost">
+              <Text>{t('storySettings:swap.resumeLater')}</Text>
+            </Button>
+          </AlertDialogCancel>
           <View
             className={cn('flex flex-col-reverse gap-2', Platform.select({ web: 'sm:flex-row' }))}
           >

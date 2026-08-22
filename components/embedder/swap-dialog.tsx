@@ -3,6 +3,7 @@ import { Platform, Pressable, View } from 'react-native'
 
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -151,9 +152,11 @@ function PickPane({
       </View>
 
       <AlertDialogFooter>
-        <Button variant="secondary" onPress={onDismiss}>
-          <Text>{t('storySettings:swap.cancel')}</Text>
-        </Button>
+        <AlertDialogCancel asChild>
+          <Button variant="secondary">
+            <Text>{t('storySettings:swap.cancel')}</Text>
+          </Button>
+        </AlertDialogCancel>
         <Button
           variant="primary"
           onPress={onNext}
@@ -315,9 +318,11 @@ function OptionsPane({
         <Button variant="ghost" onPress={onBack}>
           <Text>{t('storySettings:swap.back')}</Text>
         </Button>
-        <Button variant="secondary" onPress={onDismiss}>
-          <Text>{t('storySettings:swap.cancel')}</Text>
-        </Button>
+        <AlertDialogCancel asChild>
+          <Button variant="secondary">
+            <Text>{t('storySettings:swap.cancel')}</Text>
+          </Button>
+        </AlertDialogCancel>
       </AlertDialogFooter>
     </>
   )
