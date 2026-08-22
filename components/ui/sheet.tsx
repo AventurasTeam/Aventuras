@@ -25,7 +25,7 @@ import { InputComponentContext, type InputComponent } from '@/components/ui/inpu
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
-import { useRegisteredSheet } from '@/hooks/use-registered-sheet'
+import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
@@ -94,6 +94,11 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   enablePanDownToClose?: boolean
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
   portalHost?: string
+  /**
+   * Opt out of claiming the surface. Only for an overlay that must not gate the
+   * Actions menu against itself — the menu's own sheet is not a foreign overlay.
+   */
+  suppressOverlayRegistration?: boolean
 }
 
 function SheetContent({ anchor = 'bottom', ...props }: SheetContentProps) {
@@ -115,10 +120,11 @@ function BottomSheetContent({
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
   enablePanDownToClose = true,
+  suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
-  useRegisteredSheet(open)
+  useRegisteredOverlay(open && !suppressOverlayRegistration)
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -274,6 +280,7 @@ function RightSheetContent({
   title = 'Sheet',
   children,
   enablePanDownToClose: _enablePanDownToClose,
+  suppressOverlayRegistration: _suppressOverlayRegistration,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const insets = useSafeAreaInsets()

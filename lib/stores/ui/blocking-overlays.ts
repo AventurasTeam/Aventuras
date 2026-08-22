@@ -2,18 +2,19 @@ import { useStore } from 'zustand'
 import { createStore } from 'zustand/vanilla'
 
 /**
- * The phone bottom sheets currently open, held as opaque per-instance tokens.
+ * The overlays currently claiming the surface — bottom sheets and modal
+ * dialogs — held as opaque per-instance tokens.
  *
  * A set rather than a counter: a duplicate release is a no-op instead of
  * underflowing the gate into permanently-unblocked, which fails open silently.
  */
-type OpenSheetsState = { open: ReadonlySet<object> }
+type BlockingOverlaysState = { open: ReadonlySet<object> }
 
-const store = createStore<OpenSheetsState>()(() => ({ open: new Set<object>() }))
+const store = createStore<BlockingOverlaysState>()(() => ({ open: new Set<object>() }))
 
-export const openSheetsStore = {
-  useOpenSheetCount: (): number => useStore(store, (s) => s.open.size),
-  getState: (): OpenSheetsState => store.getState(),
+export const blockingOverlaysStore = {
+  useBlockingOverlayCount: (): number => useStore(store, (s) => s.open.size),
+  getState: (): BlockingOverlaysState => store.getState(),
   acquire: (token: object): void =>
     store.setState((s) => {
       if (s.open.has(token)) return s
@@ -31,4 +32,4 @@ export const openSheetsStore = {
   __reset: (): void => store.setState({ open: new Set<object>() }),
 }
 
-export type { OpenSheetsState }
+export type { BlockingOverlaysState }

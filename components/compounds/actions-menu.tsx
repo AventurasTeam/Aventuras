@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
-import { openSheetsStore } from '@/lib/stores'
+import { blockingOverlaysStore } from '@/lib/stores'
 
 import { isActionsMenuInert } from './actions-menu-logic'
 
@@ -173,8 +173,8 @@ function ActionsMenu({
     (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
     [],
   )
-  const openSheets = openSheetsStore.useOpenSheetCount()
-  const inert = isActionsMenuInert(blocked, openSheets, open)
+  const overlayCount = blockingOverlaysStore.useBlockingOverlayCount()
+  const inert = isActionsMenuInert(blocked, overlayCount)
 
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
   // Both off-reasons live here, not split with the matcher, so a third has one place to go.
@@ -259,6 +259,7 @@ function ActionsMenu({
       onActivate={handleActivate}
       autofocusSearch="web-only"
       sheetSize="tall"
+      suppressOverlayRegistration
     />
   )
 }

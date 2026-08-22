@@ -2,23 +2,23 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { openSheetsStore } from '@/lib/stores'
+import { blockingOverlaysStore } from '@/lib/stores'
 
-import { useRegisteredSheet } from './use-registered-sheet'
+import { useRegisteredOverlay } from './use-registered-overlay'
 
 afterEach(() => {
   cleanup()
-  openSheetsStore.__reset()
+  blockingOverlaysStore.__reset()
 })
 
 function Sheet({ open }: { open: boolean }) {
-  useRegisteredSheet(open)
+  useRegisteredOverlay(open)
   return null
 }
 
-const count = () => openSheetsStore.getState().open.size
+const count = () => blockingOverlaysStore.getState().open.size
 
-describe('useRegisteredSheet', () => {
+describe('useRegisteredOverlay', () => {
   it('registers nothing while closed, though the sheet is mounted', () => {
     render(<Sheet open={false} />)
     // The primitives stay mounted and drive presentation from `open`, so a

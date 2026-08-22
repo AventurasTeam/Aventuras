@@ -3,7 +3,13 @@ import type { ReactNode } from 'react'
 import { View } from 'react-native'
 import { expect, screen, userEvent } from 'storybook/test'
 
-import { useRegisteredSheet } from '@/hooks/use-registered-sheet'
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
 import { Text } from '../ui/text'
@@ -192,7 +198,7 @@ export const Blocked: Story = {
 // phone, so this half is derived from the store rather than passed down. Registered
 // through the real hook so the story covers hook, store and menu as one path.
 function ForeignSheet({ children }: { children: ReactNode }) {
-  useRegisteredSheet(true)
+  useRegisteredOverlay(true)
   return <>{children}</>
 }
 
@@ -205,6 +211,38 @@ export const ForeignSheetSuppressesTheMenu: Story = {
   play: async () => {
     await userEvent.keyboard('{Control>}k{/Control}')
     expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // The gate is trigger AND shortcut: on phone the trigger is what a touch
+    // user reaches for, so asserting only the shortcut leaves half of it open.
+    expect(screen.getByRole('button', { name: /Actions/ })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+// The crash-recovery and swap-resume hosts mount above every route, so their
+// state can never reach a route's `blocked` prop — the menu has to see the
+// modal itself or Cmd/Ctrl-K stays live over an unanswered decision.
+export const ModalSuppressesTheMenu: Story = {
+  render: () => (
+    <>
+      <AlertDialog open>
+        <AlertDialogContent>
+          <AlertDialogTitle>Recover unsaved work?</AlertDialogTitle>
+          <AlertDialogDescription>A draft was left behind.</AlertDialogDescription>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // `hidden: true` because the modal aria-hides its siblings. That covers the
+    // trigger for assistive tech but not the shortcut, which is a window-level
+    // listener outside the focus trap — hence the assertion above.
+    expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
+      pointerEvents: 'none',
+    })
   },
 }
 

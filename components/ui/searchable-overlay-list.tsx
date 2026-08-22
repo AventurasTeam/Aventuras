@@ -112,6 +112,8 @@ type SearchableOverlayListProps<T> = {
   autofocusSearch?: 'always' | 'web-only'
   escClearsQueryFirst?: boolean
   sheetSize?: 'short' | 'medium' | 'tall'
+  /** Forwarded to the phone sheet; see `SheetContentProps`. */
+  suppressOverlayRegistration?: boolean
 
   renderTrigger?: (p: TriggerProps) => ReactNode
 
@@ -811,6 +813,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     autofocusSearch = 'always',
     escClearsQueryFirst = false,
     sheetSize = 'tall',
+    suppressOverlayRegistration = false,
     ariaLabel,
     ariaLabelledBy,
     'aria-invalid': ariaInvalid,
@@ -1017,7 +1020,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           ariaLabel={ariaLabel}
           ariaLabelledBy={ariaLabelledBy}
         >
-          <SheetContent anchor="bottom" size={sheetSize}>
+          <SheetContent
+            anchor="bottom"
+            size={sheetSize}
+            suppressOverlayRegistration={suppressOverlayRegistration}
+          >
             {body}
           </SheetContent>
         </Sheet>

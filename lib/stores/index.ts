@@ -16,9 +16,9 @@ import { navigationStore } from './navigation/navigation'
 import { rehydrateStories, storiesStore } from './stories/stories'
 import { threadsStore } from './threads/threads'
 import { translationsStore } from './translations/translations'
+import { blockingOverlaysStore } from './ui/blocking-overlays'
 import { embedderSwapStore } from './ui/embedder-swap'
 import { embeddingStatusStore } from './ui/embedding-status'
-import { openSheetsStore } from './ui/open-sheets'
 import { recoveryReportStore } from './ui/recovery-report'
 import { undoRedoStore } from './ui/undo-redo'
 import { CAST_ID_PREFIX, wizardStore } from './wizard/wizard'
@@ -44,7 +44,7 @@ export function resetAllStores(): void {
   appSettingsStore.__reset()
   embedderSwapStore.__reset()
   embeddingStatusStore.__reset()
-  openSheetsStore.__reset()
+  blockingOverlaysStore.__reset()
   recoveryReportStore.__reset()
   undoRedoStore.clear()
   wizardStore.reset()
@@ -52,6 +52,7 @@ export function resetAllStores(): void {
 
 export {
   appSettingsStore,
+  blockingOverlaysStore,
   CAST_ID_PREFIX,
   chaptersStore,
   characterRelationshipsStore,
@@ -69,7 +70,6 @@ export {
   hydrateAppSettings,
   loreStore,
   navigationStore,
-  openSheetsStore,
   recoveryReportStore,
   rehydrateAppSettings,
   rehydrateStories,

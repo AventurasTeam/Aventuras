@@ -208,19 +208,22 @@ than taking it as a prop, so a new mount is gated by default and a
 screen cannot forget.
 
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
-trigger do nothing while another Sheet is open — Sheet-over-Sheet is
-disallowed per [`overlays.md`](./overlays.md) — or while the surface
-is mid-decision.
+trigger do nothing while another Sheet or a modal dialog is open —
+Sheet-over-Sheet is disallowed per [`overlays.md`](./overlays.md) —
+or while the surface is mid-decision.
 
 The two halves are gated differently because only one of them can be
-derived. Open sheets register themselves, so the menu reads the count
-and no screen has to declare anything; this is the only workable
-shape, because a sheet opened inside a primitive (a `Select`, a
-picker) never surfaces to the route at all. The menu discounts its
-own registration, since on phone it is a Sheet too. Mid-decision is
-the judgment half — a confirm the user must answer before navigating
-away — and stays a prop, because nothing distinguishes a confirm
-worth trapping from any other overlay. Popovers deliberately do not
+derived. Blocking overlays register themselves, so the menu reads the
+count and no screen has to declare anything; this is the only workable
+shape, because an overlay opened inside a primitive (a `Select`, a
+picker) never surfaces to the route, and a modal host mounted above
+the router (crash recovery, swap resume) sits outside every route's
+state. The menu's own sheet opts out of registering rather than being
+discounted from the count, so the gate does not depend on which tier
+renders it as a Sheet. Mid-decision is the judgment half — a confirm
+the user must answer before navigating away — and stays a prop,
+because nothing distinguishes a confirm worth trapping from any other
+overlay. Popovers deliberately do not
 gate: summoning the menu replaces an open popover, which is the
 intended behaviour.
 

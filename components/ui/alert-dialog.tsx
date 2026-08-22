@@ -7,6 +7,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { useRegisteredOverlay } from '@/hooks/use-registered-overlay'
 import { cn } from '@/lib/utils'
 
 const AlertDialog = AlertDialogPrimitive.Root
@@ -50,6 +51,9 @@ function AlertDialogContent({
 }: ComponentProps<typeof AlertDialogPrimitive.Content> & {
   portalHost?: string
 }) {
+  // Mount-scoped, not keyed on an `open` flag: the Portal only mounts its
+  // children while the root is open, so the mount interval is the open interval.
+  useRegisteredOverlay(true)
   return (
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>
