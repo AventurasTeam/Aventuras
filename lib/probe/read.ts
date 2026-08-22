@@ -32,18 +32,18 @@ export function capturesForStoryQuery(storyId: string): RowQuery {
   )
 }
 
-// Warns, never throws: an older capture is still worth reading, and refusing it
-// would blank the browse screen over a field the reader can present as a caveat.
-// A tokenizer change does not invalidate a capture either — it makes
-// tokens_estimated a count from a different vocabulary, which only a re-price
-// would notice.
-function warnOnCaptureDrift(id: string, payload: ProbeCapturePayload): void {
+// A stale version throws: there is one capture format, and a payload written by an
+// older one has fields the current type says are present. decodeCaptures routes the
+// throw into `corrupt`, so the row stays listed and deletable rather than decoding
+// into a shape that lies about itself.
+//
+// Tokenizer drift only warns — it makes tokens_estimated a count from a different
+// vocabulary, which only a re-price would notice, and invalidates nothing.
+function assertCaptureVersion(id: string, payload: ProbeCapturePayload): void {
   if (payload.capture_version !== CAPTURE_VERSION) {
-    logger.warn('memory.probe_capture_version_drift', {
-      id,
-      captured: payload.capture_version,
-      current: CAPTURE_VERSION,
-    })
+    throw new Error(
+      `capture ${id} is format version ${payload.capture_version}, expected ${CAPTURE_VERSION}`,
+    )
   }
   const tokenizer = payload.tokenizer
   const stored =
@@ -76,7 +76,7 @@ export function decodeCapture(row: readonly unknown[]): StoredCapture {
   const decoded = decompressPayload(payloadBytes)
   assertCaptureShape(decoded)
   assertRankerParams(decoded.params.ranker)
-  warnOnCaptureDrift(id, decoded)
+  assertCaptureVersion(id, decoded)
   return { id, branchId, capturedAt, captureMode, failureReason, payloadSize, payload: decoded }
 }
 

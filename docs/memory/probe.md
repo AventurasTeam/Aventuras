@@ -110,9 +110,9 @@ Per capture:
   (the entry whose retrieval this drove), `chapter_id`,
   `captured_at`, `capture_mode = 'light' | 'deep'`,
   `embedding_model_id` active at capture. The version is bumped
-  whenever a captured field's shape or meaning changes, so a decode
-  warns rather than silently misreading an older payload as the
-  current type.
+  whenever a captured field's shape or meaning changes, and a decode
+  refuses any payload that is not current rather than silently
+  misreading it (see [one capture format](#simulatable-parameters)).
 - **Tokenizer identity.** `tokenizer: { encoding, version }` — which
   vocabulary priced `tokens_estimated`. A replay under a different
   tokenizer can then warn instead of diverging quietly.
@@ -403,18 +403,21 @@ bypassed row below the floor can be followed by a row scoring above
 it that the ranker nonetheless drops, so a simulator that skips
 arming diverges on real inputs rather than only in principle.
 
-**A pre-v3 capture must be refused, not branched on.** `mmr_score` is
-typed `number | null`, where `null` means "never reached MMR" — but a
-format-version-2 payload carries the field as **absent**, so it
-decodes as `undefined`. `assertCaptureShape` tolerates field-level
-drift by design and the reader's version-drift log line is advisory,
-neither of them a gate. A simulator that branches on
-`mmr_score === null` therefore reads a v2 row as scored, compares
-`undefined < threshold` as `false`, and never arms the latch —
-returning a plausible, wrong selection with no error. Gate the
-simulate path on `capture_version >= 3` and refuse below it, the way
-`replayType` already refuses a row whose `common_knowledge` is
-`undefined`.
+**There is one capture format.** A payload written by an older
+`capture_version` carries fields the current type says are present —
+`mmr_score` is typed `number | null`, where `null` means "never
+reached MMR", but a pre-v3 payload has it **absent**, decoding as
+`undefined`. A simulator that branches on `mmr_score === null` would
+read such a row as scored, compare `undefined < threshold` as
+`false`, and never arm the latch, returning a plausible wrong
+selection with no error.
+
+Rather than gate each field, `decodeCapture` refuses any payload
+whose `capture_version` is not current. `decodeCaptures` routes the
+throw into its `corrupt` lane, so the row stays listed and deletable
+instead of blanking the browse screen — which is what makes refusing
+safe. Downstream code may therefore assume every decoded payload is
+current, and no consumer carries a version branch.
 
 ### Non-simulatable parameters
 

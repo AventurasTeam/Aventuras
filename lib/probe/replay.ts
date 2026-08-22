@@ -1,4 +1,4 @@
-import { MMR_CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
+import type { ProbeCapturePayload } from '@/lib/db'
 import { rankPerType, type Candidate, type RankedType, type RetrievalType } from '@/lib/retrieval'
 
 import { assertRankerParams, RankerParamsError } from './validate'
@@ -43,14 +43,6 @@ export function replayType(
   // pass never made, which reads as a result (probe.md → Failed captures).
   if (payload.failure_reason !== null) {
     throw new Error(`replayType cannot simulate a failed capture (${payload.failure_reason})`)
-  }
-  // Refused, not branched on: a pre-v3 payload carries mmr_score absent, so a
-  // `=== null` test reads it as scored and the threshold latch never arms
-  // (probe.md → A pre-v3 capture must be refused, not branched on).
-  if (payload.capture_version < MMR_CAPTURE_VERSION) {
-    throw new Error(
-      `replayType needs capture version ${MMR_CAPTURE_VERSION} or later, got ${payload.capture_version}`,
-    )
   }
   // A simulator retunes the snapshot after decodeCapture validated it, so the
   // guard has to run here too, not only at the read boundary.

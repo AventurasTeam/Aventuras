@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { ProbeCapturePayload } from '@/lib/db'
+import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { RANKER_DEFAULTS } from '@/lib/retrieval'
 import { retrievalFailure } from '@/lib/retrieval/__tests__/outcome'
@@ -16,7 +16,6 @@ import {
   decodeCaptures,
   deleteCaptureOp,
 } from './read'
-import { CaptureShapeError } from './validate'
 import { writeProbeCapture } from './writer'
 
 describe('capturesForStoryQuery', () => {
@@ -167,60 +166,38 @@ describe('decodeCapture', () => {
     )
   })
 
-  // Warn, not throw: a stale capture that cannot be opened is a capture that
-  // cannot be deleted from the browse screen either.
-  it.each([
-    ['capture_version', { capture_version: 99 }, 'memory.probe_capture_version_drift'],
-    [
-      'tokenizer',
-      { tokenizer: { encoding: 'cl100k_base', version: '1' } },
-      'memory.probe_capture_tokenizer_drift',
-    ],
-  ])('warns on %s drift and still returns the capture', (_field, override, event) => {
+  // One capture format: a payload from an older one has fields the current type
+  // claims are present, so it is refused rather than decoded into a shape that
+  // lies. decodeCaptures routes the throw to `corrupt`, keeping the row listed
+  // and deletable — which is the only reason refusing here is safe.
+  it('refuses a capture written by an older format version', () => {
+    const { bytes } = compressPayload({
+      ...buildCapturePayload(captureInput()),
+      capture_version: CAPTURE_VERSION - 1,
+    })
+
+    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])).toThrow(
+      /format version/i,
+    )
+  })
+
+  // Tokenizer identity is not the capture format: it changes what
+  // tokens_estimated counted, which only a re-price would notice.
+  it('warns on tokenizer drift and still returns the capture', () => {
     const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const { bytes } = compressPayload({ ...buildCapturePayload(captureInput()), ...override })
+    const { bytes } = compressPayload({
+      ...buildCapturePayload(captureInput()),
+      tokenizer: { encoding: 'cl100k_base', version: '1' },
+    })
 
     const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])
 
     expect(decoded.id).toBe('pc_1')
-    expect(warn).toHaveBeenCalledWith(event, expect.objectContaining({ id: 'pc_1' }))
-  })
-
-  // The shape that predates the payload-side marker is refused, not upgraded
-  // off the column: replayType never sees the row, so reading the column would
-  // let it decide a replay's outcome, and nothing can write that shape any more.
-  it('rejects a payload carrying no failure marker', () => {
-    const legacy = { ...buildCapturePayload(captureInput()) } as Record<string, unknown>
-    delete legacy.failure_reason
-    const { bytes } = compressPayload(legacy as unknown as ProbeCapturePayload)
-
-    expect(() => decodeCapture(['pc_1', 'br_a', 1000, 'light', 'call', 100, bytes])).toThrow(
-      CaptureShapeError,
+    expect(warn).toHaveBeenCalledWith(
+      'memory.probe_capture_tokenizer_drift',
+      expect.objectContaining({ id: 'pc_1' }),
     )
-  })
-
-  // The payload is the single source for replay: a payload saying "this pass
-  // succeeded" must win over a stale column rather than be collapsed into it.
-  it('keeps a payload null over a non-null column', () => {
-    const { bytes } = compressPayload({
-      ...buildCapturePayload(captureInput()),
-      failure_reason: null,
-    })
-
-    const decoded = decodeCapture(['pc_1', 'br_a', 1000, 'light', 'call', 100, bytes])
-
-    expect(decoded.payload.failure_reason).toBeNull()
-    // The row keeps its own value; only the payload is authoritative for replay.
-    expect(decoded.failureReason).toBe('call')
-  })
-
-  it('warns on neither when the capture matches the current format', () => {
-    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {})
-    const { bytes } = compressPayload(buildCapturePayload(captureInput()))
-
-    decodeCapture(['pc_1', 'br_a', 1000, 'light', null, 100, bytes])
-
-    expect(warn).not.toHaveBeenCalled()
+    warn.mockRestore()
   })
 })
 

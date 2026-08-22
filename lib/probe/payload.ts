@@ -1,6 +1,6 @@
 import {
   CAPTURE_VERSION,
-  type CaptureCandidateWrite,
+  type CaptureCandidate,
   type ProbeCapturePayload,
   type VecTargetKind,
 } from '@/lib/db'
@@ -45,7 +45,7 @@ const candidateOf = (
   t: CandidateTrace,
   mode: 'light' | 'deep',
   vector: Float32Array | undefined,
-): CaptureCandidateWrite => ({
+): CaptureCandidate => ({
   target_kind: t.kind,
   target_id: t.id,
   display_name: t.displayName,

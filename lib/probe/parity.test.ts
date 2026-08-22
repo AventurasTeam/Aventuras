@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { MMR_CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
+import type { ProbeCapturePayload } from '@/lib/db'
 import {
   countTokens,
   rankPerType,
@@ -577,27 +577,6 @@ describe('replayType', () => {
     // re-ranking them returns a selection the pass never made.
     expect(replayType(payload, 'happenings').selected.length).toBeGreaterThan(0)
     expect(() => replayType(failed, 'happenings')).toThrow(/failed capture/)
-  })
-
-  it('refuses a pre-v3 capture rather than reading its absent mmr_score as scored', async () => {
-    const state = STATES.normal
-    const payload = await storedPayload(state, rankProd(state))
-    // A v2 row carries mmr_score absent, not null, so a `=== null` branch reads
-    // it as scored and the threshold latch never arms — a plausible, wrong
-    // selection with no error. The same payload ranks fine at the current version.
-    const preV3 = {
-      ...payload,
-      capture_version: MMR_CAPTURE_VERSION - 1,
-      pools: {
-        ...payload.pools,
-        happenings: payload.pools.happenings.map(
-          ({ mmr_score: _s, mmr_rank: _r, ...rest }) => rest,
-        ),
-      },
-    }
-
-    expect(replayType(payload, 'happenings').selected.length).toBeGreaterThan(0)
-    expect(() => replayType(preV3, 'happenings')).toThrow(/capture version/)
   })
 
   it('refuses a happening row whose common_knowledge flag is absent', async () => {
