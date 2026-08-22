@@ -24,21 +24,28 @@ vi.mock('@react-navigation/native', () => ({
 type Listener = () => void
 
 function stubBridge() {
-  const listeners = new Set<Listener>()
+  const closeListeners = new Set<Listener>()
+  const reloadListeners = new Set<Listener>()
   const bridge = {
     platform: 'linux' as NodeJS.Platform,
     revealDbFile: vi.fn(() => Promise.resolve()),
     setCloseGuard: vi.fn(),
     confirmClose: vi.fn(),
     onCloseRequested: vi.fn((cb: Listener) => {
-      listeners.add(cb)
-      return () => listeners.delete(cb)
+      closeListeners.add(cb)
+      return () => closeListeners.delete(cb)
+    }),
+    confirmReload: vi.fn(),
+    onReloadRequested: vi.fn((cb: Listener) => {
+      reloadListeners.add(cb)
+      return () => reloadListeners.delete(cb)
     }),
   }
   window.native = bridge
   return {
     ...bridge,
-    requestClose: () => listeners.forEach((cb) => cb()),
+    requestClose: () => closeListeners.forEach((cb) => cb()),
+    requestReload: () => reloadListeners.forEach((cb) => cb()),
     get armed() {
       const calls = bridge.setCloseGuard.mock.calls
       return calls.length > 0 ? calls[calls.length - 1][0] : undefined
@@ -158,5 +165,71 @@ describe('useUnsavedChangesGuard', () => {
     render(<Guard dirty requestLeave={vi.fn()} />)
 
     expect(add).toHaveBeenCalledWith('beforeunload', expect.any(Function))
+  })
+
+  // Electron has no unload prompt of its own — the renderer must prevent it so
+  // main gets `will-prevent-unload`, or Ctrl-R on a dirty surface reloads through.
+  it('prevents the unload itself on the desktop bridge while dirty', () => {
+    stubBridge()
+    const view = render(<Guard dirty requestLeave={vi.fn()} />)
+
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+
+    view.rerender(<Guard dirty={false} requestLeave={vi.fn()} />)
+    const later = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(later)
+    expect(later.defaultPrevented).toBe(false)
+  })
+
+  it('keeps preventing the unload while another surface is still dirty', () => {
+    stubBridge()
+    const view = render(
+      <>
+        <Guard dirty requestLeave={vi.fn()} />
+        <Guard dirty requestLeave={vi.fn()} />
+      </>,
+    )
+    view.rerender(
+      <>
+        <Guard dirty requestLeave={vi.fn()} />
+        <Guard dirty={false} requestLeave={vi.fn()} />
+      </>,
+    )
+    const event = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
+  it('asks every dirty surface before confirming a reload, and never confirms the close', () => {
+    const bridge = stubBridge()
+    const first = vi.fn((proceed: () => void) => proceed())
+    const second = vi.fn((proceed: () => void) => proceed())
+    render(
+      <>
+        <Guard dirty requestLeave={first} />
+        <Guard dirty requestLeave={second} />
+      </>,
+    )
+
+    bridge.requestReload()
+
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(1)
+    expect(bridge.confirmReload).toHaveBeenCalledTimes(1)
+    expect(bridge.confirmClose).not.toHaveBeenCalled()
+  })
+
+  it('leaves the page in place when a surface cancels the reload', () => {
+    const bridge = stubBridge()
+    const cancels = vi.fn(() => {})
+    render(<Guard dirty requestLeave={cancels} />)
+
+    bridge.requestReload()
+
+    expect(cancels).toHaveBeenCalledTimes(1)
+    expect(bridge.confirmReload).not.toHaveBeenCalled()
+    expect(bridge.armed).toBe(true)
   })
 })

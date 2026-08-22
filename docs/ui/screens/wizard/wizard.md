@@ -252,11 +252,32 @@ Tone
 Three input paths per field, all writing into `{ label, promptBody }`:
 
 1. **Manual** — user types both directly.
-2. **Browse presets** (`📚`) — opens picker popover with bundled
-   presets. Each row: `displayName · 1-line tagline · preview body`
-   on hover. Pick → copies to label + promptBody.
+2. **Browse presets** (`📚`) — opens the picker (popover on desktop,
+   Sheet on phone) with bundled presets. Each row stacks three
+   lines: the preset's display name, its one-line tagline, then the
+   prompt body on a single clamped line — the whole body is in the
+   row and CSS ellipsises everything past one line's width, so only
+   its opening words show. Clamping rather than slicing keeps every
+   platform previewing the same thing; a hover preview cannot exist
+   on touch. The clamped line is `aria-hidden`, because the clip is
+   visual and the row is named by its contents. Picking copies the display name into the label
+   and the preset's prose into the prompt body; the replace-confirm
+   below guards an existing value.
 3. **AI-suggest** (`✨`) — see [AI-assist pattern](#ai-assist-pattern).
    Result is **prose** (label preview + body preview together).
+
+**Dismiss-on-dirty.** Closing the AI-assist surface without committing —
+Escape, tap-outside, or a swipe-down on the phone Sheet — confirms first
+whenever it holds an uncommitted candidate: a generated result the user
+has not accepted, or a non-empty suggestion list. Keep editing reopens the
+panel with nothing cleared; Discard is the only thing that resets it. A
+preview seeded from the field's own committed prose is not a candidate and
+closes without asking, and neither is a first generate still in flight.
+The explicit Discard and Use-this buttons stay unconfirmed, and so does
+Cancel everywhere but the failure card. A failed generate never clears the
+list — only a successful one writes it — so cancelling there destroys a
+candidate the user already has, and it takes the same confirm as an
+implicit dismiss.
 
 **Replace-on-existing.** If the user picks a preset OR accepts an
 AI-suggest while `label` or `promptBody` is non-empty, a confirm

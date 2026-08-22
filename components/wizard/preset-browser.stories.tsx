@@ -55,7 +55,7 @@ export const TriggerOpensOverlay: Story = {
   },
 }
 
-export const AllPresetsRenderNameAndTagline: Story = {
+export const AllPresetsRenderNameTaglineAndBodyLead: Story = {
   render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
@@ -63,6 +63,9 @@ export const AllPresetsRenderNameAndTagline: Story = {
     for (const preset of GENRE_PRESETS) {
       expect(screen.getByText(preset.displayName)).toBeInTheDocument()
       expect(screen.getByText(preset.tagline)).toBeInTheDocument()
+      // numberOfLines only clamps display — the DOM text is unclamped, and RTL
+      // normalizes whitespace, so match promptBody normalized the same way.
+      expect(screen.getByText(preset.promptBody.replace(/\s+/g, ' ').trim())).toBeInTheDocument()
     }
   },
 }
@@ -141,6 +144,68 @@ export const SearchFiltersToMatchesOnNameAndTagline: Story = {
     // A filtered row still commits the preset it names.
     await userEvent.click(screen.getByText(noir.displayName))
     await waitFor(() => expect(searchPickMock).toHaveBeenCalledWith(noir))
+  },
+}
+
+// The row renders a clamped promptBody lead, so a phrase visible in the list has to
+// be findable — searching name and tagline alone empties the list on what the user
+// is looking straight at.
+export const SearchFindsAPhraseOnlyInThePromptBody: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    const noir = GENRE_PRESETS.find((preset) => preset.id === 'noir')
+    if (noir == null) throw new Error('expected a "noir" fixture in GENRE_PRESETS')
+    // A word the body carries and neither the name nor the tagline does.
+    const bodyOnly = noir.promptBody
+      .replace(/\s+/g, ' ')
+      .split(' ')
+      .find(
+        (word) =>
+          word.length > 4 &&
+          !noir.displayName.toLowerCase().includes(word.toLowerCase()) &&
+          !noir.tagline.toLowerCase().includes(word.toLowerCase()),
+      )
+    if (bodyOnly == null) throw new Error('expected a body-only word in the noir promptBody')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, bodyOnly)
+    await waitFor(() => expect(screen.getByText(noir.displayName)).toBeInTheDocument())
+  },
+}
+
+// The row collapses the body's paragraph breaks to spaces, so a phrase the user
+// reads as one run of words spans a newline in the source. Matching the raw body
+// would empty the list on a phrase they can see.
+export const SearchFindsAPhraseAcrossAParagraphBreak: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    // Straddles a blank line: last word of one paragraph, first of the next.
+    const straddling = GENRE_PRESETS.map((preset) => {
+      const seam = /(\S+)\n\s*\n(\S+)/.exec(preset.promptBody)
+      return seam == null ? null : { preset, phrase: `${seam[1]} ${seam[2]}` }
+    }).find((hit) => hit != null)
+    if (straddling == null) throw new Error('expected a multi-paragraph promptBody fixture')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, straddling.phrase)
+    await waitFor(() => expect(screen.getByText(straddling.preset.displayName)).toBeInTheDocument())
+  },
+}
+
+// Typing a word then a space is ordinary; without a trimmed needle it empties the
+// list on a query that has matched up to the moment the space lands.
+export const SearchIgnoresATrailingSpace: Story = {
+  render: () => <Demo presets={GENRE_PRESETS} ariaLabel="Browse genre presets" onPick={fn()} />,
+  play: async () => {
+    const noir = GENRE_PRESETS.find((preset) => preset.id === 'noir')
+    if (noir == null) throw new Error('expected a "noir" fixture in GENRE_PRESETS')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browse genre presets' }))
+    const search = await screen.findByPlaceholderText('Search presets')
+    await userEvent.type(search, `${noir.displayName} `)
+    await waitFor(() => expect(screen.getByText(noir.displayName)).toBeInTheDocument())
   },
 }
 

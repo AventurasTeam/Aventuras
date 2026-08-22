@@ -8,11 +8,8 @@ import { wizardStore } from '@/lib/stores'
 
 import { CharacterEditor } from './cast-editors'
 
-// `react-native-css-interop` skips component registration when NODE_ENV is
-// 'test', so every className is inert in the vitest browser project and every
-// element measures the full viewport — which is why layout bugs survive the
-// suite. Registering View is the documented escape hatch, and it is scoped to
-// this file so the rest of the stories keep the harness's default behaviour.
+// `react-native-css-interop` skips component registration when NODE_ENV is 'test', so every
+// className is inert in vitest; registering View is the documented escape hatch, scoped here.
 cssInterop(View, { className: 'style' })
 
 const ROW: WizardCharacterDraft = {

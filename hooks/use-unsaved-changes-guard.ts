@@ -4,18 +4,23 @@ import { Platform } from 'react-native'
 
 import type { NativeApi } from '@/types/native'
 
-type CloseBridge = Pick<NativeApi, 'setCloseGuard' | 'confirmClose' | 'onCloseRequested'>
+type CloseBridge = Pick<
+  NativeApi,
+  'setCloseGuard' | 'confirmClose' | 'onCloseRequested' | 'confirmReload' | 'onReloadRequested'
+>
 
-// The declared type says nothing about what the running preload exposes: the
-// web build has no `window.native` at all, and an older desktop shell can be
-// missing methods this build expects. Probe before trusting it.
+// The declared type says nothing about what the preload actually exposes (web has no
+// `window.native`) — probe first. A partial bridge falls back to the unguarded browser path
+// (main's `will-prevent-unload` fail-open).
 function closeBridge(): CloseBridge | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return null
   const native = window.native
   if (
     typeof native?.setCloseGuard !== 'function' ||
     typeof native.confirmClose !== 'function' ||
-    typeof native.onCloseRequested !== 'function'
+    typeof native.onCloseRequested !== 'function' ||
+    typeof native.confirmReload !== 'function' ||
+    typeof native.onReloadRequested !== 'function'
   ) {
     return null
   }
@@ -31,13 +36,13 @@ type LeaveRequest = (proceed: () => void) => void
 const armed = new Set<{ current: LeaveRequest }>()
 let unsubscribe: (() => void) | null = null
 
-function askEach(native: CloseBridge): void {
+function askEach(confirm: () => void): void {
   // Snapshot: a surface goes clean and drops out of `armed` as it answers, so
   // iterating the live set would skip whoever follows it.
   const queue = [...armed]
   const step = (index: number): void => {
     if (index >= queue.length) {
-      native.confirmClose()
+      confirm()
       return
     }
     // Cancel is the absence of a call: a surface that never runs `proceed`
@@ -50,7 +55,14 @@ function askEach(native: CloseBridge): void {
 function syncBridge(native: CloseBridge): void {
   if (armed.size > 0) {
     native.setCloseGuard(true)
-    unsubscribe ??= native.onCloseRequested(() => askEach(native))
+    if (unsubscribe == null) {
+      const offClose = native.onCloseRequested(() => askEach(() => native.confirmClose()))
+      const offReload = native.onReloadRequested(() => askEach(() => native.confirmReload()))
+      unsubscribe = () => {
+        offClose()
+        offReload()
+      }
+    }
     return
   }
   native.setCloseGuard(false)
@@ -59,15 +71,16 @@ function syncBridge(native: CloseBridge): void {
 }
 
 /**
- * Extends a surface's unsaved-changes guard to navigator removal and the window.
+ * Extends a surface's unsaved-changes guard to navigator removal, the window,
+ * and a reload.
  *
  * Navigator actions are replayed exactly after the surface confirms leaving,
  * preserving the original pop/reset target. On Electron the main process
- * holds the close until every dirty surface has
- * run the callback it is handed, so the user answers each surface's own Save /
- * Discard / Cancel dialog in turn. In a browser `beforeunload` cannot be
- * resumed once it returns, so the guard can only raise the browser's native
- * prompt — `requestLeave` never runs there.
+ * holds a close or a reload until every dirty surface has run the callback it
+ * is handed, so the user answers each surface's own Save / Discard / Cancel
+ * dialog in turn. In a browser `beforeunload` cannot be resumed once it
+ * returns, so the guard can only raise the browser's native prompt —
+ * `requestLeave` never runs there.
  *
  * @param dirty - Whether the surface currently holds unsaved work.
  * @param requestLeave - Runs its argument once the user confirms leaving.
@@ -89,27 +102,32 @@ export function useUnsavedChangesGuard(dirty: boolean, requestLeave: LeaveReques
     if (Platform.OS !== 'web' || typeof window === 'undefined') return undefined
 
     const native = closeBridge()
-    if (native != null) {
-      if (!dirty) {
-        // Still syncs: a reload leaves the main process holding a guard armed
-        // by the previous renderer, with no listener behind it.
-        syncBridge(native)
-        return undefined
-      }
-      const entry = requestLeaveRef
-      armed.add(entry)
-      syncBridge(native)
-      return () => {
-        armed.delete(entry)
-        syncBridge(native)
-      }
+    if (!dirty) {
+      // Still syncs: a reload leaves the main process holding a guard armed
+      // by the previous renderer, with no listener behind it.
+      if (native != null) syncBridge(native)
+      return undefined
     }
 
-    if (!dirty) return undefined
+    // Per-surface, not shared: addEventListener dedupes by reference — sharing it would let
+    // one clean surface unhook every other. Browser prompts natively; Electron routes through
+    // the bridge via will-prevent-unload. A surface dirtied without a user gesture is
+    // unguarded here (lessons-learned/beforeunload-needs-sticky-activation.md).
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault()
     }
     window.addEventListener('beforeunload', onBeforeUnload)
-    return () => window.removeEventListener('beforeunload', onBeforeUnload)
+    const entry = requestLeaveRef
+    if (native != null) {
+      armed.add(entry)
+      syncBridge(native)
+    }
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      if (native != null) {
+        armed.delete(entry)
+        syncBridge(native)
+      }
+    }
   }, [dirty])
 }

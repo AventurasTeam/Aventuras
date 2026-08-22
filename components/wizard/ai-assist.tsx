@@ -19,12 +19,14 @@ import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Spinner } from '@/components/ui/spinner'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { type GenerateStructuredResult } from '@/lib/ai'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
 
+import { AiAssistDiscardDialog } from './ai-assist-discard-dialog'
 import {
   itemKey,
   markExisting,
@@ -160,6 +162,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
   // itemKey rather than index so a later page cannot shift what is checked.
   const [listItems, setListItems] = useState<AssistListItem<P>[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const abortRef = useRef<AbortController | null>(null)
   // Guards against a stale in-flight response clobbering state set by a
@@ -192,12 +195,48 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     resetOnClose()
   }
 
-  // Catches dismiss paths that bypass closeOverlay() — tap-outside, Escape,
-  // hardware back, sheet swipe-down — so an in-flight request still aborts
-  // and stale result/failure state doesn't survive to the next open.
+  // Only a candidate the user has not committed counts: a seeded preview is
+  // the field's own value, a fresh generate in flight has produced nothing yet.
+  function hasUnsavedCandidate(): boolean {
+    // `selected` is redundant today — its keys only ever come from `listItems`
+    // — but it is kept: the cost of this guard being wrong is a lost list.
+    if (listItems.length > 0 || selected.size > 0) return true
+    switch (assist.kind) {
+      // A regenerate carries the previous candidate; a first generate has
+      // produced nothing yet, so there is nothing to lose by closing. A seeded
+      // `from` is unreachable today: only prose seeds, and a seeded Regenerate
+      // routes to the guidance form rather than into 'loading'.
+      case 'loading':
+        return assist.from !== undefined && !assist.from.seeded
+      // A seeded preview is the field's own committed prose, not a candidate.
+      case 'result':
+      case 'refine':
+        return !assist.seeded
+      default:
+        return false
+    }
+  }
+
+  // Every dismiss that can still lose work: Escape, tap-outside and swipe-down arrive through
+  // handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
+  // via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
+  function requestClose() {
+    setOpen(false)
+    if (hasUnsavedCandidate()) {
+      setConfirmDiscard(true)
+      return
+    }
+    resetOnClose()
+  }
+
+  // Phone-sheet hardware back never reaches here — gorhom registers no BackHandler, so the
+  // press falls through to the wizard's own router.back().
   function handleOpenChange(next: boolean) {
-    setOpen(next)
-    if (!next) resetOnClose()
+    if (next) {
+      setOpen(true)
+      return
+    }
+    requestClose()
   }
 
   // The committed value only counts as a seed once it actually carries prose —
@@ -445,7 +484,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                             where its click bubbles to the row Pressable and the two
                             toggles cancel out. */}
                         <View
-                          pointerEvents="none"
+                          style={POINTER_EVENTS_NONE}
                           aria-hidden={Platform.OS === 'web' ? true : undefined}
                           accessibilityElementsHidden
                           importantForAccessibility="no-hide-descendants"
@@ -757,7 +796,9 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
             </Text>
             {actionSpacer}
             <View className="flex-row justify-end gap-2">
-              <Button variant="ghost" onPress={closeOverlay}>
+              {/* Not closeOverlay: a failure after a successful generate leaves listItems
+                  intact — only the ok branch overwrites it — so this discards a real list. */}
+              <Button variant="ghost" onPress={requestClose}>
                 <Text>{t('wizard:aiAssist.actions.cancel')}</Text>
               </Button>
               <Button onPress={assist.retry}>
@@ -815,8 +856,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
         </Sheet>
       ) : (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-          {/* No header ×: every state ends in an explicit Cancel or Discard, and
-              those route the close through resetOnClose. */}
+          {/* No header ×: every state ends in an explicit Cancel or Discard, which
+              route the close through requestClose — a dirty overlay asks first. */}
           {/* Explicit width, not the primitive's content-sized default: the body
               swaps per state and the loading line is wider than the guidance
               label, so a content-sized dialog visibly resizes mid-flow. 32rem
@@ -835,6 +876,17 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
           </DialogContent>
         </Dialog>
       )}
+      <AiAssistDiscardDialog
+        open={confirmDiscard}
+        onKeep={() => {
+          setConfirmDiscard(false)
+          setOpen(true)
+        }}
+        onDiscard={() => {
+          setConfirmDiscard(false)
+          resetOnClose()
+        }}
+      />
     </View>
   )
 }

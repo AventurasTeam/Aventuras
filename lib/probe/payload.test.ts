@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { CAPTURE_VERSION, type ProbeCapturePayload } from '@/lib/db'
+import { type ProbeCapturePayload } from '@/lib/db'
 import { MEMORY_BLOCKS } from '@/lib/prompts/bundled/memory-blocks'
 import { PER_TURN_NARRATIVE } from '@/lib/prompts/bundled/per-turn'
 import { STATE_EMISSION } from '@/lib/prompts/bundled/state-emission'
@@ -238,7 +238,7 @@ describe('buildCapturePayload', () => {
       captured_at: 1_700_000_000_123,
       embedding_model_id: 'Xenova/all-MiniLM-L6-v2',
       capture_mode: 'light',
-      capture_version: CAPTURE_VERSION,
+      capture_version: 3,
     })
   })
 
@@ -315,6 +315,9 @@ describe('buildCapturePayload', () => {
       chapter_boost_applied: false,
       bypass_triggered: true,
       final_score: 1.09275,
+      // Single candidate: MMR's first pick is lambdaDiv × score with no
+      // diversity penalty (RANKER_DEFAULTS.lambdaDiv = 0.75).
+      mmr_score: expect.closeTo(0.8195625, 6),
       mmr_rank: 0,
       selected: true,
       drop_reason: 'not_dropped',

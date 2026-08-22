@@ -289,8 +289,12 @@ function Pulsing({ children }: { children: ReactNode }) {
   useEffect(() => {
     opacity.set(withRepeat(withTiming(0.3, { duration: 600 }), -1, true))
   }, [opacity])
-  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }))
-  return <Animated.View style={style}>{children}</Animated.View>
+  const style = useAnimatedStyle(() => ({ opacity: opacity.get() }), [opacity])
+  return (
+    <Animated.View style={style} testID="reasoning-pulse">
+      {children}
+    </Animated.View>
+  )
 }
 
 function PlainNarrative({ marked, muted }: { marked: string; muted?: boolean }) {

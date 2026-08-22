@@ -83,6 +83,7 @@ const capturePayload = (): ProbeCapturePayload => ({
         chapter_boost_applied: false,
         bypass_triggered: false,
         final_score: 0.45,
+        mmr_score: isPreFiltered ? null : 0.3375,
         mmr_rank: isPreFiltered ? null : i,
         selected: isSelected,
         drop_reason: isSelected ? 'not_dropped' : isPreFiltered ? 'pre_filtered' : 'over_budget',

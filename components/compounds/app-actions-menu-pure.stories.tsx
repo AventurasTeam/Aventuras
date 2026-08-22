@@ -35,3 +35,30 @@ export const DiagnosticsOff: Story = {
     expect(screen.queryByRole('option', { name: 'Diagnostics Hub' })).toBeNull()
   },
 }
+
+// `blocked` gates the trigger as well as the shortcut; `hotkeyEnabled` gates only
+// the shortcut (actions-menu.md → Inert under a blocking overlay).
+export const BlockedIgnoresShortcutAndTrigger: Story = {
+  args: { diagnosticsEnabled: true, onOpenDiagnosticsHub: fn(), blocked: true },
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+
+    // Not clicked: userEvent refuses a pointer-events:none target, which is itself the
+    // assertion — the trigger is inert, not merely unstyled.
+    expect(screen.getByRole('button', { name: /Actions/ })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+export const HotkeyDisabledStillOpensFromTheTrigger: Story = {
+  args: { diagnosticsEnabled: true, onOpenDiagnosticsHub: fn(), hotkeyEnabled: false },
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}

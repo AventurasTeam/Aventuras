@@ -42,7 +42,7 @@ export type { TranslationWrite } from './translations/translations-schema'
 export { branchEraFlipWriteSchema } from './stories/era-flip-schema'
 export type { BranchEraFlipWrite } from './stories/era-flip-schema'
 export { CAPTURE_VERSION } from './probe-capture-types'
-export type { DropReason, ProbeCapturePayload } from './probe-capture-types'
+export type { CaptureCandidate, DropReason, ProbeCapturePayload } from './probe-capture-types'
 export type { ClassifierLifecycleState, ClassifierStatus } from './world-json-types'
 export type {
   StoryDefinition,

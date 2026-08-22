@@ -3,6 +3,7 @@ import { type ComponentProps, type ReactNode } from 'react'
 import { Platform } from 'react-native'
 
 import { Text, TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 function Tabs({ className, ...props }: ComponentProps<typeof TabsPrimitive.Root>) {
@@ -44,9 +45,7 @@ function TabsTrigger({ className, count, children, ...props }: TabsTriggerProps)
       )}
     >
       <TabsPrimitive.Trigger
-        style={
-          Platform.OS === 'web' && props.disabled ? ({ pointerEvents: 'none' } as never) : undefined
-        }
+        style={Platform.OS === 'web' && props.disabled ? POINTER_EVENTS_NONE : undefined}
         className={cn(
           'group flex-row items-center gap-1 border-b-2 py-row-y-sm',
           active ? 'border-fg-primary' : 'border-transparent',

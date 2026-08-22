@@ -199,10 +199,33 @@ Popover; `Esc`, outside-click, or activating any entry closes it,
 returning focus to `⚲`. Phone: `⚲` tap opens the Sheet; drag-down,
 scrim-tap, system-back, or activating an entry closes it.
 
+**Only the focused screen answers the shortcut.** `Cmd/Ctrl-K` is a
+window-level listener and a pushed-under screen stays mounted — on
+web the stack hides it with `display: none` rather than freezing it —
+so an ungated mount answers from behind the screen on top. The
+connected menu reads its own focus state from the navigator rather
+than taking it as a prop, so a new mount is gated by default and a
+screen cannot forget.
+
 **Inert under a blocking overlay.** `Cmd/Ctrl-K` and the `⚲`
-trigger do nothing while a modal, AlertDialog, or other Sheet owns
-the surface — Sheet-over-Sheet is disallowed per
-[`overlays.md`](./overlays.md).
+trigger do nothing while another Sheet or a modal dialog is open —
+Sheet-over-Sheet is disallowed per [`overlays.md`](./overlays.md) —
+or while the surface is mid-decision.
+
+The two halves are gated differently because only one of them can be
+derived. Blocking overlays register themselves, so the menu reads the
+count and no screen has to declare anything; this is the only workable
+shape, because an overlay opened inside a primitive (a `Select`, a
+picker) never surfaces to the route, and a modal host mounted above
+the router (crash recovery, swap resume) sits outside every route's
+state. The menu's own sheet opts out of registering rather than being
+discounted from the count, so the gate does not depend on which tier
+renders it as a Sheet. Mid-decision is the judgment half — a confirm
+the user must answer before navigating away — and stays a prop,
+because nothing distinguishes a confirm worth trapping from any other
+overlay. Popovers deliberately do not
+gate: summoning the menu replaces an open popover, which is the
+intended behaviour.
 
 **Activation** — three outcomes, all of which **close the menu
 first**:

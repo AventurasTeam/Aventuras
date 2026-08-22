@@ -383,3 +383,75 @@ export function seedCorruptDraft(dbPath: string, title: string): void {
     db.close()
   }
 }
+
+export const OPENING_ONLY_STORY_ID = 'story_e2e_opening_only'
+export const OPENING_ONLY_BRANCH_ID = 'br_e2e_opening_only_main'
+export const OPENING_ONLY_TITLE = 'E2E Opening Only'
+
+// Only-opening branch — no seeded fixture has one (every fixture branch has ≥ 2 entries).
+// Borrows creative's leadless definition/settings, so no entity rows are needed; the opening
+// carries create-story's minimal metadata.
+export function seedOpeningOnlyStory(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const donor = db
+      .prepare(`SELECT definition, settings FROM stories WHERE id = 'story_creative'`)
+      .get() as { definition: string; settings: string } | undefined
+    if (!donor) {
+      throw new Error(
+        'cannot seed the opening-only story: story_creative is missing from the fixture',
+      )
+    }
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      db.prepare(
+        `INSERT INTO stories (id, title, description, status, definition, settings, created_at, updated_at, current_branch_id)
+         VALUES (?, ?, NULL, 'active', ?, ?, 1, 1, ?)`,
+      ).run(
+        OPENING_ONLY_STORY_ID,
+        OPENING_ONLY_TITLE,
+        donor.definition,
+        donor.settings,
+        OPENING_ONLY_BRANCH_ID,
+      )
+      db.prepare(
+        `INSERT INTO branches (id, story_id, name, created_at) VALUES (?, ?, 'main', 1)`,
+      ).run(OPENING_ONLY_BRANCH_ID, OPENING_ONLY_STORY_ID)
+      db.prepare(
+        `INSERT INTO story_entries (id, branch_id, position, kind, content, metadata, created_at)
+         VALUES ('entry_e2e_opening', ?, 1, 'opening', ?, ?, 1)`,
+      ).run(
+        OPENING_ONLY_BRANCH_ID,
+        'The tide has gone out and left the parish standing. Nobody has written back yet.',
+        JSON.stringify({ sceneEntities: [], currentLocationId: null, worldTime: 0 }),
+      )
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+  } finally {
+    db.close()
+  }
+}
+
+// `providers` must be an array — an object hits hydrateAppSettings' parse-failure arm, gating
+// app/_layout on SettingsRecoveryScreen. Missing rows / bad `diagnostics` blobs don't reach it,
+// and no app route writes this state.
+export function corruptAppSettings(dbPath: string): void {
+  const db = new DatabaseSync(dbPath)
+  try {
+    db.exec('PRAGMA busy_timeout = 10000')
+    const { changes } = db
+      .prepare(`UPDATE app_settings SET providers = ? WHERE id = 'singleton'`)
+      .run(JSON.stringify({ not: 'an array' }))
+    // A zero-row UPDATE would leave the fixture healthy, and the spec that
+    // depends on this would boot fine and assert nothing.
+    if (changes !== 1) {
+      throw new Error(`cannot corrupt app_settings: expected 1 row, updated ${changes}`)
+    }
+  } finally {
+    db.close()
+  }
+}

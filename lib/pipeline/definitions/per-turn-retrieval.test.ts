@@ -255,6 +255,7 @@ function trace(id: string, finalScore: number, mmrRank: number): CandidateTrace 
     chapterBoostApplied: false,
     bypassTriggered: false,
     finalScore,
+    mmrScore: 0.75 * finalScore,
     mmrRank,
     selected: true,
     dropReason: 'not_dropped',

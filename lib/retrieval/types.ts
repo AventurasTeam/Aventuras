@@ -103,6 +103,11 @@ export type CandidateTrace = {
   chapterBoostApplied: boolean
   bypassTriggered: boolean
   finalScore: number
+  /**
+   * The post-MMR score the threshold walk compared (`mmr(c, S)`), null when the
+   * candidate was pre-filtered out before MMR ran. `finalScore` is pre-MMR.
+   */
+  mmrScore: number | null
   /** null when the candidate was pre-filtered out before MMR ran. */
   mmrRank: number | null
   selected: boolean

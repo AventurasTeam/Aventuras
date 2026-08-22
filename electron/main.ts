@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { app, BrowserWindow, ipcMain, net, protocol, session, shell } from 'electron'
+import type { WebContents } from 'electron'
 
 import { resolveBundlePath } from './bundle-path'
 import {
@@ -21,6 +22,7 @@ import {
 } from './embedder/paths'
 import { embed as embedderEmbed, evictPipeline, listInstalled, smokeTest } from './embedder/service'
 import type { EmbedderAttestation } from './embedder/types'
+import { NATIVE_CHANNELS } from './native/channels'
 
 // Abort handles for in-flight downloads, so a renderer cancel actually stops
 // the transfer instead of only hiding its progress.
@@ -109,11 +111,34 @@ function applyContentSecurityPolicy(): void {
   })
 }
 
-// Windows whose renderer holds unsaved work, those that have already answered
-// the prompt and may close, and those whose close cancelled a quit.
-const closeGuards = new Set<number>()
-const confirmedCloses = new Set<number>()
-const pendingQuits = new Set<number>()
+type WindowGuard = {
+  /** The renderer holds unsaved work. */
+  guarded: boolean
+  /** Already answered the prompt and may close. */
+  confirmedClose: boolean
+  /**
+   * Cleared on navigation commit, which is what usually clears it: the guard
+   * hook drops its `beforeunload` listener before main reloads, so the
+   * `will-prevent-unload` that would consume it mostly never fires.
+   */
+  confirmedReload: boolean
+  /** This window's close cancelled a quit; confirming it resumes the quit. */
+  pendingQuit: boolean
+}
+
+// Window ids are reused, so an entry outliving its window would hand that
+// window's state to an unrelated future one. `closed` is the only delete.
+const windowGuards = new Map<number, WindowGuard>()
+
+// Unreachable as null in practice — the entry is registered synchronously in
+// `createWindow` before the renderer loads, and dropped only once the window is
+// gone — so a missing entry means the sender has no window worth acting on.
+function windowAndGuard(sender: WebContents): { win: BrowserWindow; guard: WindowGuard } | null {
+  const win = BrowserWindow.fromWebContents(sender)
+  if (win == null) return null
+  const guard = windowGuards.get(win.id)
+  return guard === undefined ? null : { win, guard }
+}
 
 // `before-quit` runs before any window's `close`, so a guard that cancels the
 // close also cancels this quit. Recorded per window so confirming resumes it.
@@ -135,6 +160,14 @@ function createWindow(): void {
       sandbox: false,
     },
   })
+
+  const guard: WindowGuard = {
+    guarded: false,
+    confirmedClose: false,
+    confirmedReload: false,
+    pendingQuit: false,
+  }
+  windowGuards.set(win.id, guard)
 
   win.once('ready-to-show', () => win.show())
 
@@ -164,27 +197,50 @@ function createWindow(): void {
   // `closed` from firing — so without this the window becomes unclosable and
   // every later quit is blocked too.
   win.webContents.on('render-process-gone', () => {
-    closeGuards.delete(win.id)
+    guard.guarded = false
+    guard.confirmedReload = false
+  })
+
+  // will-prevent-unload fires instead of a prompt on a blocked unload. Doing nothing keeps the
+  // page; calling preventDefault() here is what ALLOWS the unload through — inverted from usual.
+  win.webContents.on('will-prevent-unload', (event) => {
+    // Consumed before the branch, not inside it — inside a `||` it would short-circuit past
+    // the reset, stranding the flag.
+    const confirmedReload = guard.confirmedReload
+    guard.confirmedReload = false
+    // Fail-open, same rule as `close` below: only a renderer that armed the guard gets asked.
+    // Otherwise an unguarded beforeunload (e.g. a failed bridge probe registering only the
+    // browser's own listener) leaves the window unquittable — no dialog, nothing logged.
+    if (confirmedReload || guard.confirmedClose || !guard.guarded) {
+      event.preventDefault()
+      return
+    }
+    // Named for the only cause that reaches it today: other prevented-unload sources (post-init
+    // loadURL, off-origin nav) are already blocked by will-navigate or precede the guard arming.
+    win.webContents.send(NATIVE_CHANNELS.reloadRequested)
+  })
+  // A committed main-frame navigation means the arming renderer — and any confirmed
+  // reload — is gone. Not did-start-navigation: that fires before will-navigate can
+  // cancel, disarming a guard whose document is still alive and still holds the draft.
+  // In-page navigations raise did-navigate-in-page instead, so the guard survives them.
+  win.webContents.on('did-navigate', () => {
+    guard.guarded = false
+    guard.confirmedReload = false
   })
 
   // Fail-open: only a live renderer that armed the guard gets asked.
   win.on('close', (event) => {
-    if (!closeGuards.has(win.id) || confirmedCloses.has(win.id)) return
+    if (!guard.guarded || guard.confirmedClose) return
     if (win.webContents.isDestroyed() || win.webContents.isCrashed()) return
     event.preventDefault()
     // Assigned, not merged: a close arriving outside a quit must clear an
     // intent left behind by a quit the user cancelled.
-    if (quitRequested) pendingQuits.add(win.id)
-    else pendingQuits.delete(win.id)
+    guard.pendingQuit = quitRequested
     quitRequested = false
-    win.webContents.send('native:close-requested')
+    win.webContents.send(NATIVE_CHANNELS.closeRequested)
   })
   win.on('closed', () => {
-    // Window ids are reused; a stale entry here would arm the guard on an
-    // unrelated future window.
-    closeGuards.delete(win.id)
-    confirmedCloses.delete(win.id)
-    pendingQuits.delete(win.id)
+    windowGuards.delete(win.id)
   })
 
   if (isDev) {
@@ -218,24 +274,31 @@ app.whenReady().then(async () => {
     showSearchWithGoogle: false,
     showInspectElement: isDev,
   })
-  ipcMain.handle('native:reveal-db-file', () => {
+  ipcMain.handle(NATIVE_CHANNELS.revealDbFile, () => {
     shell.showItemInFolder(getDbFilePath())
   })
-  ipcMain.on('native:set-close-guard', (event, active: boolean) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win == null) return
-    if (active) closeGuards.add(win.id)
-    else closeGuards.delete(win.id)
+  ipcMain.on(NATIVE_CHANNELS.setCloseGuard, (event, active: boolean) => {
+    const target = windowAndGuard(event.sender)
+    if (target == null) return
+    target.guard.guarded = active
   })
-  ipcMain.on('native:confirm-close', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win == null) return
-    confirmedCloses.add(win.id)
+  ipcMain.on(NATIVE_CHANNELS.confirmClose, (event) => {
+    const target = windowAndGuard(event.sender)
+    if (target == null) return
+    const { win, guard } = target
+    guard.confirmedClose = true
     // `window-all-closed` does not quit on darwin, so a Cmd-Q whose close we
     // cancelled would otherwise leave the process running with no windows.
-    const resumeQuit = pendingQuits.delete(win.id)
+    const resumeQuit = guard.pendingQuit
+    guard.pendingQuit = false
     win.close()
     if (resumeQuit) app.quit()
+  })
+  ipcMain.on(NATIVE_CHANNELS.confirmReload, (event) => {
+    const target = windowAndGuard(event.sender)
+    if (target == null) return
+    target.guard.confirmedReload = true
+    target.win.webContents.reload()
   })
   ipcMain.handle('db:query', (_e, sql: string, params: unknown[], method: DbProxyMethod) =>
     dbQuery(sql, params, method),

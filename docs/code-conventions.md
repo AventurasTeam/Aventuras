@@ -233,6 +233,19 @@ container. Several narrow-named stories
 in a 360/375 px frame and carry a visible caveat saying so; the
 viewport global is what would let them actually assert the tier.
 
+**A play story that wraps `FormRow` below 640 px must pin `stacked`.**
+`FormRow` guesses its layout from `useTier()` on the first frame and
+corrects from `onLayout` afterwards; the two branches are different
+element trees, so the correction **remounts `children`**. A play
+function that captures a node before that async correction lands
+asserts against the branch that is about to disappear and goes
+vacuously green — or types into an input that is remounted
+mid-keystroke. Pass `stacked` (or `stacked={false}`) explicitly in
+any story whose wrapper width disagrees with the viewport tier, or
+select the tier with the viewport global so guess and measurement
+agree. Details:
+[lessons-learned → FormRow narrow-story remount](./implementation/lessons-learned/formrow-narrow-story-remount.md).
+
 End-to-end (Playwright + Electron) coverage of the cross-subsystem
 seams is a separate layer with its own spec:
 [`testing.md`](./testing.md).

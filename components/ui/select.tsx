@@ -23,7 +23,9 @@ import { Heading } from '@/components/ui/heading'
 import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -123,6 +125,7 @@ function PhoneSheetContent({
   tailAction?: { label: string; onPress: () => void }
 }) {
   const { open, onOpenChange } = SelectBase.useRootContext()
+  useRegisteredOverlay(open)
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
 
@@ -150,7 +153,9 @@ function PhoneSheetContent({
     // Root context lookup happy. BottomSheetModal would portal again and lose it.
     <SelectBase.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        <View style={StyleSheet.absoluteFill} pointerEvents={open ? 'box-none' : 'none'}>
+        <View
+          style={[StyleSheet.absoluteFill, open ? POINTER_EVENTS_BOX_NONE : POINTER_EVENTS_NONE]}
+        >
           <BottomSheet
             ref={sheetRef}
             // Derived inline, never via state. The portal mounts fresh on open,

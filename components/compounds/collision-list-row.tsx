@@ -2,6 +2,7 @@ import { Platform, Pressable, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 import { ListRow, type ListRowProps } from './list-row'
@@ -28,7 +29,7 @@ export function CollisionListRow({ row, collision }: CollisionListRowProps) {
       >
         <View
           aria-hidden
-          pointerEvents="none"
+          style={POINTER_EVENTS_NONE}
           className="absolute inset-0 bg-warning opacity-[.12]"
         />
         <Pressable

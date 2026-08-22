@@ -20,24 +20,3 @@ slice-planning gate forces its resolution before that slice is planned.
 ## Inbox
 
 _Empty._
-
-Drained 2026-08-20. Four items were fixed on the branch that surfaced
-them — the corrupt-draft clobber, the suggestion re-roll's reversal
-gate, a deliberate cancel logged as an embedder fault, and
-`embedding_stale`'s column default. Two went to their owning
-milestone's slice-authoring notes in [`roadmap.md`](./roadmap.md):
-the per-row delete-vector sweep to M4.2, the main-process
-unhandled-rejection handler to M7.3. One went to
-[`parked.md`](../parked.md) with a stated signal —
-`runSyncStage`'s embed payload, whose fix trades away a documented
-no-partial-success contract. Three entries carried claims that were
-wrong or materially incomplete and were corrected before they moved.
-
-Previously drained 2026-08-18: items with a downstream owner went to
-that milestone's slice-authoring notes in
-[`roadmap.md`](./roadmap.md), items with a stated revisit trigger to
-[`parked.md`](../parked.md), and the unowned M3 remainder to
-Slice 3.12 — since split (2026-08-19) into
-[Slice 3.12a](./milestones/03-memory-floor/slices/12a-runtime-integrity.md)
-and
-[Slice 3.12b](./milestones/03-memory-floor/slices/12b-ui-tooling-contracts.md).

@@ -7,6 +7,7 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { buttonTextVariants, buttonVariants } from '@/components/ui/button'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { cn } from '@/lib/utils'
 
 const AlertDialog = AlertDialogPrimitive.Root
@@ -50,6 +51,11 @@ function AlertDialogContent({
 }: ComponentProps<typeof AlertDialogPrimitive.Content> & {
   portalHost?: string
 }) {
+  // Keyed on `open`, not mount-scoped: the Portal unmounts its children while
+  // closed, but this renders the Portal rather than living inside one, so it
+  // stays mounted with the consumer for the life of the surface.
+  const { open } = AlertDialogPrimitive.useRootContext()
+  useRegisteredOverlay(open)
   return (
     <AlertDialogPortal hostName={portalHost}>
       <AlertDialogOverlay>

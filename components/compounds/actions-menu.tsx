@@ -11,6 +11,9 @@ import {
 } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
+import { blockingOverlaysStore } from '@/lib/stores'
+
+import { isActionsMenuInert } from './actions-menu-logic'
 
 type ActionEntry = {
   /** Stable id; unique across all entries the menu surfaces this render. */
@@ -59,10 +62,18 @@ type ActionsMenuProps = {
   triggerSize?: IconActionSize
   /**
    * When true, both the trigger and the `Cmd/Ctrl-K` shortcut are inert. Pass
-   * this from the surface owner whenever a modal / AlertDialog / Sheet is
-   * blocking — Sheet-over-Sheet is disallowed
+   * this while the surface is mid-decision — a confirm the user must answer
+   * before navigating away. Open sheets already gate themselves; this is the
+   * judgment half, which nothing can derive.
    */
   blocked?: boolean
+  /**
+   * The owning screen's focus state. A pushed-under expo-router screen stays
+   * mounted, so without this its Cmd/Ctrl-K keeps firing from behind the
+   * screen on top. Gates only the shortcut; `blocked` is what makes the
+   * trigger inert too.
+   */
+  hotkeyEnabled?: boolean
 }
 
 type MenuRowData = {
@@ -152,17 +163,26 @@ function ActionsMenu({
   triggerLabel = DEFAULT_TRIGGER_LABEL,
   triggerSize,
   blocked,
+  hotkeyEnabled = true,
 }: ActionsMenuProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const shortcutHint = useShortcutHint()
 
   const matchesMenuShortcut = useCallback(
-    (e: KeyboardEvent) => !blocked && (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
-    [blocked],
+    (e: KeyboardEvent) => (e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K'),
+    [],
   )
+  const overlayCount = blockingOverlaysStore.useBlockingOverlayCount()
+  const inert = isActionsMenuInert(blocked, overlayCount)
+
   const toggleOpen = useCallback(() => setOpen((prev) => !prev), [])
-  useGlobalHotkey(matchesMenuShortcut, toggleOpen, { capture: true, stopPropagation: true })
+  // Both off-reasons live here, not split with the matcher, so a third has one place to go.
+  useGlobalHotkey(matchesMenuShortcut, toggleOpen, {
+    capture: true,
+    stopPropagation: true,
+    enabled: hotkeyEnabled && !inert,
+  })
 
   const sections = useMemo<Section<MenuRowData>[]>(() => {
     const out: Section<MenuRowData>[] = []
@@ -206,11 +226,11 @@ function ActionsMenu({
         p={p}
         label={triggerLabel}
         shortcutHint={shortcutHint}
-        disabled={blocked}
+        disabled={inert}
         size={triggerSize}
       />
     ),
-    [triggerLabel, shortcutHint, blocked, triggerSize],
+    [triggerLabel, shortcutHint, inert, triggerSize],
   )
 
   const renderEmpty = useCallback(
@@ -239,6 +259,7 @@ function ActionsMenu({
       onActivate={handleActivate}
       autofocusSearch="web-only"
       sheetSize="tall"
+      suppressOverlayRegistration
     />
   )
 }

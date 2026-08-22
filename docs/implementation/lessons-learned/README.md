@@ -89,6 +89,9 @@ slice plans when relevant.
   — `flex-1` lands on the inner element, not the Header that sits in
   your row; the web tree survives only because the wrapper adds its
   own web-only `flex-1`, and Yoga collapses the native one.
+- [A Content that renders the Portal is always mounted](./portal-owner-mount-is-not-open.md)
+  — the Portal unmounts its children, not its renderer; effects that
+  should last the open interval must read `open` from the root context.
 - [Portaled overlays outlive screen focus](./portaled-overlay-outlives-screen-focus.md)
   — a Stack keeps pushed-under screens mounted, so their portaled
   modals float over the new screen; gate on `useIsFocused()`.
@@ -178,9 +181,18 @@ slice plans when relevant.
   `lucide-react-native` / `nativewind`'s externalized `require('react-native')`
   both fail outside Storybook's full `vite-plugin-rnw` combination; component
   behavior belongs in Storybook, not `unit`.
+- [A narrow-wrapped `FormRow` story remounts its control after the first frame](./formrow-narrow-story-remount.md)
+  — the onLayout correction swaps element trees; pin `stacked` or select
+  the viewport tier in any play story below 640 px.
+- [Vite-built targets never read `babel.config.js` — wire worklets yourself](./vite-targets-dont-read-babel-config.md)
+  — the rnw preset hardcodes `babelrc: false`; Storybook now declares the
+  plugin itself, and any new Vite target must too.
 
 ### Native deps / install ritual
 
+- [`beforeunload` cancellation is ignored without sticky user activation](./beforeunload-needs-sticky-activation.md)
+  — no gesture means no `will-prevent-unload` at all, which looks exactly like
+  a missing guard; tests must click before they type.
 - [Native-module RN libs need a dev-client rebuild](./native-dep-expo-link.md)
   — `pnpm add` alone crashes Android for libs with native
   modules; config-plugin step is per-library, not universal.

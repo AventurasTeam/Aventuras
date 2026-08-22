@@ -39,6 +39,8 @@ type CaptureCandidate = {
   chapter_boost_applied: boolean
   bypass_triggered: boolean
   final_score: number
+  /** Post-MMR; null on a pre-filtered row, which never reached MMR. */
+  mmr_score: number | null
   mmr_rank: number | null
   selected: boolean
   drop_reason: DropReason
@@ -88,7 +90,7 @@ type CaptureTokenizer = { encoding: string; version: string }
  * Bumped when a captured field's shape or meaning changes, so a decode can
  * warn instead of silently misreading an older payload as the current type.
  */
-export const CAPTURE_VERSION = 2 as const
+export const CAPTURE_VERSION = 3 as const
 
 export type ProbeCapturePayload = {
   capture_version: number
@@ -119,3 +121,5 @@ export type ProbeCapturePayload = {
    */
   failure_reason: EmbedderErrorKind | null
 }
+
+export type { CaptureCandidate }

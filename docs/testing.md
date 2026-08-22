@@ -117,6 +117,11 @@ harness absorbs:
   `pnpm build:web` (renderer) and `pnpm electron:compile` (main) before
   the `dev` suite, and steps 1-3 of [CI](#ci) before the packaged one.
   CI itself is safe, because its job always builds first.
+  **Mutation-testing `electron/` has no tell at all.** A mutation left
+  uncompiled simply never runs, so the suite passes and the reading is
+  "this branch is uncovered" — the opposite of the truth, and a
+  conclusion that then gets written down. Recompile between every
+  mutation and its run.
 - **A running `pnpm desktop` breaks the whole suite.** The dev app holds
   the default remote-debugging port (`127.0.0.1:9222`), and a suite
   launched alongside it fails **every** spec in `beforeAll` — Electron
@@ -215,6 +220,16 @@ change or a new locale propagates in one place, and a renamed i18n
 key fails loudly rather than silently missing an element. Specs
 import from `locators/` and `flows/`; they do not construct raw
 selectors inline.
+
+The same rule covers navigation: specs reach a screen by driving the
+UI, never by `page.goto`. The one exception is
+`e2e/tests/reader-hydration-failed.spec.ts`, which hand-writes a
+reader URL for a branch that does not exist, because no in-app path
+can produce that state — both reader entry points navigate only
+after `loadOpenStory` succeeds — and because the deep-route fallback
+(`app://bundle` → `index.html`) is itself the seam under test. A new
+spec that wants a URL needs the same two-part justification in a
+comment, or it does not get one.
 
 ## Fixture + seed contract
 

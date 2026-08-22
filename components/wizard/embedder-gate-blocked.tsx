@@ -2,6 +2,7 @@ import { useRouter, type Href } from 'expo-router'
 
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
@@ -68,9 +69,11 @@ export function EmbedderGateBlocked({ reason, backend }: EmbedderGateBlockedProp
           <AlertDialogDescription>{t(bodyKey)}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button variant="secondary" onPress={() => router.back()}>
-            <Text>{t('wizard:embedGate.back')}</Text>
-          </Button>
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>{t('wizard:embedGate.back')}</Text>
+            </Button>
+          </AlertDialogCancel>
           <Button onPress={() => router.push(settingsHref(reason))}>
             <Text>{t('wizard:embedGate.openSettings')}</Text>
           </Button>
@@ -107,9 +110,11 @@ export function EmbedderGateUnresolved({ message, onRetry }: EmbedderGateUnresol
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <Button variant="secondary" onPress={() => router.back()}>
-            <Text>{t('wizard:embedGate.back')}</Text>
-          </Button>
+          <AlertDialogCancel asChild>
+            <Button variant="secondary">
+              <Text>{t('wizard:embedGate.back')}</Text>
+            </Button>
+          </AlertDialogCancel>
           <Button onPress={onRetry}>
             <Text>{t('wizard:embedGate.unresolved.retry')}</Text>
           </Button>

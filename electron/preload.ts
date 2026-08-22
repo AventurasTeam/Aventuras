@@ -2,21 +2,30 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import type { DbBridge } from './db/types'
 import type { EmbedderBridge, EmbedderDownloadProgress } from './embedder/types'
+import { NATIVE_CHANNELS } from './native/channels'
 import type { NativeApi } from './native/types'
 
 const api: NativeApi = {
   platform: process.platform,
-  revealDbFile: (): Promise<void> => ipcRenderer.invoke('native:reveal-db-file'),
+  revealDbFile: (): Promise<void> => ipcRenderer.invoke(NATIVE_CHANNELS.revealDbFile),
   setCloseGuard: (active: boolean): void => {
-    ipcRenderer.send('native:set-close-guard', active)
+    ipcRenderer.send(NATIVE_CHANNELS.setCloseGuard, active)
   },
   confirmClose: (): void => {
-    ipcRenderer.send('native:confirm-close')
+    ipcRenderer.send(NATIVE_CHANNELS.confirmClose)
   },
   onCloseRequested: (cb: () => void): (() => void) => {
     const listener = (): void => cb()
-    ipcRenderer.on('native:close-requested', listener)
-    return () => ipcRenderer.removeListener('native:close-requested', listener)
+    ipcRenderer.on(NATIVE_CHANNELS.closeRequested, listener)
+    return () => ipcRenderer.removeListener(NATIVE_CHANNELS.closeRequested, listener)
+  },
+  confirmReload: (): void => {
+    ipcRenderer.send(NATIVE_CHANNELS.confirmReload)
+  },
+  onReloadRequested: (cb: () => void): (() => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on(NATIVE_CHANNELS.reloadRequested, listener)
+    return () => ipcRenderer.removeListener(NATIVE_CHANNELS.reloadRequested, listener)
   },
 }
 

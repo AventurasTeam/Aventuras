@@ -3,6 +3,7 @@ import { Platform, Pressable, View } from 'react-native'
 
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 type BannerProps = {
@@ -24,7 +25,7 @@ export function Banner({ message, ctaLabel, onCta, className }: BannerProps) {
     >
       <View
         aria-hidden
-        pointerEvents="none"
+        style={POINTER_EVENTS_NONE}
         className="absolute inset-0 bg-warning opacity-[.12]"
       />
       <Icon as={TriangleAlert} size="sm" className="text-warning" />

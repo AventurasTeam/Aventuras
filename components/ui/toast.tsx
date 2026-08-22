@@ -16,6 +16,7 @@ import { runOnJS } from 'react-native-worklets'
 
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { toastStore, type ToastItem, type ToastSeverity } from '@/lib/toast'
 import { cn } from '@/lib/utils'
 
@@ -80,7 +81,7 @@ function Toast({ item }: ToastProps) {
   const toastHeight = useSharedValue(0)
   const animatedDragStyle = useAnimatedStyle(
     () => ({ transform: [{ translateY: dragOffset.value }] }),
-    [],
+    [dragOffset],
   )
   const panGesture = useMemo(
     () =>
@@ -199,15 +200,14 @@ export function Toaster() {
 
   return (
     <View
-      pointerEvents="box-none"
       // top-4 alone sits under the status bar / notch on device; pad past the inset.
-      style={{ paddingTop: insets.top }}
+      style={[{ paddingTop: insets.top }, POINTER_EVENTS_BOX_NONE]}
       className={cn(
         'absolute left-0 right-0 top-4 z-[100] mx-4 items-center gap-2',
         Platform.select({ web: 'fixed' }),
       )}
     >
-      <View pointerEvents="box-none" className="w-full max-w-[400px] gap-2">
+      <View style={POINTER_EVENTS_BOX_NONE} className="w-full max-w-[400px] gap-2">
         {items.map((item) => (
           <Toast key={item.id} item={item} />
         ))}

@@ -116,6 +116,13 @@ export const storySettings = {
       .unsavedDialog(page)
       .getByRole('button', { name: t('storySettings:save.unsavedDiscard') }),
 
+  // Scoped inside the dialog for the same reason as unsavedDiscard: the save
+  // bar behind it also renders a "Save" button, and stays in the a11y tree.
+  unsavedSave: (page: Page): Locator =>
+    storySettings
+      .unsavedDialog(page)
+      .getByRole('button', { name: t('storySettings:save.unsavedSave') }),
+
   // The dialog's AlertDialogCancel uses the shared `common:cancel`, not a
   // storySettings-namespaced key.
   unsavedCancel: (page: Page): Locator =>

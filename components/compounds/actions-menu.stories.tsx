@@ -1,5 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
+import type { ReactNode } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
+
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { useRegisteredOverlay } from '@/lib/stores'
 
 import { ActionsMenu, type ActionGroup } from './actions-menu'
 import { Text } from '../ui/text'
@@ -178,4 +189,154 @@ export const Blocked: Story = {
   render: () => (
     <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} blocked />
   ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+  },
+}
+
+// A sheet the route cannot see: primitives (a Select, a picker) open their own on
+// phone, so this half is derived from the store rather than passed down. Registered
+// through the real hook so the story covers hook, store and menu as one path.
+function ForeignSheet({ children }: { children: ReactNode }) {
+  useRegisteredOverlay(true)
+  return <>{children}</>
+}
+
+export const ForeignSheetSuppressesTheMenu: Story = {
+  render: () => (
+    <ForeignSheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </ForeignSheet>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // The gate is trigger AND shortcut: on phone the trigger is what a touch
+    // user reaches for, so asserting only the shortcut leaves half of it open.
+    expect(screen.getByRole('button', { name: /Actions/ })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+// The crash-recovery and swap-resume hosts mount above every route, so their
+// state can never reach a route's `blocked` prop — the menu has to see the
+// modal itself or Cmd/Ctrl-K stays live over an unanswered decision.
+export const ModalSuppressesTheMenu: Story = {
+  render: () => (
+    <>
+      <AlertDialog open>
+        <AlertDialogContent>
+          <AlertDialogTitle>Recover unsaved work?</AlertDialogTitle>
+          <AlertDialogDescription>A draft was left behind.</AlertDialogDescription>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // `hidden: true` because the modal aria-hides its siblings. That covers the
+    // trigger for assistive tech but not the shortcut, which is a window-level
+    // listener outside the focus trap — hence the assertion above.
+    expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+// The regression the `open` gate exists for: AlertDialogContent renders the Portal
+// rather than living inside one, so it stays mounted with the surface whether or not
+// the dialog is showing. Registering mount-scoped left every route that merely *has*
+// a confirm dialog with a permanently inert menu.
+export const AClosedModalLeavesTheMenuLive: Story = {
+  render: () => (
+    <>
+      <AlertDialog open={false}>
+        <AlertDialogContent>
+          <AlertDialogTitle>Recover unsaved work?</AlertDialogTitle>
+          <AlertDialogDescription>A draft was left behind.</AlertDialogDescription>
+        </AlertDialogContent>
+      </AlertDialog>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    expect(screen.getByRole('button', { name: /Actions/ })).not.toBeDisabled()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// Same shape as the modal above — a closed right sheet mounts with its surface.
+export const AClosedRightSheetLeavesTheMenuLive: Story = {
+  render: () => (
+    <>
+      <Sheet open={false}>
+        <SheetContent anchor="right" title="Entity details">
+          <Text>Entity details</Text>
+        </SheetContent>
+      </Sheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    expect(screen.getByRole('button', { name: /Actions/ })).not.toBeDisabled()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+// The right anchor is the desktop side panel: its own branch of SheetContent, and
+// the only one whose registration a `useRegisteredOverlay(true)` stand-in cannot
+// reach. Rendered as a real Sheet so the story covers the component's wiring.
+export const RightSheetSuppressesTheMenu: Story = {
+  render: () => (
+    <>
+      <Sheet open>
+        <SheetContent anchor="right" title="Entity details">
+          <Text>Entity details</Text>
+        </SheetContent>
+      </Sheet>
+      <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />
+    </>
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // `hidden: true` for the same reason ModalSuppressesTheMenu needs it — the
+    // right sheet is a Radix dialog, so it aria-hides the chrome behind it.
+    expect(screen.getByRole('button', { name: /Actions/, hidden: true })).toHaveStyle({
+      pointerEvents: 'none',
+    })
+  },
+}
+
+// Cmd/Ctrl-K is a window-level listener; these two pin that the focus gate, not
+// the trigger, is what decides whether it fires.
+export const ShortcutOpensTheMenu: Story = {
+  render: () => <ActionsMenu contextual={READER_CONTEXT} coreGroups={[GO_TO, STORY_TOOLS, APP]} />,
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
+}
+
+export const FocusGateSuppressesTheShortcut: Story = {
+  render: () => (
+    <ActionsMenu
+      contextual={READER_CONTEXT}
+      coreGroups={[GO_TO, STORY_TOOLS, APP]}
+      hotkeyEnabled={false}
+    />
+  ),
+  play: async () => {
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByPlaceholderText('Search actions…')).not.toBeInTheDocument()
+    // The trigger itself is untouched — only the listener is gated, unlike `blocked`.
+    await userEvent.click(screen.getByRole('button', { name: /Actions/ }))
+    expect(await screen.findByPlaceholderText('Search actions…')).toBeInTheDocument()
+  },
 }

@@ -248,14 +248,168 @@ edits have no behavior to pin.
 
 ## Open questions
 
-- The six product decisions above (upstream filing, narrow-decorator
-  fix shape, js-tiktoken guard shape, probe.md list, preset preview,
-  sheet dismissal) plus the `compositeText` owner call — each
-  carries a recommended option; sign off one at a time at this
-  slice's planning.
+- None — every decision was signed off at planning (2026-08-21);
+  see [Implementation notes](#implementation-notes).
 
 ## Implementation notes
 
 Created 2026-08-19 by the Slice 3.12 split; the split record and
 routing table live in
 [Slice 3.12a → Implementation notes](./12a-runtime-integrity.md#implementation-notes).
+
+**Planning resolutions (2026-08-21).** Every item was re-verified
+against the code at pickup; the premise corrections and the calls
+taken, one bullet each:
+
+- **`compositeText` separator — space, pinned in canon.** Canon had
+  no separator rule at all (`retrieval.md` said
+  `xxhash(title + description) or similar`), so this is a first-time
+  addition rather than an amendment, and there was never a staleness
+  bug: `lib/embedder/service.ts` embeds and hashes the same string.
+  NUL — for the hash alone or for both — was rejected because it
+  forces a full re-index for an unmeasured field-boundary effect and
+  puts a control character on the provider wire. The original NUL
+  rationale survives only in a gitignored plan file, which is why
+  [`plan-file-nul-corruption.md`](../../../lessons-learned/plan-file-nul-corruption.md)
+  exists.
+
+- **`probe.md` light-mode list — narrowed, and `mmr_score` captured.**
+  Of the nine listed parameters only per-type budgets reproduced from
+  a light capture: `trace()` stored the pre-MMR raw score as
+  `final_score`, `mmrScore` was never captured, and
+  `min_score_threshold` compares against `mmrScore`. The list now
+  names budgets and the threshold as light-simulatable and moves the
+  rest to deep mode. The threshold is recovered by one float per row
+  (`mmr_score`, `CAPTURE_VERSION` 2 → 3); the read side's version-drift
+  warning is advisory only — `assertCaptureShape` tolerates
+  field-level drift by design — so a light-mode simulator has to gate
+  on `capture_version` itself; `probe.md` records why. No light-mode simulate path exists yet
+  (`replayType` refuses light captures) — the field is there so
+  captures written before M7.5 are not second-class when it lands.
+
+- **Preset-browser preview — the prompt body clamped onto a third
+  row line.** Canon's `preview body on hover` cannot exist on the
+  phone Sheet, and the shipped rows showed label and tagline only,
+  so the replace-confirm guarded an uninformed pick. A clamped third
+  line previews the same thing on every platform; no substrate change
+  was needed — `SearchableOverlayList` takes a `renderRow` slot, its
+  rows are `min-h`, and the web virtualizer re-measures.
+- **Dirty generation-sheet dismissal — confirm-before-discard on the
+  implicit paths only.** `AiAssist` has eight production mounts, not
+  five; the two `result="list"` ones (lore, cast) accumulate
+  multi-page results and selections. Dirty means an unseeded result
+  landed or the list / selection is nonempty — guidance text alone
+  and a fresh generate in flight are not. The gated paths, traced
+  rather than assumed: Escape and tap-outside on the web `Dialog`,
+  swipe-down on the phone `Sheet`, and hardware back on the
+  tablet-width native `Dialog`. **Hardware back on the phone `Sheet`
+  is not covered** — `@rn-primitives/dialog`'s
+  `hardwareBackPress` handler lives on `Content`, which the
+  bottom-sheet branch never mounts, and `@gorhom/bottom-sheet`
+  registers none, so the press falls through to the wizard screen's
+  own handler and pops the route. Pre-existing, unchanged by this
+  slice, filed to triage. Tap-outside is also inert on both native
+  branches (no `backdropComponent` on the sheet; the native overlay
+  is an `Animated.View` that ignores `onPress`), so nothing is lost
+  there either. Keep editing re-opens the overlay with nothing
+  cleared — a sibling rather than a nested dialog because a swiped Sheet is
+  already dismissed when `onOpenChange(false)` fires and re-opening is
+  the path that already works. Explicit Discard / Cancel / Use this
+  stay unconfirmed; the abort stays seq-guarded and only the clear is
+  gated.
+- **Suggestion-emission worked example — keep both macros.** The
+  JSON macro is not example-free: it names `cat1` in prose, and
+  `cat1` is slot 1's ref by construction, so both paths already
+  privilege slot 1 and removing the tagged exemplar would create the
+  asymmetry it claimed to remove. There is no canonical record of
+  these macros to correct; the two header comments are the record
+  and this bullet is the decision.
+- **Narrow-decorator trap — an authoring rule, not a lint or a
+  measure-first `FormRow`.** No live victim existed; ~10 stories, not
+  3, already hand-roll the window-versus-wrapper caveat, and
+  `code-conventions.md` already held the adjacent rule, which now
+  carries the `FormRow` case with a lessons-learned entry behind it.
+- **`js-tiktoken` guard — a dist-shape unit test.** The app's ESM
+  path runs through a hash-named chunk and Metro may resolve the cjs
+  entry on Android, so the test globs every dist bundle rather than
+  naming one, and fails on exactly the bump that drops the `Map`
+  staging while the patch still applies.
+- **Upstream filings — won't do, but the stated exposure was wrong.**
+  The call stands; its rationale does not. This slice's Scope-in note
+  says "pnpm fails loudly when the patch stops applying", and that is
+  false for this repo: all four `patchedDependencies` keys are
+  version-less, which pnpm 10 maps to `strict: false`, so
+  `allowFailure` is `true` and a patch that stops applying only
+  `globalWarn`s on an exit-0 install
+  (`applyPatchToDir`; verified against pnpm 10.33.1). The real exposure
+  is therefore wider than "a bump where the patch still applies but no
+  longer covers the code path" — **any** invalidating bump drops the
+  patch silently, for all four patches. That widens the value of the
+  `js-tiktoken` dist guard and leaves the other three unguarded;
+  `ignorePatchFailures: false` would restore the loud failure in one
+  line. Filed to [`triage.md`](../../../triage.md) rather than taken
+  here, since it changes install behaviour for every contributor.
+- **`pointerEvents` — the console cannot go quiet, and that is not a
+  failed conversion.** All fourteen first-party prop sites moved, but
+  `@gorhom/bottom-sheet` emits the same deprecated prop from its own
+  bundle under a `BottomSheetModalProvider` mounted globally in both
+  `app/_layout.tsx` and `.storybook/preview.tsx`, and RN-Web keys
+  `warnOnce` on the bare string. A before/after console capture showed
+  the warning in **both** states. The evidence of record for this item
+  is the inventory grep going to zero plus typecheck / lint / the
+  storybook lane — not a silent console. Anyone re-opening this item
+  should start from the vendor patch, which is filed to triage.
+- **Ctrl-K focus gating closed a live bug, not a latent one.** The
+  scope note assumed today's behaviour was benign because expo-router
+  freezes a blurred screen. It does not: the web `NativeStackView`
+  renders every route and hides the unfocused ones with
+  `display: none`, there is no `Freeze` in that path and `enableFreeze`
+  is called nowhere, and the menu's popover portals to `document.body`
+  anyway. Pre-fix, two screens' listeners answered one Ctrl-K — and
+  because [`actions-menu.md`](../../../../ui/patterns/actions-menu.md)
+  names the Wizard as an explicit opt-out, the shortcut was opening the
+  underlying screen's menu from inside a surface that is specified not
+  to have one.
+- **Bad-branch hydration — hard navigation.** No in-app route can
+  reach the reader with an unknown branch: both entry points sit
+  behind a successful `loadOpenStory`, so a dangling
+  `stories.current_branch_id` surfaces on the landing screen, never
+  in the reader. `page.goto` is the only route and, in packaged mode,
+  the only end-to-end exercise of the 2026-08-18 `app://` deep-route
+  fallback; `testing.md` records it as the one sanctioned URL.
+- **Premise corrections on the remaining items.** `select.tsx:153`
+  is reached only on native phone tier and was never the residual
+  RN-Web warning's source — the warning is `warnOnce`, so any single
+  unconverted site keeps it alive, which is why all fourteen moved
+  together. The `StreamingReasoning` falsification controls the
+  record named (`suggestion-categories-editor.tsx:408/:751`) and the
+  alternative (`skeleton.tsx`) are all native-only; `Pulsing` was the
+  only web-reachable deps-less `useAnimatedStyle` in the tree, so the
+  cause was bisected directly. Under Electron the unsaved-changes
+  guard registered no `beforeunload` at all, so the reload guard is
+  two dependent halves — the renderer must prevent its own unload
+  before main ever sees `will-prevent-unload` — and the same listener
+  now sits in front of a confirmed close, which main lets through.
+- **Reload guard — the renderer registered no `beforeunload` at all.**
+  The item read as "hold a reload behind the ask", but under Electron
+  the guard's effect returned on every bridge-path branch before it
+  ever reached the listener registration, so Ctrl-R on a dirty surface
+  had nothing to prevent it and `will-prevent-unload` never fired. The
+  fix is therefore two dependent halves: the renderer must prevent its
+  own unload before main can answer. Main's handler fails open on
+  `!guard.guarded` — added after review found that asking
+  unconditionally leaves a window that cancels its unload without
+  arming the guard permanently unquittable, which is worse than the
+  bug being fixed. Coverage is honest but partial:
+  `e2e/tests/reload-guard.spec.ts` is the only automated evidence
+  (there is no unit harness for `main.ts`). Mutation testing over a
+  freshly recompiled `electron/dist` leaves four `main.ts` mutations
+  alive, and the `confirmedReload ||` arm scores **nondeterministically**
+  — surviving twice and dying once on identical input — because whether
+  the renderer still holds its `beforeunload` listener when main issues
+  the confirmed reload is a race. A single-run verdict on this file is
+  therefore evidence in neither direction; that gap is recorded here
+  rather than papered over. The
+  manual desktop smoke was never run — this environment's Wayland
+  session is the developer's own display, which Electron connects to
+  directly regardless of `DISPLAY`, so `xvfb` cannot isolate it.

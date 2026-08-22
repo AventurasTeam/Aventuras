@@ -8,6 +8,7 @@ import { IconAction } from '@/components/ui/icon-action'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
 import { type StoryDefinition } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { type OpenFailureKind, type StoryCardData } from '@/lib/stores'
@@ -90,9 +91,8 @@ export function StoryCard({
     >
       <View
         className="absolute bottom-0 left-0 top-0 w-1"
-        style={{ backgroundColor: stripColor }}
+        style={[{ backgroundColor: stripColor }, POINTER_EVENTS_NONE]}
         aria-hidden
-        pointerEvents="none"
       />
 
       <Pressable
@@ -185,7 +185,7 @@ export function StoryCard({
         />
       </Pressable>
 
-      <View className="absolute right-2 top-2" pointerEvents="box-none">
+      <View className="absolute right-2 top-2" style={POINTER_EVENTS_BOX_NONE}>
         <Popover>
           <PopoverTrigger ref={overflowTriggerRef} asChild>
             <IconAction icon={MoreHorizontal} label={t('storyCard.actionsLabel')} size="sm" />

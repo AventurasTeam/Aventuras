@@ -4,6 +4,7 @@ import { Platform, Pressable, View } from 'react-native'
 import { Chip } from '@/components/ui/chip'
 import { SearchableOverlayList, type Section } from '@/components/ui/searchable-overlay-list'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
@@ -190,10 +191,8 @@ export function CalendarPicker({
           aria-haspopup="dialog"
           aria-expanded={p['aria-expanded']}
           aria-controls={p['aria-controls']}
-          // rn-primitives merges a web click past Pressable.disabled.
-          style={
-            Platform.OS === 'web' && disabled ? ({ pointerEvents: 'none' } as never) : undefined
-          }
+          // className-only disabled styling still takes a web click; the style gates it.
+          style={Platform.OS === 'web' && disabled ? POINTER_EVENTS_NONE : undefined}
           className={cn(
             'h-control-md w-full flex-row items-center rounded-md border border-border bg-bg-base px-3',
             disabled && 'opacity-50',
@@ -377,8 +376,8 @@ function EditAction({
       accessibilityRole="link"
       onPress={onPress}
       disabled={disabled}
-      // eslint-disable-next-line react-native/no-inline-styles -- rn-primitives wrappers don't gate disabled clicks on web; inline pointerEvents is the documented workaround.
-      style={disabled ? { pointerEvents: 'none' } : undefined}
+      // className-only disabled styling still takes a web click; the style gates it.
+      style={disabled ? POINTER_EVENTS_NONE : undefined}
       className={cn(
         'self-start rounded-sm py-1',
         !disabled &&

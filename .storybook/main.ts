@@ -24,6 +24,10 @@ const config: StorybookConfig = {
     options: {
       pluginReactOptions: {
         jsxImportSource: 'nativewind',
+        // The preset hardcodes babelrc/configFile false, so babel.config.js never loads
+        // and worklets never injects `updater.__closure`.
+        // See lessons-learned/vite-targets-dont-read-babel-config.md.
+        babel: { plugins: ['react-native-worklets/plugin'] },
       },
     },
   },

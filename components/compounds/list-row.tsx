@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { cn } from '@/lib/utils'
 
 type RecentlyClassified = 'fresh' | 'fading'
@@ -84,21 +85,21 @@ export function ListRow({
         <View
           className="absolute inset-0 bg-recently-classified-bg opacity-50"
           aria-hidden
-          pointerEvents="none"
+          style={POINTER_EVENTS_NONE}
         />
       ) : null}
       {inScene ? (
         <View
           className="absolute bottom-0 left-0 top-0 w-[3px] bg-success"
           aria-hidden
-          pointerEvents="none"
+          style={POINTER_EVENTS_NONE}
         />
       ) : null}
       {selected ? (
         <View
           className="absolute bottom-0 right-0 top-0 w-[3px] bg-accent"
           aria-hidden
-          pointerEvents="none"
+          style={POINTER_EVENTS_NONE}
         />
       ) : null}
 

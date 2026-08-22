@@ -341,6 +341,13 @@ describe('rankPerType — MMR and budget fill', () => {
     const dropped = r.traces.filter((t) => t.dropReason === 'pre_filtered')
     expect(dropped).toHaveLength(5)
     expect(dropped.every((t) => t.mmrRank === null)).toBe(true)
+    // null means "never reached MMR" (vs a real score) — assert absence as hard as presence.
+    // Consumers must still gate on capture_version: pre-v3 payloads have it absent, not null.
+    expect(dropped.every((t) => t.mmrScore === null)).toBe(true)
+    const ranked = r.traces.filter((t) => t.dropReason !== 'pre_filtered')
+    // Length first: `every` on an empty array is vacuously true.
+    expect(ranked).toHaveLength(200)
+    expect(ranked.every((t) => t.mmrScore !== null)).toBe(true)
     // The five it drops are the five lowest-scoring, not just any five.
     expect(dropped.map((t) => t.id).sort()).toEqual(['c0', 'c1', 'c2', 'c3', 'c4'])
   })

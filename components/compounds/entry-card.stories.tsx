@@ -138,6 +138,17 @@ export const StreamingReasoning: StoryT = {
     content: '',
     reasoning: 'Thinking about how the warden would respond to direct aggression…',
   },
+  // The toggle is the only control this state renders, so its absence is the
+  // whole "card body is blank" symptom.
+  play: async () => {
+    expect(await screen.findByRole('button', { name: 'Show reasoning' })).toBeInTheDocument()
+    // parseFloat not Number: Number('') is 0, which passes with no animation at
+    // all. This pins that the pulse animates, NOT the deps array — the freeze an
+    // empty deps array causes is environment-dependent and does not reproduce
+    // under the browser test project, where the mutation survives.
+    const pulsing = screen.getByTestId('reasoning-pulse')
+    await waitFor(() => expect(parseFloat(pulsing.style.opacity)).toBeLessThan(0.9))
+  },
 }
 
 export const StreamingReply: StoryT = {

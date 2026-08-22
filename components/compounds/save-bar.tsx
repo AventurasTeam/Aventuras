@@ -1,19 +1,14 @@
 import { AlertTriangle } from 'lucide-react-native'
 import { useCallback, useMemo } from 'react'
-import { Platform, View, type ViewStyle } from 'react-native'
+import { Platform, View } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { Icon } from '@/components/ui/icon'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useGlobalHotkey } from '@/hooks/use-global-hotkey'
 import { t } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
-
-// Hoisted so the decorative overlay does not allocate a new style object per
-// render. props.pointerEvents is deprecated in favour of style.pointerEvents.
-const STATIC_STYLES = {
-  pointerEventsNone: { pointerEvents: 'none' } satisfies ViewStyle,
-}
 
 type SaveBarProps = {
   /**
@@ -104,7 +99,7 @@ export function SaveBar({
       <View
         className="absolute inset-0 bg-warning opacity-[.12]"
         aria-hidden
-        style={STATIC_STYLES.pointerEventsNone}
+        style={POINTER_EVENTS_NONE}
       />
 
       {/* Scoped to the message: role="status" implies aria-atomic, so a region

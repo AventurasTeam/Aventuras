@@ -200,7 +200,11 @@ export default function Index() {
       variant="app-root"
       title={<Text className="font-semibold">{t('landing:title')}</Text>}
       onOpenAppSettings={() => router.push('/settings')}
-      actions={<AppActionsMenu />}
+      actions={
+        <AppActionsMenu
+          blocked={prompt != null || storyRecovery != null || pendingDelete != null}
+        />
+      }
     >
       <StoryList
         cards={cards}

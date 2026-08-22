@@ -24,7 +24,9 @@ import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 import { InputComponentContext, type InputComponent } from '@/components/ui/input'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
+import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
 import { dismissKeyboard } from '@/lib/keyboard'
+import { useRegisteredOverlay } from '@/lib/stores'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
 
@@ -92,6 +94,11 @@ type SheetContentProps = ComponentProps<typeof DialogPrimitive.Content> & {
   enablePanDownToClose?: boolean
   /** Right-anchor only — names the rn-primitives Portal host to render into. */
   portalHost?: string
+  /**
+   * Opt out of claiming the surface. Only for an overlay that must not gate the
+   * Actions menu against itself — the menu's own sheet is not a foreign overlay.
+   */
+  suppressOverlayRegistration?: boolean
 }
 
 function SheetContent({ anchor = 'bottom', ...props }: SheetContentProps) {
@@ -113,9 +120,11 @@ function BottomSheetContent({
   // portalHost is right-anchor only — the gorhom path uses BottomSheetModalProvider's portal.
   portalHost: _portalHost,
   enablePanDownToClose = true,
+  suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
+  useRegisteredOverlay(open && !suppressOverlayRegistration)
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
@@ -271,8 +280,11 @@ function RightSheetContent({
   title = 'Sheet',
   children,
   enablePanDownToClose: _enablePanDownToClose,
+  suppressOverlayRegistration = false,
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
+  const { open } = DialogPrimitive.useRootContext()
+  useRegisteredOverlay(open && !suppressOverlayRegistration)
   const insets = useSafeAreaInsets()
   const { height: screenHeight } = useWindowDimensions()
   const maxHeight = Math.max(screenHeight - insets.top - SAFE_AREA_GAP_PX, 0)
@@ -298,8 +310,7 @@ function RightSheetContent({
       <FullWindowOverlay>
         <View
           className={Platform.OS === 'web' ? 'fixed inset-0' : ''}
-          style={Platform.select({ native: StyleSheet.absoluteFill })}
-          pointerEvents="box-none"
+          style={[Platform.select({ native: StyleSheet.absoluteFill }), POINTER_EVENTS_BOX_NONE]}
         >
           <NativeOnlyAnimatedView
             entering={FadeIn.duration(200)}

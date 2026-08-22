@@ -6,6 +6,10 @@ type AppActionsMenuPureProps = {
   onOpenDiagnosticsHub: () => void
   /** Screen-contributed "ON THIS SCREEN" group; omitted → zone hidden. */
   contextual?: ActionGroup
+  /** Passed through to `ActionsMenu`; the route owns the focus state. */
+  hotkeyEnabled?: boolean
+  /** Passed through to `ActionsMenu`; the route owns which overlays block it. */
+  blocked?: boolean
 }
 
 // Presentational variant — props in, no store/navigation coupling — so stories
@@ -15,6 +19,8 @@ export function AppActionsMenuPure({
   diagnosticsEnabled,
   onOpenDiagnosticsHub,
   contextual,
+  hotkeyEnabled,
+  blocked,
 }: AppActionsMenuPureProps) {
   // Capability-gated entries are absent from the array, not disabled — the menu
   // doesn't surface dead commands (per actions-menu spec).
@@ -38,6 +44,8 @@ export function AppActionsMenuPure({
       coreGroups={[appGroup]}
       triggerLabel={t('chrome.actions')}
       triggerSize="lg"
+      hotkeyEnabled={hotkeyEnabled}
+      blocked={blocked}
     />
   )
 }

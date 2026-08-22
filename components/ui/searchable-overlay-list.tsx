@@ -33,6 +33,7 @@ import { Icon } from '@/components/ui/icon'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { Text } from '@/components/ui/text'
+import { POINTER_EVENTS_NONE } from '@/constants/styles'
 import { useTier } from '@/hooks/use-tier'
 import { cn } from '@/lib/utils'
 
@@ -111,6 +112,8 @@ type SearchableOverlayListProps<T> = {
   autofocusSearch?: 'always' | 'web-only'
   escClearsQueryFirst?: boolean
   sheetSize?: 'short' | 'medium' | 'tall'
+  /** Forwarded to the phone sheet; see `SheetContentProps`. */
+  suppressOverlayRegistration?: boolean
 
   renderTrigger?: (p: TriggerProps) => ReactNode
 
@@ -137,7 +140,6 @@ const STATIC_STYLES = {
     maxHeight: 480,
     overflow: 'hidden' as const,
   } satisfies ViewStyle,
-  pointerEventsNone: { pointerEvents: 'none' as const } satisfies ViewStyle,
   // Native inline popover for Shape1Inline: absolute positioning relative to
   // the wrapper (which contains the input) places the popover just below the
   // input regardless of where the wrapper sits in the window. `elevation` lifts
@@ -811,6 +813,7 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
     autofocusSearch = 'always',
     escClearsQueryFirst = false,
     sheetSize = 'tall',
+    suppressOverlayRegistration = false,
     ariaLabel,
     ariaLabelledBy,
     'aria-invalid': ariaInvalid,
@@ -1017,7 +1020,11 @@ function Shape2Dialog<T>(props: SearchableOverlayListProps<T>) {
           ariaLabel={ariaLabel}
           ariaLabelledBy={ariaLabelledBy}
         >
-          <SheetContent anchor="bottom" size={sheetSize}>
+          <SheetContent
+            anchor="bottom"
+            size={sheetSize}
+            suppressOverlayRegistration={suppressOverlayRegistration}
+          >
             {body}
           </SheetContent>
         </Sheet>
@@ -1280,7 +1287,7 @@ function Shape1Inline<T>(props: SearchableOverlayListProps<T>) {
       ref={wrapperRef}
       className={cn('relative', className)}
       onLayout={updateAnchor}
-      style={disabled ? STATIC_STYLES.pointerEventsNone : undefined}
+      style={disabled ? POINTER_EVENTS_NONE : undefined}
     >
       <SearchInput
         query={list.query}

@@ -1187,7 +1187,12 @@ export default function ReaderComposerRoute() {
       onOpenStorySettings={() => {
         if (storyId != null) router.push(`/story-settings/${storyId}`)
       }}
-      actions={<AppActionsMenu contextual={contextualActions} />}
+      actions={
+        <AppActionsMenu
+          contextual={contextualActions}
+          blocked={rollback != null || timeEdit != null}
+        />
+      }
       statusSlot={
         <GenerationStatusPill
           activePhase={activePhase}

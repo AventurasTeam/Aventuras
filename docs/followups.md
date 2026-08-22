@@ -37,6 +37,26 @@ for the placement rule.
   [Entry metadata shape](./data-model.md#entry-metadata-shape));
   only the wizard UX is missing.
 
+- **Hardware back on a phone `Sheet` bypasses `onOpenChange`, so no
+  sheet can guard it.** `@rn-primitives/dialog` registers its
+  `hardwareBackPress` handler on `Content`, but a bottom-anchored
+  `SheetContent` routes to `BottomSheetContent`
+  (`components/ui/sheet.tsx`), which renders a bare `BottomSheetModal`
+  — and `@gorhom/bottom-sheet` registers no `BackHandler` anywhere.
+  The press reaches whatever the screen registered instead; in the
+  wizard that is `app/wizard.tsx`, which calls `router.back()` and
+  returns true, popping the route out from under the open sheet.
+  Surfaced by Slice 3.12b's AiAssist discard-confirm, where it is the
+  one dismiss path the confirm cannot intercept — on Android phone,
+  the platform that decision record singled out as unrecoverable.
+  The fix is a guarded `BackHandler` in `BottomSheetContent` mirroring
+  the dialog primitive, which would benefit every sheet consumer.
+  Held out of 3.12b for verification reasons, not effort: it changes
+  back-button behaviour app-wide and only an Android device can prove
+  it, E2E being desktop-only per
+  [`testing.md`](./testing.md#e2e-target-desktop-only). Land it in a
+  slice that can run the device loop.
+
 - **Suggest-cast unresolved references should surface visually, not
   fall back to `null` silently.** Canon
   ([`wizard.md → AI-suggest — structured identity`](./ui/screens/wizard/wizard.md#ai-suggest--structured-identity))

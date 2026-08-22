@@ -976,16 +976,18 @@ each names.
   translation call replaces that no-op. Surfaced by M3.7a Task 7
   (2026-07-25).
 - **M8.3 — `getCalendar` consults only code builtins, never the
-  `vault_calendars` table.** The seeded story sets `calendarSystemId:
-'cal_default'` and a matching `vault_calendars` row exists, but the
-  registry holds only `earth-gregorian`, so every story falls through
-  to the default and renders Gregorian dates regardless of the
-  calendar it was configured with. Slice 3.8 relies on that fallback
-  being load-bearing and correct, so nothing is broken today — but it
-  means the registry-hit path is unexercised by seed data and a
-  user-authored calendar would be silently ignored once the vault can
-  hold one. Decide whether resolution is meant to be registry-only,
-  DB-backed, or registry-with-DB-overlay. Raised 2026-08-15 by the
+  `vault_calendars` table.** The registry holds only
+  `earth-gregorian`, so a story configured with a `vault_calendars`
+  row falls through to the default: it renders Gregorian dates
+  regardless of the calendar it was configured with, and because the
+  write path gates on `getCalendar` rather than `resolveCalendar`, the
+  world-time editor refuses to open at all. The seed pointed at the
+  vault-only `cal_default` row until 2026-08-22, which blocked that
+  editor on every seeded story; it now uses the builtin, so the
+  registry-hit path is exercised and a user-authored calendar would be
+  silently ignored only once the vault can hold one. Decide whether
+  resolution is meant to be registry-only, DB-backed, or
+  registry-with-DB-overlay. Raised 2026-08-15 by the
   Slice 3.8 Task 6 implementation. Extended by the Slice 3.12 split
   (2026-08-19): the fallback now backs a **write path**, not just
   rendering — the world-time edit form's tiers and inverse conversion
@@ -993,10 +995,10 @@ each names.
   edits Minute/Second fields the story's calendar does not have and
   Gregorian-rollover seconds are written into `metadata.worldTime`,
   silently re-meaning if the real calendar ever resolves. Two facts
-  for whoever picks it up: only seeded data can produce a non-builtin
-  id today (the wizard offers builtins only), and DB-backing is not a
-  lookup change — the seeded `cal_default` definition does not match
-  `calendarSystemSchema`, so the persisted shape has to be designed
+  for whoever picks it up: no shipped path produces a non-builtin id
+  today (the wizard offers builtins only, and the seed now does too),
+  and DB-backing is not a lookup change — the seeded `cal_default`
+  definition does not match `calendarSystemSchema`, so the persisted shape has to be designed
   first, and every registry consumer is synchronous (two `useMemo`s
   and the wizard), so an async or store-backed registry ripples. The
   reader-versus-prompt disagreement half was fixed in

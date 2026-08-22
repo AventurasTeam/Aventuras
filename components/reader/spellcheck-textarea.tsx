@@ -4,6 +4,11 @@ import { Platform, View, type TextInputScrollEvent } from 'react-native'
 
 import { Text, TextClassContext } from '@/components/ui/text'
 import { Textarea, type TextareaProps } from '@/components/ui/textarea'
+import {
+  POINTER_EVENTS_AUTO,
+  POINTER_EVENTS_BOX_NONE,
+  POINTER_EVENTS_NONE,
+} from '@/constants/styles'
 import { t } from '@/lib/i18n'
 import { buildTextSegments } from '@/lib/spellcheck'
 import { toast } from '@/lib/toast'
@@ -31,16 +36,6 @@ const LINT_UNDERLINE_CLASS = Platform.select({
   web: 'underline decoration-wavy decoration-danger',
   default: 'underline decoration-dotted decoration-danger',
 })
-
-// Container above is pointerEvents="box-none" so plain text passes clicks
-// through to the Textarea underneath; lint spans opt back in to catch
-// hover/tap.
-const LINT_HIT_STYLE = { pointerEvents: 'auto' as const }
-
-// box-none only restores pointer-events on its direct DOM child (this root
-// Text) — it must opt back out itself, or the whole block would catch
-// clicks meant for the Textarea underneath instead of just the lint spans.
-const OVERLAY_ROOT_STYLE = { pointerEvents: 'none' as const }
 
 function boundingRectOf(node: unknown): DOMRect | null {
   const el = node as { getBoundingClientRect?: () => DOMRect } | null
@@ -126,12 +121,15 @@ export function SpellcheckTextarea({
     <View ref={containerRef} className="relative">
       <Textarea value={value} onScroll={handleScroll} {...textareaProps} />
 
+      {/* box-none restores pointer-events on the direct child only, so the root Text opts back
+          out and the lint spans opt back in — otherwise the block eats clicks meant for the
+          Textarea underneath. */}
       {hasLints ? (
-        <View pointerEvents="box-none" className="absolute inset-0 overflow-hidden">
+        <View style={POINTER_EVENTS_BOX_NONE} className="absolute inset-0 overflow-hidden">
           <TextClassContext.Provider value="text-transparent">
             <Text
               className={OVERLAY_TEXT_CLASS}
-              style={[OVERLAY_ROOT_STYLE, { transform: [{ translateY: -scrollOffsetY }] }]}
+              style={[POINTER_EVENTS_NONE, { transform: [{ translateY: -scrollOffsetY }] }]}
             >
               {segments.map((segment, i) => {
                 if (segment.kind === 'plain') return <Text key={`p-${i}`}>{segment.text}</Text>
@@ -140,7 +138,7 @@ export function SpellcheckTextarea({
                   <Text
                     key={segment.key}
                     className={LINT_UNDERLINE_CLASS}
-                    style={LINT_HIT_STYLE}
+                    style={POINTER_EVENTS_AUTO}
                     onPress={() => handlePress(lint)}
                     {...hoverProps(segment.key, lint)}
                   >
@@ -155,9 +153,8 @@ export function SpellcheckTextarea({
 
       {tooltip ? (
         <View
-          pointerEvents="none"
           className="absolute z-10 max-w-60 gap-1 rounded-md border border-border bg-bg-overlay p-2"
-          style={tooltip.position}
+          style={[tooltip.position, POINTER_EVENTS_NONE]}
         >
           <Text size="xs">{tooltip.lint.message()}</Text>
           {(() => {

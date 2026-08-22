@@ -197,6 +197,12 @@
       "label": "How should this change?",
       "placeholder": "e.g. make it darker"
     },
+    "discardConfirm": {
+      "title": "Discard what was generated?",
+      "body": "Closing throws away the generated suggestion. Keep editing to reopen the panel.",
+      "keep": "Keep editing",
+      "discard": "Discard"
+    },
     "list": {
       "alreadyExists": "(already exists)",
       "empty": "Nothing suggested. Try different guidance.",

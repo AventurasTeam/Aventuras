@@ -110,9 +110,9 @@ Per capture:
   (the entry whose retrieval this drove), `chapter_id`,
   `captured_at`, `capture_mode = 'light' | 'deep'`,
   `embedding_model_id` active at capture. The version is bumped
-  whenever a captured field's shape or meaning changes, so a decode
-  warns rather than silently misreading an older payload as the
-  current type.
+  whenever a captured field's shape or meaning changes, and a decode
+  refuses any payload that is not current rather than silently
+  misreading it (see [one capture format](#simulatable-parameters)).
 - **Tokenizer identity.** `tokenizer: { encoding, version }` — which
   vocabulary priced `tokens_estimated`. A replay under a different
   tokenizer can then warn instead of diverging quietly.
@@ -157,7 +157,8 @@ Per capture:
     four types. The ranker forces `pin_signal = 0` and
     `recency_factor = 1` on those rows, which the captured pair alone
     cannot tell apart from an unpinned recent one.
-  - `final_score`, `mmr_rank` (or null if pre-filtered out).
+  - `final_score` (pre-MMR), `mmr_score` (post-MMR; null if
+    pre-filtered out), `mmr_rank` (or null if pre-filtered out).
   - `selected` (bool), `drop_reason` (enum):
     `pre_filtered | below_threshold | over_budget |`
     `candidate_too_large | not_dropped`.
@@ -335,28 +336,33 @@ not a UX one — but it determines whether the probe is trustworthy.
 
 ### Simulatable parameters
 
-**The light-mode list below is under review.** Slice 3.5's parity
-work found most of it unreachable from a light capture. Every
+Light mode reproduces only what a light capture stores. Every
 parameter that feeds `score` changes MMR's greedy pick order, and
-recomputing that order needs the candidate-vs-candidate cosines only
-a deep capture's per-row vectors carry.
-`min_score_threshold` is further out of reach: it compares against
-the post-MMR `mmr_score`, and no capture stores one — `final_score`
-is the **pre-MMR** raw score.
-
-**Per-type budgets are the confirmed-surviving case.** The
-below-threshold latch is monotone over the MMR order, so the first
-captured `below_threshold` row pins the partition and no budget
-change can move it; re-walking `mmr_rank` order against
-`tokens_estimated` then reproduces the fill exactly.
-
-What light mode should actually offer — accept the narrower list,
-capture an `mmr_score` per row (one float, recovers the threshold),
-or store the kept-set pairwise cosines (recovers everything) — is an
-open product call, to settle before the simulator is built. Until
-then read the list as design intent, not as shipped capability.
+recomputing that order needs the candidate-vs-candidate cosines that
+only a deep capture's per-row vectors carry — so the blend weights,
+decay rates, boosts, `τ_revive`, `k_pin` and `pin_signal` overrides
+are deep-mode parameters. Settled during Slice 3.12b planning after
+Slice 3.5's parity work found the earlier light-mode list
+unreachable; `mmr_score` was added to the capture (format version 3)
+to recover the threshold.
 
 From a light capture:
+
+- **Per-type budgets** — re-run greedy budget-fill against stored
+  `tokens_estimated` in `mmr_rank` order. Neither the latch condition
+  nor the bypass test reads a budget, so the captured
+  `below_threshold` classification holds under any budget; read each
+  row's stored `drop_reason` rather than reconstructing a suffix.
+  `typeOverhead` is not listed here or below because it is measured
+  rather than tuned, so it is not a knob to simulate.
+- **`min_score_threshold`** — re-walk `mmr_rank` order and re-latch
+  where the stored `mmr_score` first falls below the new threshold.
+  MMR runs before the threshold walk, so the order itself does not
+  move. A `bypass_triggered` row is exempt from the
+  `below_threshold` drop but still arms the latch. See
+  [Two traps in re-walking the threshold](#two-traps-in-re-walking-the-threshold).
+
+Adds in a deep capture, where the per-row vectors let MMR re-run:
 
 - `w_action`, `w_digest`, `w_prose` — re-blend stored per-query
   sims into a new `sim_blend`.
@@ -367,9 +373,6 @@ From a light capture:
   `sim_blend`.
 - `chapter_boost` magnitude — re-apply where stored
   `chapter_boost_applied=1`.
-- `min_score_threshold` — re-run budget-fill termination.
-- Per-type budgets — re-run greedy budget-fill against stored
-  `tokens_estimated`.
 - `k_pin` per-type — re-scale the pin multiplier against stored
   `sim_blend`, `recency_factor` and `pin_signal`. Needs no field the
   capture does not already carry.
@@ -379,11 +382,42 @@ From a light capture:
   and the captured `(recency_factor, pin_signal)` pair pins down the
   underlying age only while `pin_signal < 1` — at exactly 1 the factor
   is 1 regardless of age. `chapters_old` is what closes that.
+- `λ_div` (MMR diversity) — the candidate-vs-candidate cosines
+  themselves.
 
-Adds in a deep capture:
+#### Two traps in re-walking the threshold
 
-- `λ_div` (MMR diversity) — requires candidate-vs-candidate
-  cosines, which require the per-row vectors.
+**The bypass exempts the drop, not the arming.** The ranker updates
+`belowFloor` unconditionally and only then tests `bypassTriggered`
+(`lib/retrieval/ranker.ts`), so a bypassed row seats itself while
+still arming the latch for every row after it. Note the mechanism is
+that the latch update is unconditional, not that one statement
+precedes the other — reordering the two tests would change nothing.
+
+**`mmr_score` is not monotone over `mmr_rank`.** Cosine is clamped to
+`[-1, 1]`, so a negative similarity to an already-picked row raises a
+later row's MMR score. With scores 1.0 and 0.9 on two candidates at
+`cos(a, b) = -1` and `λ_div = 0.75`, the emitted sequence is 0.75
+then 0.925 — rank 1 above rank 0. Together with the rule above, a
+bypassed row below the floor can be followed by a row scoring above
+it that the ranker nonetheless drops, so a simulator that skips
+arming diverges on real inputs rather than only in principle.
+
+**There is one capture format.** A payload written by an older
+`capture_version` carries fields the current type says are present —
+`mmr_score` is typed `number | null`, where `null` means "never
+reached MMR", but a pre-v3 payload has it **absent**, decoding as
+`undefined`. A simulator that branches on `mmr_score === null` would
+read such a row as scored, compare `undefined < threshold` as
+`false`, and never arm the latch, returning a plausible wrong
+selection with no error.
+
+Rather than gate each field, `decodeCapture` refuses any payload
+whose `capture_version` is not current. `decodeCaptures` routes the
+throw into its `corrupt` lane, so the row stays listed and deletable
+instead of blanking the browse screen — which is what makes refusing
+safe. Downstream code may therefore assume every decoded payload is
+current, and no consumer carries a version branch.
 
 ### Non-simulatable parameters
 
