@@ -181,9 +181,9 @@ slice plans when relevant.
 - [A narrow-wrapped `FormRow` story remounts its control after the first frame](./formrow-narrow-story-remount.md)
   — the onLayout correction swaps element trees; pin `stacked` or select
   the viewport tier in any play story below 640 px.
-- [`useAnimatedStyle` needs an explicit dependency array under Vite-built targets](./useanimatedstyle-needs-deps-under-vite.md)
-  — Metro's Babel plugin injects the closure Vite never reads; a deps-less
-  call throws under the dev server and silently no-ops under `mode: test`.
+- [Vite-built targets never read `babel.config.js` — wire worklets yourself](./vite-targets-dont-read-babel-config.md)
+  — the rnw preset hardcodes `babelrc: false`; Storybook now declares the
+  plugin itself, and any new Vite target must too.
 
 ### Native deps / install ritual
 

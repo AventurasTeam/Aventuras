@@ -24,6 +24,11 @@ const config: StorybookConfig = {
     options: {
       pluginReactOptions: {
         jsxImportSource: 'nativewind',
+        // The preset hardcodes babelrc/configFile false, so babel.config.js never loads and
+        // worklets never injects `updater.__closure` — a deps-less Reanimated hook then throws
+        // on the dev server and, with __DEV__ false under vitest, freezes silently instead.
+        // The preset spreads this after its own flags, so the merge cannot reach babel.config.js.
+        babel: { plugins: ['react-native-worklets/plugin'] },
       },
     },
   },
