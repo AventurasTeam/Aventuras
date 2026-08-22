@@ -24,6 +24,7 @@ import { Icon } from '@/components/ui/icon'
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { Text, TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE, POINTER_EVENTS_NONE } from '@/constants/styles'
+import { useRegisteredSheet } from '@/hooks/use-registered-sheet'
 import { useTier } from '@/hooks/use-tier'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
@@ -124,6 +125,7 @@ function PhoneSheetContent({
   tailAction?: { label: string; onPress: () => void }
 }) {
   const { open, onOpenChange } = SelectBase.useRootContext()
+  useRegisteredSheet(open)
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
 

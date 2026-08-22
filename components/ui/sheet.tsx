@@ -25,6 +25,7 @@ import { InputComponentContext, type InputComponent } from '@/components/ui/inpu
 import { NativeOnlyAnimatedView } from '@/components/ui/native-only-animated-view'
 import { TextClassContext } from '@/components/ui/text'
 import { POINTER_EVENTS_BOX_NONE } from '@/constants/styles'
+import { useRegisteredSheet } from '@/hooks/use-registered-sheet'
 import { dismissKeyboard } from '@/lib/keyboard'
 import { useTheme } from '@/lib/themes'
 import { cn } from '@/lib/utils'
@@ -117,6 +118,7 @@ function BottomSheetContent({
   ...contentProps
 }: Omit<SheetContentProps, 'anchor'>) {
   const { open, onOpenChange } = DialogPrimitive.useRootContext()
+  useRegisteredSheet(open)
   const { ariaLabel, ariaLabelledBy } = useSheetA11y()
   const { theme } = useTheme()
   const insets = useSafeAreaInsets()
