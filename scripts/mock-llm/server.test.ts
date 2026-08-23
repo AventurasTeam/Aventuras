@@ -4,6 +4,8 @@ import { z } from 'zod'
 import { schemaToTypeScriptBlock, type JsonSchema } from '@/lib/ai'
 import { parseStateBlock, parseSuggestionsBlock, stripTrailingBlocks } from '@/lib/piggyback'
 import { fallbackClassifierSchema } from '@/lib/pipeline'
+import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
+import { labeledPromptOutputSchema } from '@/lib/wizard'
 
 import { collectSseContent } from './passthrough'
 import { startMockServer, type MockServer } from './server'
@@ -40,9 +42,9 @@ async function waitForEntry(): Promise<{ outcome: string }> {
 }
 
 /** The prompt the app would send for `schema` on the default (auto) path. */
-function structuredPrompt(schema: z.ZodType): string {
+function structuredPrompt(schema: z.ZodType, text = 'Classify the turn.'): string {
   const block = schemaToTypeScriptBlock(z.toJSONSchema(schema) as JsonSchema)
-  return `Classify the turn.\n\nRespond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}\n\nOutput ONLY the JSON object, no other text or markdown.`
+  return `${text}\n\nRespond strictly with JSON. The JSON should be compatible with the TypeScript type Response from the following:\n\n${block}\n\nOutput ONLY the JSON object, no other text or markdown.`
 }
 
 function structuredRequest(schema: z.ZodType): Record<string, unknown> {
@@ -66,6 +68,27 @@ describe('structured calls', () => {
 
     expect(value.worldTimeDelta).toBe(0)
     expect(value.sceneEntities).toEqual([])
+  })
+
+  it('answers a wizard call on the lane its own template names, with a reply that shape accepts', async () => {
+    const prompt = renderTemplate(TEMPLATE_IDS.wizardTone, {
+      definition: { setting: 'A city that flooded and stayed.', genre: {}, tone: {} },
+      guidance: '',
+    })
+    const response = await post({
+      model: 'seed/narrative',
+      messages: [{ role: 'user', content: structuredPrompt(labeledPromptOutputSchema, prompt) }],
+    })
+
+    const body = (await response.json()) as { choices: { message: { content: string } }[] }
+    const value = labeledPromptOutputSchema.parse(
+      JSON.parse(body.choices[0]?.message.content ?? ''),
+    )
+    expect(value.promptBody).not.toBe('')
+
+    // Genre answers the same schema, so only the marker keeps the two apart.
+    const [entry] = mock.ctx.log.list()
+    expect(entry?.lane).toBe('wizard-tone')
   })
 
   it('answers {} for a shape nobody has configured, and opens a lane for it', async () => {
@@ -238,6 +261,47 @@ describe('catalog and control surface', () => {
       { ref: 'c2', label: 'Mira' },
       { ref: 'lo1', label: 'The Drowning' },
       { ref: 'l1', label: 'The Harbour' },
+    ])
+  })
+
+  it('reads the roster out of a real wizard prompt, whose cast rows are not bracketed', async () => {
+    mock.ctx.log.clear()
+    // The macro itself, not a transcription of it: the extractor has to track
+    // whatever macro_wizard_opening_context actually renders.
+    const prompt = renderTemplate(TEMPLATE_IDS.wizardOpening, {
+      definition: { mode: 'adventure', genre: {}, tone: {} },
+      leadEntityId: 'c1',
+      lore: [],
+      cast: [
+        {
+          id: 'c1',
+          name: 'Kael Ashwater',
+          kind: 'character',
+          status: 'active',
+          description: 'A diver.',
+        },
+        {
+          id: 'l1',
+          name: 'The Drowned Exchange',
+          kind: 'location',
+          status: 'active',
+          description: '',
+        },
+        { id: 'c2', name: 'Verity Sould', kind: 'character', status: 'staged', description: '' },
+      ],
+      guidance: '',
+    })
+    await post({ model: 'seed/narrative', messages: [{ role: 'user', content: prompt }] })
+
+    const entries = (await (await fetch(`${base()}/api/log`)).json()) as {
+      placeholders: { ref: string; label: string }[]
+    }[]
+
+    // Staged rows are filtered out of the prompt by the macro, so the roster
+    // the panel pins is exactly the one the reply may legally reference.
+    expect(entries[0]?.placeholders).toEqual([
+      { ref: 'c1', label: 'Kael Ashwater' },
+      { ref: 'l1', label: 'The Drowned Exchange' },
     ])
   })
 

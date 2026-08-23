@@ -9,11 +9,13 @@ import { matchShape } from '../../scripts/mock-llm/routing'
 //   - stream: true          → an SSE prose stream (the narrative call).
 //   - otherwise (structured) → a JSON chat completion, whose body is chosen by
 //     matching the exact TypeScript block the app injects into the prompt
-//     (schemaToTypeScriptBlock over the agent's zod schema). Each reply shape
-//     is one STRUCTURED_SHAPES entry — an agent with more than one possible
-//     schema (e.g. the classifier with/without suggestions) gets one entry per
-//     shape; adding one is mechanical and the match can't drift because it
-//     reuses the app's own renderer.
+//     (schemaToTypeScriptBlock over the agent's zod schema). Each CALL SITE is
+//     one STRUCTURED_SHAPES entry — an agent with more than one possible schema
+//     (e.g. the classifier with/without suggestions) gets one entry per shape,
+//     and call sites that share a schema (the wizard's generate/refine pairs)
+//     are separated by a marker sliced out of their own template. Adding one is
+//     mechanical and the match can't drift because both halves are derived from
+//     the app's own renderer and its own prompt pack.
 // Exercises the real transport (lib/ai/transport), unlike the __DEV__-gated
 // stub provider. See docs/testing.md → Mock LLM.
 //
@@ -54,6 +56,41 @@ export const EXAMPLES: Record<string, unknown> = {
   // run failure, so an empty default would fail any spec that reaches ⟳
   // without calling setStructured. cat1 is the first enabled category.
   'suggestion-refresh': { suggestions: [{ categoryRef: 'cat1', text: 'You press on.' }] },
+
+  // Wizard assist. Nothing here is written until the user imports it, so the
+  // inertness rule the classifier defaults follow does not apply — and could
+  // not be met anyway: the list schemas require at least one row. What these
+  // are instead is minimal and unmistakably mock-shaped, so a spec asserting on
+  // wizard content is obviously reading a default it forgot to override.
+  // sceneEntities / currentLocationId stay empty: a fixture's placeholders are
+  // allocated per call, so no shared default can name one.
+  'wizard-genre': { label: 'Mock genre', promptBody: 'Mock genre body.' },
+  'wizard-genre-refine': { label: 'Mock genre', promptBody: 'Mock genre body, revised.' },
+  'wizard-tone': { label: 'Mock tone', promptBody: 'Mock tone body.' },
+  'wizard-tone-refine': { label: 'Mock tone', promptBody: 'Mock tone body, revised.' },
+  'wizard-setting': { setting: 'Mock setting.' },
+  'wizard-setting-refine': { setting: 'Mock setting, revised.' },
+  'wizard-lore': { lore: [{ title: 'Mock lore', body: 'Mock lore body.', category: '' }] },
+  'wizard-cast': {
+    entities: [
+      { kind: 'character', name: 'Mock Character', description: 'Mock.', status: 'active' },
+    ],
+  },
+  'wizard-opening': {
+    prose: 'Mock opening.',
+    sceneEntities: [],
+    currentLocationId: null,
+    worldTime: 0,
+  },
+  'wizard-opening-refine': {
+    prose: 'Mock opening, revised.',
+    sceneEntities: [],
+    currentLocationId: null,
+    worldTime: 0,
+  },
+  'wizard-title-chips': { titles: ['Mock Title'] },
+  'wizard-description': { description: 'Mock description.' },
+  'wizard-description-refine': { description: 'Mock description, revised.' },
 }
 
 export type MockLlm = {

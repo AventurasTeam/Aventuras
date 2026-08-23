@@ -122,6 +122,33 @@
         background: var(--panel-2);
         box-shadow: inset 3px 0 0 var(--accent);
       }
+      .group-btn {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        border-bottom: 1px solid var(--line);
+        background: var(--panel-2);
+        padding: 7px 12px;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--dim);
+      }
+      .group-btn:hover {
+        color: var(--text);
+      }
+      .group-btn .chev {
+        font-size: 9px;
+        width: 8px;
+      }
+      .group-count {
+        margin-left: auto;
+        font-family: var(--mono);
+        letter-spacing: 0;
+      }
       .lane-badges {
         display: flex;
         gap: 4px;
@@ -368,6 +395,42 @@
         structured: ['none', 'http', 'malformed', 'hang'],
       }
 
+      // Nav sections, in display order; `id` matches laneCatalog's group.
+      const GROUPS = [
+        { id: 'narrative', label: 'Narrative' },
+        { id: 'story', label: 'Story' },
+        { id: 'wizard', label: 'Wizard' },
+        { id: 'unknown', label: 'Unregistered' },
+      ]
+      const COLLAPSED_KEY = 'mock-llm.collapsed-groups'
+
+      const collapsed = new Set(
+        (() => {
+          try {
+            return JSON.parse(localStorage.getItem(COLLAPSED_KEY)) ?? []
+          } catch {
+            return []
+          }
+        })(),
+      )
+
+      function setCollapsed(id, value) {
+        if (value) collapsed.add(id)
+        else collapsed.delete(id)
+        try {
+          localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]))
+        } catch {
+          // Private-mode storage refusal costs the memory of the toggle, not the toggle.
+        }
+      }
+
+      // Selection can move without a click on the lane list (the log's "open
+      // this lane" jumps), and a highlight inside a collapsed group is invisible.
+      function revealSelected() {
+        const group = snap?.lanes.find((meta) => meta.key === selected)?.group
+        if (group !== undefined) setCollapsed(group, false)
+      }
+
       let snap = null
       let selected = 'narrative'
       let log = []
@@ -409,23 +472,40 @@
 
       // ---------- lane list ----------
 
+      function laneButton(meta) {
+        const l = meta.lane
+        const badges = [
+          l.mode === 'passthrough' ? '<span class="badge warn">passthrough</span>' : '',
+          l.failure.kind !== 'none' && l.failure.remaining !== 0
+            ? `<span class="badge bad">${esc(l.failure.kind)}</span>`
+            : '',
+          l.sequence.enabled ? '<span class="badge on">seq</span>' : '',
+          l.delay.ttfbMs > 0 ? `<span class="badge">${esc(l.delay.ttfbMs)}ms</span>` : '',
+          meta.kind === 'unknown' ? '<span class="badge bad">unregistered</span>' : '',
+        ].join('')
+        return `<button class="lane-btn" data-lane="${esc(meta.key)}" aria-current="${meta.key === selected}">
+          ${esc(meta.title)}
+          <div class="lane-badges">${badges}</div>
+        </button>`
+      }
+
       function renderLanes() {
-        $('lanes').innerHTML = snap.lanes
-          .map((meta) => {
-            const l = meta.lane
-            const badges = [
-              l.mode === 'passthrough' ? '<span class="badge warn">passthrough</span>' : '',
-              l.failure.kind !== 'none' && l.failure.remaining !== 0
-                ? `<span class="badge bad">${esc(l.failure.kind)}</span>`
-                : '',
-              l.sequence.enabled ? '<span class="badge on">seq</span>' : '',
-              l.delay.ttfbMs > 0 ? `<span class="badge">${esc(l.delay.ttfbMs)}ms</span>` : '',
-              meta.kind === 'unknown' ? '<span class="badge bad">unregistered</span>' : '',
-            ].join('')
-            return `<button class="lane-btn" data-lane="${esc(meta.key)}" aria-current="${meta.key === selected}">
-              ${esc(meta.title)}
-              <div class="lane-badges">${badges}</div>
-            </button>`
+        const sections = GROUPS.map((group) => ({
+          ...group,
+          lanes: snap.lanes.filter((meta) => meta.group === group.id),
+        })).filter((section) => section.lanes.length > 0)
+
+        $('lanes').innerHTML = sections
+          .map((section) => {
+            if (section.id === 'narrative') return section.lanes.map(laneButton).join('')
+            const open = !collapsed.has(section.id)
+            return `<div class="lane-group">
+              <button class="group-btn" data-group="${esc(section.id)}" aria-expanded="${open}">
+                <span class="chev">${open ? '▾' : '▸'}</span>${esc(section.label)}
+                <span class="group-count">${section.lanes.length}</span>
+              </button>
+              ${open ? section.lanes.map(laneButton).join('') : ''}
+            </div>`
           })
           .join('')
       }
@@ -661,11 +741,15 @@
 
       document.addEventListener('click', async (event) => {
         const t = event.target.closest(
-          '[data-lane],[data-bulk],[data-cps],[data-activate],[data-delete],[data-entry],[data-save-entry],[data-goto],[data-copy],#reset,#addResponse,#save,#rename,#seqReset',
+          '[data-lane],[data-group],[data-bulk],[data-cps],[data-activate],[data-delete],[data-entry],[data-save-entry],[data-goto],[data-copy],#reset,#addResponse,#save,#rename,#seqReset',
         )
         if (!t) return
 
         try {
+          if (t.dataset.group) {
+            setCollapsed(t.dataset.group, !collapsed.has(t.dataset.group))
+            return renderLanes()
+          }
           if (t.dataset.lane) {
             selected = t.dataset.lane
             laneError = ''
@@ -738,12 +822,14 @@
             })
             const entry = log.find((e) => e.id === t.dataset.saveEntry)
             selected = entry?.lane ?? selected
+            revealSelected()
             laneError = ''
             return render()
           }
           if (t.dataset.goto) {
             selected = t.dataset.goto
             pinned = log.find((e) => e.id === t.dataset.entryPh)?.placeholders ?? null
+            revealSelected()
             laneError = ''
             return render()
           }

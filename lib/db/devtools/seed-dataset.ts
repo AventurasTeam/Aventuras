@@ -1553,14 +1553,17 @@ const appSettingsRow: NewAppSettings = {
       modelRef: { providerId: 'prov_local', modelId: 'seed/narrative' },
     }),
   ],
-  // 'suggestion' reuses the classifier profile rather than seeding a dedicated
-  // one: resolveModel keys purely on assignments[target] -> profile id (no
-  // kind/target coupling), and no fixture scenario needs a suggestion-specific
-  // model/temperature distinct from the classifier's.
+  // 'suggestion' and 'wizard-assist' reuse the classifier profile rather than
+  // seeding dedicated ones: resolveModel keys purely on assignments[target] ->
+  // profile id (no kind/target coupling), and no fixture scenario needs a
+  // model/temperature for either distinct from the classifier's. Every agent
+  // target the app actually calls is listed — an unassigned one resolves to
+  // 'no-profile-assigned' and never reaches the provider at all.
   assignments: {
     narrative: 'prof_narrative',
     classifier: 'prof_classifier',
     suggestion: 'prof_classifier',
+    'wizard-assist': 'prof_classifier',
   },
   defaultProviderId: 'prov_local',
   embeddingModelId: 'Xenova/all-MiniLM-L6-v2',

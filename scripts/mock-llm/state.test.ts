@@ -102,6 +102,15 @@ describe('shipped defaults', () => {
     )
   })
 
+  it('ships at least one reply per lane, since an unconfigured lane answers {}', () => {
+    // {} parses for a schema whose fields all default, and fails every schema
+    // that requires one — so a lane shipped empty is a wizard step that errors
+    // on first use rather than a lane that quietly does nothing.
+    for (const [key, lane] of Object.entries(defaultState().lanes)) {
+      expect(lane.responses.length, key).toBeGreaterThan(0)
+    }
+  })
+
   it('ships only responses their own lane schema accepts', () => {
     for (const [key, lane] of Object.entries(defaultState().lanes)) {
       for (const response of lane.responses) {
