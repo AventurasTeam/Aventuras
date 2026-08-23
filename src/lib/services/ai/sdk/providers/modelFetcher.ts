@@ -295,15 +295,17 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     const data = await response.json()
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
-        .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+        .filter(
+          (m) =>
+            m.supportedGenerationMethods == null ||
+            m.supportedGenerationMethods.includes('generateContent'),
+        )
         .filter((m) => !isGoogleImageModel(m.name.replace(/^models\//, '')))
         .map((m) => {
           const id = m.name.replace(/^models\//, '')
-          const isGemini25 = id.includes('gemini-2.5')
           return {
             id,
-            reasoning: m.thinking ?? false,
-            isBudgetReasoning: isGemini25,
+            reasoning: m.thinking ?? true,
           }
         })
         .filter((m) => !!m.id)
