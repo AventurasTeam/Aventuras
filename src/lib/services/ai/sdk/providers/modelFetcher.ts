@@ -6,8 +6,8 @@
 
 import type { ProviderType, TextModel } from '$lib/types'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
+import { getBaseUrl, PROVIDERS } from './config'
 import { createTimeoutFetch } from './fetch'
-import { PROVIDERS, getBaseUrl } from './config'
 
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']
@@ -34,7 +34,7 @@ export async function fetchModelsFromProvider(
   apiKey?: string,
 ): Promise<TextModel[]> {
   // Provider-specific fetch logic
-  if (providerType === 'nanogpt') return fetchNanogptModels(baseUrl)
+  if (providerType === 'nanogpt') return fetchNanoGptModels(baseUrl, apiKey)
   if (providerType === 'openrouter') return fetchOpenRouterModels(baseUrl)
   if (providerType === 'google') return fetchGoogleModels(baseUrl, apiKey)
   if (providerType === 'anthropic') return wrap(fetchAnthropicModels(baseUrl, apiKey))
@@ -164,35 +164,51 @@ async function fetchNimModels(baseUrl?: string, apiKey?: string): Promise<TextMo
   return dedupeTextModels(raw.filter((m) => isNimTextGenModel(m.id)).map((m) => ({ id: m.id })))
 }
 
-interface NanogptModelEntry {
-  model: string
-  name?: string
-  capabilities?: string[]
+interface NanoGptCapabilities {
+  reasoning?: boolean
+  tool_calling?: boolean
+  parallel_tool_calls?: boolean
+  structured_output?: boolean
 }
 
-async function fetchNanogptModels(baseUrl?: string): Promise<TextModel[]> {
+interface NanoGptSubscriptionDetails {
+  included: boolean
+  inputTokenMultiplier?: number
+  note?: string
+}
+
+interface NanoGptModelEntry {
+  id: string
+  name?: string
+  capabilities?: NanoGptCapabilities
+  reasoning_efforts?: string[]
+  subscription: NanoGptSubscriptionDetails
+}
+
+async function fetchNanoGptModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
   // Use the detailed API to get capabilities including reasoning
-  const effectiveBase = baseUrl?.replace(/\/v1\/?$/, '') || 'https://nano-gpt.com/api'
+  const effectiveBase = baseUrl || 'https://nano-gpt.com/api/v1'
   const modelsUrl = effectiveBase.replace(/\/$/, '') + '/models?detailed=true'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-  const response = await fetchFn(modelsUrl, { method: 'GET' })
+  const response = await fetchFn(modelsUrl, {
+    method: 'GET',
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch NanoGPT models: ${response.status} ${response.statusText}`)
   }
 
   const data = await response.json()
-  const textModels: Record<string, NanogptModelEntry> = data?.models?.text ?? {}
-
+  const textModels: NanoGptModelEntry[] = data?.data ?? []
   const models: TextModel[] = []
 
   for (const [key, entry] of Object.entries(textModels)) {
-    const modelId = entry.model || key
     models.push({
-      id: modelId,
-      reasoning: entry.capabilities?.includes('reasoning'),
-      structuredOutput: entry.capabilities?.includes('structured-output'),
+      id: entry.id || key,
+      reasoning: entry.capabilities?.reasoning ?? false,
+      structuredOutput: entry.capabilities?.structured_output ?? false,
     })
   }
 
