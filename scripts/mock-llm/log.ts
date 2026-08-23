@@ -9,16 +9,25 @@ const PLACEHOLDER_ALTERNATION = Object.values(PLACEHOLDER_PREFIX_BY_KIND)
   .sort((a, b) => b.length - a.length)
   .join('|')
 
-// Prompts list entities as "[c1] Kael" (lib/prompts/bundled/state-emission.ts),
-// which is the only place a canned reply can learn what this run's positional
-// placeholders actually point at — IdBiMap allocates them per run in
-// encounter order, so they mean something different every turn.
-// The label stops at the next `[` as well as at the line end: rosters are
-// normally one entity per line, but a prompt that lists several inline would
-// otherwise fold every later entry into the first one's label.
-const ROSTER_PATTERN = new RegExp(
+// A prompt's roster is the only place a canned reply can learn what this run's
+// positional placeholders actually point at — IdBiMap allocates them per run in
+// encounter order, so they mean something different every turn. The two prompt
+// families spell a roster row differently, so both are scanned.
+
+// "[c1] Kael" (lib/prompts/bundled/state-emission.ts). The label stops at the
+// next `[` as well as at the line end: rosters are normally one entity per
+// line, but a prompt that lists several inline would otherwise fold every later
+// entry into the first one's label.
+const STORY_ROSTER_PATTERN = new RegExp(
   `\\[((?:${PLACEHOLDER_ALTERNATION})\\d+)\\]\\s*([^\\n\\r[]*)`,
   'g',
+)
+
+// "- Kael (character, cast id: c1)" (macro_wizard_opening_context). Anchored to
+// the line, since the description that may follow runs to the end of it.
+const WIZARD_ROSTER_PATTERN = new RegExp(
+  `^-\\s*([^\\n\\r]+?)\\s*\\([a-z]+, cast id: ((?:${PLACEHOLDER_ALTERNATION})\\d+)\\)`,
+  'gm',
 )
 
 export type Placeholder = { ref: string; label: string }
@@ -46,11 +55,12 @@ export type LogEntry = {
 
 export function extractPlaceholders(prompt: string): Placeholder[] {
   const seen = new Map<string, string>()
-  for (const match of prompt.matchAll(ROSTER_PATTERN)) {
-    const [, ref, label] = match
-    if (ref === undefined) continue
-    if (!seen.has(ref)) seen.set(ref, (label ?? '').trim())
+  const take = (ref: string | undefined, label: string | undefined): void => {
+    if (ref === undefined || seen.has(ref)) return
+    seen.set(ref, (label ?? '').trim())
   }
+  for (const [, ref, label] of prompt.matchAll(STORY_ROSTER_PATTERN)) take(ref, label)
+  for (const [, label, ref] of prompt.matchAll(WIZARD_ROSTER_PATTERN)) take(ref, label)
   return [...seen].map(([ref, label]) => ({ ref, label }))
 }
 

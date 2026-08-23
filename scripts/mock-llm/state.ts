@@ -165,9 +165,193 @@ function defaultLanes(): Record<string, Lane> {
     // A refresh that resolves nothing is a run failure, so the default is not
     // the empty list the other lanes use.
     'suggestion-refresh': lane([canned('Three chips', { suggestions: SAMPLE_SUGGESTIONS })]),
+
+    ...wizardLanes(),
   }
 
   return lanes
+}
+
+const DROWNED_CITY_GENRE = [
+  'Write drowned-city fantasy: a world where the water came and stayed, and people built upward rather than leaving. Magic is old infrastructure — half-understood, still running, and expensive to touch.',
+  '',
+  'Keep the fantastic domestic. A ward that keeps a doorway dry is worth more than a prophecy, and characters argue about who pays for it. Name the trades, the tolls and the tide tables; let wonder arrive through what people do for a living.',
+].join('\n')
+
+const DROWNED_CITY_TONE = [
+  'Write in a wry, elegiac register. The narration has seen worse and says so plainly; grief arrives sideways, in an inventory or a joke, rather than in a declaration.',
+  '',
+  'Favour short declaratives at the moment of action and longer, looser sentences either side of it. Cut adverbs, cut weather-as-mood unless the weather is doing something. Let a scene end one beat before the reader expects it to.',
+].join('\n')
+
+const DROWNED_CITY_SETTING =
+  'Vessel was a river port before the sea reached inland and made it an archipelago of its own rooftops. Two centuries on, the lower streets are shipping lanes, the guild halls have docks where their front steps used to be, and the tide is a municipal department.\n\nWhat kept the city alive was the ward-work in its foundations, laid by engineers nobody can now name. It still holds. Nobody knows for how long, and the people who ask loudest are the ones who have read the maintenance ledgers.'
+
+const OPENING_PROSE =
+  'The blade rasps free of its sheath. Somewhere in the drowned city a bell answers, and the rain leans closer to listen.\n\nYou come down the stair with one hand on the rail. The step gives underfoot, soft as bread, and below you something moves that is not the current.'
+
+const OPENING_PROSE_REFINED =
+  'The blade comes free without a sound — you have had practice — and the bell answers anyway, somewhere east, muffled by rain.\n\nThe stair takes your weight in the grudging way rotted wood does. Two steps from the bottom the water starts. Something in it moves against the current, unhurried, as though it has all evening.'
+
+// sceneEntities and currentLocationId stay empty for the same reason the
+// classifier defaults write nothing: IdBiMap allocates c1/l1 per run in
+// prompt-encounter order, so a shipped default cannot know what they point at.
+// The request log's "Open this lane with its placeholders" is how a reply that
+// tags a specific entity gets written.
+function opening(prose: string): Record<string, unknown> {
+  return { prose, sceneEntities: [], currentLocationId: null, worldTime: 0 }
+}
+
+function labeled(label: string, promptBody: string): Record<string, unknown> {
+  return { label, promptBody }
+}
+
+function wizardLanes(): Record<string, Lane> {
+  return {
+    'wizard-genre': lane([
+      canned('Drowned-city fantasy', labeled('Drowned-city fantasy', DROWNED_CITY_GENRE)),
+    ]),
+    'wizard-genre-refine': lane([
+      canned(
+        'Drowned-city fantasy, grimmer',
+        labeled(
+          'Drowned-city salvage fantasy',
+          `${DROWNED_CITY_GENRE}\n\nThe salvage trade is the spine of it. Everything of value was somebody's before the water, and the law about that is unsettled enough to be worth killing over.`,
+        ),
+      ),
+    ]),
+
+    'wizard-tone': lane([canned('Wry and elegiac', labeled('Wry and elegiac', DROWNED_CITY_TONE))]),
+    'wizard-tone-refine': lane([
+      canned(
+        'Wry and elegiac, drier',
+        labeled(
+          'Dry and elegiac',
+          `${DROWNED_CITY_TONE}\n\nPull the sentiment back another notch. Where a line could be either bitter or fond, write it fond and let the context supply the bitterness.`,
+        ),
+      ),
+    ]),
+
+    'wizard-setting': lane([canned('Vessel', { setting: DROWNED_CITY_SETTING })]),
+    'wizard-setting-refine': lane([
+      canned('Vessel, with the tide court', {
+        setting: `${DROWNED_CITY_SETTING}\n\nAuthority sits with the Tide Court, which meets at low water and adjourns when the stairs go under. Its writ runs exactly as far as the ward-work does, which is a matter of ongoing and occasionally violent dispute.`,
+      }),
+    ]),
+
+    'wizard-lore': lane([
+      canned('Five entries', {
+        lore: [
+          {
+            title: 'The ward-work',
+            body: 'The lattice of glyph-cut stone under Vessel that keeps the lower city dry enough to walk through at low water. Laid before the flood by engineers whose guild no longer exists. It is repaired, never extended: nobody living can cut a new line that holds.',
+            category: 'cosmology',
+          },
+          {
+            title: 'Tide Court',
+            body: 'Vessel\u2019s governing body, so named because it sits only between the tides. A session that runs long is adjourned by the water itself, which is considered a feature — long deliberations are held to be a sign of a bad question.',
+            category: 'history',
+          },
+          {
+            title: 'Salvage right',
+            body: 'The claim a diver holds over what they bring up from a drowned floor. It lapses at sunset, which is why the salvage quarter is loudest at dusk and empty by full dark.',
+            category: 'law',
+          },
+          {
+            title: 'Bell-speech',
+            body: 'The rooftop bells carry a working vocabulary of about forty phrases — tide, fire, writ, sail, plague. Children learn it before they learn to read. Two bells answering each other means something is moving that should not be.',
+            category: 'terminology',
+          },
+          {
+            title: 'The Quiet Year',
+            body: 'The twelve months after the flood when no bell was rung, by agreement, because there was nothing left to warn anyone about. Dating in Vessel still runs from its end rather than from the flood.',
+            category: 'history',
+          },
+        ],
+      }),
+    ]),
+
+    'wizard-cast': lane([
+      canned('Five entries, mixed kinds', {
+        entities: [
+          {
+            kind: 'character',
+            name: 'Kael Ashwater',
+            description:
+              'A salvage diver working the guild floors below the old exchange. Careful, underpaid, and the only person still keeping a written record of which wards have failed.',
+            status: 'active',
+            speech: 'clipped, understated',
+            traits: ['methodical', 'stubborn', 'good in cold water'],
+            drives: ['finish the survey', 'avoid owing the Tide Court a favour'],
+            faction_name: 'The Salvagers\u2019 Table',
+          },
+          {
+            kind: 'character',
+            name: 'Verity Sould',
+            description:
+              'A ward-keeper who inherited the maintenance ledgers and has read them all the way through, which is more than her predecessors managed.',
+            status: 'staged',
+            speech: 'formal, over-precise',
+            traits: ['exacting', 'privately frightened'],
+            drives: ['keep the lattice running', 'be believed'],
+          },
+          {
+            kind: 'location',
+            name: 'The Drowned Exchange',
+            description:
+              'Vessel\u2019s old trading hall, now three storeys under at high water. Its upper gallery is dry, rented out, and reachable only by rope bridge.',
+            status: 'active',
+            condition: 'flooded to the second gallery',
+          },
+          {
+            kind: 'item',
+            name: 'The survey ledger',
+            description:
+              'A wax-bound book of ward readings going back forty years, in four hands. Worth more than the building it is kept in.',
+            status: 'active',
+            condition: 'water-stained, legible',
+          },
+          {
+            kind: 'faction',
+            name: 'The Salvagers\u2019 Table',
+            description:
+              'The loose association of divers who work the drowned quarters. No charter, no dues, and an absolute rule about not diving another crew\u2019s floor.',
+            status: 'active',
+            agenda: ['keep salvage right lapsing at sunset', 'stay out of the Tide Court'],
+            standing: 'tolerated, not represented',
+          },
+        ],
+      }),
+    ]),
+
+    'wizard-opening': lane([canned('Short beat', opening(OPENING_PROSE))]),
+    'wizard-opening-refine': lane([canned('Colder, slower', opening(OPENING_PROSE_REFINED))]),
+
+    'wizard-title-chips': lane([
+      canned('Five titles', {
+        titles: [
+          'The Quiet Year',
+          'Bell-Speech',
+          'What the Water Kept',
+          'Salvage Right',
+          'The Tide Court',
+        ],
+      }),
+    ]),
+
+    'wizard-description': lane([
+      canned('Log line', {
+        description:
+          'A salvage diver in a half-drowned city finds the ward-work failing faster than anyone is willing to admit.',
+      }),
+    ]),
+    'wizard-description-refine': lane([
+      canned('Log line, sharper', {
+        description:
+          'A salvage diver discovers the wards holding her city above water are failing, and that the people who could fix them would rather not know.',
+      }),
+    ]),
+  }
 }
 
 export function defaultState(): MockState {

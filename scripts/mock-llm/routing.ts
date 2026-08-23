@@ -69,21 +69,65 @@ function blockFromResponseFormat(body: Record<string, unknown>): string | null {
  * a schema that is a superset of another still wins — today no registered block
  * contains another (asserted in routing.test.ts), but the scan must not be the
  * thing that breaks on the day one does.
+ */
+function candidatesFor(
+  block: string | null,
+  text: string,
+  shapes: readonly StructuredShape[],
+): readonly StructuredShape[] {
+  if (block !== null) {
+    const exact = shapes.filter((s) => s.block === block)
+    if (exact.length > 0) return exact
+  }
+  const byLength = [...shapes].sort((a, b) => b.block.length - a.block.length)
+  const hit = byLength.find((s) => text.includes(s.block))
+  return hit === undefined ? [] : shapes.filter((s) => s.block === hit.block)
+}
+
+/**
+ * Earliest occurrence wins, not registry order. A marker is the literal its
+ * template OPENS with, so the real one sits at the top of the prompt, while a
+ * sibling's marker can only appear deeper — quoted back inside the `current`
+ * preview a refine embeds. Taking the first candidate that matches anywhere
+ * would let that quotation outrank the directive the call actually carries.
+ */
+function pickByMarker(
+  candidates: readonly StructuredShape[],
+  text: string,
+): StructuredShape | null {
+  let best: StructuredShape | null = null
+  let bestAt = Infinity
+  for (const shape of candidates) {
+    if (shape.marker === '') continue
+    const at = text.indexOf(shape.marker)
+    if (at === -1 || at >= bestAt) continue
+    best = shape
+    bestAt = at
+  }
+  return best
+}
+
+/**
+ * The shape this request answers with, or null when nothing claims it.
  *
- * `shapes` is a parameter so the ordering rule can be tested with a pair that
- * actually nests; production always passes the registry.
+ * A block identifies a SCHEMA, and several call sites can share one (the
+ * wizard's generate/refine pairs, and genre/tone, all answer the same shapes).
+ * Where the block is ambiguous the marker breaks the tie; where it is not, the
+ * marker is not consulted at all, so a user-authored pack that rewrites a
+ * wizard template only costs the calls that genuinely cannot be told apart
+ * without it.
+ *
+ * `shapes` is a parameter so the ordering rules can be tested with pairs that
+ * actually collide; production always passes the registry.
  */
 export function matchShape(
   block: string | null,
   text: string,
   shapes: readonly StructuredShape[] = STRUCTURED_SHAPES,
 ): StructuredShape | null {
-  if (block !== null) {
-    const exact = shapes.find((s) => s.block === block)
-    if (exact) return exact
-  }
-  const byLength = [...shapes].sort((a, b) => b.block.length - a.block.length)
-  return byLength.find((s) => text.includes(s.block)) ?? null
+  const candidates = candidatesFor(block, text, shapes)
+  if (candidates.length <= 1) return candidates[0] ?? null
+  return pickByMarker(candidates, text)
 }
 
 export function unknownKey(block: string | null): string {

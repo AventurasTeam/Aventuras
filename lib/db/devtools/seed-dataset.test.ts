@@ -79,6 +79,36 @@ describe('buildSeedSteps', () => {
 // (prefix_<uuid>); a mnemonic id like char_kael passes through untouched and
 // the turn fails on the placeholder return trip. The fixture must therefore
 // carry real prefixed UUIDs — see docs/testing.md → Fixture + seed contract.
+// A target with no assignment resolves to 'no-profile-assigned', which
+// short-circuits generateStructured before the request is built — so the
+// feature reads as "the mock isn't running" rather than "the seed is
+// incomplete". Named explicitly rather than swept from AGENT_IDS: the registry
+// carries targets nothing calls yet, and seeding those would assert nothing.
+describe('seeded agent assignments', () => {
+  const CALLED_TARGETS = ['classifier', 'suggestion', 'wizard-assist'] as const
+
+  function seededSettings(): { assignments: Record<string, string>; profiles: { id: string }[] } {
+    const [row] = rowsOf('app_settings') as unknown as {
+      assignments: Record<string, string>
+      profiles: { id: string }[]
+    }[]
+    expect(row).toBeDefined()
+    return row!
+  }
+
+  it.each(CALLED_TARGETS)('resolves %s to a profile the seed actually defines', (target) => {
+    const { assignments, profiles } = seededSettings()
+    const profileId = assignments[target]
+    expect(profileId, `${target} has no assignment`).toBeDefined()
+    expect(profiles.map((p) => p.id)).toContain(profileId)
+  })
+
+  it('seeds a narrative-kind profile, which resolveModel finds by kind not assignment', () => {
+    const [row] = rowsOf('app_settings') as unknown as { profiles: { kind: string }[] }[]
+    expect(row!.profiles.some((p) => p.kind === 'narrative')).toBe(true)
+  })
+})
+
 describe('seed id substitution contract', () => {
   // Canonical id prefix per LLM-facing kind (docs/data-model.md → ID shape).
   const ENTITY_PREFIX: Record<string, string> = {

@@ -1,8 +1,8 @@
 # Mock LLM
 
 A local OpenAI-compatible provider with a browser control panel, so a
-pipeline turn costs milliseconds instead of minutes while you drive the
-app by hand.
+pipeline turn — or a walk through the story-creation wizard — costs
+milliseconds instead of minutes while you drive the app by hand.
 
 ```sh
 pnpm db:seed   # seeds prov_local at http://localhost:4319/v1
@@ -39,15 +39,45 @@ separates them by inspecting the request:
   the app injects into the prompt (or, on the `force-on` path, by the JSON
   Schema in `response_format`).
 
-Shapes listed in [`shapes.ts`](./shapes.ts) get a named lane with live
-schema validation. A shape that is _not_ listed still gets a lane, keyed by
-a hash of its block and flagged `unregistered` in the UI — a new agent is
-addressable straight away, and adding it to `shapes.ts` only upgrades it to
-a friendly name and validation.
+Entries in [`shapes.ts`](./shapes.ts) get a named lane with live schema
+validation; the panel files them under **Story** or **Wizard**. A shape that
+is _not_ listed still gets a lane, keyed by a hash of its block and flagged
+`unregistered` in the UI — a new agent is addressable straight away, and
+adding it to `shapes.ts` only upgrades it to a friendly name and validation.
 
 Per lane you get: a library of named responses, sequence cycling, a
 mock/passthrough switch, response delay and jitter, failure injection, and
 (narrative only) streaming speed.
+
+### One entry per call site
+
+A block identifies a _schema_, and several call sites can answer with the
+same one — the wizard's thirteen assist calls share seven schemas, so genre,
+tone and both their refines are indistinguishable on the wire. Where that
+happens, the entry also carries a `marker`: the literal text its template
+opens with, before the first Liquid tag, sliced out of the pack the app
+itself renders. Editing a template therefore moves its marker in the same
+edit, and `routing.test.ts` renders every wizard template through the real
+engine to prove the marker still survives.
+
+The marker only breaks ties. Where a block already names one call site it is
+never consulted, so a user-authored pack that rewrites wizard templates
+costs only the calls that genuinely cannot be told apart without it — those
+fall through to an `unregistered` lane rather than being served a sibling's
+reply.
+
+## Wizard assist
+
+`pnpm db:seed` assigns the `wizard-assist` agent, so **Suggest** and
+**Refine** on every wizard step reach the mock. Without that assignment
+`resolveModel` returns `no-profile-assigned` and the call never leaves the
+app, which looks identical to a mock that isn't running.
+
+Each wizard button gets its own lane and its own shipped default, so a walk
+through all five steps produces a coherent (if fictional) story rather than
+the same paragraph thirteen times. Refine lanes ship a visibly different
+reply from their generate counterpart, so a refine that did nothing is
+obvious.
 
 ## Failure injection
 
@@ -96,7 +126,9 @@ therefore name none of them.
 
 To write a reply that moves a specific entity: run the turn, open the
 request in the log, and use **Open this lane with its placeholders** — the
-roster the prompt actually sent is pinned above the editor.
+roster the prompt actually sent is pinned above the editor. The wizard's
+opening lanes are read the same way, though their prompt spells a roster row
+`- Kael (character, cast id: c1)` rather than `[c1] Kael`.
 
 ## Piggyback
 

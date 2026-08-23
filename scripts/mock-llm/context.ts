@@ -27,22 +27,30 @@ export function createContext(opts: { persist?: boolean } = {}): MockContext {
   }
 }
 
+export type LaneMeta = {
+  key: string
+  title: string
+  kind: 'narrative' | 'registered' | 'unknown'
+  /** Nav section the panel files this lane under. */
+  group: 'narrative' | 'story' | 'wizard' | 'unknown'
+}
+
 /** Lane keys the UI lists: narrative, every registered shape, then discoveries. */
-export function laneCatalog(
-  ctx: MockContext,
-): { key: string; title: string; kind: 'narrative' | 'registered' | 'unknown' }[] {
+export function laneCatalog(ctx: MockContext): LaneMeta[] {
   const registered = STRUCTURED_SHAPES.map((s) => ({
     key: s.name,
     title: s.name,
     kind: 'registered' as const,
+    group: s.group,
   }))
   const unknown = [...ctx.discovered.values()].map((d) => ({
     key: d.key,
     title: d.key,
     kind: 'unknown' as const,
+    group: 'unknown' as const,
   }))
   return [
-    { key: NARRATIVE_LANE, title: 'narrative', kind: 'narrative' as const },
+    { key: NARRATIVE_LANE, title: 'narrative', kind: 'narrative' as const, group: 'narrative' },
     ...registered,
     ...unknown,
   ]
