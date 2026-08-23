@@ -407,7 +407,10 @@
       const collapsed = new Set(
         (() => {
           try {
-            return JSON.parse(localStorage.getItem(COLLAPSED_KEY)) ?? []
+            // Anything but an array feeds `new Set` a non-iterable and throws at
+            // top level, which would cost the whole panel, not just the memory.
+            const stored = JSON.parse(localStorage.getItem(COLLAPSED_KEY))
+            return Array.isArray(stored) ? stored : []
           } catch {
             return []
           }
