@@ -88,10 +88,9 @@ export function reasoningCapabilityFor({
   modelSupportsReasoning,
 }: ReasoningCapabilityInput): ReasoningCapability {
   if (!modelId || !providerSupportsReasoning) return 'unsupported'
-  // Only a provider that publishes capabilities can say a model has none; elsewhere the
-  // absent flag means "unknown", and refusing reasoning on unknown would disable the slider
-  // for every provider that does not have a catalogue.
-  if (providerFetchesModelCapabilities && !modelSupportsReasoning) return 'unsupported'
+  // Only a provider that publishes capabilities can say a model has none; refusing reasoning on
+  // unknown would disable the slider for every provider that does not explicitly return false.
+  if (providerFetchesModelCapabilities && modelSupportsReasoning === false) return 'unsupported'
   if (modelSupportsReasoning && reasoningIsEnforced(providerType, modelId)) return 'enforced'
   return 'supported'
 }

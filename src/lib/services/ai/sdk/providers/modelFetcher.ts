@@ -207,8 +207,8 @@ async function fetchNanoGptModels(baseUrl?: string, apiKey?: string): Promise<Te
   for (const [key, entry] of Object.entries(textModels)) {
     models.push({
       id: entry.id || key,
-      reasoning: entry.capabilities?.reasoning ?? false,
-      structuredOutput: entry.capabilities?.structured_output ?? false,
+      reasoning: entry.capabilities?.reasoning,
+      structuredOutput: entry.capabilities?.structured_output,
     })
   }
 
@@ -321,7 +321,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
           const id = m.name.replace(/^models\//, '')
           return {
             id,
-            reasoning: m.thinking ?? true,
+            reasoning: m.thinking,
           }
         })
         .filter((m) => !!m.id)
@@ -492,7 +492,7 @@ async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]
       )
       .map((m) => ({
         id: m.name,
-        reasoning: m.reasoning ?? false,
+        reasoning: m.reasoning,
       }))
 
     return models.length > 0 ? dedupeTextModels(models) : []
