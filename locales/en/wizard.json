@@ -306,6 +306,12 @@
     "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
     "importRefsDropped_one": "1 reference couldn't be matched and was left blank.",
     "importRefsDropped_other": "{{count}} references couldn't be matched and were left blank.",
+    "unresolvedRef": {
+      "factionMissing": "Suggested faction “{{name}}” is not in your cast.",
+      "factionUnattached": "“{{name}}” is in your cast — attach it in the editor.",
+      "parentMissing": "Suggested parent location “{{name}}” is not in your cast.",
+      "parentUnattached": "“{{name}}” is in your cast — attach it in the editor."
+    },
     "leadNotice": {
       "mode": "Adventure mode needs a lead character. Mark one active character as lead to continue.",
       "narration": "First- and second-person narration need a lead character. Mark one active character as lead to continue."

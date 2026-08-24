@@ -1,4 +1,13 @@
-import { Flag, MapPin, Package, Plus, Star, User, type LucideIcon } from 'lucide-react-native'
+import {
+  AlertTriangle,
+  Flag,
+  MapPin,
+  Package,
+  Plus,
+  Star,
+  User,
+  type LucideIcon,
+} from 'lucide-react-native'
 import { useMemo, useRef, type ComponentRef } from 'react'
 import { Platform, Pressable, View } from 'react-native'
 
@@ -24,7 +33,7 @@ import {
   LocationEditor,
   SetAsLeadButton,
 } from './cast-editors'
-import { resolveCastImports } from './cast-import'
+import { pendingCastRef, resolveCastImports } from './cast-import'
 import { activeLead, invalidCastRowIds } from './step-cast-logic'
 import {
   resolveWizardAssistModelId,
@@ -103,9 +112,13 @@ type CompactRowProps = {
   isLead: boolean
   invalid: boolean
   expanded: boolean
+  cast: readonly WizardCastDraft[]
 }
 
-function CompactRow({ row, isLead, invalid, expanded }: CompactRowProps) {
+function CompactRow({ row, isLead, invalid, expanded, cast }: CompactRowProps) {
+  // Re-checked per render against the live cast, so importing the named row
+  // later downgrades "not in your cast" to "not attached" without a re-import.
+  const pending = pendingCastRef(row, cast)
   const staged = row.status === 'staged'
   return (
     <>
@@ -143,6 +156,26 @@ function CompactRow({ row, isLead, invalid, expanded }: CompactRowProps) {
             <Text size="xs" className="text-danger">
               {t('wizard:cast.editor.errors.name')}
             </Text>
+          ) : null}
+          {/* A warning, not an error: the row commits fine, it just lost the
+              affiliation the model asked for — which the editors otherwise
+              render as "No factions yet", reading as "you have none". */}
+          {pending ? (
+            <View className="flex-row items-center gap-1">
+              <Icon as={AlertTriangle} aria-hidden size="sm" className="shrink-0 text-warning" />
+              <Text size="xs" className="text-warning">
+                {t(
+                  pending.field === 'faction'
+                    ? pending.resolvableId != null
+                      ? 'wizard:cast.unresolvedRef.factionUnattached'
+                      : 'wizard:cast.unresolvedRef.factionMissing'
+                    : pending.resolvableId != null
+                      ? 'wizard:cast.unresolvedRef.parentUnattached'
+                      : 'wizard:cast.unresolvedRef.parentMissing',
+                  { name: pending.wantedName },
+                )}
+              </Text>
+            </View>
           ) : null}
         </>
       ) : null}
@@ -277,6 +310,7 @@ export function CastList({ onSetupAssist, assist }: CastListProps) {
                     isLead={lead?.id === row.id}
                     invalid={invalid}
                     expanded={isExpanded}
+                    cast={cast}
                   />
                 }
                 editor={

@@ -616,6 +616,20 @@ mean they have none rather than that the AI's answer was dropped.
 A reference the model simply omitted is not counted — only one it
 supplied and the wizard could not honour.
 
+The toast is transient, so the **row keeps the ask** and warns
+inline in the compact list until the field is decided. The name is
+re-checked against the live cast on every render rather than frozen
+at import, which separates two states the user acts on differently:
+_not in your cast_ (import the named row, or pick another) and _in
+your cast, not attached_ (assign it in the editor). Importing the
+named row afterwards therefore downgrades the warning with no
+re-import. Re-checking follows the same active-and-kind rule as
+resolution itself, so nothing is offered that commit would drop.
+Assigning the field — including back to `null` — clears the
+remembered ask, so a decision the user has already made cannot
+resurrect the warning. The ask is wizard-draft state only; Finish
+projects named columns and never carries it to an entity.
+
 ### Lead-required gating
 
 - **Trigger** (set in step 1): `mode='adventure'` OR

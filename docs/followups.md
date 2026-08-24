@@ -13,19 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Suggest-cast unresolved references should surface visually, not
-  fall back to `null` silently.** Canon
-  ([`wizard.md → AI-suggest — structured identity`](./ui/screens/wizard/wizard.md#ai-suggest--structured-identity))
-  resolves a suggestion's `parent_location_name` / `faction_name`
-  at import time against same-kind rows in the imported selection
-  and the existing cast, and unresolved names fall back to `null`
-  with no feedback — the user learns their suggested character's
-  faction never attached only by opening the editor later. Wanted:
-  resolve at runtime in the list surface and render an inline error
-  or warning on rows whose references cannot be resolved (e.g. the
-  named faction was left unchecked at import). Surfaced during 3.6b
-  slice planning (2026-08-13); deliberately not in 3.6b scope.
-
 - **World-state block: render from metadata, strip the XML out of
   persisted entry content.** Scheduled for the post-M3 reconciliation
   pass, before M4 opens. Today `EntryCard` detects the block by
