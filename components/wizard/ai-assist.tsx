@@ -217,8 +217,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
   }
 
-  // Every dismiss that can still lose work: Escape, tap-outside and swipe-down arrive through
-  // handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
+  // Every dismiss that can still lose work: Escape, tap-outside, swipe-down and Android
+  // hardware back arrive through handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
   // via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
   function requestClose() {
     setOpen(false)
@@ -229,8 +229,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     resetOnClose()
   }
 
-  // Phone-sheet hardware back never reaches here — gorhom registers no BackHandler, so the
-  // press falls through to the wizard's own router.back().
   function handleOpenChange(next: boolean) {
     if (next) {
       setOpen(true)

@@ -10,6 +10,7 @@ import {
   type ComponentProps,
 } from 'react'
 import {
+  BackHandler,
   Platform,
   StyleSheet,
   TextInput,
@@ -144,6 +145,22 @@ function BottomSheetContent({
       isMountedRef.current = false
     }
   }, [])
+
+  // @rn-primitives/dialog registers this on Content, but a bottom-anchored sheet
+  // renders a bare BottomSheetModal and gorhom registers no BackHandler anywhere —
+  // so the press would fall through to whatever the screen registered (in the
+  // wizard, a router.back() that pops the route out from under the open sheet).
+  // Routing it through onOpenChange lets a consumer's dismiss guard intercept it
+  // like every other dismiss path. Gated on `open` because the modal stays mounted
+  // while closed, and on Android because react-native-web's stub console.errors.
+  useEffect(() => {
+    if (!open || Platform.OS !== 'android') return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onOpenChange(false)
+      return true
+    })
+    return () => sub.remove()
+  }, [open, onOpenChange])
 
   useEffect(() => {
     let cancelled = false
