@@ -265,14 +265,22 @@ for the placement rule.
   single per-column side-channel exemption
   ([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)):
   editing it mutates the row directly, writes no delta, and preserves
-  no prior text, so CTRL-Z cannot reach it. The implementation goes
-  further than the doc implies — `updateStoryEntryContent`
-  (`lib/actions/story-entries/operational.ts`) also calls
-  `undoRedoStore.clear()`, so a typo fix silently discards the redo
-  stack for _unrelated_ actions. Meanwhile the metadata edits landing
-  on the same card are fully delta-logged and reversible, so one entry
-  will carry two adjacent edit affordances with opposite reversibility
-  and no visible reason for the difference. The exemption is a
+  no prior text, so CTRL-Z cannot reach it. `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts`) additionally calls
+  `undoRedoStore.clear()`, so a typo fix discards the redo stack for
+  unrelated actions — but that matches canon rather than exceeding it
+  ("the stack clears on any new action", same section), and mirrors by
+  hand what `apply-delta-action.ts` does for every delta-logged write.
+  The genuine asymmetry is narrower: writing no delta, a content edit
+  is the only action that clears the forward path while contributing
+  nothing to the backward one, so it is pure loss where every other
+  action trades redo for undo. Narrowing it is therefore a canon
+  change, not a blast-radius fix, and cannot be split off from the
+  question below (re-verified 2026-08-24). Meanwhile the metadata
+  edits landing on the same card are fully delta-logged and
+  reversible, so one entry will carry two adjacent edit affordances
+  with opposite reversibility and no visible reason for the
+  difference. The exemption is a
   deliberate storage-economy decision, not an oversight — the open
   question is whether the UX is defensible as-is, wants an editor-local
   undo stack, or wants the redo-clear narrowed. Not scoped to the
