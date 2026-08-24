@@ -297,12 +297,45 @@ for the placement rule.
   covers. Surfaced 2026-07-31 reviewing
   [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
 
-- **Q3's Medium-weight signals are English-shaped and fail silently.**
+- **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
-  scores five signals; the two High ones (entity-name, lore-keyword) are
-  language-agnostic by construction — `matchTerms` uses `\p{L}\p{N}`
-  lookarounds specifically so accented and Cyrillic names match. Both
-  Medium ones are not, and neither degrades loudly.
+  specifies five per-sentence signals; three of them, plus the
+  tokenizer underneath, assume a lexical, Latin-script, past-tense
+  narrative, and the design has no way to report that the assumption
+  failed. The two High signals (entity-name, lore-keyword) are the
+  exception and are sound — `matchTerms` uses `\p{L}\p{N}` lookarounds
+  specifically so accented and Cyrillic names match, and they reuse an
+  index the hybrid pathway already builds. That layer is worth keeping;
+  what sits around it is what wants redesigning.
+
+  Two structural findings drive the re-spec, ahead of any individual
+  signal:
+  - **Q3 can never report itself absent, so a degenerate extract still
+    spends its full `w_prose` share.** `buildQueryStack`
+    (`lib/retrieval/queries.ts`) derives presence from `nonEmpty(text)`,
+    and `extractProse` returns top-K by source-order tie-break even when
+    every sentence scores zero — so a no-signal extract is textually
+    indistinguishable from a good one and reads present. Canon already
+    reasoned this exact failure through for Q2, which renders to the
+    empty string when every conditional line is empty and correctly
+    drops out of the blend
+    ([`retrieval.md → Q2`](./memory/retrieval.md#q2-structural-digest));
+    Q3 shipped without the equivalent, which makes this an
+    inconsistency inside the spec rather than a gap in the code. It is
+    also the prerequisite for measuring anything else here: a silent
+    degradation cannot be tuned against, so no empirical argument about
+    `w_prose` is available until Q3 can say it found nothing.
+  - **The score carries too little resolution to rank with.** Five
+    booleans sum to at most 11, and an ordinary sentence lands in the
+    0-4 band, so ties are the common case and every tie resolves to
+    source order. Selection collapses toward "the earliest sentences
+    that scored at all" well before any language mismatch enters the
+    picture. The signals are also summed as though independent when
+    they are not: `said` and `Drew` each fire the verb weight and the
+    entity weight off a single token.
+
+  The language-shape findings underneath, verified 2026-08-06 against
+  the shipped code:
   - **Action verbs.** `ACTION_VERBS` (`lib/retrieval/prose-extract.ts`)
     is 13 hardcoded English simple-past verbs matched by exact
     `Set.has`, no stemming. `stories.settings.definition.narration`
@@ -312,43 +345,42 @@ for the placement rule.
     `draw` / `drawing` do not. There is also no narrative-language
     setting at all (`translation.targetLanguage` is the translation
     _target_; entries store the original), so a story written in
-    Spanish or Russian scores zero on this signal permanently. And it
-    false-positives on names: `words` is lowercased before lookup, so
-    "**Drew** nodded." fires the verb weight, and if Drew is an entity
-    the same token also fires the entity weight — one word, two
-    signals, no action. `Said` has the same problem.
-  - **Dialogue spans.** `DIALOGUE_SPAN` covers `"…"`, `“…”` and
-    `‘…’` and misses `«…»` (French, Russian), `„…”` (German, Polish,
-    Czech) and `「…」` (CJK). Same weight, same silent miss, but
-    unlike the verb list this one is a three-alternative regex change
-    with no linguistics in it — worth taking on its own if the wider
-    redesign stalls.
+    Spanish or Russian scores zero on this signal permanently.
+  - **Dialogue spans.** `DIALOGUE_SPAN` covers `"…"`, `“…”` and `‘…’`
+    and misses `«…»` (French, Russian), `„…”` (German, Polish, Czech)
+    and `「…」` (CJK). Same weight, same silent miss.
   - **Brevity** is character-counted (`BREVITY_MAX_CHARS = 90`), so in
     CJK it fires on nearly every sentence and stops discriminating.
   - **CJK is never split into sentences at all**, which sits upstream
     of every signal above. `splitSentences` terminates on `[.!?…]`
     followed by whitespace; CJK uses ideographic terminators and no
-    inter-sentence space, so a whole entry collapses to one
-    "sentence". Q3 then embeds the full 400-1000 token entry — the
-    cost the extract exists to avoid — and `scores` degenerates to a
-    single meaningless number, emptying the probe's per-sentence
-    capture. Verified against the shipped splitter (2026-08-06):
-    a three-sentence Japanese passage returns one element.
+    inter-sentence space, so a whole entry collapses to one "sentence".
+    Q3 then embeds the full 400-1000 token entry — the cost the extract
+    exists to avoid — and `scores` degenerates to a single meaningless
+    number, emptying the probe's per-sentence capture. Verified against
+    the shipped splitter (2026-08-06): a three-sentence Japanese
+    passage returns one element.
     [`name-index.ts`](../lib/retrieval/name-index.ts) documents CJK as
     out of scope for word-boundary matching; nothing documents it for
     splitting, so this reads as an oversight rather than a deferral.
     Whatever replaces the scorer has to own this first.
 
-  Failure is silent throughout: when every sentence scores 0,
-  `extractProse` still returns top-K by source-order tie-break, so Q3
-  quietly degrades to "the first 4 sentences" while carrying its full
-  `w_prose = 0.30` share of the blend. One redesign direction worth
-  arguing: drop the hardcoded list for a set derived from the branch's
-  own happening titles, which the classifier writes in the story's
-  language — self-localizing, no linguistics, reuses an index the pass
-  already builds. Mildly circular, hence a discussion rather than a
-  patch. Touches the canon signal table, so it is a spec change, not
-  only a code change. Surfaced 2026-08-06 reviewing
+  One redesign direction worth arguing: drop the hardcoded verb list
+  for a term set derived from the branch's own happening titles, which
+  the classifier writes in the story's language — self-localizing, no
+  linguistics, reuses an index the pass already builds. The
+  circularity is sharper than it first reads, and settling it is part
+  of the re-spec: happening titles summarize what the memory layer has
+  already absorbed, so scoring sentences by resemblance to them biases
+  Q3 toward recorded material and away from the novel prose a
+  retrieval pass most needs to surface.
+
+  Scope is the canon signal table, the sentence tokenizer, the
+  presence contract and the scorer — a spec change before it is a code
+  change. The dialogue-span regex was previously carved out here as
+  separately shippable; folded back in 2026-08-24, because landing it
+  alone tunes one Medium signal inside a scoring model that is being
+  replaced. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
 
 ## Tooling
