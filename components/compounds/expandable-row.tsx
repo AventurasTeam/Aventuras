@@ -66,7 +66,14 @@ export type ExpandableRowProps = {
   removeLabel: string
   expandLabel: string
   collapseLabel: string
-  /** Compact summary content (title line, preview, chips, inline errors). */
+  /**
+   * Compact summary content (title line, preview, chips, inline errors).
+   *
+   * Its **first line** must be a control-height line box (`min-h-control-sm`
+   * plus vertical centring). The action cluster centres on one so a
+   * control-height `compactAction` and the 22px icon-actions share a
+   * centreline; a bare text line would leave the summary sitting above them.
+   */
   compact: ReactNode
   /** Inline editor body, rendered only while expanded. */
   editor: ReactNode
@@ -119,31 +126,36 @@ export function ExpandableRow({
             and the taller control dragged the row off its own centre. The
             min-height is what holds the cluster on the summary's FIRST line
             when the compact body wraps to several. */}
-        <View className="min-h-control-sm flex-row items-center gap-1 pr-3">
-          {compactAction}
-          <IconAction
-            icon={Trash2}
-            label={removeLabel}
-            size="sm"
-            variant="destructive"
-            onPress={onRemove}
-          />
-          {/* Redundant pointer affordance for the row-wide Pressable above, which
+        <View className="flex-row py-row-y-lg pr-3">
+          {/* Inner element owns the line box: min-height is a border-box
+              measure, so putting it on the padded element lets the padding
+              absorb it and an icon-only cluster collapses below the box. */}
+          <View className="min-h-control-sm flex-row items-center gap-1">
+            {compactAction}
+            <IconAction
+              icon={Trash2}
+              label={removeLabel}
+              size="sm"
+              variant="destructive"
+              onPress={onRemove}
+            />
+            {/* Redundant pointer affordance for the row-wide Pressable above, which
               stays the single control assistive tech sees — two buttons carrying
               one action would read as a duplicate. RN derives both platforms'
               hiding from `aria-hidden` alone. The flip is a plain RN transform:
               it must reach neither react-native-svg (which can't resolve it) nor
               NativeWind (whose native output for it is unverified here). */}
-          <Pressable
-            aria-hidden
-            focusable={false}
-            onPress={onToggle}
-            className="h-icon-action-sm w-icon-action-sm items-center justify-center"
-          >
-            <View style={expanded ? CARET_FLIPPED : undefined}>
-              <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
-            </View>
-          </Pressable>
+            <Pressable
+              aria-hidden
+              focusable={false}
+              onPress={onToggle}
+              className="h-icon-action-sm w-icon-action-sm items-center justify-center"
+            >
+              <View style={expanded ? CARET_FLIPPED : undefined}>
+                <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
+              </View>
+            </Pressable>
+          </View>
         </View>
       </View>
       {expanded ? <View className="gap-4 px-3 pb-3">{editor}</View> : null}

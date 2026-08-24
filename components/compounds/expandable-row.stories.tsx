@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
@@ -40,7 +40,11 @@ function Demo({
           removeLabel={`Remove ${row.name}`}
           expandLabel={`Expand ${row.name}`}
           collapseLabel={`Collapse ${row.name}`}
-          compact={<Text className="font-medium">{row.name}</Text>}
+          compact={
+            <View className="min-h-control-sm justify-center">
+              <Text className="font-medium">{row.name}</Text>
+            </View>
+          }
           editor={<Text variant="muted">Editor body for {row.name}</Text>}
           compactAction={
             row.id === compactActionRowId ? (
@@ -161,7 +165,7 @@ export const RemovingARowPrunesItsExpansionSoARecycledIdStartsCollapsed: Story =
   },
 }
 
-function midY(el: Element): number {
+function mid(el: Element): number {
   const r = el.getBoundingClientRect()
   return (r.top + r.bottom) / 2
 }
@@ -174,8 +178,8 @@ function midY(el: Element): number {
  * to actually resolve under vitest, which they do as of the storybook project's
  * cssInterop registration.
  */
-export const CompactActionSharesTheIconActionCentreline: Story = {
-  render: () => (
+function row(compactAction?: ReactNode) {
+  return (
     <ExpandableRow
       expanded={false}
       invalid={false}
@@ -184,27 +188,62 @@ export const CompactActionSharesTheIconActionCentreline: Story = {
       removeLabel="Remove row"
       expandLabel="Expand row"
       collapseLabel="Collapse row"
-      compact={<Text className="font-medium">char</Text>}
-      editor={<Text variant="muted">Editor body</Text>}
-      compactAction={
-        <Button variant="secondary" size="sm">
-          <Text>Set as lead</Text>
-        </Button>
+      compact={
+        <View className="min-h-control-sm justify-center">
+          <Text className="font-medium">char</Text>
+        </View>
       }
+      editor={<Text variant="muted">Editor body</Text>}
+      compactAction={compactAction}
     />
-  ),
+  )
+}
+
+/**
+ * A control-height `compactAction` (a Button) sits beside 22px icon-actions.
+ * Top-aligning them parked their centres 7px apart, and the cluster being
+ * shorter than the row's content box dropped all its slack below the controls —
+ * the Button's top touched the row border with a gap underneath. The cluster
+ * now centres on a control-height line box, which `compact`'s first line
+ * matches. Asserting any of this needs NativeWind classNames to resolve under
+ * vitest, which they do as of the storybook project's cssInterop registration.
+ */
+export const CompactActionCentresOnTheRow: Story = {
+  render: () =>
+    row(
+      <Button variant="secondary" size="sm">
+        <Text>Set as lead</Text>
+      </Button>,
+    ),
   play: async () => {
     const action = screen.getByRole('button', { name: 'Set as lead' })
     const remove = screen.getByRole('button', { name: 'Remove row' })
     const name = screen.getByText('char')
+    const rowEl = action.closest('.rounded-md') as HTMLElement
 
-    // The two controls differ in height by design; only their centres must agree.
-    expect(action.getBoundingClientRect().height).toBeGreaterThan(
-      remove.getBoundingClientRect().height,
-    )
-    expect(Math.abs(midY(action) - midY(remove))).toBeLessThanOrEqual(1)
-    // ...and the cluster tracks the summary's first line rather than floating
-    // below it, which is what made the whole row read as badly centred.
-    expect(Math.abs(midY(name) - midY(remove))).toBeLessThanOrEqual(3)
+    const a = action.getBoundingClientRect()
+    const r = rowEl.getBoundingClientRect()
+    // The controls differ in height by design; only their centres must agree.
+    expect(a.height).toBeGreaterThan(remove.getBoundingClientRect().height)
+    expect(Math.abs(mid(action) - mid(remove))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(action) - mid(name))).toBeLessThanOrEqual(1)
+    // The cluster is centred in the row, not top-anchored with the slack
+    // dumped underneath it.
+    expect(Math.abs(a.top - r.top - (r.bottom - a.bottom))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(action) - mid(rowEl))).toBeLessThanOrEqual(1)
+  },
+}
+
+/** Without a compactAction the cluster is icon-actions only — it must still
+ *  centre on the same line box, or a consumer that passes no action (lore-list)
+ *  is tilted by the shared change. */
+export const IconOnlyClusterStaysCentred: Story = {
+  render: () => row(),
+  play: async () => {
+    const remove = screen.getByRole('button', { name: 'Remove row' })
+    const name = screen.getByText('char')
+    const rowEl = remove.closest('.rounded-md') as HTMLElement
+    expect(Math.abs(mid(remove) - mid(name))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(remove) - mid(rowEl))).toBeLessThanOrEqual(1)
   },
 }

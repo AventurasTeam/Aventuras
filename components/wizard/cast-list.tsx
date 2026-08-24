@@ -109,7 +109,7 @@ function CompactRow({ row, isLead, invalid, expanded }: CompactRowProps) {
   const staged = row.status === 'staged'
   return (
     <>
-      <View className="flex-row flex-wrap items-center gap-2">
+      <View className="min-h-control-sm flex-row flex-wrap content-center items-center gap-2">
         <Icon
           as={KIND_ICON[row.kind]}
           aria-hidden
