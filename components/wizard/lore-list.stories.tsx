@@ -40,7 +40,7 @@ const meta: Meta<typeof LoreList> = {
   parameters: { layout: 'padded' },
   decorators: [
     (Story) => (
-      <View className="w-[640px] gap-4 rounded-md bg-bg-base p-6">
+      <View className="w-[720px] gap-4 rounded-md bg-bg-base p-6">
         <Story />
       </View>
     ),

@@ -37,11 +37,31 @@ export const Phone: Story = {
 }
 ```
 
+## The width can come from a className, not just an inline style
+
+Until the Storybook vitest project registered NativeWind's `cssInterop`
+(2026-08-24), classNames were inert there, so a `w-24` or `w-[640px]`
+wrapper measured full-width and the correction never fired. Stories
+written under that harness look like they pass at a wide layout while
+production stacks and remounts. Two shapes surfaced when registration
+landed:
+
+- **A component that is always narrow should pin the branch itself.**
+  `TierTupleInput` wraps every `FormRow` in `w-24` / `w-40`, so the
+  correction fired on every mount in production too — a real remount,
+  not a test artifact. It now passes `stacked`.
+- **A story wrapper sitting just under the threshold is a race.**
+  `w-[640px]` plus `p-6` measures 592 px, and stories doing that went
+  flaky (4 / 2 / 5 failures across identical runs) rather than failing
+  outright. Widen the wrapper so the guess and the measurement agree.
+
 ## How to apply
 
-- Any play story with a `FormRow` under an inline width below 640 px
-  passes `stacked` explicitly. Render-only stories may leave it to the
-  heuristic — the remount is harmless without assertions.
+- Any play story with a `FormRow` under a width below 640 px — inline
+  style **or** className, and remember to subtract padding — passes
+  `stacked` explicitly or widens past the threshold. Render-only
+  stories may leave it to the heuristic — the remount is harmless
+  without assertions.
 - The rule is about the **first frame**; a `waitFor` after the
   correction would also work, but it encodes the remount as a
   timing dependency instead of removing it.

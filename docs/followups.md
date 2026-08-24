@@ -388,53 +388,6 @@ for the placement rule.
   Surfaced 2026-07-30 finishing
   [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
 
-- **Storybook vitest project applies no NativeWind classNames, so every
-  style assertion in a story passes vacuously.** Components render with
-  only react-native-web's own generated class — no `rounded-md`, no
-  `hidden`, no theme tokens — so the repo has zero style-level test
-  coverage in CI. The Storybook dev server is unaffected. Confirmed by
-  probe (2026-08-18): a `<View className="hidden rounded-md">` renders
-  `class="css-view-g5y9jx"`, `style="null"`, computed `display: flex`,
-  `border-radius: 0px`.
-  **The obvious fix is disproven.** Carrying
-  `framework.options.pluginReactOptions.jsxImportSource: 'nativewind'`
-  into the vitest project does not work: adding
-  `rnw({ jsxRuntime: 'automatic', jsxImportSource: 'nativewind' })` to the
-  storybook project's plugins changes nothing, in either plugin order, and
-  `esbuild.jsxImportSource` changes nothing either. The plugin genuinely
-  runs — pointing it at a nonexistent module fails the build on
-  `<module>/jsx-runtime` — so the option is read but the transform that
-  actually compiles the story is not the one it configures.
-  **Root cause is the interop registration, not the JSX transform.** The
-  stylesheets are fine (6 sheets, 861 rules, the `.hidden` rule present).
-  What is missing is `cssInterop` registration for the RN core components:
-  adding `cssInterop(View, { className: 'style' })` by hand makes the same
-  probe render `class="css-view-g5y9jx hidden rounded-md"` with
-  `display: none` and `border-radius: 6px`.
-  `components/wizard/cast-row-layout.stories.tsx:16` already carries that
-  hand-registration as a local workaround.
-  **Importing NativeWind's own registration module does not work
-  (2026-08-18).** `nativewind/jsx-runtime` reaches
-  `react-native-css-interop`'s `runtime/components`, which owns the
-  canonical list, but that prebuilt CJS resolves `react-native` to a
-  different identity than the aliased stories do, so it decorates the
-  wrong `View`. Adding the import leaves the probe unchanged while the
-  full storybook project still reports 776 passing tests, so the suite
-  cannot be used to tell whether registration took: verify with the probe.
-  Registering in `.storybook/preview.tsx`, which the same aliasing
-  applies to, does work. That leaves the setup-file route as the only
-  path, and it must restate NativeWind's list (15 components plus 3
-  special mappings) locally, where it can drift.
-  **Cost is measured (2026-08-18).** With the full list registered, 17
-  story tests across 7 files fail: `world-time-edit-form` (4),
-  `lore-list` (4), `cast-editors` (3), `tier-tuple-input` (2),
-  `embedding-models-panel` (2), `worldtime-edit-sheet` (1), `button` (1),
-  heavily TextInput-adjacent. Payoff today is small — 6 style assertions
-  exist repo-wide — so the value is unlocking style and visual-regression
-  assertions going forward. Until it lands, treat any style assertion in
-  a story as unproven. Surfaced by M3.11 Task 7 (2026-07-22), root-caused
-  and priced 2026-08-18.
-
 ## Code structure
 
 Near-future refactors routed out of the Slice 3.12 split

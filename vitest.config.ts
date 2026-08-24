@@ -50,6 +50,7 @@ export default defineConfig({
         optimizeDeps: { include: ['i18next', 'react-i18next'] },
         test: {
           name: 'storybook',
+          setupFiles: ['./.storybook/vitest.setup.ts'],
           browser: {
             enabled: true,
             headless: true,

@@ -64,7 +64,9 @@ export const TestSuccess: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByText(LIGHTWEIGHT.displayName))
-    await userEvent.click(await screen.findByText('Test embedder'))
+    await userEvent.click(
+      await screen.findByRole('button', { name: `Test ${LIGHTWEIGHT.displayName}` }),
+    )
     await waitFor(() =>
       expect(screen.getByText(`OK · dim ${LIGHTWEIGHT.dim} · 42 ms`)).toBeTruthy(),
     )
@@ -80,7 +82,9 @@ export const TestFailure: Story = {
   },
   play: async () => {
     await userEvent.click(await screen.findByText(LIGHTWEIGHT.displayName))
-    await userEvent.click(await screen.findByText('Test embedder'))
+    await userEvent.click(
+      await screen.findByRole('button', { name: `Test ${LIGHTWEIGHT.displayName}` }),
+    )
     await waitFor(() => expect(screen.getByText('ONNX runtime init failed')).toBeTruthy())
   },
 }
