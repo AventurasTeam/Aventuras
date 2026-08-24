@@ -31,3 +31,14 @@ slice-planning gate forces its resolution before that slice is planned.
   than on any ordinary crash. Cross-cutting: the same gap lets any kind
   re-run against its own un-reversed orphan. The code already carries a
   TODO at the catch site. Raised 2026-08-24 disproving that followup.
+- **`app-actions-menu-pure.stories.tsx` depends on cross-file DOM
+  cleanliness.** Under `--fileParallelism=false` the `Diagnostics On`
+  story fails reproducibly (2/2) with the body still carrying a
+  `data-density` attribute an earlier file set; it passes alone and
+  under the default parallel run, where each file gets its own page.
+  Latent rather than active — nothing runs the suite serially — but it
+  means "run the browser project sequentially" is not available as a
+  debugging move until the story stops relying on ambient body state.
+  Cross-cutting: any story that reads app-level DOM state has the same
+  exposure, so the fix is a cleanup contract, not one story's patch.
+  Raised 2026-08-24 verifying the `pnpm test:run` gate followup.

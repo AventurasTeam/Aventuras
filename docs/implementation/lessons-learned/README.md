@@ -187,6 +187,10 @@ slice plans when relevant.
 - [Vite-built targets never read `babel.config.js` — wire worklets yourself](./vite-targets-dont-read-babel-config.md)
   — the rnw preset hardcodes `babelrc: false`; Storybook now declares the
   plugin itself, and any new Vite target must too.
+- [Failed Storybook files with zero failed tests](./storybook-load-flake-zero-failed-tests.md)
+  — a file-load flake, not a test failure; contention is ruled out
+  empirically and serializing the project breaks isolation, so check
+  `server.fs.allow` first.
 
 ### Native deps / install ritual
 

@@ -315,23 +315,6 @@ for the placement rule.
   replaced. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
 
-## Tooling
-
-- **`pnpm test:run` over the whole repo cannot be read as a gate.** A
-  full run reports failed test _files_ with zero failed tests: a varying
-  handful of Storybook browser-project files fail to _load_ under
-  parallel contention (`Failed to fetch dynamically imported module`,
-  `Cannot connect to the iframe …`). The same files pass in isolation,
-  and the failing set differs run to run. Reproduced on `main`
-  (`54528591`) from a clean install — 9 files, 0 failed tests — so it is
-  not branch-specific. Until it is fixed, every slice's finish step has
-  to run the `unit` project and the Storybook files separately and argue
-  the residual by hand, which is exactly the shape that lets a real
-  browser-project regression hide. Likely levers: concurrency limits on
-  the browser project, or isolating it from the `unit` project's workers.
-  Surfaced 2026-07-30 finishing
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
-
 ## Code structure
 
 Near-future refactors routed out of the Slice 3.12 split
