@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Pressable, View } from 'react-native'
 import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 
 import { ExpandableRow, useRowExpansion } from './expandable-row'
@@ -157,5 +158,53 @@ export const RemovingARowPrunesItsExpansionSoARecycledIdStartsCollapsed: Story =
     // from the leaked "dup-id" entry left behind by Row A.
     expect(await screen.findByText('Row C')).toBeInTheDocument()
     expect(screen.queryByText('Editor body for Row C')).not.toBeInTheDocument()
+  },
+}
+
+function midY(el: Element): number {
+  const r = el.getBoundingClientRect()
+  return (r.top + r.bottom) / 2
+}
+
+/**
+ * A control-height `compactAction` (a Button, ~36px) sits beside 22px
+ * icon-actions. Top-aligning them parked their centres 7px apart and let the
+ * taller control drag the row off its own centre; the cluster centres on a
+ * control-height line box instead. Asserting this needs NativeWind classNames
+ * to actually resolve under vitest, which they do as of the storybook project's
+ * cssInterop registration.
+ */
+export const CompactActionSharesTheIconActionCentreline: Story = {
+  render: () => (
+    <ExpandableRow
+      expanded={false}
+      invalid={false}
+      onToggle={() => {}}
+      onRemove={() => {}}
+      removeLabel="Remove row"
+      expandLabel="Expand row"
+      collapseLabel="Collapse row"
+      compact={<Text className="font-medium">char</Text>}
+      editor={<Text variant="muted">Editor body</Text>}
+      compactAction={
+        <Button variant="secondary" size="sm">
+          <Text>Set as lead</Text>
+        </Button>
+      }
+    />
+  ),
+  play: async () => {
+    const action = screen.getByRole('button', { name: 'Set as lead' })
+    const remove = screen.getByRole('button', { name: 'Remove row' })
+    const name = screen.getByText('char')
+
+    // The two controls differ in height by design; only their centres must agree.
+    expect(action.getBoundingClientRect().height).toBeGreaterThan(
+      remove.getBoundingClientRect().height,
+    )
+    expect(Math.abs(midY(action) - midY(remove))).toBeLessThanOrEqual(1)
+    // ...and the cluster tracks the summary's first line rather than floating
+    // below it, which is what made the whole row read as badly centred.
+    expect(Math.abs(midY(name) - midY(remove))).toBeLessThanOrEqual(3)
   },
 }

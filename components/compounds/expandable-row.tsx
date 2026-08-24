@@ -113,7 +113,13 @@ export function ExpandableRow({
         >
           <View className="min-w-0 flex-1 gap-1">{compact}</View>
         </Pressable>
-        <View className="flex-row items-start gap-1 pr-3 pt-row-y-lg">
+        {/* Centred on a control-height line box rather than top-aligned: the
+            compact action is a full-height Button and its neighbours are
+            22px icon-actions, so top-aligning parked their centres 7px apart
+            and the taller control dragged the row off its own centre. The
+            min-height is what holds the cluster on the summary's FIRST line
+            when the compact body wraps to several. */}
+        <View className="min-h-control-sm flex-row items-center gap-1 pr-3">
           {compactAction}
           <IconAction
             icon={Trash2}
