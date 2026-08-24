@@ -665,9 +665,11 @@ Scene metadata:
 
 The metadata block surfaces structured-output refs
 (`sceneEntities`, `currentLocationId`) emitted by wizard-assist,
-resolved to entity names. Read-only — generation owns the refs.
-Constrained to **active** wizard-curated cast; prose can mention
-unbacked or staged names freely.
+resolved to entity names. Read-only **in the preview** — the refs
+are generation's proposal until the prose is accepted; they become
+editable in the committed state below. Constrained to **active**
+wizard-curated cast; prose can mention unbacked or staged names
+freely.
 
 #### Committed prose (after `Use this` OR after manual typing)
 
@@ -676,21 +678,41 @@ Opening                                            [✨]
 
 [textarea, editable, contains the prose]
 
-Scene metadata: Aria Stoneheart · Mornstone Keep
-  (visible only if AI-generated; user-written = empty)
+Cast in scene   [Aria Stoneheart] [Bran] [Old Jorin]
+Location        ( Not set | Mornstone Keep )
 ```
+
+**Scene tagging is authored, on both paths.** A generated opening
+seeds the two controls through structured output; a user-written
+one starts empty and can be tagged by hand. Toggle chips carry the
+active characters and items — names stay legible at a glance, which
+is what the older read-only line was for — and the location is a
+single-select whose control shape follows the usual option-count
+rule. Both slots degrade to guidance text when the Cast step has no
+candidate of that kind.
+
+Candidates are **active** and kind-filtered to match the filter
+Finish commits through, so nothing offered here is dropped on the
+way to `story_entries.metadata`, and a ref that fails that filter (a
+since-staged row, or a character id in the location slot) reads as
+unset rather than rendering a name in the wrong slot.
+
+Tagging writes metadata only. It never sets `metadata.model`, which
+stays the authorship discriminator per
+[`data-model.md → Opening entry`](../../../data-model.md#opening-entry).
 
 User edits prose freely after committing. Editing AI-generated
 prose does **not** clear metadata refs — refs stay intact (user
 might tweak prose without invalidating cast/location grounding).
-For fresh metadata, user regenerates via `✨`.
+For fresh metadata, the user regenerates via `✨` or corrects the
+refs in place, which is the remedy that keeps prose edits.
 
 The same rule covers a back-jump to Cast that reassigns the lead
-after generation: `sceneEntities` isn't re-derived, so the metadata
-line keeps resolving names from whoever it already references (the
-prior lead included) rather than going blank or auto-clearing. It's
-model-authored scene metadata, not an authored field — same
-resolution path as any other stale ref, regenerate via `✨`.
+after generation: `sceneEntities` isn't re-derived, so the controls
+keep resolving whoever they already reference (the prior lead
+included) rather than going blank or auto-clearing. A ref that no
+longer resolves is simply not offered, and drops on the next
+explicit edit — the user authoring, not an auto-clear.
 
 `✨` stays available in the committed state as the regenerate /
 refine entry point, per

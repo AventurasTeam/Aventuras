@@ -20,7 +20,14 @@
     "heading": "How does this story begin?",
     "emptyHint": "Generate with ✨, or start typing below.",
     "placeholder": "Write the opening, or generate one with ✨.",
-    "sceneMetadata": "Scene metadata: {{value}}",
+    "scene": {
+      "cast": "Cast in scene",
+      "location": "Location",
+      "noCast": "Add a character or item on the Cast step to tag the opening scene.",
+      "noLocations": "Add a location on the Cast step to set where the opening happens.",
+      "noLocationChosen": "Not set",
+      "hint": "Optional. Grounds the first turn in who is present and where; the classifier keeps it current from turn 2."
+    },
     "replaceConfirm": {
       "title": "Replace the opening?",
       "body": "The opening currently in the field will be lost.",

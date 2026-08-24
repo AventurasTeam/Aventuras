@@ -113,12 +113,12 @@ export const OpeningAssistCommits: Story = {
       expect(opening.sceneEntities).toEqual([LEAD_ID])
       expect(opening.model).toBe(MODEL_ID)
     })
-    // Committed state surfaces the resolved cast name in the metadata line.
-    expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+    // Committed state surfaces the resolved cast name on its scene chip.
+    expect(await screen.findByText('Aria')).toBeInTheDocument()
   },
 }
 
-export const SceneMetadataJoinsCastAndLocation: Story = {
+export const SceneTagsReflectCommittedRefs: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -148,13 +148,17 @@ export const SceneMetadataJoinsCastAndLocation: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
 
-    // wizard.md → Committed prose: cast names and the resolved location join
-    // with the canon separator ("Aria Stoneheart · Mornstone Keep").
-    expect(await screen.findByText('Scene metadata: Aria · Mornstone Keep')).toBeInTheDocument()
+    // Generated refs seed the editable controls rather than a read-only line.
+    await waitFor(() => expect(screen.getByText('Aria')).toBeInTheDocument())
+    expect(screen.getByText('Mornstone Keep')).toBeInTheDocument()
+    // ...and the user can correct them without regenerating the prose.
+    await userEvent.click(screen.getByText('Aria'))
+    await waitFor(() => expect(wizardStore.getWizard().state.opening.sceneEntities).toEqual([]))
+    expect(wizardStore.getWizard().state.opening.content).toContain('Aria drew her blade')
   },
 }
 
-export const SceneMetadataDropsStagedAndKindMismatchedRefs: Story = {
+export const SceneTagsDropStagedAndKindMismatchedRefs: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -167,6 +171,10 @@ export const SceneMetadataDropsStagedAndKindMismatchedRefs: Story = {
       // unlike reusing the lead's id, whose name would collide via dedupe.
       { ...emptyCastDraft('character', MISKIND_ID), name: 'Bran' },
       { ...emptyCastDraft('faction', FACTION_ID), name: 'The Ashen Court' },
+      // An active location, so the location control actually renders and the
+      // kind guard below is exercised rather than short-circuited by the
+      // no-locations empty state.
+      { ...emptyCastDraft('location', LOCATION_ID), name: 'Mornstone Keep' },
     ])
     wizardStore.setLeadEntityId(LEAD_ID)
   },
@@ -192,20 +200,24 @@ export const SceneMetadataDropsStagedAndKindMismatchedRefs: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
 
-    // Staged Gandalf is dropped (wizard.md → Status field: staged entities
-    // can't appear in scene metadata); the kind-mismatched location ref
-    // (Bran, a character) is dropped too; and the active faction is dropped
-    // because factions are never scene-tagged (data-model.md → Scene presence
-    // is kind-aware) — the same filter Finish commits through, so the preview
-    // can't promise scene state the story never gets.
-    expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+    // Staged Gandalf is never offered (wizard.md → Status field: staged
+    // entities can't appear in scene metadata), and the active faction is not
+    // either because factions are never scene-tagged (data-model.md → Scene
+    // presence is kind-aware). Bran is an active character so he IS a scene
+    // candidate — what must not happen is his id, sitting in the location
+    // slot, rendering as the chosen location.
+    await waitFor(() => expect(screen.getByText('Aria')).toBeInTheDocument())
     expect(screen.queryByText(/Gandalf/)).not.toBeInTheDocument()
-    expect(screen.queryByText(/Bran/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Ashen Court/)).not.toBeInTheDocument()
+    // Bran's id sits in the location slot; resolveOpening's reverse
+    // substitution doesn't validate kind, so the control must read as unset
+    // rather than adopting a character as the location.
+    expect(screen.getByRole('radio', { name: 'Not set' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Mornstone Keep' })).not.toBeChecked()
   },
 }
 
-export const SceneMetadataDropsStagedLocation: Story = {
+export const SceneTagsDropStagedLocation: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -237,12 +249,19 @@ export const SceneMetadataDropsStagedLocation: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
 
-    expect(await screen.findByText('Scene metadata: Aria')).toBeInTheDocument()
+    // Active-only applies to the location slot too, not just cast rows: the
+    // staged location is never offered, so the ref reads as unset.
+    await waitFor(() => expect(screen.getByText('Aria')).toBeInTheDocument())
     expect(screen.queryByText(/Shadowfen/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Add a location on the Cast step to set where the opening happens.'),
+    ).toBeInTheDocument()
   },
 }
 
-export const SceneMetadataDedupesRepeatedNames: Story = {
+// The item this surface exists for: a user-written opening (no `model`) can be
+// grounded at wizard time instead of waiting for turn 2's classifier.
+export const UserWrittenSceneTagging: Story = {
   beforeEach: () => {
     wizardStore.reset()
     appSettingsStore.__reset()
@@ -252,29 +271,43 @@ export const SceneMetadataDedupesRepeatedNames: Story = {
       { ...emptyCastDraft('location', LOCATION_ID), name: 'Mornstone Keep' },
     ])
     wizardStore.setLeadEntityId(LEAD_ID)
+    wizardStore.patchOpening({ content: 'The harbor lay still under a bruised sky.' })
   },
-  render: () => (
-    <StepOpening
-      onSetupAssist={fn()}
-      assist={{
-        resolveModelId: () => MODEL_ID,
-        opening: okRun({
-          content: 'Aria drew her blade as the storm broke over Mornstone Keep.',
-          // The location also appears in sceneEntities alongside the lead —
-          // the joined label must not repeat "Mornstone Keep".
-          sceneEntities: [LEAD_ID, LOCATION_ID],
-          currentLocationId: LOCATION_ID,
-          model: MODEL_ID,
-        }),
-      }}
-    />
-  ),
   play: async () => {
-    await userEvent.click(screen.getByRole('button', { name: 'Suggest opening' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
+    const before = wizardStore.getWizard().state.opening
+    expect(before.model).toBeNull()
+    expect(before.sceneEntities).toEqual([])
+    expect(before.currentLocationId).toBeNull()
 
-    expect(await screen.findByText('Scene metadata: Aria · Mornstone Keep')).toBeInTheDocument()
+    await userEvent.click(await screen.findByText('Aria'))
+    await waitFor(() =>
+      expect(wizardStore.getWizard().state.opening.sceneEntities).toEqual([LEAD_ID]),
+    )
+
+    await userEvent.click(screen.getByText('Mornstone Keep'))
+    await waitFor(() =>
+      expect(wizardStore.getWizard().state.opening.currentLocationId).toBe(LOCATION_ID),
+    )
+    // Tagging is authorship of metadata only — it must not claim the prose was
+    // model-written, which is the discriminator Finish commits on.
+    expect(wizardStore.getWizard().state.opening.model).toBeNull()
+  },
+}
+
+// Both slots degrade to guidance rather than an empty control the user cannot act on.
+export const SceneTagsWithNoCast: Story = {
+  beforeEach: () => {
+    wizardStore.reset()
+    appSettingsStore.__reset()
+    wizardStore.patchOpening({ content: 'The harbor lay still under a bruised sky.' })
+  },
+  play: async () => {
+    expect(
+      await screen.findByText('Add a character or item on the Cast step to tag the opening scene.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Add a location on the Cast step to set where the opening happens.'),
+    ).toBeInTheDocument()
   },
 }
 

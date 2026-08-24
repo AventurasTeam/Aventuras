@@ -22,6 +22,7 @@ import { appSettingsStore, wizardStore } from '@/lib/stores'
 
 import { AiAssist } from './ai-assist'
 import { MemoryCostDisclosure } from './memory-cost-disclosure'
+import { OpeningSceneTags } from './opening-scene-tags'
 import {
   refineDescriptionAssist,
   refineOpeningAssist,
@@ -62,49 +63,9 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
   // wizard.md → Replace-on-existing: a candidate accepted over authored prose
   // is staged here until confirmed, never written straight to the store.
   const [pendingOpening, setPendingOpening] = useState<OpeningAssistValue | null>(null)
-  const isAiGenerated = opening.model != null
 
   const handleSetup = onSetupAssist ?? (() => {})
   const resolveModelId = assist?.resolveModelId ?? (() => resolveWizardAssistModelId())
-
-  // Resolved live against the current cast, not snapshotted at generation
-  // time (wizard.md → Committed prose: refs stay intact across cast edits;
-  // the user regenerates via ✨ for fresh metadata rather than this label
-  // silently going stale-but-blank). Active AND character/item, matching the
-  // filter Finish commits through (data-model.md → Scene presence is
-  // kind-aware): previewing a ref that Finish then drops would promise the
-  // user scene state the story never gets.
-  const sceneNames = opening.sceneEntities
-    .map((id) =>
-      cast
-        .find(
-          (r) =>
-            r.id === id && r.status === 'active' && (r.kind === 'character' || r.kind === 'item'),
-        )
-        ?.name.trim(),
-    )
-    .filter((name): name is string => name != null && name.length > 0)
-  // Kind-guarded: resolveOpening's reverse substitution doesn't validate kind,
-  // so a non-placeholder id that survives it must not render a character's
-  // name in the location slot.
-  const locationName =
-    opening.currentLocationId != null
-      ? (cast
-          .find(
-            (r) =>
-              r.id === opening.currentLocationId && r.kind === 'location' && r.status === 'active',
-          )
-          ?.name.trim() ?? null)
-      : null
-  // De-duped: a repeated id, two rows sharing a name, or the location id also
-  // present in sceneEntities would otherwise render "Aria · Aria".
-  const parts = [
-    ...new Set([
-      ...sceneNames,
-      ...(locationName != null && locationName.length > 0 ? [locationName] : []),
-    ]),
-  ]
-  const metadataLabel = isAiGenerated && hasContent && parts.length > 0 ? parts.join(' · ') : null
 
   // An absent default-story-setting tracks the code default, which is 'local'.
   const embeddingBackend =
@@ -152,11 +113,16 @@ export function StepOpening({ onSetupAssist, assist }: StepOpeningProps) {
           placeholder={t('wizard:opening.placeholder')}
           aria-label={t('wizard:opening.opening.label')}
         />
-        {metadataLabel != null ? (
-          <Text size="sm" variant="muted">
-            {t('wizard:opening.sceneMetadata', { value: metadataLabel })}
-          </Text>
-        ) : null}
+        <OpeningSceneTags
+          cast={cast}
+          sceneEntities={opening.sceneEntities}
+          currentLocationId={opening.currentLocationId}
+          onChangeSceneEntities={(sceneEntities) => wizardStore.patchOpening({ sceneEntities })}
+          onChangeLocation={(currentLocationId) => wizardStore.patchOpening({ currentLocationId })}
+        />
+        <Text size="sm" variant="muted">
+          {t('wizard:opening.scene.hint')}
+        </Text>
       </View>
 
       <View className="gap-4">

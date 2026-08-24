@@ -172,6 +172,9 @@
   /* chip input */
   .chip-input { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg-region); min-height: 28px; align-items: center; }
   .chip { font-size: 11px; padding: 2px 8px; background: var(--bg-faint); border: 1px solid var(--line-soft); border-radius: 12px; color: var(--ink); display: inline-flex; align-items: center; gap: 4px; }
+  .chip.selected { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .scene-tags { margin-top: 10px; display: grid; grid-template-columns: 96px 1fr; gap: 8px 12px; align-items: center; }
+  .scene-tags .chip-row { display: flex; flex-wrap: wrap; gap: 4px; }
   .chip .chip-x { color: var(--ink-muted); cursor: pointer; font-size: 11px; }
   .chip-input .chip-input-typer { flex: 1; min-width: 80px; border: none; outline: none; padding: 3px 4px; font-size: 12px; font-family: inherit; background: transparent; color: var(--ink); }
   .chip-cap-warn { font-size: 10px; color: var(--warn); margin-top: 2px; }
@@ -709,6 +712,8 @@
           <div class="ai-result">
             <div class="ai-result-title"><span class="sparkle">✨</span> Suggested opening</div>
             <div class="ai-preview">The bell of the abbey tolled twice as Aria reached the tree line. Snow lay thick on the broken road, and the wind smelled of old smoke. Below, the keep's torches flickered against the dusk — too few, she thought, for a household preparing supper.</div>
+            <!-- Read-only here: generation's proposal until the prose is
+                 accepted; editable in the committed state below. -->
             <div class="ai-meta">
               <strong>Scene metadata:</strong><br>
               Cast in scene: Aria Stoneheart<br>
@@ -726,7 +731,22 @@
         <!-- Committed state (variant: opening-committed) -->
         <div id="opening-committed" class="hidden">
           <div class="opening-preview" contenteditable="true">The bell of the abbey tolled twice as Aria reached the tree line. Snow lay thick on the broken road, and the wind smelled of old smoke. Below, the keep's torches flickered against the dusk — too few, she thought, for a household preparing supper.</div>
-          <div class="ai-meta" style="margin-top: 8px;">Scene metadata: Aria Stoneheart · Mornstone Keep</div>
+          <!-- Authored on both paths: generation seeds these, the user corrects
+               them in place. Chips keep the names legible, which is what the
+               older read-only line was for. -->
+          <div class="scene-tags">
+            <span class="field-label">Cast in scene</span>
+            <div class="chip-row">
+              <span class="chip selected">Aria Stoneheart</span>
+              <span class="chip">Bran</span>
+              <span class="chip">Old Jorin</span>
+            </div>
+            <span class="field-label">Location</span>
+            <div class="segment">
+              <div class="seg">Not set</div>
+              <div class="seg active">Mornstone Keep</div>
+            </div>
+          </div>
         </div>
       </div>
 

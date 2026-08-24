@@ -13,30 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Optional user-side scene tagging on user-written openings.**
-  User-written openings start with empty
-  `metadata.sceneEntities` / `currentLocationId` / `worldTime: 0`
-  per the locked
-  [opening entry contract](./data-model.md#opening-entry).
-  Turn-2 classifier picks up scene presence from there. Some users may
-  want to pre-tag scene presence on the opening at wizard time — pick
-  which cast members are in the opening's scene, which location is
-  current — so first-turn generation context is grounded from entry 1.
-
-  Wizard concern, not data-model. The
-  [Wizard design pass](./explorations/2026-04-30-story-creation-wizard.md)
-  landed without this affordance — AI-generated openings emit
-  metadata refs via structured output, but user-written openings
-  remain empty until turn-2 classifier picks up. Adding a manual
-  scene-tagging surface on the wizard's step 5 was deliberately
-  deferred. Lifted from parked to active during 3.6b slice planning
-  (2026-08-13): with the Cast step landing, a starting-location
-  marker for user-written openings is the remaining gap turn 1
-  cannot recover on its own. The data shape already supports it
-  (metadata fields exist and are user-editable per
-  [Entry metadata shape](./data-model.md#entry-metadata-shape));
-  only the wizard UX is missing.
-
 - **Suggest-cast unresolved references should surface visually, not
   fall back to `null` silently.** Canon
   ([`wizard.md → AI-suggest — structured identity`](./ui/screens/wizard/wizard.md#ai-suggest--structured-identity))
