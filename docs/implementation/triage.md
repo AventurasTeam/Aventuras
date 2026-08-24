@@ -19,4 +19,15 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-_Empty._
+- **A boot recovery that fails to reverse leaves the branch runnable
+  against un-reversed writes.** `recoverInFlightRuns`
+  (`lib/pipeline/runtime/recovery.ts`) logs a per-orphan
+  `DeltaReplayError` and leaves the row for the next boot — correct on
+  its own, but `resetStuckClassifierRunState` runs immediately after
+  and flips `classifier_status` to idle regardless, so the classifier
+  can start a fresh pass over a window whose partial writes are still
+  on disk. That is the duplication the (now removed) crash-mid-burst
+  followup described, reachable only when recovery itself fails rather
+  than on any ordinary crash. Cross-cutting: the same gap lets any kind
+  re-run against its own un-reversed orphan. The code already carries a
+  TODO at the catch site. Raised 2026-08-24 disproving that followup.

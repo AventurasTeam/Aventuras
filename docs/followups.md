@@ -266,25 +266,6 @@ for the placement rule.
   undo stack, or wants the redo-clear narrowed. Not scoped to the
   world-state-block work; surfaced alongside it 2026-07-23.
 
-- **A crash mid-burst re-classifies the window and duplicates its
-  happenings.** The classifier phase yields its planned writes one at a
-  time and the orchestrator commits each as its own delta; the watermark
-  advances only after the last one
-  (`lib/pipeline/definitions/periodic-classifier.ts`). A crash in between
-  leaves the deltas on disk with `processedThrough` unmoved, so the next
-  pass re-reads the same window. Boot's `resetStuckClassifierRunState`
-  assumes that state is coherent ("the watermark never advanced"), but it
-  is only coherent when _no_ delta landed. `createHappening` allocates a
-  fresh id per call and nothing keys on content, so the replay writes a
-  second copy of every happening, involvement and awareness row the
-  interrupted burst had already committed. Options, roughly in order of
-  cost: advance the watermark inside the same transaction as the burst;
-  give the pass a run marker that recovery reverse-replays like any other
-  orphan; or an idempotency key on classifier-sourced happenings. Not the
-  same hole as the `state: 'running'` orphan the boot reset already
-  covers. Surfaced 2026-07-31 reviewing
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
-
 - **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
   specifies five per-sentence signals; three of them, plus the
