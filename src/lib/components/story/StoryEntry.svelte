@@ -190,15 +190,18 @@
    * Dismiss/delete this error entry from the story.
    */
   async function handleDismissError() {
-    if (ui.lastGenerationError?.errorEntryId === entry.id) {
-      ui.clearGenerationError()
-    }
     try {
       await story.deleteEntry(entry.id)
     } catch (error) {
       // A branch forking from this entry refuses the delete; without this the button
       // would simply do nothing.
       ui.showToast(errMessage(error), 'error')
+      return
+    }
+    // Only once the entry is gone: a refused delete leaves it on screen, and clearing the
+    // tracked error would take its Retry away with it.
+    if (ui.lastGenerationError?.errorEntryId === entry.id) {
+      ui.clearGenerationError()
     }
   }
 

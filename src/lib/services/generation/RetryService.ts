@@ -119,10 +119,6 @@ export class RetryService {
     })
 
     try {
-      // Ahead of both paths, which restore lorebook activation before they touch the entries:
-      // a refusal that surfaced later would leave that restore applied with nothing undone.
-      callbacks.assertEntriesRemovable(backup.entryCountBeforeAction)
-
       if (backup.hasFullState) {
         // Full state restore path
         await this.restoreFullState(backup, callbacks)
@@ -139,6 +135,24 @@ export class RetryService {
       }
     } catch (error) {
       log('Restore failed', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown restore error',
+      }
+    }
+  }
+
+  /**
+   * Both entry points run this before they touch anything: the restore paths rewind lorebook
+   * activation and clear the suggestions before they reach the entries, and a refusal that
+   * surfaced later would leave all of that applied with nothing undone.
+   */
+  private preflight(backup: RetryBackupData, callbacks: RetryStoreCallbacks): RestoreResult | null {
+    try {
+      callbacks.assertEntriesRemovable(backup.entryCountBeforeAction)
+      return null
+    } catch (error) {
+      log('Restore refused before any state was touched', error)
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown restore error',
@@ -240,15 +254,13 @@ export class RetryService {
   ): Promise<RestoreResult> {
     log('handleStopGeneration called')
 
+    const refused = this.preflight(backup, callbacks)
+    if (refused) return refused
+
     // Clear UI state first
     uiCleanup.clearGenerationError()
     uiCleanup.clearSuggestions()
     uiCleanup.clearActionChoices()
-
-    // Restore activation data for full state path
-    if (backup.hasFullState) {
-      callbacks.restoreActivationData(backup.activationData, backup.storyPosition)
-    }
 
     // Clear lorebook retrieval debug state
     callbacks.setLastLorebookRetrieval(null)
@@ -273,6 +285,9 @@ export class RetryService {
       hasFullState: backup.hasFullState,
       entryCountBeforeAction: backup.entryCountBeforeAction,
     })
+
+    const refused = this.preflight(backup, callbacks)
+    if (refused) return refused
 
     // Clear UI state
     uiCleanup.clearGenerationError()

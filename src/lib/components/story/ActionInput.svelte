@@ -1036,13 +1036,6 @@
       return
     }
 
-    ui.clearGenerationError()
-    ui.clearSuggestions(story.currentStory.id)
-    ui.clearActionChoices(story.currentStory.id)
-
-    if (backup.hasFullState) {
-      ui.restoreActivationData(backup.activationData, backup.storyPosition)
-    }
     ui.setLastLorebookRetrieval(null)
     ui.setLastRetrievalResult(null)
 
@@ -1068,12 +1061,16 @@
       },
     )
 
-    if (result.success) {
-      await tick()
-      actionType = (result.restoredActionType as ActionType) ?? actionType
-      isRawActionChoice = result.restoredWasRawActionChoice ?? false
-      inputValue = result.restoredRawInput ?? ''
+    if (!result.success) {
+      // The backup is the only way back to the pre-action story, so a refused restore keeps it.
+      ui.showToast(result.error ?? 'Could not restore the story', 'error')
+      return
     }
+
+    await tick()
+    actionType = (result.restoredActionType as ActionType) ?? actionType
+    isRawActionChoice = result.restoredWasRawActionChoice ?? false
+    inputValue = result.restoredRawInput ?? ''
     ui.clearRetryBackup(true)
   }
 
@@ -1162,10 +1159,6 @@
 
     const storyId = story.currentStory.id
 
-    ui.clearGenerationError()
-    ui.clearSuggestions(storyId)
-    ui.clearActionChoices(storyId)
-
     const result = await retryService.handleRetryLastMessage(
       backup,
       {
@@ -1188,7 +1181,10 @@
       },
     )
 
-    if (!result.success) return
+    if (!result.success) {
+      ui.showToast(result.error ?? 'Could not restore the story', 'error')
+      return
+    }
 
     await tick()
 

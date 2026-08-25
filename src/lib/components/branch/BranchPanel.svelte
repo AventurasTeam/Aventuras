@@ -114,13 +114,17 @@
   const latestCheckpoint = $derived(getLatestCheckpoint())
   const canCreateBranch = $derived(!!latestCheckpoint)
 
-  /** Distinguishes "never had one" from "had one, but its entry was deleted". */
+  /**
+   * Distinguishes "never had one" from "had one, but its entry isn't there". A branch switch
+   * sets the branch id before the entries it loads arrive, so the second case is ambiguous —
+   * the same ambiguity `forkPointTitle` names below.
+   */
   const createBranchTitle = $derived.by(() => {
     if (canCreateBranch) return 'Create new branch from latest checkpoint'
     const currentBranchId = story.currentStory?.currentBranchId ?? null
     const hadOne = story.checkpoints.some((c) => getCheckpointBranchId(c) === currentBranchId)
     return hadOne
-      ? 'This branch has no usable checkpoint left - the entry each one marked has been deleted'
+      ? "This branch's checkpoints aren't usable - their entries aren't loaded yet, or were deleted"
       : 'No checkpoints available - checkpoints are created at chapter boundaries'
   })
 

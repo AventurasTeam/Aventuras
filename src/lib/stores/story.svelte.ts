@@ -1031,8 +1031,10 @@ class StoryStore {
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
-    await this.pruneCheckpointsForEntries(new Set([entryId]))
+    // Prune after the row is gone: this path leaves chapters alone, and a chapter still
+    // referencing the entry makes the delete fail on the foreign key.
     await database.deleteStoryEntry(entryId)
+    await this.pruneCheckpointsForEntries(new Set([entryId]))
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
     // Invalidate caches
@@ -4345,7 +4347,6 @@ class StoryStore {
       })
 
       this.assertNoBranchForkAtOrAfter(backup.entryCountBeforeAction)
-      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
@@ -4357,6 +4358,8 @@ class StoryStore {
         backup.items,
         backup.storyBeats,
       )
+
+      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Reload from database using branch-aware method for clean state
       await this.reloadEntriesForCurrentBranch()
