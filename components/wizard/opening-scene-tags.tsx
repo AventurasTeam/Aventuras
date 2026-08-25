@@ -7,8 +7,7 @@ import { Text } from '@/components/ui/text'
 import type { WizardCastDraft } from '@/lib/db'
 import { t } from '@/lib/i18n'
 
-// Select carries string values, so "no location" needs a sentinel rather than
-// an empty string, which is indistinguishable from an unset trigger.
+// Select carries string values; an empty string is indistinguishable from unset.
 const NO_LOCATION = '__none__'
 
 function displayName(row: WizardCastDraft): string {
@@ -25,15 +24,9 @@ export type OpeningSceneTagsProps = {
 
 /**
  * Scene grounding for the opening entry: who is present, where it happens.
- * Both authorship paths edit the same fields — an AI-generated opening seeds
- * them through structured output and the user may correct them here, which is
- * the only remedy that doesn't discard prose edits the way regenerating does.
- *
- * Candidates are active-and-kind-filtered to match the filter Finish commits
- * through, so nothing offered here is silently dropped on the way to
- * `story_entries.metadata`, and a ref that fails that filter (a since-staged
- * row, or a character id sitting in the location slot) reads as unset rather
- * than rendering someone's name in the wrong slot.
+ * Candidates are active-and-kind-filtered to match what Finish commits, so a ref
+ * that fails that filter (since-staged row, character id in the location slot)
+ * reads as unset instead of rendering a name in the wrong slot.
  */
 export function OpeningSceneTags({
   cast,
@@ -52,9 +45,8 @@ export function OpeningSceneTags({
     const next = new Set(selected)
     if (next.has(id)) next.delete(id)
     else next.add(id)
-    // Emitted in candidate order off the filtered list, so a ref that no longer
-    // resolves drops on the next explicit edit. Canon keeps such refs across
-    // cast edits; this is the user authoring, not an auto-clear.
+    // Emitted off the filtered list, so an unresolvable ref drops on the next
+    // explicit edit — user authorship; canon keeps such refs across cast edits.
     onChangeSceneEntities(sceneCandidates.map((r) => r.id).filter((id) => next.has(id)))
   }
 

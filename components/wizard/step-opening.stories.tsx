@@ -171,9 +171,8 @@ export const SceneTagsDropStagedAndKindMismatchedRefs: Story = {
       // unlike reusing the lead's id, whose name would collide via dedupe.
       { ...emptyCastDraft('character', MISKIND_ID), name: 'Bran' },
       { ...emptyCastDraft('faction', FACTION_ID), name: 'The Ashen Court' },
-      // An active location, so the location control actually renders and the
-      // kind guard below is exercised rather than short-circuited by the
-      // no-locations empty state.
+      // An active location so the location control renders at all — otherwise the
+      // kind guard below is short-circuited by the no-locations empty state.
       { ...emptyCastDraft('location', LOCATION_ID), name: 'Mornstone Keep' },
     ])
     wizardStore.setLeadEntityId(LEAD_ID)
@@ -200,18 +199,13 @@ export const SceneTagsDropStagedAndKindMismatchedRefs: Story = {
     await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
     await userEvent.click(screen.getByRole('button', { name: 'Use this' }))
 
-    // Staged Gandalf is never offered (wizard.md → Status field: staged
-    // entities can't appear in scene metadata), and the active faction is not
-    // either because factions are never scene-tagged (data-model.md → Scene
-    // presence is kind-aware). Bran is an active character so he IS a scene
-    // candidate — what must not happen is his id, sitting in the location
-    // slot, rendering as the chosen location.
+    // Staged entities can't be scene-tagged (wizard.md → Status field), nor can
+    // factions (data-model.md → Scene presence is kind-aware).
     await waitFor(() => expect(screen.getByText('Aria')).toBeInTheDocument())
     expect(screen.queryByText(/Gandalf/)).not.toBeInTheDocument()
     expect(screen.queryByText(/Ashen Court/)).not.toBeInTheDocument()
-    // Bran's id sits in the location slot; resolveOpening's reverse
-    // substitution doesn't validate kind, so the control must read as unset
-    // rather than adopting a character as the location.
+    // resolveOpening's reverse substitution doesn't validate kind, so Bran's id in
+    // the location slot must read as unset, not adopt a character as the location.
     expect(screen.getByRole('radio', { name: 'Not set' })).toBeChecked()
     expect(screen.getByRole('radio', { name: 'Mornstone Keep' })).not.toBeChecked()
   },
@@ -259,8 +253,8 @@ export const SceneTagsDropStagedLocation: Story = {
   },
 }
 
-// The item this surface exists for: a user-written opening (no `model`) can be
-// grounded at wizard time instead of waiting for turn 2's classifier.
+// A user-written opening (no `model`) is grounded at wizard time instead of
+// waiting for turn 2's classifier.
 export const UserWrittenSceneTagging: Story = {
   beforeEach: () => {
     wizardStore.reset()

@@ -170,14 +170,6 @@ function mid(el: Element): number {
   return (r.top + r.bottom) / 2
 }
 
-/**
- * A control-height `compactAction` (a Button, ~36px) sits beside 22px
- * icon-actions. Top-aligning them parked their centres 7px apart and let the
- * taller control drag the row off its own centre; the cluster centres on a
- * control-height line box instead. Asserting this needs NativeWind classNames
- * to actually resolve under vitest, which they do as of the storybook project's
- * cssInterop registration.
- */
 function row(compactAction?: ReactNode) {
   return (
     <ExpandableRow
@@ -200,13 +192,9 @@ function row(compactAction?: ReactNode) {
 }
 
 /**
- * A control-height `compactAction` (a Button) sits beside 22px icon-actions.
- * Top-aligning them parked their centres 7px apart, and the cluster being
- * shorter than the row's content box dropped all its slack below the controls —
- * the Button's top touched the row border with a gap underneath. The cluster
- * now centres on a control-height line box, which `compact`'s first line
- * matches. Asserting any of this needs NativeWind classNames to resolve under
- * vitest, which they do as of the storybook project's cssInterop registration.
+ * Pins the cluster's centreline: a Button-sized `compactAction`, the 22px
+ * icon-actions, `compact`'s first line and the row itself all share it.
+ * Vacuous unless NativeWind classNames resolve under vitest (cssInterop).
  */
 export const CompactActionCentresOnTheRow: Story = {
   render: () =>
@@ -227,16 +215,14 @@ export const CompactActionCentresOnTheRow: Story = {
     expect(a.height).toBeGreaterThan(remove.getBoundingClientRect().height)
     expect(Math.abs(mid(action) - mid(remove))).toBeLessThanOrEqual(1)
     expect(Math.abs(mid(action) - mid(name))).toBeLessThanOrEqual(1)
-    // The cluster is centred in the row, not top-anchored with the slack
-    // dumped underneath it.
+    // Centred in the row, not top-anchored with the slack dumped underneath.
     expect(Math.abs(a.top - r.top - (r.bottom - a.bottom))).toBeLessThanOrEqual(1)
     expect(Math.abs(mid(action) - mid(rowEl))).toBeLessThanOrEqual(1)
   },
 }
 
-/** Without a compactAction the cluster is icon-actions only — it must still
- *  centre on the same line box, or a consumer that passes no action (lore-list)
- *  is tilted by the shared change. */
+/** Icon-only cluster (no `compactAction`) must centre on the same line box —
+ *  otherwise consumers that pass no action, like lore-list, sit tilted. */
 export const IconOnlyClusterStaysCentred: Story = {
   render: () => row(),
   play: async () => {

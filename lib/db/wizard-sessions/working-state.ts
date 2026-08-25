@@ -67,9 +67,8 @@ const characterCastDraftSchema = z.object({
   visual: castVisualDraftSchema.default(() => castVisualDraftSchema.parse({})),
   factionId: z.string().nullable().default(null),
   /**
-   * The faction name an import asked for that resolved to no row, kept so the
-   * list can re-check it against the live cast instead of the drop being
-   * visible only as an empty picker. Cleared once the user assigns the field.
+   * The faction name an import asked for that resolved to no row, kept so the list
+   * can re-check it against the live cast. Cleared once the user assigns the field.
    * Wizard-only: Finish projects named columns, so it never reaches an entity.
    */
   unresolvedFactionName: z.string().default(''),

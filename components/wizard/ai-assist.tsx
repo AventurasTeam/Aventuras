@@ -217,9 +217,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
   }
 
-  // Every dismiss that can still lose work: Escape, tap-outside, swipe-down and Android
-  // hardware back arrive through handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
-  // via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
+  // The single funnel for dismisses that can lose work. Dirty closes anyway and hands off to
+  // the sibling confirm dialog: Keep re-opens and clears nothing, Discard is the only reset.
   function requestClose() {
     setOpen(false)
     if (hasUnsavedCandidate()) {

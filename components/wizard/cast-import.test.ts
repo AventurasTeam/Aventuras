@@ -498,8 +498,7 @@ describe('pendingCastRef', () => {
     })
   })
 
-  // The whole point of re-checking at render: importing the faction afterwards
-  // has to change the message without a re-import.
+  // Re-checked at render so a later import flips the message without a re-import.
   it('reports the ask as resolvable once a matching active row exists', () => {
     const row = character({ unresolvedFactionName: 'ashfall pact' })
     expect(pendingCastRef(row, [row, faction('Ashfall Pact')])?.resolvableId).toBe('fact_1')

@@ -157,9 +157,8 @@ function CompactRow({ row, isLead, invalid, expanded, cast }: CompactRowProps) {
               {t('wizard:cast.editor.errors.name')}
             </Text>
           ) : null}
-          {/* A warning, not an error: the row commits fine, it just lost the
-              affiliation the model asked for — which the editors otherwise
-              render as "No factions yet", reading as "you have none". */}
+          {/* A warning, not an error: the row commits, it just lost the affiliation
+              the model asked for — which the editors render as "No factions yet". */}
           {pending ? (
             <View className="flex-row items-center gap-1">
               <Icon as={AlertTriangle} aria-hidden size="sm" className="shrink-0 text-warning" />

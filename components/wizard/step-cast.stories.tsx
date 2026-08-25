@@ -365,9 +365,8 @@ export const ImportingWithoutTheReferencedFactionToastsTheDrop: Story = {
   },
 }
 
-// The toast above is transient; the row itself has to carry the ask, and the
-// message has to track a cast the user is still editing. Importing the faction
-// afterwards must downgrade "not in your cast" without a re-import.
+// The toast is transient, so the row carries the ask — and tracks a cast still
+// being edited: importing the faction downgrades the message without a re-import.
 export const ADroppedRefWarnsOnTheRowAndTracksTheLiveCast: Story = {
   beforeEach: () => seed(),
   render: () => (

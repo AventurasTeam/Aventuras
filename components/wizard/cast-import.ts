@@ -34,11 +34,9 @@ export type UnresolvedCastRef = {
 }
 
 /**
- * The reference a row still wants but has not got, re-checked against the live
- * cast rather than the selection it was imported with. `resolvableId` is set
- * once a matching active row exists, which distinguishes "you never imported
- * it" from "it is here, just not attached" — the user can act on those two
- * differently, and the first can become the second while the wizard is open.
+ * The reference a row still wants, re-checked against the live cast rather than the
+ * import-time selection. `resolvableId` is set once a matching active row exists —
+ * "here, just not attached" vs "never imported", and that can flip mid-session.
  */
 export function pendingCastRef(
   row: WizardCastDraft,
@@ -110,9 +108,8 @@ export function resolveCastImports(
   // guards this at commit time; resolving it here means the store never
   // carries the dangling self-pointer in the first place).
   const unresolved: UnresolvedCastRef[] = []
-  // Names that resolved to nothing, keyed by the importing row's id, so the
-  // row can carry the ask forward and the list can re-check it against a cast
-  // the user is still editing.
+  // Names that resolved to nothing, keyed by importing row id, so the row carries
+  // the ask forward for the list to re-check against a cast still being edited.
   const wantedByRow = new Map<string, string>()
   const ref = (
     kind: 'faction' | 'location',

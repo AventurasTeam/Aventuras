@@ -6,13 +6,9 @@ import { recoverInFlightRuns } from '@/lib/pipeline'
 
 import { makeHarness, resetSingletons } from './harness'
 
-// A periodic-classifier burst yields each planned write separately and the
-// orchestrator commits each as its own delta, advancing the watermark only
-// after the last one. A crash in between therefore leaves committed happenings
-// behind an unmoved watermark, and the next pass re-reads the same window.
-// What keeps that from duplicating them is the run's pipeline_runs marker:
-// beginRun writes one for every kind, and boot's recoverInFlightRuns
-// reverse-replays every delta sharing the orphan's action_id.
+// A crashed burst leaves committed happenings behind an unmoved watermark, so the
+// next pass re-reads the same window. The pipeline_runs marker is what stops a
+// duplicate: boot reverse-replays every delta sharing the orphan's action_id.
 describe('a crashed classifier burst', () => {
   beforeEach(() => resetSingletons())
   afterEach(() => resetSingletons())

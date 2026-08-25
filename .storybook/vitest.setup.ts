@@ -1,6 +1,4 @@
-// react-native-css-interop's wrap-jsx guards its own component registration
-// with `if (process.env.NODE_ENV !== 'test')`, so under vitest nothing is
-// registered and every className in a story is inert. Importing the
-// registration module directly beats that guard while still using the
-// library's canonical component list rather than a local copy that can drift.
+// css-interop's wrap-jsx skips component registration when NODE_ENV === 'test',
+// leaving every className in a story inert. Import the registration module
+// directly to beat that guard — never hand-roll a local component list.
 import 'react-native-css-interop/dist/runtime/components'

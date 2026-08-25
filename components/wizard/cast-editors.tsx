@@ -253,9 +253,8 @@ export function CharacterEditor({
               nullLabel={t('wizard:cast.editor.unaffiliated')}
               candidates={factionCandidates}
               value={row.factionId}
-              // The remembered ask is cleared on any explicit assignment,
-              // including back to null: leaving it would let the warning
-              // resurrect on a field the user has already decided about.
+              // Cleared on any explicit assignment, including back to null — a kept ask
+              // would resurrect the warning on a field the user has already decided.
               onChange={(factionId) =>
                 wizardStore.patchCast(row, { factionId, unresolvedFactionName: '' })
               }

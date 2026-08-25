@@ -17,11 +17,9 @@ type ReasonTooltipProps = {
  * on the reason's presence changes the root element type, and React remounts
  * the control, dropping focus at the moment the state flips.
  *
- * The wrapper only takes a layout box while it carries a reason. `contents`
- * generates no box, so with a disabled control underneath — already
- * `pointer-events: none` — there is nothing left for the pointer to land on and
- * the browser never surfaces the tooltip. Varying the class keeps the same
- * element, so the remount hazard above still does not apply.
+ * `contents` generates no layout box, so over a `pointer-events: none` control
+ * nothing catches the pointer — hence `inline-flex` while a reason exists. The
+ * class-only change keeps the element, so the remount hazard above does not apply.
  */
 function ReasonTooltip({ reason, children }: ReasonTooltipProps) {
   if (Platform.OS !== 'web') return children
