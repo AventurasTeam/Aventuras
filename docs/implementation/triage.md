@@ -33,8 +33,10 @@ slice-planning gate forces its resolution before that slice is planned.
   re-inserts (conflicts), so one transient error hardened into a
   permanent one on every later boot. Failures now also reach the user
   through the existing crash-recovery modal, which no longer titles
-  itself "Story recovered" when nothing was reversed. Two gaps survive,
-  both cross-cutting:
+  itself "Story recovered" when nothing was reversed. The one
+  unreversible-by-any-retry case, version skew, is parked as a non-issue
+  ([parked.md](../parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed)),
+  which leaves two gaps, both cross-cutting:
   - **The gate is keyed on the classifier having been mid-run, not on
     the branch being hazardous.** A branch is only held back if its own
     `classifier_status` was left `running`. When some other kind's
@@ -56,16 +58,6 @@ slice-planning gate forces its resolution before that slice is planned.
     boot path, which at least keeps trying. Leaving the marker open
     instead would hand it to boot recovery, but it also re-opens a run
     the user was told had finished; that trade has not been made.
-  - **A permanently unreversible orphan has no resolution.** Boot retries
-    the reversal each time, so anything transient self-heals; what
-    remains is version skew — a delta naming a domain the running build's
-    registry lacks (`unknown target_table`), which no retry can fix. The
-    TODO at the catch site (`lib/pipeline/runtime/recovery.ts`) proposes
-    deleting the orphaned rows: **not viable as written.** Deltas are the
-    undo stack (`undoLastAction` reads them through `selectUndoTarget`),
-    so deleting them erases undo history while leaving the writes they
-    describe in place, and the next ctrl-Z reverses an older action
-    against a state it never saw.
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.
