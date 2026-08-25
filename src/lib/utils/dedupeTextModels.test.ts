@@ -63,6 +63,16 @@ describe('dedupeTextModels', () => {
       expect(result[0].reasoning).toBeUndefined()
       expect(result[0].structuredOutput).toBeUndefined()
     })
+
+    it('keeps an explicit false over a later undefined', () => {
+      const result = dedupeTextModels([model('a', { reasoning: false }), model('a')])
+      expect(result[0].reasoning).toBe(false)
+    })
+
+    it('keeps an explicit false from the later duplicate', () => {
+      const result = dedupeTextModels([model('a'), model('a', { reasoning: false })])
+      expect(result[0].reasoning).toBe(false)
+    })
   })
 
   it('returns an empty list unchanged', () => {

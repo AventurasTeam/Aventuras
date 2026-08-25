@@ -11,8 +11,8 @@ export function dedupeTextModels(models: TextModel[]): TextModel[] {
     if (existing) {
       deduped.set(id, {
         ...existing,
-        reasoning: existing.reasoning || model.reasoning || undefined,
-        structuredOutput: existing.structuredOutput || model.structuredOutput || undefined,
+        reasoning: existing.reasoning ?? model.reasoning,
+        structuredOutput: existing.structuredOutput ?? model.structuredOutput,
       })
       continue
     }

@@ -93,6 +93,17 @@ describe('reasoningCapabilityFor', () => {
     ).toBe('supported')
   })
 
+  it('treats an unknown model as supported when the catalogue omits the flag', () => {
+    // A capability-fetching provider whose entry for this model has no reasoning flag at all --
+    // distinct from an explicit false, which stays unsupported.
+    expect(
+      reasoningCapabilityFor({
+        ...base,
+        modelSupportsReasoning: undefined,
+      }),
+    ).toBe('supported')
+  })
+
   it('enforces only the thinking variants', () => {
     expect(reasoningCapabilityFor({ ...base, modelId: 'zai-org/glm-5:thinking' })).toBe('enforced')
   })
