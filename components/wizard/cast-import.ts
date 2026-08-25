@@ -42,9 +42,17 @@ export function pendingCastRef(
   row: WizardCastDraft,
   cast: readonly WizardCastDraft[],
 ): { field: 'faction' | 'parentLocation'; wantedName: string; resolvableId: string | null } | null {
+  // Self-exclusion mirrors the import path's and finish.ts's: a location named
+  // like its own pending parent must stay "missing", since the editor's picker
+  // never offers the row itself and commit would drop the pointer anyway.
   const match = (kind: WizardCastDraft['kind'], wanted: string): string | null =>
-    cast.find((r) => r.kind === kind && r.status === 'active' && norm(r.name) === norm(wanted))
-      ?.id ?? null
+    cast.find(
+      (r) =>
+        r.id !== row.id &&
+        r.kind === kind &&
+        r.status === 'active' &&
+        norm(r.name) === norm(wanted),
+    )?.id ?? null
 
   if (row.kind === 'character' && row.factionId == null) {
     const wanted = row.unresolvedFactionName.trim()

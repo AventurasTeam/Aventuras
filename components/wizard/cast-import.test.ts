@@ -517,6 +517,17 @@ describe('pendingCastRef', () => {
     expect(pendingCastRef(row, [row, loc])?.resolvableId).toBe(null)
   })
 
+  // The editor's picker never offers the row itself and commit drops a
+  // self-pointer, so "attach it" would point at a control that cannot.
+  it('does not resolve a location parent ask against the row itself', () => {
+    const row = {
+      ...emptyCastDraft('location', 'loc_1'),
+      name: 'The Vale',
+      unresolvedParentLocationName: 'The Vale',
+    }
+    expect(pendingCastRef(row, [row])?.resolvableId).toBe(null)
+  })
+
   it('reports a location parent ask on its own field', () => {
     const row = { ...emptyCastDraft('location', 'loc_1'), unresolvedParentLocationName: 'The Vale' }
     expect(pendingCastRef(row, [row])).toEqual({
