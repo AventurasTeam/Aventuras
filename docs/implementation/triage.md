@@ -19,36 +19,6 @@ slice-planning gate forces its resolution before that slice is planned.
 
 ## Inbox
 
-- **An orphan that will not reverse is suspended, never resolved.**
-  Raised 2026-08-24 disproving the crash-mid-burst followup; the
-  classifier half is closed as of 2026-08-25.
-  `resetStuckClassifierRunState` now consumes the recovery pass's
-  failures and leaves a branch still holding their deltas `running`,
-  which suspends the cadence, so the automatic path can no longer
-  re-read a window whose partial writes are on disk. A second fix the
-  same day made the `pipeline_runs` marker settle inside the reversal's
-  own transaction: written separately, a failure between the two left the
-  deltas reversed and the orphan open, and the replay is not idempotent —
-  undoing a `create` deletes (repeatable) but undoing a `delete`
-  re-inserts (conflicts), so one transient error hardened into a
-  permanent one on every later boot. Failures now also reach the user
-  through the existing crash-recovery modal, which no longer titles
-  itself "Story recovered" when nothing was reversed. The one
-  unreversible-by-any-retry case, version skew, is parked as a non-issue
-  ([parked.md](../parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed)),
-  and `abortRun` now leaves its marker open when its own reversal fails
-  so boot recovery still owns those deltas. One gap survives:
-  - **The gate is keyed on the classifier having been mid-run, not on
-    the branch being hazardous.** A branch is only held back if its own
-    `classifier_status` was left `running`. When some other kind's
-    orphan fails to reverse and the classifier happened to be `idle`,
-    nothing holds the branch: the cadence fires over a window carrying
-    those un-reversed writes. `[Run classifier now]` bypasses the
-    suspension by design, and the other kinds are event-triggered with
-    no equivalent gate at all. One rule at run-start — refuse to start
-    any kind on a branch with un-reversed orphan deltas — would cover
-    every kind, the manual override, and this asymmetry together, but it
-    needs the concurrency contract to learn about orphans.
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.

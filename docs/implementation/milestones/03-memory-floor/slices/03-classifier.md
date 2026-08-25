@@ -379,7 +379,9 @@ world-state-block edit surface rather than by this pipeline.
   cannot re-read a window whose partial writes survive. The boot that
   finally reverses them reconciles the branch normally, and
   `[Run classifier now]` overrides throughout — the suspension is
-  automatic only.
+  automatic only. The hold keys on this branch's own status, so another
+  kind's failed reversal does not trigger it; that residue is parked
+  ([parked.md](../../../../parked.md#the-classifier-can-read-a-window-holding-un-reversed-writes)).
 - **The reader was narrowed rather than the classifier widened.**
   `isGenerating` was "any run on this branch", which gave a `no-gate`
   classifier run a phantom streaming placeholder and a
