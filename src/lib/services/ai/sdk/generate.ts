@@ -24,14 +24,14 @@ import { jsonrepair } from 'jsonrepair'
 import * as z from 'zod'
 import { loggingMiddleware, patchResponseMiddleware, promptSchemaMiddleware } from './middleware'
 import { retryOn429Middleware } from './middleware/retryMiddleware'
-import { createModelFromProfile } from './providers'
-import { usesThinkTag } from './providers/config'
 import {
   buildProviderOptions,
+  type ResolvedPreset,
   resolvePresetModel,
   thinkingNudgeApplies,
-  type ResolvedPreset,
 } from './presetResolution'
+import { createModelFromProfile } from './providers'
+import { usesThinkTag } from './providers/config'
 
 const log = createLogger('Generate')
 
@@ -57,8 +57,6 @@ interface GenerateObjectOptions<T extends z.ZodType> extends BaseGenerateOptions
 // Config Resolution
 // ============================================================================
 
-type ResolvedConfig = ResolvedPreset
-
 interface NarrativeConfig {
   profile: APIProfile
   providerType: ProviderType
@@ -68,10 +66,6 @@ interface NarrativeConfig {
   providerOptions?: SharedV4ProviderOptions
   reasoning: ReasoningEffort
   useThinkTag: boolean
-}
-
-function resolveConfig(presetId: string, serviceId: string, debugId?: string): ResolvedConfig {
-  return resolvePresetModel({ presetId, serviceId, debugId })
 }
 
 /**
@@ -148,7 +142,7 @@ function createJsonExtractMiddleware(): LanguageModelMiddleware {
  * Takes the resolved config rather than a row of booleans: every flag it needs is already on
  * it, and four positional `boolean`s in a row is a swap no type error would ever catch.
  */
-function buildStructuredMiddleware(config: ResolvedConfig): LanguageModelMiddleware[] {
+function buildStructuredMiddleware(config: ResolvedPreset): LanguageModelMiddleware[] {
   const { supportsStructuredOutput, useThinkTag, preset, providerType } = config
 
   // retryOn429Middleware is intentionally outermost: it re-invokes the whole
@@ -210,7 +204,7 @@ export async function generateStructured<T extends z.ZodType>(
   serviceId: string,
 ): Promise<z.infer<T>> {
   const { presetId, schema, system, prompt, signal } = options
-  const config = resolveConfig(presetId, serviceId)
+  const config = resolvePresetModel({ presetId, serviceId, debugId: undefined })
   const { preset, providerType, model, providerOptions, reasoning, supportsStructuredOutput } =
     config
 
@@ -244,10 +238,12 @@ export async function generatePlainText(
   serviceId: string,
 ): Promise<string> {
   const { presetId, system, prompt, signal } = options
-  const { preset, providerType, model, providerOptions, reasoning, useThinkTag } = resolveConfig(
-    presetId,
-    serviceId,
-  )
+  const { preset, providerType, model, providerOptions, reasoning, useThinkTag } =
+    resolvePresetModel({
+      presetId,
+      serviceId,
+      debugId: undefined,
+    })
 
   log('generatePlainText', { presetId, model: preset.model, providerType })
 

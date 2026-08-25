@@ -6,8 +6,11 @@
 
 import type { ProviderType, TextModel } from '$lib/types'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
+import { createLogger } from '$lib/log'
+import { getBaseUrl, PROVIDERS } from './config'
 import { createTimeoutFetch } from './fetch'
-import { PROVIDERS, getBaseUrl } from './config'
+
+const log = createLogger('ModelFetcher')
 
 /** URLs that don't require authentication for model fetching */
 const NO_AUTH_PATTERNS = ['nano-gpt.com', 'gen.pollinations.ai', '127.0.0.1', 'localhost']
@@ -34,7 +37,7 @@ export async function fetchModelsFromProvider(
   apiKey?: string,
 ): Promise<TextModel[]> {
   // Provider-specific fetch logic
-  if (providerType === 'nanogpt') return fetchNanogptModels(baseUrl)
+  if (providerType === 'nanogpt') return fetchNanoGptModels(baseUrl, apiKey)
   if (providerType === 'openrouter') return fetchOpenRouterModels(baseUrl)
   if (providerType === 'google') return fetchGoogleModels(baseUrl, apiKey)
   if (providerType === 'anthropic') return wrap(fetchAnthropicModels(baseUrl, apiKey))
@@ -164,35 +167,55 @@ async function fetchNimModels(baseUrl?: string, apiKey?: string): Promise<TextMo
   return dedupeTextModels(raw.filter((m) => isNimTextGenModel(m.id)).map((m) => ({ id: m.id })))
 }
 
-interface NanogptModelEntry {
-  model: string
-  name?: string
-  capabilities?: string[]
+interface NanoGptCapabilities {
+  reasoning?: boolean
+  tool_calling?: boolean
+  parallel_tool_calls?: boolean
+  structured_output?: boolean
 }
 
-async function fetchNanogptModels(baseUrl?: string): Promise<TextModel[]> {
+interface NanoGptSubscriptionDetails {
+  included: boolean
+  inputTokenMultiplier?: number
+  note?: string
+}
+
+interface NanoGptModelEntry {
+  id: string
+  name?: string
+  capabilities?: NanoGptCapabilities
+  reasoning_efforts?: string[]
+  subscription: NanoGptSubscriptionDetails
+}
+
+async function fetchNanoGptModels(baseUrl?: string, apiKey?: string): Promise<TextModel[]> {
   // Use the detailed API to get capabilities including reasoning
-  const effectiveBase = baseUrl?.replace(/\/v1\/?$/, '') || 'https://nano-gpt.com/api'
+  const effectiveBase = baseUrl || 'https://nano-gpt.com/api/v1'
   const modelsUrl = effectiveBase.replace(/\/$/, '') + '/models?detailed=true'
 
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-  const response = await fetchFn(modelsUrl, { method: 'GET' })
+  const response = await fetchFn(modelsUrl, {
+    method: 'GET',
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  })
 
   if (!response.ok) {
     throw new Error(`Failed to fetch NanoGPT models: ${response.status} ${response.statusText}`)
   }
 
   const data = await response.json()
-  const textModels: Record<string, NanogptModelEntry> = data?.models?.text ?? {}
-
+  const textModels: NanoGptModelEntry[] = data?.data ?? []
   const models: TextModel[] = []
 
-  for (const [key, entry] of Object.entries(textModels)) {
-    const modelId = entry.model || key
+  for (const entry of textModels) {
+    if (!entry.id) {
+      log('dropping NanoGPT model entry with no id', entry)
+      continue
+    }
     models.push({
-      id: modelId,
-      reasoning: entry.capabilities?.includes('reasoning'),
-      structuredOutput: entry.capabilities?.includes('structured-output'),
+      id: entry.id,
+      reasoning: entry.capabilities?.reasoning,
+      structuredOutput: entry.capabilities?.structured_output,
     })
   }
 
@@ -211,14 +234,18 @@ async function fetchOpenRouterModels(baseUrl?: string): Promise<TextModel[]> {
   }
 
   const data = await response.json()
-  const textModels: { id: string; supported_parameters: string[] }[] = data?.data ?? []
+  const textModels: { id: string; name?: string; supported_parameters: string[] }[] =
+    data?.data ?? []
 
   const models: TextModel[] = []
 
   for (const entry of textModels) {
-    const modelId = entry.id
+    if (!entry.id) {
+      log('dropping OpenRouter model entry with no id', entry)
+      continue
+    }
     models.push({
-      id: modelId,
+      id: entry.id,
       reasoning: entry.supported_parameters?.includes('reasoning'),
       structuredOutput: entry.supported_parameters?.includes('structured_outputs'),
     })
@@ -231,18 +258,17 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
   const effectiveBaseUrl = baseUrl || 'https://api.anthropic.com/v1'
   const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
 
+  const fetchFn = createTimeoutFetch(30000, 'model-fetch')
+  const headers: Record<string, string> = { 'anthropic-version': '2023-06-01' }
+  if (apiKey) headers['x-api-key'] = apiKey
+
+  const response = await fetchFn(modelsUrl, { method: 'GET', headers })
+
+  if (!response.ok) {
+    throw new Error(`Anthropic API returned ${response.status} ${response.statusText}`)
+  }
+
   try {
-    const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-    const headers: Record<string, string> = { 'anthropic-version': '2023-06-01' }
-    if (apiKey) headers['x-api-key'] = apiKey
-
-    const response = await fetchFn(modelsUrl, { method: 'GET', headers })
-
-    if (!response.ok) {
-      console.warn(`[ModelFetcher] Anthropic API returned ${response.status}`)
-      return []
-    }
-
     const data = await response.json()
     if (data.data && Array.isArray(data.data)) {
       const models = data.data.map((m: { id: string }) => m.id).filter(Boolean)
@@ -251,7 +277,7 @@ async function fetchAnthropicModels(baseUrl?: string, apiKey?: string): Promise<
 
     return []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Anthropic models:', error)
+    log('Failed to fetch Anthropic models:', error)
     return []
   }
 }
@@ -283,27 +309,28 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
     encodeURIComponent(apiKey) +
     '&pageSize=200'
 
+  const fetchFn = createTimeoutFetch(30000, 'model-fetch')
+  const response = await fetchFn(modelsUrl, { method: 'GET' })
+
+  if (!response.ok) {
+    throw new Error(`Google API returned ${response.status} ${response.statusText}`)
+  }
+
   try {
-    const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-    const response = await fetchFn(modelsUrl, { method: 'GET' })
-
-    if (!response.ok) {
-      console.warn(`[ModelFetcher] Google API returned ${response.status}`)
-      return []
-    }
-
     const data = await response.json()
     if (data.models && Array.isArray(data.models)) {
       const models = (data.models as GoogleModelEntry[])
-        .filter((m) => m.supportedGenerationMethods?.includes('generateContent'))
+        .filter(
+          (m) =>
+            m.supportedGenerationMethods == null ||
+            m.supportedGenerationMethods.includes('generateContent'),
+        )
         .filter((m) => !isGoogleImageModel(m.name.replace(/^models\//, '')))
         .map((m) => {
           const id = m.name.replace(/^models\//, '')
-          const isGemini25 = id.includes('gemini-2.5')
           return {
             id,
-            reasoning: m.thinking ?? false,
-            isBudgetReasoning: isGemini25,
+            reasoning: m.thinking,
           }
         })
         .filter((m) => !!m.id)
@@ -312,7 +339,7 @@ async function fetchGoogleModels(baseUrl?: string, apiKey?: string): Promise<Tex
 
     return []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Google models:', error)
+    log('Failed to fetch Google models:', error)
     return []
   }
 }
@@ -353,15 +380,14 @@ async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
   const effectiveBaseUrl = baseUrl || PROVIDERS.ollama.baseUrl
   const tagsUrl = effectiveBaseUrl.replace(/\/$/, '').replace(/\/api$/, '') + '/api/tags'
 
+  const fetchFn = createTimeoutFetch(10000, 'model-fetch')
+  const response = await fetchFn(tagsUrl, { method: 'GET' })
+
+  if (!response.ok) {
+    throw new Error(`Ollama returned ${response.status} ${response.statusText}`)
+  }
+
   try {
-    const fetchFn = createTimeoutFetch(10000, 'model-fetch')
-    const response = await fetchFn(tagsUrl, { method: 'GET' })
-
-    if (!response.ok) {
-      console.warn(`[ModelFetcher] Ollama returned ${response.status}`)
-      return []
-    }
-
     const data = await response.json()
     if (data.models && Array.isArray(data.models)) {
       const models = data.models
@@ -372,7 +398,7 @@ async function fetchOllamaModels(baseUrl?: string): Promise<string[]> {
 
     return []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Ollama models (is Ollama running?):', error)
+    log('Failed to fetch Ollama models (is Ollama running?):', error)
     return []
   }
 }
@@ -385,18 +411,17 @@ async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<stri
   const effectiveBaseUrl = baseUrl || PROVIDERS.zhipu.baseUrl
   const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
 
+  const fetchFn = createTimeoutFetch(30000, 'model-fetch')
+  const response = await fetchFn(modelsUrl, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Zhipu API returned ${response.status} ${response.statusText}`)
+  }
+
   try {
-    const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-    const response = await fetchFn(modelsUrl, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
-
-    if (!response.ok) {
-      console.warn(`[ModelFetcher] Zhipu API returned ${response.status}`)
-      return []
-    }
-
     const data = await response.json()
     if (data.data && Array.isArray(data.data)) {
       const models = data.data.map((m: { id?: string }) => m.id || '').filter(Boolean)
@@ -405,7 +430,7 @@ async function fetchZhipuModels(baseUrl?: string, apiKey?: string): Promise<stri
 
     return []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Zhipu models:', error)
+    log('Failed to fetch Zhipu models:', error)
     return []
   }
 }
@@ -418,18 +443,17 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
   const effectiveBaseUrl = baseUrl || PROVIDERS.mistral.baseUrl
   const modelsUrl = effectiveBaseUrl.replace(/\/$/, '') + '/models'
 
+  const fetchFn = createTimeoutFetch(30000, 'model-fetch')
+  const response = await fetchFn(modelsUrl, {
+    method: 'GET',
+    headers: { Authorization: `Bearer ${apiKey}` },
+  })
+
+  if (!response.ok) {
+    throw new Error(`Mistral API returned ${response.status} ${response.statusText}`)
+  }
+
   try {
-    const fetchFn = createTimeoutFetch(30000, 'model-fetch')
-    const response = await fetchFn(modelsUrl, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    })
-
-    if (!response.ok) {
-      console.warn(`[ModelFetcher] Mistral API returned ${response.status}`)
-      return []
-    }
-
     const data = await response.json()
     if (data.data && Array.isArray(data.data)) {
       const models = data.data.map((m: { id?: string }) => m.id || '').filter(Boolean)
@@ -438,7 +462,7 @@ async function fetchMistralModels(baseUrl?: string, apiKey?: string): Promise<st
 
     return []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Mistral models:', error)
+    log('Failed to fetch Mistral models:', error)
     return []
   }
 }
@@ -455,13 +479,15 @@ async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]
   const url = 'https://gen.pollinations.ai/text/models'
   const fetchFn = createTimeoutFetch(30000, 'model-fetch')
 
-  try {
-    const response = await fetchFn(url, {
-      method: 'GET',
-      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-    })
-    if (!response.ok) return []
+  const response = await fetchFn(url, {
+    method: 'GET',
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  })
+  if (!response.ok) {
+    throw new Error(`Pollinations API returned ${response.status} ${response.statusText}`)
+  }
 
+  try {
     const data = await response.json()
     if (!Array.isArray(data)) return []
 
@@ -474,12 +500,12 @@ async function fetchPollinationsTextModels(apiKey?: string): Promise<TextModel[]
       )
       .map((m) => ({
         id: m.name,
-        reasoning: m.reasoning ?? false,
+        reasoning: m.reasoning,
       }))
 
     return models.length > 0 ? dedupeTextModels(models) : []
   } catch (error) {
-    console.warn('[ModelFetcher] Failed to fetch Pollinations text models:', error)
+    log('Failed to fetch Pollinations text models:', error)
     return []
   }
 }

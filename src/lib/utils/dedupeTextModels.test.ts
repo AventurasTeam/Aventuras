@@ -58,26 +58,20 @@ describe('dedupeTextModels', () => {
       expect(result[0].structuredOutput).toBe(true)
     })
 
-    it('lets the first duplicate win on isBudgetReasoning', () => {
-      // `??` not `||` here, and deliberately: `false` is a real answer for this flag (the model
-      // takes effort levels, not a token budget), so the first source to state it is trusted.
-      const result = dedupeTextModels([
-        model('a', { isBudgetReasoning: false }),
-        model('a', { isBudgetReasoning: true }),
-      ])
-      expect(result[0].isBudgetReasoning).toBe(false)
-    })
-
-    it('takes isBudgetReasoning from the later duplicate when the first left it unset', () => {
-      const result = dedupeTextModels([model('a'), model('a', { isBudgetReasoning: true })])
-      expect(result[0].isBudgetReasoning).toBe(true)
-    })
-
     it('leaves a capability undefined rather than false when nobody declares it', () => {
       const result = dedupeTextModels([model('a'), model('a')])
       expect(result[0].reasoning).toBeUndefined()
       expect(result[0].structuredOutput).toBeUndefined()
-      expect(result[0].isBudgetReasoning).toBeUndefined()
+    })
+
+    it('keeps an explicit false over a later undefined', () => {
+      const result = dedupeTextModels([model('a', { reasoning: false }), model('a')])
+      expect(result[0].reasoning).toBe(false)
+    })
+
+    it('keeps an explicit false from the later duplicate', () => {
+      const result = dedupeTextModels([model('a'), model('a', { reasoning: false })])
+      expect(result[0].reasoning).toBe(false)
     })
   })
 
