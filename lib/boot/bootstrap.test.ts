@@ -90,7 +90,7 @@ describe('runBootstrap', () => {
     expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
   })
 
-  it('a per-orphan reversal failure does not block boot or publish a report', async () => {
+  it('a per-orphan reversal failure does not block boot, and is reported', async () => {
     await seedRow()
     await ctx.db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await ctx.db.insert(branches).values({ id: 'b1', storyId: 's1', name: 'm', createdAt: 1 })
@@ -121,7 +121,11 @@ describe('runBootstrap', () => {
     const r = await runBootstrap(ctx)
 
     expect(r).toEqual({ status: 'ok' })
-    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBeNull()
+    // The orphan's writes are still on disk, so the user is told rather than left
+    // with a silently degraded story.
+    const published = recoveryReportStore.getSnapshot().pendingRecoveryReport
+    expect(published?.reversed).toEqual([])
+    expect(published?.failures).toMatchObject([{ runId: 'r-failed', storyId: 's1' }])
   })
 
   // Guards the load-bearing registerAllDomains()-before-recovery order. Simulate a

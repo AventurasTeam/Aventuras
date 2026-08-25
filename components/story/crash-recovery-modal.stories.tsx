@@ -36,6 +36,21 @@ const multiReport: RecoveryReport = {
   failures: [],
 }
 
+// Nothing reversed: the orphan's writes survive and the branch is held back from the
+// cadence, so the modal must not title itself "Story recovered".
+const degradedReport: RecoveryReport = {
+  reversed: [],
+  failures: [
+    {
+      runId: 'run-classifier',
+      kind: 'periodic-classifier',
+      actionId: 'action-classifier',
+      storyId: 's1',
+      error: new Error('could not reverse'),
+    },
+  ],
+}
+
 const meta: Meta<typeof CrashRecoveryModal> = {
   title: 'Compounds/Story/CrashRecoveryModal',
   component: CrashRecoveryModal,
@@ -77,6 +92,19 @@ export const MultipleRuns: Story = {
   play: async () => {
     const description = screen.getByText(/chapter-close pass was reverted/)
     expect(description.textContent).toContain('last AI response was reverted')
+  },
+}
+
+export const MemoryPaused: Story = {
+  args: {
+    report: degradedReport,
+    storyNames: { s1: 'Mornstone' },
+  },
+  play: async () => {
+    expect(screen.getByText('Recovery incomplete')).toBeInTheDocument()
+    const description = screen.getByText(/Memory updates for this story are paused/)
+    expect(description.textContent).toContain('Mornstone')
+    expect(description.textContent).toContain('restarting the app retries automatically')
   },
 }
 

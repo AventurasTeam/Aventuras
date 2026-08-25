@@ -16,7 +16,7 @@ const store = createStore<RecoveryReportSnapshot>()(() => INITIAL_SNAPSHOT)
 
 export const recoveryReportStore = {
   publish: (report: RecoveryReport): void => {
-    if (report.reversed.length === 0) return
+    if (report.reversed.length === 0 && report.failures.length === 0) return
     store.setState({ pendingRecoveryReport: report })
   },
   claim: (): RecoveryReport | null => {
