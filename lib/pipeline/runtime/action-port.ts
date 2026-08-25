@@ -1,12 +1,16 @@
 import type { MutationResult, PipelineAction } from '@/lib/actions/types'
-import type { DbCtx } from '@/lib/db'
+import type { DbCtx, SqlOp } from '@/lib/db'
 
 export type DeltaActionPort = {
   applyDeltaAction: (
     args: { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null },
     ctx: DbCtx,
   ) => Promise<MutationResult>
-  reverseReplayDeltas: (actionId: string, ctx: DbCtx) => Promise<number>
+  reverseReplayDeltas: (
+    actionId: string,
+    ctx: DbCtx,
+    settleOps?: (deltaCount: number) => readonly SqlOp[],
+  ) => Promise<number>
   // Returns the reversal-failure detail when `e` is a committed-aware
   // DeltaReplayError, or undefined for any other thrown value.
   describeReplayError: (e: unknown) => string | undefined
