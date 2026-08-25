@@ -140,4 +140,13 @@ describe('formatRecoveryTitle', () => {
   it('claims recovery when something was', () => {
     expect(formatRecoveryTitle(report(recovered('per-turn', 'story_1')))).toBe('Story recovered')
   })
+
+  it('does not claim recovery when a reversal succeeded alongside one that failed', () => {
+    expect(
+      formatRecoveryTitle({
+        reversed: [recovered('per-turn', 'story_1')],
+        failures: [failed('periodic-classifier', 'story_2')],
+      }),
+    ).toBe('Recovery incomplete')
+  })
 })

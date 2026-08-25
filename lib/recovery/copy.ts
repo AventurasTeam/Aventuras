@@ -38,9 +38,11 @@ function formatFailure(failure: RecoveryFailure, storyName: string | undefined):
     : t('crashRecovery.incompleteUnnamed')
 }
 
-/** "Story recovered" over-claims when nothing could be reversed. */
+/** "Story recovered" over-claims while any orphan's writes are still on disk. */
 export function formatRecoveryTitle(report: RecoveryReport): string {
-  return report.reversed.length > 0 ? t('crashRecovery.title') : t('crashRecovery.titleIncomplete')
+  return report.reversed.length > 0 && report.failures.length === 0
+    ? t('crashRecovery.title')
+    : t('crashRecovery.titleIncomplete')
 }
 
 export function formatRecoveryReport(
