@@ -494,17 +494,21 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                           />
                         </View>
                         <View className="min-w-0 flex-1 gap-0.5">
-                          <Text size="sm" className="font-medium">
-                            {row.name}
-                          </Text>
+                          {/* On the name line: it accounts for the disabled
+                              checkbox, so it has to be read before the row is. */}
+                          <View className="flex-row flex-wrap items-baseline gap-x-1.5">
+                            <Text size="sm" className="font-medium">
+                              {row.name}
+                            </Text>
+                            {row.exists ? (
+                              <Text size="xs" className="text-warning">
+                                {t('wizard:aiAssist.list.alreadyExists')}
+                              </Text>
+                            ) : null}
+                          </View>
                           <Text size="xs" variant="muted" numberOfLines={2}>
                             {row.detail}
                           </Text>
-                          {row.exists ? (
-                            <Text size="xs" variant="muted">
-                              {t('wizard:aiAssist.list.alreadyExists')}
-                            </Text>
-                          ) : null}
                         </View>
                       </Pressable>
                     )
