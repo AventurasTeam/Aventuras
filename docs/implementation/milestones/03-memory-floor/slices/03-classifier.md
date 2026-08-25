@@ -218,15 +218,22 @@ world-state-block edit surface rather than by this pipeline.
   the burst has landed. The orchestrator applies each delta as it is
   yielded, so there is no run-wide transaction to join. Watermark-after
   is the right order — the reverse would advance over facts that were
-  then reversed, a silent permanent hole in the graph — but it is **not**
-  coherent by construction, as this note originally claimed. The claim
-  assumed boot recovery reverse-replays an interrupted pass; nothing
-  does. Classifier runs leave no `pipeline_runs` marker, and
-  `resetStuckClassifierRunState` only repairs `$.state`, so a crash
-  between two committed deltas leaves those deltas on disk with the
-  watermark unmoved and the next pass re-writes the window's happenings.
-  Tracked in [`followups.md`](../../../../followups.md); closing it needs
-  either a transactional watermark, a run marker, or an idempotency key.
+  then reversed, a silent permanent hole in the graph — and it is
+  coherent, though not by the watermark alone. A crash between two
+  committed deltas does leave them on disk with the watermark unmoved,
+  but the marker is what closes the window: `beginRun` persists a
+  `pipeline_runs` row for every kind including this one, each burst delta
+  carries that run's `action_id`, and boot's `recoverInFlightRuns`
+  reverse-replays all of them before anything re-reads the range —
+  `abortRun` does the same for an in-process cancel. Pinned by
+  `lib/pipeline/__tests__/classifier-burst-recovery.test.ts`. The marker
+  settles inside the reversal's own transaction, because the replay is
+  not idempotent — undoing a `create` deletes (repeatable), undoing a
+  `delete` re-inserts (conflicts) — so an orphan left open over
+  already-reversed deltas would fail deterministically on every later
+  boot. The residual is the reversal that itself fails; boot then leaves
+  the branch un-reconciled rather than freeing it, so the cadence cannot
+  re-read the window (see the boot note below).
 - **`bracketProseReversal` is the only sanctioned entry to the reversal
   sweep.** It owns both classifier-era obligations (drain the in-flight
   run, hold `reversalInProgress` across the whole wait → sweep window),
@@ -366,7 +373,13 @@ world-state-block edit surface rather than by this pipeline.
   `pipeline_runs`), and is one key-scoped UPDATE on `$.state`;
   `retrying` and `failed-persistent` are explicitly left alone, since
   resetting those would erase a real error state and re-arm a broken
-  provider.
+  provider. It consumes that pass's failures rather than merely following
+  it: a branch still holding deltas from an orphan that would not reverse
+  keeps `running`, which already suspends the cadence, so the classifier
+  cannot re-read a window whose partial writes survive. The boot that
+  finally reverses them reconciles the branch normally, and
+  `[Run classifier now]` overrides throughout — the suspension is
+  automatic only.
 - **The reader was narrowed rather than the classifier widened.**
   `isGenerating` was "any run on this branch", which gave a `no-gate`
   classifier run a phantom streaming placeholder and a

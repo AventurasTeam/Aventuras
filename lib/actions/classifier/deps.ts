@@ -1,7 +1,7 @@
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
 import { IDLE_STATUS_JSON, idleStatus, nextStatusOnFailure } from '@/lib/classifier'
-import { branches, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
+import { branches, deltas, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
 import { embedTexts, type EmbedderConfig } from '@/lib/embedder'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
@@ -88,11 +88,32 @@ export async function recordClassifierPreflightFailure(
  * Boot-time orphan reconciliation: a branch left `state: 'running'` was owned by a
  * process that no longer exists. Scoped to `$.state` and to 'running' only —
  * 'retrying' / 'failed-persistent' are real errors the manual run must surface.
+ *
+ * `unreversedActionIds` are the orphans boot could not reverse-replay. A branch
+ * still holding their deltas is NOT reconcilable, so it keeps `running`, which
+ * already suspends the cadence — reconciling it would let the classifier re-read a
+ * window whose partial writes are still on disk. The boot that finally reverses
+ * them drops the branch from this set and reconciles it normally; `[Run classifier
+ * now]` overrides in the meantime, which is the user's call to make.
  */
-export async function resetStuckClassifierRunState(ctx: DbCtx): Promise<void> {
+export async function resetStuckClassifierRunState(
+  ctx: DbCtx,
+  unreversedActionIds: readonly string[],
+): Promise<void> {
+  // Keyed on surviving deltas, not on the failure alone: the boot path reverses
+  // without pruning, so a failure that left nothing behind (the marker write threw
+  // after a clean reversal) correctly reconciles.
+  const quarantine =
+    unreversedActionIds.length === 0
+      ? sql``
+      : sql` AND ${branches.id} NOT IN (SELECT ${deltas.branchId} FROM ${deltas}
+              WHERE ${deltas.actionId} IN (${sql.join(
+                unreversedActionIds.map((id) => sql`${id}`),
+                sql`, `,
+              )}))`
   await ctx.db.run(
     sql`UPDATE ${branches}
         SET classifier_status = json_set(classifier_status, '$.state', 'idle')
-        WHERE json_extract(classifier_status, '$.state') = 'running'`,
+        WHERE json_extract(classifier_status, '$.state') = 'running'${quarantine}`,
   )
 }

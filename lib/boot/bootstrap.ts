@@ -21,6 +21,7 @@ import {
   PER_TURN_KIND,
   pipelineEventBus,
   recoverInFlightRuns,
+  type RecoveryReport,
 } from '@/lib/pipeline'
 import {
   appSettingsStore,
@@ -117,9 +118,10 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   wireClassifierScheduler(ctx)
   // Recovery must never block boot: a failure of the orphan pass itself (not just
   // a per-orphan delta) is logged and boot proceeds to hydrate.
+  let recovery: RecoveryReport | null = null
   try {
-    const report = await recoverInFlightRuns(ctx)
-    if (report.reversed.length > 0) recoveryReportStore.publish(report)
+    recovery = await recoverInFlightRuns(ctx)
+    recoveryReportStore.publish(recovery)
   } catch (err) {
     logger.error('bootstrap.recovery_failed', {
       error: err instanceof Error ? err.message : String(err),
@@ -128,13 +130,20 @@ export async function runBootstrap(ctx: DbCtx): Promise<BootHydrateResult> {
   // A branch's own orphan: state: 'running' outlived the process that wrote it.
   // Separate from recoverInFlightRuns (pipeline_runs markers) because
   // classifier_status is a branches column with no marker row of its own — and
-  // unlike a marker's deltas, there is nothing here to reverse-replay.
-  try {
-    await resetStuckClassifierRunState(ctx)
-  } catch (err) {
-    logger.error('bootstrap.classifier_running_reset_failed', {
-      error: err instanceof Error ? err.message : String(err),
-    })
+  // unlike a marker's deltas, there is nothing here to reverse-replay. Ordered
+  // after recovery because which branches are reconcilable depends on which
+  // orphans reversed; with no report at all, none of them are.
+  if (recovery !== null) {
+    try {
+      await resetStuckClassifierRunState(
+        ctx,
+        recovery.failures.map((f) => f.actionId),
+      )
+    } catch (err) {
+      logger.error('bootstrap.classifier_running_reset_failed', {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
   // ctx.db (not the module-level default) so recovery and hydrate hit the
   // same instance.
