@@ -1077,9 +1077,10 @@ modals — the case is vanishingly rare (concurrent same-kind runs
 can't happen; chained runs don't run simultaneously), so pretty UI
 for it isn't worth designing.
 
-Zero-reverse orphans (the pre-first-delta case) and recovery
-failures don't mount the modal; they surface via observability
-only.
+Zero-reverse orphans (the pre-first-delta case) don't mount the
+modal — nothing reached disk, so there is nothing to report.
+Recovery failures do mount it, under a different title; see
+[Recovery-failure policy](#recovery-failure-policy).
 
 #### Recovery-failure policy
 
@@ -1088,16 +1089,36 @@ recovery, the loop catches per-orphan and continues; boot is not
 blocked. The orphan row stays with `finished_at = NULL` so the next
 boot retries, and the failure emits `pipeline.recovery_failed` at
 `error` severity via observability — visible in the Diagnostics Hub
-Logs tab. The modal layer stays silent: the user's state is
-consistent (SQLite ROLLBACK undid any partial replay), the failure
-is almost always cross-version-related (an orphan's `undo_payload`
-references a column shape that no longer exists post-migration —
-the deferred multi-version apply-dispatcher case), and the orphan
-retries transparently on next boot.
+Logs tab.
+
+The modal reports it too. SQLite ROLLBACK undoes the partial
+reverse-replay, not the orphan's own writes: those stay on disk, and
+for a `periodic-classifier` orphan the branch stays held back from
+the cadence (`resetStuckClassifierRunState` skips branches whose
+deltas survived). A story whose memory has silently stopped updating
+is indistinguishable from a healthy one, so this is not an
+observability-only state:
+
+- The title reads _"Recovery incomplete"_ unless every orphan
+  reversed. A boot that reversed one orphan and failed another has
+  still left writes behind, and _"Story recovered"_ would over-claim
+  it.
+- A `periodic-classifier` failure is the one kind that can promise
+  the pause, because it writes `state: 'running'` before any delta
+  and so definitionally causes one. Other kinds describe the fault
+  without promising a pause.
+- Both variants say the story's content is intact and that
+  restarting the app retries automatically.
 
 No max-retry counter and no admin "drop orphan" affordance for v1;
-stuck orphans remain visible in Logs across boots. The real fix
-lives with the multi-version apply-dispatcher work.
+stuck orphans remain visible in Logs across boots. Nearly every
+failure is transient DB IO that self-heals on the next boot. Two
+cannot, and both are parked: an orphan whose `undo_payload`
+references a column shape that no longer exists post-migration (the
+[multi-version apply-dispatcher](./parked.md#multi-version-undo_payload-apply-dispatcher)
+case, which that work resolves), and
+[a delta whose target table left the registry](./parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed).
+Reaching either means running a build older than its own data.
 
 ### `chainsTo` on predecessor
 
