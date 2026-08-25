@@ -623,12 +623,16 @@ at import, which separates two states the user acts on differently:
 _not in your cast_ (import the named row, or pick another) and _in
 your cast, not attached_ (assign it in the editor). Importing the
 named row afterwards therefore downgrades the warning with no
-re-import. Re-checking follows the same active-and-kind rule as
-resolution itself, so nothing is offered that commit would drop.
-Assigning the field — including back to `null` — clears the
-remembered ask, so a decision the user has already made cannot
-resurrect the warning. The ask is wizard-draft state only; Finish
-projects named columns and never carries it to an entity.
+re-import. Re-checking applies the same name-and-kind rule as
+resolution itself, status included: a staged row is in the cast, the
+editor's picker offers it, and Finish commits the pointer, so
+reporting it as missing would be false. Whether an active character
+belongs to a faction the story has yet to introduce is an authoring
+question left to the user. Assigning the field — including back to
+`null` — clears the remembered ask, so a decision the user has
+already made cannot resurrect the warning. The ask is wizard-draft
+state only; Finish projects named columns and never carries it to an
+entity.
 
 ### Lead-required gating
 

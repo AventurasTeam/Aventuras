@@ -35,24 +35,20 @@ export type UnresolvedCastRef = {
 
 /**
  * The reference a row still wants, re-checked against the live cast rather than the
- * import-time selection. `resolvableId` is set once a matching active row exists —
+ * import-time selection. `resolvableId` is set once a matching row exists —
  * "here, just not attached" vs "never imported", and that can flip mid-session.
  */
 export function pendingCastRef(
   row: WizardCastDraft,
   cast: readonly WizardCastDraft[],
 ): { field: 'faction' | 'parentLocation'; wantedName: string; resolvableId: string | null } | null {
-  // Self-exclusion mirrors the import path's and finish.ts's: a location named
-  // like its own pending parent must stay "missing", since the editor's picker
-  // never offers the row itself and commit would drop the pointer anyway.
+  // Kind and self-exclusion only, matching resolveCastImports and the editor's
+  // pickers. Status is deliberately not a filter: the pickers offer a staged
+  // target and finish.ts's castRef commits the pointer, so calling it missing
+  // would be false. Self is the one exclusion all three agree on.
   const match = (kind: WizardCastDraft['kind'], wanted: string): string | null =>
-    cast.find(
-      (r) =>
-        r.id !== row.id &&
-        r.kind === kind &&
-        r.status === 'active' &&
-        norm(r.name) === norm(wanted),
-    )?.id ?? null
+    cast.find((r) => r.id !== row.id && r.kind === kind && norm(r.name) === norm(wanted))?.id ??
+    null
 
   if (row.kind === 'character' && row.factionId == null) {
     const wanted = row.unresolvedFactionName.trim()

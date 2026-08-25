@@ -489,7 +489,7 @@ describe('pendingCastRef', () => {
     expect(pendingCastRef(row, [row, faction('Ashfall Pact')])).toBeNull()
   })
 
-  it('reports the ask as missing while no active row carries the name', () => {
+  it('reports the ask as missing while no row carries the name', () => {
     const row = character({ unresolvedFactionName: 'Ashfall Pact' })
     expect(pendingCastRef(row, [row])).toEqual({
       field: 'faction',
@@ -499,16 +499,18 @@ describe('pendingCastRef', () => {
   })
 
   // Re-checked at render so a later import flips the message without a re-import.
-  it('reports the ask as resolvable once a matching active row exists', () => {
+  it('reports the ask as resolvable once a matching row exists', () => {
     const row = character({ unresolvedFactionName: 'ashfall pact' })
     expect(pendingCastRef(row, [row, faction('Ashfall Pact')])?.resolvableId).toBe('fact_1')
   })
 
-  it('does not resolve against a staged row, matching what commit would accept', () => {
+  // The picker offers a staged faction and commit keeps the pointer; whether an
+  // active character belongs to a not-yet-introduced one is the user's call.
+  it('resolves against a staged row, which the picker offers and commit keeps', () => {
     const row = character({ unresolvedFactionName: 'Ashfall Pact' })
     expect(
       pendingCastRef(row, [row, faction('Ashfall Pact', 'fact_1', 'staged')])?.resolvableId,
-    ).toBe(null)
+    ).toBe('fact_1')
   })
 
   it('does not resolve a faction ask against a same-named location', () => {
