@@ -319,17 +319,16 @@ async function abortRun(
     reversalFailed = true
   }
   generationStore.abortRun(run.runId)
-  if (reversalFailed) {
-    try {
-      await markerOp(outcome)
-    } catch (e) {
-      logger.error(
-        'pipeline.marker_write_failed',
-        { runId: run.runId, outcome, error: String(e) },
-        { actionId: run.actionId },
-      )
-    }
-  }
+  // A failed reversal leaves its writes on disk, and `finished_at IS NULL` is the
+  // only thing that hands them to boot recovery — settling the marker here would
+  // strand them with no retry at all. Nothing user-facing reads pipeline_runs; the
+  // outcome the user sees rides `run_complete` on the event bus, still 'failed'.
+  if (reversalFailed)
+    logger.warn(
+      'pipeline.orphan_left_for_recovery',
+      { runId: run.runId, outcome },
+      { actionId: run.actionId },
+    )
   turnCaptureSink.endTurn(run.actionId, outcome, cause.reason)
   logger.error(
     'pipeline.run_aborted',

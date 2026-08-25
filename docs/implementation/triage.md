@@ -36,7 +36,8 @@ slice-planning gate forces its resolution before that slice is planned.
   itself "Story recovered" when nothing was reversed. The one
   unreversible-by-any-retry case, version skew, is parked as a non-issue
   ([parked.md](../parked.md#a-delta-whose-target-table-left-the-registry-cannot-be-reversed)),
-  which leaves two gaps, both cross-cutting:
+  and `abortRun` now leaves its marker open when its own reversal fails
+  so boot recovery still owns those deltas. One gap survives:
   - **The gate is keyed on the classifier having been mid-run, not on
     the branch being hazardous.** A branch is only held back if its own
     `classifier_status` was left `running`. When some other kind's
@@ -48,16 +49,6 @@ slice-planning gate forces its resolution before that slice is planned.
     any kind on a branch with un-reversed orphan deltas — would cover
     every kind, the manual override, and this asymmetry together, but it
     needs the concurrency contract to learn about orphans.
-  - **`abortRun` strands its deltas when its own reversal fails.** The
-    marker now rides the reversal transaction on the success path, but
-    when reverse-replay throws, `abortRun`
-    (`lib/pipeline/runtime/orchestrator.ts`) still settles the marker
-    with `outcome: 'failed'`. `recoverInFlightRuns` selects on
-    `finished_at IS NULL`, so boot never sees that run and the
-    un-reversed writes are stranded with no retry at all — worse than the
-    boot path, which at least keeps trying. Leaving the marker open
-    instead would hand it to boot recovery, but it also re-opens a run
-    the user was told had finished; that trade has not been made.
 - **Story isolation leaks across files under
   `--fileParallelism=false`.** Serializing puts every story file in one
   page, and some app-level DOM state survives the file that set it.
