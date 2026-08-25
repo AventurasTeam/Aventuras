@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Pressable, View } from 'react-native'
 import { expect, screen, userEvent, waitFor } from 'storybook/test'
 
+import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 
 import { ExpandableRow, useRowExpansion } from './expandable-row'
@@ -39,7 +40,11 @@ function Demo({
           removeLabel={`Remove ${row.name}`}
           expandLabel={`Expand ${row.name}`}
           collapseLabel={`Collapse ${row.name}`}
-          compact={<Text className="font-medium">{row.name}</Text>}
+          compact={
+            <View className="min-h-control-sm justify-center">
+              <Text className="font-medium">{row.name}</Text>
+            </View>
+          }
           editor={<Text variant="muted">Editor body for {row.name}</Text>}
           compactAction={
             row.id === compactActionRowId ? (
@@ -157,5 +162,74 @@ export const RemovingARowPrunesItsExpansionSoARecycledIdStartsCollapsed: Story =
     // from the leaked "dup-id" entry left behind by Row A.
     expect(await screen.findByText('Row C')).toBeInTheDocument()
     expect(screen.queryByText('Editor body for Row C')).not.toBeInTheDocument()
+  },
+}
+
+function mid(el: Element): number {
+  const r = el.getBoundingClientRect()
+  return (r.top + r.bottom) / 2
+}
+
+function row(compactAction?: ReactNode) {
+  return (
+    <ExpandableRow
+      expanded={false}
+      invalid={false}
+      onToggle={() => {}}
+      onRemove={() => {}}
+      removeLabel="Remove row"
+      expandLabel="Expand row"
+      collapseLabel="Collapse row"
+      compact={
+        <View className="min-h-control-sm justify-center">
+          <Text className="font-medium">char</Text>
+        </View>
+      }
+      editor={<Text variant="muted">Editor body</Text>}
+      compactAction={compactAction}
+    />
+  )
+}
+
+/**
+ * Pins the cluster's centreline: a Button-sized `compactAction`, the 22px
+ * icon-actions, `compact`'s first line and the row itself all share it.
+ * Vacuous unless NativeWind classNames resolve under vitest (cssInterop).
+ */
+export const CompactActionCentresOnTheRow: Story = {
+  render: () =>
+    row(
+      <Button variant="secondary" size="sm">
+        <Text>Set as lead</Text>
+      </Button>,
+    ),
+  play: async () => {
+    const action = screen.getByRole('button', { name: 'Set as lead' })
+    const remove = screen.getByRole('button', { name: 'Remove row' })
+    const name = screen.getByText('char')
+    const rowEl = action.closest('.rounded-md') as HTMLElement
+
+    const a = action.getBoundingClientRect()
+    const r = rowEl.getBoundingClientRect()
+    // The controls differ in height by design; only their centres must agree.
+    expect(a.height).toBeGreaterThan(remove.getBoundingClientRect().height)
+    expect(Math.abs(mid(action) - mid(remove))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(action) - mid(name))).toBeLessThanOrEqual(1)
+    // Centred in the row, not top-anchored with the slack dumped underneath.
+    expect(Math.abs(a.top - r.top - (r.bottom - a.bottom))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(action) - mid(rowEl))).toBeLessThanOrEqual(1)
+  },
+}
+
+/** Icon-only cluster (no `compactAction`) must centre on the same line box —
+ *  otherwise consumers that pass no action, like lore-list, sit tilted. */
+export const IconOnlyClusterStaysCentred: Story = {
+  render: () => row(),
+  play: async () => {
+    const remove = screen.getByRole('button', { name: 'Remove row' })
+    const name = screen.getByText('char')
+    const rowEl = remove.closest('.rounded-md') as HTMLElement
+    expect(Math.abs(mid(remove) - mid(name))).toBeLessThanOrEqual(1)
+    expect(Math.abs(mid(remove) - mid(rowEl))).toBeLessThanOrEqual(1)
   },
 }

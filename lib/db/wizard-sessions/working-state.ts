@@ -66,6 +66,12 @@ const characterCastDraftSchema = z.object({
   drives: z.array(z.string()).default(() => []),
   visual: castVisualDraftSchema.default(() => castVisualDraftSchema.parse({})),
   factionId: z.string().nullable().default(null),
+  /**
+   * The faction name an import asked for that resolved to no row, kept so the list
+   * can re-check it against the live cast. Cleared once the user assigns the field.
+   * Wizard-only: Finish projects named columns, so it never reaches an entity.
+   */
+  unresolvedFactionName: z.string().default(''),
 })
 
 const locationCastDraftSchema = z.object({
@@ -73,6 +79,8 @@ const locationCastDraftSchema = z.object({
   kind: z.literal('location'),
   parentLocationId: z.string().nullable().default(null),
   condition: z.string().default(''),
+  /** Parent-location counterpart of `unresolvedFactionName`. */
+  unresolvedParentLocationName: z.string().default(''),
 })
 
 const itemCastDraftSchema = z.object({

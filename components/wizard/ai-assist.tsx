@@ -217,9 +217,8 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     }
   }
 
-  // Every dismiss that can still lose work: Escape, tap-outside and swipe-down arrive through
-  // handleOpenChange, the failure card's Cancel calls this directly. A dirty overlay re-opens
-  // via the sibling confirm dialog; Keep clears nothing, Discard is the only reset.
+  // The single funnel for dismisses that can lose work. Dirty closes anyway and hands off to
+  // the sibling confirm dialog: Keep re-opens and clears nothing, Discard is the only reset.
   function requestClose() {
     setOpen(false)
     if (hasUnsavedCandidate()) {
@@ -229,8 +228,6 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
     resetOnClose()
   }
 
-  // Phone-sheet hardware back never reaches here — gorhom registers no BackHandler, so the
-  // press falls through to the wizard's own router.back().
   function handleOpenChange(next: boolean) {
     if (next) {
       setOpen(true)
@@ -497,17 +494,21 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
                           />
                         </View>
                         <View className="min-w-0 flex-1 gap-0.5">
-                          <Text size="sm" className="font-medium">
-                            {row.name}
-                          </Text>
+                          {/* On the name line: it accounts for the disabled
+                              checkbox, so it has to be read before the row is. */}
+                          <View className="flex-row flex-wrap items-baseline gap-x-1.5">
+                            <Text size="sm" className="font-medium">
+                              {row.name}
+                            </Text>
+                            {row.exists ? (
+                              <Text size="xs" className="text-warning">
+                                {t('wizard:aiAssist.list.alreadyExists')}
+                              </Text>
+                            ) : null}
+                          </View>
                           <Text size="xs" variant="muted" numberOfLines={2}>
                             {row.detail}
                           </Text>
-                          {row.exists ? (
-                            <Text size="xs" variant="muted">
-                              {t('wizard:aiAssist.list.alreadyExists')}
-                            </Text>
-                          ) : null}
                         </View>
                       </Pressable>
                     )

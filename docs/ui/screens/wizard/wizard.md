@@ -616,6 +616,24 @@ mean they have none rather than that the AI's answer was dropped.
 A reference the model simply omitted is not counted — only one it
 supplied and the wizard could not honour.
 
+The toast is transient, so the **row keeps the ask** and warns
+inline in the compact list until the field is decided. The name is
+re-checked against the live cast on every render rather than frozen
+at import, which separates two states the user acts on differently:
+_not in your cast_ (import the named row, or pick another) and _in
+your cast, not attached_ (assign it in the editor). Importing the
+named row afterwards therefore downgrades the warning with no
+re-import. Re-checking applies the same name-and-kind rule as
+resolution itself, status included: a staged row is in the cast, the
+editor's picker offers it, and Finish commits the pointer, so
+reporting it as missing would be false. Whether an active character
+belongs to a faction the story has yet to introduce is an authoring
+question left to the user. Assigning the field — including back to
+`null` — clears the remembered ask, so a decision the user has
+already made cannot resurrect the warning. The ask is wizard-draft
+state only; Finish projects named columns and never carries it to an
+entity.
+
 ### Lead-required gating
 
 - **Trigger** (set in step 1): `mode='adventure'` OR
@@ -665,9 +683,11 @@ Scene metadata:
 
 The metadata block surfaces structured-output refs
 (`sceneEntities`, `currentLocationId`) emitted by wizard-assist,
-resolved to entity names. Read-only — generation owns the refs.
-Constrained to **active** wizard-curated cast; prose can mention
-unbacked or staged names freely.
+resolved to entity names. Read-only **in the preview** — the refs
+are generation's proposal until the prose is accepted; they become
+editable in the committed state below. Constrained to **active**
+wizard-curated cast; prose can mention unbacked or staged names
+freely.
 
 #### Committed prose (after `Use this` OR after manual typing)
 
@@ -676,21 +696,41 @@ Opening                                            [✨]
 
 [textarea, editable, contains the prose]
 
-Scene metadata: Aria Stoneheart · Mornstone Keep
-  (visible only if AI-generated; user-written = empty)
+Cast in scene   [Aria Stoneheart] [Bran] [Old Jorin]
+Location        ( Not set | Mornstone Keep )
 ```
+
+**Scene tagging is authored, on both paths.** A generated opening
+seeds the two controls through structured output; a user-written
+one starts empty and can be tagged by hand. Toggle chips carry the
+active characters and items — names stay legible at a glance, which
+is what the older read-only line was for — and the location is a
+single-select whose control shape follows the usual option-count
+rule. Both slots degrade to guidance text when the Cast step has no
+candidate of that kind.
+
+Candidates are **active** and kind-filtered to match the filter
+Finish commits through, so nothing offered here is dropped on the
+way to `story_entries.metadata`, and a ref that fails that filter (a
+since-staged row, or a character id in the location slot) reads as
+unset rather than rendering a name in the wrong slot.
+
+Tagging writes metadata only. It never sets `metadata.model`, which
+stays the authorship discriminator per
+[`data-model.md → Opening entry`](../../../data-model.md#opening-entry).
 
 User edits prose freely after committing. Editing AI-generated
 prose does **not** clear metadata refs — refs stay intact (user
 might tweak prose without invalidating cast/location grounding).
-For fresh metadata, user regenerates via `✨`.
+For fresh metadata, the user regenerates via `✨` or corrects the
+refs in place, which is the remedy that keeps prose edits.
 
 The same rule covers a back-jump to Cast that reassigns the lead
-after generation: `sceneEntities` isn't re-derived, so the metadata
-line keeps resolving names from whoever it already references (the
-prior lead included) rather than going blank or auto-clearing. It's
-model-authored scene metadata, not an authored field — same
-resolution path as any other stale ref, regenerate via `✨`.
+after generation: `sceneEntities` isn't re-derived, so the controls
+keep resolving whoever they already reference (the prior lead
+included) rather than going blank or auto-clearing. A ref that no
+longer resolves is simply not offered, and drops on the next
+explicit edit — the user authoring, not an auto-clear.
 
 `✨` stays available in the committed state as the regenerate /
 refine entry point, per

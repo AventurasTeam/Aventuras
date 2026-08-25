@@ -33,6 +33,40 @@ export type UnresolvedCastRef = {
   wantedName: string
 }
 
+/**
+ * The reference a row still wants, re-checked against the live cast rather than the
+ * import-time selection. `resolvableId` is set once a matching row exists —
+ * "here, just not attached" vs "never imported", and that can flip mid-session.
+ */
+export function pendingCastRef(
+  row: WizardCastDraft,
+  cast: readonly WizardCastDraft[],
+): { field: 'faction' | 'parentLocation'; wantedName: string; resolvableId: string | null } | null {
+  // Kind and self-exclusion only, matching resolveCastImports and the editor's
+  // pickers. Status is deliberately not a filter: the pickers offer a staged
+  // target and finish.ts's castRef commits the pointer, so calling it missing
+  // would be false. Self is the one exclusion all three agree on.
+  const match = (kind: WizardCastDraft['kind'], wanted: string): string | null =>
+    cast.find((r) => r.id !== row.id && r.kind === kind && norm(r.name) === norm(wanted))?.id ??
+    null
+
+  if (row.kind === 'character' && row.factionId == null) {
+    const wanted = row.unresolvedFactionName.trim()
+    if (wanted.length > 0)
+      return { field: 'faction', wantedName: wanted, resolvableId: match('faction', wanted) }
+  }
+  if (row.kind === 'location' && row.parentLocationId == null) {
+    const wanted = row.unresolvedParentLocationName.trim()
+    if (wanted.length > 0)
+      return {
+        field: 'parentLocation',
+        wantedName: wanted,
+        resolvableId: match('location', wanted),
+      }
+  }
+  return null
+}
+
 export type CastImportResult = {
   rows: WizardCastDraft[]
   /**
@@ -78,6 +112,9 @@ export function resolveCastImports(
   // guards this at commit time; resolving it here means the store never
   // carries the dangling self-pointer in the first place).
   const unresolved: UnresolvedCastRef[] = []
+  // Names that resolved to nothing, keyed by importing row id, so the row carries
+  // the ask forward for the list to re-check against a cast still being edited.
+  const wantedByRow = new Map<string, string>()
   const ref = (
     kind: 'faction' | 'location',
     name: string | undefined,
@@ -91,12 +128,14 @@ export function resolveCastImports(
     const resolved = found === selfId ? null : found
     // A self-reference counts: the row still imports without the pointer it
     // asked for, which is the thing worth telling the user about.
-    if (resolved === null)
+    if (resolved === null) {
       unresolved.push({
         rowName,
         field: kind === 'faction' ? 'faction' : 'parentLocation',
         wantedName: name ?? '',
       })
+      if (name != null) wantedByRow.set(selfId, name.trim())
+    }
     return resolved
   }
 
@@ -121,6 +160,7 @@ export function resolveCastImports(
             distinguishing: clampStr(s.visual?.distinguishing ?? '', FIELD_MAX),
           },
           factionId: ref('faction', s.faction_name, id, s.name),
+          unresolvedFactionName: wantedByRow.get(id) ?? '',
         })
       case 'location':
         return wizardCastDraftSchema.parse({
@@ -130,6 +170,7 @@ export function resolveCastImports(
           description: s.description,
           status: s.status,
           parentLocationId: ref('location', s.parent_location_name, id, s.name),
+          unresolvedParentLocationName: wantedByRow.get(id) ?? '',
           condition: clampStr(s.condition ?? '', FIELD_MAX),
         })
       case 'item':

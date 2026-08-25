@@ -20,7 +20,14 @@
     "heading": "How does this story begin?",
     "emptyHint": "Generate with ✨, or start typing below.",
     "placeholder": "Write the opening, or generate one with ✨.",
-    "sceneMetadata": "Scene metadata: {{value}}",
+    "scene": {
+      "cast": "Cast in scene",
+      "location": "Location",
+      "noCast": "Add a character or item on the Cast step to tag the opening scene.",
+      "noLocations": "Add a location on the Cast step to set where the opening happens.",
+      "noLocationChosen": "Not set",
+      "hint": "Optional. Grounds the first turn in who is present and where; the classifier keeps it current from turn 2."
+    },
     "replaceConfirm": {
       "title": "Replace the opening?",
       "body": "The opening currently in the field will be lost.",
@@ -299,6 +306,12 @@
     "leadUnsetRemovedToast": "Lead unset — the lead was removed from the cast.",
     "importRefsDropped_one": "1 reference couldn't be matched and was left blank.",
     "importRefsDropped_other": "{{count}} references couldn't be matched and were left blank.",
+    "unresolvedRef": {
+      "factionMissing": "Suggested faction “{{name}}” is not in your cast.",
+      "factionUnattached": "“{{name}}” is in your cast — attach it in the editor.",
+      "parentMissing": "Suggested parent location “{{name}}” is not in your cast.",
+      "parentUnattached": "“{{name}}” is in your cast — attach it in the editor."
+    },
     "leadNotice": {
       "mode": "Adventure mode needs a lead character. Mark one active character as lead to continue.",
       "narration": "First- and second-person narration need a lead character. Mark one active character as lead to continue."

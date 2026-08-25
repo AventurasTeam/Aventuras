@@ -10,6 +10,7 @@ import {
   type ComponentProps,
 } from 'react'
 import {
+  BackHandler,
   Platform,
   StyleSheet,
   TextInput,
@@ -144,6 +145,18 @@ function BottomSheetContent({
       isMountedRef.current = false
     }
   }, [])
+
+  // Bottom-anchored sheets render a bare BottomSheetModal, and neither dialog (Content-only)
+  // nor gorhom registers a back handler — back would hit the screen's router.back() and pop
+  // the route out from under the sheet. Android-only: react-native-web's stub console.errors.
+  useEffect(() => {
+    if (!open || Platform.OS !== 'android') return
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onOpenChange(false)
+      return true
+    })
+    return () => sub.remove()
+  }, [open, onOpenChange])
 
   useEffect(() => {
     let cancelled = false

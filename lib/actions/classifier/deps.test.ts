@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
 
-import { branches, stories, storyEntries, type ClassifierStatus } from '@/lib/db'
+import { branches, deltas, stories, storyEntries, type ClassifierStatus } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
 import { resetStuckClassifierRunState, unprocessedTurnCount } from './deps'
@@ -17,6 +17,27 @@ async function seed(
     name: branchId,
     createdAt: 1,
     classifierStatus,
+  })
+}
+
+async function seedDelta(
+  db: Awaited<ReturnType<typeof createTestDb>>['db'],
+  branchId: string,
+  actionId: string,
+) {
+  await db.insert(deltas).values({
+    id: `d_${branchId}_${actionId}`,
+    branchId,
+    entryId: null,
+    actionId,
+    logPosition: 1,
+    source: 'ai_classifier',
+    targetTable: 'happenings',
+    targetId: 'hap_1',
+    op: 'create',
+    undoPayload: null,
+    encodingVersion: 1,
+    createdAt: 1,
   })
 }
 
@@ -44,7 +65,7 @@ describe('resetStuckClassifierRunState', () => {
     }
     await seed(db, 'b1', running)
 
-    await resetStuckClassifierRunState({ db, runInTransaction })
+    await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
     expect(await readStatus(db, 'b1')).toEqual({ ...running, state: 'idle' })
   })
@@ -69,7 +90,7 @@ describe('resetStuckClassifierRunState', () => {
     await seed(db, 'b-retrying', retrying)
     await seed(db, 'b-failed', failedPersistent)
 
-    await resetStuckClassifierRunState({ db, runInTransaction })
+    await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
     expect(await readStatus(db, 'b-retrying')).toEqual(retrying)
     expect(await readStatus(db, 'b-failed')).toEqual(failedPersistent)
@@ -80,9 +101,49 @@ describe('resetStuckClassifierRunState', () => {
     await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
     await seed(db, 'b-null', null)
 
-    await resetStuckClassifierRunState({ db, runInTransaction })
+    await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
     expect(await readStatus(db, 'b-null')).toBeNull()
+  })
+
+  it('leaves a branch holding an unreversed orphan running, reconciling its peers', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running: ClassifierStatus = {
+      state: 'running',
+      lastSuccessAt: null,
+      lastError: null,
+      retryCount: 0,
+      processedThrough: 4,
+    }
+    await seed(db, 'b-hazard', running)
+    await seed(db, 'b-clean', running)
+    await seedDelta(db, 'b-hazard', 'act_failed')
+    // A second branch's orphan that DID reverse: its id is absent from the argument,
+    // so its surviving deltas must not quarantine it.
+    await seedDelta(db, 'b-clean', 'act_reversed')
+
+    await resetStuckClassifierRunState({ db, runInTransaction }, ['act_failed'])
+
+    expect(await readStatus(db, 'b-hazard')).toEqual(running)
+    expect(await readStatus(db, 'b-clean')).toEqual({ ...running, state: 'idle' })
+  })
+
+  it('reconciles a failed orphan that left no deltas behind', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
+    const running: ClassifierStatus = {
+      state: 'running',
+      lastSuccessAt: null,
+      lastError: null,
+      retryCount: 0,
+      processedThrough: 4,
+    }
+    await seed(db, 'b1', running)
+
+    await resetStuckClassifierRunState({ db, runInTransaction }, ['act_no_deltas'])
+
+    expect(await readStatus(db, 'b1')).toEqual({ ...running, state: 'idle' })
   })
 
   it('leaves an idle branch alone (no-op, not just a matching outcome)', async () => {
@@ -97,7 +158,7 @@ describe('resetStuckClassifierRunState', () => {
     }
     await seed(db, 'b-idle', idle)
 
-    await resetStuckClassifierRunState({ db, runInTransaction })
+    await resetStuckClassifierRunState({ db, runInTransaction }, [])
 
     expect(await readStatus(db, 'b-idle')).toEqual(idle)
   })

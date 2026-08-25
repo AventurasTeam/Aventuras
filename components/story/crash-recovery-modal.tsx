@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
 import type { RecoveryReport } from '@/lib/pipeline'
-import { formatRecoveryReport, type RecoveryStoryNames } from '@/lib/recovery'
+import { formatRecoveryReport, formatRecoveryTitle, type RecoveryStoryNames } from '@/lib/recovery'
 
 type CrashRecoveryModalProps = {
   open: boolean
@@ -44,7 +44,7 @@ export function CrashRecoveryModal({
         }
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>{t('crashRecovery.title')}</AlertDialogTitle>
+          <AlertDialogTitle>{formatRecoveryTitle(report)}</AlertDialogTitle>
           <AlertDialogDescription>
             {formatRecoveryReport(report, storyNames)}
           </AlertDialogDescription>

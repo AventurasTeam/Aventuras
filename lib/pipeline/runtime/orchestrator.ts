@@ -300,29 +300,35 @@ async function abortRun(
   run.abortController.abort()
   let outcome: 'aborted' | 'failed' = cause.reason === 'user-cancel' ? 'aborted' : 'failed'
   let error = cause.error
+  const markerOp = (settled: 'aborted' | 'failed') =>
+    ctx.db
+      .update(pipelineRuns)
+      .set({ finishedAt: Date.now(), outcome: settled })
+      .where(eq(pipelineRuns.runId, run.runId))
+  let reversalFailed = false
   try {
-    await reverseReplayDeltas(run.actionId, ctx)
+    // The marker rides the reversal's transaction: settled separately, a failure
+    // between the two strands an open orphan over reversed deltas, and boot's
+    // replay is not idempotent — undoing a `delete` re-inserts and conflicts.
+    await reverseReplayDeltas(run.actionId, ctx, () => [markerOp(outcome).toSQL()])
   } catch (e) {
     const detail = describeReplayError(e)
     if (detail === undefined) throw e
     error = { kind: 'orchestrator', detail: `reverse-replay failed: ${detail}` }
     outcome = 'failed'
+    reversalFailed = true
   }
   generationStore.abortRun(run.runId)
-  try {
-    await ctx.db
-      .update(pipelineRuns)
-      .set({ finishedAt: Date.now(), outcome })
-      .where(eq(pipelineRuns.runId, run.runId))
-  } catch (e) {
-    // Deltas are already reversed; a failed marker leaves an orphan that boot
-    // recovery re-reverses idempotently. Finish cleanly regardless.
-    logger.error(
-      'pipeline.marker_write_failed',
-      { runId: run.runId, outcome, error: String(e) },
+  // A failed reversal leaves its writes on disk, and `finished_at IS NULL` is the
+  // only thing that hands them to boot recovery — settling the marker here would
+  // strand them with no retry at all. Nothing user-facing reads pipeline_runs; the
+  // outcome the user sees rides `run_complete` on the event bus, still 'failed'.
+  if (reversalFailed)
+    logger.warn(
+      'pipeline.orphan_left_for_recovery',
+      { runId: run.runId, outcome },
       { actionId: run.actionId },
     )
-  }
   turnCaptureSink.endTurn(run.actionId, outcome, cause.reason)
   logger.error(
     'pipeline.run_aborted',

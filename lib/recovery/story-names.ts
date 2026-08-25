@@ -10,7 +10,7 @@ export async function loadRecoveryStoryNames(
   db: DbCtx['db'],
 ): Promise<RecoveryStoryNames> {
   const storyIds = new Set<string>()
-  for (const run of report.reversed) {
+  for (const run of [...report.reversed, ...report.failures]) {
     if (run.storyId !== null) storyIds.add(run.storyId)
   }
 

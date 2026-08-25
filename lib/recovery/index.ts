@@ -1,5 +1,5 @@
 export { announceStorySettingsResetConfirmation } from './accessibility'
-export { formatRecoveryReport } from './copy'
+export { formatRecoveryReport, formatRecoveryTitle } from './copy'
 export type { RecoveryStoryNames } from './copy'
 export { getDatabaseFileRevealAction } from './database-file'
 export { loadRecoveryStoryNames } from './story-names'

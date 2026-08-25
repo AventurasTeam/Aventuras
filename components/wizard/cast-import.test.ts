@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 
-import { emptyCastDraft, entityStateSchemaForKind } from '@/lib/db'
+import { emptyCastDraft, entityStateSchemaForKind, type WizardCharacterDraft } from '@/lib/db'
 
-import { ARRAY_MAX, FIELD_MAX, resolveCastImports, VOICE_MAX } from './cast-import'
+import { ARRAY_MAX, FIELD_MAX, pendingCastRef, resolveCastImports, VOICE_MAX } from './cast-import'
 
 let n = 0
 /** Test seam — production mints real prefixed ids. */
@@ -470,5 +470,72 @@ describe('clamp constants track the entity-state-schema degradation bounds', () 
     const schema = entityStateSchemaForKind('faction')
     expect(boundAt(schema, ['agenda'])).toBe(ARRAY_MAX)
     expect(boundAt(schema, ['standing'])).toBe(FIELD_MAX)
+  })
+})
+
+describe('pendingCastRef', () => {
+  const character = (over: Partial<WizardCharacterDraft> = {}): WizardCharacterDraft => ({
+    ...emptyCastDraft('character', 'char_1'),
+    ...over,
+  })
+  const faction = (name: string, id = 'fact_1', status: 'active' | 'staged' = 'active') => ({
+    ...emptyCastDraft('faction', id),
+    name,
+    status,
+  })
+
+  it('reports nothing once the field is assigned, even with a remembered ask', () => {
+    const row = character({ factionId: 'fact_1', unresolvedFactionName: 'Ashfall Pact' })
+    expect(pendingCastRef(row, [row, faction('Ashfall Pact')])).toBeNull()
+  })
+
+  it('reports the ask as missing while no row carries the name', () => {
+    const row = character({ unresolvedFactionName: 'Ashfall Pact' })
+    expect(pendingCastRef(row, [row])).toEqual({
+      field: 'faction',
+      wantedName: 'Ashfall Pact',
+      resolvableId: null,
+    })
+  })
+
+  // Re-checked at render so a later import flips the message without a re-import.
+  it('reports the ask as resolvable once a matching row exists', () => {
+    const row = character({ unresolvedFactionName: 'ashfall pact' })
+    expect(pendingCastRef(row, [row, faction('Ashfall Pact')])?.resolvableId).toBe('fact_1')
+  })
+
+  // The picker offers a staged faction and commit keeps the pointer; whether an
+  // active character belongs to a not-yet-introduced one is the user's call.
+  it('resolves against a staged row, which the picker offers and commit keeps', () => {
+    const row = character({ unresolvedFactionName: 'Ashfall Pact' })
+    expect(
+      pendingCastRef(row, [row, faction('Ashfall Pact', 'fact_1', 'staged')])?.resolvableId,
+    ).toBe('fact_1')
+  })
+
+  it('does not resolve a faction ask against a same-named location', () => {
+    const row = character({ unresolvedFactionName: 'Mornstone' })
+    const loc = { ...emptyCastDraft('location', 'loc_1'), name: 'Mornstone' }
+    expect(pendingCastRef(row, [row, loc])?.resolvableId).toBe(null)
+  })
+
+  // The editor's picker never offers the row itself and commit drops a
+  // self-pointer, so "attach it" would point at a control that cannot.
+  it('does not resolve a location parent ask against the row itself', () => {
+    const row = {
+      ...emptyCastDraft('location', 'loc_1'),
+      name: 'The Vale',
+      unresolvedParentLocationName: 'The Vale',
+    }
+    expect(pendingCastRef(row, [row])?.resolvableId).toBe(null)
+  })
+
+  it('reports a location parent ask on its own field', () => {
+    const row = { ...emptyCastDraft('location', 'loc_1'), unresolvedParentLocationName: 'The Vale' }
+    expect(pendingCastRef(row, [row])).toEqual({
+      field: 'parentLocation',
+      wantedName: 'The Vale',
+      resolvableId: null,
+    })
   })
 })

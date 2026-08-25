@@ -40,7 +40,12 @@
     "periodicClassifierNamed": "An interrupted shutdown was detected in {{storyName}}. A background memory update was reverted; your story content is intact.",
     "periodicClassifierUnnamed": "An interrupted shutdown was detected. A background memory update was reverted; your story content is intact.",
     "genericNamed": "An interrupted shutdown was detected in {{storyName}}. An incomplete background update was reverted to keep the story consistent.",
-    "genericUnnamed": "An interrupted shutdown was detected. An incomplete background update was reverted to keep the story consistent."
+    "genericUnnamed": "An interrupted shutdown was detected. An incomplete background update was reverted to keep the story consistent.",
+    "titleIncomplete": "Recovery incomplete",
+    "memoryPausedNamed": "An interrupted background memory update in {{storyName}} could not be undone. Memory updates for this story are paused so nothing is duplicated — your story content is intact, and restarting the app retries automatically.",
+    "memoryPausedUnnamed": "An interrupted background memory update could not be undone. Memory updates for that story are paused so nothing is duplicated — your story content is intact, and restarting the app retries automatically.",
+    "incompleteNamed": "An interrupted background update in {{storyName}} could not be undone. Your story content is intact, and restarting the app retries automatically.",
+    "incompleteUnnamed": "An interrupted background update could not be undone. Your story content is intact, and restarting the app retries automatically."
   },
   "chrome": {
     "appSettings": "App Settings",

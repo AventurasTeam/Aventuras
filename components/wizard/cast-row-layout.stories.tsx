@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { cssInterop } from 'nativewind'
 import { View } from 'react-native'
 import { expect, screen, within } from 'storybook/test'
 
@@ -8,17 +7,13 @@ import { wizardStore } from '@/lib/stores'
 
 import { CharacterEditor } from './cast-editors'
 
-// `react-native-css-interop` skips component registration when NODE_ENV is 'test', so every
-// className is inert in vitest; registering View is the documented escape hatch, scoped here.
-cssInterop(View, { className: 'style' })
-
 const ROW: WizardCharacterDraft = {
   ...emptyCastDraft('character', 'char_layout'),
   name: 'Aria Stoneheart',
 }
 
-// Explicit pixel widths, never a className: the container has to be real even
-// if a future harness change makes the registration above a no-op again.
+// Explicit pixel widths, never a className: this story measures layout, so the
+// container must not depend on the harness resolving Tailwind at all.
 function Harness({ width }: { width: number }) {
   return (
     <View

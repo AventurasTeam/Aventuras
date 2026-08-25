@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import type { RecoveredRun, RecoveryReport } from '@/lib/pipeline'
+import type { RecoveredRun, RecoveryFailure, RecoveryReport } from '@/lib/pipeline'
 
-import { formatRecoveryReport } from './copy'
+import { formatRecoveryReport, formatRecoveryTitle } from './copy'
 
 function recovered(kind: string, storyId: string | null): RecoveredRun {
   return {
@@ -16,6 +16,20 @@ function recovered(kind: string, storyId: string | null): RecoveredRun {
 
 function report(...reversed: RecoveredRun[]): RecoveryReport {
   return { reversed, failures: [] }
+}
+
+function failed(kind: string, storyId: string | null): RecoveryFailure {
+  return {
+    runId: `run_${kind}`,
+    kind,
+    actionId: `action_${kind}`,
+    storyId,
+    error: new Error('could not reverse'),
+  }
+}
+
+function failureReport(...failures: RecoveryFailure[]): RecoveryReport {
+  return { reversed: [], failures }
 }
 
 describe('formatRecoveryReport', () => {
@@ -77,5 +91,62 @@ describe('formatRecoveryReport', () => {
     ).toBe(
       'An interrupted shutdown was detected in Mornstone. An incomplete background update was reverted to keep the story consistent.',
     )
+  })
+})
+
+describe('failure copy', () => {
+  it('promises the pause only for a classifier orphan, which is the kind that causes one', () => {
+    expect(
+      formatRecoveryReport(failureReport(failed('periodic-classifier', 'story_1')), {
+        story_1: 'Mornstone',
+      }),
+    ).toContain('Memory updates for this story are paused')
+  })
+
+  it('describes the fault without promising a pause for other kinds', () => {
+    const text = formatRecoveryReport(failureReport(failed('per-turn', 'story_1')), {
+      story_1: 'Mornstone',
+    })
+    expect(text).toContain('Mornstone')
+    expect(text).not.toContain('paused')
+  })
+
+  it('falls back to unnamed copy when the story id resolves to no title', () => {
+    expect(formatRecoveryReport(failureReport(failed('periodic-classifier', null)), {})).toContain(
+      'that story',
+    )
+  })
+
+  it('reports reversed runs and failures together', () => {
+    const text = formatRecoveryReport(
+      {
+        reversed: [recovered('per-turn', 'story_1')],
+        failures: [failed('periodic-classifier', 'story_1')],
+      },
+      { story_1: 'Mornstone' },
+    )
+    expect(text).toContain('was reverted')
+    expect(text).toContain('are paused')
+  })
+})
+
+describe('formatRecoveryTitle', () => {
+  it('does not claim recovery when nothing was reversed', () => {
+    expect(formatRecoveryTitle(failureReport(failed('periodic-classifier', 'story_1')))).toBe(
+      'Recovery incomplete',
+    )
+  })
+
+  it('claims recovery when something was', () => {
+    expect(formatRecoveryTitle(report(recovered('per-turn', 'story_1')))).toBe('Story recovered')
+  })
+
+  it('does not claim recovery when a reversal succeeded alongside one that failed', () => {
+    expect(
+      formatRecoveryTitle({
+        reversed: [recovered('per-turn', 'story_1')],
+        failures: [failed('periodic-classifier', 'story_2')],
+      }),
+    ).toBe('Recovery incomplete')
   })
 })

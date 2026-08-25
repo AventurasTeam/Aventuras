@@ -175,6 +175,38 @@ describe('reverseReplayDeltas', () => {
     expect(await reverseReplayDeltas('act_none', { db, runInTransaction })).toBe(0)
   })
 
+  it('runs settleOps even when the action has no deltas left to reverse', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+    await db.insert(stories).values({ id: 's-settle', title: 'X', createdAt: 1, updatedAt: 1 })
+
+    const count = await reverseReplayDeltas('act_none', { db, runInTransaction }, () => [
+      db.delete(stories).where(eq(stories.id, 's-settle')).toSQL(),
+    ])
+
+    expect(count).toBe(0)
+    expect(await db.select().from(stories).where(eq(stories.id, 's-settle'))).toHaveLength(0)
+  })
+
+  it('rolls the reversal back when a settleOp fails, so a retry meets untouched deltas', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await createKnight(ctx, 'act_rev')
+    expect(await knightRow(db)).toBeDefined()
+
+    await expect(
+      reverseReplayDeltas('act_rev', ctx, () => [
+        { sql: 'UPDATE no_such_table SET x = 1', params: [] },
+      ]),
+    ).rejects.toThrow()
+
+    // Undoing a create deletes the row; the failed settle must have taken that with
+    // it, or the next attempt reverses an already-reversed action.
+    expect(await knightRow(db)).toBeDefined()
+    expect(await db.select().from(deltas).where(eq(deltas.actionId, 'act_rev'))).toHaveLength(1)
+  })
+
   it('reverses a single update with the row surviving (positive restore)', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

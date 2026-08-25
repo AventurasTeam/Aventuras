@@ -66,7 +66,12 @@ export type ExpandableRowProps = {
   removeLabel: string
   expandLabel: string
   collapseLabel: string
-  /** Compact summary content (title line, preview, chips, inline errors). */
+  /**
+   * Compact summary content (title line, preview, chips, inline errors). Its
+   * **first line** must be a control-height line box (`min-h-control-sm` plus
+   * vertical centring): the action cluster centres on one, so a bare text line
+   * leaves the summary sitting above the actions.
+   */
   compact: ReactNode
   /** Inline editor body, rendered only while expanded. */
   editor: ReactNode
@@ -113,31 +118,35 @@ export function ExpandableRow({
         >
           <View className="min-w-0 flex-1 gap-1">{compact}</View>
         </Pressable>
-        <View className="flex-row items-start gap-1 pr-3 pt-row-y-lg">
-          {compactAction}
-          <IconAction
-            icon={Trash2}
-            label={removeLabel}
-            size="sm"
-            variant="destructive"
-            onPress={onRemove}
-          />
-          {/* Redundant pointer affordance for the row-wide Pressable above, which
-              stays the single control assistive tech sees — two buttons carrying
-              one action would read as a duplicate. RN derives both platforms'
-              hiding from `aria-hidden` alone. The flip is a plain RN transform:
-              it must reach neither react-native-svg (which can't resolve it) nor
-              NativeWind (whose native output for it is unverified here). */}
-          <Pressable
-            aria-hidden
-            focusable={false}
-            onPress={onToggle}
-            className="h-icon-action-sm w-icon-action-sm items-center justify-center"
-          >
-            <View style={expanded ? CARET_FLIPPED : undefined}>
-              <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
-            </View>
-          </Pressable>
+        {/* Centred on a control-height line box: a Button-sized compact action
+            beside 22px icon-actions parks their centres 7px apart if top-aligned,
+            and the min-height holds the cluster on the summary's FIRST line. */}
+        <View className="flex-row py-row-y-lg pr-3">
+          {/* Inner element owns the line box: min-height is border-box, so on the
+              padded element the padding absorbs it and icon-only clusters collapse. */}
+          <View className="min-h-control-sm flex-row items-center gap-1">
+            {compactAction}
+            <IconAction
+              icon={Trash2}
+              label={removeLabel}
+              size="sm"
+              variant="destructive"
+              onPress={onRemove}
+            />
+            {/* Pointer-only duplicate of the row-wide Pressable; `aria-hidden` leaves
+              one control for assistive tech. The flip must stay a plain RN transform —
+              react-native-svg can't resolve it, NativeWind's native output is unverified. */}
+            <Pressable
+              aria-hidden
+              focusable={false}
+              onPress={onToggle}
+              className="h-icon-action-sm w-icon-action-sm items-center justify-center"
+            >
+              <View style={expanded ? CARET_FLIPPED : undefined}>
+                <Icon as={ChevronDown} size="sm" className="text-fg-muted" />
+              </View>
+            </Pressable>
+          </View>
         </View>
       </View>
       {expanded ? <View className="gap-4 px-3 pb-3">{editor}</View> : null}

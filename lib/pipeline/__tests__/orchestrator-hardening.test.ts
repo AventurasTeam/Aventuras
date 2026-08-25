@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { type PipelineAction } from '@/lib/actions'
 import { deltas, entities, pipelineRuns, storyEntries } from '@/lib/db'
 import { getDiagnosticsSnapshot } from '@/lib/diagnostics'
-import { definePipeline, runPipeline, type PhaseResult } from '@/lib/pipeline'
+import {
+  definePipeline,
+  recoverInFlightRuns,
+  runPipeline,
+  type PhaseContext,
+  type PhaseResult,
+} from '@/lib/pipeline'
 import { generationStore } from '@/lib/stores'
 
 import { expectRan, makeHarness, resetSingletons } from './harness'
@@ -174,6 +180,54 @@ describe('orchestrator hardening', () => {
     expect(
       getDiagnosticsSnapshot().logEntries.some((e) => e.kind === 'pipeline.marker_write_failed'),
     ).toBe(true)
+  })
+
+  // The deltas an aborted run could not reverse are still on disk. Settling the
+  // marker would hide them from recoverInFlightRuns, which selects on
+  // finished_at IS NULL — the only retry they ever get.
+  it('leaves an unreversible abort open so boot recovery still owns it', async () => {
+    const { db, ctx } = await makeHarness()
+    definePipeline({
+      kind: 'poisoned',
+      phases: [
+        {
+          name: 'p',
+          run: async function* (phase: PhaseContext) {
+            // target_table is free text resolved through the runtime registry, so an
+            // unregistered name makes this run's own reversal throw for real.
+            await phase.db.insert(deltas).values({
+              id: 'd_poison',
+              branchId: 'b1',
+              entryId: null,
+              actionId: phase.actionId,
+              logPosition: 900,
+              source: 'ai_classifier',
+              targetTable: 'not_a_registered_table',
+              targetId: 'x',
+              op: 'create',
+              undoPayload: null,
+              encodingVersion: 1,
+              createdAt: 1,
+            })
+            return {
+              status: 'failed',
+              error: { kind: 'phase-logic', detail: 'poisoned' },
+            } as PhaseResult
+          },
+        },
+      ],
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('poisoned', ctx))
+    expect(result.outcome).toBe('failed')
+    expect(generationStore.getTxState().runs.size).toBe(0)
+
+    // Open, not settled — the poison delta survived and boot must still see it.
+    const [marker] = await db.select().from(pipelineRuns)
+    expect(marker.finishedAt).toBeNull()
+    const report = await recoverInFlightRuns(ctx)
+    expect(report.failures).toHaveLength(1)
   })
 
   it('a marker-write failure on abort finishes cleanly without leaking state', async () => {

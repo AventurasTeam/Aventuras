@@ -20,11 +20,29 @@ const reversedReport: RecoveryReport = {
 describe('recoveryReportStore', () => {
   beforeEach(() => recoveryReportStore.__reset())
 
-  it('ignores reports without reversed runs even when recovery failures exist', () => {
-    recoveryReportStore.publish({
+  // A failure is the degradation worth reporting: the orphan's writes stay on disk
+  // and a classifier orphan leaves its branch held back from the cadence.
+  it('publishes a report that only has failures', () => {
+    const failureReport = {
       reversed: [],
-      failures: [{ runId: 'r-failed', kind: 'per-turn', error: new Error('failed') }],
-    })
+      failures: [
+        {
+          runId: 'r-failed',
+          kind: 'periodic-classifier',
+          actionId: 'act_failed',
+          storyId: 's1',
+          error: new Error('failed'),
+        },
+      ],
+    }
+
+    recoveryReportStore.publish(failureReport)
+
+    expect(recoveryReportStore.getSnapshot().pendingRecoveryReport).toBe(failureReport)
+  })
+
+  it('ignores a report with nothing reversed and nothing failed', () => {
+    recoveryReportStore.publish({ reversed: [], failures: [] })
 
     expect(recoveryReportStore.getSnapshot()).toEqual({
       pendingRecoveryReport: null,

@@ -108,9 +108,13 @@ function LoreRow({ row, invalid, expanded, onToggleExpanded }: LoreRowProps) {
       collapseLabel={t('wizard:world.lore.collapse')}
       compact={
         <>
-          <Text className="font-medium" numberOfLines={1}>
-            {row.title.trim() || t('wizard:world.lore.untitled')}
-          </Text>
+          {/* Control-height line box: ExpandableRow centres its action cluster
+              on one, so a bare text line would sit above the icons. */}
+          <View className="min-h-control-sm justify-center">
+            <Text className="font-medium" numberOfLines={1}>
+              {row.title.trim() || t('wizard:world.lore.untitled')}
+            </Text>
+          </View>
           {!expanded ? (
             <>
               {!blank(row.body) ? (

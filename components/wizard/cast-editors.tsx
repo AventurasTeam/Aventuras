@@ -253,7 +253,11 @@ export function CharacterEditor({
               nullLabel={t('wizard:cast.editor.unaffiliated')}
               candidates={factionCandidates}
               value={row.factionId}
-              onChange={(factionId) => wizardStore.patchCast(row, { factionId })}
+              // Cleared on any explicit assignment, including back to null — a kept ask
+              // would resurrect the warning on a field the user has already decided.
+              onChange={(factionId) =>
+                wizardStore.patchCast(row, { factionId, unresolvedFactionName: '' })
+              }
             />
           </AccordionContent>
         </AccordionItem>
@@ -284,7 +288,9 @@ export function LocationEditor({ row, invalid, cast }: CommonEditorProps<WizardL
               nullLabel={t('wizard:cast.editor.noParent')}
               candidates={locationCandidates}
               value={row.parentLocationId}
-              onChange={(parentLocationId) => wizardStore.patchCast(row, { parentLocationId })}
+              onChange={(parentLocationId) =>
+                wizardStore.patchCast(row, { parentLocationId, unresolvedParentLocationName: '' })
+              }
             />
             <FormRow label={t('wizard:cast.editor.condition')}>
               <Input

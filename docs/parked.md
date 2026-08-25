@@ -810,6 +810,67 @@ person to ask "why is this regression not warned about?" finds the
 answer. Revisit if flashbacks ever get their own marker.
 Raised 2026-08-15 by the Slice 3.8 Task 2 review.
 
+#### A delta whose target table left the registry cannot be reversed
+
+`reverseReplayDeltas` resolves `deltas.target_table` through the
+runtime registry and throws `unknown target_table` when it misses, so
+an orphan written by a build that carried a domain the running build
+does not is unreversible by any retry. Boot then holds that branch
+back from the classifier cadence indefinitely
+(`resetStuckClassifierRunState`), which is the safe direction but a
+permanent one. Reaching it requires running a build older than its own
+data — a downgrade, or a domain renamed without a migration. Not
+corruption, and not otherwise reachable: every other reversal failure
+is transient DB IO and self-heals on the next boot.
+
+The obvious remedy is wrong and is recorded here so it is not
+re-proposed: deleting the orphaned rows would erase undo history,
+since deltas **are** the undo stack (`undoLastAction` reads them
+through `selectUndoTarget`), while leaving the writes they describe on
+disk — the next ctrl-Z would then reverse an older action against a
+state it never saw. A real fix needs the registry to carry retired
+table descriptors, or the reversal to degrade to a row-level no-op.
+
+Parked 2026-08-25 as a non-issue until a downgrade path exists; a
+`pipeline.recovery_failed` log naming `unknown target_table` in the
+field is the signal to revisit.
+
+#### The classifier can read a window holding un-reversed writes
+
+Boot holds a branch back from the cadence only when its own
+`classifier_status` was left `running`
+(`resetStuckClassifierRunState`). Another kind's failed reversal, on a
+branch whose classifier happened to be `idle`, holds nothing — so the
+cadence can fire over a window carrying those un-reversed writes.
+
+Benign in every reachable case, which is why it is parked rather than
+fixed:
+
+- **On the boot path it needs the version skew above.** Every other
+  reversal failure is transient and the next boot's retry clears it,
+  so the branch is either reconciled or already held back.
+- **In-session it needs a later successful turn.** The scheduler ticks
+  only on `kind === PER_TURN_KIND && outcome === 'completed'`, so the
+  failed run does not fire it.
+- **What is stranded is not duplicate material.** A failed reversal
+  leaves the aborted run's own entry and its piggyback facts on disk
+  _and_ on screen — the patchers never ran either, so the store keeps
+  the row too. The classifier then reading that prose is the ordinary
+  piggyback/classifier division of labour over a turn that, to the
+  user, happened. The real duplication case — the classifier re-reading
+  the window its own interrupted pass half-wrote — is covered.
+
+The obvious remedy is wrong and is recorded so it is not re-proposed:
+a run-start gate goes through `checkConcurrencyContract`, which gates
+**every** kind including `per-turn`, so it would block the user from
+submitting a turn to protect a background pass. A correct version has
+to be scoped to the kinds that re-derive from a window, and needs the
+concurrency contract to learn about orphans.
+
+Parked 2026-08-25 after the boot-recovery work closed the reachable
+half; duplicated happenings observed after a failed reversal are the
+signal to revisit.
+
 ### Memory pipeline (parked)
 
 Subsystem-scoped deferrals for the memory pipeline (retrieval,

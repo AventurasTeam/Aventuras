@@ -1822,7 +1822,12 @@ refs are constrained.
 **No separate classifier pass on the opening (v1).** User-written
 openings start with empty metadata (`worldTime: 0`,
 `sceneEntities: []`, `currentLocationId: null`); turn 2's classifier
-populates scene presence going forward. The first AI reply's prompt
+populates scene presence going forward. The wizard's opening step
+offers optional hand-tagging of the two scene fields on either
+authorship path (see
+[`wizard.md → Committed prose`](./ui/screens/wizard/wizard.md#committed-prose-after-use-this-or-after-manual-typing)),
+which changes what those fields may hold at commit but not the
+absence of a classifier pass, and never sets `metadata.model`. The first AI reply's prompt
 context includes the opening prose verbatim (protected buffer
 covers it — chapter 1 has only the opening entry, so the protected
 floor pulls the opening into context), so the AI grounds itself

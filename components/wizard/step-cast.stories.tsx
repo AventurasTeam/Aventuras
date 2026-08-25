@@ -365,6 +365,38 @@ export const ImportingWithoutTheReferencedFactionToastsTheDrop: Story = {
   },
 }
 
+// The toast is transient, so the row carries the ask — and tracks a cast still
+// being edited: importing the faction downgrades the message without a re-import.
+export const ADroppedRefWarnsOnTheRowAndTracksTheLiveCast: Story = {
+  beforeEach: () => seed(),
+  render: () => (
+    <StepCast
+      onSetupAssist={fn()}
+      assist={{ resolveModelId: () => MODEL_ID, cast: okListRun(CAST_SUGGESTIONS) }}
+    />
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest cast' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Generate' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Aria Stoneheart' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import selected' }))
+
+    // The faction was left out of the selection, so the row shows the ask.
+    expect(
+      await screen.findByText('Suggested faction “ashfall pact” is not in your cast.'),
+    ).toBeInTheDocument()
+
+    // Add the faction by hand; the row's warning re-checks and downgrades.
+    wizardStore.importCast([{ ...emptyCastDraft('faction', 'fact_added'), name: 'Ashfall Pact' }])
+    expect(
+      await screen.findByText('“ashfall pact” is in your cast — attach it in the editor.'),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Suggested faction “ashfall pact” is not in your cast.'),
+    ).not.toBeInTheDocument()
+  },
+}
+
 const SAME_NAME_ACROSS_KINDS: CastAssistValue = {
   entities: [
     {

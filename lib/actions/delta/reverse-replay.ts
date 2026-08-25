@@ -181,17 +181,30 @@ export async function reverseAndPruneDeltaRows(
   return rows.length
 }
 
-export async function reverseReplayDeltas(actionId: string, ctx: DbCtx): Promise<number> {
+/**
+ * `settleOps` commits caller ops in the SAME transaction as the reversal, keyed on
+ * the delta count so the caller can branch on it. Recovery uses it for the
+ * `pipeline_runs` marker: written separately, a failure between the two leaves the
+ * deltas reversed but the orphan open, and the next boot's replay is not idempotent
+ * — undoing a `create` deletes (repeatable), undoing a `delete` re-inserts (conflicts),
+ * so a transient error would harden into a permanent one.
+ */
+export async function reverseReplayDeltas(
+  actionId: string,
+  ctx: DbCtx,
+  settleOps: (deltaCount: number) => readonly SqlOp[] = () => [],
+): Promise<number> {
   try {
     const rows = (await ctx.db
       .select()
       .from(deltas)
       .where(eq(deltas.actionId, actionId))
       .orderBy(desc(deltas.logPosition))) as Delta[]
-    if (rows.length === 0) return 0
+    const settle = settleOps(rows.length)
+    if (rows.length === 0 && settle.length === 0) return 0
 
     const { ops, patches } = await buildUndoOps(rows, ctx)
-    await ctx.runInTransaction(ops)
+    await ctx.runInTransaction([...ops, ...settle])
     // Action layer owns the patch: invert in the held-branch store after the tx.
     for (const p of patches) resolveByTable(p.table)?.patcher?.(p.branchId, p.patch)
     return rows.length

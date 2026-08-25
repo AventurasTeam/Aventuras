@@ -120,12 +120,15 @@ describe('cast drafts', () => {
       traits: [],
       drives: [],
       factionId: null,
+      // The remembered import ask starts empty: a hand-added row never had one.
+      unresolvedFactionName: '',
       tags: [],
       visual: { physique: '', face: '', hair: '', eyes: '', attire: '', distinguishing: '' },
     })
     expect(emptyCastDraft('location', 'loc_1')).toMatchObject({
       kind: 'location',
       parentLocationId: null,
+      unresolvedParentLocationName: '',
       condition: '',
     })
     expect(emptyCastDraft('item', 'item_1')).toMatchObject({ kind: 'item', condition: '' })

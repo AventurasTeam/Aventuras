@@ -67,7 +67,13 @@ export function TierTupleInput({
 
         return (
           <View key={tier.name} className={hasLabels ? 'w-40' : 'w-24'}>
-            <FormRow label={tierLabel(tier.name)} error={showError ? errorMessage : undefined}>
+            {/* `stacked` pinned: the wrapper is always under FormRow's 640px
+                threshold, so the unpinned heuristic remounts the control mid-edit. */}
+            <FormRow
+              stacked
+              label={tierLabel(tier.name)}
+              error={showError ? errorMessage : undefined}
+            >
               {hasLabels ? (
                 <Select
                   mode="dropdown"

@@ -272,8 +272,9 @@ corrected premises as of that pass; file/line references are dated
   [`roadmap.md`](../../../roadmap.md) during the 2026-08-18 triage
   drain, and items parked under
   [`parked.md → Parked until signal`](../../../../parked.md#parked-until-signal).
-- Root-causing the flake and NativeWind gaps tracked in
-  [`followups.md → Tooling`](../../../../followups.md#tooling).
+- Root-causing the Storybook file-load flake and the NativeWind
+  gaps, both since closed — see
+  [`lessons-learned → Failed Storybook files with zero failed tests`](../../../lessons-learned/storybook-load-flake-zero-failed-tests.md).
 
 ## Acceptance criteria
 

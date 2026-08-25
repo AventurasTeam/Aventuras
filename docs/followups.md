@@ -13,63 +13,6 @@ for the placement rule.
 
 ## UX
 
-- **Optional user-side scene tagging on user-written openings.**
-  User-written openings start with empty
-  `metadata.sceneEntities` / `currentLocationId` / `worldTime: 0`
-  per the locked
-  [opening entry contract](./data-model.md#opening-entry).
-  Turn-2 classifier picks up scene presence from there. Some users may
-  want to pre-tag scene presence on the opening at wizard time — pick
-  which cast members are in the opening's scene, which location is
-  current — so first-turn generation context is grounded from entry 1.
-
-  Wizard concern, not data-model. The
-  [Wizard design pass](./explorations/2026-04-30-story-creation-wizard.md)
-  landed without this affordance — AI-generated openings emit
-  metadata refs via structured output, but user-written openings
-  remain empty until turn-2 classifier picks up. Adding a manual
-  scene-tagging surface on the wizard's step 5 was deliberately
-  deferred. Lifted from parked to active during 3.6b slice planning
-  (2026-08-13): with the Cast step landing, a starting-location
-  marker for user-written openings is the remaining gap turn 1
-  cannot recover on its own. The data shape already supports it
-  (metadata fields exist and are user-editable per
-  [Entry metadata shape](./data-model.md#entry-metadata-shape));
-  only the wizard UX is missing.
-
-- **Hardware back on a phone `Sheet` bypasses `onOpenChange`, so no
-  sheet can guard it.** `@rn-primitives/dialog` registers its
-  `hardwareBackPress` handler on `Content`, but a bottom-anchored
-  `SheetContent` routes to `BottomSheetContent`
-  (`components/ui/sheet.tsx`), which renders a bare `BottomSheetModal`
-  — and `@gorhom/bottom-sheet` registers no `BackHandler` anywhere.
-  The press reaches whatever the screen registered instead; in the
-  wizard that is `app/wizard.tsx`, which calls `router.back()` and
-  returns true, popping the route out from under the open sheet.
-  Surfaced by Slice 3.12b's AiAssist discard-confirm, where it is the
-  one dismiss path the confirm cannot intercept — on Android phone,
-  the platform that decision record singled out as unrecoverable.
-  The fix is a guarded `BackHandler` in `BottomSheetContent` mirroring
-  the dialog primitive, which would benefit every sheet consumer.
-  Held out of 3.12b for verification reasons, not effort: it changes
-  back-button behaviour app-wide and only an Android device can prove
-  it, E2E being desktop-only per
-  [`testing.md`](./testing.md#e2e-target-desktop-only). Land it in a
-  slice that can run the device loop.
-
-- **Suggest-cast unresolved references should surface visually, not
-  fall back to `null` silently.** Canon
-  ([`wizard.md → AI-suggest — structured identity`](./ui/screens/wizard/wizard.md#ai-suggest--structured-identity))
-  resolves a suggestion's `parent_location_name` / `faction_name`
-  at import time against same-kind rows in the imported selection
-  and the existing cast, and unresolved names fall back to `null`
-  with no feedback — the user learns their suggested character's
-  faction never attached only by opening the editor later. Wanted:
-  resolve at runtime in the list surface and render an inline error
-  or warning on rows whose references cannot be resolved (e.g. the
-  named faction was left unchecked at import). Surfaced during 3.6b
-  slice planning (2026-08-13); deliberately not in 3.6b scope.
-
 - **World-state block: render from metadata, strip the XML out of
   persisted entry content.** Scheduled for the post-M3 reconciliation
   pass, before M4 opens. Today `EntryCard` detects the block by
@@ -265,44 +208,66 @@ for the placement rule.
   single per-column side-channel exemption
   ([`data-model.md → Entry mutability & rollback`](./data-model.md#entry-mutability--rollback)):
   editing it mutates the row directly, writes no delta, and preserves
-  no prior text, so CTRL-Z cannot reach it. The implementation goes
-  further than the doc implies — `updateStoryEntryContent`
-  (`lib/actions/story-entries/operational.ts`) also calls
-  `undoRedoStore.clear()`, so a typo fix silently discards the redo
-  stack for _unrelated_ actions. Meanwhile the metadata edits landing
-  on the same card are fully delta-logged and reversible, so one entry
-  will carry two adjacent edit affordances with opposite reversibility
-  and no visible reason for the difference. The exemption is a
+  no prior text, so CTRL-Z cannot reach it. `updateStoryEntryContent`
+  (`lib/actions/story-entries/operational.ts`) additionally calls
+  `undoRedoStore.clear()`, so a typo fix discards the redo stack for
+  unrelated actions — but that matches canon rather than exceeding it
+  ("the stack clears on any new action", same section), and mirrors by
+  hand what `apply-delta-action.ts` does for every delta-logged write.
+  The genuine asymmetry is narrower: writing no delta, a content edit
+  is the only action that clears the forward path while contributing
+  nothing to the backward one, so it is pure loss where every other
+  action trades redo for undo. Narrowing it is therefore a canon
+  change, not a blast-radius fix, and cannot be split off from the
+  question below (re-verified 2026-08-24). Meanwhile the metadata
+  edits landing on the same card are fully delta-logged and
+  reversible, so one entry will carry two adjacent edit affordances
+  with opposite reversibility and no visible reason for the
+  difference. The exemption is a
   deliberate storage-economy decision, not an oversight — the open
   question is whether the UX is defensible as-is, wants an editor-local
   undo stack, or wants the redo-clear narrowed. Not scoped to the
   world-state-block work; surfaced alongside it 2026-07-23.
 
-- **A crash mid-burst re-classifies the window and duplicates its
-  happenings.** The classifier phase yields its planned writes one at a
-  time and the orchestrator commits each as its own delta; the watermark
-  advances only after the last one
-  (`lib/pipeline/definitions/periodic-classifier.ts`). A crash in between
-  leaves the deltas on disk with `processedThrough` unmoved, so the next
-  pass re-reads the same window. Boot's `resetStuckClassifierRunState`
-  assumes that state is coherent ("the watermark never advanced"), but it
-  is only coherent when _no_ delta landed. `createHappening` allocates a
-  fresh id per call and nothing keys on content, so the replay writes a
-  second copy of every happening, involvement and awareness row the
-  interrupted burst had already committed. Options, roughly in order of
-  cost: advance the watermark inside the same transaction as the burst;
-  give the pass a run marker that recovery reverse-replays like any other
-  orphan; or an idempotency key on classifier-sourced happenings. Not the
-  same hole as the `state: 'running'` orphan the boot reset already
-  covers. Surfaced 2026-07-31 reviewing
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
-
-- **Q3's Medium-weight signals are English-shaped and fail silently.**
+- **Q3 needs an overhaul and a re-spec, not signal-by-signal patches.**
   [`retrieval.md → Q3`](./memory/retrieval.md#q3-heuristic-prose-extract)
-  scores five signals; the two High ones (entity-name, lore-keyword) are
-  language-agnostic by construction — `matchTerms` uses `\p{L}\p{N}`
-  lookarounds specifically so accented and Cyrillic names match. Both
-  Medium ones are not, and neither degrades loudly.
+  specifies five per-sentence signals; three of them, plus the
+  tokenizer underneath, assume a lexical, Latin-script, past-tense
+  narrative, and the design has no way to report that the assumption
+  failed. The two High signals (entity-name, lore-keyword) are the
+  exception and are sound — `matchTerms` uses `\p{L}\p{N}` lookarounds
+  specifically so accented and Cyrillic names match, and they reuse an
+  index the hybrid pathway already builds. That layer is worth keeping;
+  what sits around it is what wants redesigning.
+
+  Two structural findings drive the re-spec, ahead of any individual
+  signal:
+  - **Q3 can never report itself absent, so a degenerate extract still
+    spends its full `w_prose` share.** `buildQueryStack`
+    (`lib/retrieval/queries.ts`) derives presence from `nonEmpty(text)`,
+    and `extractProse` returns top-K by source-order tie-break even when
+    every sentence scores zero — so a no-signal extract is textually
+    indistinguishable from a good one and reads present. Canon already
+    reasoned this exact failure through for Q2, which renders to the
+    empty string when every conditional line is empty and correctly
+    drops out of the blend
+    ([`retrieval.md → Q2`](./memory/retrieval.md#q2-structural-digest));
+    Q3 shipped without the equivalent, which makes this an
+    inconsistency inside the spec rather than a gap in the code. It is
+    also the prerequisite for measuring anything else here: a silent
+    degradation cannot be tuned against, so no empirical argument about
+    `w_prose` is available until Q3 can say it found nothing.
+  - **The score carries too little resolution to rank with.** Five
+    booleans sum to at most 11, and an ordinary sentence lands in the
+    0-4 band, so ties are the common case and every tie resolves to
+    source order. Selection collapses toward "the earliest sentences
+    that scored at all" well before any language mismatch enters the
+    picture. The signals are also summed as though independent when
+    they are not: `said` and `Drew` each fire the verb weight and the
+    entity weight off a single token.
+
+  The language-shape findings underneath, verified 2026-08-06 against
+  the shipped code:
   - **Action verbs.** `ACTION_VERBS` (`lib/retrieval/prose-extract.ts`)
     is 13 hardcoded English simple-past verbs matched by exact
     `Set.has`, no stemming. `stories.settings.definition.narration`
@@ -312,108 +277,43 @@ for the placement rule.
     `draw` / `drawing` do not. There is also no narrative-language
     setting at all (`translation.targetLanguage` is the translation
     _target_; entries store the original), so a story written in
-    Spanish or Russian scores zero on this signal permanently. And it
-    false-positives on names: `words` is lowercased before lookup, so
-    "**Drew** nodded." fires the verb weight, and if Drew is an entity
-    the same token also fires the entity weight — one word, two
-    signals, no action. `Said` has the same problem.
-  - **Dialogue spans.** `DIALOGUE_SPAN` covers `"…"`, `“…”` and
-    `‘…’` and misses `«…»` (French, Russian), `„…”` (German, Polish,
-    Czech) and `「…」` (CJK). Same weight, same silent miss, but
-    unlike the verb list this one is a three-alternative regex change
-    with no linguistics in it — worth taking on its own if the wider
-    redesign stalls.
+    Spanish or Russian scores zero on this signal permanently.
+  - **Dialogue spans.** `DIALOGUE_SPAN` covers `"…"`, `“…”` and `‘…’`
+    and misses `«…»` (French, Russian), `„…”` (German, Polish, Czech)
+    and `「…」` (CJK). Same weight, same silent miss.
   - **Brevity** is character-counted (`BREVITY_MAX_CHARS = 90`), so in
     CJK it fires on nearly every sentence and stops discriminating.
   - **CJK is never split into sentences at all**, which sits upstream
     of every signal above. `splitSentences` terminates on `[.!?…]`
     followed by whitespace; CJK uses ideographic terminators and no
-    inter-sentence space, so a whole entry collapses to one
-    "sentence". Q3 then embeds the full 400-1000 token entry — the
-    cost the extract exists to avoid — and `scores` degenerates to a
-    single meaningless number, emptying the probe's per-sentence
-    capture. Verified against the shipped splitter (2026-08-06):
-    a three-sentence Japanese passage returns one element.
+    inter-sentence space, so a whole entry collapses to one "sentence".
+    Q3 then embeds the full 400-1000 token entry — the cost the extract
+    exists to avoid — and `scores` degenerates to a single meaningless
+    number, emptying the probe's per-sentence capture. Verified against
+    the shipped splitter (2026-08-06): a three-sentence Japanese
+    passage returns one element.
     [`name-index.ts`](../lib/retrieval/name-index.ts) documents CJK as
     out of scope for word-boundary matching; nothing documents it for
     splitting, so this reads as an oversight rather than a deferral.
     Whatever replaces the scorer has to own this first.
 
-  Failure is silent throughout: when every sentence scores 0,
-  `extractProse` still returns top-K by source-order tie-break, so Q3
-  quietly degrades to "the first 4 sentences" while carrying its full
-  `w_prose = 0.30` share of the blend. One redesign direction worth
-  arguing: drop the hardcoded list for a set derived from the branch's
-  own happening titles, which the classifier writes in the story's
-  language — self-localizing, no linguistics, reuses an index the pass
-  already builds. Mildly circular, hence a discussion rather than a
-  patch. Touches the canon signal table, so it is a spec change, not
-  only a code change. Surfaced 2026-08-06 reviewing
+  One redesign direction worth arguing: drop the hardcoded verb list
+  for a term set derived from the branch's own happening titles, which
+  the classifier writes in the story's language — self-localizing, no
+  linguistics, reuses an index the pass already builds. The
+  circularity is sharper than it first reads, and settling it is part
+  of the re-spec: happening titles summarize what the memory layer has
+  already absorbed, so scoring sentences by resemblance to them biases
+  Q3 toward recorded material and away from the novel prose a
+  retrieval pass most needs to surface.
+
+  Scope is the canon signal table, the sentence tokenizer, the
+  presence contract and the scorer — a spec change before it is a code
+  change. The dialogue-span regex was previously carved out here as
+  separately shippable; folded back in 2026-08-24, because landing it
+  alone tunes one Medium signal inside a scoring model that is being
+  replaced. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
-
-## Tooling
-
-- **`pnpm test:run` over the whole repo cannot be read as a gate.** A
-  full run reports failed test _files_ with zero failed tests: a varying
-  handful of Storybook browser-project files fail to _load_ under
-  parallel contention (`Failed to fetch dynamically imported module`,
-  `Cannot connect to the iframe …`). The same files pass in isolation,
-  and the failing set differs run to run. Reproduced on `main`
-  (`54528591`) from a clean install — 9 files, 0 failed tests — so it is
-  not branch-specific. Until it is fixed, every slice's finish step has
-  to run the `unit` project and the Storybook files separately and argue
-  the residual by hand, which is exactly the shape that lets a real
-  browser-project regression hide. Likely levers: concurrency limits on
-  the browser project, or isolating it from the `unit` project's workers.
-  Surfaced 2026-07-30 finishing
-  [Slice 3.3](./implementation/milestones/03-memory-floor/slices/03-classifier.md).
-
-- **Storybook vitest project applies no NativeWind classNames, so every
-  style assertion in a story passes vacuously.** Components render with
-  only react-native-web's own generated class — no `rounded-md`, no
-  `hidden`, no theme tokens — so the repo has zero style-level test
-  coverage in CI. The Storybook dev server is unaffected. Confirmed by
-  probe (2026-08-18): a `<View className="hidden rounded-md">` renders
-  `class="css-view-g5y9jx"`, `style="null"`, computed `display: flex`,
-  `border-radius: 0px`.
-  **The obvious fix is disproven.** Carrying
-  `framework.options.pluginReactOptions.jsxImportSource: 'nativewind'`
-  into the vitest project does not work: adding
-  `rnw({ jsxRuntime: 'automatic', jsxImportSource: 'nativewind' })` to the
-  storybook project's plugins changes nothing, in either plugin order, and
-  `esbuild.jsxImportSource` changes nothing either. The plugin genuinely
-  runs — pointing it at a nonexistent module fails the build on
-  `<module>/jsx-runtime` — so the option is read but the transform that
-  actually compiles the story is not the one it configures.
-  **Root cause is the interop registration, not the JSX transform.** The
-  stylesheets are fine (6 sheets, 861 rules, the `.hidden` rule present).
-  What is missing is `cssInterop` registration for the RN core components:
-  adding `cssInterop(View, { className: 'style' })` by hand makes the same
-  probe render `class="css-view-g5y9jx hidden rounded-md"` with
-  `display: none` and `border-radius: 6px`.
-  `components/wizard/cast-row-layout.stories.tsx:16` already carries that
-  hand-registration as a local workaround.
-  **Importing NativeWind's own registration module does not work
-  (2026-08-18).** `nativewind/jsx-runtime` reaches
-  `react-native-css-interop`'s `runtime/components`, which owns the
-  canonical list, but that prebuilt CJS resolves `react-native` to a
-  different identity than the aliased stories do, so it decorates the
-  wrong `View`. Adding the import leaves the probe unchanged while the
-  full storybook project still reports 776 passing tests, so the suite
-  cannot be used to tell whether registration took: verify with the probe.
-  Registering in `.storybook/preview.tsx`, which the same aliasing
-  applies to, does work. That leaves the setup-file route as the only
-  path, and it must restate NativeWind's list (15 components plus 3
-  special mappings) locally, where it can drift.
-  **Cost is measured (2026-08-18).** With the full list registered, 17
-  story tests across 7 files fail: `world-time-edit-form` (4),
-  `lore-list` (4), `cast-editors` (3), `tier-tuple-input` (2),
-  `embedding-models-panel` (2), `worldtime-edit-sheet` (1), `button` (1),
-  heavily TextInput-adjacent. Payoff today is small — 6 style assertions
-  exist repo-wide — so the value is unlocking style and visual-regression
-  assertions going forward. Until it lands, treat any style assertion in
-  a story as unproven. Surfaced by M3.11 Task 7 (2026-07-22), root-caused
-  and priced 2026-08-18.
 
 ## Code structure
 
