@@ -96,9 +96,9 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
   retry, time-travel delete and regenerate reversible (`rollbackService`).
 - **Checkpoints** are full state snapshots; **retry backups** are in-memory only and do not
   survive an app restart or a story switch. A checkpoint is anchored to its `lastEntryId` and is
-  deleted with that entry, alongside the chapters and embedded images that reference it: it is the
-  fork point a branch would be created from, so an orphaned one yields a branch pointing at an
-  entry the database no longer holds.
+  deleted with that entry - in the same transaction, alongside the chapters and embedded images
+  that reference it. It is the fork point a branch would be created from, so an orphaned one
+  yields a branch pointing at an entry the database no longer holds.
 - **Removing an entry a branch forks from is refused**, and the check runs before anything else
   the operation would rewind - a rollback, or the lorebook activation a retry restores - because
   a refusal raised afterwards would leave that half applied. Editing and deleting are refused the

@@ -61,6 +61,24 @@ function runtimeVarPath(defId: string, field?: string): string {
 /** Entity tables that can carry runtime-variable values in their metadata JSON. */
 const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
 
+/** `DELETE ... IN (...)` split into chunks that stay under SQLite's bound-parameter limit. */
+function deleteInStatements(
+  table: string,
+  column: string,
+  ids: string[],
+): { sql: string; params: unknown[] }[] {
+  const CHUNK = 500
+  const statements: { sql: string; params: unknown[] }[] = []
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK)
+    statements.push({
+      sql: `DELETE FROM ${table} WHERE ${column} IN (${slice.map(() => '?').join(',')})`,
+      params: slice,
+    })
+  }
+  return statements
+}
+
 /**
  * Migrate visual descriptors from old string array format to new structured object format.
  * Handles both old format (string[]) and new format (VisualDescriptors object).
@@ -765,11 +783,6 @@ class DatabaseService {
     await db.execute(`UPDATE story_entries SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
-  async deleteStoryEntry(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM story_entries WHERE id = ?', [id])
-  }
-
   /**
    * Delete all main-branch entries for a story (branch_id IS NULL).
    * Also clears related world_state_snapshots so stale snapshots don't
@@ -778,14 +791,21 @@ class DatabaseService {
    * (chapters have no ON DELETE behavior tying them to story_entries).
    * Used by the SillyTavern chat import to overwrite story content.
    */
-  async clearStoryEntries(storyId: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM chapters WHERE story_id = ? AND branch_id IS NULL', [storyId])
-    await db.execute('DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL', [
-      storyId,
-    ])
-    await db.execute('DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL', [
-      storyId,
+  async clearStoryEntries(storyId: string, checkpointIds: string[] = []): Promise<void> {
+    await this.transaction([
+      {
+        sql: 'DELETE FROM chapters WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      {
+        sql: 'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      {
+        sql: 'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
     ])
   }
 
@@ -2481,6 +2501,29 @@ class DatabaseService {
    * Delete rows by id in a single query (chunked to stay under SQLite's variable limit),
    * instead of one round-trip per id. `column`/`table` are internal literals, never user input.
    */
+  /**
+   * Remove entries together with the rows that point at them, atomically. Half of this applied
+   * leaves a chapter or a checkpoint referencing an entry that is gone - the first makes the
+   * next delete fail on the foreign key, the second yields a branch with a dangling fork point.
+   */
+  async deleteEntriesWithDependents({
+    entryIds,
+    chapterIds = [],
+    checkpointIds = [],
+  }: {
+    entryIds: string[]
+    chapterIds?: string[]
+    checkpointIds?: string[]
+  }): Promise<void> {
+    await this.transaction([
+      // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.
+      ...deleteInStatements('chapters', 'id', chapterIds),
+      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      ...deleteInStatements('embedded_images', 'entry_id', entryIds),
+      ...deleteInStatements('story_entries', 'id', entryIds),
+    ])
+  }
+
   private async deleteByIds(table: string, ids: string[], column = 'id'): Promise<void> {
     if (ids.length === 0) return
     const db = await this.getDb()
@@ -2518,10 +2561,6 @@ class DatabaseService {
 
   async deleteCheckpoints(ids: string[]): Promise<void> {
     await this.deleteByIds('checkpoints', ids)
-  }
-
-  async deleteEmbeddedImagesForEntries(entryIds: string[]): Promise<void> {
-    await this.deleteByIds('embedded_images', entryIds, 'entry_id')
   }
 
   /**
