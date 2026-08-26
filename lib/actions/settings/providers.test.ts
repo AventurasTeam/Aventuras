@@ -6,7 +6,12 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { redactHeaderValue, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 import { appSettingsStore, rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { addProvider, quickWireModel, recordProviderEmbeddingDim } from './providers'
+import {
+  addProvider,
+  quickWireModel,
+  recordProviderEmbeddingDim,
+  updateProvider,
+} from './providers'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
 let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
@@ -71,6 +76,21 @@ describe('provider mutators', () => {
     const cached = appSettingsStore.getAppSettings().providers[0].cachedModels ?? []
     expect(cached.find((m) => m.id === 'm-a')?.capabilities?.embeddingDim).toBe(1024)
     expect(cached.find((m) => m.id === 'm-b')?.capabilities?.embeddingDim).toBe(512)
+  })
+
+  it('keeps a concurrent updateProvider from another surface, not just sibling dims', async () => {
+    await addProvider(oaiProvider, { db, runInTransaction })
+
+    await Promise.all([
+      recordProviderEmbeddingDim('prov-1', 'm-a', 1024, { db, runInTransaction }),
+      updateProvider('prov-1', { displayName: 'Renamed' }, { db, runInTransaction }),
+    ])
+
+    const provider = appSettingsStore.getAppSettings().providers[0]
+    expect(provider.displayName).toBe('Renamed')
+    expect(provider.cachedModels?.find((m) => m.id === 'm-a')?.capabilities?.embeddingDim).toBe(
+      1024,
+    )
   })
 
   it('registers the configured provider key for httpCallSink redaction', async () => {
