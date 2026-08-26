@@ -7,7 +7,6 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
@@ -62,18 +61,16 @@ class GenerationForegroundService : Service() {
     // -- Notification ----------------------------------------------------------
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Story Generation",
-                NotificationManager.IMPORTANCE_LOW   // no sound, minimal visual
-            ).apply {
-                description = "Shown while AI text generation is running in the background"
-                setShowBadge(false)
-            }
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Story Generation",
+            NotificationManager.IMPORTANCE_LOW   // no sound, minimal visual
+        ).apply {
+            description = "Shown while AI text generation is running in the background"
+            setShowBadge(false)
         }
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.createNotificationChannel(channel)
     }
 
     private fun buildNotification(): Notification {
