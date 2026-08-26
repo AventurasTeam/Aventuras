@@ -1,6 +1,5 @@
 export {
   readClassifierStatus,
-  recordClassifierPreflightFailure,
   resetStuckClassifierRunState,
   unprocessedTurnCount,
 } from './classifier/deps'

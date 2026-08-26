@@ -1,6 +1,6 @@
 import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
-import { IDLE_STATUS_JSON, idleStatus, nextStatusOnFailure } from '@/lib/classifier'
+import { idleStatus } from '@/lib/classifier'
 import { branches, deltas, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
 
 /**
@@ -36,29 +36,6 @@ export async function readClassifierStatus(
     .from(branches)
     .where(eq(branches.id, branchId))
   return row?.classifierStatus ?? idleStatus()
-}
-
-/**
- * Records a failure the classifier phase never saw. A pre-flight failure (an
- * unassigned `classifier` agent) halts the run before phase 0, so without this the
- * status stays idle: no backoff, no failed-persistent, no `lastError` for the pill,
- * and the cadence re-fires the doomed run on every committed turn.
- */
-export async function recordClassifierPreflightFailure(
-  branchId: string,
-  detail: string,
-  ctx: DbCtx,
-): Promise<void> {
-  const current = await readClassifierStatus(branchId, ctx)
-  const { status } = nextStatusOnFailure(current, { error: detail, at: Date.now() })
-  await ctx.db.run(
-    sql`UPDATE ${branches} SET classifier_status = json_set(
-          COALESCE(classifier_status, ${IDLE_STATUS_JSON}),
-          '$.state', ${status.state},
-          '$.lastError', ${status.lastError},
-          '$.retryCount', ${status.retryCount}
-        ) WHERE ${branches.id} = ${branchId}`,
-  )
 }
 
 /**

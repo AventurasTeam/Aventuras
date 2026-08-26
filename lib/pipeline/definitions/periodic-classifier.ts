@@ -76,7 +76,9 @@ async function readWindowEntries(
 // this still wins — the SDK aborts first; a longer one is deliberately capped.
 const CALL_TIMEOUT_MS = 300_000
 
-async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
+type StatusCtx = Pick<PhaseContext, 'db' | 'branchId'>
+
+async function readStatus(ctx: StatusCtx): Promise<ClassifierStatus> {
   const [row] = await ctx.db
     .select({ classifierStatus: branches.classifierStatus })
     .from(branches)
@@ -84,7 +86,7 @@ async function readStatus(ctx: PhaseContext): Promise<ClassifierStatus> {
   return row?.classifierStatus ?? idleStatus()
 }
 
-async function writeStatus(ctx: PhaseContext, status: ClassifierStatus): Promise<void> {
+async function writeStatus(ctx: StatusCtx, status: ClassifierStatus): Promise<void> {
   // branches is not delta-logged (classifier.md -> Persistence), so this is a
   // direct row write. Key-scoped json_set because the reversal clamp owns
   // $.processedThrough and can commit between this run's read and this write.
@@ -264,6 +266,14 @@ export function ensurePeriodicClassifierPipelineRegistered(): void {
         },
       ],
       affordance: 'pill-only',
+      onPreflightFailure: async (ctx, error) => {
+        const detail = error.kind === 'config-resolver' ? error.failure : error.detail
+        const { status } = nextStatusOnFailure(await readStatus(ctx), {
+          error: `classifier: ${detail}`,
+          at: Date.now(),
+        })
+        await writeStatus(ctx, status)
+      },
       gateBehavior: 'no-gate',
       concurrencyPolicy: { blockedBy: [PERIODIC_CLASSIFIER_KIND, 'chapter-close'] },
     })

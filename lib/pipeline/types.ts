@@ -108,6 +108,18 @@ export type PhaseNode =
 
 export type ConcurrencyPolicy = { blockedBy?: readonly string[]; yieldsTo?: readonly string[] }
 
+/**
+ * Reacts to the pipeline's own pre-flight failure. Pre-flight halts before phase
+ * 0, so a pipeline that keeps failure bookkeeping in a phase would never record
+ * one. The orchestrator calls this while the run is still registered, which is
+ * what puts the write under the same concurrency gate as the phases' writes — a
+ * caller inspecting the returned result is already outside it.
+ */
+export type PreflightFailureHook = (
+  ctx: Pick<PhaseContext, 'db' | 'branchId'>,
+  error: PipelineError,
+) => Promise<void>
+
 export type Pipeline = {
   kind: string
   phases: readonly PhaseNode[]
@@ -115,6 +127,7 @@ export type Pipeline = {
   gateBehavior: 'hard-gate' | 'no-gate'
   concurrencyPolicy: ConcurrencyPolicy
   chainsTo?: (run: RunState) => string | null
+  onPreflightFailure?: PreflightFailureHook
 }
 
 export type TxResult = {
