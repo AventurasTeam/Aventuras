@@ -14,6 +14,8 @@ interface AndroidBridge {
   startGenerationService(): void
   /** Stop the foreground service after generation completes / fails / is aborted. */
   stopGenerationService(): void
+  /** Toggle IME_FLAG_NO_PERSONALIZED_LEARNING on the WebView's input connections. */
+  setIncognitoKeyboard(enabled: boolean): void
 }
 
 interface Window {
