@@ -28,8 +28,10 @@ export {
   setDrainKickSink,
   setDrainStatusSink,
   startStorySwap,
+  withTurnAdmission,
   SwapBusyError,
   SwapConfigError,
   type StoryEmbedderActionRejection,
+  type TurnAdmissionResult,
   type SwapCancelOutcome,
 } from './app-deps'

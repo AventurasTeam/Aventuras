@@ -49,7 +49,6 @@ import {
   loadOpenStory,
   readRecentEntries,
   redoLastAction,
-  refreshEmbeddingStatus,
   refreshSuggestions,
   regenerateTurn,
   rollbackToEntry,
@@ -74,6 +73,7 @@ import {
   type SystemFailureMeta,
 } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { refreshEmbeddingStatus } from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
 import { createHtmlStreamBuffer, type HtmlStreamBuffer } from '@/lib/markdown'
 import {

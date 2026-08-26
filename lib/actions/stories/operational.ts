@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm'
 
 import { branches, entities, storyDefinitionSchema, storySettingsSchema, stories } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { kickStoryDrain } from '@/lib/embedder-swap'
 import {
   currentStoryStore,
   entitiesStore,
@@ -12,7 +13,6 @@ import {
   type OpenFailureKind,
 } from '@/lib/stores'
 
-import { kickStoryDrain } from '../embedder-swap'
 import { readRecentEntries } from '../story-entries/recent-window'
 import type { DbCtx } from '../types'
 

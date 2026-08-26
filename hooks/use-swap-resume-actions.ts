@@ -1,13 +1,13 @@
 import { useCallback } from 'react'
 
+import { db, runInTransaction } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 import {
   cancelStorySwap,
   refreshEmbeddingStatus,
   resumeStorySwap,
   SwapBusyError,
-} from '@/lib/actions'
-import { db, runInTransaction } from '@/lib/db'
-import { logger } from '@/lib/diagnostics'
+} from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
 import { toast } from '@/lib/toast'
 
