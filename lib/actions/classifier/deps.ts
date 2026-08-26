@@ -2,29 +2,6 @@ import { and, eq, gt, ne, sql } from 'drizzle-orm'
 
 import { IDLE_STATUS_JSON, idleStatus, nextStatusOnFailure } from '@/lib/classifier'
 import { branches, deltas, storyEntries, type ClassifierStatus, type DbCtx } from '@/lib/db'
-import { embedTexts, type EmbedderConfig } from '@/lib/embedder'
-import { appSettingsStore, currentStoryStore } from '@/lib/stores'
-
-import { resolveDrainConfig } from '../embedder-swap'
-
-/**
- * Transient decision-time embed for disambiguation — NOT a persisted embedding
- * write, so it sits outside the embedding-compute boundary (classifier.md).
- */
-export async function embedClassifierDescriptions(
-  texts: string[],
-): Promise<{ vectors: Float32Array[]; dim: number }> {
-  const storyId = currentStoryStore.getCurrentStory()?.storyId
-  if (storyId == null) return { vectors: [], dim: 0 }
-  const resolution = resolveDrainConfig(storyId)
-  if (!resolution.ok) return { vectors: [], dim: 0 }
-  const config: EmbedderConfig = resolution.config
-  const provider =
-    config.backend === 'provider'
-      ? appSettingsStore.getAppSettings().providers.find((p) => p.id === config.providerId)
-      : undefined
-  return embedTexts(config, texts, 'document', provider)
-}
 
 /**
  * Classifiable turns past the watermark — the cadence's input. Counts rows rather

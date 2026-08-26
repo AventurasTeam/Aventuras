@@ -16,6 +16,7 @@ export {
   composeRetrievalEmbedDeps,
   kickStoryDrain,
   countStoryEmbeddableRows,
+  embedClassifierDescriptions,
   isStorySwapPending,
   refreshEmbeddingStatus,
   reindexStoryNow,

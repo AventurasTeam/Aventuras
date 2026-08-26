@@ -1,5 +1,4 @@
 export {
-  embedClassifierDescriptions,
   readClassifierStatus,
   recordClassifierPreflightFailure,
   resetStuckClassifierRunState,
@@ -18,6 +17,7 @@ export {
   composeRetrievalEmbedDeps,
   kickStoryDrain,
   countStoryEmbeddableRows,
+  embedClassifierDescriptions,
   refreshEmbeddingStatus,
   reindexStoryNow,
   relabelStory,
