@@ -175,6 +175,12 @@ normal, git-tracked Kotlin class. `cargo`'s config discovery walks up from the b
 directory, so this only works because both `npx tauri android ...` and `./compileApk.sh` run with
 the repo root as their working directory — confirmed by tracing `BuildTask.kt`'s `workingDir`.
 
+This substitution is undocumented wry internals, not a public API — verified by reading
+`wry-0.55.1`'s `build.rs` directly (search the vendored crate's registry checkout for
+`CLASS_EXTENSION` if this ever needs re-verifying after a wry bump). If the override silently
+stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
+where the renamed placeholder or env var will be found.
+
 ### Signing APK
 
 ```bash
