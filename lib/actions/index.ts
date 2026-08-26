@@ -4,7 +4,6 @@ export {
   unprocessedTurnCount,
 } from './classifier/deps'
 export { runClassifierNow } from './classifier/run-now'
-export { defineAction } from './define-action'
 export { applyDeltaAction } from './delta/apply-delta-action'
 export { applyUndoPayload, computeUndoPayload } from './delta/delta-encoding'
 export { __resetRegistrationGuard, registerAllDomains } from './delta/registrations'
