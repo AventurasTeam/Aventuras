@@ -3,9 +3,9 @@ import { eq } from 'drizzle-orm'
 import { APP_SETTINGS_SINGLETON_ID, appSettings } from '@/lib/db'
 import { appSettingsStore, rehydrateAppSettings } from '@/lib/stores'
 
-import type { SettingsActionCtx } from './types'
+import type { DbCtx } from '../types'
 
-export async function setAppearanceThemeId(themeId: string, ctx: SettingsActionCtx): Promise<void> {
+export async function setAppearanceThemeId(themeId: string, ctx: DbCtx): Promise<void> {
   // Read the row, not the store cache: a read-modify-write off a stale in-memory
   // appearance (e.g. store not yet rehydrated after another write) would clobber
   // sibling keys. Mirrors normalizeAppSettingsRow's fresh-select pattern.

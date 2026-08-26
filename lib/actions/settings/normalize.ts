@@ -7,7 +7,7 @@ import {
   appSettingsDiagnosticsSchema,
 } from '@/lib/db'
 
-import type { SettingsActionCtx } from './types'
+import type { DbCtx } from '../types'
 
 export type NormalizeAppSettingsResult =
   | { status: 'normalized'; columns: string[] }
@@ -66,9 +66,7 @@ function addMissingDefaults(stored: unknown, parsed: unknown): unknown {
  * left untouched (corrupt data stays inspectable); steady-state boots diff
  * clean and write nothing.
  */
-export async function normalizeAppSettingsRow(
-  ctx: SettingsActionCtx,
-): Promise<NormalizeAppSettingsResult> {
+export async function normalizeAppSettingsRow(ctx: DbCtx): Promise<NormalizeAppSettingsResult> {
   const [row] = await ctx.db
     .select()
     .from(appSettings)

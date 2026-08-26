@@ -4,8 +4,8 @@ import { APP_SETTINGS_SINGLETON_ID, appSettings } from '@/lib/db'
 import { testEmbedder } from '@/lib/embedder'
 import { appSettingsStore, rehydrateAppSettings } from '@/lib/stores'
 
+import type { DbCtx } from '../types'
 import { recordProviderEmbeddingDim } from './providers'
-import type { SettingsActionCtx } from './types'
 
 export type ProviderEmbeddingDimInput = { providerId: string; modelId: string }
 export type ProviderEmbeddingDimResult = Awaited<ReturnType<typeof testEmbedder>>
@@ -15,7 +15,7 @@ const pendingDimensionProbes = new Map<string, Promise<ProviderEmbeddingDimResul
 
 export async function setEmbedderDefaults(
   input: { backend: 'local' | 'provider'; modelId: string | null; providerId: string | null },
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
 ): Promise<void> {
   // Fresh select, not the store cache: a read-modify-write off a stale
   // in-memory defaultStorySettings would clobber sibling keys. Mirrors
@@ -43,7 +43,7 @@ export async function setEmbedderDefaults(
 
 export async function probeProviderEmbeddingDim(
   input: ProviderEmbeddingDimInput,
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
   runTest: RunEmbedderProbe = testEmbedder,
 ): Promise<ProviderEmbeddingDimResult> {
   const provider = appSettingsStore
@@ -71,7 +71,7 @@ export async function probeProviderEmbeddingDim(
 
 export async function ensureProviderEmbeddingDim(
   input: ProviderEmbeddingDimInput,
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
   runTest: RunEmbedderProbe = testEmbedder,
 ): Promise<ProviderEmbeddingDimResult> {
   const cached = appSettingsStore

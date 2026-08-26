@@ -163,7 +163,7 @@ export function MemoryPanel({
     if (target.backend !== 'provider' || target.providerId == null) return
     const result = await ensureProviderEmbeddingDim(
       { providerId: target.providerId, modelId: target.modelId },
-      { db },
+      ctx,
     )
     if (!result.ok) throw new Error(result.message)
   }, [])

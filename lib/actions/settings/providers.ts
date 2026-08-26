@@ -12,10 +12,10 @@ import {
 import { generateId } from '@/lib/ids'
 import { appSettingsStore, rehydrateAppSettings } from '@/lib/stores'
 
-import type { SettingsActionCtx } from './types'
+import type { DbCtx } from '../types'
 
 async function persistConfig(
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
   patch: Partial<{
     providers: ProviderInstance[]
     profiles: ModelProfile[]
@@ -30,10 +30,7 @@ async function persistConfig(
   }
 }
 
-export async function addProvider(
-  provider: ProviderInstance,
-  ctx: SettingsActionCtx,
-): Promise<void> {
+export async function addProvider(provider: ProviderInstance, ctx: DbCtx): Promise<void> {
   const parsed = providerInstanceSchema.parse(provider)
   const current = appSettingsStore.getAppSettings().providers
   await persistConfig(ctx, { providers: [...current, parsed] })
@@ -42,7 +39,7 @@ export async function addProvider(
 export async function updateProvider(
   id: string,
   patch: Partial<ProviderInstance>,
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
 ): Promise<void> {
   const current = appSettingsStore.getAppSettings().providers
   if (!current.some((p) => p.id === id)) {
@@ -75,7 +72,7 @@ export async function recordProviderEmbeddingDim(
   providerId: string,
   modelId: string,
   embeddingDim: number,
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
 ): Promise<void> {
   if (!Number.isInteger(embeddingDim) || embeddingDim < 1) {
     throw new Error(`Invalid embedding dimension: ${embeddingDim}`)
@@ -102,11 +99,11 @@ export async function recordProviderEmbeddingDim(
   })
 }
 
-export async function setDefaultProvider(id: string | null, ctx: SettingsActionCtx): Promise<void> {
+export async function setDefaultProvider(id: string | null, ctx: DbCtx): Promise<void> {
   await persistConfig(ctx, { defaultProviderId: id })
 }
 
-export async function upsertProfile(profile: ModelProfile, ctx: SettingsActionCtx): Promise<void> {
+export async function upsertProfile(profile: ModelProfile, ctx: DbCtx): Promise<void> {
   const parsed = modelProfileSchema.parse(profile)
   const current = appSettingsStore.getAppSettings().profiles
   const exists = current.some((p) => p.id === parsed.id)
@@ -116,7 +113,7 @@ export async function upsertProfile(profile: ModelProfile, ctx: SettingsActionCt
 
 export async function setAssignments(
   assignments: Record<string, string>,
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
 ): Promise<void> {
   await persistConfig(ctx, { assignments })
 }
@@ -127,7 +124,7 @@ export async function setAssignments(
 // interim form owns exactly one provider in M2).
 export async function quickWireModel(
   modelRef: { providerId: string; modelId: string },
-  ctx: SettingsActionCtx,
+  ctx: DbCtx,
 ): Promise<void> {
   const narrative: ModelProfile = modelProfileSchema.parse({
     id: generateId('prof'),

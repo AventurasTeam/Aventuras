@@ -16,7 +16,13 @@ import '@/global.css'
 import { setAppearanceThemeId } from '@/lib/actions'
 import { registerRejectionHandler, useBootstrap } from '@/lib/boot'
 import { queryClient } from '@/lib/cache'
-import { DrizzleStudioDevTools, db, ensureAppSettingsSingleton, useDbMigrations } from '@/lib/db'
+import {
+  DrizzleStudioDevTools,
+  db,
+  ensureAppSettingsSingleton,
+  runInTransaction,
+  useDbMigrations,
+} from '@/lib/db'
 import { DensityProvider } from '@/lib/density'
 import { logger } from '@/lib/diagnostics'
 import { i18n } from '@/lib/i18n'
@@ -80,7 +86,7 @@ export default function RootLayout() {
             <ThemeProvider
               initialThemeId={appSettingsStore.getAppSettings().appearance.themeId}
               onThemeChange={(id) =>
-                void setAppearanceThemeId(id, { db }).catch((err) =>
+                void setAppearanceThemeId(id, { db, runInTransaction }).catch((err) =>
                   logger.error('action_layer.theme_persist_failed', {
                     themeId: id,
                     error: err instanceof Error ? err.message : String(err),

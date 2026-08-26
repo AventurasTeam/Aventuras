@@ -61,7 +61,6 @@ export {
   updateProvider,
   upsertProfile,
 } from './settings'
-export type { SettingsActionCtx } from './settings'
 export {
   createStoryWithBranch,
   type CreateStoryInput,

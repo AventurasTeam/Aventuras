@@ -15,7 +15,7 @@ import { Text } from '@/components/ui/text'
 import { useMasterDetailBack } from '@/hooks/use-master-detail-back'
 import { useTier } from '@/hooks/use-tier'
 import { setDebugLevelEnabled, setDiagnosticsEnabled } from '@/lib/actions'
-import { db } from '@/lib/db'
+import { db, runInTransaction } from '@/lib/db'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
 import { cn } from '@/lib/utils'
@@ -144,8 +144,8 @@ export default function SettingsRoute() {
           <DiagnosticsSettingsPanel
             enabled={enabled}
             debugEnabled={debugEnabled}
-            onToggleEnabled={(next) => void setDiagnosticsEnabled(next, { db })}
-            onToggleDebug={(next) => void setDebugLevelEnabled(next, { db })}
+            onToggleEnabled={(next) => void setDiagnosticsEnabled(next, { db, runInTransaction })}
+            onToggleDebug={(next) => void setDebugLevelEnabled(next, { db, runInTransaction })}
           />
           {__DEV__ ? (
             <Button variant="secondary" onPress={() => router.push('/dev')}>

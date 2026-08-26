@@ -14,7 +14,7 @@ import { Tag } from '@/components/ui/tag'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import { setEmbedderDefaults } from '@/lib/actions'
-import { db } from '@/lib/db'
+import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import {
   EMBEDDER_CATALOG,
@@ -74,13 +74,14 @@ export function EmbeddingModelsPanel({
   }, [installed])
 
   const setDefault = useCallback((modelId: string) => {
-    void setEmbedderDefaults({ backend: 'local', modelId, providerId: null }, { db }).catch(
-      (e: unknown) => {
-        logger.error('embedder.default_save_failed', {
-          error: e instanceof Error ? e.message : String(e),
-        })
-      },
-    )
+    void setEmbedderDefaults(
+      { backend: 'local', modelId, providerId: null },
+      { db, runInTransaction },
+    ).catch((e: unknown) => {
+      logger.error('embedder.default_save_failed', {
+        error: e instanceof Error ? e.message : String(e),
+      })
+    })
   }, [])
 
   const onInstalled = useCallback(
