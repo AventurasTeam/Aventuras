@@ -824,12 +824,7 @@ class StoryStore {
   async updateEntry(entryId: string, content: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    // Prevent editing during any generation or retry restore to avoid race conditions
-    // Silently return - UI should disable buttons using ui.isGenerating
-    if (this._isRetryInProgress || ui.isGenerating) {
-      log('Edit blocked - generation or retry in progress')
-      return
-    }
+    this.assertNotBusy('edit an entry')
 
     const existingEntry = this.entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
@@ -960,32 +955,33 @@ class StoryStore {
     ui.clearRetryBackup(true)
   }
 
-  // Delete a story entry
-  async deleteEntry(entryId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    // Prevent deleting during any generation or retry restore to avoid race conditions
-    // Silently return - UI should disable buttons using ui.isGenerating
+  /**
+   * Editing and deleting race with a generation or a retry restore rewriting the same entries.
+   * `isRetryInProgress` and `ui.isGenerating` let the UI disable the affordance up front; this
+   * refuses the ones that get through, rather than returning as if the work had been done.
+   */
+  private assertNotBusy(action: string): void {
     if (this._isRetryInProgress || ui.isGenerating) {
-      log('Delete blocked - generation or retry in progress')
-      return
+      throw new Error(`Cannot ${action} while a generation or retry is in progress`)
     }
+  }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
-    if (!existingEntry) throw new Error('Entry not found')
+  /** Every precondition for removing an entry, in one place. Returns the validated entry. */
+  private assertEntryDeletable(entryId: string): StoryEntry {
+    this.assertNotBusy('delete an entry')
 
-    // Prevent deleting inherited entries on a branch
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.currentStory.currentBranchId
-    if ((existingEntry.branchId ?? null) !== currentBranchId) {
+    if ((entry.branchId ?? null) !== (this.currentStory?.currentBranchId ?? null)) {
       throw new Error(
         'Cannot delete inherited entries. This entry belongs to ' +
-          (existingEntry.branchId === null ? 'the main branch' : 'a parent branch') +
+          (entry.branchId === null ? 'the main branch' : 'a parent branch') +
           '. You can only delete entries created on the current branch.',
       )
     }
 
-    // Check if this entry is a fork point for any branch
     const branchUsingEntry = this.branches.find((b) => b.forkEntryId === entryId)
     if (branchUsingEntry) {
       throw new Error(
@@ -993,6 +989,16 @@ class StoryStore {
           `Delete the branch first if you want to remove this entry.`,
       )
     }
+
+    return entry
+  }
+
+  // Delete a story entry
+  async deleteEntry(entryId: string): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const existingEntry = this.assertEntryDeletable(entryId)
+    const currentBranchId = this.currentStory.currentBranchId
 
     // Phase 2: Rollback on delete — cascade delete from this position with world state undo
     const rollbackEnabled =
@@ -1072,9 +1078,7 @@ class StoryStore {
     entryId: string,
   ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
     if (!this.currentStory) throw new Error('No story loaded')
-    if (this._isRetryInProgress || ui.isGenerating) {
-      throw new Error('Cannot regenerate while a generation or retry is in progress')
-    }
+    this.assertNotBusy('regenerate')
 
     const entry = this.entries.find((e) => e.id === entryId)
     if (!entry) throw new Error('Entry not found')

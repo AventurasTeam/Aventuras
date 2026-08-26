@@ -1084,7 +1084,14 @@
       return
     }
 
-    await story.deleteEntry(error.errorEntryId)
+    try {
+      await story.deleteEntry(error.errorEntryId)
+    } catch (err) {
+      // Regenerating over an entry that could not be removed would leave the failed one above
+      // the new narration, so the retry stops here.
+      ui.showToast(errMessage(err), 'error')
+      return
+    }
     ui.clearGenerationError()
 
     await generateResponse(userActionEntry.id, userActionEntry.content, {

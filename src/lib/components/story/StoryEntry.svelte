@@ -186,6 +186,9 @@
       !!findPrecedingUserAction(story.entries, entry.id),
   )
 
+  // A retry restore rewrites the same entries a generation does, and the store refuses both.
+  const entriesLocked = $derived(ui.isGenerating || story.isRetryInProgress)
+
   /**
    * Dismiss/delete this error entry from the story.
    */
@@ -215,8 +218,8 @@
       isGenerating: ui.isGenerating,
     })
 
-    if (ui.isGenerating) {
-      console.log('[StoryEntry] Already generating, returning')
+    if (entriesLocked) {
+      console.log('[StoryEntry] Already generating or retrying, returning')
       return
     }
 
@@ -1549,9 +1552,9 @@
           variant="text"
           size="icon"
           onclick={startEdit}
-          disabled={ui.isGenerating}
+          disabled={entriesLocked}
           class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={ui.isGenerating ? 'Cannot edit during generation' : 'Edit'}
+          title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
         >
           <Pencil class="h-4 w-4" />
         </Button>
@@ -1559,9 +1562,9 @@
           variant="text"
           size="icon"
           onclick={() => (isDeleting = true)}
-          disabled={ui.isGenerating}
+          disabled={entriesLocked}
           class="text-muted-foreground h-7 w-7 hover:text-red-500"
-          title={ui.isGenerating ? 'Cannot delete during generation' : 'Delete'}
+          title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
         >
           <Trash2 class="h-4 w-4" />
         </Button>
@@ -1904,7 +1907,7 @@
             variant="outline"
             size="sm"
             onclick={handleRetryFromEntry}
-            disabled={ui.isGenerating}
+            disabled={entriesLocked}
             class="h-8 border-red-500/30 px-3 text-red-500 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
           >
             <RefreshCw class="h-3.5 w-3.5" />
@@ -1914,7 +1917,7 @@
             variant="outline"
             size="sm"
             onclick={handleDismissError}
-            disabled={ui.isGenerating}
+            disabled={entriesLocked}
             class="text-muted-foreground border-border h-8 px-3 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
           >
             <Trash2 class="h-3.5 w-3.5" />
