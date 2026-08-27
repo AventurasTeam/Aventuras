@@ -1,7 +1,9 @@
 package com.karelian.aventura
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.view.inputmethod.InputMethodManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
@@ -91,6 +93,17 @@ class MainActivity : TauriActivity() {
       val l = kotlin.math.ceil(bars.left / d).toInt()
       val r = kotlin.math.ceil(bars.right / d).toInt()
       return """{"top":$t,"bottom":$b,"left":$l,"right":$r}"""
+    }
+
+    /** Toggles IME_FLAG_NO_PERSONALIZED_LEARNING for future input connections. */
+    @JavascriptInterface
+    fun setIncognitoKeyboard(enabled: Boolean) {
+      IncognitoIme.enabled = enabled
+      val wv = webView ?: return
+      wv.post {
+        val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+        imm.restartInput(wv)
+      }
     }
   }
 }

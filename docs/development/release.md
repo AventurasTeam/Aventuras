@@ -164,6 +164,28 @@ The unsigned release APK will be at:
 src-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release-unsigned.apk
 ```
 
+**Injecting Kotlin into the generated WebView.** wry generates
+`src-tauri/gen/android/app/src/main/java/com/karelian/aventura/generated/RustWebView.kt` fresh on
+every build — it's gitignored and must never be hand-edited. wry's `build.rs` substitutes an
+env var named `WRY_<FILE_STEM>_CLASS_EXTENSION` (file stem uppercased, e.g.
+`WRY_RUSTWEBVIEW_CLASS_EXTENSION` for `RustWebView.kt`) into a `{{class-extension}}` placeholder in
+that file. The repo-root `.cargo/config.toml` sets this to inject a one-line
+`onCreateInputConnection` override (used for the incognito-keyboard setting) that delegates to a
+normal, git-tracked Kotlin class. `cargo`'s config discovery walks up from the build's working
+directory, so this only works because both `npx tauri android ...` and `./compileApk.sh` run with
+the repo root as their working directory — confirmed by tracing `BuildTask.kt`'s `workingDir`.
+
+This substitution is undocumented wry internals, not a public API — verified by reading
+`wry-0.55.1`'s `build.rs` directly (search the vendored crate's registry checkout for
+`CLASS_EXTENSION` if this ever needs re-verifying after a wry bump). If the override silently
+stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
+where the renamed placeholder or env var will be found.
+
+`scripts/check_wry_injection.js` runs after `tauri android build` in both Android CI jobs and
+fails the build if the lines `.cargo/config.toml` injects are absent from the generated
+`RustWebView.kt`, so a wry bump that breaks the substitution stops the release instead of
+shipping a dead setting.
+
 ### Signing APK
 
 ```bash

@@ -18,7 +18,10 @@
   import { getSupportedLanguages } from '$lib/services/ai/utils/TranslationService'
   import { updaterService, UpdateError } from '$lib/services/updater'
   import { updateNotifier } from '$lib/stores/updateNotifier.svelte'
+  import { isAndroid } from '$lib/utils/platform'
   import { RefreshCw, Loader2, Languages, Plus, X, Trash2 } from '@lucide/svelte'
+
+  const showIncognitoKeyboard = isAndroid()
 
   /**
    * What the swatch and the preview should show. An empty stored colour means "the
@@ -464,6 +467,22 @@
       onCheckedChange={(v) => settings.setShowScrollToBottom(v)}
     />
   </div>
+
+  {#if showIncognitoKeyboard}
+    <!-- Incognito Keyboard Toggle -->
+    <div class="flex items-center justify-between">
+      <div>
+        <Label>Incognito Keyboard</Label>
+        <p class="text-muted-foreground text-xs">
+          Ask the keyboard not to learn from what you type. Not all keyboards honour this.
+        </p>
+      </div>
+      <Switch
+        checked={settings.uiSettings.incognitoKeyboard}
+        onCheckedChange={(v) => settings.setIncognitoKeyboard(v)}
+      />
+    </div>
+  {/if}
 
   <!-- Translation Section -->
   <div class="space-y-3">

@@ -739,6 +739,8 @@ export interface UISettings {
    * CSS fallback rather than picking a colour on the user's behalf.
    */
   dialogueColor: string
+  /** Android-only: ask the keyboard not to learn from what is typed. */
+  incognitoKeyboard: boolean
 }
 
 /**
