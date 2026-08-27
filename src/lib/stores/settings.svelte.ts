@@ -40,6 +40,7 @@ import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
+import { applyIncognitoKeyboard } from '$lib/utils/platform'
 import type { ImageGenerationServiceSettings, TimelineFillSettings } from '$lib/services/ai'
 import { debug } from './debug.svelte'
 import { modelHealth } from './modelHealth.svelte'
@@ -1198,6 +1199,7 @@ export function getDefaultUISettings(): UISettings {
     storyMaxWidth: '3xl',
     highlightDialogue: false,
     dialogueColor: '',
+    incognitoKeyboard: false,
   }
 }
 
@@ -1580,6 +1582,11 @@ class SettingsStore {
       const dialogueColor = await database.getSetting('dialogue_color')
       if (dialogueColor !== null) this.uiSettings.dialogueColor = dialogueColor
       this.applyDialogueHighlight()
+
+      const incognitoKeyboard = await database.getSetting('incognito_keyboard')
+      if (incognitoKeyboard !== null)
+        this.uiSettings.incognitoKeyboard = incognitoKeyboard === 'true'
+      applyIncognitoKeyboard(this.uiSettings.incognitoKeyboard)
 
       const debugMode = await database.getSetting('debug_mode')
       if (debugMode !== null) debug.isActive = this.uiSettings.debugMode = debugMode === 'true'
@@ -2654,6 +2661,12 @@ class SettingsStore {
     await database.setSetting('story_max_width', width)
   }
 
+  async setIncognitoKeyboard(enabled: boolean) {
+    this.uiSettings.incognitoKeyboard = enabled
+    await database.setSetting('incognito_keyboard', enabled.toString())
+    applyIncognitoKeyboard(enabled)
+  }
+
   /**
    * Publish the dialogue colour to CSS. The toggle and the colour live on the root
    * element, not in the rendered markup: the `<span class="dialogue-line">` wrappers
@@ -3120,6 +3133,8 @@ class SettingsStore {
     await database.setSetting('highlight_dialogue', this.uiSettings.highlightDialogue.toString())
     await database.setSetting('dialogue_color', this.uiSettings.dialogueColor)
     this.applyDialogueHighlight()
+    await database.setSetting('incognito_keyboard', this.uiSettings.incognitoKeyboard.toString())
+    applyIncognitoKeyboard(this.uiSettings.incognitoKeyboard)
     await database.setSetting(
       'advanced_manual_mode',
       this.advancedRequestSettings.manualMode.toString(),

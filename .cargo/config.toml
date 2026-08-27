@@ -1,0 +1,16 @@
+# wry substitutes this into the generated RustWebView.kt ({{class-extension}}); the generated
+# file is gitignored (src-tauri/gen/android/app/.gitignore), so the incognito-keyboard override
+# has to be injected here. See docs/development/release.md for the full mechanism.
+#
+# The substitution itself is undocumented wry internals, not a public API: verified against
+# wry 0.55.1's build.rs (CLASS_EXTENSION/CLASS_INIT loop over src/android/kotlin/*.kt, around
+# build.rs:39-76). If an env upgrade bumps wry and this override stops appearing in the
+# generated RustWebView.kt, that build script is the first place to check for a rename.
+[env]
+WRY_RUSTWEBVIEW_CLASS_EXTENSION = """
+  override fun onCreateInputConnection(outAttrs: android.view.inputmethod.EditorInfo): android.view.inputmethod.InputConnection? {
+    val ic = super.onCreateInputConnection(outAttrs)
+    com.karelian.aventura.IncognitoIme.apply(outAttrs)
+    return ic
+  }
+"""

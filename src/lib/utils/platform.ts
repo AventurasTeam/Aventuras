@@ -22,3 +22,13 @@ export function supportsHover(): boolean {
   if (typeof window.matchMedia !== 'function') return !isAndroid()
   return !window.matchMedia('(hover: none)').matches
 }
+
+/** No-op off Android. Asks the WebView's keyboard not to learn from what is typed. */
+export function applyIncognitoKeyboard(enabled: boolean): void {
+  if (!isAndroid()) return
+  try {
+    window.AndroidBridge?.setIncognitoKeyboard(enabled)
+  } catch (e) {
+    console.warn('[platform] Failed to set incognito keyboard:', e)
+  }
+}
