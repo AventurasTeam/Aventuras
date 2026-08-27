@@ -206,7 +206,9 @@ corrected premises as of that pass; file/line references are dated
   exporting the primitives from the barrel; tests deep-import. The
   extraction pass itself is in
   [`followups.md → Code structure`](../../../../followups.md#code-structure).
-  Surfaced 2026-08-01; narrowed 2026-08-19.
+  Surfaced 2026-08-01; narrowed 2026-08-19. (The pass completed
+  2026-08-26 and its entry is gone from that section — see Slice 1.5a's
+  Post-M1 reconciliation for the `defineAction` half.)
 
 ### Query and render cost
 
