@@ -94,6 +94,13 @@ memory-only mutations that touch nothing else stay inside the store
 file as mutators; the action layer exists for writes that persist to
 SQLite or cross stores.
 
+Within a domain, files split by whether the write is delta-logged:
+`register.ts` (or `register-<target>.ts` where a domain registers
+several) holds the handlers registered through the delta registry;
+`operational.ts` holds the non-delta write seam — compute-lifecycle
+columns and other state the delta log does not carry. A domain that
+writes only one of the two carries only that file.
+
 ### Syncing a store after a write
 
 A store that mirrors a SQLite table stays in sync by **re-hydrating

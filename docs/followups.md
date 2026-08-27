@@ -318,7 +318,7 @@ for the placement rule.
 ## Code structure
 
 Near-future refactors routed out of the Slice 3.12 split
-(2026-08-19); both were re-verified against the code that day.
+(2026-08-19), re-verified against the code that day.
 
 - **`buildGenerationContext` should own the store reads — the
   unified data-source refactor.** The planned shape is a data
@@ -356,39 +356,3 @@ Near-future refactors routed out of the Slice 3.12 split
   Zero user-visible impact until a custom pack or a fourth consumer
   exists. Surfaced by M3.7a post-merge review (2026-07-30);
   re-verified and re-sized during the Slice 3.12 split (2026-08-19).
-
-- **`lib/actions/` extraction pass — pipeline triggers, classifier
-  deps, and the embedder-swap module move.** The layer's bar
-  ([`code-conventions.md → Action layer`](./code-conventions.md#action-layer))
-  is writes that persist to SQLite or cross stores; three resident
-  groups miss it. Verified state, correcting the original framing:
-  **(a) triggers** — `suggestions/refresh-suggestions.ts` writes
-  nothing, but `classifier/run-now.ts` is _not_ a pure trigger (it
-  records the classifier preflight failure, a real write, which must
-  split out before any move). The stated payoff "extracting the
-  triggers lets the eslint exception go" is dead: four action files
-  runtime-import `@/lib/pipeline`, and two of them
-  (`turns/submit-turn.ts`, `turns/regenerate-turn.ts`) are genuine
-  delta-logged writes that stay — either alone keeps the import
-  alive; the eslint `boundaries/dependencies` exception covers
-  **type-only** imports that never produced a runtime cycle (the
-  actual cycle workaround is the `configureDeltaActionPort` runtime
-  port wired in bootstrap). Argue the trigger move on taxonomy alone
-  or drop it. **(b) `classifier/deps.ts`** — three of five exports
-  are not writes; the two genuine writes bypass `defineAction` with
-  raw `ctx.db.run(sql...)`. Splits three ways: a lib read module, a
-  `defineAction`-conformant writer pair, and
-  `embedClassifierDescriptions` following `resolveDrainConfig`
-  wherever it lands. **(c) `embedder-swap/`** — 1,267 non-test lines
-  plus 1,953 test lines and eight exported error classes; the feared
-  cycle with `lib/embedder` checks clean (the dependency is
-  one-directional), so the `lib/embedder-swap` move is decidable
-  now. The barrel's uncurated re-export of the raw engine primitives
-  is being fixed in
-  [Slice 3.12a](./implementation/milestones/03-memory-floor/slices/12a-runtime-integrity.md);
-  this pass is the remaining structure half. What stays put: the
-  `register.ts` versus `operational.ts` split is the layer's real
-  organizing rule, and reads deliberately colocated to pin a shared
-  invariant (`story-entries/recent-window.ts`) are correct where
-  they are. Surfaced by a 2026-08-01 read of the folder; re-verified
-  during the Slice 3.12 split (2026-08-19).
