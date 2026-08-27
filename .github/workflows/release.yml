@@ -92,7 +92,6 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -121,6 +120,9 @@ jobs:
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npx tauri android build
+
+      - name: Verify incognito-keyboard injection
+        run: node scripts/check_wry_injection.js
 
       - name: Decode keystore
         env:

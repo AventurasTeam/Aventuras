@@ -181,6 +181,11 @@ This substitution is undocumented wry internals, not a public API — verified b
 stops appearing in the generated `RustWebView.kt`, that build script — not any docs page — is
 where the renamed placeholder or env var will be found.
 
+`scripts/check_wry_injection.js` runs after `tauri android build` in both Android CI jobs and
+fails the build if the lines `.cargo/config.toml` injects are absent from the generated
+`RustWebView.kt`, so a wry bump that breaks the substitution stops the release instead of
+shipping a dead setting.
+
 ### Signing APK
 
 ```bash
