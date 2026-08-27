@@ -875,6 +875,14 @@ Session boundary: this entire surface — any tab, any field. Save
 commits all dirty fields under one `action_id`; Definitional-change
 confirmation (above) intercepts the commit when applicable.
 
+**No-undo notice.** The bar's `⚠` slot carries a standing note — _Undo
+doesn't reach story settings_ — because `stories` is story-scoped and
+therefore deltaless, so CTRL-Z cannot reverse a committed settings
+change (see
+[`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)).
+It is the slot's lowest-priority content: an invalid draft or a hard
+gate outranks it, since those explain why Save is dead.
+
 ## Top-bar
 
 Standard in-story chrome per

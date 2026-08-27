@@ -2259,6 +2259,26 @@ write layer enforces this distinction: mutations to narrative fields
 write a delta + row update in one transaction; mutations to UI fields
 just update the row.
 
+**Branch scope is the hard boundary.** `deltas.branch_id` is `NOT NULL`
+with an FK to `branches.id`, so only a branch-scoped row can be
+described by a delta at all. Everything above that scope is deltaless
+by construction: the `stories` row (`definition`, `settings`, and the
+identity columns), the `branches` registry itself, `pipeline_runs`,
+`wizard_sessions`, and the unscoped `app_settings`, `vault_calendars`
+and `assets`. The delta log is a branch's narrative history; story
+definition is authoring config that sits above any one branch, so it
+has no place in it.
+
+**The resulting undo asymmetry is deliberate.** Editing an entity or a
+lore card is reversible through CTRL-Z; editing the story's genre,
+tone, setting or title is not — the `stories` row is the only place
+user-_authored_ content lives outside the log. Definition edits are
+rare and deliberate rather than turn-by-turn, which doesn't warrant
+widening delta scope past the branch, but the surfaces that write them
+must not imply undo cover: Story Settings' save bar carries a standing
+no-undo notice (see
+[`story-settings.md → Save session`](./ui/screens/story-settings/story-settings.md#save-session)).
+
 **Exception on `story_entries.content`.** The text content of an entry
 is the one narrative field deliberately exempted from the delta log
 (per the side-channel decision above). Row-level changes to

@@ -128,6 +128,13 @@ When it does, the surface refuses the save: **Save and the
 same `⚠` slot the informational notes above use — a second kind of
 content for the one slot, not a second state.
 
+**The slot is ranked, not shared.** Where a surface has more than one
+candidate note, the blocking reason wins: invalid draft, then hard
+gate, then any standing informational note. A note that merely informs
+must never displace the one that explains why Save is dead. Story
+Settings exercises all three (see
+[`story-settings.md → Save session`](../screens/story-settings/story-settings.md#save-session)).
+
 **Discard and Cancel always stay live.** An invalid draft must never
 trap the user — they can always throw the session away or leave it
 alone. The [navigate-away guard](#navigate-away-guard--global-intercept)
