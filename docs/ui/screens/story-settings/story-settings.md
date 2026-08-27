@@ -265,11 +265,22 @@ allowed — user can author label + prose from scratch.
   [parked.md → Vault content types for genre / tone / setting templates](../../../parked.md#vault-content-types-for-genre--tone--setting-templates).
 
 **Soft warn-box at the top of the Generation tab** when narrative
-exists, copy along the lines of "Edits to genre / tone / setting
-propagate from the next turn forward." Story content prose changes
-do **not** trigger the
+exists: "Edits to genre, tone and setting propagate from the next turn
+forward. They replace the current text — undo doesn't reach story
+settings." Story content prose changes do **not** trigger the
 [Definitional-change confirmation modal](#definitional-change-confirmations) —
 they shift AI output gradually without coherence breaks.
+
+The second sentence is the surface's only no-undo disclosure, and it
+is deliberately scoped here rather than to the whole screen. `stories`
+is story-scoped and therefore carries no deltas, so nothing on this
+screen is reachable by CTRL-Z (see
+[`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)) —
+but that only _costs_ the user where a field holds prose they would
+have to retype. The Settings-section tabs are knobs a user can simply
+set back, so warning there would spend the signal on a non-event, and
+the warn-box fires while the old text is still on screen rather than
+after it has been typed over.
 
 ### Modal-flagged fields (existing scope, unchanged)
 
@@ -874,14 +885,6 @@ Standard [save-session pattern](../../patterns/save-sessions.md).
 Session boundary: this entire surface — any tab, any field. Save
 commits all dirty fields under one `action_id`; Definitional-change
 confirmation (above) intercepts the commit when applicable.
-
-**No-undo notice.** The bar's `⚠` slot carries a standing note — _Undo
-doesn't reach story settings_ — because `stories` is story-scoped and
-therefore deltaless, so CTRL-Z cannot reverse a committed settings
-change (see
-[`data-model.md → Entry mutability & rollback`](../../../data-model.md#entry-mutability--rollback)).
-It is the slot's lowest-priority content: an invalid draft or a hard
-gate outranks it, since those explain why Save is dead.
 
 ## Top-bar
 

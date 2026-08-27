@@ -2275,9 +2275,9 @@ tone, setting or title is not — the `stories` row is the only place
 user-_authored_ content lives outside the log. Definition edits are
 rare and deliberate rather than turn-by-turn, which doesn't warrant
 widening delta scope past the branch, but the surfaces that write them
-must not imply undo cover: Story Settings' save bar carries a standing
-no-undo notice (see
-[`story-settings.md → Save session`](./ui/screens/story-settings/story-settings.md#save-session)).
+must disclose it where a field holds prose the user would have to
+retype — Story Settings does so in the Generation tab's warn-box (see
+[`story-settings.md → Story-shaping content`](./ui/screens/story-settings/story-settings.md#generation-tab--definitional-fields--authoring-aids)).
 
 **Exception on `story_entries.content`.** The text content of an entry
 is the one narrative field deliberately exempted from the delta log

@@ -1,5 +1,4 @@
 import { SaveBar } from '@/components/compounds/save-bar'
-import { t } from '@/lib/i18n'
 
 import { useStorySettingsSaveSession } from './save-session'
 import { UnsavedChangesDialog } from './unsaved-changes-dialog'
@@ -23,7 +22,7 @@ export function StorySettingsSaveBar({
       dirtyCount={dirtyFields.length}
       saving={session.saving}
       enabled={enabled && !blocked}
-      notice={invalidReason ?? (blocked ? disabledReason : t('storySettings:save.noUndo'))}
+      notice={invalidReason ?? (blocked ? disabledReason : undefined)}
       saveDisabled={blocked || invalidReason != null}
       saveDisabledReason={blocked ? disabledReason : invalidReason}
       onSave={() => void session.save()}

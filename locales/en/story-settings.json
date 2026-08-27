@@ -28,8 +28,7 @@
     "unsavedTitle": "Unsaved changes",
     "unsavedBody": "You have unsaved changes on this screen. Save them, discard them, or stay here.",
     "unsavedSave": "Save",
-    "unsavedDiscard": "Discard",
-    "noUndo": "Undo doesn't reach story settings \u2014 discard now, or change them again after saving."
+    "unsavedDiscard": "Discard"
   },
   "missingStory": "This story could not be loaded.",
   "swap": {

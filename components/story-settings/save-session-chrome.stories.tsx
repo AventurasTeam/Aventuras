@@ -113,7 +113,6 @@ export const DirtyMountsSaveBar: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
     expect(await screen.findByRole('button', { name: 'Discard' })).toBeInTheDocument()
     expect(screen.getByText(/suggestion count/)).toBeInTheDocument()
-    expect(screen.getByLabelText(/Undo doesn't reach story settings/)).toBeInTheDocument()
   },
 }
 
@@ -122,9 +121,6 @@ export const InvalidDisablesSaveBarSave: Story = {
   play: async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Make invalid' }))
     expect(await screen.findByLabelText('dup labels')).toBeInTheDocument()
-    // One notice slot, ranked: the blocking reason outranks the standing
-    // no-undo note, which would otherwise hide why Save went dead.
-    expect(screen.queryByLabelText(/Undo doesn't reach/)).not.toBeInTheDocument()
     const save = screen.getByRole('button', { name: /^Save/ })
     expect(save).toBeDisabled()
   },
@@ -173,7 +169,6 @@ export const HardGateDisablesEverySavePath: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
     expect(await screen.findByRole('button', { name: /^Save/ })).toBeDisabled()
     expect(screen.getByLabelText('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
-    expect(screen.queryByLabelText(/Undo doesn't reach/)).not.toBeInTheDocument()
 
     await userEvent.keyboard('{Meta>}s{/Meta}')
     expect(args.onCommit).not.toHaveBeenCalled()
