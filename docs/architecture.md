@@ -40,11 +40,29 @@ read them.
   and become available to later templates in the same run.
 - **Pack variables (user-defined custom fields) sit alongside built-ins.**
   A pack author sees the same API surface a built-in template sees.
-- **No prop-drilling between phases or templates.** A phase reads the
-  domain stores directly and calls the group's context builder
-  (`buildGenerationContext`) per render; run-scoped values flow through
-  the pipeline's `intermediates` bag. Templates render against the
-  builder's output.
+- **No prop-drilling between phases or templates.** A phase calls the
+  group's context builder (`buildGenerationContext`) with run identity
+  and run-scoped flags, and nothing else; the builder reads the domain
+  data itself — the prompt buffer from SQLite, definition, settings and
+  entities from the open story — so no phase can hand the group a slice
+  of its own and quietly stop the context being unified. Run-scoped
+  values flow through the pipeline's `intermediates` bag. Templates
+  render against the builder's output.
+- **The prompt buffer is read, not filtered from a working set.** The
+  entries store holds the reader's window, which grows with scroll-up
+  paging and shrinks on reload; composing the buffer from it would cap
+  it below what
+  [`cadence.md → Composition rule`](./memory/cadence.md#composition-rule)
+  asks for and make prompt content a function of scroll position. The
+  builder and the retrieval phase share one `readPromptBuffer`, so the
+  window the pools are priced against is the window the prompt carries.
+- **`entries` is the only budget-governed collection.** A second,
+  wider entries variable would let a template render past the window
+  retrieval measured, leaving rows seated against a budget for a
+  prompt that was never sent. `lastTurns` is the deliberate exception
+  and is bounded at two rows by its own query: the user's action plus
+  the AI's reply is a pipeline contract for per-turn classification,
+  not a share of the prompt budget.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)
