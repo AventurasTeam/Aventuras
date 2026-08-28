@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { makeLogger } from '@/lib/diagnostics'
@@ -13,6 +13,7 @@ import {
   resetAllStores,
 } from '@/lib/stores'
 
+import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { fallbackClassifierWithSuggestionsSchema } from './per-turn-piggyback'
 import {
@@ -100,7 +101,7 @@ function openStory(settings: Partial<StorySettings> = {}) {
 }
 
 function hydrate(entries: unknown[] = [TARGET_ENTRY]) {
-  entriesStore.hydrate('b1', entries as never[])
+  hydrateEntries(phaseDb, 'b1', entries as never[])
   entitiesStore.hydrate('b1', [])
 }
 
@@ -128,7 +129,7 @@ function phaseCtx(inputs: unknown, abortSignal = new AbortController().signal): 
     intermediates: {},
     inputs,
     log: makeLogger('act_1'),
-    db: {} as never,
+    db: phaseDb.db,
     runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
@@ -167,6 +168,13 @@ beforeEach(() => {
   generateStructuredMock.mockReset()
   __resetRegistry()
   resetAllStores()
+  resetPhaseDb(phaseDb)
+})
+
+let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
 })
 
 describe('suggestion-refresh declaration', () => {
@@ -358,7 +366,7 @@ describe('suggestion-refresh emission phase', () => {
 
   it('fails when the entries store is loaded for another branch', async () => {
     openStory()
-    entriesStore.hydrate('b-other', [])
+    hydrateEntries(phaseDb, 'b-other', [])
     entitiesStore.hydrate('b1', [])
 
     const { result } = await runEmission()
@@ -659,7 +667,7 @@ describe('suggestion-refresh emission phase', () => {
     // paths and non-UI writers sit outside it, so the row can still be gone by
     // the time the call returns.
     generateStructuredMock.mockImplementation(async () => {
-      entriesStore.hydrate('b1', [])
+      hydrateEntries(phaseDb, 'b1', [])
       return okChips([{ categoryRef: 'cat1', text: 'Orphaned.' }])
     })
 

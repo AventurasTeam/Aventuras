@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { redactUrl } from '@/lib/diagnostics'
-import { generateId, IdBiMap } from '@/lib/ids'
+import { generateId, type IdBiMap } from '@/lib/ids'
 import {
   buildPiggybackActions,
   parseStateBlock,
@@ -14,7 +14,6 @@ import {
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import type { RetrievalSuccess } from '@/lib/retrieval'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
@@ -24,11 +23,7 @@ import {
   piggybackFallbackClassifierPhase,
   resolvePiggybackFires,
 } from './per-turn-piggyback'
-import {
-  RETRIEVAL_INTERMEDIATE_KEY,
-  RETRIEVAL_PHASE_NAME,
-  retrievalPhase,
-} from './per-turn-retrieval'
+import { RETRIEVAL_PHASE_NAME, retrievalPhase } from './per-turn-retrieval'
 import { loadPerTurnWorkingSet } from './working-set'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
@@ -44,19 +39,6 @@ export type PerTurnPhaseName =
   | typeof RETRIEVAL_PHASE_NAME
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
-
-// `ctx.intermediates` is Record<string, unknown>, so presence is the discriminant:
-// only ok outcomes are ever stashed, and the phase fails the run before this one
-// otherwise — absence degrades the prompt to empty buckets rather than throwing.
-// The `ok` check is defensive: a future stash of the failure variant must not
-// reach the builder as a bundle.
-function readRetrievalOutcome(
-  intermediates: Record<string, unknown>,
-): RetrievalSuccess | undefined {
-  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
-  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
-  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
-}
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
@@ -97,20 +79,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const suggestionEmission = resolveSuggestionEmission(open.settings)
   const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
 
-  const idMap = new IdBiMap()
-  ctx.intermediates.idMap = idMap
-  const context = buildGenerationContext({
-    branchId,
-    entries,
-    entities,
-    definition: open.definition,
-    settings: open.settings,
-    idMap,
+  const load = await buildGenerationContext(ctx, {
+    label: PER_TURN_KIND,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
-    retrieval: readRetrievalOutcome(ctx.intermediates),
   })
-  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
+  if (!load.ok) return load.result
+  // The builder owns the map so every phase in the run resolves against the one
+  // the prompt was built with.
+  const idMap = ctx.intermediates.idMap as IdBiMap
+  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context)
 
   const entryId = generateId('entry')
   const startedAt = Date.now()

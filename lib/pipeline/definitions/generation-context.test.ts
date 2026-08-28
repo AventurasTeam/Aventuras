@@ -1,13 +1,29 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { describeCalendarVocabulary, EARTH_GREGORIAN } from '@/lib/calendar'
-import { STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
+import {
+  STORY_SETTINGS_DEFAULTS,
+  storyEntries,
+  type EntryMetadata,
+  type StoryEntry,
+  type StorySettings,
+} from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
-import type { Candidate, CandidateKind, EntityRow, LoreRow, ThreadRow } from '@/lib/retrieval'
+import type {
+  Candidate,
+  CandidateKind,
+  EntityRow,
+  LoreRow,
+  RetrievalSuccess,
+  ThreadRow,
+} from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
+import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 
 const definition = {
   mode: 'adventure' as const,
@@ -88,8 +104,80 @@ const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'] }
 
 const keysOf = (bucket: unknown) => (bucket as object[]).map((r) => Object.keys(r).sort())
 
+let testDb: Awaited<ReturnType<typeof createTestDb>>
+
+beforeAll(async () => {
+  testDb = await createTestDb()
+  testDb.sqlite.exec(`
+    INSERT INTO stories (id, title, created_at, updated_at) VALUES ('s1', 'A story', 1, 1);
+    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b1', 's1', 'main', 1);
+    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b2', 's1', 'alt', 1);
+  `)
+})
+
+beforeEach(() => {
+  testDb.sqlite.exec('DELETE FROM story_entries')
+  currentStoryStore.__reset()
+  entriesStore.__reset()
+  entitiesStore.__reset()
+})
+
+const phaseCtx = (intermediates: Record<string, unknown> = {}) => ({
+  db: testDb.db,
+  storyId: 's1',
+  branchId: 'b1',
+  intermediates,
+})
+
+const seedEntries = (rows: StoryEntry[]) =>
+  testDb.db.insert(storyEntries).values(rows).onConflictDoNothing()
+
+/**
+ * Seeds the sources the builder reads, then calls it — so a case states its
+ * world the way it used to state its arguments. onConflictDoNothing because a
+ * case that builds twice seeds the same rows twice.
+ */
+async function buildContext(args: {
+  entries?: StoryEntry[]
+  entities?: unknown[]
+  definition?: unknown
+  settings?: StorySettings
+  idMap?: IdBiMap
+  retrieval?: RetrievalSuccess
+  piggybackFires?: boolean
+  suggestionsFire?: boolean
+  refreshGuidance?: string
+}): Promise<Record<string, unknown>> {
+  currentStoryStore.set({
+    storyId: 's1',
+    branchId: 'b1',
+    definition: (args.definition ?? definition) as never,
+    settings: args.settings ?? settings,
+  })
+  // branchId first, so a fixture that states its own (the cross-branch case)
+  // still wins.
+  entitiesStore.hydrate(
+    'b1',
+    (args.entities ?? []).map((e) => ({ branchId: 'b1', ...(e as object) })) as never[],
+  )
+  if (args.entries?.length) await seedEntries(args.entries)
+
+  const intermediates: Record<string, unknown> = {}
+  if (args.idMap) intermediates.idMap = args.idMap
+  if (args.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = { ...args.retrieval, ok: true }
+
+  const load = await buildGenerationContext(phaseCtx(intermediates), {
+    label: 'test',
+    piggybackFires: args.piggybackFires,
+    suggestionsFire: args.suggestionsFire,
+    refreshGuidance: args.refreshGuidance,
+  })
+  if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
+  return load.context
+}
+
 describe('buildGenerationContext', () => {
-  it('drops system entries outright', () => {
+  it('drops system entries outright', async () => {
     const entries = [
       entry('e1', 1, 'one'),
       entry('e2', 2, 'two'),
@@ -97,8 +185,7 @@ describe('buildGenerationContext', () => {
       entry('sys', 4, 'ERROR', 'system'),
       entry('e5', 5, 'five'),
     ] as never[]
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+    const ctx = await buildContext({
       entries,
       // Wide enough that composition windows nothing out, so the assertion
       // isolates the system-kind exclusion.
@@ -112,9 +199,8 @@ describe('buildGenerationContext', () => {
     expect(contents).not.toContain('ERROR')
   })
 
-  it('exposes all three buffer knobs through userSettings', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('exposes all three buffer knobs through userSettings', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -128,9 +214,8 @@ describe('buildGenerationContext', () => {
     })
   })
 
-  it('emits every variable the generationContext registry pins', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('emits every variable the generationContext registry pins', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -142,9 +227,8 @@ describe('buildGenerationContext', () => {
     }
   })
 
-  it('normalizes whitespace-only definitional fields to empty string', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('normalizes whitespace-only definitional fields to empty string', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -155,11 +239,10 @@ describe('buildGenerationContext', () => {
     expect((ctx.definition as typeof definition).setting).toBe('A keep on a hill.')
   })
 
-  it('substitutes entity UUIDs to placeholders', () => {
+  it('substitutes entity UUIDs to placeholders', async () => {
     const entities = [
       {
         id: 'char_00000000-0000-4000-8000-000000000001',
-        branchId: 'b1',
         kind: 'character',
         name: 'Mara',
         description: 'A knight.',
@@ -167,8 +250,7 @@ describe('buildGenerationContext', () => {
         injectionMode: 'auto',
       },
     ] as never[]
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+    const ctx = await buildContext({
       entries: [],
       entities,
       definition,
@@ -181,14 +263,12 @@ describe('buildGenerationContext', () => {
   // Packs are user-authored, so whatever reaches the context is template surface
   // whether the bundled template renders it or not. Passing the drizzle row whole
   // would silently enrol every future column and make it undroppable.
-  it('projects entities to PROMPT_ENTITY_FIELDS, dropping the rest of the row', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('projects entities to PROMPT_ENTITY_FIELDS, dropping the rest of the row', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [
         {
           id: 'char_00000000-0000-4000-8000-000000000001',
-          branchId: 'b1',
           kind: 'character',
           name: 'Mara',
           description: 'A knight.',
@@ -211,7 +291,7 @@ describe('buildGenerationContext', () => {
     expect(Object.keys(entity).sort()).toEqual([...PROMPT_ENTITY_FIELDS].sort())
   })
 
-  it('extracts sceneEntities from the last non-system entry, substituted like the entities', () => {
+  it('extracts sceneEntities from the last non-system entry, substituted like the entities', async () => {
     const leadId = 'char_00000000-0000-4000-8000-000000000001'
     const entries = [
       {
@@ -223,7 +303,6 @@ describe('buildGenerationContext', () => {
     const entities = [
       {
         id: leadId,
-        branchId: 'b1',
         kind: 'character',
         name: 'Mara',
         description: 'A knight.',
@@ -231,8 +310,7 @@ describe('buildGenerationContext', () => {
         injectionMode: 'auto',
       },
     ] as never[]
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+    const ctx = await buildContext({
       entries,
       entities,
       definition,
@@ -246,9 +324,8 @@ describe('buildGenerationContext', () => {
     expect(prompt).toContain('A knight.')
   })
 
-  it('yields empty sceneEntities when no entry carries scene metadata', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('yields empty sceneEntities when no entry carries scene metadata', async () => {
+    const ctx = await buildContext({
       entries: [entry('e1', 1, 'one')] as never[],
       entities: [],
       definition,
@@ -261,7 +338,7 @@ describe('buildGenerationContext', () => {
   // End-to-end, not a mechanism check: the builder composes the window and the
   // template renders it whole, so the composed list is asserted on its own
   // before the render assertions ride on top of it.
-  it('renders the per-turn template over exactly the composed window', () => {
+  it('renders the per-turn template over exactly the composed window', async () => {
     const entries = [
       entry('e1', 1, 'first-line'),
       entry('e2', 2, 'second-line'),
@@ -269,8 +346,7 @@ describe('buildGenerationContext', () => {
       entry('e4', 4, 'fourth-line'),
       entry('e5', 5, 'The gate creaks open.'),
     ] as never[]
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+    const ctx = await buildContext({
       entries,
       entities: [],
       definition,
@@ -297,9 +373,8 @@ describe('buildGenerationContext', () => {
   // story_entries.content persists the reply verbatim; the reader renders
   // stripTrailingBlocks(...).prose. Re-injecting the raw column feeds the model
   // its own markup back as narrative and diverges from what the user sees.
-  it("carries the reader's prose, not the persisted trailing blocks", () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it("carries the reader's prose, not the persisted trailing blocks", async () => {
+    const ctx = await buildContext({
       entries: [
         entry('e1', 1, 'The gate creaks open.\n<state><summary>At the gate</summary></state>'),
         entry('e2', 2, 'I step through.', 'user_action'),
@@ -321,9 +396,8 @@ describe('buildGenerationContext', () => {
     expect(prompt).not.toContain('At the gate')
   })
 
-  it('drops entries and entities belonging to another branch', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('drops entries and entities belonging to another branch', async () => {
+    const ctx = await buildContext({
       entries: [entry('e1', 1, 'ours'), { ...entry('e2', 2, 'theirs'), branchId: 'b2' }] as never[],
       entities: [
         { id: 'char_00000000-0000-4000-8000-00000000000a', name: 'Ours', branchId: 'b1' },
@@ -337,7 +411,7 @@ describe('buildGenerationContext', () => {
     expect((ctx.entities as { name: string }[]).map((e) => e.name)).toEqual(['Ours'])
   })
 
-  it('always carries suggestionSlots; suggestionsFire gates only the instruction', () => {
+  it('always carries suggestionSlots; suggestionsFire gates only the instruction', async () => {
     const paletteSettings = storySettings({
       suggestionCategories: [
         {
@@ -350,18 +424,18 @@ describe('buildGenerationContext', () => {
         },
       ],
     })
-    const base = { branchId: 'b1', entries: [], entities: [], definition, idMap: new IdBiMap() }
+    const base = { entries: [], entities: [], definition, idMap: new IdBiMap() }
 
     // The slots are the story's palette, not an instruction to emit — a caller
     // that renders a template reading them (suggestion-refresh) must not have
     // to claim it is "firing" to receive its own subject matter.
-    const quiet = buildGenerationContext({ ...base, settings: paletteSettings })
+    const quiet = await buildContext({ ...base, settings: paletteSettings })
     expect(quiet.suggestionSlots).toEqual([
       { ref: 'cat1', label: 'Action', promptHint: 'Do something.' },
     ])
     expect(quiet.suggestionsFire).toBe(false)
 
-    const firing = buildGenerationContext({
+    const firing = await buildContext({
       ...base,
       settings: paletteSettings,
       suggestionsFire: true,
@@ -369,9 +443,8 @@ describe('buildGenerationContext', () => {
     expect(firing.suggestionsFire).toBe(true)
   })
 
-  it('re-gates suggestionsFire to false when the palette has nothing enabled', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('re-gates suggestionsFire to false when the palette has nothing enabled', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -382,9 +455,8 @@ describe('buildGenerationContext', () => {
     expect(ctx.suggestionsFire).toBe(false)
   })
 
-  it('emits placeholder-ref slots for the enabled categories, in order, when suggestionsFire is true', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('emits placeholder-ref slots for the enabled categories, in order, when suggestionsFire is true', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -416,9 +488,8 @@ describe('buildGenerationContext', () => {
     ])
   })
 
-  it('forces suggestionsFire back to false when the caller says true but every category is disabled', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('forces suggestionsFire back to false when the caller says true but every category is disabled', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -441,9 +512,8 @@ describe('buildGenerationContext', () => {
     expect(ctx.suggestionSlots).toEqual([])
   })
 
-  it('passes suggestionCount through from settings regardless of whether suggestions fire', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('passes suggestionCount through from settings regardless of whether suggestions fire', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -453,9 +523,8 @@ describe('buildGenerationContext', () => {
     expect(ctx.suggestionCount).toBe(5)
   })
 
-  it('defaults refreshGuidance to empty and normalizes a whitespace-only steer', () => {
-    const empty = buildGenerationContext({
-      branchId: 'b1',
+  it('defaults refreshGuidance to empty and normalizes a whitespace-only steer', async () => {
+    const empty = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -464,8 +533,7 @@ describe('buildGenerationContext', () => {
     })
     expect(empty.refreshGuidance).toBe('')
 
-    const blank = buildGenerationContext({
-      branchId: 'b1',
+    const blank = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -475,8 +543,7 @@ describe('buildGenerationContext', () => {
     })
     expect(blank.refreshGuidance).toBe('')
 
-    const steered = buildGenerationContext({
-      branchId: 'b1',
+    const steered = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -487,9 +554,8 @@ describe('buildGenerationContext', () => {
     expect(steered.refreshGuidance).toBe('I sneak around the back')
   })
 
-  it('resolves calendarVocabulary for a known id, and falls back to earth-gregorian for an unknown one', () => {
-    const knownCtx = buildGenerationContext({
-      branchId: 'b1',
+  it('resolves calendarVocabulary for a known id, and falls back to earth-gregorian for an unknown one', async () => {
+    const knownCtx = await buildContext({
       entries: [],
       entities: [],
       definition: { ...definition, calendarSystemId: 'earth-gregorian' },
@@ -499,8 +565,7 @@ describe('buildGenerationContext', () => {
     expect(knownCtx.calendarVocabulary).not.toBeNull()
     expect((knownCtx.calendarVocabulary as { baseUnitName: string }).baseUnitName).toBe('second')
 
-    const unknownCtx = buildGenerationContext({
-      branchId: 'b1',
+    const unknownCtx = await buildContext({
       entries: [],
       entities: [],
       definition: { ...definition, calendarSystemId: 'nonexistent-calendar' },
@@ -512,9 +577,8 @@ describe('buildGenerationContext', () => {
     expect(unknownCtx.calendarVocabulary).toEqual(describeCalendarVocabulary(EARTH_GREGORIAN))
   })
 
-  it('emits no runtime key the generationContext registry does not define', () => {
-    const ctx = buildGenerationContext({
-      branchId: 'b1',
+  it('emits no runtime key the generationContext registry does not define', async () => {
+    const ctx = await buildContext({
       entries: [],
       entities: [],
       definition,
@@ -539,10 +603,10 @@ const contentsOf = (ctx: Record<string, unknown>) =>
   (ctx.entries as { content: string }[]).map((e) => e.content)
 
 describe('buildGenerationContext — composed prompt buffer', () => {
-  const base = () => ({ branchId: 'b1', entities: [], definition, idMap: new IdBiMap() })
+  const base = () => ({ entities: [], definition, idMap: new IdBiMap() })
 
-  it('windows partial mode to partialChapterBuffer, tail-first', () => {
-    const ctx = buildGenerationContext({
+  it('windows partial mode to partialChapterBuffer, tail-first', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: branchEntries(40, 15),
       settings: storySettings({
@@ -557,8 +621,8 @@ describe('buildGenerationContext — composed prompt buffer', () => {
   // Distinguishes the two modes on the same fixture: partial gives 4, full 15.
   // Reachable only from chapterId, so it also pins that composition runs before
   // the entry -> { content } map strips it.
-  it('takes the whole open region in full mode', () => {
-    const ctx = buildGenerationContext({
+  it('takes the whole open region in full mode', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: branchEntries(40, 15),
       settings: storySettings({
@@ -574,8 +638,8 @@ describe('buildGenerationContext — composed prompt buffer', () => {
 
   // cadence.md -> Composition rule: a short open region is filled from the
   // previous chapter up to protectedBuffer, so the window crosses the boundary.
-  it('widens past the open region to satisfy the protectedBuffer floor', () => {
-    const ctx = buildGenerationContext({
+  it('widens past the open region to satisfy the protectedBuffer floor', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: branchEntries(40, 3),
       settings: storySettings({
@@ -591,8 +655,8 @@ describe('buildGenerationContext — composed prompt buffer', () => {
   // Contract pin for the piggyback fallback classifier, which passes exactly
   // the tail pair it wants extracted rather than a branch: under the shipped
   // defaults the composition must not truncate a caller window that short.
-  it('leaves a two-entry caller window intact under the default knobs', () => {
-    const ctx = buildGenerationContext({
+  it('leaves a two-entry caller window intact under the default knobs', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: branchEntries(2, 2),
       settings: storySettings(),
@@ -605,8 +669,8 @@ describe('buildGenerationContext — composed prompt buffer', () => {
   // a region with no open entries composes to nothing at all and the classifier
   // gets its extraction instruction with no prose beneath it. Reachable from M5,
   // when chapter-close starts stamping chapterId on recent entries.
-  it('composes that same pair away at protectedBuffer 0 once both entries are chaptered', () => {
-    const ctx = buildGenerationContext({
+  it('composes that same pair away at protectedBuffer 0 once both entries are chaptered', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: branchEntries(2, 0),
       settings: storySettings({ protectedBuffer: 0 }),
@@ -626,8 +690,7 @@ describe('buildGenerationContext — composed window reaches the bundled templat
     protectedBuffer: 0,
   })
   const context = () =>
-    buildGenerationContext({
-      branchId: 'b1',
+    buildContext({
       entries: branchEntries(40, 12),
       entities: [],
       definition,
@@ -635,15 +698,15 @@ describe('buildGenerationContext — composed window reaches the bundled templat
       idMap: new IdBiMap(),
     })
 
-  it('composes wider than partialChapterBuffer, so a re-trim would be visible', () => {
-    expect(contentsOf(context())).toHaveLength(12)
-    expect(contentsOf(context()).length).toBeGreaterThan(settings.partialChapterBuffer)
+  it('composes wider than partialChapterBuffer, so a re-trim would be visible', async () => {
+    expect(contentsOf(await context())).toHaveLength(12)
+    expect(contentsOf(await context()).length).toBeGreaterThan(settings.partialChapterBuffer)
   })
 
   it.each([TEMPLATE_IDS.perTurnNarrative, TEMPLATE_IDS.suggestionRefresh])(
     'renders every composed entry in %s',
-    (templateId) => {
-      const ctx = context()
+    async (templateId) => {
+      const ctx = await context()
       const prompt = renderTemplate(templateId, ctx)
       const composed = contentsOf(ctx)
       expect(composed).toHaveLength(12)
@@ -680,7 +743,6 @@ function seededIdMap(...ids: string[]): IdBiMap {
 
 describe('buildGenerationContext — retrieval bundles', () => {
   const base = () => ({
-    branchId: 'b1',
     entries: [] as never[],
     entities: [],
     definition,
@@ -699,15 +761,15 @@ describe('buildGenerationContext — retrieval bundles', () => {
       },
     })
 
-  it('emits an empty array for every retrieved bucket when no retrieval ran', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: undefined })
+  it('emits an empty array for every retrieved bucket when no retrieval ran', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: undefined })
     for (const key of RETRIEVED_KEYS) expect(ctx[key]).toEqual([])
   })
 
   // Positive control for the emptiness assertion above: the same five keys
   // carry their own bundle and only their own.
-  it('routes each bundle to its own bucket', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('routes each bundle to its own bucket', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     expect(namesOf(ctx.retrievedEntities)).toEqual(['Mara'])
     expect(namesOf(ctx.retrievedLore)).toEqual(['The Compact'])
     expect(namesOf(ctx.retrievedHappenings)).toEqual(['The siege'])
@@ -716,22 +778,21 @@ describe('buildGenerationContext — retrieval bundles', () => {
   })
 
   // Why those three and nothing else: see promptRows in generation-context.ts.
-  it('projects a candidate to id / displayName / renderedText only', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('projects a candidate to id / displayName / renderedText only', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     const row = (ctx.retrievedLore as Record<string, unknown>[])[0]!
     expect(Object.keys(row).sort()).toEqual(['displayName', 'id', 'renderedText'])
     expect(row.renderedText).toBe('The Compact rendered')
   })
 
-  it('substitutes retrieved row ids to placeholders, like the entities list', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('substitutes retrieved row ids to placeholders, like the entities list', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     expect((ctx.retrievedEntities as { id: string }[])[0]!.id).toBe('c1')
   })
 })
 
 describe('buildGenerationContext — structural floor', () => {
   const base = () => ({
-    branchId: 'b1',
     entries: [] as never[],
     entities: [],
     definition,
@@ -751,8 +812,8 @@ describe('buildGenerationContext — structural floor', () => {
       },
     })
 
-  it('emits empty lists and a null location when no retrieval ran', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: undefined })
+  it('emits empty lists and a null location when no retrieval ran', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: undefined })
     expect(ctx.structuralActiveThreads).toEqual([])
     expect(ctx.structuralPinnedEntities).toEqual([])
     expect(ctx.structuralPinnedLore).toEqual([])
@@ -760,8 +821,8 @@ describe('buildGenerationContext — structural floor', () => {
     expect(ctx.structuralLocation).toBeNull()
   })
 
-  it('carries every floor field to its own bucket', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('carries every floor field to its own bucket', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     expect((ctx.structuralLocation as { name: string }).name).toBe('The keep')
     expect((ctx.structuralActiveThreads as { title: string }[]).map((t) => t.title)).toEqual([
       'Find the heir',
@@ -770,8 +831,8 @@ describe('buildGenerationContext — structural floor', () => {
 
   // Why they are not one concatenated list: see the structuralPinned* keys in
   // generation-context.ts.
-  it('keeps the pinned rows in per-type buckets a template can tell apart', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('keeps the pinned rows in per-type buckets a template can tell apart', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     expect((ctx.structuralPinnedEntities as { name: string }[]).map((e) => e.name)).toEqual([
       'Corvin',
     ])
@@ -783,16 +844,16 @@ describe('buildGenerationContext — structural floor', () => {
     ])
   })
 
-  it('substitutes floor row ids to placeholders', () => {
-    const ctx = buildGenerationContext({ ...base(), retrieval: populated() })
+  it('substitutes floor row ids to placeholders', async () => {
+    const ctx = await buildContext({ ...base(), retrieval: populated() })
     expect((ctx.structuralLocation as { id: string }).id).toBe('l1')
   })
 
   // The floor is built over LOADED source rows, so every row here still carries
   // embeddingStale (and lore's keywords) at runtime; StructuralFloor's declared
   // shape hides that from the compiler, which is why it needs a runtime pin.
-  it('projects floor rows to render fields only, dropping retrieval bookkeeping', () => {
-    const ctx = buildGenerationContext({
+  it('projects floor rows to render fields only, dropping retrieval bookkeeping', async () => {
+    const ctx = await buildContext({
       ...base(),
       retrieval: retrievalSuccess({
         floor: {
@@ -817,7 +878,7 @@ describe('buildGenerationContext — structural floor', () => {
   // Positive control for the projection assertions: the same leaked fields are
   // present on the rows going in, so those key lists are a filter's output and
   // not just the fixture's own shape.
-  it('receives floor rows that do carry the bookkeeping it drops', () => {
+  it('receives floor rows that do carry the bookkeeping it drops', async () => {
     const leaked = { ...entityRow(CHAR_ID, 'Mara'), ...LOADED_EXTRAS }
     expect(Object.keys(leaked)).toContain('embeddingStale')
     expect(Object.keys(leaked)).toContain('keywords')
@@ -834,7 +895,6 @@ describe('buildGenerationContext — locationIds', () => {
   })
 
   const base = () => ({
-    branchId: 'b1',
     entries: [] as never[],
     entities: [],
     definition,
@@ -842,12 +902,12 @@ describe('buildGenerationContext — locationIds', () => {
     idMap: seededIdMap(LOC_A, LOC_B, LOC_C, LOC_D, CHAR_ID, CHAR_ID_2),
   })
 
-  it('is empty when no retrieval ran', () => {
-    expect(buildGenerationContext({ ...base(), retrieval: undefined }).locationIds).toEqual([])
+  it('is empty when no retrieval ran', async () => {
+    expect((await buildContext({ ...base(), retrieval: undefined })).locationIds).toEqual([])
   })
 
-  it('collects every place the prompt renders an ID for, in reading order', () => {
-    const ctx = buildGenerationContext({
+  it('collects every place the prompt renders an ID for, in reading order', async () => {
+    const ctx = await buildContext({
       ...base(),
       retrieval: {
         ...retrievalSuccess({
@@ -864,8 +924,8 @@ describe('buildGenerationContext — locationIds', () => {
     expect(ctx.locationIds).toEqual(['l2', 'l1', 'l3', 'l4'])
   })
 
-  it('leaves out entities that are not places, from either the floor or the ranker', () => {
-    const ctx = buildGenerationContext({
+  it('leaves out entities that are not places, from either the floor or the ranker', async () => {
+    const ctx = await buildContext({
       ...base(),
       retrieval: {
         ...retrievalSuccess({
@@ -887,8 +947,8 @@ describe('buildGenerationContext — locationIds', () => {
     expect((ctx.retrievedEntities as { id: string }[]).map((e) => e.id)).toEqual(['c2'])
   })
 
-  it('de-duplicates a place the floor and the ranker both name', () => {
-    const ctx = buildGenerationContext({
+  it('de-duplicates a place the floor and the ranker both name', async () => {
+    const ctx = await buildContext({
       ...base(),
       retrieval: {
         ...retrievalSuccess({
@@ -905,15 +965,14 @@ describe('buildGenerationContext — locationIds', () => {
 describe('buildGenerationContext — currentLocationId', () => {
   // LOC_A is l1 and LOC_B is l2, so the two entries below are distinguishable.
   const base = () => ({
-    branchId: 'b1',
     entities: [],
     definition,
     settings,
     idMap: seededIdMap(LOC_A, LOC_B),
   })
 
-  it('reads the narrative tail, not an earlier entry, and substitutes the id', () => {
-    const ctx = buildGenerationContext({
+  it('reads the narrative tail, not an earlier entry, and substitutes the id', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: [
         { ...entry('e1', 1, 'one'), metadata: sceneMetadata(LOC_A) },
@@ -923,13 +982,13 @@ describe('buildGenerationContext — currentLocationId', () => {
     expect(ctx.currentLocationId).toBe('l2')
   })
 
-  it('falls back to null when the tail carries no location', () => {
-    const ctx = buildGenerationContext({ ...base(), entries: [entry('e1', 1, 'one')] as never[] })
+  it('falls back to null when the tail carries no location', async () => {
+    const ctx = await buildContext({ ...base(), entries: [entry('e1', 1, 'one')] as never[] })
     expect(ctx.currentLocationId).toBeNull()
   })
 
-  it('ignores a system row at the tail', () => {
-    const ctx = buildGenerationContext({
+  it('ignores a system row at the tail', async () => {
+    const ctx = await buildContext({
       ...base(),
       entries: [
         { ...entry('e1', 1, 'one'), metadata: sceneMetadata(LOC_A) },
@@ -937,5 +996,138 @@ describe('buildGenerationContext — currentLocationId', () => {
       ] as never[],
     })
     expect(ctx.currentLocationId).toBe('l1')
+  })
+})
+
+describe('buildGenerationContext — data source', () => {
+  const dbEntry = (
+    position: number,
+    content: string,
+    kind: StoryEntry['kind'] = 'ai_reply',
+    metadata: EntryMetadata | null = null,
+  ): StoryEntry => ({
+    id: `entry_${position}`,
+    branchId: 'b1',
+    position,
+    kind,
+    content,
+    chapterId: null,
+    metadata,
+    createdAt: position,
+  })
+
+  function openStory(overrides: Partial<StorySettings> = {}, branchId = 'b1') {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId,
+      definition: definition as never,
+      settings: storySettings({ fullChapterInBuffer: true, protectedBuffer: 0, ...overrides }),
+    })
+    entitiesStore.hydrate(branchId, [])
+  }
+
+  async function build(intermediates: Record<string, unknown> = {}) {
+    const load = await buildGenerationContext(phaseCtx(intermediates), { label: 'test' })
+    if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
+    return load.context
+  }
+
+  it('composes entries from the database rather than a caller-supplied array', async () => {
+    openStory()
+    await seedEntries([dbEntry(1, 'first'), dbEntry(2, 'second')])
+
+    const context = await build()
+
+    expect((context.entries as { content: string }[]).map((e) => e.content)).toEqual([
+      'first',
+      'second',
+    ])
+  })
+
+  it('exposes the last two non-system turns as lastTurns', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'oldest'),
+      dbEntry(2, 'user turn', 'user_action'),
+      dbEntry(3, 'ai turn'),
+      dbEntry(4, 'ERROR', 'system'),
+    ])
+
+    const context = await build()
+
+    expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual([
+      'user turn',
+      'ai turn',
+    ])
+  })
+
+  it('projects entries to position, content and the scene metadata subset', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'prose', 'ai_reply', {
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: 42,
+        summary: 'a summary',
+        reasoning: 'model chain of thought',
+        model: 'some-model',
+      }),
+    ])
+
+    const [row] = (await build()).entries as Record<string, unknown>[]
+
+    expect(Object.keys(row).sort()).toEqual(['content', 'metadata', 'position'])
+    expect(row.metadata).toEqual({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 42,
+      summary: 'a summary',
+    })
+  })
+
+  // Scene state is what the story is currently in, so it comes off the branch's
+  // own tail rather than the window's: a chapter-assigned branch with no
+  // protected floor composes an empty buffer, and the scene must survive that.
+  it('takes scene state from the branch tail even when the buffer window is empty', async () => {
+    openStory({ fullChapterInBuffer: false, partialChapterBuffer: 10, protectedBuffer: 0 })
+    await seedEntries([
+      {
+        ...dbEntry(1, 'closed prose', 'ai_reply', {
+          sceneEntities: [],
+          currentLocationId: LOC_A,
+          worldTime: 0,
+        }),
+        chapterId: 'chap_00000000-0000-4000-8000-00000000a001',
+      },
+    ])
+
+    const context = await build()
+
+    expect(context.entries).toEqual([])
+    expect(context.currentLocationId).toBe('l1')
+  })
+
+  it('refuses the run when the open story is another branch', async () => {
+    openStory({}, 'b2')
+
+    const load = await buildGenerationContext(phaseCtx(), { label: 'narrative' })
+
+    expect(load).toEqual({
+      ok: false,
+      result: {
+        status: 'failed',
+        error: { kind: 'orchestrator', detail: 'narrative: no open story for branch' },
+      },
+    })
+  })
+
+  it('reuses the run-scoped idMap so placeholders stay stable across phases', async () => {
+    openStory()
+    const idMap = new IdBiMap()
+    const intermediates: Record<string, unknown> = { idMap }
+
+    await build(intermediates)
+
+    expect(intermediates.idMap).toBe(idMap)
   })
 })

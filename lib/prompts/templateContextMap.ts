@@ -25,6 +25,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       required: true,
     },
     {
+      name: 'lastTurns',
+      type: 'Entry[]',
+      category: 'Story',
+      description:
+        "The last two narrative turns — the user's action and the AI's reply — bounded by the query, so neither the story's buffer knobs nor a template can narrow them. For per-turn classification, not for narrating.",
+      required: true,
+    },
+    {
       name: 'entities',
       type: 'Entity[]',
       category: 'Entities',
@@ -326,7 +334,7 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // UI-level grouping name -> variable names it surfaces. A name that matches
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
-  Story: ['entries', 'turns'],
+  Story: ['entries', 'lastTurns', 'turns'],
   Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadEntityId', 'cast'],
   Plot: ['happenings'],
   Retrieval: [

@@ -1,18 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { logger, makeLogger, type Logger } from '@/lib/diagnostics'
 import type { TemplateId } from '@/lib/prompts'
 import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
-import {
-  appSettingsStore,
-  currentStoryStore,
-  entitiesStore,
-  entriesStore,
-  resetAllStores,
-} from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
+import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
@@ -93,7 +88,7 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
     abortSignal,
     intermediates: {},
     log: makeLogger('act_1'),
-    db: {} as never,
+    db: phaseDb.db,
     runInTransaction: async () => undefined,
     storyId: 's1',
     branchId: 'b1',
@@ -108,6 +103,13 @@ beforeEach(() => {
   streamTextMock.mockReset().mockReturnValue(failingStreamCall())
   renderTemplateMock.mockReset()
   resetAllStores()
+  resetPhaseDb(phaseDb)
+})
+
+let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
 })
 
 describe('per-turn pipeline declaration', () => {
@@ -135,7 +137,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates: {},
       log: makeLogger('act_1'),
-      db: {} as never,
+      db: phaseDb.db,
       runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
@@ -154,7 +156,8 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3, models: { narrative: 'story-model' } }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
       providers: [provider],
@@ -204,7 +207,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3 }),
     })
-    entriesStore.hydrate('b-other', [])
+    hydrateEntries(phaseDb, 'b-other', [])
 
     const result = await runNarrativePhase()
 
@@ -225,7 +228,8 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3 }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
     const controller = new AbortController()
     // ai@6 fullStream ends without throwing on abort (an 'abort' part, no
     // onError) — the phase must classify via the signal, not a stream error.
@@ -252,7 +256,8 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3 }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
     streamTextMock.mockReturnValue({
       ok: false,
       kind: 'no-profile-assigned',
@@ -280,7 +285,7 @@ describe('per-turn pipeline declaration', () => {
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
     const heroId = 'char_00000000-0000-4000-8000-000000000001'
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [
       {
         id: heroId,
@@ -342,13 +347,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       runInTransaction: async () => undefined,
-      db: {
-        select: () => ({
-          from: () => ({
-            where: () => Promise.resolve([{ next: 1 }]),
-          }),
-        }),
-      } as never,
+      db: phaseDb.db,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -408,7 +407,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
     // 'c99' is never allocated (definition.leadEntityId claims 'c1', nothing
     // else is character-shaped here), so it's placeholder-shaped but
     // unresolvable — MalformedPlaceholderError.
@@ -457,9 +456,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       runInTransaction: async () => undefined,
-      db: {
-        select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
-      } as never,
+      db: phaseDb.db,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -497,7 +494,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
@@ -543,9 +540,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: logger,
       runInTransaction: async () => undefined,
-      db: {
-        select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
-      } as never,
+      db: phaseDb.db,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -571,7 +566,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
@@ -622,13 +617,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       runInTransaction: async () => undefined,
-      db: {
-        select: () => ({
-          from: () => ({
-            where: () => Promise.resolve([{ next: 1 }]),
-          }),
-        }),
-      } as never,
+      db: phaseDb.db,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -654,7 +643,7 @@ describe('per-turn pipeline declaration', () => {
       definition,
       settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
     })
-    entriesStore.hydrate('b1', [])
+    hydrateEntries(phaseDb, 'b1', [])
     entitiesStore.hydrate('b1', [])
     vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
       ...APP_SETTINGS_DEFAULTS,
@@ -706,13 +695,7 @@ describe('per-turn pipeline declaration', () => {
       intermediates,
       log: makeLogger('act_1'),
       runInTransaction: async () => undefined,
-      db: {
-        select: () => ({
-          from: () => ({
-            where: () => Promise.resolve([{ next: 1 }]),
-          }),
-        }),
-      } as never,
+      db: phaseDb.db,
       storyId: 's1',
       branchId: 'b1',
     })
@@ -734,7 +717,7 @@ describe('per-turn pipeline declaration', () => {
       abortSignal: new AbortController().signal,
       intermediates,
       log: makeLogger('act_1'),
-      db: {} as never,
+      db: phaseDb.db,
       runInTransaction: async () => undefined,
       storyId: 's1',
       branchId: 'b1',
@@ -818,7 +801,7 @@ async function runNarrativeWith(opts: {
       ...opts.settings,
     }),
   })
-  entriesStore.hydrate('b1', [])
+  hydrateEntries(phaseDb, 'b1', [])
   // The store carries the whole branch in production (openStory hydrates it
   // unwindowed), and buildPiggybackActions resolves <current_location> against
   // it — so a ranked location has to exist here, not only in the retrieval
@@ -873,9 +856,7 @@ async function runNarrativeWith(opts: {
     intermediates,
     log: opts.log ?? makeLogger('act_1'),
     runInTransaction: async () => undefined,
-    db: {
-      select: () => ({ from: () => ({ where: () => Promise.resolve([{ next: 1 }]) }) }),
-    } as never,
+    db: phaseDb.db,
     storyId: 's1',
     branchId: 'b1',
   })

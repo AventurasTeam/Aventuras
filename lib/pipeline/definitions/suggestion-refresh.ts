@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
-import { IdBiMap } from '@/lib/ids'
 import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
@@ -10,7 +9,7 @@ import {
   suggestionRefSchema,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import { appSettingsStore, currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
+import { appSettingsStore, currentStoryStore, entriesStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
 import { PER_TURN_KIND } from './per-turn'
@@ -95,8 +94,9 @@ async function* suggestionEmissionPhase(
     .sort((a, b) => a.position - b.position)
   // Same anchor the strip renders from, so the run writes where the reader is
   // looking. Only AI-authored entries qualify, and everything after the anchor
-  // is a user_action or a system row — neither carries chips. The whole branch
-  // goes to the builder regardless; composing the prompt window is its job.
+  // is a user_action or a system row — neither carries chips. Read from the
+  // store, not the DB: the anchor is the row the reader can see, which is the
+  // point of it, and the prompt window is the builder's own read.
   const target = findSuggestionAnchor(entries)
   if (!target) {
     ctx.log.warn('classifier.suggestions_refresh_no_anchor', { branchId: ctx.branchId })
@@ -112,16 +112,12 @@ async function* suggestionEmissionPhase(
     defaultProviderId: cfg.defaultProviderId,
     storyModels: open.settings.models,
   }
-  const context = buildGenerationContext({
-    branchId: ctx.branchId,
-    entries,
-    entities: [...entitiesStore.getEntities().values()],
-    definition: open.definition,
-    settings: open.settings,
-    idMap: new IdBiMap(),
+  const load = await buildGenerationContext(ctx, {
+    label: SUGGESTION_REFRESH_KIND,
     refreshGuidance: guidance,
   })
-  const prompt = renderTemplate(TEMPLATE_IDS.suggestionRefresh, context)
+  if (!load.ok) return load.result
+  const prompt = renderTemplate(TEMPLATE_IDS.suggestionRefresh, load.context)
 
   const result = await generateStructured(
     'suggestion',

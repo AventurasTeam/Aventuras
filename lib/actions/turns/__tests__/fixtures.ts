@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { vi } from 'vitest'
 
 import { stories, storyDefinitionSchema, storySettingsSchema } from '@/lib/db'
-import { currentStoryStore, entriesStore, rehydrateStories } from '@/lib/stores'
+import { currentStoryStore, entitiesStore, entriesStore, rehydrateStories } from '@/lib/stores'
 
 import type { makeHarness } from '../../../pipeline/__tests__/harness'
 
@@ -121,6 +121,9 @@ export async function openStory(
     definition: STORY_DEFINITION,
     settings: STORY_SETTINGS,
   })
+  // The real open action loads both working sets in one block, and the
+  // generation context guards on the entities half being loaded for the branch.
+  entitiesStore.hydrate(branchId, [])
 }
 
 export function branchEntries(branchId: string) {

@@ -144,22 +144,19 @@ export async function* piggybackFallbackClassifierPhase(
 
   // Same context builder + template pattern as the narrative phase
   // (lib/pipeline/definitions/per-turn.ts) — the classifier is a
-  // story-related prompt like any other, not a special case. Reuses the
-  // narrative phase's idMap (ctx.intermediates) so placeholder IDs stay
-  // consistent across the turn instead of being renumbered from scratch.
-  const idMap = ctx.intermediates.idMap as IdBiMap
-  const context = buildGenerationContext({
-    branchId: ctx.branchId,
-    // The user's action can itself carry state changes ("I put the sword
-    // away"), not just the AI's reply — both entries go to the classifier.
-    entries: previousEntry ? [previousEntry, tail] : [tail],
-    entities,
-    definition: open.definition,
-    settings: open.settings,
-    idMap,
+  // story-related prompt like any other, not a special case. Its template
+  // renders `lastTurns` rather than `entries`: the user's action can itself
+  // carry state changes ("I put the sword away"), not just the AI's reply, and
+  // that pair is a fixed contract the story's buffer knobs must not cut.
+  const load = await buildGenerationContext(ctx, {
+    label: PIGGYBACK_FALLBACK_PHASE_NAME,
     suggestionsFire: askForSuggestions,
   })
-  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+  if (!load.ok) return load.result
+  // The narrative phase's idMap, so placeholder IDs stay consistent across the
+  // turn instead of being renumbered from scratch.
+  const idMap = ctx.intermediates.idMap as IdBiMap
+  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
 
   const appSettings = appSettingsStore.getAppSettings()
   const classifierConfig: ResolveModelConfig = {

@@ -1,53 +1,49 @@
+import { and, desc, eq, ne } from 'drizzle-orm'
+
 import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
-import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
-import { substituteIds, type IdBiMap } from '@/lib/ids'
+import {
+  inheritedEntryMetadata,
+  storyEntries,
+  type DbCtx,
+  type Entity,
+  type StoryEntry,
+} from '@/lib/db'
+import { IdBiMap, substituteIds } from '@/lib/ids'
 import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
 import {
-  composePromptBuffer,
+  readPromptBuffer,
   type Candidate,
   type EntityRow,
   type LoreRow,
   type RetrievalSuccess,
   type ThreadRow,
 } from '@/lib/retrieval'
+import { currentStoryStore, entitiesStore } from '@/lib/stores'
 
-type BuildArgs = {
-  // Scopes both collections below. Callers already read per-branch, but no
-  // generation context has ever wanted a row from another branch, so the
-  // predicate belongs here rather than at each call site.
-  branchId: string
-  // The branch's loaded entries, ascending by position. Every consumer draws
-  // from that one set and differs only in how much of it it passes, so this is
-  // a truncation seam, not a per-kind query. What reaches a template is
-  // composePromptBuffer's window over this list, so a caller handing over a
-  // deliberate short tail can still have it cut — or emptied — by the story's
-  // own buffer knobs, which the caller does not control.
-  entries: readonly StoryEntry[]
-  entities: readonly Entity[]
-  definition: StoryDefinition
-  settings: StorySettings
-  idMap: IdBiMap
+import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
+import type { PhaseContext, PhaseResult } from '../types'
+
+type BuildFlags = {
+  /** Prefixes a guard failure's detail with the calling phase's name. */
+  label: string
   // Whether THIS turn's tagged block will actually be consumed — only the
-  // narrative phase knows this (piggybackMode + resolved model capability),
-  // so it's caller-supplied rather than computed here. Defaults false for
-  // every other generationContext consumer, which never emits state-emission
-  // instructions in the first place.
+  // narrative phase knows this (piggybackMode + resolved model capability), so
+  // it stays caller-supplied. Defaults false for every other consumer, which
+  // never emits state-emission instructions in the first place.
   piggybackFires?: boolean
-  // Whether THIS call should emit the <suggestions> fragment — only the
-  // calling fold knows this (suggestionsEnabled + enabled categories + no
-  // suggestions already in hand), so it's caller-supplied like piggybackFires
-  // rather than computed here. Defaults false for every other
-  // generationContext consumer.
+  // Whether THIS call should emit the <suggestions> fragment — only the calling
+  // fold knows this (suggestionsEnabled + enabled categories + no suggestions
+  // already in hand), so it is caller-supplied like piggybackFires.
   suggestionsFire?: boolean
   // Composer text at the moment the reader hit ⟳ on the chip strip
   // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
   // phase has it; blank everywhere else.
   refreshGuidance?: string
-  // This turn's successful retrieval pass. Absent for the two folds that never
-  // retrieve — the piggyback fallback classifier and suggestion-refresh — which
-  // then render every bucket empty.
-  retrieval?: RetrievalSuccess
 }
+
+export type GenerationContextLoad =
+  | { ok: true; context: Record<string, unknown> }
+  | { ok: false; result: Extract<PhaseResult, { status: 'failed' }> }
 
 /** A ranked bundle row as a template sees it. */
 export type RetrievedRow = { id: string; displayName: string; renderedText: string }
@@ -128,30 +124,94 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-// The one context builder for the `generationContext` group: every story
-// agent's phase calls this and its template picks from the same variable set
-// (pinned in templateContextMap; parity-tested here).
-export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
-  const {
-    branchId,
-    entries,
-    entities,
-    definition,
-    settings,
-    idMap,
-    piggybackFires = false,
-    suggestionsFire = false,
-    refreshGuidance = '',
-    retrieval,
-  } = args
+/** The last two narrative turns: the user's action and the AI's reply. */
+const LAST_TURNS = 2
 
-  // Both exclusions are unconditional defense-in-depth: system entries are
-  // technical-only rows (removed on generate) that templates must never see,
-  // and a foreign-branch row would describe a story this prompt isn't telling.
-  // Not redundant with composePromptBuffer's own system filter — the scene and
-  // location tail reads below depend on this one.
-  const narrative = entries.filter((e) => e.kind !== 'system' && e.branchId === branchId)
-  const branchEntities = entities.filter((e) => e.branchId === branchId)
+/**
+ * A story entry as a template sees it. `metadata` is projected, never passed
+ * whole: the column also carries raw model `reasoning`, the reversed submission
+ * kept for Retry, internal failure detail and per-call telemetry — none of which
+ * belongs in a prompt, and any of which a pack could reach for good once
+ * exposed. `id` is deliberately absent; `entry` has no substitutable prefix, and
+ * `position` is the handle a template wants.
+ */
+function promptEntry(entry: StoryEntry): Record<string, unknown> {
+  return {
+    position: entry.position,
+    content: promptProse(entry),
+    metadata: {
+      ...inheritedEntryMetadata(entry.metadata),
+      summary: entry.metadata?.summary ?? '',
+    },
+  }
+}
+
+// Bounded by the query rather than by a caller or a template: the pair is a
+// pipeline contract (the user's action plus the AI's reply), not a share of the
+// prompt budget, so neither the story's buffer knobs nor a pack may narrow it.
+async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
+  const rows = (await db
+    .select()
+    .from(storyEntries)
+    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
+    .orderBy(desc(storyEntries.position))
+    .limit(LAST_TURNS)) as StoryEntry[]
+  return rows.reverse()
+}
+
+function readRetrievalOutcome(
+  intermediates: Record<string, unknown>,
+): RetrievalSuccess | undefined {
+  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
+  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
+  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
+}
+
+const guardFailure = (detail: string): GenerationContextLoad => ({
+  ok: false,
+  result: { status: 'failed', error: { kind: 'orchestrator', detail } },
+})
+
+/**
+ * The one context builder for the `generationContext` group: every story agent's
+ * phase calls this and its template picks from the same variable set (pinned in
+ * templateContextMap; parity-tested here).
+ *
+ * Takes run identity and run-scoped flags only. No caller hands it domain data,
+ * so no phase can quietly narrow the group's context to a slice of its own —
+ * entries come from SQLite (never `entriesStore`, whose reader window caps them),
+ * and the open story carries definition, settings and entities.
+ */
+export async function buildGenerationContext(
+  ctx: Pick<PhaseContext, 'db' | 'storyId' | 'branchId' | 'intermediates'>,
+  flags: BuildFlags,
+): Promise<GenerationContextLoad> {
+  const { branchId, storyId } = ctx
+  const { label, piggybackFires = false, suggestionsFire = false, refreshGuidance = '' } = flags
+
+  // Both guards are defense-in-depth against store desync: a build against the
+  // wrong branch would describe a story this prompt isn't telling, and would
+  // filter every entity away rather than fail.
+  const open = currentStoryStore.getCurrentStory()
+  if (!open || open.branchId !== branchId || open.storyId !== storyId)
+    return guardFailure(`${label}: no open story for branch`)
+  if (entitiesStore.getLoadedBranch() !== branchId)
+    return guardFailure(`${label}: entities store loaded for another branch`)
+
+  const { definition, settings } = open
+
+  // Run-scoped, so it rides intermediates: the placeholders a later phase
+  // resolves must be the ones the prompt was built with.
+  const idMap = (ctx.intermediates.idMap as IdBiMap | undefined) ?? new IdBiMap()
+  ctx.intermediates.idMap = idMap
+
+  const [buffer, lastTurns] = await Promise.all([
+    readPromptBuffer(ctx.db, branchId, settings),
+    readLastTurns(ctx.db, branchId),
+  ])
+  const branchEntities = [...entitiesStore.getEntities().values()].filter(
+    (e) => e.branchId === branchId,
+  )
 
   const normalizedDefinition = {
     ...definition,
@@ -170,8 +230,13 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   // false — asking is that call's whole premise, not a per-run condition.
   const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
 
-  const tail = narrative.at(-1)
+  const retrieval = readRetrievalOutcome(ctx.intermediates)
   const floor = retrieval?.floor
+
+  // The branch's own tail, not the window's: scene state is what the story is
+  // currently in, so it must not move with the buffer knobs or with whatever a
+  // template chose to render.
+  const tail = lastTurns.at(-1)
 
   // Every place the prompt brackets an id for, in the order the blocks render.
   // A template that instead named "the ids above" would point <current_location>
@@ -188,7 +253,8 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
-    entries: composePromptBuffer(narrative, settings).map((e) => ({ content: promptProse(e) })),
+    entries: buffer.map(promptEntry),
+    lastTurns: lastTurns.map(promptEntry),
     entities: branchEntities.map(promptEntity),
     // Writers inherit scene state forward (submit-turn, per-turn), so the
     // non-system tail always carries the current scene and location.
@@ -228,5 +294,5 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes
   // a placeholder; prose (entry.content, definition prose) has no IDs and passes through.
-  return substituteIds(context, idMap) as Record<string, unknown>
+  return { ok: true, context: substituteIds(context, idMap) as Record<string, unknown> }
 }

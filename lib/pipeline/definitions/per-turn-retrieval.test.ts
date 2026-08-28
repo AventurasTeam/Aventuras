@@ -36,12 +36,12 @@ import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/ou
 import {
   currentStoryStore,
   entitiesStore,
-  entriesStore,
   rehydrateAppSettings,
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
 
+import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
@@ -181,7 +181,7 @@ function seedOpenStory(
     definition,
     settings,
   })
-  entriesStore.hydrate(opts.entriesBranch ?? 'b1', opts.entries ?? [])
+  hydrateEntries(phaseDb, opts.entriesBranch ?? 'b1', opts.entries ?? [])
   entitiesStore.hydrate('b1', opts.entities ?? [])
   vi.spyOn(storiesStore, 'getStories').mockReturnValue({
     rows: [storyRow(settings, opts.storyId ?? 's1')],
@@ -196,16 +196,9 @@ function openOnBranch(branchId: string): void {
   currentStoryStore.set({ ...open, branchId })
 }
 
-// The phase composes its prompt buffer from SQLite, so every run needs a real
-// handle. Tests that don't care about sourcing get the store's entries mirrored
-// in; seedDbEntries opts a test out to let the two sources differ on purpose.
-let harnessDb: Awaited<ReturnType<typeof createTestDb>>
-let dbEntriesSeeded = false
-
-async function seedDbEntries(rows: StoryEntry[]): Promise<void> {
-  await harnessDb.db.insert(storyEntries).values(rows)
-  dbEntriesSeeded = true
-}
+// Database-only, so a case can make the two sources disagree on purpose;
+// seedOpenStory writes to both.
+const seedDbEntries = (rows: StoryEntry[]) => phaseDb.db.insert(storyEntries).values(rows)
 
 async function runRetrievalPhase(
   abortSignal = new AbortController().signal,
@@ -223,19 +216,12 @@ async function runRetrievalPhase(
   // A fake logger rather than makeLogger: the real one drops everything when the
   // diagnostics gate is off, which is the default in unit tests.
   const log = { error: vi.fn(), warn: vi.fn(), debug: vi.fn() }
-  if (!dbEntriesSeeded) {
-    const mirrored = [...entriesStore.getEntries().values()]
-    // onConflictDoNothing: a test that runs the phase twice mirrors the same
-    // rows twice.
-    if (mirrored.length > 0)
-      await harnessDb.db.insert(storyEntries).values(mirrored).onConflictDoNothing()
-  }
   const gen = node.run({
     actionId: 'act_1',
     abortSignal,
     intermediates,
     log,
-    db: harnessDb.db,
+    db: phaseDb.db,
     runInTransaction,
     storyId: 's1',
     branchId: 'b1',
@@ -362,18 +348,14 @@ function lastParams(): RetrievalParams {
   return call[1] as RetrievalParams
 }
 
+let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
+
 beforeAll(async () => {
-  harnessDb = await createTestDb()
-  harnessDb.sqlite.exec(`
-    INSERT INTO stories (id, title, created_at, updated_at) VALUES ('s1', 'A story', 1, 1);
-    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b1', 's1', 'main', 1);
-    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b-other', 's1', 'alt', 1);
-  `)
+  phaseDb = await createPhaseDb()
 })
 
 beforeEach(() => {
-  harnessDb.sqlite.exec('DELETE FROM story_entries')
-  dbEntriesSeeded = false
+  resetPhaseDb(phaseDb)
   vi.restoreAllMocks()
   runRetrievalMock.mockReset().mockResolvedValue(OK_OUTCOME)
   refreshEmbeddingStatusMock.mockReset().mockResolvedValue(undefined)
@@ -1195,10 +1177,9 @@ describe('retrieval phase — RetrievalParams assembly', () => {
       settings: { fullChapterInBuffer: true, protectedBuffer: 0 },
       entries: [entry(11, 'ai_reply', 'in-window-prose', meta())],
     })
-    await seedDbEntries([
-      entry(10, 'ai_reply', 'beyond-window-prose', meta()),
-      entry(11, 'ai_reply', 'in-window-prose', meta()),
-    ])
+    // Only in the database: the older entry a scroll-up would have to load
+    // before the store could see it.
+    await seedDbEntries([entry(10, 'ai_reply', 'beyond-window-prose', meta())])
 
     await runRetrievalPhase()
 
