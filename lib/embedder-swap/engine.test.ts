@@ -782,6 +782,38 @@ describe('embedder-swap engine', () => {
     expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
   })
 
+  it('7c. reindex cancelled after its final batch leaves every row current', async () => {
+    const { sqlite, runInTransaction, embedded } = await setup()
+    seedOldVectors(sqlite, embedded)
+    const { fn } = makeEmbedRows(sqlite)
+    // Same shape as 5f, but same-model: the cancel lands with staging done and
+    // phase 2 unwritten, which is the only path reaching the unprocessed branch.
+    let staged = false
+    const { deps } = makeDeps(sqlite, runInTransaction, async (config, rows) => {
+      const ops = await fn(config, rows)
+      staged = true
+      return ops
+    })
+    deps.isCancelRequested = () => staged
+
+    const result = await reindexStory(deps, {
+      storyId: 's1',
+      branchIds: ['b1'],
+      currentModelId: OLD,
+      currentSwapTarget: null,
+      targetConfig: cfg(OLD),
+    })
+
+    expect(result).toBe('cancelled')
+    expect(idsForModel(sqlite, 'entities_vec_384', OLD)).toEqual(['e1', 'e2', 'e3'])
+    expect(storySettings(sqlite)?.embedding_swap_target).toBeUndefined()
+    // The loop finished, so every row carries a fresh vector. Queueing the story
+    // would redo work the cancel never undid.
+    expect(staleFlag(sqlite, 'entities', 'e1')).toBe(0)
+    expect(staleFlag(sqlite, 'lore', 'l1')).toBe(0)
+    expect(staleFlag(sqlite, 'chapters', 'c1')).toBe(0)
+  })
+
   it('7b. same model id, new dim family: phase 2 sweeps the old family, spares the staged one', async () => {
     const { sqlite, runInTransaction, embedded } = await setup()
     seedOldVectors(sqlite, embedded)

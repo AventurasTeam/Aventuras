@@ -73,12 +73,13 @@ describe('setEmbedderDefaults', () => {
     expect(cfg.defaultStorySettings.embeddingBackend).toBe('local')
   })
 
-  it('merges embeddingBackend into existing defaultStorySettings without dropping sibling keys', async () => {
+  it('merges embeddingBackend off the DB row, not a stale store cache', async () => {
+    // No rehydrate: the store still holds the pre-write defaults, so a
+    // read-modify-write sourced from it would drop activePackId.
     await db
       .update(appSettings)
       .set({ defaultStorySettings: { activePackId: 'some-pack' } })
       .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
-    await rehydrateAppSettings(db)
 
     await setEmbedderDefaults(
       { backend: 'provider', modelId: 'text-embedding-3-small', providerId: 'prov-1' },
