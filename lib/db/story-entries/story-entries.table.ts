@@ -19,7 +19,12 @@ export const storyEntries = sqliteTable(
     metadata: text('metadata', { mode: 'json' }).$type<EntryMetadata>(),
     createdAt: integer('created_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    // Leading branch_id lets the ordered prompt-buffer reads seek this index
+    // directly; the composite PK is keyed on id, so position sorts unindexed.
+    index('story_entries_position_idx').on(t.branchId, t.position),
+  ],
 )
 
 export const chapters = sqliteTable(

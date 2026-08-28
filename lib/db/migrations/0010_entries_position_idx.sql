@@ -1,0 +1,1 @@
+CREATE INDEX `story_entries_position_idx` ON `story_entries` (`branch_id`,`position`);
