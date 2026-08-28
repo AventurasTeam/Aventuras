@@ -2,6 +2,7 @@ import { and, desc, eq, lt, ne } from 'drizzle-orm'
 
 import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
+import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
   ensurePerTurnPipelineRegistered,
@@ -14,7 +15,6 @@ import {
 import { entriesStore, generationStore, undoRedoStore } from '@/lib/stores'
 
 import { DeltaReplayError, reverseAndPruneDeltaRows } from '../delta/reverse-replay'
-import { isStorySwapPending, withTurnAdmission } from '../embedder-swap/app-deps'
 import { resolveSweep, type StoryEntryRejection } from '../story-entries/operational'
 import { bracketProseReversal } from '../story-entries/prose-reversal'
 import type { DbCtx } from '../types'

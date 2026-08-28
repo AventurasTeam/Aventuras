@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Text } from '@/components/ui/text'
 import { addProvider, quickWireModel, updateProvider } from '@/lib/actions'
 import { fetchModelCatalog, normalizeModelCatalog } from '@/lib/ai'
-import { db } from '@/lib/db'
+import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { t } from '@/lib/i18n'
 import { appSettingsStore } from '@/lib/stores'
@@ -47,10 +47,14 @@ export function ProviderSetupForm() {
             endpoint,
             favoriteModelIds: [],
           },
-          { db },
+          { db, runInTransaction },
         )
       } else {
-        await updateProvider(provider.id, { displayName, apiKey, endpoint }, { db })
+        await updateProvider(
+          provider.id,
+          { displayName, apiKey, endpoint },
+          { db, runInTransaction },
+        )
       }
     } catch (e) {
       logger.error('provider.setup_save_failed', {
@@ -72,7 +76,7 @@ export function ProviderSetupForm() {
       await updateProvider(
         provider.id,
         { cachedModels: normalizeModelCatalog(ids, provider.cachedModels), cachedAt: Date.now() },
-        { db },
+        { db, runInTransaction },
       )
       setCatalog('idle')
     } catch (e) {
@@ -87,7 +91,7 @@ export function ProviderSetupForm() {
     if (picked === null) return
     setWired(false)
     try {
-      await quickWireModel(picked, { db })
+      await quickWireModel(picked, { db, runInTransaction })
       setWired(true)
     } catch (e) {
       setWired(false)
@@ -177,7 +181,7 @@ export function ProviderSetupForm() {
                 await updateProvider(
                   provider.id,
                   { customModelIds: [...(provider.customModelIds ?? []), ref.modelId] },
-                  { db },
+                  { db, runInTransaction },
                 )
               } catch (e) {
                 logger.error('provider.setup_add_custom_failed', {

@@ -1,6 +1,11 @@
 import { boundedSignal } from '@/lib/abort'
 import { inheritedEntryMetadata, queryRows } from '@/lib/db'
 import { embedderReadDim } from '@/lib/embedder'
+import {
+  composeRetrievalEmbedDeps,
+  refreshEmbeddingStatus,
+  resolveStorySwapConfig,
+} from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
@@ -39,10 +44,6 @@ export async function* retrievalPhase(
   if (!working.ok) return working.result
   const { open, entries, entities } = working.set
 
-  // Lazy: lib/actions' barrel reaches submitTurn, which imports lib/pipeline.
-  // A module-eval import would close that require cycle and warn under Metro.
-  const { composeRetrievalEmbedDeps, refreshEmbeddingStatus, resolveStorySwapConfig } =
-    await import('@/lib/actions')
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
 
   const resolution = resolveStorySwapConfig(open.storyId, {

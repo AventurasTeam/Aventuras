@@ -7,16 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Text } from '@/components/ui/text'
 import { useInstalledModels, type InstalledModelInfo } from '@/hooks/use-installed-models'
 import { useSwapResumeActions } from '@/hooks/use-swap-resume-actions'
-import {
-  countStoryEmbeddableRows,
-  ensureProviderEmbeddingDim,
-  refreshEmbeddingStatus,
-  reindexStoryNow,
-  relabelStory,
-  RelabelBlockedError,
-  RelabelDimMismatchError,
-  startStorySwap,
-} from '@/lib/actions'
+import { ensureProviderEmbeddingDim } from '@/lib/actions'
 import {
   db,
   runInTransaction,
@@ -31,6 +22,15 @@ import {
   providerTypeSupportsEmbedding,
   resolveEmbedderConfig,
 } from '@/lib/embedder'
+import {
+  countStoryEmbeddableRows,
+  refreshEmbeddingStatus,
+  reindexStoryNow,
+  relabelStory,
+  RelabelBlockedError,
+  RelabelDimMismatchError,
+  startStorySwap,
+} from '@/lib/embedder-swap'
 import { t } from '@/lib/i18n'
 import {
   appSettingsStore,
@@ -163,7 +163,7 @@ export function MemoryPanel({
     if (target.backend !== 'provider' || target.providerId == null) return
     const result = await ensureProviderEmbeddingDim(
       { providerId: target.providerId, modelId: target.modelId },
-      { db },
+      ctx,
     )
     if (!result.ok) throw new Error(result.message)
   }, [])

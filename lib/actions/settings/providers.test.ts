@@ -6,12 +6,18 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { redactHeaderValue, setHttpCallKnownSecretValues } from '@/lib/diagnostics'
 import { appSettingsStore, rehydrateAppSettings, resetAllStores } from '@/lib/stores'
 
-import { addProvider, quickWireModel, recordProviderEmbeddingDim } from './providers'
+import {
+  addProvider,
+  quickWireModel,
+  recordProviderEmbeddingDim,
+  updateProvider,
+} from './providers'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
+let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
 
 beforeEach(async () => {
-  ;({ db } = await createTestDb())
+  ;({ db, runInTransaction } = await createTestDb())
   await db.insert(appSettings).values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   await rehydrateAppSettings(db)
 })
@@ -31,15 +37,15 @@ const oaiProvider = {
 
 describe('provider mutators', () => {
   it('addProvider persists and rehydrates the store', async () => {
-    await addProvider(oaiProvider, { db })
+    await addProvider(oaiProvider, { db, runInTransaction })
     const cfg = appSettingsStore.getAppSettings()
     expect(cfg.providers).toHaveLength(1)
     expect(cfg.providers[0].id).toBe('prov-1')
   })
 
   it('quickWireModel wires narrative + one agent profile + all six assignments + default', async () => {
-    await addProvider(oaiProvider, { db })
-    await quickWireModel({ providerId: 'prov-1', modelId: 'm-1' }, { db })
+    await addProvider(oaiProvider, { db, runInTransaction })
+    await quickWireModel({ providerId: 'prov-1', modelId: 'm-1' }, { db, runInTransaction })
 
     const cfg = appSettingsStore.getAppSettings()
     expect(cfg.defaultProviderId).toBe('prov-1')
@@ -60,11 +66,11 @@ describe('provider mutators', () => {
   })
 
   it('keeps both dims when two models on one provider are recorded concurrently', async () => {
-    await addProvider(oaiProvider, { db })
+    await addProvider(oaiProvider, { db, runInTransaction })
 
     await Promise.all([
-      recordProviderEmbeddingDim('prov-1', 'm-a', 1024, { db }),
-      recordProviderEmbeddingDim('prov-1', 'm-b', 512, { db }),
+      recordProviderEmbeddingDim('prov-1', 'm-a', 1024, { db, runInTransaction }),
+      recordProviderEmbeddingDim('prov-1', 'm-b', 512, { db, runInTransaction }),
     ])
 
     const cached = appSettingsStore.getAppSettings().providers[0].cachedModels ?? []
@@ -72,14 +78,29 @@ describe('provider mutators', () => {
     expect(cached.find((m) => m.id === 'm-b')?.capabilities?.embeddingDim).toBe(512)
   })
 
+  it('keeps a concurrent updateProvider from another surface, not just sibling dims', async () => {
+    await addProvider(oaiProvider, { db, runInTransaction })
+
+    await Promise.all([
+      recordProviderEmbeddingDim('prov-1', 'm-a', 1024, { db, runInTransaction }),
+      updateProvider('prov-1', { displayName: 'Renamed' }, { db, runInTransaction }),
+    ])
+
+    const provider = appSettingsStore.getAppSettings().providers[0]
+    expect(provider.displayName).toBe('Renamed')
+    expect(provider.cachedModels?.find((m) => m.id === 'm-a')?.capabilities?.embeddingDim).toBe(
+      1024,
+    )
+  })
+
   it('registers the configured provider key for httpCallSink redaction', async () => {
-    await addProvider({ ...oaiProvider, apiKey: 'sk-secret-xyz' }, { db })
+    await addProvider({ ...oaiProvider, apiKey: 'sk-secret-xyz' }, { db, runInTransaction })
     expect(redactHeaderValue('Bearer sk-secret-xyz')).toBe('***')
   })
 
   it('rejects an invalid provider shape at the boundary', async () => {
     const bad = { id: 'x', type: 'nope', displayName: 'X', apiKey: 'k', favoriteModelIds: [] }
     // @ts-expect-error invalid provider type — rejected by Zod at the write boundary
-    await expect(addProvider(bad, { db })).rejects.toThrow()
+    await expect(addProvider(bad, { db, runInTransaction })).rejects.toThrow()
   })
 })

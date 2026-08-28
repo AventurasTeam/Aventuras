@@ -1,20 +1,22 @@
 import {
   DeltaReplayError,
   applyDeltaAction,
-  buildDrainController,
-  embedClassifierDescriptions,
   normalizeAppSettingsRow,
   readClassifierStatus,
   registerAllDomains,
   resetStuckClassifierRunState,
   reverseReplayDeltas,
   runClassifierNow,
-  setDrainKickSink,
   unprocessedTurnCount,
 } from '@/lib/actions'
 import { createClassifierScheduler } from '@/lib/classifier'
 import { STORY_SETTINGS_DEFAULTS, type DbCtx } from '@/lib/db'
 import { configureDiagnosticsGate, logger } from '@/lib/diagnostics'
+import {
+  buildDrainController,
+  embedClassifierDescriptions,
+  setDrainKickSink,
+} from '@/lib/embedder-swap'
 import {
   configureClassifierEmbedder,
   configureDeltaActionPort,

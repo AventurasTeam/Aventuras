@@ -887,7 +887,7 @@ activation memory, but main still accumulates every resulting vector
 before replying, so peak main-process memory and the structured-clone
 payload both still scale with the dirty set (~1000 rows × 384 dims in
 one message). `lib/embedder/drain.ts` and
-`lib/actions/embedder-swap/engine.ts` already pre-batch at 16, so they
+`lib/embedder-swap/engine.ts` already pre-batch at 16, so they
 are unaffected and the chunking is a no-op for them.
 
 Streaming results back per chunk would bound both, but it breaks the
@@ -1079,7 +1079,7 @@ cross-model path is uncovered: the harness's second model is an id-copy of
 MiniLM, and a synthetic id fails catalog dim resolution, while real
 cross-model coverage needs the 768-dim catalog model (~330 MB) downloaded
 per CI run. Unit coverage: the engine's cross-model matrix in
-`lib/actions/embedder-swap/engine.test.ts`. Revisit if a small second
+`lib/embedder-swap/engine.test.ts`. Revisit if a small second
 catalog model lands or CI caches grow acceptable. Surfaced by M3.1b
 Task 12 (2026-07-24).
 

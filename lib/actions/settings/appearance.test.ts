@@ -8,9 +8,10 @@ import { appSettingsStore, rehydrateAppSettings, resetAllStores } from '@/lib/st
 import { setAppearanceThemeId } from './appearance'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
+let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
 
 beforeEach(async () => {
-  ;({ db } = await createTestDb())
+  ;({ db, runInTransaction } = await createTestDb())
   await db.insert(appSettings).values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   await rehydrateAppSettings(db)
 })
@@ -20,7 +21,7 @@ afterEach(() => {
 
 describe('setAppearanceThemeId', () => {
   it('persists the id, preserves sibling appearance keys, and rehydrates the store', async () => {
-    await setAppearanceThemeId('tokyo-night', { db })
+    await setAppearanceThemeId('tokyo-night', { db, runInTransaction })
     const rows = await db
       .select()
       .from(appSettings)
@@ -41,7 +42,7 @@ describe('setAppearanceThemeId', () => {
       .set({ appearance: staleFree })
       .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
 
-    await setAppearanceThemeId('tokyo-night', { db })
+    await setAppearanceThemeId('tokyo-night', { db, runInTransaction })
 
     const rows = await db
       .select()

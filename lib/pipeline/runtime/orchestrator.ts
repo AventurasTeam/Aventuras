@@ -446,6 +446,20 @@ export async function runPipeline<K extends string>(
         },
         { actionId: run.actionId },
       )
+      // Before abortRun: that releases the run, and releasing it drops the gate
+      // that serializes this write against the phases' own status writes.
+      const onPreflightFailure = getPipeline(run.kind).onPreflightFailure
+      if (onPreflightFailure) {
+        try {
+          await onPreflightFailure(ctx, preflightError)
+        } catch (e) {
+          logger.error(
+            'pipeline.preflight_hook_failed',
+            { runId: run.runId, error: e instanceof Error ? e.message : String(e) },
+            { actionId: run.actionId },
+          )
+        }
+      }
       const tx = await abortRun(run, ctx, { reason: 'preflight-failure', error: preflightError })
       return originResult ?? tx
     }

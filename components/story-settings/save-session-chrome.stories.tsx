@@ -168,6 +168,7 @@ export const HardGateDisablesEverySavePath: Story = {
   play: async ({ args }) => {
     await userEvent.click(screen.getByRole('button', { name: 'Make dirty' }))
     expect(await screen.findByRole('button', { name: /^Save/ })).toBeDisabled()
+    expect(screen.getByLabelText('Generation is in flight. Cancel to edit.')).toBeInTheDocument()
 
     await userEvent.keyboard('{Meta>}s{/Meta}')
     expect(args.onCommit).not.toHaveBeenCalled()

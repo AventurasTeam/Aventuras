@@ -159,7 +159,8 @@ cross-branch concurrency is parked.
   cross-cutting transactional layer:
   - **Public API in `index.ts`**: a `defineAction(...)` helper
     that wraps `(state, writeSet) => Promise<void>` around a
-    SQLite transaction with rollback on throw; the concrete
+    SQLite transaction with rollback on throw (removed in M3 —
+    never called; see Post-M1 reconciliation); the concrete
     `applyDeltaAction` for Path A delta-emitted handling
     (writes one delta row to SQL plus the target-table row in
     the same transaction; assigns `log_position` via
@@ -524,3 +525,11 @@ disposition)` (backed by a `terminal` deferred on `RunState`) that
   only — `yieldsTo`, `reversalInProgress`, and `awaitRunTerminal`'s real
   callers (classifier, prose reversals, chapter-close phase 0) land M2/M3/M5;
   no concrete kind declares a `concurrencyPolicy` in M1.
+- **`defineAction` removed (was public API).** 2026-08-26. Never
+  called once in the repo's history. It returned `{ ops, result }`
+  with no store-patch slot, so it could only express half of what
+  the layer does, and the atomicity it advertised belongs to
+  `runInTransaction` rather than to a wrapper. The delta path took
+  `ActionHandler`'s `{ ops, patch }` instead; non-delta writers call
+  `ctx.runInTransaction` directly. `applyDeltaAction` and the rest
+  of this slice's `lib/actions/` brief stand as shipped.

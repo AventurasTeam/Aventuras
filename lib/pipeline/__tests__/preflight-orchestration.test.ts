@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { PERIODIC_CLASSIFIER_KIND } from '@/lib/classifier'
-import { deltas, pipelineRuns } from '@/lib/db'
+import { branches, deltas, pipelineRuns } from '@/lib/db'
 import {
   definePipeline,
   ensurePeriodicClassifierPipelineRegistered,
@@ -16,6 +16,10 @@ import { generationStore, hydrateAppSettings } from '@/lib/stores'
 import { expectRan, makeHarness, resetSingletons } from './harness'
 
 const base = { affordance: 'invisible', gateBehavior: 'hard-gate', concurrencyPolicy: {} } as const
+
+const noopPhase: PhaseFn = async function* () {
+  return { status: 'completed' }
+}
 
 const WIRED_CONFIG = {
   providers: [
@@ -160,6 +164,62 @@ describe('runPipeline config pre-flight', () => {
     // config-resolver is only reachable from pre-flight: the phase itself would
     // have failed on the unhydrated story stores with an 'orchestrator' error.
     expect((await db.select().from(deltas)).length).toBe(0)
+    expect(generationStore.getTxState().runs.size).toBe(0)
+
+    // Total, not just the keys the failure path sets: the column is typed
+    // ClassifierStatus, and a json_set onto a bare '{}' would persist an object
+    // missing lastSuccessAt/processedThrough for every consumer reading it back.
+    const [row] = await db
+      .select({ status: branches.classifierStatus })
+      .from(branches)
+      .where(eq(branches.id, 'b1'))
+    expect(row.status).toEqual({
+      state: 'retrying',
+      retryCount: 1,
+      lastError: 'classifier: no-profile-assigned',
+      lastSuccessAt: null,
+      processedThrough: null,
+    })
+  })
+
+  it('runs the pre-flight hook before the run is wound down', async () => {
+    const { ctx } = await makeHarness()
+    await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
+
+    const order: string[] = []
+    definePipeline({
+      kind: 'pf-hook',
+      phases: [{ name: 'narrative', run: noopPhase, resolves: [{ target: 'narrative' }] }],
+      onPreflightFailure: async () => {
+        order.push('hook')
+      },
+      ...base,
+    })
+
+    const off = pipelineEventBus.subscribe('run_complete', () => order.push('run_complete'))
+    await runPipeline('pf-hook', ctx)
+    off()
+
+    // Ordering is the contract: after wind-down the run has left the concurrency
+    // gate, so a hook running there would race the phases' own writes.
+    expect(order).toEqual(['hook', 'run_complete'])
+  })
+
+  it('winds the run down even when the pre-flight hook throws', async () => {
+    const { ctx } = await makeHarness()
+    await hydrateAppSettings(async () => ({ ...WIRED_CONFIG, profiles: [] }))
+
+    definePipeline({
+      kind: 'pf-hook-throws',
+      phases: [{ name: 'narrative', run: noopPhase, resolves: [{ target: 'narrative' }] }],
+      onPreflightFailure: async () => {
+        throw new Error('boom')
+      },
+      ...base,
+    })
+
+    const result = expectRan(await runPipeline('pf-hook-throws', ctx))
+    expect(result.outcome).toBe('failed')
     expect(generationStore.getTxState().runs.size).toBe(0)
   })
 })

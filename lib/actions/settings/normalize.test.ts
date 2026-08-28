@@ -7,9 +7,10 @@ import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { normalizeAppSettingsRow } from './normalize'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
+let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
 
 beforeEach(async () => {
-  ;({ db } = await createTestDb())
+  ;({ db, runInTransaction } = await createTestDb())
 })
 
 const readRow = async () => {
@@ -28,7 +29,7 @@ describe('normalizeAppSettingsRow', () => {
       // Pre-showJumpToBottom row shape.
       appearance: {} as never,
     })
-    const res = await normalizeAppSettingsRow({ db })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res).toEqual({ status: 'normalized', columns: ['appearance'] })
     expect((await readRow())?.appearance).toEqual(APP_SETTINGS_DEFAULTS.appearance)
     expect((await readRow())?.appearance.showJumpToBottom).toBe(true)
@@ -42,7 +43,7 @@ describe('normalizeAppSettingsRow', () => {
       // unknown key from a newer build.
       appearance: { showJumpToBottom: false, unknownKey: 1 } as never,
     })
-    const res = await normalizeAppSettingsRow({ db })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res.status).toBe('normalized')
     expect((await readRow())?.appearance).toEqual({
       ...APP_SETTINGS_DEFAULTS.appearance,
@@ -57,7 +58,7 @@ describe('normalizeAppSettingsRow', () => {
       ...APP_SETTINGS_DEFAULTS,
       appearance: { ...APP_SETTINGS_DEFAULTS.appearance, unknownKey: 1 } as never,
     })
-    const res = await normalizeAppSettingsRow({ db })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res).toEqual({ status: 'noop' })
     expect((await readRow())?.appearance).toEqual({
       ...APP_SETTINGS_DEFAULTS.appearance,
@@ -70,8 +71,8 @@ describe('normalizeAppSettingsRow', () => {
       id: APP_SETTINGS_SINGLETON_ID,
       ...APP_SETTINGS_DEFAULTS,
     })
-    await normalizeAppSettingsRow({ db })
-    const res = await normalizeAppSettingsRow({ db })
+    await normalizeAppSettingsRow({ db, runInTransaction })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res).toEqual({ status: 'noop' })
   })
 
@@ -82,7 +83,7 @@ describe('normalizeAppSettingsRow', () => {
       providers: 'not-an-array' as never,
     })
     const before = await readRow()
-    const res = await normalizeAppSettingsRow({ db })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res).toEqual({ status: 'skipped-corrupt' })
     expect(await readRow()).toEqual(before)
   })
@@ -94,14 +95,14 @@ describe('normalizeAppSettingsRow', () => {
       appearance: {} as never,
       diagnostics: { enabled: 'garbage' } as never,
     })
-    const res = await normalizeAppSettingsRow({ db })
+    const res = await normalizeAppSettingsRow({ db, runInTransaction })
     expect(res).toEqual({ status: 'normalized', columns: ['appearance'] })
     // Bad diagnostics stays inspectable, not clobbered with defaults.
     expect((await readRow())?.diagnostics).toEqual({ enabled: 'garbage' })
   })
 
   it('returns no-row when the singleton is absent', async () => {
-    expect(await normalizeAppSettingsRow({ db })).toEqual({ status: 'no-row' })
+    expect(await normalizeAppSettingsRow({ db, runInTransaction })).toEqual({ status: 'no-row' })
   })
 
   it('never materializes defaultStorySettings — absent keys keep tracking defaults', async () => {
@@ -109,7 +110,7 @@ describe('normalizeAppSettingsRow', () => {
       id: APP_SETTINGS_SINGLETON_ID,
       ...APP_SETTINGS_DEFAULTS,
     })
-    await normalizeAppSettingsRow({ db })
+    await normalizeAppSettingsRow({ db, runInTransaction })
     expect((await readRow())?.defaultStorySettings).toEqual(
       APP_SETTINGS_DEFAULTS.defaultStorySettings,
     )

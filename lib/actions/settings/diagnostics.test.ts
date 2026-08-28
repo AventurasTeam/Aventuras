@@ -16,9 +16,10 @@ import { setDebugLevelEnabled, setDiagnosticsEnabled } from './diagnostics'
 import { resetAppSettings } from './reset'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
+let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
 
 beforeEach(async () => {
-  ;({ db } = await createTestDb())
+  ;({ db, runInTransaction } = await createTestDb())
   await db.insert(appSettings).values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   await rehydrateAppSettings(db)
   __resetDiagnosticsGate()
@@ -40,14 +41,14 @@ const readDiagnostics = async () => {
 
 describe('diagnostics toggle actions', () => {
   it('setDiagnosticsEnabled persists, re-hydrates, and the store reflects it', async () => {
-    await setDiagnosticsEnabled(true, { db })
+    await setDiagnosticsEnabled(true, { db, runInTransaction })
     expect(await readDiagnostics()).toEqual({ enabled: true, debug_level_enabled: false })
     expect(appSettingsStore.getAppSettings().diagnostics.enabled).toBe(true)
   })
 
   it('setDebugLevelEnabled preserves enabled', async () => {
-    await setDiagnosticsEnabled(true, { db })
-    await setDebugLevelEnabled(true, { db })
+    await setDiagnosticsEnabled(true, { db, runInTransaction })
+    await setDebugLevelEnabled(true, { db, runInTransaction })
     expect(await readDiagnostics()).toEqual({ enabled: true, debug_level_enabled: true })
   })
 
@@ -55,7 +56,7 @@ describe('diagnostics toggle actions', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     logger.warn('pipeline.run_aborted')
     expect(getDiagnosticsSnapshot().logEntries.length).toBeGreaterThan(0)
-    await setDiagnosticsEnabled(true, { db })
+    await setDiagnosticsEnabled(true, { db, runInTransaction })
     expect(getDiagnosticsSnapshot().logEntries.length).toBeGreaterThan(0)
   })
 
@@ -63,14 +64,14 @@ describe('diagnostics toggle actions', () => {
     configureDiagnosticsGate({ isEnabled: () => true, isDebugEnabled: () => true })
     logger.warn('pipeline.run_aborted')
     expect(getDiagnosticsSnapshot().logEntries.length).toBeGreaterThan(0)
-    await setDiagnosticsEnabled(false, { db })
+    await setDiagnosticsEnabled(false, { db, runInTransaction })
     expect(getDiagnosticsSnapshot().logEntries).toEqual([])
   })
 
   it('toggling twice is reflected live in the store (not a captured snapshot)', async () => {
-    await setDiagnosticsEnabled(true, { db })
+    await setDiagnosticsEnabled(true, { db, runInTransaction })
     expect(appSettingsStore.getAppSettings().diagnostics.enabled).toBe(true)
-    await setDiagnosticsEnabled(false, { db })
+    await setDiagnosticsEnabled(false, { db, runInTransaction })
     expect(appSettingsStore.getAppSettings().diagnostics.enabled).toBe(false)
   })
 
@@ -79,7 +80,7 @@ describe('diagnostics toggle actions', () => {
       .update(appSettings)
       .set({ defaultProviderId: 'p9' })
       .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
-    const r = await resetAppSettings({ db })
+    const r = await resetAppSettings({ db, runInTransaction })
     expect(r).toEqual({ status: 'ok' })
     expect(appSettingsStore.getAppSettings().defaultProviderId).toBeNull()
   })

@@ -31,7 +31,7 @@ export function useBootstrap(ready: boolean): {
   // No unmount guard: the recovery screen is boot-blocking, so there is no
   // navigate-away path while resetAppSettings is in flight.
   const resetSettings = useCallback(async () => {
-    const r = await resetAppSettings({ db })
+    const r = await resetAppSettings({ db, runInTransaction })
     setPhase(r.status === 'config-corrupt' ? 'config-corrupt' : 'ready')
   }, [])
 

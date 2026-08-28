@@ -231,6 +231,9 @@ async function runPhases(deps: SwapDeps, p: SwapParams): Promise<'completed' | '
       currentModelId: p.currentModelId,
       sourceDim: p.sourceDim,
       targetDim: stagedDim,
+      // Absent unprocessed reads as crash recovery and re-flags every row; the
+      // loop finished, so the live-run answer is "none left".
+      unprocessed: [],
     })
     return 'cancelled'
   }

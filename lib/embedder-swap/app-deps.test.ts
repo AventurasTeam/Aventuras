@@ -38,6 +38,7 @@ import {
   buildDrainController,
   cancelStorySwap,
   composeRetrievalEmbedDeps,
+  embedClassifierDescriptions,
   setDrainStatusSink,
   makeCallbackGuards,
   reindexStoryNow,
@@ -1030,5 +1031,88 @@ describe('buildDrainController', () => {
     expect(out.staleRows).toEqual([drifted])
     expect(out.freshOps.map((op) => op.params)).toEqual([['ent_fresh', 'b1', 'Kael', 'A knight.']])
     expect(seen.at(-1)?.params).toEqual(['b1', MINILM, 'ent_fresh', 'ent_drifted'])
+  })
+})
+
+// Boot wires this through configureClassifierEmbedder, so the classifier's own
+// tests inject a stub and never reach the composition here: a dropped intent or
+// provider degrades reconciliation silently rather than failing anything.
+describe('embedClassifierDescriptions', () => {
+  const definition = storyDefinitionSchema.parse({
+    mode: 'adventure',
+    leadEntityId: 'char_00000000-0000-4000-8000-000000000001',
+    narration: 'first',
+    genre: { label: 'Fantasy', promptBody: 'high fantasy' },
+    tone: { label: 'Wry', promptBody: 'wry' },
+    setting: 'A keep on a hill.',
+    calendarSystemId: 'gregorian',
+    worldTimeOrigin: { year: 0 },
+  })
+
+  async function openLocalStory(): Promise<void> {
+    const settings = storySettings({ embeddingBackend: 'local' }, MINILM, null)
+    await seedStores(settings)
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+  }
+
+  it('embeds at document intent and returns the embedder result verbatim', async () => {
+    await openLocalStory()
+    const result = { vectors: [new Float32Array([0.5])], dim: 384 }
+    vi.mocked(embedTexts).mockResolvedValue(result)
+
+    await expect(embedClassifierDescriptions(['a knight', 'a sellsword'])).resolves.toBe(result)
+
+    // 'document', against composeRetrievalEmbedDeps' 'query': these descriptions
+    // are stored-row material, and the query prefix would put them in the wrong
+    // space for every similarity the reconciler draws.
+    expect(embedTexts).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: 'local', modelId: MINILM }),
+      ['a knight', 'a sellsword'],
+      'document',
+      undefined,
+    )
+  })
+
+  it('resolves the provider instance a provider-backed config is served by', async () => {
+    const settings = storySettings({ embeddingBackend: 'provider' }, PROVIDER_MODEL, 'prov1')
+    await seedStores(settings, [cachedProvider('prov1', [{ id: PROVIDER_MODEL }])])
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+    vi.mocked(embedTexts).mockResolvedValue({ vectors: [], dim: 1536 })
+
+    await embedClassifierDescriptions(['a knight'])
+
+    // Positive control against the `undefined` above: a dropped providerFor()
+    // would send a provider embed with no instance to call.
+    expect(embedTexts).toHaveBeenCalledWith(
+      expect.objectContaining({ backend: 'provider', providerId: 'prov1' }),
+      ['a knight'],
+      'document',
+      expect.objectContaining({ id: 'prov1' }),
+    )
+  })
+
+  it('yields no vectors when no story is open, rather than throwing', async () => {
+    await expect(embedClassifierDescriptions(['a knight'])).resolves.toEqual({
+      vectors: [],
+      dim: 0,
+    })
+    expect(embedTexts).not.toHaveBeenCalled()
+  })
+
+  it('yields no vectors while a swap owns the story', async () => {
+    const settings = {
+      ...storySettings({ embeddingBackend: 'local' }, MINILM, null),
+      embedding_swap_target: MINILM,
+    }
+    await seedStores(settings)
+    currentStoryStore.set({ storyId: 's1', branchId: 'b1', definition, settings })
+
+    await expect(embedClassifierDescriptions(['a knight'])).resolves.toEqual({
+      vectors: [],
+      dim: 0,
+    })
+    // Not merely empty output: embedding under the model a swap is replacing
+    // would land these vectors in a space the re-embedded rows never share.
+    expect(embedTexts).not.toHaveBeenCalled()
   })
 })

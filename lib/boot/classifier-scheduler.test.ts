@@ -1,13 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  embedClassifierDescriptions,
-  unprocessedTurnCount,
-  readClassifierStatus,
-  runClassifierNow,
-} from '@/lib/actions'
+import { unprocessedTurnCount, readClassifierStatus, runClassifierNow } from '@/lib/actions'
 import { idleStatus } from '@/lib/classifier'
 import { storyDefinitionSchema, storySettingsSchema, type DbCtx } from '@/lib/db'
+import { embedClassifierDescriptions } from '@/lib/embedder-swap'
 import { configureClassifierEmbedder, PER_TURN_KIND, pipelineEventBus } from '@/lib/pipeline'
 import { currentStoryStore, resetAllStores } from '@/lib/stores'
 

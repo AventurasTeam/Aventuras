@@ -13,9 +13,10 @@ import {
 import { addProvider } from './providers'
 
 let db: Awaited<ReturnType<typeof createTestDb>>['db']
+let runInTransaction: Awaited<ReturnType<typeof createTestDb>>['runInTransaction']
 
 beforeEach(async () => {
-  ;({ db } = await createTestDb())
+  ;({ db, runInTransaction } = await createTestDb())
   await db.insert(appSettings).values({ id: APP_SETTINGS_SINGLETON_ID, ...APP_SETTINGS_DEFAULTS })
   await rehydrateAppSettings(db)
 })
@@ -27,7 +28,7 @@ describe('setEmbedderDefaults', () => {
   it('persists model id, provider id, and backend in one write', async () => {
     await setEmbedderDefaults(
       { backend: 'provider', modelId: 'text-embedding-3-small', providerId: 'prov-1' },
-      { db },
+      { db, runInTransaction },
     )
 
     const cfg = appSettingsStore.getAppSettings()
@@ -39,7 +40,7 @@ describe('setEmbedderDefaults', () => {
   it('local backend nulls providerId even if input.providerId is set', async () => {
     await setEmbedderDefaults(
       { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', providerId: 'prov-1' },
-      { db },
+      { db, runInTransaction },
     )
 
     const cfg = appSettingsStore.getAppSettings()
@@ -51,20 +52,20 @@ describe('setEmbedderDefaults', () => {
   it('switching backend local -> provider -> local nulls providerId appropriately', async () => {
     await setEmbedderDefaults(
       { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', providerId: null },
-      { db },
+      { db, runInTransaction },
     )
     expect(appSettingsStore.getAppSettings().embeddingProviderId).toBeNull()
 
     await setEmbedderDefaults(
       { backend: 'provider', modelId: 'text-embedding-3-small', providerId: 'prov-1' },
-      { db },
+      { db, runInTransaction },
     )
     expect(appSettingsStore.getAppSettings().embeddingProviderId).toBe('prov-1')
     expect(appSettingsStore.getAppSettings().defaultStorySettings.embeddingBackend).toBe('provider')
 
     await setEmbedderDefaults(
       { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', providerId: null },
-      { db },
+      { db, runInTransaction },
     )
     const cfg = appSettingsStore.getAppSettings()
     expect(cfg.embeddingProviderId).toBeNull()
@@ -72,16 +73,17 @@ describe('setEmbedderDefaults', () => {
     expect(cfg.defaultStorySettings.embeddingBackend).toBe('local')
   })
 
-  it('merges embeddingBackend into existing defaultStorySettings without dropping sibling keys', async () => {
+  it('merges embeddingBackend off the DB row, not a stale store cache', async () => {
+    // No rehydrate: the store still holds the pre-write defaults, so a
+    // read-modify-write sourced from it would drop activePackId.
     await db
       .update(appSettings)
       .set({ defaultStorySettings: { activePackId: 'some-pack' } })
       .where(eq(appSettings.id, APP_SETTINGS_SINGLETON_ID))
-    await rehydrateAppSettings(db)
 
     await setEmbedderDefaults(
       { backend: 'provider', modelId: 'text-embedding-3-small', providerId: 'prov-1' },
-      { db },
+      { db, runInTransaction },
     )
 
     const cfg = appSettingsStore.getAppSettings()
@@ -94,7 +96,7 @@ describe('setEmbedderDefaults', () => {
 
     await setEmbedderDefaults(
       { backend: 'local', modelId: 'Xenova/all-MiniLM-L6-v2', providerId: null },
-      { db },
+      { db, runInTransaction },
     )
 
     expect(appSettingsStore.getAppSettings().embeddingModelId).toBe('Xenova/all-MiniLM-L6-v2')
@@ -113,11 +115,15 @@ describe('provider embedding dimension probes', () => {
   }
 
   it('persists the native dimension returned by a successful probe', async () => {
-    await addProvider(provider, { db })
+    await addProvider(provider, { db, runInTransaction })
     const runTest = vi.fn(async () => ({ ok: true as const, dim: 1536, ms: 12 }))
 
     await expect(
-      probeProviderEmbeddingDim({ providerId: 'prov-1', modelId: 'embed-1' }, { db }, runTest),
+      probeProviderEmbeddingDim(
+        { providerId: 'prov-1', modelId: 'embed-1' },
+        { db, runInTransaction },
+        runTest,
+      ),
     ).resolves.toEqual({ ok: true, dim: 1536, ms: 12 })
 
     expect(runTest).toHaveBeenCalledWith(
@@ -148,12 +154,16 @@ describe('provider embedding dimension probes', () => {
           },
         ],
       },
-      { db },
+      { db, runInTransaction },
     )
     const runTest = vi.fn()
 
     await expect(
-      ensureProviderEmbeddingDim({ providerId: 'prov-1', modelId: 'embed-1' }, { db }, runTest),
+      ensureProviderEmbeddingDim(
+        { providerId: 'prov-1', modelId: 'embed-1' },
+        { db, runInTransaction },
+        runTest,
+      ),
     ).resolves.toMatchObject({ ok: true, dim: 768 })
     expect(runTest).not.toHaveBeenCalled()
   })

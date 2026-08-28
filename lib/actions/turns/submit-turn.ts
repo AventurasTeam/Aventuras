@@ -1,6 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
+import { isStorySwapPending, withTurnAdmission } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
 import {
   ensurePerTurnPipelineRegistered,
@@ -11,7 +12,6 @@ import {
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
 import { DeltaReplayError, reverseReplayDeltas } from '../delta/reverse-replay'
-import { isStorySwapPending, withTurnAdmission } from '../embedder-swap/app-deps'
 import type { DbCtx } from '../types'
 import { withBranchQueue } from './branch-queue'
 

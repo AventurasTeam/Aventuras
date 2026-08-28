@@ -16,6 +16,7 @@ export {
   composeRetrievalEmbedDeps,
   kickStoryDrain,
   countStoryEmbeddableRows,
+  embedClassifierDescriptions,
   isStorySwapPending,
   refreshEmbeddingStatus,
   reindexStoryNow,
@@ -27,8 +28,10 @@ export {
   setDrainKickSink,
   setDrainStatusSink,
   startStorySwap,
+  withTurnAdmission,
   SwapBusyError,
   SwapConfigError,
   type StoryEmbedderActionRejection,
+  type TurnAdmissionResult,
   type SwapCancelOutcome,
 } from './app-deps'

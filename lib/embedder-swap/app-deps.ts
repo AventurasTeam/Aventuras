@@ -378,6 +378,22 @@ export function composeRetrievalEmbedDeps(config: EmbedderConfig): {
   }
 }
 
+/**
+ * Transient decision-time embed for classifier disambiguation — NOT a persisted
+ * embedding write, so it sits outside the embedding-compute boundary
+ * (classifier.md). An unopened story or an unresolvable config yields no
+ * vectors rather than throwing: the caller reads that as "no signal".
+ */
+export async function embedClassifierDescriptions(
+  texts: string[],
+): Promise<{ vectors: Float32Array[]; dim: number }> {
+  const storyId = currentStoryStore.getCurrentStory()?.storyId
+  if (storyId == null) return { vectors: [], dim: 0 }
+  const resolution = resolveDrainConfig(storyId)
+  if (!resolution.ok) return { vectors: [], dim: 0 }
+  return embedTexts(resolution.config, texts, 'document', providerFor(resolution.config))
+}
+
 function composeSwapDeps(storyId: string, ctx: DbCtx): SwapDeps {
   return {
     runInTransaction: ctx.runInTransaction,

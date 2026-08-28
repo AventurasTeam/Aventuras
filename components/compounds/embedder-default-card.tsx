@@ -11,7 +11,7 @@ import {
   probeProviderEmbeddingDim,
   setEmbedderDefaults,
 } from '@/lib/actions'
-import { db } from '@/lib/db'
+import { db, runInTransaction } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { getCatalogEntry, testEmbedder, type EmbedderConfig } from '@/lib/embedder'
 import { t } from '@/lib/i18n'
@@ -129,7 +129,7 @@ export function EmbedderDefaultCard({
   const persistLocal = useCallback((modelId: string) => {
     void setEmbedderDefaults(
       { backend: 'local', modelId: modelId === '' ? null : modelId, providerId: null },
-      { db },
+      { db, runInTransaction },
     ).catch((e: unknown) => {
       logger.error('embedder.default_save_failed', {
         error: e instanceof Error ? e.message : String(e),
@@ -147,12 +147,12 @@ export function EmbedderDefaultCard({
             modelId: normalizedModelId === '' ? null : normalizedModelId,
             providerId: providerId === '' ? null : providerId,
           },
-          { db },
+          { db, runInTransaction },
         )
         if (providerId !== '' && normalizedModelId !== '') {
           const result = await ensureProviderEmbeddingDim(
             { providerId, modelId: normalizedModelId },
-            { db },
+            { db, runInTransaction },
             runTest,
           )
           if (!result.ok) {
@@ -214,7 +214,7 @@ export function EmbedderDefaultCard({
     try {
       const result = await probeProviderEmbeddingDim(
         { providerId: providerIdDraft, modelId: modelIdDraft },
-        { db },
+        { db, runInTransaction },
         runTest,
       )
       setTestState(result)

@@ -128,6 +128,17 @@ When it does, the surface refuses the save: **Save and the
 same `⚠` slot the informational notes above use — a second kind of
 content for the one slot, not a second state.
 
+**The slot carries session state, not field consequences.** Both kinds
+of content it takes describe the session as a whole — this draft can't
+be written, this surface is gated. A consequence that belongs to a
+particular field ("this replaces the current text", "this rewrites the
+prompt on the next turn") does NOT go here: it belongs to the
+tab-level warn-box before the edit, or a save-time confirmation at the
+commit, where there is room for a readable sentence and where it
+reaches phone users, who get no tooltip. The slot is also ranked —
+invalid draft outranks hard gate — so a note can never displace the
+one explaining why Save is dead.
+
 **Discard and Cancel always stay live.** An invalid draft must never
 trap the user — they can always throw the session away or leave it
 alone. The [navigate-away guard](#navigate-away-guard--global-intercept)
