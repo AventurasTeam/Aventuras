@@ -1,4 +1,6 @@
-import type { StoryEntry } from '@/lib/db'
+import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
+
+import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 
 export type BufferEntry = {
   id: string
@@ -34,19 +36,53 @@ export function composePromptBuffer<T extends BufferEntry>(
   settings: BufferSettings,
 ): T[] {
   const ordered = entries.filter((e) => e.kind !== 'system').sort((a, b) => a.position - b.position)
-  const openCount = ordered.filter((e) => e.chapterId === null).length
-
-  const wanted = settings.fullChapterInBuffer
-    ? openCount
-    : toCount(settings.partialChapterBuffer, 1)
-
-  // Spillover is gated on the open region running out, so the floor widens this
-  // one window rather than reserving room alongside it. Taking a tail of the
-  // whole branch is what makes the two sources contiguous.
-  const take = Math.max(toCount(settings.protectedBuffer, 0), Math.min(openCount, wanted))
+  const take = promptBufferTake(ordered.filter((e) => e.chapterId === null).length, settings)
 
   // Front-indexed and clamped: a bare negative start is a tail of that size, so
   // a floor wider than the branch would return the last take - length entries
   // instead of everything.
   return ordered.slice(Math.max(0, ordered.length - take))
+}
+
+/**
+ * How many entries the window holds, given the size of the open region.
+ * Spillover is gated on that region running out, so protectedBuffer widens this
+ * one window rather than reserving room alongside it — taking a tail of the
+ * whole branch is what makes the two sources contiguous.
+ */
+export function promptBufferTake(openCount: number, settings: BufferSettings): number {
+  const wanted = settings.fullChapterInBuffer
+    ? openCount
+    : toCount(settings.partialChapterBuffer, 1)
+  return Math.max(toCount(settings.protectedBuffer, 0), Math.min(openCount, wanted))
+}
+
+/**
+ * The prompt buffer straight from SQLite. Never from `entriesStore`: that store
+ * holds the reader's window, which caps the buffer at whatever the reader
+ * happens to have scrolled in, so the same story composes different prompts
+ * across two turns of one session.
+ */
+export async function readPromptBuffer(
+  db: DbCtx['db'],
+  branchId: string,
+  settings: BufferSettings,
+): Promise<StoryEntry[]> {
+  const narrative = and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system'))
+
+  const [open] = await db
+    .select({ openCount: count() })
+    .from(storyEntries)
+    .where(and(narrative, isNull(storyEntries.chapterId)))
+
+  const take = promptBufferTake(open?.openCount ?? 0, settings)
+  if (take === 0) return []
+
+  const rows = (await db
+    .select()
+    .from(storyEntries)
+    .where(narrative)
+    .orderBy(desc(storyEntries.position))
+    .limit(take)) as StoryEntry[]
+  return rows.reverse()
 }

@@ -10,7 +10,7 @@ import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
-  composePromptBuffer,
+  readPromptBuffer,
   countTokens,
   RANKER_DEFAULTS,
   runRetrieval,
@@ -72,7 +72,7 @@ export async function* retrievalPhase(
   // mode rule. Priced on the prose alone: the per-turn template wraps entries in
   // bare newlines, so this reads as a lower bound the way the floor's own rows
   // do (probe.md → Structural floor).
-  const promptBuffer = composePromptBuffer(entries, open.settings)
+  const promptBuffer = (await readPromptBuffer(ctx.db, branchId, open.settings))
     .map((e) => promptProse(e))
     .join('\n')
 

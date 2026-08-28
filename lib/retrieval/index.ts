@@ -1,6 +1,6 @@
 export { loadAwarenessForScene } from './awareness'
 export type { AwarenessRow } from './awareness'
-export { composePromptBuffer } from './buffer'
+export { composePromptBuffer, promptBufferTake, readPromptBuffer } from './buffer'
 export type { BufferEntry, BufferSettings } from './buffer'
 export { KNN_K, PROSE_EXTRACT_TOP_K, RANKER_DEFAULTS } from './constants'
 export { matchTerms, nameKeywordIndexFrom, normalizeTerm } from './name-index'

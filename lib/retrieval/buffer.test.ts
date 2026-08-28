@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 
-import { composePromptBuffer, type BufferEntry } from './buffer'
+import { branches, stories, storyEntries } from '@/lib/db'
+import { createTestDb } from '@/lib/db/__tests__/test-db'
+
+import { composePromptBuffer, readPromptBuffer, type BufferEntry } from './buffer'
 
 type E = BufferEntry
 
@@ -268,5 +271,66 @@ describe('composePromptBuffer — unvalidated settings', () => {
       protectedBuffer: 5.9,
     })
     expect(ids(out)).toEqual(['e6', 'e7', 'e8', 'e9', 'e10'])
+  })
+})
+
+describe('readPromptBuffer', () => {
+  const DEFAULTS = { fullChapterInBuffer: false, partialChapterBuffer: 10, protectedBuffer: 10 }
+
+  async function seed(rows: E[], branchId = 'br_1') {
+    const { db } = await createTestDb()
+    await db.insert(stories).values({ id: 'story_1', title: 'T', createdAt: 1, updatedAt: 1 })
+    await db.insert(branches).values([
+      { id: 'br_1', storyId: 'story_1', name: 'main', createdAt: 1 },
+      { id: 'br_2', storyId: 'story_1', name: 'alt', createdAt: 1 },
+    ])
+    await db
+      .insert(storyEntries)
+      .values(rows.map((r) => ({ ...r, branchId, metadata: null, createdAt: r.position })))
+    return db
+  }
+
+  it('takes the last window ascending by position', async () => {
+    const db = await seed(range(1, 50))
+    expect(ids(await readPromptBuffer(db, 'br_1', DEFAULTS))).toEqual(ids(range(41, 50)))
+  })
+
+  it('reaches past the reader window instead of stopping at fifty', async () => {
+    const db = await seed(range(1, 120))
+    const out = await readPromptBuffer(db, 'br_1', { ...DEFAULTS, fullChapterInBuffer: true })
+    expect(out).toHaveLength(120)
+    expect(out.at(0)?.id).toBe('e1')
+  })
+
+  it('excludes system entries from both the window and the open count', async () => {
+    const db = await seed([entry(1), entry(2, null, 'system'), entry(3)])
+    const out = await readPromptBuffer(db, 'br_1', { ...DEFAULTS, protectedBuffer: 0 })
+    expect(ids(out)).toEqual(['e1', 'e3'])
+  })
+
+  it('spills across the chapter boundary to satisfy protectedBuffer', async () => {
+    const db = await seed(mixed)
+    expect(ids(await readPromptBuffer(db, 'br_1', DEFAULTS))).toEqual(ids(range(1, 10)))
+  })
+
+  it('returns an empty window when the knobs resolve to no entries', async () => {
+    const db = await seed(range(1, 8, 'ch_1'))
+    expect(await readPromptBuffer(db, 'br_1', { ...DEFAULTS, protectedBuffer: 0 })).toEqual([])
+  })
+
+  it('scopes the window to the branch', async () => {
+    const db = await seed(range(1, 5))
+    await db.insert(storyEntries).values(
+      range(1, 5).map((r) => ({
+        ...r,
+        id: `other-${r.id}`,
+        branchId: 'br_2',
+        metadata: null,
+        createdAt: r.position,
+      })),
+    )
+    const out = await readPromptBuffer(db, 'br_1', DEFAULTS)
+    expect(out.every((e) => e.branchId === 'br_1')).toBe(true)
+    expect(out).toHaveLength(5)
   })
 })
