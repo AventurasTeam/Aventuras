@@ -64,6 +64,43 @@ distinction at every call site. The refresh skips any row where the two differ. 
 content's own hash against the baseline instead, as it once did, reads every user edit as a stale default
 and reverts it on the next app start.
 
+### Updating a Pack From a File
+
+A custom pack is otherwise frozen at the baseline it was created from, so replacing its contents with a
+newer `.prompt.json` is the only way to update one. `importExportService.updatePackFromFile` does that
+**in place**: the `preset_packs` row is updated, never deleted, and only `pack_templates` and
+`pack_variables` are cleared and rewritten, in one transaction (`database.replacePackContents`).
+
+What that preserves is the point of doing it this way:
+
+- **The pack id**, so `stories.pack_id` still resolves. It is `ON DELETE RESTRICT`, so a delete-and-recreate
+  could not run at all while a story used the pack.
+- **Runtime variable definitions.** `pack_runtime_variables` is `ON DELETE CASCADE`; dropping the pack row
+  takes the definitions with it while entity `metadata.runtimeVars` keeps holding values keyed by their
+  ids — unreachable and unfixable. The export format carries no runtime variables, so a file that says
+  nothing about them changes nothing about them.
+- **The pack's name**, which is the user's label. Description and author come from the file.
+- **A story's `custom_variable_values`**, which are keyed by variable name, so answers survive wherever the
+  file keeps a name.
+
+What it discards is every edit to that pack's templates — which is the operation, and why the confirmation
+counts them first. That count uses `isUntouched` (did the user change this?), not
+`getModifiedTemplates` (does this differ from what ships today?); the second also flags templates the user
+never touched but a later app version has improved.
+
+Rows are written with `isBaseline: true` — the file *is* this pack's baseline. **That is why `default-pack`
+is excluded**: marking every row as its own baseline makes them all read as untouched, so
+`refreshDefaultPackTemplates` would decide the shipped prompts had changed and overwrite the whole import
+on the next launch. Importing over the built-in pack would appear to work until the next restart.
+
+Templates the file omits are gone from the pack; resolution falls through to `default-pack` and then the
+code baseline, and `backfillMissingTemplates` re-inserts them on the next start. This is deliberate — an
+updated pack should match what a fresh import of the same file produces, not carry ghosts of its previous
+self.
+
+Importing a file always creates a *new* pack. A name collision offers a copy or a cancel, never an
+overwrite: replacing a pack is reached from that pack, not from a name that happens to match.
+
 ## Prompt Ordering and Prefix Caching
 
 Inference servers reuse the KV cache for the longest prefix a request shares with the previous one, and
