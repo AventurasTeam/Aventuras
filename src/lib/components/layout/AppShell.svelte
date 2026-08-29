@@ -34,15 +34,8 @@
 
   const log = createLogger('AppShell')
 
-  // Swipe handlers for mobile sidebar toggle
-  function handleSwipeLeft() {
+  function handleEdgeSwipeLeft() {
     if (story.currentStory && !ui.sidebarOpen) {
-      ui.toggleSidebar()
-    }
-  }
-
-  function handleSwipeRight() {
-    if (ui.sidebarOpen) {
       ui.toggleSidebar()
     }
   }
@@ -209,14 +202,7 @@
   onresize={handleWindowResize}
 />
 
-<div
-  class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col"
-  use:swipe={{
-    onSwipeRight: handleSwipeRight,
-    onSwipeLeft: handleSwipeLeft,
-    threshold: 50,
-  }}
->
+<div class="app-shell bg-surface-900 relative flex h-screen w-screen flex-col">
   <!-- Profile Warning Banner (shown when API profiles need updating) -->
   <ProfileWarningBanner />
 
@@ -235,7 +221,7 @@
     {#if !ui.sidebarOpen && story.currentStory}
       <div
         class="swipe-edge-zone"
-        use:swipe={{ onSwipeLeft: handleSwipeLeft, threshold: 30 }}
+        use:swipe={{ onSwipeLeft: handleEdgeSwipeLeft, threshold: 30 }}
       ></div>
     {/if}
 
