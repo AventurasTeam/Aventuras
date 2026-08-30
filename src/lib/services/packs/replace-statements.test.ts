@@ -3,6 +3,8 @@ import {
   packTemplateStatement,
   packVariableStatement,
   packReplacementStatements,
+  shippedTemplateStatement,
+  shippedTemplateStatements,
 } from './replace-statements'
 import type { PackExport } from './validation'
 
@@ -170,5 +172,59 @@ describe('packReplacementStatements', () => {
         ids: { templates: [], variables: [] },
       }),
     ).toThrow(/one id required per template/)
+  })
+})
+
+describe('shippedTemplateStatement', () => {
+  it('updates an existing row and marks it untouched again', () => {
+    const { sql, params } = shippedTemplateStatement({
+      packId: 'pack-1',
+      templateId: 'adventure',
+      content: 'the shipped text',
+      contentHash: 'shipped-hash',
+      now: 1000,
+    })
+
+    expect(sql).toContain('UPDATE pack_templates')
+    expect(sql).not.toContain('INSERT')
+    expect(sql).toContain('WHERE pack_id = ? AND template_id = ?')
+    expect(params).toEqual([
+      'the shipped text',
+      'shipped-hash',
+      'shipped-hash',
+      1000,
+      'pack-1',
+      'adventure',
+    ])
+    // content_hash and baseline_hash both come from the shipped text, so the startup refresh
+    // takes future changes to this row again.
+    expect(params[1]).toBe(params[2])
+  })
+})
+
+describe('shippedTemplateStatements', () => {
+  const rows = [
+    { templateId: 'adventure', content: 'a', contentHash: 'ha' },
+    { templateId: 'classifier', content: 'b', contentHash: 'hb' },
+  ]
+
+  it('emits one statement per row and touches nothing else', () => {
+    const statements = shippedTemplateStatements({ packId: 'pack-1', rows, now: 1000 })
+    const sql = statements.map((s) => s.sql).join(' ')
+
+    expect(statements).toHaveLength(2)
+    expect(sql).not.toContain('pack_variables')
+    expect(sql).not.toContain('preset_packs')
+    expect(sql).not.toContain('pack_runtime_variables')
+    expect(sql).not.toContain('DELETE')
+  })
+
+  it('scopes every statement to the one pack', () => {
+    const statements = shippedTemplateStatements({ packId: 'pack-1', rows, now: 1000 })
+
+    for (const statement of statements) {
+      expect(statement.params).toContain('pack-1')
+      expect(statement.params).not.toContain(undefined)
+    }
   })
 })

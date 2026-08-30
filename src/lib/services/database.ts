@@ -38,7 +38,10 @@ import type {
   EnumOption,
 } from '$lib/services/packs/types'
 import { hashContent } from '$lib/services/packs/hash'
-import { packReplacementStatements } from '$lib/services/packs/replace-statements'
+import {
+  packReplacementStatements,
+  shippedTemplateStatements,
+} from '$lib/services/packs/replace-statements'
 import type { PackExport } from '$lib/services/packs/validation'
 
 /**
@@ -3702,6 +3705,20 @@ class DatabaseService {
         now: Date.now(),
       }),
     )
+  }
+
+  /**
+   * Return a pack's templates to the text the app ships, atomically.
+   *
+   * A partially applied refresh would leave the user unable to tell which of their edits
+   * survived, so the batch either lands or does not.
+   */
+  async refreshPackTemplatesToShipped(
+    packId: string,
+    rows: { templateId: string; content: string; contentHash: string }[],
+  ): Promise<void> {
+    if (rows.length === 0) return
+    await this.transaction(shippedTemplateStatements({ packId, rows, now: Date.now() }))
   }
 
   async canDeletePack(packId: string): Promise<boolean> {

@@ -3,6 +3,9 @@
   import type { FullPack } from '$lib/services/packs/types'
   import { allSamples } from './sampleContext'
   import { packService } from '$lib/services/packs/pack-service'
+  import type { ClassifiedTemplates, RefreshScope } from '$lib/services/packs/staleness'
+  import { ui } from '$lib/stores/ui.svelte'
+  import { errMessage } from '$lib/utils/error'
   import { createIsMobile } from '$lib/hooks/is-mobile.svelte'
   import TemplateGroupList from './TemplateGroupList.svelte'
   import TemplateEditor from './TemplateEditor.svelte'
@@ -20,6 +23,7 @@
   import { Label } from '$lib/components/ui/label'
   import { renderDescription } from '$lib/utils/markdown'
   import TestVariablesModal from './TestVariablesModal.svelte'
+  import RefreshTemplatesDialog from './RefreshTemplatesDialog.svelte'
   import {
     ChevronLeft,
     Menu,
@@ -104,10 +108,53 @@
     loading = true
     try {
       fullPack = await packService.getFullPack(packId)
+      await loadClassification()
     } catch (error) {
       console.error('[PromptPackEditor] Failed to load pack:', error)
     } finally {
       loading = false
+    }
+  }
+
+  // Which of the built-in pack's templates carry edits, and which of those the app has
+  // shipped newer text for. Null until loaded; empty groups mean the pack matches shipped.
+  let classified = $state<ClassifiedTemplates | null>(null)
+  let refreshDialogOpen = $state(false)
+  let refreshing = $state(false)
+
+  let editedCount = $derived(
+    (classified?.behind.length ?? 0) + (classified?.customised.length ?? 0),
+  )
+  let behindCount = $derived(classified?.behind.length ?? 0)
+
+  async function loadClassification() {
+    if (!fullPack?.pack.isDefault) {
+      classified = null
+      return
+    }
+    try {
+      classified = await packService.classifyPackTemplates(packId)
+    } catch (error) {
+      console.error('[PromptPackEditor] Failed to classify templates:', error)
+      classified = null
+    }
+  }
+
+  async function handleRefresh(scope: RefreshScope) {
+    refreshing = true
+    try {
+      const count = await packService.refreshTemplates(packId, scope)
+      ui.showToast(count === 1 ? '1 template replaced' : `${count} templates replaced`, 'info')
+      refreshDialogOpen = false
+      // The action lives in Pack Settings, which only renders with no template open, so
+      // there is no editor holding stale content to reload.
+      await refreshPack()
+      await loadClassification()
+    } catch (e) {
+      console.error('Refresh failed:', e)
+      ui.showToast(`Refresh failed: ${errMessage(e)}`, 'error')
+    } finally {
+      refreshing = false
     }
   }
 
@@ -530,6 +577,46 @@
                 {/if}
               </div>
 
+              {#if fullPack.pack.isDefault && classified}
+                <div class="flex flex-col gap-3 rounded-lg border p-4">
+                  <div class="flex flex-col gap-1">
+                    <h4 class="text-sm font-medium">Shipped prompts</h4>
+                    {#if editedCount === 0}
+                      <p class="text-muted-foreground text-sm">
+                        Every template matches the prompts this version of the app ships.
+                      </p>
+                    {:else}
+                      <p class="text-muted-foreground text-sm">
+                        {editedCount}
+                        {editedCount === 1 ? 'template carries' : 'templates carry'} your edits,
+                        {#if behindCount === 0}
+                          and the app ships nothing newer for any of them.
+                        {:else}
+                          {behindCount} of {editedCount === 1 ? 'which is' : 'them are'} behind newer
+                          shipped text.
+                        {/if}
+                      </p>
+                      <p class="text-muted-foreground text-xs">
+                        An edited template stops receiving shipped improvements until it is
+                        replaced.
+                      </p>
+                    {/if}
+                  </div>
+                  <div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-7 gap-1.5 text-xs"
+                      disabled={editedCount === 0}
+                      onclick={() => (refreshDialogOpen = true)}
+                    >
+                      <RotateCcw class="h-3.5 w-3.5" />
+                      Refresh from shipped prompts
+                    </Button>
+                  </div>
+                </div>
+              {/if}
+
               {#if editingSettings}
                 <!-- Edit mode -->
                 <div class="space-y-4">
@@ -635,6 +722,15 @@
   {testValues}
   onOpenChange={(open) => (showTestVars = open)}
   onTestValuesChange={handleTestValuesChange}
+/>
+
+<RefreshTemplatesDialog
+  open={refreshDialogOpen}
+  packName={fullPack?.pack.name ?? ''}
+  {classified}
+  {refreshing}
+  onConfirm={handleRefresh}
+  onCancel={() => (refreshDialogOpen = false)}
 />
 
 <!-- Dirty guard dialog -->

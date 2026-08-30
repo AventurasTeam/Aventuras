@@ -42,6 +42,47 @@ export function packTemplateStatement(args: {
 }
 
 /**
+ * Return one existing template row to the text the app ships.
+ *
+ * All three hash-bearing columns come from the shipped text, so the row reads as untouched
+ * again and the startup refresh takes future changes to it.
+ *
+ * An UPDATE rather than the insert-or-replace the general writer uses: this only ever runs
+ * on rows already read from the pack, so it cannot create one for a template the pack does
+ * not have.
+ */
+export function shippedTemplateStatement(args: {
+  packId: string
+  templateId: string
+  content: string
+  contentHash: string
+  now: number
+}): Statement {
+  return {
+    sql: 'UPDATE pack_templates SET content = ?, content_hash = ?, baseline_hash = ?, updated_at = ? WHERE pack_id = ? AND template_id = ?',
+    params: [
+      args.content,
+      args.contentHash,
+      args.contentHash,
+      args.now,
+      args.packId,
+      args.templateId,
+    ],
+  }
+}
+
+/** The statements returning a set of a pack's templates to the shipped text, as one batch. */
+export function shippedTemplateStatements(args: {
+  packId: string
+  rows: { templateId: string; content: string; contentHash: string }[]
+  now: number
+}): Statement[] {
+  return args.rows.map((row) =>
+    shippedTemplateStatement({ packId: args.packId, ...row, now: args.now }),
+  )
+}
+
+/**
  * One variable row of a replaced pack.
  *
  * Every optional field lands as an explicit NULL: `transaction` rejects `undefined` rather
