@@ -62,6 +62,18 @@ function runtimeVarPath(defId: string, field?: string): string {
 const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
 
 /**
+ * What `createStory` accepts: a `Story` minus its timestamps, plus the two pack columns.
+ *
+ * `packId` and `customVariableValues` are not on `Story` — they are read through
+ * `getStoryPackId` / `getStoryCustomVariables` rather than off the loaded row — so they ride
+ * here as optional extras instead.
+ */
+export type CreateStoryInput = Omit<Story, 'createdAt' | 'updatedAt'> & {
+  packId?: string | null
+  customVariableValues?: Record<string, string> | null
+}
+
+/**
  * Migrate visual descriptors from old string array format to new structured object format.
  * Handles both old format (string[]) and new format (VisualDescriptors object).
  */
@@ -374,7 +386,14 @@ class DatabaseService {
     return results.length > 0 ? this.mapStory(results[0]) : null
   }
 
-  async createStory(story: Omit<Story, 'createdAt' | 'updatedAt'>): Promise<Story> {
+  /**
+   * A new story row, plus the two pack columns that are not part of `Story`.
+   *
+   * Both are optional. The setup wizard leaves them out and writes them a moment later through
+   * `setStoryPack` / `setStoryCustomVariables`, which is unaffected by this; import supplies them
+   * up front so the story never exists bound to a pack its author did not choose.
+   */
+  async createStory(story: CreateStoryInput): Promise<Story> {
     const db = await this.getDb()
     const now = Date.now()
     await db.execute(
@@ -391,9 +410,11 @@ class DatabaseService {
         memory_config,
         retry_state,
         style_review_state,
-        time_tracker
+        time_tracker,
+        pack_id,
+        custom_variable_values
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         story.id,
         story.title,
@@ -408,6 +429,8 @@ class DatabaseService {
         story.retryState ? JSON.stringify(story.retryState) : null,
         story.styleReviewState ? JSON.stringify(story.styleReviewState) : null,
         story.timeTracker ? JSON.stringify(story.timeTracker) : null,
+        story.packId ?? null,
+        story.customVariableValues ? JSON.stringify(story.customVariableValues) : null,
       ],
     )
     return { ...story, createdAt: now, updatedAt: now }

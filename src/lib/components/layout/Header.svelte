@@ -87,6 +87,8 @@
         data.checkpoints,
         data.branches,
         data.chapters,
+        null, // currentBgImage: unchanged from before; the importer reads it off story instead
+        data.packBinding,
       )
     }, 'Aventuras (.avt)')
   }

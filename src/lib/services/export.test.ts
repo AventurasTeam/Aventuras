@@ -115,7 +115,7 @@ describe('importFromAventura — reads the picked file natively', () => {
 
     const result = await exportService.importFromAventura()
 
-    expect(importFromFile).toHaveBeenCalledWith('/sdcard/yuka.avt')
+    expect(importFromFile).toHaveBeenCalledWith('/sdcard/yuka.avt', {})
     expect(result).toEqual({ success: true, storyId: 'new-id' })
   })
 

@@ -16,12 +16,64 @@
   } from '@lucide/svelte'
   import { Html5Qrcode } from 'html5-qrcode'
   import type { SyncServerInfo, SyncStoryPreview, SyncConnectionData } from '$lib/types/sync'
-  import { onDestroy } from 'svelte'
+  import { onDestroy, untrack } from 'svelte'
+  import PackMappingDialog from '$lib/components/story/PackMappingDialog.svelte'
+  import { settings } from '$lib/stores/settings.svelte'
+  import type { PresetPack } from '$lib/services/packs'
+  import { planPackBinding, previewImport } from '$lib/services/import'
+  import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Card, CardHeader, CardTitle, CardDescription } from '$lib/components/ui/card'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
   import { Badge } from '$lib/components/ui/badge'
+
+  /** Non-null only while a transfer is waiting on the user's pack choice. */
+  let packMapping = $state<{
+    context: PackBindingContext
+    lockedPack?: PresetPack | null
+    onlyVariables?: string[]
+    resolve: (resolution: PackBindingResolution | null) => void
+  } | null>(null)
+
+  /**
+   * Settle which pack the incoming story binds to, before the transfer writes or deletes anything.
+   *
+   * This runs ahead of `createPreSyncBackup`/`deleteStory` on purpose. Both receive paths remove
+   * the story they are replacing *before* importing, so a question asked any later would let a
+   * cancel destroy the copy being replaced and put nothing in its place.
+   *
+   * Sync can ask at all because it is user-driven: the payload is already downloaded and no
+   * remote party is waiting. A background sync would need a different answer here.
+   *
+   * Returns the resolution, or `null` if the user backed out — in which case the caller must
+   * return without touching anything.
+   */
+  async function resolveIncomingPack(
+    storyJson: string,
+  ): Promise<PackBindingResolution | null | { error: string }> {
+    const preview = await previewImport(storyJson)
+    if ('error' in preview) return preview
+    const { context } = preview
+
+    const plan = await planPackBinding(
+      context,
+      settings.experimentalFeatures.legacyImportPackMapping,
+    )
+    if (!plan.ask) return plan.resolution
+
+    return new Promise((resolve) => {
+      packMapping = {
+        context,
+        lockedPack: plan.lockedPack,
+        onlyVariables: plan.onlyVariables,
+        resolve: (value) => {
+          packMapping = null
+          resolve(value)
+        },
+      }
+    })
+  }
 
   // State
   let serverInfo = $state<SyncServerInfo | null>(null)
@@ -40,8 +92,10 @@
   // State for receiving pushed stories (when in generate mode)
   let receivedStoryJson = $state<string | null>(null)
   let receivedStoryPreview = $state<SyncStoryPreview | null>(null)
+  let receivedStoryQueue = $state<string[]>([])
   let showReceivedConflict = $state(false)
   let pollingInterval: ReturnType<typeof setInterval> | null = null
+  let receivingStory = false
 
   // State for version mismatch warning
   let remoteVersion = $state<string | null>(null)
@@ -56,11 +110,16 @@
   // Reset state when modal opens
   $effect(() => {
     if (ui.syncModalOpen) {
-      resetState()
+      // resetState reads packMapping to cancel stale work. Do not make that read a dependency or
+      // opening a new pack dialog would retrigger this effect and immediately cancel itself.
+      untrack(resetState)
     }
   })
 
   function resetState() {
+    // Settle an older transfer before discarding the state it was waiting on. Merely removing the
+    // dialog would leave resolveIncomingPack suspended forever.
+    cancelPendingPackMapping()
     serverInfo = null
     connection = null
     remoteStories = []
@@ -75,12 +134,18 @@
     syncMessage = null
     receivedStoryJson = null
     receivedStoryPreview = null
+    receivedStoryQueue = []
     showReceivedConflict = false
+    receivingStory = false
     remoteVersion = null
     localVersion = null
     showVersionWarning = false
     pendingConnection = null
     stopPolling()
+  }
+
+  function cancelPendingPackMapping() {
+    packMapping?.resolve(null)
   }
 
   function stopPolling() {
@@ -99,35 +164,66 @@
     try {
       const received = await syncService.getReceivedStories()
       if (received.length > 0) {
-        // Take the first received story
-        const storyJson = received[0]
-        const preview = syncService.getStoryPreview(storyJson)
-
-        if (preview) {
-          receivedStoryJson = storyJson
-          receivedStoryPreview = preview
-
-          // Check for conflict
-          const exists = await syncService.checkStoryExists(preview.title)
-          if (exists) {
-            showReceivedConflict = true
-          } else {
-            // No conflict, import directly
-            await importReceivedStory()
-          }
-        }
-
-        // Clear received stories from server
-        await syncService.clearReceivedStories()
+        if (receivedStoryJson || receivingStory) return
+        // The native API clears its whole queue at once. Keep every payload after the claimed
+        // one locally, then process them in order after the active transfer finishes.
+        const [storyJson, ...queuedStories] = received
+        receivedStoryQueue = queuedStories
         stopPolling()
+        await syncService.clearReceivedStories()
+        await claimReceivedStory(storyJson)
       }
     } catch {
       // Ignore polling errors
     }
   }
 
+  async function claimReceivedStory(storyJson: string) {
+    const preview = syncService.getStoryPreview(storyJson)
+    if (!preview) {
+      error = 'Received an invalid story payload'
+      resumeReceivedStories()
+      return
+    }
+
+    receivedStoryJson = storyJson
+    receivedStoryPreview = preview
+    const exists = await syncService.checkStoryExists(preview.title)
+    if (exists) {
+      showReceivedConflict = true
+    } else {
+      await importReceivedStory()
+    }
+  }
+
+  function resumeReceivedStories() {
+    const [next, ...remaining] = receivedStoryQueue
+    if (next) {
+      receivedStoryQueue = remaining
+      void claimReceivedStory(next)
+    } else {
+      startPolling()
+    }
+  }
+
   async function importReceivedStory() {
-    if (!receivedStoryJson || !receivedStoryPreview) return
+    if (!receivedStoryJson || !receivedStoryPreview || receivingStory) return
+    receivingStory = true
+
+    // Pack first — and deliberately outside the block below, whose `finally` discards the
+    // received payload. The poller has already cleared the server's copy, so a cancel that fell
+    // through to it would lose the story outright; backing out must leave it pending so the user
+    // can go install the pack and click again.
+    const packBinding = await resolveIncomingPack(receivedStoryJson)
+    if (packBinding && 'error' in packBinding) {
+      error = packBinding.error
+      receivingStory = false
+      return
+    }
+    if (!packBinding) {
+      receivingStory = false
+      return
+    }
 
     loading = true
     error = null
@@ -141,7 +237,9 @@
         await syncService.deleteStory(existingId)
       }
 
-      const result = await exportService.importFromContent(receivedStoryJson, true)
+      const result = await exportService.importFromContent(receivedStoryJson, true, {
+        resolvePackBinding: async () => packBinding,
+      })
 
       if (result.success) {
         await story.loadAllStories()
@@ -154,21 +252,24 @@
       error = e instanceof Error ? e.message : 'Import failed'
     } finally {
       loading = false
+      receivingStory = false
       receivedStoryJson = null
       receivedStoryPreview = null
+      resumeReceivedStories()
     }
   }
 
-  function cancelReceivedImport() {
+  function discardReceivedStory() {
     showReceivedConflict = false
+    receivingStory = false
     receivedStoryJson = null
     receivedStoryPreview = null
-    // Resume polling for more stories
-    startPolling()
+    resumeReceivedStories()
   }
 
   // Cleanup on destroy
   onDestroy(() => {
+    cancelPendingPackMapping()
     cleanup()
   })
 
@@ -343,6 +444,7 @@
 
   async function pullStory() {
     if (!connection || !selectedRemoteStory) return
+    const pullConnection = connection
 
     // Check for conflict
     const exists = await syncService.checkStoryExists(selectedRemoteStory.title)
@@ -358,6 +460,24 @@
     showConflictWarning = false
 
     try {
+      // Download first, then settle the pack, and only then delete what we are replacing. The
+      // pull used to sit between the delete and the import, which meant both a failed download
+      // and a cancelled pack choice left the user with neither copy.
+      const storyJson = await syncService.pullStory(pullConnection, selectedRemoteStory.id)
+
+      const packBinding = await resolveIncomingPack(storyJson)
+      if (packBinding && 'error' in packBinding) {
+        error = packBinding.error
+        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
+        return
+      }
+      if (!packBinding) {
+        // A user cancellation keeps the established connection usable. A lifecycle cancellation
+        // from close/reset must not resurrect an old session over freshly reset state.
+        if (ui.syncModalOpen && connection === pullConnection) ui.setSyncMode('connected')
+        return
+      }
+
       // If replacing, delete the existing story first
       const existingId = await syncService.findStoryIdByTitle(selectedRemoteStory.title)
       if (existingId) {
@@ -365,12 +485,11 @@
         await syncService.deleteStory(existingId)
       }
 
-      // Pull the story
-      const storyJson = await syncService.pullStory(connection, selectedRemoteStory.id)
-
       // Import using existing import service
       // Use skipImportedSuffix=true so synced stories keep their original title
-      const result = await exportService.importFromContent(storyJson, true)
+      const result = await exportService.importFromContent(storyJson, true, {
+        resolvePackBinding: async () => packBinding,
+      })
 
       if (result.success) {
         await story.loadAllStories()
@@ -418,8 +537,11 @@
   }
 
   async function close() {
-    await cleanup()
+    // Mark the modal closed before settling the promise so the suspended pull cannot switch the
+    // hidden modal back to its connected state while cleanup is running.
     ui.closeSyncModal()
+    cancelPendingPackMapping()
+    await cleanup()
   }
 
   function formatDate(timestamp: number): string {
@@ -533,8 +655,18 @@
               it will create a "Pre-sync backup" checkpoint first. Continue?
             </p>
             <div class="flex gap-3">
-              <Button variant="outline" onclick={cancelReceivedImport}>Cancel</Button>
+              <Button variant="outline" onclick={discardReceivedStory}>Cancel</Button>
               <Button onclick={importReceivedStory}>Replace</Button>
+            </div>
+          </div>
+        {:else if receivedStoryPreview}
+          <div class="flex flex-col items-center py-4 text-center">
+            <p class="text-muted-foreground mb-4">
+              Received "{receivedStoryPreview.title}". Choose a prompt pack to continue.
+            </p>
+            <div class="flex gap-3">
+              <Button variant="outline" onclick={discardReceivedStory}>Discard</Button>
+              <Button onclick={importReceivedStory}>Continue import</Button>
             </div>
           </div>
         {:else if loading}
@@ -738,3 +870,13 @@
     {/if}
   </ResponsiveModal.Content>
 </ResponsiveModal.Root>
+
+<!-- Pack step of an in-flight transfer. Opens before anything is written or deleted. -->
+{#if packMapping}
+  <PackMappingDialog
+    context={packMapping.context}
+    lockedPack={packMapping.lockedPack}
+    onlyVariables={packMapping.onlyVariables}
+    onResolve={packMapping.resolve}
+  />
+{/if}

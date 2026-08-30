@@ -1,6 +1,7 @@
 /** Shape checks and version warnings for an incoming `.avt`. */
 
 import type { AventuraExport } from './types'
+import { sanitizePackBinding } from './packBinding'
 
 /**
  * Compare semantic versions. Returns negative if a < b, 0 if equal, positive if a > b.
@@ -58,12 +59,22 @@ const FEATURE_HISTORY: { version: string; warning: string }[] = [
     version: '1.8.0',
     warning: 'current background image (v1.8.0). Current background image will not be restored.',
   },
+  {
+    version: '1.9.0',
+    warning: 'prompt pack information (v1.9.0). The story will be bound to the built-in pack.',
+  },
 ]
 
 /** Log warnings for imports from older versions that may be missing features. */
-export function logVersionCompatibilityWarnings(importVersion: string): void {
+export function logVersionCompatibilityWarnings(
+  data: Pick<AventuraExport, 'version' | 'packBinding'> | string,
+): void {
+  // Keep the version-only form for callers that cannot inspect the payload yet.
+  const importVersion = typeof data === 'string' ? data : data.version
+  const hasPackBinding = typeof data !== 'string' && sanitizePackBinding(data.packBinding) !== null
   for (const { version, warning } of FEATURE_HISTORY) {
     if (compareVersions(importVersion, version) < 0) {
+      if (version === '1.9.0' && hasPackBinding) continue
       console.warn(`[Import] File from v${importVersion} predates ${warning}`)
     }
   }

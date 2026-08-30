@@ -914,6 +914,7 @@ export function getDefaultExperimentalFeatures(): ExperimentalFeatures {
     backgroundGeneration: false,
     generationNotifications: false,
     notificationPreview: false,
+    legacyImportPackMapping: false,
   }
 }
 
