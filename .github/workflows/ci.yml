@@ -131,11 +131,12 @@ jobs:
 
       # Runs after the build: lint needs the Rust libraries and the wry-generated sources.
       - name: Lint Android
+        id: lint_android
         working-directory: src-tauri/gen/android
         run: ./gradlew :app:lintUniversalDebug
 
       - name: Upload lint report
-        if: failure()
+        if: failure() && steps.lint_android.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: android-lint-report
