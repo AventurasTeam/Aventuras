@@ -129,6 +129,19 @@ jobs:
       - name: Verify incognito-keyboard injection
         run: node scripts/check_wry_injection.js
 
+      # Runs after the build: lint needs the Rust libraries and the wry-generated sources.
+      - name: Lint Android
+        id: lint_android
+        working-directory: src-tauri/gen/android
+        run: ./gradlew :app:lintUniversalDebug
+
+      - name: Upload lint report
+        if: failure() && steps.lint_android.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-lint-report
+          path: src-tauri/gen/android/app/build/reports/lint-results-universalDebug.html
+
       - name: Decode keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}

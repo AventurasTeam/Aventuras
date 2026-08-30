@@ -40,8 +40,9 @@ if [[ -z "${JAVA_HOME:-}" ]] || ! jdk_ok "${JAVA_HOME:-}"; then
     JAVA_HOME=""
     best_major=0
     # Scan all installed JVMs + the Android Studio JBR if present, picking the newest valid
-    # JDK (e.g. 21 > 17). Name-agnostic (openjdk/temurin/...).
-    for cand in /usr/lib/jvm/*/ "$HOME/android-studio/jbr" /opt/android-studio/jbr; do
+    # JDK (e.g. 21 > 17). Name-agnostic (openjdk/temurin/...). $HOME/.local/lib/jvm covers
+    # distros that no longer package an LTS JDK (Fedora 41+ ships only the latest release).
+    for cand in /usr/lib/jvm/*/ "$HOME"/.local/lib/jvm/*/ "$HOME/android-studio/jbr" /opt/android-studio/jbr; do
         cand="${cand%/}"
         if jdk_ok "$cand"; then
             m="$(jdk_major "$cand")"

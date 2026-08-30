@@ -24,10 +24,15 @@ val keyProperties = Properties().apply {
 android {
     compileSdk = 36
     namespace = "com.karelian.aventura"
+    lint {
+        // Template noise from `tauri android init`: this app targets phones and tablets,
+        // never Leanback, and a device without a touchscreen cannot run it.
+        disable += setOf("MissingTvBanner", "ImpliedTouchscreenHardware")
+    }
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.karelian.aventura"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
