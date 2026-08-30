@@ -718,7 +718,12 @@ class StoryStore {
 
     // Wipe all existing main-branch entries (and any chapters that
     // referenced them — clearStoryEntries deletes both, see database.ts)
-    await database.clearStoryEntries(storyId)
+    const droppedCheckpoints = this.checkpointsAnchoredTo(new Set(this.entries.map((e) => e.id)))
+    await database.clearStoryEntries(
+      storyId,
+      droppedCheckpoints.map((cp) => cp.id),
+    )
+    this.forgetCheckpoints(droppedCheckpoints)
     this.chapters = this.chapters.filter((ch) => ch.branchId !== null)
     this.invalidateChapterCache()
 
@@ -823,12 +828,7 @@ class StoryStore {
   async updateEntry(entryId: string, content: string): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
-    // Prevent editing during any generation or retry restore to avoid race conditions
-    // Silently return - UI should disable buttons using ui.isGenerating
-    if (this._isRetryInProgress || ui.isGenerating) {
-      log('Edit blocked - generation or retry in progress')
-      return
-    }
+    this.assertNotBusy('edit an entry')
 
     const existingEntry = this.entries.find((e) => e.id === entryId)
     if (!existingEntry) throw new Error('Entry not found')
@@ -913,6 +913,56 @@ class StoryStore {
   }
 
   /**
+   * Every destructive operation that removes entries from a position onward runs this first,
+   * before any rollback: a branch forked at or after that position would survive with a fork
+   * point that no longer exists, and a rollback already applied cannot be taken back.
+   */
+  private assertNoBranchForkAtOrAfter(position: number): void {
+    const forked = this.branches.find((b) =>
+      this.entries.some((e) => e.id === b.forkEntryId && e.position >= position),
+    )
+    if (forked) {
+      throw new Error(
+        `Cannot remove these entries because branch "${forked.name}" forks from one of them. ` +
+          `Delete the branch first.`,
+      )
+    }
+  }
+
+  /**
+   * The same check, for a caller that mutates other state before it reaches the entries — a
+   * retry restores lorebook activation first, and would otherwise leave that half-applied.
+   */
+  assertEntriesRemovable(position: number): void {
+    this.assertNoBranchForkAtOrAfter(position)
+  }
+
+  /**
+   * A checkpoint restores to its `lastEntryId`, so one whose entry is gone can only produce a
+   * branch with a dangling fork point. Callers hand these to the delete that removes the
+   * entries, so both land together, and then drop them from memory with `forgetCheckpoints`.
+   */
+  private checkpointsAnchoredTo(entryIds: Set<string>): Checkpoint[] {
+    return this.checkpoints.filter((cp) => entryIds.has(cp.lastEntryId))
+  }
+
+  private forgetCheckpoints(removed: Checkpoint[]): void {
+    if (removed.length === 0) return
+    const ids = new Set(removed.map((cp) => cp.id))
+    this.checkpoints = this.checkpoints.filter((cp) => !ids.has(cp.id))
+    log('Deleted checkpoints whose entry was removed:', removed.length)
+  }
+
+  /** For the one caller whose entry delete cannot be joined into a single transaction. */
+  private async pruneCheckpointsForEntries(entryIds: Set<string>): Promise<void> {
+    const orphaned = this.checkpointsAnchoredTo(entryIds)
+    if (orphaned.length === 0) return
+
+    await database.deleteCheckpoints(orphaned.map((cp) => cp.id))
+    this.forgetCheckpoints(orphaned)
+  }
+
+  /**
    * Common cleanup logic after an entry is deleted.
    * Restores suggested actions from the new last narration entry and invalidates the retry backup.
    */
@@ -921,32 +971,33 @@ class StoryStore {
     ui.clearRetryBackup(true)
   }
 
-  // Delete a story entry
-  async deleteEntry(entryId: string): Promise<void> {
-    if (!this.currentStory) throw new Error('No story loaded')
-
-    // Prevent deleting during any generation or retry restore to avoid race conditions
-    // Silently return - UI should disable buttons using ui.isGenerating
+  /**
+   * Editing and deleting race with a generation or a retry restore rewriting the same entries.
+   * `isRetryInProgress` and `ui.isGenerating` let the UI disable the affordance up front; this
+   * refuses the ones that get through, rather than returning as if the work had been done.
+   */
+  private assertNotBusy(action: string): void {
     if (this._isRetryInProgress || ui.isGenerating) {
-      log('Delete blocked - generation or retry in progress')
-      return
+      throw new Error(`Cannot ${action} while a generation or retry is in progress`)
     }
+  }
 
-    const existingEntry = this.entries.find((e) => e.id === entryId)
-    if (!existingEntry) throw new Error('Entry not found')
+  /** Every precondition for removing an entry, in one place. Returns the validated entry. */
+  private assertEntryDeletable(entryId: string): StoryEntry {
+    this.assertNotBusy('delete an entry')
 
-    // Prevent deleting inherited entries on a branch
+    const entry = this.entries.find((e) => e.id === entryId)
+    if (!entry) throw new Error('Entry not found')
+
     // An entry is inherited if its branchId doesn't match the current branch
-    const currentBranchId = this.currentStory.currentBranchId
-    if ((existingEntry.branchId ?? null) !== currentBranchId) {
+    if ((entry.branchId ?? null) !== (this.currentStory?.currentBranchId ?? null)) {
       throw new Error(
         'Cannot delete inherited entries. This entry belongs to ' +
-          (existingEntry.branchId === null ? 'the main branch' : 'a parent branch') +
+          (entry.branchId === null ? 'the main branch' : 'a parent branch') +
           '. You can only delete entries created on the current branch.',
       )
     }
 
-    // Check if this entry is a fork point for any branch
     const branchUsingEntry = this.branches.find((b) => b.forkEntryId === entryId)
     if (branchUsingEntry) {
       throw new Error(
@@ -955,12 +1006,24 @@ class StoryStore {
       )
     }
 
+    return entry
+  }
+
+  // Delete a story entry
+  async deleteEntry(entryId: string): Promise<void> {
+    if (!this.currentStory) throw new Error('No story loaded')
+
+    const existingEntry = this.assertEntryDeletable(entryId)
+    const currentBranchId = this.currentStory.currentBranchId
+
     // Phase 2: Rollback on delete — cascade delete from this position with world state undo
     const rollbackEnabled =
       settings.experimentalFeatures.stateTracking && settings.experimentalFeatures.rollbackOnDelete
 
     if (rollbackEnabled) {
       log('Rollback-on-delete: cascading from position', existingEntry.position)
+
+      this.assertNoBranchForkAtOrAfter(existingEntry.position)
 
       // Run rollback to undo world state changes for this entry and all after it
       const rollbackSummary = await rollbackService.rollbackFromPosition(
@@ -990,7 +1053,12 @@ class StoryStore {
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
-    await database.deleteStoryEntry(entryId)
+    const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
+    await database.deleteEntriesWithDependents({
+      entryIds: [entryId],
+      checkpointIds: droppedCheckpoints.map((cp) => cp.id),
+    })
+    this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 
     // Invalidate caches
@@ -1028,9 +1096,7 @@ class StoryStore {
     entryId: string,
   ): Promise<{ entitiesUndone: boolean; timeUndone: boolean }> {
     if (!this.currentStory) throw new Error('No story loaded')
-    if (this._isRetryInProgress || ui.isGenerating) {
-      throw new Error('Cannot regenerate while a generation or retry is in progress')
-    }
+    this.assertNotBusy('regenerate')
 
     const entry = this.entries.find((e) => e.id === entryId)
     if (!entry) throw new Error('Entry not found')
@@ -1055,6 +1121,8 @@ class StoryStore {
       )
     }
 
+    this.assertNoBranchForkAtOrAfter(entry.position)
+
     let entitiesUndone = false
     let timeUndone = false
 
@@ -1078,9 +1146,8 @@ class StoryStore {
       timeUndone = true
     }
 
-    // Cascade-delete rather than deleteStoryEntry: this also clears chapters whose
-    // start/end reference the entry and its embedded images, which the single-row path
-    // does not.
+    // Cascade-delete rather than removing the one entry: this also clears chapters whose
+    // start/end reference it, which the single-entry path does not.
     await this.deleteEntriesFromPosition(entry.position, { skipRollback: true })
     await this.reloadEntriesForCurrentBranch()
 
@@ -1256,6 +1323,8 @@ class StoryStore {
   ): Promise<void> {
     if (!this.currentStory) throw new Error('No story loaded')
 
+    this.assertNoBranchForkAtOrAfter(position)
+
     // Phase 2: Rollback world state before deleting entries
     // Skip if caller already performed rollback (e.g. deleteEntry)
     const rollbackEnabled =
@@ -1293,25 +1362,22 @@ class StoryStore {
       (ch) => entryIdsToDelete.has(ch.startEntryId) || entryIdsToDelete.has(ch.endEntryId),
     )
 
-    if (chaptersToDelete.length > 0) {
-      log('Deleting chapters that reference entries being deleted', {
-        chaptersToDelete: chaptersToDelete.length,
-        chapterNumbers: chaptersToDelete.map((ch) => ch.number),
-      })
+    const droppedCheckpoints = this.checkpointsAnchoredTo(entryIdsToDelete)
 
-      // Delete chapters first (to satisfy foreign key constraints)
-      await database.deleteChapters(chaptersToDelete.map((ch) => ch.id))
-      this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
-    }
+    log('Deleting entries and the rows that reference them', {
+      chaptersToDelete: chaptersToDelete.length,
+      chapterNumbers: chaptersToDelete.map((ch) => ch.number),
+      checkpointsToDelete: droppedCheckpoints.length,
+    })
 
-    // Delete embedded images for entries being deleted
-    // (explicit deletion to ensure cleanup even if CASCADE isn't working)
-    await database.deleteEmbeddedImagesForEntries(entriesToDelete.map((entry) => entry.id))
+    await database.deleteEntriesWithDependents({
+      entryIds: Array.from(entryIdsToDelete),
+      chapterIds: chaptersToDelete.map((ch) => ch.id),
+      checkpointIds: droppedCheckpoints.map((cp) => cp.id),
+    })
 
-    // Now delete entries from database
-    if (entriesToDelete.length > 0) {
-      await database.deleteStoryEntries(Array.from(entryIdsToDelete))
-    }
+    this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
+    this.forgetCheckpoints(droppedCheckpoints)
 
     // Update in-memory state
     this.entries = this.entries.filter((e) => e.position < position)
@@ -4296,6 +4362,8 @@ class StoryStore {
         entriesToDelete: entryIdsToDelete.length,
       })
 
+      this.assertNoBranchForkAtOrAfter(backup.entryCountBeforeAction)
+
       // Restore to database (branch-aware: only delete/restore world state for current branch)
       await database.restoreRetryBackup(
         entryIdsToDelete,
@@ -4306,6 +4374,8 @@ class StoryStore {
         backup.items,
         backup.storyBeats,
       )
+
+      await this.pruneCheckpointsForEntries(new Set(entryIdsToDelete))
 
       // Reload from database using branch-aware method for clean state
       await this.reloadEntriesForCurrentBranch()

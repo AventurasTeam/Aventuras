@@ -1036,13 +1036,6 @@
       return
     }
 
-    ui.clearGenerationError()
-    ui.clearSuggestions(story.currentStory.id)
-    ui.clearActionChoices(story.currentStory.id)
-
-    if (backup.hasFullState) {
-      ui.restoreActivationData(backup.activationData, backup.storyPosition)
-    }
     ui.setLastLorebookRetrieval(null)
     ui.setLastRetrievalResult(null)
 
@@ -1054,6 +1047,7 @@
         deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
         restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
         restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
+        assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
         lockRetryInProgress: story.lockRetryInProgress.bind(story),
         unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
         restoreActivationData: ui.restoreActivationData.bind(ui),
@@ -1067,12 +1061,16 @@
       },
     )
 
-    if (result.success) {
-      await tick()
-      actionType = (result.restoredActionType as ActionType) ?? actionType
-      isRawActionChoice = result.restoredWasRawActionChoice ?? false
-      inputValue = result.restoredRawInput ?? ''
+    if (!result.success) {
+      // The backup is the only way back to the pre-action story, so a refused restore keeps it.
+      ui.showToast(result.error ?? 'Could not restore the story', 'error')
+      return
     }
+
+    await tick()
+    actionType = (result.restoredActionType as ActionType) ?? actionType
+    isRawActionChoice = result.restoredWasRawActionChoice ?? false
+    inputValue = result.restoredRawInput ?? ''
     ui.clearRetryBackup(true)
   }
 
@@ -1086,7 +1084,14 @@
       return
     }
 
-    await story.deleteEntry(error.errorEntryId)
+    try {
+      await story.deleteEntry(error.errorEntryId)
+    } catch (err) {
+      // Regenerating over an entry that could not be removed would leave the failed one above
+      // the new narration, so the retry stops here.
+      ui.showToast(errMessage(err), 'error')
+      return
+    }
     ui.clearGenerationError()
 
     await generateResponse(userActionEntry.id, userActionEntry.content, {
@@ -1161,10 +1166,6 @@
 
     const storyId = story.currentStory.id
 
-    ui.clearGenerationError()
-    ui.clearSuggestions(storyId)
-    ui.clearActionChoices(storyId)
-
     const result = await retryService.handleRetryLastMessage(
       backup,
       {
@@ -1173,6 +1174,7 @@
         deleteEntitiesCreatedAfterBackup: story.deleteEntitiesCreatedAfterBackup.bind(story),
         restoreCharacterSnapshots: story.restoreCharacterSnapshots.bind(story),
         restoreTimeTrackerSnapshot: story.restoreTimeTrackerSnapshot.bind(story),
+        assertEntriesRemovable: story.assertEntriesRemovable.bind(story),
         lockRetryInProgress: story.lockRetryInProgress.bind(story),
         unlockRetryInProgress: story.unlockRetryInProgress.bind(story),
         restoreActivationData: ui.restoreActivationData.bind(ui),
@@ -1186,7 +1188,10 @@
       },
     )
 
-    if (!result.success) return
+    if (!result.success) {
+      ui.showToast(result.error ?? 'Could not restore the story', 'error')
+      return
+    }
 
     await tick()
 

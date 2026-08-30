@@ -97,8 +97,13 @@
   function getLatestCheckpoint() {
     if (story.checkpoints.length === 0) return null
     const currentBranchId = story.currentStory?.currentBranchId ?? null
+    // A checkpoint left behind by a story saved before entry deletion pruned them still points
+    // at an entry that is gone; branching from it would fail on the missing fork entry.
+    const liveEntryIds = new Set(story.entries.map((e) => e.id))
     const eligible = story.checkpoints.filter(
-      (checkpoint) => getCheckpointBranchId(checkpoint) === currentBranchId,
+      (checkpoint) =>
+        getCheckpointBranchId(checkpoint) === currentBranchId &&
+        liveEntryIds.has(checkpoint.lastEntryId),
     )
     if (eligible.length === 0) return null
     // Sort by createdAt descending and return the most recent
@@ -108,6 +113,20 @@
 
   const latestCheckpoint = $derived(getLatestCheckpoint())
   const canCreateBranch = $derived(!!latestCheckpoint)
+
+  /**
+   * Distinguishes "never had one" from "had one, but its entry isn't there". A branch switch
+   * sets the branch id before the entries it loads arrive, so the second case is ambiguous —
+   * the same ambiguity `forkPointTitle` names below.
+   */
+  const createBranchTitle = $derived.by(() => {
+    if (canCreateBranch) return 'Create new branch from latest checkpoint'
+    const currentBranchId = story.currentStory?.currentBranchId ?? null
+    const hadOne = story.checkpoints.some((c) => getCheckpointBranchId(c) === currentBranchId)
+    return hadOne
+      ? "This branch's checkpoints aren't usable - their entries aren't loaded yet, or were deleted"
+      : 'No checkpoints available - checkpoints are created at chapter boundaries'
+  })
 
   async function handleCreateBranch() {
     if (!newBranchName.trim()) return
@@ -243,9 +262,7 @@
           : 'text-surface-600 cursor-not-allowed'}"
         onclick={() => canCreateBranch && (showCreateForm = !showCreateForm)}
         disabled={!canCreateBranch}
-        title={canCreateBranch
-          ? 'Create new branch from latest checkpoint'
-          : 'No checkpoints available - checkpoints are created at chapter boundaries'}
+        title={createBranchTitle}
       >
         <Plus class="h-5 w-5 sm:h-4 sm:w-4" />
       </button>

@@ -19,6 +19,7 @@
     Volume2,
     Image as ImageIcon,
     Copy,
+    MoreVertical,
   } from '@lucide/svelte'
   import { aiService } from '$lib/services/ai'
   import { aiTTSService } from '$lib/services/ai/utils/TTSService'
@@ -51,8 +52,10 @@
   import { onMount } from 'svelte'
   import ReasoningBlock from './ReasoningBlock.svelte'
   import { countTokens } from '$lib/services/tokenizer'
+  import { errMessage } from '$lib/utils/error'
   import { Button } from '$lib/components/ui/button'
   import * as Popover from '$lib/components/ui/popover'
+  import * as DropdownMenu from '$lib/components/ui/dropdown-menu'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Input } from '$lib/components/ui/input'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
@@ -183,14 +186,26 @@
       !!findPrecedingUserAction(story.entries, entry.id),
   )
 
+  // A retry restore rewrites the same entries a generation does, and the store refuses both.
+  const entriesLocked = $derived(ui.isGenerating || story.isRetryInProgress)
+
   /**
    * Dismiss/delete this error entry from the story.
    */
   async function handleDismissError() {
+    try {
+      await story.deleteEntry(entry.id)
+    } catch (error) {
+      // A branch forking from this entry refuses the delete; without this the button
+      // would simply do nothing.
+      ui.showToast(errMessage(error), 'error')
+      return
+    }
+    // Only once the entry is gone: a refused delete leaves it on screen, and clearing the
+    // tracked error would take its Retry away with it.
     if (ui.lastGenerationError?.errorEntryId === entry.id) {
       ui.clearGenerationError()
     }
-    await story.deleteEntry(entry.id)
   }
 
   /**
@@ -203,8 +218,8 @@
       isGenerating: ui.isGenerating,
     })
 
-    if (ui.isGenerating) {
-      console.log('[StoryEntry] Already generating, returning')
+    if (entriesLocked) {
+      console.log('[StoryEntry] Already generating or retrying, returning')
       return
     }
 
@@ -250,6 +265,16 @@
   let embeddedImages = $state<EmbeddedImage[]>([])
   let expandedImageId = $state<string | null>(null)
   let clickedElement = $state<HTMLElement | null>(null)
+
+  const hasEmbeddedImages = $derived(embeddedImages.length > 0)
+  const canGenerateStoryImages = $derived(
+    entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic',
+  )
+  const storyImagesLabel = $derived(
+    hasEmbeddedImages ? 'Images already generated' : 'Generate story images',
+  )
+  const ttsLabel = $derived(isPlayingTTS ? 'Stop narration' : 'Narrate')
+  const copyLabel = $derived(isCopied ? 'Copied!' : 'Copy message text')
 
   // Branching state
   let isBranching = $state(false)
@@ -1318,8 +1343,10 @@
       />
     {/if}
 
-    <!-- Token count badge (shows 0 if no tokens) -->
-    <span class="bg-muted rounded px-1.5 py-0.5 text-[11px] tabular-nums">
+    <!-- Token count badge (shows 0 if no tokens). Hidden on narrow screens, where the toolbar
+         needs the width. Narration entries keep it under "Response info" in the overflow menu;
+         on any other entry type it is not shown there at all. -->
+    <span class="bg-muted hidden rounded px-1.5 py-0.5 text-[11px] tabular-nums sm:inline">
       {#if isReasoningEnabled && reasoningTokens > 0}
         <span class="text-muted-foreground">{reasoningTokens}r</span>
         <span class="text-muted-foreground/50 mx-0.5">+</span>
@@ -1348,7 +1375,73 @@
 
     <!-- Right side: Action buttons toolbar (always visible on mobile, hover-only on desktop) -->
     {#if !isEditing && !isDeleting && !isBranching && !isCreatingCheckpoint && entry.type !== 'system'}
-      <div class="flex items-center gap-0.5">
+      <div class="flex shrink-0 items-center gap-0.5">
+        {#snippet copyIcon()}
+          {#if isCopied}
+            <Check class="h-4 w-4 text-green-500" />
+          {:else}
+            <Copy class="h-4 w-4" />
+          {/if}
+        {/snippet}
+        {#snippet responseInfoRows()}
+          <dl class="space-y-1.5">
+            {#if isReasoningEnabled && reasoningTokens > 0}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Reasoning tokens</dt>
+                <dd class="text-right">{reasoningTokens}</dd>
+              </div>
+            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Content tokens</dt>
+              <dd class="text-right">{contentTokens}</dd>
+            </div>
+            {#if generationInfo.storyTime}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Story time</dt>
+                <dd class="text-right">{generationInfo.storyTime}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.model}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Model</dt>
+                <dd class="text-right break-all">{generationInfo.model}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.profileName}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Profile</dt>
+                <dd class="text-right break-all">{generationInfo.profileName}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.reasoningEffort}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Thinking</dt>
+                <dd class="text-right">{generationInfo.reasoningEffort}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.temperature !== undefined}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Temperature</dt>
+                <dd class="text-right">{generationInfo.temperature}</dd>
+              </div>
+            {/if}
+            {#if generationInfo.duration}
+              <div class="flex justify-between gap-3">
+                <dt class="text-muted-foreground shrink-0">Duration</dt>
+                <dd class="text-right">{generationInfo.duration}</dd>
+              </div>
+            {/if}
+            <div class="flex justify-between gap-3">
+              <dt class="text-muted-foreground shrink-0">Generated at</dt>
+              <dd class="text-right">{generationInfo.timestamp}</dd>
+            </div>
+            {#if !generationInfo.model}
+              <p class="text-muted-foreground pt-1">
+                Model details were not recorded for this response.
+              </p>
+            {/if}
+          </dl>
+        {/snippet}
         {#if showInfo}
           <Popover.Root>
             <Popover.Trigger>
@@ -1356,7 +1449,7 @@
                 <Button
                   variant="text"
                   size="icon"
-                  class="text-muted-foreground hover:text-foreground h-7 w-7"
+                  class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
                   title="Response info"
                   {...props}
                 >
@@ -1366,53 +1459,7 @@
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
               <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
-              <dl class="space-y-1.5">
-                {#if generationInfo.storyTime}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Story time</dt>
-                    <dd class="text-right">{generationInfo.storyTime}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.model}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Model</dt>
-                    <dd class="text-right break-all">{generationInfo.model}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.profileName}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Profile</dt>
-                    <dd class="text-right break-all">{generationInfo.profileName}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.reasoningEffort}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Thinking</dt>
-                    <dd class="text-right">{generationInfo.reasoningEffort}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.temperature !== undefined}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Temperature</dt>
-                    <dd class="text-right">{generationInfo.temperature}</dd>
-                  </div>
-                {/if}
-                {#if generationInfo.duration}
-                  <div class="flex justify-between gap-3">
-                    <dt class="text-muted-foreground shrink-0">Duration</dt>
-                    <dd class="text-right">{generationInfo.duration}</dd>
-                  </div>
-                {/if}
-                <div class="flex justify-between gap-3">
-                  <dt class="text-muted-foreground shrink-0">Generated at</dt>
-                  <dd class="text-right">{generationInfo.timestamp}</dd>
-                </div>
-                {#if !generationInfo.model}
-                  <p class="text-muted-foreground pt-1">
-                    Model details were not recorded for this response.
-                  </p>
-                {/if}
-              </dl>
+              {@render responseInfoRows()}
             </Popover.Content>
           </Popover.Root>
         {/if}
@@ -1442,7 +1489,7 @@
             variant="text"
             size="icon"
             onclick={() => (isBranching = true)}
-            class="h-7 w-7 text-amber-500 hover:text-amber-600"
+            class="hidden h-7 w-7 text-amber-500 hover:text-amber-600 sm:flex"
             title="Branch from here"
           >
             <GitBranch class="h-4 w-4" />
@@ -1453,7 +1500,7 @@
             variant="text"
             size="icon"
             onclick={() => (isCreatingCheckpoint = true)}
-            class="h-7 w-7 text-blue-500 hover:text-blue-600"
+            class="hidden h-7 w-7 text-blue-500 hover:text-blue-600 sm:flex"
             title="Create checkpoint"
           >
             <Bookmark class="h-4 w-4" />
@@ -1465,7 +1512,7 @@
           onclick={handleTTSToggle}
           disabled={isGeneratingTTS}
           class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={isPlayingTTS ? 'Stop narration' : 'Narrate'}
+          title={ttsLabel}
         >
           {#if isGeneratingTTS}
             <Loader2 class="h-4 w-4 animate-spin" />
@@ -1475,14 +1522,14 @@
             <Volume2 class="h-4 w-4" />
           {/if}
         </Button>
-        {#if entry.type === 'narration' && story.currentStory?.settings?.imageGenerationMode === 'agentic'}
+        {#if canGenerateStoryImages}
           <Button
             variant="text"
             size="icon"
             onclick={handleGenerateStoryImages}
-            disabled={ui.isGenerating || isGeneratingStoryImages || embeddedImages.length > 0}
-            class="text-muted-foreground hover:text-foreground h-7 w-7"
-            title={embeddedImages.length > 0 ? 'Images already generated' : 'Generate story images'}
+            disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
+            class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+            title={storyImagesLabel}
           >
             {#if isGeneratingStoryImages}
               <Loader2 class="h-4 w-4 animate-spin" />
@@ -1495,23 +1542,19 @@
           variant="text"
           size="icon"
           onclick={handleCopyContent}
-          class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={isCopied ? 'Copied!' : 'Copy message text'}
-          aria-label={isCopied ? 'Message copied' : 'Copy message text'}
+          class="text-muted-foreground hover:text-foreground hidden h-7 w-7 sm:flex"
+          title={copyLabel}
+          aria-label={isCopied ? 'Message copied' : copyLabel}
         >
-          {#if isCopied}
-            <Check class="h-4 w-4 text-green-500" />
-          {:else}
-            <Copy class="h-4 w-4" />
-          {/if}
+          {@render copyIcon()}
         </Button>
         <Button
           variant="text"
           size="icon"
           onclick={startEdit}
-          disabled={ui.isGenerating}
+          disabled={entriesLocked}
           class="text-muted-foreground hover:text-foreground h-7 w-7"
-          title={ui.isGenerating ? 'Cannot edit during generation' : 'Edit'}
+          title={entriesLocked ? 'Cannot edit during generation or retry' : 'Edit'}
         >
           <Pencil class="h-4 w-4" />
         </Button>
@@ -1519,12 +1562,74 @@
           variant="text"
           size="icon"
           onclick={() => (isDeleting = true)}
-          disabled={ui.isGenerating}
+          disabled={entriesLocked}
           class="text-muted-foreground h-7 w-7 hover:text-red-500"
-          title={ui.isGenerating ? 'Cannot delete during generation' : 'Delete'}
+          title={entriesLocked ? 'Cannot delete during generation or retry' : 'Delete'}
         >
           <Trash2 class="h-4 w-4" />
         </Button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger>
+            {#snippet child({ props })}
+              <Button
+                variant="text"
+                size="icon"
+                class="text-muted-foreground hover:text-foreground h-7 w-7 sm:hidden"
+                title="More actions"
+                aria-label="More actions"
+                {...props}
+              >
+                <MoreVertical class="h-4 w-4" />
+              </Button>
+            {/snippet}
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" class="max-h-[70vh] overflow-y-auto">
+            {#if canBranch}
+              <DropdownMenu.Item onclick={() => (isBranching = true)}>
+                <GitBranch class="h-4 w-4" />
+                Branch from here
+              </DropdownMenu.Item>
+            {/if}
+            {#if canCreateCheckpoint}
+              <DropdownMenu.Item onclick={() => (isCreatingCheckpoint = true)}>
+                <Bookmark class="h-4 w-4" />
+                Create checkpoint
+              </DropdownMenu.Item>
+            {/if}
+            <!-- Static label and icon: selecting an item closes the menu, so the "Copied!"
+                 state would never be on screen. The toast is the feedback here. -->
+            <DropdownMenu.Item onclick={handleCopyContent}>
+              <Copy class="h-4 w-4" />
+              Copy message text
+            </DropdownMenu.Item>
+            {#if canGenerateStoryImages}
+              <DropdownMenu.Item
+                onclick={handleGenerateStoryImages}
+                disabled={ui.isGenerating || isGeneratingStoryImages || hasEmbeddedImages}
+              >
+                {#if isGeneratingStoryImages}
+                  <Loader2 class="h-4 w-4 animate-spin" />
+                {:else}
+                  <ImageIcon class="h-4 w-4" />
+                {/if}
+                {storyImagesLabel}
+              </DropdownMenu.Item>
+            {/if}
+            <!-- Rendered inline rather than behind an item: selecting an item closes the
+                 menu, which would unmount any popover anchored to it. -->
+            {#if showInfo}
+              <DropdownMenu.Separator />
+              <DropdownMenu.Group>
+                <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
+                  Response info
+                </DropdownMenu.GroupHeading>
+                <div class="w-56 px-2 pb-1.5 text-xs">
+                  {@render responseInfoRows()}
+                </div>
+              </DropdownMenu.Group>
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
       </div>
     {/if}
   </div>
@@ -1802,7 +1907,7 @@
             variant="outline"
             size="sm"
             onclick={handleRetryFromEntry}
-            disabled={ui.isGenerating}
+            disabled={entriesLocked}
             class="h-8 border-red-500/30 px-3 text-red-500 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
           >
             <RefreshCw class="h-3.5 w-3.5" />
@@ -1812,7 +1917,7 @@
             variant="outline"
             size="sm"
             onclick={handleDismissError}
-            disabled={ui.isGenerating}
+            disabled={entriesLocked}
             class="text-muted-foreground border-border h-8 px-3 hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-400"
           >
             <Trash2 class="h-3.5 w-3.5" />
