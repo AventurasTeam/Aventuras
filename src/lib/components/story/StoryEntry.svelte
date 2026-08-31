@@ -1443,6 +1443,16 @@
             {/if}
           </dl>
         {/snippet}
+        {#snippet entryNumberRow()}
+          <!-- Where the entry sits in the story, not how it was generated — so it stays outside
+               the Response info block at both sizes rather than becoming a row in it. -->
+          <div class="flex justify-between gap-3">
+            <span class="text-muted-foreground shrink-0">Entry number</span>
+            <span class="text-foreground text-right font-medium tabular-nums"
+              >{entryNumber(entry)}</span
+            >
+          </div>
+        {/snippet}
         {#if showInfo}
           <Popover.Root>
             <Popover.Trigger>
@@ -1459,13 +1469,8 @@
               {/snippet}
             </Popover.Trigger>
             <Popover.Content class="w-64 p-3 text-xs" align="end">
-              <!-- Where the entry sits in the story, not how it was generated — so it is
-                   outside the Response info block rather than a row in it. -->
-              <div class="border-border mb-2 flex justify-between gap-3 border-b pb-2">
-                <span class="text-muted-foreground shrink-0">Entry number</span>
-                <span class="text-foreground text-right font-medium tabular-nums">
-                  {entryNumber(entry)}
-                </span>
+              <div class="border-border mb-2 border-b pb-2">
+                {@render entryNumberRow()}
               </div>
               <p class="text-foreground mb-2 text-sm font-medium">Response info</p>
               {@render responseInfoRows()}
@@ -1628,6 +1633,9 @@
                  menu, which would unmount any popover anchored to it. -->
             {#if showInfo}
               <DropdownMenu.Separator />
+              <div class="w-56 px-2 pb-1.5 text-xs">
+                {@render entryNumberRow()}
+              </div>
               <DropdownMenu.Group>
                 <DropdownMenu.GroupHeading class="px-2 py-1.5 text-sm font-medium">
                   Response info
