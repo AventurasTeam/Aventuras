@@ -2,6 +2,9 @@ import type { DiscoveryCard, DiscoveryProvider, SearchOptions, SearchResult } fr
 import { corsFetch } from '../utils'
 
 const BACKYARD_API_BASE = 'https://backyard.ai/api/trpc'
+// Avoid making a safe search appear stuck when an upstream page contains only filtered cards.
+// A cap keeps one user action from walking an unexpectedly long provider feed.
+const MAX_FILTERED_PAGE_HOPS = 5
 
 export class BackyardProvider implements DiscoveryProvider {
   id = 'backyard'
@@ -33,7 +36,8 @@ export class BackyardProvider implements DiscoveryProvider {
         type: sortMap[options.sort || 'popular'] || 'Popularity',
         direction: 'desc',
       },
-      type: options.nsfw ? 'all' : 'sfw',
+      // Backyard now uses this field for chat topology, not content sensitivity.
+      type: 'all',
       direction: 'forward',
     }
 
@@ -65,44 +69,53 @@ export class BackyardProvider implements DiscoveryProvider {
       input.cursor = this.lastCursor
     }
 
-    const url = this.buildTrpcUrl('hub.browse.getHubGroupConfigsForTag', input)
-    console.log('[Backyard] Searching:', url)
+    for (let hop = 0; hop < MAX_FILTERED_PAGE_HOPS; hop++) {
+      const url = this.buildTrpcUrl('hub.browse.getHubGroupConfigsForTag', input)
+      console.log('[Backyard] Searching:', url)
 
-    const response = await corsFetch(url, {
-      method: 'GET',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-    })
+      const response = await corsFetch(url, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+      })
 
-    if (!response.ok) {
-      throw new Error(`Backyard API error: ${response.status}`)
+      if (!response.ok) {
+        throw new Error(`Backyard API error: ${response.status}`)
+      }
+
+      const json = await response.json()
+      // tRPC batch response: [{ result: { data: { json: ... } } }]
+      const data = json[0]?.result?.data?.json
+
+      if (!data) {
+        this.lastCursor = undefined
+        return { cards: [], hasMore: false }
+      }
+
+      this.lastCursor = data.nextCursor || undefined
+
+      const configs = (data.hubGroupConfigs || []).filter(
+        (config: any) =>
+          options.nsfw ||
+          !(config.isNSFW || config.CharacterConfigs?.some((character: any) => character.isNSFW)),
+      )
+      const cards = configs.map((c: any) => this.transformCard(c))
+      const hasMore = !!data.nextCursor
+
+      if (cards.length > 0 || !hasMore || options.nsfw || hop === MAX_FILTERED_PAGE_HOPS - 1) {
+        return {
+          cards,
+          hasMore,
+          nextPage: hasMore ? (options.page || 1) + 1 : undefined,
+        }
+      }
+
+      input.cursor = data.nextCursor
     }
 
-    const json = await response.json()
-    // tRPC batch response: [{ result: { data: { json: ... } } }]
-    const data = json[0]?.result?.data?.json
-
-    if (!data) {
-      return { cards: [], hasMore: false }
-    }
-
-    // Update cursor for next page
-    if (data.nextCursor) {
-      this.lastCursor = data.nextCursor
-    } else {
-      this.lastCursor = undefined
-    }
-
-    const configs = data.hubGroupConfigs || []
-    const cards = configs.map((c: any) => this.transformCard(c))
-
-    return {
-      cards,
-      hasMore: !!data.nextCursor,
-      nextPage: data.nextCursor ? (options.page || 1) + 1 : undefined,
-    }
+    return { cards: [], hasMore: false }
   }
 
   private lastCursor?: string
