@@ -3,7 +3,7 @@
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
-  import { Download, Trash2, Lock } from '@lucide/svelte'
+  import { Upload, Trash2, Lock } from '@lucide/svelte'
   import { stripToPlainText } from '$lib/utils/markdown'
 
   interface Props {
@@ -49,7 +49,7 @@
               }}
               title="Export pack"
             >
-              <Download class="h-4 w-4" />
+              <Upload class="h-4 w-4" />
             </Button>
           {/if}
           {#if !pack.isDefault && onDelete}

@@ -285,11 +285,11 @@
         <DropdownMenuLabel>Vault</DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onclick={onImportFromVault}>
-          <Upload class="mr-2 h-4 w-4" />
+          <Download class="mr-2 h-4 w-4" />
           Import from Vault
         </DropdownMenuItem>
         <DropdownMenuItem onclick={onSaveToVault} disabled={story.lorebookEntries.length === 0}>
-          <Download class="mr-2 h-4 w-4" />
+          <Upload class="mr-2 h-4 w-4" />
           Save to Vault
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -301,10 +301,10 @@
       disabled={isLoreManagementActive}
       title={isLoreManagementActive ? 'Import disabled during lore management' : 'Import from file'}
     >
-      <Upload class="h-4 w-4" />
+      <Download class="h-4 w-4" />
     </Button>
     <Button variant="outline" size="icon" onclick={() => ui.openLorebookExport()} title="Export">
-      <Download class="h-4 w-4" />
+      <Upload class="h-4 w-4" />
     </Button>
     {#if story.lorebookEntries.length > 0 && !isLoreManagementActive}
       <Dialog.Root bind:open={deleteAllDialogOpen}>

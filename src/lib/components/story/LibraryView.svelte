@@ -4,7 +4,7 @@
   import { exportService } from '$lib/services/export'
   import { errMessage } from '$lib/utils/error'
   import { ask } from '@tauri-apps/plugin-dialog'
-  import { BookOpen, Upload, RefreshCw, Archive, Plus, MessageSquareShare } from '@lucide/svelte'
+  import { BookOpen, Download, RefreshCw, Archive, Plus, MessageSquareShare } from '@lucide/svelte'
   import SetupWizard from '../wizard/SetupWizard.svelte'
   import STImportWizard from '../wizard/STImportWizard.svelte'
 
@@ -114,7 +114,7 @@
           onclick={() => ui.setActivePanel('vault')}
         />
         <Button
-          icon={Upload}
+          icon={Download}
           label="Import"
           variant="outline"
           title="Import Story"
