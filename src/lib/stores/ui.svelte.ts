@@ -457,17 +457,27 @@ class UIStore {
    * from a template. The claimer clears it unconditionally, because the only consumer is a
    * mounted story view and it must not leak into an unrelated switch later.
    */
-  private branchLandingClaimed = false
+  private branchLandingClaim: { branchId: string | null } | null = null
 
-  claimBranchLanding() {
-    this.branchLandingClaimed = true
+  claimBranchLanding(branchId: string | null) {
+    this.branchLandingClaim = { branchId }
   }
 
-  /** Take the claim, if any, and clear it. */
-  consumeBranchLandingClaim(): boolean {
-    const claimed = this.branchLandingClaimed
-    this.branchLandingClaimed = false
-    return claimed
+  /**
+   * Take the claim if it was made for this branch, and clear it.
+   *
+   * Keyed rather than a bare flag: switches queue, so one already in flight can reach its own
+   * `BranchSwitched` while a claim for a different branch is standing, and an unkeyed claim
+   * would be spent on it — suppressing that switch's landing and leaving this one unclaimed.
+   */
+  consumeBranchLandingClaim(branchId: string | null): boolean {
+    if (!this.branchLandingClaim || this.branchLandingClaim.branchId !== branchId) return false
+    this.branchLandingClaim = null
+    return true
+  }
+
+  clearBranchLandingClaim() {
+    this.branchLandingClaim = null
   }
 
   requestEntryScroll(entryId: string) {

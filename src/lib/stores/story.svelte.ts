@@ -584,6 +584,10 @@ class StoryStore {
       // them back to the library on error, which would discard the story they switched to and
       // explain it with the name of the one they left. The newer load speaks for itself.
       if (seq !== this.storyLoadSeq) return
+      // A load that failed *after* publishing leaves the store naming a story whose entries and
+      // world state it never loaded. The caller shows the library, so the mismatch is invisible
+      // but latent — tear it down rather than leave it for the next reader of the store.
+      if (this.currentStory?.id === storyId) this.closeStory()
       throw error
     }
   }
@@ -1112,18 +1116,31 @@ class StoryStore {
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
-    const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
-    // Chapters hold foreign keys to the entries at their boundaries, with no ON DELETE
-    // behaviour, so a boundary entry cannot go without them — same as the cascade path.
-    const chaptersToDelete = this.chapters.filter(
+    //
+    // A chapter holds foreign keys to the entries at its boundaries. Deleting those rows along
+    // with the entry — which is what the cascade path does — is only safe there because that
+    // path removes a contiguous *suffix*, so the chapters it drops are trailing and the entries
+    // they covered go with them. One entry out of the middle is not that: it would delete a
+    // chapter and its generated summary while the entries around it survive, leaving a gap in
+    // the numbering. Refuse, naming what is in the way, rather than lose the summary silently.
+    const boundaryChapters = this.chapters.filter(
       (ch) => ch.startEntryId === entryId || ch.endEntryId === entryId,
     )
+    if (boundaryChapters.length > 0) {
+      const named = boundaryChapters
+        .map((ch) => (ch.title ? `${ch.number} ("${ch.title}")` : `${ch.number}`))
+        .join(', ')
+      throw new Error(
+        `Cannot delete this entry: it is the boundary of chapter ${named}, and deleting it ` +
+          `would discard that chapter's summary. Delete from this entry onward instead.`,
+      )
+    }
+
+    const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
-      chapterIds: chaptersToDelete.map((ch) => ch.id),
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
-    this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 

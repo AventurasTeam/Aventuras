@@ -81,7 +81,7 @@
     if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
       // Claimed before the switch, because the event that triggers the story view's own
       // end-of-branch landing is emitted inside it.
-      ui.claimBranchLanding()
+      ui.claimBranchLanding(landmark.branchId)
       try {
         await story.switchBranch(landmark.branchId)
       } catch (error) {
@@ -91,7 +91,7 @@
       } finally {
         // Only a mounted story view consumes the claim, and it is unmounted whenever another
         // panel is up — so drop it either way rather than let it suppress a later switch.
-        ui.consumeBranchLandingClaim()
+        ui.clearBranchLandingClaim()
       }
     }
 
