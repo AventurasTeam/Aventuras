@@ -42,8 +42,9 @@ import {
 } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
-import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
+import { RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseEmittedEvent, PhaseResult } from '../types'
 
@@ -983,22 +984,32 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     })
   })
 
-  it('takes the scene and location off the tail entry, narrowing characters by kind', async () => {
+  // The pools are scoped to the scene the prompt shows, which
+  // generation-context takes off the last AI-authored row. The tail carries a
+  // different scene here, so a phase still reading it fails.
+  it('takes the scene and location off the last narrative entry, narrowing characters by kind', async () => {
     seedOpenStory({
       entities: [
         entity('char_hero', 'character', 'Kael'),
         entity('item_blade', 'item', 'Blade'),
         entity('loc_keep', 'location', 'The Keep'),
+        entity('loc_road', 'location', 'The Road'),
       ],
       entries: [
         entry(
           1,
-          'user_action',
-          'I draw the blade.',
+          'ai_reply',
+          'The keep swallows the light.',
           meta({
             sceneEntities: ['char_hero', 'item_blade'],
             currentLocationId: 'loc_keep',
           }),
+        ),
+        entry(
+          2,
+          'user_action',
+          'I draw the blade.',
+          meta({ sceneEntities: ['loc_road'], currentLocationId: 'loc_road' }),
         ),
       ],
     })

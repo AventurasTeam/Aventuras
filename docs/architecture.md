@@ -83,7 +83,15 @@ read them.
   long-departed entities back in the map — where the classifier's
   reference check reads presence as "the model was shown this".
   `sceneMetadata` carries the current scene, sourced from the most
-  recent AI-authored entry.
+  recent AI-authored entry: classification writes scene state, so it
+  lives on AI-authored rows and a `user_action` only inherits it
+  forward. The retrieval phase scopes its pools through that same
+  read, so the ranker and the prompt describe one scene rather than
+  two derivations that agree only while inheritance is perfect.
+  `previousMetadata` is the deliberate exception — it feeds
+  `lastSeenAt`, which needs the immediately-previous entry's id,
+  location and world time as one coherent triple, so it stays on the
+  branch tail.
 - **An unread variable costs no query.** The group offers the same
   variables to every story template — a pack decides what it needs,
   not the builder. But the builder asks the engine which variables the

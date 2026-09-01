@@ -7,7 +7,7 @@ import {
   resolveStorySwapConfig,
 } from '@/lib/embedder-swap'
 import { generateId } from '@/lib/ids'
-import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
+import { promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
   countTokens,
@@ -18,6 +18,8 @@ import {
 } from '@/lib/retrieval'
 import { appSettingsStore } from '@/lib/stores'
 
+import { readSceneSource } from './entry-reads'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { loadPerTurnWorkingSet } from './working-set'
 import type { PhaseContext, PhaseEmittedEvent, PhaseResult } from '../types'
 
@@ -28,9 +30,6 @@ export const RETRIEVAL_PHASE_NAME = 'retrieval'
 function embedderInitFailure(detail: string): PhaseResult {
   return { status: 'failed', error: { kind: 'embedder', reason: 'init', detail, staleCount: null } }
 }
-
-/** Where this phase parks its outcome; consumers re-narrow to `RetrievalSuccess`. */
-export const RETRIEVAL_INTERMEDIATE_KEY = 'retrieval'
 
 // Matches the periodic classifier's call budget: both bound one blocking
 // provider call, and a turn already tolerates a narrative stream of this order.
@@ -59,13 +58,15 @@ export async function* retrievalPhase(
     return embedderInitFailure(`embedder dim unknown for model ${resolution.config.modelId}`)
 
   const tail = entries.at(-1)
-  const scene = inheritedEntryMetadata(tail?.metadata)
+  // The row generation-context builds `sceneMetadata` from, so the pools are
+  // scoped to the scene the prompt shows rather than to a second derivation off
+  // whatever kind sits at the reader window's tail.
+  const lastNarrative = await readSceneSource(ctx.db, branchId)
+  const scene = inheritedEntryMetadata(lastNarrative?.metadata)
   const characterIds = new Set(entities.filter((e) => e.kind === 'character').map((e) => e.id))
   // retrieval.md → POV-awareness scope queries `sceneEntities ∩ characters`;
   // sceneEntities itself is kind-mixed (data-model.md → Entry metadata shape).
   const sceneCharacterIds = scene.sceneEntities.filter((id) => characterIds.has(id))
-
-  const lastNarrative = entries.findLast((e) => NARRATIVE_KINDS.has(e.kind))
 
   // The same window generation-context composes for the prompt, so the capture
   // prices what the pools actually competed against rather than re-deriving the
