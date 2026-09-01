@@ -21,7 +21,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Render it whole.',
+        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `content` and `metadata` (`sceneEntities`, `currentLocationId`, `worldTime`, `summary`). Render it whole.',
       required: true,
     },
     {
@@ -29,7 +29,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        "The last two narrative turns — the user's action and the AI's reply — bounded by the query, so neither the story's buffer knobs nor a template can narrow them. For per-turn classification, not for narrating.",
+        'The last two non-system entries, bounded by the query so neither the buffer knobs nor a template can narrow them. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
       required: true,
     },
     {

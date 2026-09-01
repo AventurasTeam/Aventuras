@@ -43,26 +43,37 @@ read them.
 - **No prop-drilling between phases or templates.** A phase calls the
   group's context builder (`buildGenerationContext`) with run identity
   and run-scoped flags, and nothing else; the builder reads the domain
-  data itself — the prompt buffer from SQLite, definition, settings and
-  entities from the open story — so no phase can hand the group a slice
-  of its own and quietly stop the context being unified. Run-scoped
-  values flow through the pipeline's `intermediates` bag. Templates
-  render against the builder's output.
+  data itself — the prompt buffer and last turns from SQLite,
+  definition and settings from the open story, entities from the
+  entities store — so no phase can hand the group a slice of its own
+  and quietly stop the context being unified. Run-scoped values flow
+  through the pipeline's `intermediates` bag. Templates render against
+  the builder's output.
 - **The prompt buffer is read, not filtered from a working set.** The
   entries store holds the reader's window, which grows with scroll-up
   paging and shrinks on reload; composing the buffer from it would cap
   it below what
   [`cadence.md → Composition rule`](./memory/cadence.md#composition-rule)
   asks for and make prompt content a function of scroll position. The
-  builder and the retrieval phase share one `readPromptBuffer`, so the
-  window the pools are priced against is the window the prompt carries.
+  builder and the retrieval phase both go through `readPromptBuffer`,
+  so the pools are priced against the same window the prompt carries —
+  two reads at two moments, not one shared result.
 - **`entries` is the only budget-governed collection.** A second,
   wider entries variable would let a template render past the window
   retrieval measured, leaving rows seated against a budget for a
   prompt that was never sent. `lastTurns` is the deliberate exception
-  and is bounded at two rows by its own query: the user's action plus
-  the AI's reply is a pipeline contract for per-turn classification,
-  not a share of the prompt budget.
+  and is bounded at two rows by its own query, so the buffer knobs
+  cannot cut it: per-turn classification needs the action that caused
+  a state change alongside the prose around it. Which kinds those two
+  rows are depends on when in the run the phase asks — the narrative
+  fold reads them before its own reply is committed — so a template
+  must not assume an action/reply pair.
+
+- **The classifier fold sees the run's retrieval bundle.** It reads
+  `intermediates` like every other caller, so the piggyback fallback
+  classifier now renders against populated buckets where it once
+  rendered empty ones. Nothing in the bundled classifier template
+  reaches for them; a pack may.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)

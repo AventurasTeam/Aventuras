@@ -21,8 +21,8 @@ export const storyEntries = sqliteTable(
   },
   (t) => [
     primaryKey({ columns: [t.branchId, t.id] }),
-    // Leading branch_id lets the ordered prompt-buffer reads seek this index
-    // directly; the composite PK is keyed on id, so position sorts unindexed.
+    // The PK autoindex is (branch_id, id): it seeks the branch but cannot order
+    // by position, so the buffer and last-turns reads paid a temp B-tree sort.
     index('story_entries_position_idx').on(t.branchId, t.position),
   ],
 )
