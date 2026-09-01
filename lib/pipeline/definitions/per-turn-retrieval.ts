@@ -10,9 +10,9 @@ import { generateId } from '@/lib/ids'
 import { NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { commitCaptureMode, reserveCaptureMode, writeProbeCapture } from '@/lib/probe'
 import {
-  readPromptBuffer,
   countTokens,
   RANKER_DEFAULTS,
+  readPromptBuffer,
   runRetrieval,
   type RetrievalOutcome,
 } from '@/lib/retrieval'

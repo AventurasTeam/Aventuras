@@ -83,7 +83,7 @@ export const PROMPT_ENTITY_FIELDS = [
   'injectionMode',
 ] as const
 
-function promptEntity(entity: Entity): Record<string, unknown> {
+function promptEntity(entity: Entity): Pick<Entity, (typeof PROMPT_ENTITY_FIELDS)[number]> {
   return {
     id: entity.id,
     kind: entity.kind,
@@ -148,12 +148,8 @@ function promptEntry(entry: StoryEntry) {
   return { position: entry.position, content: promptProse(entry) }
 }
 
-// Bounded by the query rather than by a caller or a template, so neither the
-// story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
-// classifier needs the action that caused a state change alongside the prose
-// around it; which kinds those two rows are depends on when in the run it asks.
-// Scene state is written by classification, so it lives on AI-authored rows;
-// a user_action only inherits it forward. Reading the AI row directly keeps the
+// Scene state is written by classification, so it lives on AI-authored rows; a
+// user_action only inherits it forward. Reading the AI row directly keeps the
 // prompt's scene independent of which kind happens to sit at the tail.
 async function readSceneSource(db: DbCtx['db'], branchId: string): Promise<StoryEntry | undefined> {
   const [row] = await db
@@ -167,6 +163,10 @@ async function readSceneSource(db: DbCtx['db'], branchId: string): Promise<Story
   return row
 }
 
+// Bounded by the query rather than by a caller or a template, so neither the
+// story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
+// classifier needs the action that caused a state change alongside the prose
+// around it; which kinds those two rows are depends on when in the run it asks.
 async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
   const rows = await db
     .select()
@@ -187,20 +187,22 @@ function readRetrievalOutcome(
 
 // The identity is the whole point of a desync guard: which branch went out of
 // step is what the reader's system entry has to be able to say.
-const guardFailure = (
+function guardFailure(
   phaseName: GenerationPhaseName,
   reason: string,
-  ids: { storyId: string | null; branchId: string },
-): GuardFailure => ({
-  ok: false,
-  result: {
-    status: 'failed',
-    error: {
-      kind: 'orchestrator',
-      detail: `${phaseName}: ${reason} (story ${ids.storyId}, branch ${ids.branchId})`,
+  ids: Pick<PhaseContext, 'storyId' | 'branchId'>,
+): GuardFailure {
+  return {
+    ok: false,
+    result: {
+      status: 'failed',
+      error: {
+        kind: 'orchestrator',
+        detail: `${phaseName}: ${reason} (story ${ids.storyId}, branch ${ids.branchId})`,
+      },
     },
-  },
-})
+  }
+}
 
 /**
  * The one context builder for the `generationContext` group: every story agent's
@@ -231,12 +233,9 @@ export async function buildGenerationContext(
   // filter every entity away rather than fail.
   const open = currentStoryStore.getCurrentStory()
   if (!open || open.branchId !== branchId || open.storyId !== storyId)
-    return guardFailure(phaseName, 'no open story for branch', { storyId, branchId })
+    return guardFailure(phaseName, 'no open story for branch', ctx)
   if (entitiesStore.getLoadedBranch() !== branchId)
-    return guardFailure(phaseName, 'entities store loaded for another branch', {
-      storyId,
-      branchId,
-    })
+    return guardFailure(phaseName, 'entities store loaded for another branch', ctx)
 
   const { definition, settings } = open
 
@@ -276,7 +275,12 @@ export async function buildGenerationContext(
   const retrieval = readRetrievalOutcome(ctx.intermediates)
   const floor = retrieval?.floor
 
-  const scene = sceneSource?.metadata
+  // The one entry's worth of scene state a template may read, so no historical
+  // roster reaches the prompt or the id map.
+  const scene = {
+    ...inheritedEntryMetadata(sceneSource?.metadata),
+    summary: sceneSource?.metadata?.summary ?? '',
+  }
 
   // Every place the prompt brackets an id for, in the order the blocks render.
   // A template that instead named "the ids above" would point <current_location>
@@ -296,14 +300,9 @@ export async function buildGenerationContext(
     entries: buffer.map(promptEntry),
     lastTurns: lastTurns.map(promptEntry),
     entities: branchEntities.map(promptEntity),
-    sceneEntities: scene?.sceneEntities ?? [],
-    currentLocationId: scene?.currentLocationId ?? null,
-    // The one entry's worth of scene state a template may read, so no historical
-    // roster reaches the prompt or the id map.
-    sceneMetadata: {
-      ...inheritedEntryMetadata(sceneSource?.metadata),
-      summary: scene?.summary ?? '',
-    },
+    sceneEntities: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    sceneMetadata: scene,
     definition: normalizedDefinition,
     calendarVocabulary: describeCalendarVocabulary(calendar),
     userSettings: {
@@ -341,7 +340,6 @@ export async function buildGenerationContext(
   return { ok: true as const, context: substituteIds(context, idMap), idMap }
 }
 
-export type PromptEntry = ReturnType<typeof promptEntry>
 export type GenerationContextLoad = Awaited<ReturnType<typeof buildGenerationContext>>
 /** The variable set every `generationContext` template renders, as the builder emits it. */
 export type GenerationContext = Extract<GenerationContextLoad, { ok: true }>['context']

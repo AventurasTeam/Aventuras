@@ -22,14 +22,20 @@ export function createEngine(pack: Pack): Liquid {
   return engine
 }
 
-// Which context variables a template actually reads, following `{% include %}`
-// into macros and excluding anything the template assigns itself. Memoized per
-// engine: a pack's sources are fixed once loaded, and the parse is not free.
+// Memoized per engine: a pack's sources are fixed once loaded, and the parse is
+// not free.
 const globalsByEngine = new WeakMap<Liquid, Map<string, ReadonlySet<string>>>()
 
+/**
+ * The context variables `templateId` actually reads, following `{% include %}`
+ * into macros and excluding anything the template assigns itself.
+ */
 export function templateGlobals(engine: Liquid, templateId: string): ReadonlySet<string> {
   let perTemplate = globalsByEngine.get(engine)
-  if (!perTemplate) globalsByEngine.set(engine, (perTemplate = new Map()))
+  if (!perTemplate) {
+    perTemplate = new Map()
+    globalsByEngine.set(engine, perTemplate)
+  }
 
   const cached = perTemplate.get(templateId)
   if (cached) return cached

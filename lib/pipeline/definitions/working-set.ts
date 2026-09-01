@@ -19,11 +19,11 @@ export type WorkingSetLoad =
  * may skip. Both are defense-in-depth against store desync: the stores are
  * global and branch-scoped, and a phase that read them for the wrong branch
  * would filter every row away and go on to build a silently degenerate prompt
- * rather than fail. `label` prefixes the failure detail with the phase's name.
+ * rather than fail.
  */
 export function loadPerTurnWorkingSet(
   ctx: Pick<PhaseContext, 'storyId' | 'branchId'>,
-  label: string,
+  phaseName: string,
 ): WorkingSetLoad {
   const { branchId, storyId } = ctx
 
@@ -33,7 +33,7 @@ export function loadPerTurnWorkingSet(
       ok: false,
       result: {
         status: 'failed',
-        error: { kind: 'orchestrator', detail: `${label}: no open story for branch` },
+        error: { kind: 'orchestrator', detail: `${phaseName}: no open story for branch` },
       },
     }
 
@@ -44,7 +44,7 @@ export function loadPerTurnWorkingSet(
         status: 'failed',
         error: {
           kind: 'orchestrator',
-          detail: `${label}: entries store loaded for another branch`,
+          detail: `${phaseName}: entries store loaded for another branch`,
         },
       },
     }

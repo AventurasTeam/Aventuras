@@ -31,14 +31,6 @@ export function promptBufferTake(openCount: number, settings: BufferSettings): n
 }
 
 /**
- * cadence.md → Composition rule. Its "current chapter" is the open region:
- * entries whose `chapterId` is null (data-model.md → Chapters / memory system).
- *
- * Straight from SQLite, never `entriesStore`: that store starts at the last
- * ENTRIES_WINDOW_SIZE rows and only grows with scroll-up paging, so a window
- * wider than it would silently truncate and move with the reader.
- */
-/**
  * Position is assigned MAX+1 behind the branch queue, so a collision means a
  * writer got past it. Ordering is the basis of every prompt, so say so rather
  * than let two rows silently trade places between runs.
@@ -57,6 +49,14 @@ export function warnOnDuplicatePositions(rows: readonly StoryEntry[], branchId: 
     })
 }
 
+/**
+ * cadence.md → Composition rule. Its "current chapter" is the open region:
+ * entries whose `chapterId` is null (data-model.md → Chapters / memory system).
+ *
+ * Straight from SQLite, never `entriesStore`: that store starts at the last
+ * ENTRIES_WINDOW_SIZE rows and only grows with scroll-up paging, so a window
+ * wider than it would silently truncate and move with the reader.
+ */
 export async function readPromptBuffer(
   db: DbCtx['db'],
   branchId: string,
