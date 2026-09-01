@@ -1,6 +1,7 @@
 import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
+import { logger } from '@/lib/diagnostics'
 
 export type BufferSettings = {
   fullChapterInBuffer: boolean
@@ -37,6 +38,25 @@ export function promptBufferTake(openCount: number, settings: BufferSettings): n
  * ENTRIES_WINDOW_SIZE rows and only grows with scroll-up paging, so a window
  * wider than it would silently truncate and move with the reader.
  */
+/**
+ * Position is assigned MAX+1 behind the branch queue, so a collision means a
+ * writer got past it. Ordering is the basis of every prompt, so say so rather
+ * than let two rows silently trade places between runs.
+ */
+export function warnOnDuplicatePositions(rows: readonly StoryEntry[], branchId: string): void {
+  const seen = new Set<number>()
+  const duplicates = new Set<number>()
+  for (const row of rows) {
+    if (seen.has(row.position)) duplicates.add(row.position)
+    seen.add(row.position)
+  }
+  if (duplicates.size > 0)
+    logger.warn('retrieval.duplicate_entry_positions', {
+      branchId,
+      positions: [...duplicates],
+    })
+}
+
 export async function readPromptBuffer(
   db: DbCtx['db'],
   branchId: string,
@@ -56,7 +76,8 @@ export async function readPromptBuffer(
     .select()
     .from(storyEntries)
     .where(narrative)
-    .orderBy(desc(storyEntries.position))
+    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
     .limit(take)
+  warnOnDuplicatePositions(rows, branchId)
   return rows.reverse()
 }

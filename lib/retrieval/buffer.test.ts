@@ -1,9 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { branches, stories, storyEntries, type StoryEntry } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 
-import { promptBufferTake, readPromptBuffer } from './buffer'
+import { promptBufferTake, readPromptBuffer, warnOnDuplicatePositions } from './buffer'
+
+const warnSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/diagnostics', () => ({ logger: { warn: warnSpy } }))
+
+beforeEach(() => warnSpy.mockClear())
 
 type E = {
   id: string
@@ -218,5 +223,30 @@ describe('readPromptBuffer', () => {
     const out = await readPromptBuffer(db, 'br_1', DEFAULTS)
     expect(out.every((e) => e.branchId === 'br_1')).toBe(true)
     expect(out).toHaveLength(5)
+  })
+})
+
+describe('warnOnDuplicatePositions', () => {
+  const row = (id: string, position: number) => ({ id, position }) as StoryEntry
+
+  it('says nothing when positions are distinct', () => {
+    warnOnDuplicatePositions([row('a', 1), row('b', 2)], 'br_1')
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+
+  it('names the branch and every colliding position', () => {
+    warnOnDuplicatePositions([row('a', 1), row('b', 1), row('c', 2), row('d', 2)], 'br_1')
+    expect(warnSpy).toHaveBeenCalledWith('retrieval.duplicate_entry_positions', {
+      branchId: 'br_1',
+      positions: [1, 2],
+    })
+  })
+
+  it('reports a repeated position once', () => {
+    warnOnDuplicatePositions([row('a', 3), row('b', 3), row('c', 3)], 'br_1')
+    expect(warnSpy).toHaveBeenCalledWith('retrieval.duplicate_entry_positions', {
+      branchId: 'br_1',
+      positions: [3],
+    })
   })
 })
