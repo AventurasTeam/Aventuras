@@ -577,6 +577,18 @@ class StoryStore {
   }
 
   private async performStoryLoad(storyId: string, seq: number): Promise<void> {
+    try {
+      await this.runStoryLoad(storyId, seq)
+    } catch (error) {
+      // A load the reader has already replaced must not report its failure. Its caller sends
+      // them back to the library on error, which would discard the story they switched to and
+      // explain it with the name of the one they left. The newer load speaks for itself.
+      if (seq !== this.storyLoadSeq) return
+      throw error
+    }
+  }
+
+  private async runStoryLoad(storyId: string, seq: number): Promise<void> {
     // Serialize loads and let the most recent request win. This prevents a slower
     // earlier selection from publishing after the story the reader selected last.
     if (seq !== this.storyLoadSeq) return
