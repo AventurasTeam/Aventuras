@@ -136,7 +136,10 @@
       'lorebook'
         ? '!bg-primary/10 !text-primary'
         : ''}"
-      onclick={() => ui.setActivePanel('lorebook')}
+      onclick={() => {
+        ui.setActivePanel('lorebook')
+        ui.closeSidebarOnMobile()
+      }}
       title="Lorebook"
     >
       <BookMarked class="h-4 w-4" />
@@ -148,7 +151,10 @@
       'memory'
         ? '!bg-primary/10 !text-primary'
         : ''}"
-      onclick={() => ui.setActivePanel('memory')}
+      onclick={() => {
+        ui.setActivePanel('memory')
+        ui.closeSidebarOnMobile()
+      }}
       title="Memory"
     >
       <Brain class="h-4 w-4" />
