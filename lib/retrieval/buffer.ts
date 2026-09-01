@@ -2,46 +2,18 @@ import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
 
 import { storyEntries, type DbCtx, type StoryEntry } from '@/lib/db'
 
-export type BufferEntry = {
-  id: string
-  position: number
-  // Derived, not a bare string: the filter below turns on the 'system' literal,
-  // and a rename in the table would otherwise leak technical rows into both the
-  // prompt buffer and Layer-A's same-name haystack with nothing failing.
-  kind: StoryEntry['kind']
-  chapterId: string | null
-  content: string
-}
-
 export type BufferSettings = {
   fullChapterInBuffer: boolean
   partialChapterBuffer: number
   protectedBuffer: number
 }
 
-// Neither count carries .min() or .int() in storySettingsSchema. Fractions have
-// to go before the count reaches a slice index, and the floors differ per knob:
-// partialChapterBuffer 0 asks for no window at all, whereas protectedBuffer 0
-// legitimately means "no spillover floor".
+// Hardening against settings that never went through storySettingsSchema.
+// Fractions have to go before the count reaches a LIMIT, and the floors differ
+// per knob: partialChapterBuffer 0 asks for no window at all, whereas
+// protectedBuffer 0 legitimately means "no spillover floor".
 function toCount(value: number, floor: number): number {
   return Number.isFinite(value) ? Math.max(floor, Math.floor(value)) : floor
-}
-
-/**
- * cadence.md → Composition rule. Its "current chapter" is the open region:
- * entries whose `chapterId` is null (data-model.md → Chapters / memory system).
- */
-export function composePromptBuffer<T extends BufferEntry>(
-  entries: readonly T[],
-  settings: BufferSettings,
-): T[] {
-  const ordered = entries.filter((e) => e.kind !== 'system').sort((a, b) => a.position - b.position)
-  const take = promptBufferTake(ordered.filter((e) => e.chapterId === null).length, settings)
-
-  // Front-indexed and clamped: a bare negative start is a tail of that size, so
-  // a floor wider than the branch would return the last take - length entries
-  // instead of everything.
-  return ordered.slice(Math.max(0, ordered.length - take))
 }
 
 /**
@@ -58,10 +30,12 @@ export function promptBufferTake(openCount: number, settings: BufferSettings): n
 }
 
 /**
- * The prompt buffer straight from SQLite. Never from `entriesStore`: that store
- * holds the reader's window, which caps the buffer at whatever the reader
- * happens to have scrolled in, so the same story composes different prompts
- * across two turns of one session.
+ * cadence.md → Composition rule. Its "current chapter" is the open region:
+ * entries whose `chapterId` is null (data-model.md → Chapters / memory system).
+ *
+ * Straight from SQLite, never `entriesStore`: that store starts at the last
+ * ENTRIES_WINDOW_SIZE rows and only grows with scroll-up paging, so a window
+ * wider than it would silently truncate and move with the reader.
  */
 export async function readPromptBuffer(
   db: DbCtx['db'],
@@ -78,11 +52,11 @@ export async function readPromptBuffer(
   const take = promptBufferTake(open?.openCount ?? 0, settings)
   if (take === 0) return []
 
-  const rows = (await db
+  const rows = await db
     .select()
     .from(storyEntries)
     .where(narrative)
     .orderBy(desc(storyEntries.position))
-    .limit(take)) as StoryEntry[]
+    .limit(take)
   return rows.reverse()
 }
