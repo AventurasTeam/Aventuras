@@ -27,6 +27,7 @@
     Smartphone,
     Bell,
     Eye,
+    Package,
   } from '@lucide/svelte'
   import { Switch } from '$lib/components/ui/switch'
   import { Label } from '$lib/components/ui/label'
@@ -271,6 +272,10 @@
     await settings.updateExperimentalFeatures({ notificationPreview: checked })
   }
 
+  async function handleLegacyImportPackMappingToggle(checked: boolean) {
+    await settings.updateExperimentalFeatures({ legacyImportPackMapping: checked })
+  }
+
   async function handleResetAll() {
     await settings.resetExperimentalFeatures()
     stateTrackingChecked = settings.experimentalFeatures.stateTracking
@@ -467,6 +472,35 @@
       <span class="text-muted-foreground w-12 text-right font-mono text-sm">
         {settings.experimentalFeatures.autoSnapshotInterval}
       </span>
+    </div>
+  </div>
+
+  <Separator />
+
+  <!-- Pack mapping for older story files -->
+  <div class="space-y-5">
+    <div class="flex items-center gap-2">
+      <Package class="text-muted-foreground h-4 w-4" />
+      <Label class="text-sm font-medium">Story Import</Label>
+    </div>
+
+    <div class="flex flex-row items-center justify-between">
+      <div class="space-y-0.5">
+        <Label>Choose a prompt pack for older story files</Label>
+        <p class="text-muted-foreground text-xs">
+          Story files saved before Aventuras recorded prompt packs carry no pack of their own, and
+          import using the built-in one. Turn this on to be asked which of your packs such a file
+          should use. Files that do record a pack bind to a matching installed pack, and ask only
+          when the match is uncertain or a required value is missing, whatever this is set to.
+        </p>
+        <p class="text-muted-foreground pt-1 text-xs italic">
+          No effect if you only have one pack installed — there would be nothing to choose.
+        </p>
+      </div>
+      <Switch
+        checked={settings.experimentalFeatures.legacyImportPackMapping}
+        onCheckedChange={handleLegacyImportPackMappingToggle}
+      />
     </div>
   </div>
 

@@ -7,12 +7,24 @@
   import { BookOpen, Download, RefreshCw, Archive, Plus, MessageSquareShare } from '@lucide/svelte'
   import SetupWizard from '../wizard/SetupWizard.svelte'
   import STImportWizard from '../wizard/STImportWizard.svelte'
+  import PackMappingDialog from './PackMappingDialog.svelte'
+  import { settings } from '$lib/stores/settings.svelte'
+  import type { PresetPack } from '$lib/services/packs'
+  import { planPackBinding } from '$lib/services/import'
+  import type { PackBindingContext, PackBindingResolution } from '$lib/services/import'
 
   import { Button } from '$lib/components/ui/button'
   import EmptyState from '$lib/components/ui/empty-state/empty-state.svelte'
   import StoryCard from '$lib/components/story/StoryCard.svelte'
 
   let isImporting = $state(false)
+  /** Non-null only while the import is waiting on the user's pack choice. */
+  let packMapping = $state<{
+    context: PackBindingContext
+    lockedPack?: PresetPack | null
+    onlyVariables?: string[]
+    resolve: (resolution: PackBindingResolution | null) => void
+  } | null>(null)
   let showSetupWizard = $state(false)
   let setupWizardKey = $state(0)
   let showSTImportWizard = $state(false)
@@ -61,6 +73,34 @@
     }
   }
 
+  /**
+   * Which local pack the story being imported binds to.
+   *
+   * Called by the import pipeline once the file is parsed and before anything is written, so the
+   * dialog this may open costs nothing to dismiss.
+   */
+  async function resolvePackBinding(
+    context: PackBindingContext,
+  ): Promise<PackBindingResolution | null> {
+    const plan = await planPackBinding(
+      context,
+      settings.experimentalFeatures.legacyImportPackMapping,
+    )
+    if (!plan.ask) return plan.resolution
+
+    return new Promise((resolve) => {
+      packMapping = {
+        context,
+        lockedPack: plan.lockedPack,
+        onlyVariables: plan.onlyVariables,
+        resolve: (resolution) => {
+          packMapping = null
+          resolve(resolution)
+        },
+      }
+    })
+  }
+
   // Imports through the native picker, NOT an <input type="file">. Reading the file in JS means
   // materialising it as a string, and a .avt larger than V8's max string length (2^29-24 bytes,
   // ~512 MiB) cannot be one — a 546 MB export failed with a bogus "not valid JSON" error, because
@@ -69,7 +109,7 @@
     if (isImporting) return
     isImporting = true
     try {
-      const result = await exportService.importFromAventura()
+      const result = await exportService.importFromAventura({ resolvePackBinding })
 
       if (result.success && result.storyId) {
         await story.loadAllStories()
@@ -82,6 +122,9 @@
       ui.showToast(errMessage(error), 'error')
     } finally {
       isImporting = false
+      // A throw while the dialog is open would otherwise leave it on screen, and leave
+      // resolvePackBinding suspended forever.
+      packMapping?.resolve(null)
     }
   }
 </script>
@@ -185,4 +228,14 @@
   {#key stImportWizardKey}
     <STImportWizard onClose={() => (showSTImportWizard = false)} />
   {/key}
+{/if}
+
+<!-- Pack mapping step of an in-flight import -->
+{#if packMapping}
+  <PackMappingDialog
+    context={packMapping.context}
+    lockedPack={packMapping.lockedPack}
+    onlyVariables={packMapping.onlyVariables}
+    onResolve={packMapping.resolve}
+  />
 {/if}

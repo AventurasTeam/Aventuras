@@ -1,8 +1,27 @@
-import type { DiscoveryProvider, DiscoveryCard, SearchOptions, SearchResult } from '../types'
+import {
+  METADATA_ONLY_CHARACTER_MIME,
+  type DiscoveryProvider,
+  type DiscoveryCard,
+  type SearchOptions,
+  type SearchResult,
+} from '../types'
 import { corsFetch, GENERIC_ICON } from '../utils'
 
 const JANNY_SEARCH_URL = 'https://search.jannyai.com/multi-search'
+const JANNY_DOWNLOAD_URL = 'https://api.jannyai.com/api/v1/download'
 const JANNY_IMAGE_BASE = 'https://image.jannyai.com/bot-avatars/'
+// The API controls the returned URL, so keep this exact to prevent Tauri HTTP from fetching arbitrary hosts.
+const JANNY_DOWNLOAD_HOSTS = new Set(['cdn.jannyai.com', 'image.jannyai.com'])
+
+function isCloudflareChallenge(response: Response): boolean {
+  if (response.status !== 403) return false
+
+  return (
+    response.headers.has('cf-ray') ||
+    response.headers.get('cf-mitigated')?.toLowerCase() === 'challenge' ||
+    response.headers.get('server')?.toLowerCase().includes('cloudflare') === true
+  )
+}
 
 // Cached token
 let cachedToken: string | null = null
@@ -226,97 +245,93 @@ export class JannyProvider implements DiscoveryProvider {
   }
 
   async getDownloadUrl(card: DiscoveryCard): Promise<string> {
-    // JannyAI cards need to be fetched from the character page and parsed
-    // We return the page URL - downloadCard will handle the scraping
     const slug = card.raw?.slug || 'character'
-    return `https://jannyai.com/characters/${card.id}_${slug}`
+    return card.raw?.pageUrl || `https://jannyai.com/characters/${card.id}_character-${slug}`
   }
 
   async downloadCard(card: DiscoveryCard): Promise<Blob> {
-    // For JannyAI, we need to scrape the character page to get full data
-    const url = await this.getDownloadUrl(card)
-    console.log('[Janny] Fetching character page:', url)
-
-    const response = await corsFetch(url, {
-      headers: { Accept: 'text/html' },
+    const response = await corsFetch(JANNY_DOWNLOAD_URL, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Origin: 'https://jannyai.com',
+        Referer: 'https://jannyai.com/',
+      },
+      body: JSON.stringify({ characterId: card.id }),
     })
 
-    if (!response.ok) {
+    if (response.ok) {
+      const result = await response.json()
+      if (result?.status !== 'ok' || typeof result.downloadUrl !== 'string') {
+        throw new Error('JannyAI did not return a character download')
+      }
+
+      let downloadUrl: URL
+      try {
+        downloadUrl = new URL(result.downloadUrl)
+      } catch {
+        throw new Error('JannyAI did not return a character download')
+      }
+
+      if (
+        downloadUrl.protocol !== 'https:' ||
+        downloadUrl.port !== '' ||
+        !JANNY_DOWNLOAD_HOSTS.has(downloadUrl.hostname)
+      ) {
+        throw new Error('JannyAI did not return a character download')
+      }
+
+      const cardResponse = await corsFetch(downloadUrl.href)
+      if (!cardResponse.ok) {
+        if (isCloudflareChallenge(cardResponse)) {
+          return this.createMetadataOnlyCard(card)
+        }
+        throw new Error(`Failed to download JannyAI character: ${cardResponse.status}`)
+      }
+
+      return cardResponse.blob()
+    }
+
+    if (!isCloudflareChallenge(response)) {
       throw new Error(`Failed to fetch JannyAI character: ${response.status}`)
     }
 
-    const html = await response.text()
-    const characterData = this.parseAstroProps(html)
+    return this.createMetadataOnlyCard(card)
+  }
 
-    // Convert to SillyTavern-compatible JSON format
-    const stCard = this.convertToSTFormat(characterData)
+  private createMetadataOnlyCard(card: DiscoveryCard): Blob {
+    console.warn('[Janny] Download blocked by Cloudflare; importing search metadata only')
+    const stCard = this.convertSearchResultToSTFormat(card)
     const jsonString = JSON.stringify(stCard, null, 2)
 
-    return new Blob([jsonString], { type: 'application/json' })
+    return new Blob([jsonString], { type: METADATA_ONLY_CHARACTER_MIME })
   }
 
-  private parseAstroProps(html: string): any {
-    const astroMatch = html.match(
-      /astro-island[^>]*component-export="CharacterButtons"[^>]*props="([^"]+)"/,
-    )
-    if (!astroMatch) {
-      throw new Error('Could not find character data in JannyAI page')
-    }
-
-    const propsEncoded = astroMatch[1]
-    const propsDecoded = propsEncoded
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&#39;/g, "'")
-
-    const propsJson = JSON.parse(propsDecoded)
-    return this.decodeAstroValue(propsJson.character)
-  }
-
-  private decodeAstroValue(value: any): any {
-    if (!Array.isArray(value)) return value
-    const [type, data] = value
-    if (type === 0) {
-      if (typeof data === 'object' && data !== null && !Array.isArray(data)) {
-        const decoded: Record<string, any> = {}
-        for (const [key, val] of Object.entries(data)) {
-          decoded[key] = this.decodeAstroValue(val)
-        }
-        return decoded
-      }
-      return data
-    } else if (type === 1) {
-      return data.map((item: any) => this.decodeAstroValue(item))
-    }
-    return data
-  }
-
-  private convertToSTFormat(char: any): any {
-    const tags = (char.tagIds || []).map((id: number) => JANNYAI_TAGS[id] || `Tag ${id}`)
-
+  private convertSearchResultToSTFormat(card: DiscoveryCard): any {
     return {
       spec: 'chara_card_v2',
       spec_version: '2.0',
       data: {
-        name: char.name || 'Unnamed',
-        description: char.personality || '',
+        name: card.name || 'Unnamed',
+        description: card.description || '',
         personality: '',
-        scenario: char.scenario || '',
-        first_mes: char.firstMessage || '',
-        mes_example: char.exampleDialogs || '',
-        creator_notes: this.stripHtml(char.description || ''),
+        scenario: '',
+        first_mes: '',
+        mes_example: '',
+        creator_notes:
+          `Imported from JannyAI search metadata only. Full card unavailable. ${card.raw?.pageUrl || ''}`.trim(),
         system_prompt: '',
         post_history_instructions: '',
         alternate_greetings: [],
-        tags,
-        creator: '',
+        tags: card.tags,
+        creator: card.creator,
         character_version: '1.0',
         extensions: {
           jannyai: {
-            id: char.id,
-            creatorId: char.creatorId,
+            id: card.id,
+            pageUrl: card.raw?.pageUrl,
+            metadataOnly: true,
           },
         },
       },

@@ -389,11 +389,7 @@
   async function handleImportConfirm(strategy: ConflictStrategy) {
     if (!importValidation?.pack) return
     try {
-      const newPackId = await importExportService.applyImport(
-        importValidation.pack,
-        strategy,
-        importConflictPack ?? undefined,
-      )
+      const newPackId = await importExportService.applyImport(importValidation.pack, strategy)
       if (newPackId) {
         ui.showToast('Pack imported successfully', 'info')
       }

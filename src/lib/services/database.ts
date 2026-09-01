@@ -38,6 +38,11 @@ import type {
   EnumOption,
 } from '$lib/services/packs/types'
 import { hashContent } from '$lib/services/packs/hash'
+import {
+  packReplacementStatements,
+  shippedTemplateStatements,
+} from '$lib/services/packs/replace-statements'
+import type { PackExport } from '$lib/services/packs/validation'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -60,6 +65,36 @@ function runtimeVarPath(defId: string, field?: string): string {
 
 /** Entity tables that can carry runtime-variable values in their metadata JSON. */
 const RUNTIME_VAR_ENTITY_TABLES = ['characters', 'locations', 'items', 'story_beats'] as const
+
+/** `DELETE ... IN (...)` split into chunks that stay under SQLite's bound-parameter limit. */
+function deleteInStatements(
+  table: string,
+  column: string,
+  ids: string[],
+): { sql: string; params: unknown[] }[] {
+  const CHUNK = 500
+  const statements: { sql: string; params: unknown[] }[] = []
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK)
+    statements.push({
+      sql: `DELETE FROM ${table} WHERE ${column} IN (${slice.map(() => '?').join(',')})`,
+      params: slice,
+    })
+  }
+  return statements
+}
+
+/**
+ * What `createStory` accepts: a `Story` minus its timestamps, plus the two pack columns.
+ *
+ * `packId` and `customVariableValues` are not on `Story` — they are read through
+ * `getStoryPackId` / `getStoryCustomVariables` rather than off the loaded row — so they ride
+ * here as optional extras instead.
+ */
+export type CreateStoryInput = Omit<Story, 'createdAt' | 'updatedAt'> & {
+  packId?: string | null
+  customVariableValues?: Record<string, string> | null
+}
 
 /**
  * Migrate visual descriptors from old string array format to new structured object format.
@@ -374,7 +409,14 @@ class DatabaseService {
     return results.length > 0 ? this.mapStory(results[0]) : null
   }
 
-  async createStory(story: Omit<Story, 'createdAt' | 'updatedAt'>): Promise<Story> {
+  /**
+   * A new story row, plus the two pack columns that are not part of `Story`.
+   *
+   * Both are optional. The setup wizard leaves them out and writes them a moment later through
+   * `setStoryPack` / `setStoryCustomVariables`, which is unaffected by this; import supplies them
+   * up front so the story never exists bound to a pack its author did not choose.
+   */
+  async createStory(story: CreateStoryInput): Promise<Story> {
     const db = await this.getDb()
     const now = Date.now()
     await db.execute(
@@ -391,9 +433,11 @@ class DatabaseService {
         memory_config,
         retry_state,
         style_review_state,
-        time_tracker
+        time_tracker,
+        pack_id,
+        custom_variable_values
       )
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         story.id,
         story.title,
@@ -408,6 +452,8 @@ class DatabaseService {
         story.retryState ? JSON.stringify(story.retryState) : null,
         story.styleReviewState ? JSON.stringify(story.styleReviewState) : null,
         story.timeTracker ? JSON.stringify(story.timeTracker) : null,
+        story.packId ?? null,
+        story.customVariableValues ? JSON.stringify(story.customVariableValues) : null,
       ],
     )
     return { ...story, createdAt: now, updatedAt: now }
@@ -765,11 +811,6 @@ class DatabaseService {
     await db.execute(`UPDATE story_entries SET ${setClauses.join(', ')} WHERE id = ?`, values)
   }
 
-  async deleteStoryEntry(id: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM story_entries WHERE id = ?', [id])
-  }
-
   /**
    * Delete all main-branch entries for a story (branch_id IS NULL).
    * Also clears related world_state_snapshots so stale snapshots don't
@@ -778,14 +819,21 @@ class DatabaseService {
    * (chapters have no ON DELETE behavior tying them to story_entries).
    * Used by the SillyTavern chat import to overwrite story content.
    */
-  async clearStoryEntries(storyId: string): Promise<void> {
-    const db = await this.getDb()
-    await db.execute('DELETE FROM chapters WHERE story_id = ? AND branch_id IS NULL', [storyId])
-    await db.execute('DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL', [
-      storyId,
-    ])
-    await db.execute('DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL', [
-      storyId,
+  async clearStoryEntries(storyId: string, checkpointIds: string[] = []): Promise<void> {
+    await this.transaction([
+      {
+        sql: 'DELETE FROM chapters WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      {
+        sql: 'DELETE FROM world_state_snapshots WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
+      {
+        sql: 'DELETE FROM story_entries WHERE story_id = ? AND branch_id IS NULL',
+        params: [storyId],
+      },
     ])
   }
 
@@ -2481,6 +2529,29 @@ class DatabaseService {
    * Delete rows by id in a single query (chunked to stay under SQLite's variable limit),
    * instead of one round-trip per id. `column`/`table` are internal literals, never user input.
    */
+  /**
+   * Remove entries together with the rows that point at them, atomically. Half of this applied
+   * leaves a chapter or a checkpoint referencing an entry that is gone - the first makes the
+   * next delete fail on the foreign key, the second yields a branch with a dangling fork point.
+   */
+  async deleteEntriesWithDependents({
+    entryIds,
+    chapterIds = [],
+    checkpointIds = [],
+  }: {
+    entryIds: string[]
+    chapterIds?: string[]
+    checkpointIds?: string[]
+  }): Promise<void> {
+    await this.transaction([
+      // Chapters first: `start_entry_id` and `end_entry_id` are foreign keys to story_entries.
+      ...deleteInStatements('chapters', 'id', chapterIds),
+      ...deleteInStatements('checkpoints', 'id', checkpointIds),
+      ...deleteInStatements('embedded_images', 'entry_id', entryIds),
+      ...deleteInStatements('story_entries', 'id', entryIds),
+    ])
+  }
+
   private async deleteByIds(table: string, ids: string[], column = 'id'): Promise<void> {
     if (ids.length === 0) return
     const db = await this.getDb()
@@ -2516,8 +2587,8 @@ class DatabaseService {
     await this.deleteByIds('chapters', ids)
   }
 
-  async deleteEmbeddedImagesForEntries(entryIds: string[]): Promise<void> {
-    await this.deleteByIds('embedded_images', entryIds, 'entry_id')
+  async deleteCheckpoints(ids: string[]): Promise<void> {
+    await this.deleteByIds('checkpoints', ids)
   }
 
   /**
@@ -3605,6 +3676,49 @@ class DatabaseService {
   async deletePack(id: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM preset_packs WHERE id = ? AND is_default = 0', [id])
+  }
+
+  /**
+   * Replace a pack's templates and variables with a file's, atomically.
+   *
+   * The pack row is updated rather than replaced, so stories keep their `pack_id` and the
+   * runtime variable definitions their entities are keyed to stay where they are. The name
+   * is the user's and is left alone; the file supplies description and author.
+   *
+   * Half of this landing is a pack that is part its old self and part the file's, which
+   * every story bound to it would then narrate from.
+   */
+  async replacePackContents(
+    packId: string,
+    packData: PackExport,
+    hashes: Map<string, string>,
+  ): Promise<void> {
+    await this.transaction(
+      packReplacementStatements({
+        packId,
+        packData,
+        hashes,
+        ids: {
+          templates: packData.templates.map(() => crypto.randomUUID()),
+          variables: packData.variables.map(() => crypto.randomUUID()),
+        },
+        now: Date.now(),
+      }),
+    )
+  }
+
+  /**
+   * Return a pack's templates to the text the app ships, atomically.
+   *
+   * A partially applied refresh would leave the user unable to tell which of their edits
+   * survived, so the batch either lands or does not.
+   */
+  async refreshPackTemplatesToShipped(
+    packId: string,
+    rows: { templateId: string; content: string; contentHash: string }[],
+  ): Promise<void> {
+    if (rows.length === 0) return
+    await this.transaction(shippedTemplateStatements({ packId, rows, now: Date.now() }))
   }
 
   async canDeletePack(packId: string): Promise<boolean> {

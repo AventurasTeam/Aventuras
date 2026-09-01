@@ -32,6 +32,13 @@ export interface SearchResult {
   nextPage?: number
 }
 
+/**
+ * Marks a valid character-card payload assembled from discovery metadata because the source's
+ * full download was blocked. Keeping this distinct from ordinary JSON lets the Vault warn the
+ * user without coupling providers to UI state.
+ */
+export const METADATA_ONLY_CHARACTER_MIME = 'application/vnd.aventuras.character-metadata-only+json'
+
 export interface DiscoveryProvider {
   id: string
   name: string

@@ -10,6 +10,8 @@
   } from '$lib/services/prompts/templates'
   import { ContextBuilder } from '$lib/services/context'
   import { database } from '$lib/services/database'
+  import { DEFAULT_PACK_ID } from '$lib/services/packs/binding'
+  import type { PresetPack } from '$lib/services/packs/types'
   import WritingStyleFields from '$lib/components/shared/WritingStyleFields.svelte'
   import { Textarea } from '$lib/components/ui/textarea'
   import { Button } from '$lib/components/ui/button'
@@ -120,6 +122,31 @@
 
   const isActive = $derived(!!savedCustomPrompt)
 
+  /** The story's bound pack, for display. `null` until loaded. */
+  let boundPack = $state<PresetPack | null>(null)
+  let boundPackLoaded = $state(false)
+
+  $effect(() => {
+    const storyId = story.currentStory?.id
+    if (!storyId) return
+
+    boundPack = null
+    boundPackLoaded = false
+    let cancelled = false
+    void (async () => {
+      // Mirrors ContextBuilder.forStory: a NULL column means the built-in pack narrates.
+      const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
+      const pack = await database.getPack(packId)
+      if (cancelled) return
+      boundPack = pack
+      boundPackLoaded = true
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  })
+
   /**
    * Response Length only does anything if the prompt that will actually run renders
    * `{{ lengthInstruction }}` — a per-story override replaces the pack template outright,
@@ -136,7 +163,7 @@
     let cancelled = false
     const resolve = async () => {
       if (override) return templateUsesLengthInstruction(override)
-      const packId = (await database.getStoryPackId(storyId)) || 'default-pack'
+      const packId = (await database.getStoryPackId(storyId)) || DEFAULT_PACK_ID
       const template = await new ContextBuilder(packId).resolveTemplate(templateId)
       return templateUsesLengthInstruction(template?.content)
     }
@@ -270,6 +297,26 @@
     <p class="text-muted-foreground mb-3 text-xs">
       Replaces the default pack template for this story only. Supports Liquid template variables.
       Changes take effect on the next generation — no restart needed.
+    </p>
+
+    <!--
+      Which pack this story actually narrates through. Nothing else in the app shows it, and
+      "the default pack template" above is only true when the story is on the built-in pack —
+      for any other pack the sentence names something the reader cannot otherwise identify.
+    -->
+    <p class="text-muted-foreground mb-3 text-xs">
+      Prompt pack:
+      {#if boundPack}
+        <span class="text-foreground font-medium">{boundPack.name}</span>
+        {#if boundPack.author}<span>by {boundPack.author}</span>{/if}
+        {#if isActive}
+          <span>— overridden for this story by the custom prompt below.</span>
+        {/if}
+      {:else if boundPackLoaded}
+        <span class="opacity-70">not found</span>
+      {:else}
+        <span class="opacity-70">loading…</span>
+      {/if}
     </p>
 
     <Textarea

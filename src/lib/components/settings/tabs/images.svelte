@@ -1202,7 +1202,6 @@
         onModelChange={(id) => {
           profileModel = id
         }}
-        filterFunc={undefined}
         showCost={true}
         showImg2ImgIndicator={true}
         showDescription={profileProviderType === 'comfyui'}

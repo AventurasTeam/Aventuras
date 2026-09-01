@@ -3,7 +3,7 @@
   import { Card, CardContent } from '$lib/components/ui/card'
   import { Badge } from '$lib/components/ui/badge'
   import { Button } from '$lib/components/ui/button'
-  import { Upload, Trash2, Lock } from '@lucide/svelte'
+  import { Upload, Trash2, Lock, RefreshCw } from '@lucide/svelte'
   import { stripToPlainText } from '$lib/utils/markdown'
 
   interface Props {
@@ -12,10 +12,12 @@
     usageCount: number
     onclick: () => void
     onExport?: () => void
+    onUpdateFromFile?: () => void
     onDelete?: () => void
   }
 
-  let { pack, modifiedCount, usageCount, onclick, onExport, onDelete }: Props = $props()
+  let { pack, modifiedCount, usageCount, onclick, onExport, onUpdateFromFile, onDelete }: Props =
+    $props()
 </script>
 
 <button type="button" class="w-full text-left" {onclick}>
@@ -42,7 +44,7 @@
             <Button
               variant="ghost"
               size="icon"
-              class="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+              class="h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
               onclick={(e: MouseEvent) => {
                 e.stopPropagation()
                 onExport?.()
@@ -52,11 +54,25 @@
               <Upload class="h-4 w-4" />
             </Button>
           {/if}
+          {#if !pack.isDefault && onUpdateFromFile}
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
+              onclick={(e: MouseEvent) => {
+                e.stopPropagation()
+                onUpdateFromFile?.()
+              }}
+              title="Update from file"
+            >
+              <RefreshCw class="h-4 w-4" />
+            </Button>
+          {/if}
           {#if !pack.isDefault && onDelete}
             <Button
               variant="ghost"
               size="icon"
-              class="text-destructive h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+              class="text-destructive h-8 w-8 transition-opacity sm:opacity-0 sm:group-hover:opacity-100"
               onclick={(e: MouseEvent) => {
                 e.stopPropagation()
                 onDelete?.()

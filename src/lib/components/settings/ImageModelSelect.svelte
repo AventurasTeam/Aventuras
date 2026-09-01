@@ -15,11 +15,9 @@
     onModelChange: (modelId: string) => void
 
     // Optional features
-    filterFunc?: (model: ImageModelInfo) => boolean
     showCost?: boolean
     showImg2ImgIndicator?: boolean
     showDescription?: boolean
-    showModalities?: boolean
 
     // Loading state
     isLoading?: boolean
@@ -29,28 +27,21 @@
 
     // Styling
     placeholder?: string
-    disabled?: boolean
   }
 
   let {
     models,
-    selectedModelId = $bindable(),
+    selectedModelId,
     onModelChange,
-    filterFunc,
     showCost = false,
     showImg2ImgIndicator = false,
     showDescription = false,
-    showModalities = false,
     isLoading = false,
     errorMessage = null,
     showRefreshButton = false,
     onRefresh,
     placeholder = 'Select a model',
-    disabled = false,
   }: Props = $props()
-
-  // Apply filter if provided
-  const filteredModels = $derived(filterFunc ? models.filter(filterFunc) : models)
 
   // Format cost per image
   function formatCost(model: ImageModelInfo): string {
@@ -85,22 +76,13 @@
     return label
   }
 
-  // A custom id typed by the user is not in the fetched list, so it is prepended: without
-  // it the trigger would show the placeholder for a model that is actually saved.
-  const displayModels = $derived.by(() => {
-    const list = [...filteredModels]
-    if (selectedModelId && !list.some((m) => m.id === selectedModelId)) {
-      list.unshift({
-        id: selectedModelId,
-        name: selectedModelId,
-        supportsImg2Img: false,
-      })
-    }
-    return list
-  })
-
   // Get current selection object
-  const selectedModel = $derived(displayModels.find((m) => m.id === selectedModelId))
+  const selectedModel = $derived(models.find((m) => m.id === selectedModelId))
+
+  // An id the provider does not list is reported, never offered as a choice. Silent while the
+  // list is empty: nothing was fetched yet, or the fetch failed, and neither says anything
+  // about the saved id.
+  const selectedIsUnavailable = $derived(!!selectedModelId && models.length > 0 && !selectedModel)
   const selectedLabel = $derived(
     selectedModel ? getModelLabel(selectedModel) : selectedModelId || placeholder,
   )
@@ -122,7 +104,7 @@
     <div class="flex items-center gap-2">
       <div class="flex-1">
         <Autocomplete
-          items={displayModels}
+          items={models}
           selected={selectedModel}
           onSelect={(m) => handleChange((m as ImageModelInfo)?.id)}
           allowCustom={true}
@@ -130,7 +112,6 @@
           itemLabel={(m) => m.name}
           itemValue={(m) => m.id}
           {placeholder}
-          {disabled}
         >
           {#snippet itemSnippet(model)}
             <div class="flex w-full flex-col items-start gap-1">
@@ -153,16 +134,6 @@
                   {model.description}
                 </span>
               {/if}
-              {#if showModalities && (model.inputModalities || model.outputModalities)}
-                <span class="text-muted-foreground pl-6 text-xs">
-                  {#if model.inputModalities}
-                    In: {model.inputModalities.join(', ')}
-                  {/if}
-                  {#if model.outputModalities}
-                    → Out: {model.outputModalities.join(', ')}
-                  {/if}
-                </span>
-              {/if}
             </div>
           {/snippet}
           {#snippet triggerSnippet()}
@@ -182,8 +153,13 @@
         </Button>
       {/if}
     </div>
+    {#if selectedIsUnavailable}
+      <p class="text-muted-foreground text-xs" role="status">
+        "{selectedModelId}" is not in the list fetched from this provider. It will be sent as typed.
+      </p>
+    {/if}
     {#if errorMessage}
-      <p class="text-destructive text-xs">{errorMessage}</p>
+      <p class="text-destructive text-xs" role="alert">{errorMessage}</p>
     {/if}
   {/if}
 </div>

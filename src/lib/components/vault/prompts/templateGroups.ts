@@ -113,3 +113,29 @@ export function getTemplateGroups(): TemplateGroup[] {
 export function getTemplateGroup(templateId: string): string {
   return TEMPLATE_GROUP_MAP[templateId] ?? 'Other'
 }
+
+/** A stored template row named for a reader rather than by its id. */
+export interface TemplateDescription {
+  /** The prompt's display name. */
+  name: string
+  /** The group it is listed under. */
+  group: string
+  /** Whether this row is the prompt's user-message half rather than its system half. */
+  isUserHalf: boolean
+}
+
+/**
+ * Describe a stored template id.
+ *
+ * A `<id>-user` row has no `PROMPT_TEMPLATES` entry of its own, so it resolves its base id
+ * and is marked as that prompt's user half. `null` for an id the app no longer ships.
+ */
+export function describeTemplate(templateId: string): TemplateDescription | null {
+  const isUserHalf = templateId.endsWith('-user')
+  const baseId = isUserHalf ? templateId.slice(0, -'-user'.length) : templateId
+
+  const template = PROMPT_TEMPLATES.find((t) => t.id === baseId)
+  if (!template) return null
+
+  return { name: template.name, group: getTemplateGroup(baseId), isUserHalf }
+}

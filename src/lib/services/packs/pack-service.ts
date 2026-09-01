@@ -1,22 +1,15 @@
 import { database } from '$lib/services/database'
 import { PROMPT_TEMPLATES } from '$lib/services/prompts/templates'
 import { hashContent } from './hash'
+import {
+  classifyTemplates,
+  isUntouched,
+  type ClassifiedTemplates,
+  type RefreshScope,
+} from './staleness'
 import type { PresetPack, FullPack, PackTemplate } from './types'
 
-/**
- * Has this template been left exactly as the app last wrote it?
- *
- * `baselineHash` moves only on a write from the code baseline, so content that still hashes
- * to it has never been through the template editor. Anything else is the user's work.
- *
- * The startup refresh needs this because it cannot otherwise tell "the app ships a newer
- * default" from "the user changed this": both show up as a stored hash that differs from the
- * current baseline. It used to compare against the stored content's own hash, so it read
- * every edit as a stale default and reverted it -- on every single app start.
- */
-export function isUntouched(template: Pick<PackTemplate, 'contentHash' | 'baselineHash'>): boolean {
-  return template.contentHash === template.baselineHash
-}
+export { isUntouched } from './staleness'
 
 /**
  * Pack Service
@@ -207,6 +200,65 @@ class PackService {
     updates: { name?: string; description?: string | null; author?: string | null },
   ): Promise<void> {
     await database.updatePack(id, updates)
+  }
+
+  /**
+   * Split a pack's edited templates by whether the app has shipped newer text for them.
+   *
+   * Returned as template ids; the caller names them for display. Ids the app no longer ships
+   * appear in neither group -- there is nothing to compare them against.
+   */
+  async classifyPackTemplates(packId: string): Promise<ClassifiedTemplates> {
+    const rows = await database.getPackTemplates(packId)
+
+    const shippedHashes = new Map(
+      await Promise.all(
+        rows.map(async (row) => {
+          const shipped = this.getDefaultContent(row.templateId)
+          return [row.templateId, shipped === null ? undefined : await hashContent(shipped)] as [
+            string,
+            string | undefined,
+          ]
+        }),
+      ).then((entries) => entries.filter((e): e is [string, string] => e[1] !== undefined)),
+    )
+
+    return classifyTemplates(rows, shippedHashes)
+  }
+
+  /**
+   * Return a pack's edited templates to the shipped text, at the scope the user chose.
+   *
+   * `'behind'` takes only the templates the app has changed since; `'edited'` takes every
+   * edit, which is what keeps a set of related customisations coherent rather than leaving
+   * half of it against the other half's replacement.
+   *
+   * Restricted to the default pack: a custom pack's baseline is not the shipped text -- for
+   * an imported pack it is the file its author wrote, so this would overwrite their prompts
+   * rather than restore anything.
+   */
+  async refreshTemplates(packId: string, scope: RefreshScope): Promise<number> {
+    const pack = await database.getPack(packId)
+    if (!pack) throw new Error('Pack not found')
+    if (!pack.isDefault) {
+      throw new Error(
+        'Only the built-in pack can be refreshed from the shipped prompts — a custom pack’s templates came from its author, not from the app.',
+      )
+    }
+
+    const { behind, customised } = await this.classifyPackTemplates(packId)
+    const templateIds = scope === 'behind' ? behind : [...behind, ...customised]
+    if (templateIds.length === 0) return 0
+
+    const rows = await Promise.all(
+      templateIds.map(async (templateId) => {
+        const content = this.getDefaultContent(templateId)!
+        return { templateId, content, contentHash: await hashContent(content) }
+      }),
+    )
+
+    await database.refreshPackTemplatesToShipped(packId, rows)
+    return rows.length
   }
 
   /** Delete a pack. Default pack and packs in use by stories cannot be deleted. */

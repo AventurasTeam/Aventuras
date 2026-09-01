@@ -110,7 +110,9 @@
             <AlertTriangle class="h-4 w-4" />
             <Alert.Title>Name conflict</Alert.Title>
             <Alert.Description>
-              A pack named "{conflictPack.name}" already exists. Choose how to proceed.
+              A pack named "{conflictPack.name}" already exists. Importing creates a separate copy.
+              To replace that pack's contents with this file, use its "Update from file" action
+              instead.
             </Alert.Description>
           </Alert.Root>
         {/if}
@@ -119,10 +121,7 @@
       <ResponsiveModal.Footer class="border-t px-6 py-4">
         {#if conflictPack}
           <Button variant="ghost" onclick={onCancel}>Cancel</Button>
-          <Button variant="outline" onclick={() => onConfirm('rename')}>Import as Copy</Button>
-          <Button variant="destructive" onclick={() => onConfirm('replace')}
-            >Replace Existing</Button
-          >
+          <Button onclick={() => onConfirm('rename')}>Import as Copy</Button>
         {:else}
           <Button variant="outline" onclick={onCancel}>Cancel</Button>
           <Button onclick={() => onConfirm('rename')}>Import</Button>
