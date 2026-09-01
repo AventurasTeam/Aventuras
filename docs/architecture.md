@@ -74,6 +74,21 @@ read them.
   classifier now renders against populated buckets where it once
   rendered empty ones. Nothing in the bundled classifier template
   reaches for them; a pack may.
+- **Scene state comes from one entry, not from every entry.** Rows
+  reach a template as prose and position only. Their metadata carries
+  entity ids, and substitution allocates a placeholder for every id it
+  walks, so a window's worth of historical rosters would put
+  long-departed entities back in the map — where the classifier's
+  reference check reads presence as "the model was shown this".
+  `sceneMetadata` carries the current scene, sourced from the most
+  recent AI-authored entry.
+- **An unread variable costs no query.** The group offers the same
+  variables to every story template — a pack decides what it needs,
+  not the builder. But the builder asks the engine which variables the
+  template actually references (following `{% include %}`), and skips
+  the read behind one it never mentions; the variable is still there,
+  just empty. The classifier template names neither `entries` nor any
+  scene variable, so its build issues one query instead of four.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)

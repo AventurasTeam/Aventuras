@@ -1,5 +1,5 @@
 import { bundledPack } from './bundled'
-import { renderWith } from './engine'
+import { renderWith, templateGlobals } from './engine'
 import type { TemplateId } from './ids'
 import { loadPack, type LoadedPack } from './load-pack'
 
@@ -20,6 +20,15 @@ function bundled(): LoadedPack {
 
 export function renderTemplate(templateId: TemplateId, context: Record<string, unknown>): string {
   return renderWith(bundled().engine, templateId, context)
+}
+
+/**
+ * The context variables `templateId` reads. Lets a context builder skip the
+ * work behind a variable this template never mentions — without narrowing what
+ * the group *could* offer, which stays the same for every story template.
+ */
+export function templateReads(templateId: TemplateId): ReadonlySet<string> {
+  return templateGlobals(bundled().engine, templateId)
 }
 
 export { VARIABLES, TEMPLATE_GROUPS, DISPLAY_GROUPS, validateRegistry } from './templateContextMap'
