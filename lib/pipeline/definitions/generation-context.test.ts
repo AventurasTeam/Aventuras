@@ -36,7 +36,7 @@ const definition = {
   worldTimeOrigin: { year: 0 },
 }
 
-// composePromptBuffer reads three settings, and `as never` on a partial literal
+// promptBufferTake reads three settings, and `as never` on a partial literal
 // hides a missing one as `undefined` rather than failing to compile.
 function storySettings(overrides: Partial<StorySettings> = {}): StorySettings {
   return { ...STORY_SETTINGS_DEFAULTS, ...overrides }

@@ -150,10 +150,10 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   if (streamError !== undefined) {
     // The envelope message alone ("Failed to process successful response") names
-    // nothing actionable, and this is the only surface the failure reaches — the
-    // orchestrator does not log phase failures. No body: httpCallSink already
-    // stores it, capped. The URL is redacted — an OpenAI-compatible endpoint can
-    // pass its key as a query param.
+    // nothing actionable, and the orchestrator's own pipeline.phase_failed
+    // carries neither statusCode nor a URL. No body: httpCallSink already stores
+    // it, capped. The URL is redacted — an OpenAI-compatible endpoint can pass
+    // its key as a query param.
     ctx.log.error('provider.narrative_stream_failed', {
       detail: describeProviderError(streamError),
       ...(APICallError.isInstance(streamError)
