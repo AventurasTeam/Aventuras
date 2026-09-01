@@ -4,12 +4,14 @@ import { entriesStore } from '@/lib/stores'
 
 const BRANCH_IDS = ['b1', 'b2', 'b-other']
 
+export type PhaseDb = Awaited<ReturnType<typeof createTestDb>>
+
 /**
  * A real database for phases that read their own data rather than taking it
  * from a caller. Seeds the story and branch rows `story_entries` references, so
  * a case only has to state its entries.
  */
-export async function createPhaseDb(): Promise<Awaited<ReturnType<typeof createTestDb>>> {
+export async function createPhaseDb(): Promise<PhaseDb> {
   const testDb = await createTestDb()
   testDb.sqlite.exec(`
     INSERT INTO stories (id, title, created_at, updated_at) VALUES ('s1', 'A story', 1, 1);
@@ -23,16 +25,16 @@ export async function createPhaseDb(): Promise<Awaited<ReturnType<typeof createT
 }
 
 /**
- * Hydrates the store and writes the same rows to the database. Synchronous, so
- * it drops in wherever `entriesStore.hydrate` already stood — hence node:sqlite
- * directly rather than the async drizzle handle.
+ * Hydrates the store and writes the same rows to the database. Synchronous so it
+ * stands in for a bare `entriesStore.hydrate` call — hence node:sqlite directly
+ * rather than the async drizzle handle.
  *
  * The two sources agree only on the first call after a reset: a later hydrate
  * replaces the store but only adds to the database, which is how a case makes
  * them disagree on purpose.
  */
 export function hydrateEntries(
-  testDb: Awaited<ReturnType<typeof createTestDb>>,
+  testDb: PhaseDb,
   branchId: string,
   rows: readonly StoryEntry[],
 ): void {
@@ -60,6 +62,6 @@ export function hydrateEntries(
   }
 }
 
-export function resetPhaseDb(testDb: Awaited<ReturnType<typeof createTestDb>>): void {
+export function resetPhaseDb(testDb: PhaseDb): void {
   testDb.sqlite.exec('DELETE FROM story_entries')
 }

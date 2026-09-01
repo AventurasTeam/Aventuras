@@ -74,18 +74,14 @@ describe('promptBufferTake — full mode', () => {
   })
 })
 
+const take = (partialChapterBuffer: number, protectedBuffer: number, openCount: number) =>
+  promptBufferTake(openCount, { fullChapterInBuffer: false, partialChapterBuffer, protectedBuffer })
+
 // cadence.md → Composition rule puts the total at max(protectedBuffer,
 // min(openCount, partialChapterBuffer)) — the larger knob sizes the window, but
 // only protectedBuffer reaches past the boundary: partialChapterBuffer is a
 // window over the open region and clamps to it.
 describe('promptBufferTake — partialChapterBuffer against protectedBuffer', () => {
-  const take = (partialChapterBuffer: number, protectedBuffer: number, openCount: number) =>
-    promptBufferTake(openCount, {
-      fullChapterInBuffer: false,
-      partialChapterBuffer,
-      protectedBuffer,
-    })
-
   it('widens the window to protectedBuffer when partial < protected', () => {
     expect(take(5, 10, 12)).toBe(10)
   })
@@ -111,13 +107,6 @@ describe('promptBufferTake — partialChapterBuffer against protectedBuffer', ()
 // harden against settings that never went through it rather than pinning
 // reachable values — the same hardening lib/prompts/filters.ts → recent pins.
 describe('promptBufferTake — unvalidated settings', () => {
-  const take = (partialChapterBuffer: number, protectedBuffer: number, openCount: number) =>
-    promptBufferTake(openCount, {
-      fullChapterInBuffer: false,
-      partialChapterBuffer,
-      protectedBuffer,
-    })
-
   it.each([0, -5, Number.NaN, undefined])(
     'floors partialChapterBuffer at 1 for %s so it cannot send the whole open region',
     (partialChapterBuffer) => {

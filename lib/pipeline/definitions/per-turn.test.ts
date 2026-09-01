@@ -7,7 +7,7 @@ import type { Candidate, RetrievalSuccess } from '@/lib/retrieval'
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
-import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
@@ -98,18 +98,18 @@ async function runNarrativePhase(abortSignal = new AbortController().signal) {
   return next.value
 }
 
+let phaseDb: PhaseDb
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
+})
+
 beforeEach(() => {
   vi.restoreAllMocks()
   streamTextMock.mockReset().mockReturnValue(failingStreamCall())
   renderTemplateMock.mockReset()
   resetAllStores()
   resetPhaseDb(phaseDb)
-})
-
-let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
-
-beforeAll(async () => {
-  phaseDb = await createPhaseDb()
 })
 
 describe('per-turn pipeline declaration', () => {

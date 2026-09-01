@@ -7,7 +7,7 @@ import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
 import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
-import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -60,7 +60,7 @@ vi.mock('@/lib/ai', async (importOriginal) => {
   }
 })
 
-let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
+let phaseDb: PhaseDb
 
 beforeAll(async () => {
   phaseDb = await createPhaseDb()

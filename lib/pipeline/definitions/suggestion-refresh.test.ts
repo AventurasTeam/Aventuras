@@ -13,7 +13,7 @@ import {
   resetAllStores,
 } from '@/lib/stores'
 
-import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { fallbackClassifierWithSuggestionsSchema } from './per-turn-piggyback'
 import {
@@ -163,18 +163,18 @@ function okChips(suggestions: { categoryRef: string; text: string }[]) {
   return { status: 'ok', value: { suggestions } }
 }
 
+let phaseDb: PhaseDb
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
+})
+
 beforeEach(() => {
   vi.restoreAllMocks()
   generateStructuredMock.mockReset()
   __resetRegistry()
   resetAllStores()
   resetPhaseDb(phaseDb)
-})
-
-let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
-
-beforeAll(async () => {
-  phaseDb = await createPhaseDb()
 })
 
 describe('suggestion-refresh declaration', () => {

@@ -41,7 +41,7 @@ import {
   storiesStore,
 } from '@/lib/stores'
 
-import { createPhaseDb, hydrateEntries, resetPhaseDb } from './__tests__/phase-db'
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
 import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
@@ -348,7 +348,7 @@ function lastParams(): RetrievalParams {
   return call[1] as RetrievalParams
 }
 
-let phaseDb: Awaited<ReturnType<typeof createPhaseDb>>
+let phaseDb: PhaseDb
 
 beforeAll(async () => {
   phaseDb = await createPhaseDb()
