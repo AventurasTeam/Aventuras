@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
 import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
-import type { IdBiMap } from '@/lib/ids'
 import {
   buildPiggybackActions,
   resolveSuggestionEmission,
@@ -153,9 +152,9 @@ export async function* piggybackFallbackClassifierPhase(
     suggestionsFire: askForSuggestions,
   })
   if (!load.ok) return load.result
-  // The narrative phase's idMap, so placeholder IDs stay consistent across the
-  // turn instead of being renumbered from scratch.
-  const idMap = ctx.intermediates.idMap as IdBiMap
+  // Run-scoped, so placeholder ids stay consistent with the narrative fold's
+  // prompt instead of being renumbered from scratch.
+  const { idMap } = load
   const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
 
   const appSettings = appSettingsStore.getAppSettings()

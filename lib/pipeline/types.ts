@@ -34,6 +34,8 @@ export type PhaseResult =
   | { status: 'aborted' }
   | { status: 'failed'; error: PipelineError }
 
+export type PhaseFailure = Extract<PhaseResult, { status: 'failed' }>
+
 export type PhaseEmittedEvent =
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }

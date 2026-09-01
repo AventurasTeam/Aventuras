@@ -21,7 +21,7 @@ import {
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
 
 import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
-import type { PhaseContext, PhaseResult } from '../types'
+import type { PhaseContext, PhaseFailure } from '../types'
 
 type BuildFlags = {
   /** Prefixes a guard failure's detail with the calling phase's name. */
@@ -41,9 +41,7 @@ type BuildFlags = {
   refreshGuidance?: string
 }
 
-export type GenerationContextLoad =
-  | { ok: true; context: Record<string, unknown> }
-  | { ok: false; result: Extract<PhaseResult, { status: 'failed' }> }
+type GuardFailure = { ok: false; result: PhaseFailure }
 
 /** A ranked bundle row as a template sees it. */
 export type RetrievedRow = { id: string; displayName: string; renderedText: string }
@@ -124,18 +122,16 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-/** The last two narrative turns: the user's action and the AI's reply. */
 const LAST_TURNS = 2
 
 /**
  * A story entry as a template sees it. `metadata` is projected, never passed
- * whole: the column also carries raw model `reasoning`, the reversed submission
- * kept for Retry, internal failure detail and per-call telemetry — none of which
- * belongs in a prompt, and any of which a pack could reach for good once
- * exposed. `id` is deliberately absent; `entry` has no substitutable prefix, and
- * `position` is the handle a template wants.
+ * whole: the column also carries `reasoning`, `nextTurnSuggestions` and per-call
+ * telemetry, none of which belongs in a prompt and any of which a pack could
+ * come to depend on once exposed. `id` is deliberately absent; `entry` has no
+ * substitutable prefix, and `position` is the handle a template wants.
  */
-function promptEntry(entry: StoryEntry): Record<string, unknown> {
+function promptEntry(entry: StoryEntry) {
   return {
     position: entry.position,
     content: promptProse(entry),
@@ -146,16 +142,17 @@ function promptEntry(entry: StoryEntry): Record<string, unknown> {
   }
 }
 
-// Bounded by the query rather than by a caller or a template: the pair is a
-// pipeline contract (the user's action plus the AI's reply), not a share of the
-// prompt budget, so neither the story's buffer knobs nor a pack may narrow it.
+// Bounded by the query rather than by a caller or a template, so neither the
+// story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
+// classifier needs the action that caused a state change alongside the prose
+// around it; which kinds those two rows are depends on when in the run it asks.
 async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
-  const rows = (await db
+  const rows = await db
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
     .orderBy(desc(storyEntries.position))
-    .limit(LAST_TURNS)) as StoryEntry[]
+    .limit(LAST_TURNS)
   return rows.reverse()
 }
 
@@ -167,7 +164,7 @@ function readRetrievalOutcome(
   return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
 }
 
-const guardFailure = (detail: string): GenerationContextLoad => ({
+const guardFailure = (detail: string): GuardFailure => ({
   ok: false,
   result: { status: 'failed', error: { kind: 'orchestrator', detail } },
 })
@@ -180,12 +177,13 @@ const guardFailure = (detail: string): GenerationContextLoad => ({
  * Takes run identity and run-scoped flags only. No caller hands it domain data,
  * so no phase can quietly narrow the group's context to a slice of its own —
  * entries come from SQLite (never `entriesStore`, whose reader window caps them),
- * and the open story carries definition, settings and entities.
+ * definition and settings from the open story, and entities from
+ * `entitiesStore` — a separate store, hence the separate guard.
  */
 export async function buildGenerationContext(
   ctx: Pick<PhaseContext, 'db' | 'storyId' | 'branchId' | 'intermediates'>,
   flags: BuildFlags,
-): Promise<GenerationContextLoad> {
+) {
   const { branchId, storyId } = ctx
   const { label, piggybackFires = false, suggestionsFire = false, refreshGuidance = '' } = flags
 
@@ -294,5 +292,10 @@ export async function buildGenerationContext(
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes
   // a placeholder; prose (entry.content, definition prose) has no IDs and passes through.
-  return { ok: true, context: substituteIds(context, idMap) as Record<string, unknown> }
+  return { ok: true as const, context: substituteIds(context, idMap), idMap }
 }
+
+export type PromptEntry = ReturnType<typeof promptEntry>
+export type GenerationContextLoad = Awaited<ReturnType<typeof buildGenerationContext>>
+/** The variable set every `generationContext` template renders, as the builder emits it. */
+export type GenerationContext = Extract<GenerationContextLoad, { ok: true }>['context']

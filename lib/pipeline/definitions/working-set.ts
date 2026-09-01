@@ -1,18 +1,18 @@
 import type { Entity, StoryEntry } from '@/lib/db'
 import { currentStoryStore, entitiesStore, entriesStore, type OpenStory } from '@/lib/stores'
 
-import type { PhaseContext, PhaseResult } from '../types'
+import type { PhaseContext, PhaseFailure } from '../types'
 
 export type PerTurnWorkingSet = {
   open: OpenStory
-  /** The branch's entries, ascending by position. */
+  /** The reader's loaded window, ascending by position — not the whole branch. */
   entries: StoryEntry[]
   entities: Entity[]
 }
 
 export type WorkingSetLoad =
   | { ok: true; set: PerTurnWorkingSet }
-  | { ok: false; result: Extract<PhaseResult, { status: 'failed' }> }
+  | { ok: false; result: PhaseFailure }
 
 /**
  * The working set every per-turn phase reads, behind the two guards none of them

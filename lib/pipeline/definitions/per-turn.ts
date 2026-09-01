@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { redactUrl } from '@/lib/diagnostics'
-import { generateId, type IdBiMap } from '@/lib/ids'
+import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
   parseStateBlock,
@@ -85,9 +85,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     suggestionsFire: suggestionsShouldFire,
   })
   if (!load.ok) return load.result
-  // The builder owns the map so every phase in the run resolves against the one
-  // the prompt was built with.
-  const idMap = ctx.intermediates.idMap as IdBiMap
+  const { idMap } = load
   const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context)
 
   const entryId = generateId('entry')
