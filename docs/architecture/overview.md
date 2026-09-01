@@ -42,6 +42,12 @@ The story is an append-only list of `StoryEntry` rows (`user_action`, `narration
 - **Branches** fork at a `forkEntryId`. `story.entries` is the current branch's view, assembled
   from the branch's own rows plus everything inherited from its ancestors; `visibleEntries` is
   that list minus what has been folded into chapters.
+- **Entry numbers** are what a reader sees and types: `position + 1`, every entry type counted,
+  so the last entry's number equals the branch's entry count. Numbering is per branch view — a
+  branch continues its parent's positions from the fork, so shared history keeps its numbers and
+  sibling branches reuse them after the fork. `resolveEntryByNumber` (`utils/storyNavigation.ts`)
+  floors to the nearest lower entry, which is what makes a gap left by an import or a repair
+  navigable rather than a dead number.
 - **Chapters** cover a contiguous run of entries (`startEntryId`/`endEntryId`) and replace them
   in the prompt with a summary. Entries after the last chapter's end are the **un-chapterized
   tail** (`story.getUnchapterizedEntries()`) — the newest material, and the part chapter-oriented

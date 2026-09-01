@@ -95,6 +95,11 @@ function mergeRuntimeVars(
 
 // Story Store using Svelte 5 runes
 class StoryStore {
+  /** Tail of the story-load queue — see loadStory. */
+  private storyLoadChain: Promise<unknown> = Promise.resolve()
+  /** Sequence of the most recently requested story load. */
+  private storyLoadSeq = 0
+
   // Current active story
   currentStory = $state<Story | null>(null)
   entries = $state<StoryEntry[]>([])
@@ -526,6 +531,7 @@ class StoryStore {
 
   // Close the current story and reset state
   closeStory(): void {
+    this.storyLoadSeq++
     this.resetStoryState()
     this.currentBgImage = null
     this.branches = []
@@ -544,7 +550,55 @@ class StoryStore {
 
   // Load a specific story with all its data
   async loadStory(storyId: string): Promise<void> {
+    const seq = ++this.storyLoadSeq
+    const run = this.storyLoadChain.then(
+      () => this.performStoryLoad(storyId, seq),
+      () => this.performStoryLoad(storyId, seq),
+    )
+    this.storyLoadChain = run.catch(() => {})
+    return run
+  }
+
+  /**
+   * Whether a newer load — or a close — has taken over since this one published
+   * `currentStory`, in which case this load has to unpublish it too.
+   *
+   * Returning without that leaves the store naming the story it just published while
+   * `entries`, `branches` and the world state still belong to the previous one, which the
+   * story view and the navigation panel both render. Loads are serialised, so the load that
+   * superseded this one has not started yet and this cannot clear a story it already
+   * published; if that load then fails early, the reader gets the library rather than the
+   * mismatch.
+   */
+  private supersededAfterPublish(seq: number): boolean {
+    if (seq === this.storyLoadSeq) return false
+    this.currentStory = null
+    return true
+  }
+
+  private async performStoryLoad(storyId: string, seq: number): Promise<void> {
+    try {
+      await this.runStoryLoad(storyId, seq)
+    } catch (error) {
+      // A load the reader has already replaced must not report its failure. Its caller sends
+      // them back to the library on error, which would discard the story they switched to and
+      // explain it with the name of the one they left. The newer load speaks for itself.
+      if (seq !== this.storyLoadSeq) return
+      // A load that failed *after* publishing leaves the store naming a story whose entries and
+      // world state it never loaded. The caller shows the library, so the mismatch is invisible
+      // but latent — tear it down rather than leave it for the next reader of the store.
+      if (this.currentStory?.id === storyId) this.closeStory()
+      throw error
+    }
+  }
+
+  private async runStoryLoad(storyId: string, seq: number): Promise<void> {
+    // Serialize loads and let the most recent request win. This prevents a slower
+    // earlier selection from publishing after the story the reader selected last.
+    if (seq !== this.storyLoadSeq) return
+
     const story = await database.getStory(storyId)
+    if (seq !== this.storyLoadSeq) return
     if (!story) {
       throw new Error(`Story not found: ${storyId}`)
     }
@@ -552,13 +606,19 @@ class StoryStore {
     // Clean up any orphaned embedded_images before loading
     // (fixes FK constraint issues from older data)
     await database.cleanupOrphanedEmbeddedImages()
+    if (seq !== this.storyLoadSeq) return
 
     // Whatever the previous story left cached is about a pool this one does not have.
     clearTier3SelectionCache()
     clearImageMarkerCache()
 
+    // A remembered desktop panel must not briefly cover a story as it starts loading on a
+    // narrow display. Do this before publishing `currentStory`, which mounts those panels.
+    ui.setMobileDefaults()
     this.currentStory = story
-    this.currentBgImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+    const backgroundImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
+    if (this.supersededAfterPublish(seq)) return
+    this.currentBgImage = backgroundImage
 
     // Load branch-independent data first
     const [characters, locations, items, storyBeats, checkpoints, lorebookEntries, branches] =
@@ -571,6 +631,7 @@ class StoryStore {
         database.getEntries(storyId),
         database.getBranches(storyId),
       ])
+    if (this.supersededAfterPublish(seq)) return
 
     this.characters = characters
     this.locations = locations
@@ -592,6 +653,7 @@ class StoryStore {
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
+    if (this.supersededAfterPublish(seq)) return
 
     // Reset all caches after loading
     this.invalidateWordCountCache()
@@ -610,6 +672,7 @@ class StoryStore {
 
     // Load persisted activation data for this story (stickiness tracking)
     await ui.loadActivationData(storyId)
+    if (this.supersededAfterPublish(seq)) return
 
     // Clear stale lorebook retrieval from previous story to prevent cross-story contamination
     ui.setLastLorebookRetrieval(null)
@@ -627,15 +690,18 @@ class StoryStore {
 
     // Validate and repair chapter integrity (handles orphaned references)
     await this.validateChapterIntegrity()
+    if (this.supersededAfterPublish(seq)) return
 
     // Load persisted action choices for adventure mode
     if (story.mode === 'adventure') {
       await ui.loadActionChoices(storyId)
+      if (this.supersededAfterPublish(seq)) return
     }
 
     // Load persisted suggestions for creative-writing mode
     if (story.mode === 'creative-writing') {
       await ui.loadSuggestions(storyId)
+      if (this.supersededAfterPublish(seq)) return
     }
 
     // The settings-keyed cache above is empty for a story that never generated choices in this
@@ -656,9 +722,6 @@ class StoryStore {
     if (!hasPersistedChoices && this.entries[this.entries.length - 1]?.type === 'narration') {
       this.restoreSuggestedActionsFromLastNarration()
     }
-
-    // Set mobile-friendly defaults (close sidebar, etc.)
-    ui.setMobileDefaults()
 
     // Emit event
     emitStoryLoaded(storyId, story.mode)
@@ -1053,6 +1116,26 @@ class StoryStore {
     }
 
     // Legacy behavior: delete just this one entry (no world state changes)
+    //
+    // A chapter holds foreign keys to the entries at its boundaries. Deleting those rows along
+    // with the entry — which is what the cascade path does — is only safe there because that
+    // path removes a contiguous *suffix*, so the chapters it drops are trailing and the entries
+    // they covered go with them. One entry out of the middle is not that: it would delete a
+    // chapter and its generated summary while the entries around it survive, leaving a gap in
+    // the numbering. Refuse, naming what is in the way, rather than lose the summary silently.
+    const boundaryChapters = this.chapters.filter(
+      (ch) => ch.startEntryId === entryId || ch.endEntryId === entryId,
+    )
+    if (boundaryChapters.length > 0) {
+      const named = boundaryChapters
+        .map((ch) => (ch.title ? `${ch.number} ("${ch.title}")` : `${ch.number}`))
+        .join(', ')
+      throw new Error(
+        `Cannot delete this entry: it is the boundary of chapter ${named}, and deleting it ` +
+          `would discard that chapter's summary. Delete from this entry onward instead.`,
+      )
+    }
+
     const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
@@ -2988,6 +3071,7 @@ class StoryStore {
 
   // Clear current story (when switching or closing)
   clearCurrentStory(): void {
+    this.storyLoadSeq++
     this.resetStoryState()
 
     // Clear current retry story ID (backups are kept per-story)
@@ -3557,6 +3641,14 @@ class StoryStore {
     })
 
     return checkpoint
+  }
+
+  async renameCheckpoint(checkpointId: string, newName: string): Promise<void> {
+    await database.renameCheckpoint(checkpointId, newName)
+    this.checkpoints = this.checkpoints.map((checkpoint) =>
+      checkpoint.id === checkpointId ? { ...checkpoint, name: newName } : checkpoint,
+    )
+    log('Checkpoint renamed:', checkpointId, 'to', newName)
   }
 
   /**

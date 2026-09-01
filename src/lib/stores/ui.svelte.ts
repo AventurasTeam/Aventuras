@@ -114,6 +114,9 @@ class UIStore {
   activePanel = $state<ActivePanel>('story')
   sidebarTab = $state<SidebarTab>('characters')
   sidebarOpen = $state(typeof window !== 'undefined' ? window.innerWidth >= 640 : false)
+  // Persisted like `sidebarOpen`, but defaults closed at every width: it is a place the
+  // reader opts into, not an ambient reference the way the sidebar is.
+  navPanelOpen = $state(false)
   settingsModalOpen = $state(false)
   isGenerating = $state(false)
   isRetryingLastMessage = $state(false) // Hide stop button during completed-message retries
@@ -387,6 +390,9 @@ class UIStore {
       // No DB persist — this is a layout constraint, not a user preference.
       // Persisting here would overwrite the desktop sidebar preference.
     }
+    // Where the panel overlays rather than sits beside the story, a remembered "open" would
+    // put the reader in front of the panel instead of the story they just opened.
+    this.closeNavPanelOnMobile()
   }
 
   /**
@@ -402,6 +408,33 @@ class UIStore {
     }
   }
 
+  toggleNavPanel() {
+    this.setNavPanelOpen(!this.navPanelOpen)
+  }
+
+  /** Dismissal the reader asked for — the close button, the scrim, the swipe — so it sticks. */
+  closeNavPanel() {
+    this.setNavPanelOpen(false)
+  }
+
+  setNavPanelOpen(open: boolean): Promise<void> {
+    this.navPanelOpen = open
+    return database
+      .setSetting('nav_panel_open', open.toString())
+      .catch((err) => console.warn('[UI] Failed to persist nav panel state:', err))
+  }
+
+  /**
+   * The story navigation panel's twin of `closeSidebarOnMobile`, for the same reason — and
+   * likewise not persisted: getting out of the way of a jump on a narrow screen is a layout
+   * constraint, and must not overwrite the width where the panel sits beside the story.
+   */
+  closeNavPanelOnMobile() {
+    if (typeof window !== 'undefined' && window.innerWidth <= DESKTOP_BREAKPOINT) {
+      this.navPanelOpen = false
+    }
+  }
+
   /**
    * A pending request for the story view to bring one entry into view.
    *
@@ -411,6 +444,41 @@ class UIStore {
    * subscriber remounts a tick later. StoryView consumes this once it has a container.
    */
   pendingEntryScrollId = $state<string | null>(null)
+
+  /**
+   * A branch switch whose caller will position the view itself.
+   *
+   * The story view lands at the end of a branch on every switch. When the switch is one step
+   * of "go to this landmark on another branch", that landing and the entry the caller is
+   * about to request both run, computing different render windows and fighting over the
+   * scroll. The caller claims the landing so only its own jump happens.
+   *
+   * Not reactive: it is claimed and consumed synchronously around a single await, never read
+   * from a template. The claimer clears it unconditionally, because the only consumer is a
+   * mounted story view and it must not leak into an unrelated switch later.
+   */
+  private branchLandingClaim: { branchId: string | null } | null = null
+
+  claimBranchLanding(branchId: string | null) {
+    this.branchLandingClaim = { branchId }
+  }
+
+  /**
+   * Take the claim if it was made for this branch, and clear it.
+   *
+   * Keyed rather than a bare flag: switches queue, so one already in flight can reach its own
+   * `BranchSwitched` while a claim for a different branch is standing, and an unkeyed claim
+   * would be spent on it — suppressing that switch's landing and leaving this one unclaimed.
+   */
+  consumeBranchLandingClaim(branchId: string | null): boolean {
+    if (!this.branchLandingClaim || this.branchLandingClaim.branchId !== branchId) return false
+    this.branchLandingClaim = null
+    return true
+  }
+
+  clearBranchLandingClaim() {
+    this.branchLandingClaim = null
+  }
 
   requestEntryScroll(entryId: string) {
     this.pendingEntryScrollId = entryId

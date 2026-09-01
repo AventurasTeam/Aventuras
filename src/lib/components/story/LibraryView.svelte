@@ -45,10 +45,16 @@
     showSTImportWizard = true
   }
 
+  // Switch before loading so the story view mounts with its sidebars in one pass.
   async function openStory(storyId: string) {
     ui.resetScrollBreak()
-    await story.loadStory(storyId)
     ui.setActivePanel('story')
+    try {
+      await story.loadStory(storyId)
+    } catch (error) {
+      ui.setActivePanel('library')
+      ui.showToast(errMessage(error), 'error')
+    }
   }
 
   async function deleteStory(storyId: string, event: MouseEvent) {
@@ -113,12 +119,13 @@
 
       if (result.success && result.storyId) {
         await story.loadAllStories()
-        await story.loadStory(result.storyId)
         ui.setActivePanel('story')
+        await story.loadStory(result.storyId)
       } else if (result.error) {
         ui.showToast(result.error, 'error')
       }
     } catch (error) {
+      ui.setActivePanel('library')
       ui.showToast(errMessage(error), 'error')
     } finally {
       isImporting = false

@@ -300,7 +300,12 @@
   // No reactive reads in the effect bodies — subscribe once, unsubscribe on teardown
   $effect(() => {
     // The payload is unread: landing resolves everything from the store when it runs
-    return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', () => {
+    return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', (event) => {
+      // The switch is one step of a jump someone else is making: they position the view, and
+      // landing at the end of the branch here would race the entry they are about to request.
+      // Matched on the branch, so a switch already in flight cannot spend someone else's claim.
+      if (ui.consumeBranchLandingClaim(event.branchId)) return
+
       // Panel hidden: defer until the story panel comes back (see panel effect below)
       if (ui.activePanel !== 'story' || !storyContainer) {
         pendingBranchLanding = true

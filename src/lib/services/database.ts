@@ -1513,6 +1513,11 @@ class DatabaseService {
     )
   }
 
+  async renameCheckpoint(id: string, name: string): Promise<void> {
+    const db = await this.getDb()
+    await db.execute('UPDATE checkpoints SET name = ? WHERE id = ?', [name, id])
+  }
+
   async deleteCheckpoint(id: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM checkpoints WHERE id = ?', [id])

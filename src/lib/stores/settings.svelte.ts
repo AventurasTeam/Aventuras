@@ -38,6 +38,7 @@ import {
 import { ui } from '$lib/stores/ui.svelte'
 import { getTheme } from '../../themes/themes'
 import { LLM_TIMEOUT_DEFAULT, LLM_TIMEOUT_MIN, LLM_TIMEOUT_MAX } from '$lib/constants/timeout'
+import { MAX_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH } from '$lib/constants/layout'
 import { SvelteSet, SvelteMap } from 'svelte/reactivity'
 import { dedupeTextModels } from '$lib/utils/dedupeTextModels'
 import { applyIncognitoKeyboard } from '$lib/utils/platform'
@@ -1194,6 +1195,7 @@ export function getDefaultUISettings(): UISettings {
     disableActionPrefixes: false,
     showReasoning: true,
     sidebarWidth: 288,
+    navPanelWidth: 256,
     autoScroll: true,
     showScrollToTop: false,
     showScrollToBottom: true,
@@ -1595,8 +1597,22 @@ class SettingsStore {
       const sidebarWidth = await database.getSetting('sidebar_width')
       if (sidebarWidth) this.uiSettings.sidebarWidth = parseInt(sidebarWidth, 10)
 
+      const navPanelWidth = await database.getSetting('nav_panel_width')
+      if (navPanelWidth) {
+        const parsedNavPanelWidth = parseInt(navPanelWidth, 10)
+        if (Number.isFinite(parsedNavPanelWidth)) {
+          this.uiSettings.navPanelWidth = Math.min(
+            MAX_SIDEBAR_WIDTH,
+            Math.max(MIN_SIDEBAR_WIDTH, parsedNavPanelWidth),
+          )
+        }
+      }
+
       const sidebarOpen = await database.getSetting('sidebar_open')
       if (sidebarOpen !== null) ui.sidebarOpen = sidebarOpen === 'true'
+
+      const navPanelOpen = await database.getSetting('nav_panel_open')
+      if (navPanelOpen !== null) ui.navPanelOpen = navPanelOpen === 'true'
 
       const manualMode = await database.getSetting('advanced_manual_mode')
       if (manualMode !== null) {
@@ -2705,6 +2721,12 @@ class SettingsStore {
     await database.setSetting('sidebar_width', width.toString())
   }
 
+  async setNavPanelWidth(width: number) {
+    const clampedWidth = Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, width))
+    this.uiSettings.navPanelWidth = clampedWidth
+    await database.setSetting('nav_panel_width', clampedWidth.toString())
+  }
+
   async setDebugMode(enabled: boolean) {
     debug.isActive = this.uiSettings.debugMode = enabled
     await database.setSetting('debug_mode', enabled.toString())
@@ -3084,6 +3106,8 @@ class SettingsStore {
 
     // Reset UI settings
     this.uiSettings = getDefaultUISettings()
+    await this.setNavPanelWidth(this.uiSettings.navPanelWidth)
+    await ui.setNavPanelOpen(false)
 
     // Reset font to default
     this.applyFontFamily('default', 'default')
