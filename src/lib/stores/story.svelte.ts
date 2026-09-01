@@ -1113,10 +1113,17 @@ class StoryStore {
 
     // Legacy behavior: delete just this one entry (no world state changes)
     const droppedCheckpoints = this.checkpointsAnchoredTo(new Set([entryId]))
+    // Chapters hold foreign keys to the entries at their boundaries, with no ON DELETE
+    // behaviour, so a boundary entry cannot go without them — same as the cascade path.
+    const chaptersToDelete = this.chapters.filter(
+      (ch) => ch.startEntryId === entryId || ch.endEntryId === entryId,
+    )
     await database.deleteEntriesWithDependents({
       entryIds: [entryId],
+      chapterIds: chaptersToDelete.map((ch) => ch.id),
       checkpointIds: droppedCheckpoints.map((cp) => cp.id),
     })
+    this.chapters = this.chapters.filter((ch) => !chaptersToDelete.some((d) => d.id === ch.id))
     this.forgetCheckpoints(droppedCheckpoints)
     this.entries = this.entries.filter((e) => e.id !== entryId)
 

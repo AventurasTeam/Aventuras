@@ -276,7 +276,7 @@
                  nothing to resize. -->
             <button
               type="button"
-              class="resizer-handle nav-panel-resizer hidden h-full sm:block"
+              class="resizer-handle nav-panel-resizer h-full"
               onmousedown={(e) => startResizing('navPanel', e)}
               aria-label="Story Navigation Resizer"
             ></button>
@@ -511,6 +511,12 @@
 
     .nav-panel-scrim {
       display: block;
+    }
+
+    /* The panel overlays at a fixed width here, so there is nothing to drag. Tied to this
+       query rather than a utility class, so it cannot disagree with the overlay breakpoint. */
+    .nav-panel-resizer {
+      display: none;
     }
 
     .nav-panel-container {

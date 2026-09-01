@@ -194,6 +194,7 @@
                 <input
                   type="text"
                   class="input min-w-0 flex-1 px-1 py-0.5 text-sm"
+                  aria-label="Checkpoint name"
                   bind:value={renameValue}
                   onkeydown={(e) => {
                     if (e.key === 'Enter') confirmRename()
@@ -242,7 +243,7 @@
               </button>
               {#if landmark.checkpointId}
                 <button
-                  class="text-surface-500 hover:text-surface-200 absolute top-1 right-1 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100"
+                  class="text-surface-500 hover:text-surface-200 absolute top-1 right-1 flex min-h-[32px] min-w-[32px] items-center justify-center p-1 transition-opacity sm:min-h-0 sm:min-w-0 sm:p-0.5 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                   onclick={() => startRename(landmark.checkpointId!, landmark.label)}
                   title="Rename"
                   aria-label="Rename checkpoint"
