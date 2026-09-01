@@ -2,7 +2,11 @@
   import type { PresetPack } from '$lib/services/packs/types'
   import { packService } from '$lib/services/packs/pack-service'
   import { database } from '$lib/services/database'
-  import { importExportService } from '$lib/services/packs/import-export'
+  import {
+    importExportService,
+    type ImportValidationResult,
+  } from '$lib/services/packs/import-export'
+  import type { PackUpdateSummary } from '$lib/services/packs/update-summary'
   import { ui } from '$lib/stores/ui.svelte'
   import { errMessage } from '$lib/utils/error'
   import { Skeleton } from '$lib/components/ui/skeleton'
@@ -11,6 +15,8 @@
   import { fade } from 'svelte/transition'
   import PromptPackCard from './PromptPackCard.svelte'
   import CreatePackDialog from './CreatePackDialog.svelte'
+  import ImportPreviewDialog from './ImportPreviewDialog.svelte'
+  import UpdatePackDialog from './UpdatePackDialog.svelte'
 
   interface Props {
     onOpenPack: (packId: string) => void
@@ -27,6 +33,14 @@
   // Delete confirmation state
   let deleteTarget = $state<PresetPack | null>(null)
   let deleting = $state(false)
+
+  // Update-from-file state
+  let updateTarget = $state<PresetPack | null>(null)
+  let updateValidation = $state<ImportValidationResult | null>(null)
+  let updateSummary = $state<PackUpdateSummary | null>(null)
+  let updateErrors = $state<ImportValidationResult | null>(null)
+  let updating = $state(false)
+  let exportingBeforeUpdate = $state(false)
 
   async function loadPacks() {
     loading = true
@@ -80,6 +94,62 @@
     }
   }
 
+  async function handleUpdateFromFile(pack: PresetPack) {
+    const content = await importExportService.pickAndReadImportFile()
+    if (!content) return
+
+    const result = importExportService.validateImport(content)
+    if (!result.valid || !result.pack) {
+      updateErrors = result
+      return
+    }
+
+    try {
+      updateSummary = await importExportService.summarizeUpdate(pack.id, result.pack)
+      updateValidation = result
+      updateTarget = pack
+    } catch (e) {
+      console.error('[PromptPackList] Failed to summarize update:', e)
+      ui.showToast(`Could not read pack: ${errMessage(e)}`, 'error')
+    }
+  }
+
+  function closeUpdateDialog() {
+    updateTarget = null
+    updateValidation = null
+    updateSummary = null
+  }
+
+  async function handleExportBeforeUpdate() {
+    if (!updateTarget) return
+    exportingBeforeUpdate = true
+    try {
+      const success = await importExportService.exportPack(updateTarget.id)
+      if (success) ui.showToast('Pack exported successfully', 'info')
+    } catch (e) {
+      console.error('Export failed:', e)
+      ui.showToast(`Export failed: ${errMessage(e)}`, 'error')
+    } finally {
+      exportingBeforeUpdate = false
+    }
+  }
+
+  async function handleConfirmUpdate() {
+    if (!updateTarget || !updateValidation?.pack) return
+    updating = true
+    try {
+      await importExportService.updatePackFromFile(updateTarget.id, updateValidation.pack)
+      ui.showToast(`Updated "${updateTarget.name}"`, 'info')
+      closeUpdateDialog()
+      await loadPacks()
+    } catch (e) {
+      console.error('Update failed:', e)
+      ui.showToast(`Update failed: ${errMessage(e)}`, 'error')
+    } finally {
+      updating = false
+    }
+  }
+
   async function handleConfirmDelete() {
     if (!deleteTarget) return
     deleting = true
@@ -123,6 +193,7 @@
         usageCount={usageCounts.get(pack.id) ?? 0}
         onclick={() => onOpenPack(pack.id)}
         onExport={() => handleExportPack(pack.id)}
+        onUpdateFromFile={pack.isDefault ? undefined : () => handleUpdateFromFile(pack)}
         onDelete={pack.isDefault
           ? undefined
           : () => {
@@ -137,6 +208,32 @@
   open={showCreateDialog}
   onOpenChange={(v) => (showCreateDialog = v)}
   onCreated={handlePackCreated}
+/>
+
+<UpdatePackDialog
+  open={!!updateTarget}
+  pack={updateTarget}
+  packData={updateValidation?.pack ?? null}
+  summary={updateSummary}
+  exporting={exportingBeforeUpdate}
+  {updating}
+  onExportFirst={handleExportBeforeUpdate}
+  onConfirm={handleConfirmUpdate}
+  onCancel={closeUpdateDialog}
+/>
+
+<!-- A file that fails validation never reaches the update confirmation; its errors are
+     reported through the import preview's error state. -->
+<ImportPreviewDialog
+  open={!!updateErrors}
+  validationResult={updateErrors}
+  conflictPack={null}
+  onConfirm={() => {
+    updateErrors = null
+  }}
+  onCancel={() => {
+    updateErrors = null
+  }}
 />
 
 <!-- Delete confirmation -->

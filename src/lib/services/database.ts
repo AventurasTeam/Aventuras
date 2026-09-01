@@ -38,6 +38,11 @@ import type {
   EnumOption,
 } from '$lib/services/packs/types'
 import { hashContent } from '$lib/services/packs/hash'
+import {
+  packReplacementStatements,
+  shippedTemplateStatements,
+} from '$lib/services/packs/replace-statements'
+import type { PackExport } from '$lib/services/packs/validation'
 
 /**
  * A runtime variable's slot in an entity's metadata JSON.
@@ -3671,6 +3676,49 @@ class DatabaseService {
   async deletePack(id: string): Promise<void> {
     const db = await this.getDb()
     await db.execute('DELETE FROM preset_packs WHERE id = ? AND is_default = 0', [id])
+  }
+
+  /**
+   * Replace a pack's templates and variables with a file's, atomically.
+   *
+   * The pack row is updated rather than replaced, so stories keep their `pack_id` and the
+   * runtime variable definitions their entities are keyed to stay where they are. The name
+   * is the user's and is left alone; the file supplies description and author.
+   *
+   * Half of this landing is a pack that is part its old self and part the file's, which
+   * every story bound to it would then narrate from.
+   */
+  async replacePackContents(
+    packId: string,
+    packData: PackExport,
+    hashes: Map<string, string>,
+  ): Promise<void> {
+    await this.transaction(
+      packReplacementStatements({
+        packId,
+        packData,
+        hashes,
+        ids: {
+          templates: packData.templates.map(() => crypto.randomUUID()),
+          variables: packData.variables.map(() => crypto.randomUUID()),
+        },
+        now: Date.now(),
+      }),
+    )
+  }
+
+  /**
+   * Return a pack's templates to the text the app ships, atomically.
+   *
+   * A partially applied refresh would leave the user unable to tell which of their edits
+   * survived, so the batch either lands or does not.
+   */
+  async refreshPackTemplatesToShipped(
+    packId: string,
+    rows: { templateId: string; content: string; contentHash: string }[],
+  ): Promise<void> {
+    if (rows.length === 0) return
+    await this.transaction(shippedTemplateStatements({ packId, rows, now: Date.now() }))
   }
 
   async canDeletePack(packId: string): Promise<boolean> {

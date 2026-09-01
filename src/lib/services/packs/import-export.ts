@@ -5,6 +5,8 @@ import { packService } from './pack-service'
 import { database } from '$lib/services/database'
 import { validatePackImport, type PackExport } from './validation'
 import { templateEngine } from '$lib/services/templates/engine'
+import { hashContent } from './hash'
+import { packUpdateSummary, type PackUpdateSummary } from './update-summary'
 import type { PresetPack } from './types'
 
 interface TemplateError {
@@ -19,7 +21,12 @@ export interface ImportValidationResult {
   pack?: PackExport
 }
 
-export type ConflictStrategy = 'replace' | 'rename' | 'cancel'
+/**
+ * How a name collision on import is settled. Replacing an existing pack is not one of
+ * them: that is `updatePackFromFile`, reached from the pack itself rather than from a name
+ * that happens to match.
+ */
+export type ConflictStrategy = 'rename' | 'cancel'
 
 class ImportExportService {
   async exportPack(packId: string): Promise<boolean> {
@@ -120,25 +127,46 @@ class ImportExportService {
     return allPacks.find((p) => p.name.toLowerCase() === lowerName) ?? null
   }
 
-  async applyImport(
-    packData: PackExport,
-    strategy: ConflictStrategy,
-    existingPack?: PresetPack,
-  ): Promise<string | null> {
-    if (strategy === 'cancel') return null
+  /** What updating `packId` from this file would discard, for the confirmation. */
+  async summarizeUpdate(packId: string, packData: PackExport): Promise<PackUpdateSummary> {
+    const [currentTemplates, currentVariables, storyCount] = await Promise.all([
+      database.getPackTemplates(packId),
+      database.getPackVariables(packId),
+      database.getPackUsageCount(packId),
+    ])
 
-    if (strategy === 'replace' && existingPack) {
-      if (existingPack.isDefault) {
-        throw new Error('Cannot replace the default pack')
-      }
-      const usageCount = await database.getPackUsageCount(existingPack.id)
-      if (usageCount > 0) {
-        throw new Error(
-          `Cannot replace pack "${existingPack.name}" — it is used by ${usageCount} ${usageCount === 1 ? 'story' : 'stories'}. Reassign them first.`,
-        )
-      }
-      await database.deletePack(existingPack.id)
+    return packUpdateSummary({ currentTemplates, currentVariables, packData, storyCount })
+  }
+
+  /**
+   * Replace an existing pack's contents with a file's, keeping its id and its name.
+   *
+   * The built-in pack is excluded because `PackService.refreshDefaultPackTemplates` rewrites
+   * it from the app's own templates on startup: an import writes rows as their own baseline,
+   * so every one of them would read as untouched and be overwritten on the next launch.
+   */
+  async updatePackFromFile(packId: string, packData: PackExport): Promise<void> {
+    const pack = await packService.getPack(packId)
+    if (!pack) throw new Error('Pack not found')
+    if (pack.isDefault) {
+      throw new Error(
+        'The built-in pack cannot be updated from a file — it is rewritten from the app’s own templates on every launch.',
+      )
     }
+
+    const hashes = new Map(
+      await Promise.all(
+        packData.templates.map(
+          async (t) => [t.templateId, await hashContent(t.content)] as [string, string],
+        ),
+      ),
+    )
+
+    await database.replacePackContents(packId, packData, hashes)
+  }
+
+  async applyImport(packData: PackExport, strategy: ConflictStrategy): Promise<string | null> {
+    if (strategy === 'cancel') return null
 
     let finalName = packData.name
     if (strategy === 'rename') {
