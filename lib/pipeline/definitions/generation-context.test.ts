@@ -8,7 +8,6 @@ import {
   type StoryEntry,
   type StorySettings,
 } from '@/lib/db'
-import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { IdBiMap } from '@/lib/ids'
 import { renderTemplate, TEMPLATE_IDS, VARIABLES, type TemplateId } from '@/lib/prompts'
 import type {
@@ -22,8 +21,9 @@ import type {
 import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { currentStoryStore, entitiesStore, entriesStore } from '@/lib/stores'
 
+import { createPhaseDb, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import { buildGenerationContext, PROMPT_ENTITY_FIELDS } from './generation-context'
-import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 
 const definition = {
   mode: 'adventure' as const,
@@ -104,19 +104,14 @@ const LOADED_EXTRAS = { embeddingStale: true, keywords: ['ghost'] }
 
 const keysOf = (bucket: unknown) => (bucket as object[]).map((r) => Object.keys(r).sort())
 
-let testDb: Awaited<ReturnType<typeof createTestDb>>
+let testDb: PhaseDb
 
 beforeAll(async () => {
-  testDb = await createTestDb()
-  testDb.sqlite.exec(`
-    INSERT INTO stories (id, title, created_at, updated_at) VALUES ('s1', 'A story', 1, 1);
-    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b1', 's1', 'main', 1);
-    INSERT INTO branches (id, story_id, name, created_at) VALUES ('b2', 's1', 'alt', 1);
-  `)
+  testDb = await createPhaseDb()
 })
 
 beforeEach(() => {
-  testDb.sqlite.exec('DELETE FROM story_entries')
+  resetPhaseDb(testDb)
   currentStoryStore.__reset()
   entriesStore.__reset()
   entitiesStore.__reset()
