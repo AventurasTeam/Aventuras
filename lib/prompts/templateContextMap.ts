@@ -21,7 +21,7 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       type: 'Entry[]',
       category: 'Story',
       description:
-        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position`, `content` and `metadata` (`sceneEntities`, `currentLocationId`, `worldTime`, `summary`). Render it whole.',
+        'Prompt buffer, already composed to the two-mode window plus protectedBuffer spillover; system entries excluded. Each item carries `position` and `content`. Render it whole.',
       required: true,
     },
     {
@@ -30,6 +30,14 @@ export const VARIABLES: Record<ContextGroup, VariableDef[]> = {
       category: 'Story',
       description:
         'The last two non-system entries, bounded by the query so neither the buffer knobs nor a template can narrow them. Which kinds they are depends on when the phase asks. Overlaps `entries` — render one or the other, not both. For per-turn classification, not for narrating.',
+      required: true,
+    },
+    {
+      name: 'sceneMetadata',
+      type: 'SceneMetadata',
+      category: 'Entities',
+      description:
+        "Scene state from the most recent AI-authored entry: `sceneEntities`, `currentLocationId`, `worldTime`, `summary`. One entry's worth on purpose — a per-entry copy would put entities deleted long ago back into the prompt.",
       required: true,
     },
     {
@@ -335,7 +343,14 @@ export const TEMPLATE_GROUPS: Record<string, ContextGroup> & Record<TemplateId, 
 // no defined variable is "dangling" and reported by validateRegistry.
 export const DISPLAY_GROUPS: Record<string, string[]> = {
   Story: ['entries', 'lastTurns', 'turns'],
-  Entities: ['entities', 'sceneEntities', 'currentLocationId', 'leadEntityId', 'cast'],
+  Entities: [
+    'entities',
+    'sceneMetadata',
+    'sceneEntities',
+    'currentLocationId',
+    'leadEntityId',
+    'cast',
+  ],
   Plot: ['happenings'],
   Retrieval: [
     'retrievedEntities',

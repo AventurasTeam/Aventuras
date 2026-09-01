@@ -10,7 +10,7 @@ import {
 } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { IdBiMap } from '@/lib/ids'
-import { renderTemplate, TEMPLATE_IDS, VARIABLES } from '@/lib/prompts'
+import { renderTemplate, TEMPLATE_IDS, VARIABLES, type TemplateId } from '@/lib/prompts'
 import type {
   Candidate,
   CandidateKind,
@@ -143,6 +143,7 @@ async function buildContext(args: {
   definition?: unknown
   settings?: StorySettings
   idMap?: IdBiMap
+  templateId?: TemplateId
   retrieval?: RetrievalSuccess
   piggybackFires?: boolean
   suggestionsFire?: boolean
@@ -167,7 +168,8 @@ async function buildContext(args: {
   if (args.retrieval) intermediates[RETRIEVAL_INTERMEDIATE_KEY] = { ...args.retrieval, ok: true }
 
   const load = await buildGenerationContext(phaseCtx(intermediates), {
-    label: 'test',
+    phaseName: 'narrative',
+    templateId: args.templateId ?? TEMPLATE_IDS.perTurnNarrative,
     piggybackFires: args.piggybackFires,
     suggestionsFire: args.suggestionsFire,
     refreshGuidance: args.refreshGuidance,
@@ -1026,8 +1028,14 @@ describe('buildGenerationContext — data source', () => {
     entitiesStore.hydrate(branchId, [])
   }
 
-  async function build(intermediates: Record<string, unknown> = {}) {
-    const load = await buildGenerationContext(phaseCtx(intermediates), { label: 'test' })
+  async function build(
+    intermediates: Record<string, unknown> = {},
+    templateId: TemplateId = TEMPLATE_IDS.perTurnNarrative,
+  ) {
+    const load = await buildGenerationContext(phaseCtx(intermediates), {
+      phaseName: 'narrative',
+      templateId,
+    })
     if (!load.ok) throw new Error(`expected a context, got ${JSON.stringify(load.result)}`)
     return load.context
   }
@@ -1053,7 +1061,7 @@ describe('buildGenerationContext — data source', () => {
       dbEntry(4, 'ERROR', 'system'),
     ])
 
-    const context = await build()
+    const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual([
       'user turn',
@@ -1068,12 +1076,12 @@ describe('buildGenerationContext — data source', () => {
       { ...dbEntry(2, 'theirs'), id: 'entry_other', branchId: 'b2' },
     ])
 
-    const context = await build()
+    const context = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
     expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
   })
 
-  it('projects entries to position, content and the scene metadata subset', async () => {
+  it('projects entries to position and content, carrying no metadata', async () => {
     openStory()
     await seedEntries([
       dbEntry(1, 'prose', 'ai_reply', {
@@ -1082,18 +1090,118 @@ describe('buildGenerationContext — data source', () => {
         worldTime: 42,
         summary: 'a summary',
         reasoning: 'model chain of thought',
-        model: 'some-model',
       }),
     ])
 
-    const [row] = (await build()).entries as Record<string, unknown>[]
+    const narrative = await build()
+    const classifier = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
 
-    expect(Object.keys(row).sort()).toEqual(['content', 'metadata', 'position'])
-    expect(row.metadata).toEqual({
+    const rows = [...narrative.entries, ...classifier.lastTurns] as Record<string, unknown>[]
+    expect(rows).toHaveLength(2)
+    for (const row of rows) expect(Object.keys(row).sort()).toEqual(['content', 'position'])
+  })
+
+  // The group's variable set does not shrink; the query behind an unread one does.
+  it('skips the reads a template never mentions, leaving the variables empty', async () => {
+    openStory()
+    // Real scene state, or skipping the scene read would look the same as
+    // reading a row that has none.
+    await seedEntries([
+      dbEntry(1, 'prose', 'ai_reply', {
+        sceneEntities: [CHAR_ID],
+        currentLocationId: LOC_A,
+        worldTime: 7,
+        summary: 'a summary',
+      }),
+      dbEntry(2, 'more prose', 'user_action', null),
+    ])
+
+    const narrative = await build()
+    const classifier = await build({}, TEMPLATE_IDS.piggybackFallbackClassifier)
+
+    expect(narrative.entries).toHaveLength(2)
+    expect(narrative.lastTurns).toEqual([])
+    expect(narrative.sceneMetadata).toMatchObject({ worldTime: 7, summary: 'a summary' })
+    expect(classifier.lastTurns).toHaveLength(2)
+    expect(classifier.entries).toEqual([])
+    // The classifier reads no scene variable either, so its scene read is skipped.
+    expect(classifier.sceneMetadata).toEqual({
       sceneEntities: [],
       currentLocationId: null,
+      worldTime: 0,
+      summary: '',
+    })
+    for (const key of Object.keys(narrative)) expect(classifier).toHaveProperty(key)
+  })
+
+  it('takes sceneMetadata from the most recent AI entry, not the tail', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'ai prose', 'ai_reply', {
+        sceneEntities: [CHAR_ID],
+        currentLocationId: LOC_A,
+        worldTime: 42,
+        summary: 'a summary',
+        reasoning: 'model chain of thought',
+      }),
+      dbEntry(2, 'user prose', 'user_action', {
+        sceneEntities: [],
+        currentLocationId: null,
+        worldTime: 0,
+      }),
+    ])
+
+    const context = await build()
+
+    expect(context.sceneMetadata).toEqual({
+      sceneEntities: ['c1'],
+      currentLocationId: 'l1',
       worldTime: 42,
       summary: 'a summary',
+    })
+    expect(context.sceneEntities).toEqual(['c1'])
+    expect(context.currentLocationId).toBe('l1')
+  })
+
+  // resolveRef reads "in the id map" as "the model was shown this", so an id
+  // that only ever appeared in an old entry's roster must not be resolvable.
+  it('keeps a departed entity out of the id map when only history names it', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'long ago', 'ai_reply', {
+        sceneEntities: [CHAR_ID],
+        currentLocationId: LOC_B,
+        worldTime: 1,
+      }),
+      dbEntry(2, 'now', 'ai_reply', {
+        sceneEntities: [],
+        currentLocationId: LOC_A,
+        worldTime: 2,
+      }),
+    ])
+
+    const load = await buildGenerationContext(phaseCtx(), {
+      phaseName: 'narrative',
+      templateId: TEMPLATE_IDS.perTurnNarrative,
+    })
+
+    if (!load.ok) throw new Error('expected a context')
+    expect(load.idMap.getPlaceholderFor(CHAR_ID)).toBeUndefined()
+    expect(load.idMap.getPlaceholderFor(LOC_B)).toBeUndefined()
+    expect(load.idMap.getPlaceholderFor(LOC_A)).toBeDefined()
+  })
+
+  it('leaves sceneMetadata empty on a branch with no AI entry yet', async () => {
+    openStory()
+    await seedEntries([dbEntry(1, 'user prose', 'user_action', null)])
+
+    const context = await build()
+
+    expect(context.sceneMetadata).toEqual({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      summary: '',
     })
   })
 
@@ -1122,13 +1230,19 @@ describe('buildGenerationContext — data source', () => {
   it('refuses the run when the open story is another branch', async () => {
     openStory({}, 'b2')
 
-    const load = await buildGenerationContext(phaseCtx(), { label: 'narrative' })
+    const load = await buildGenerationContext(phaseCtx(), {
+      phaseName: 'narrative',
+      templateId: TEMPLATE_IDS.perTurnNarrative,
+    })
 
     expect(load).toEqual({
       ok: false,
       result: {
         status: 'failed',
-        error: { kind: 'orchestrator', detail: 'narrative: no open story for branch' },
+        error: {
+          kind: 'orchestrator',
+          detail: 'narrative: no open story for branch (story s1, branch b1)',
+        },
       },
     })
   })
@@ -1142,13 +1256,19 @@ describe('buildGenerationContext — data source', () => {
     })
     entitiesStore.hydrate('b1', [])
 
-    const load = await buildGenerationContext(phaseCtx(), { label: 'suggestion-emission' })
+    const load = await buildGenerationContext(phaseCtx(), {
+      phaseName: 'suggestion-emission',
+      templateId: TEMPLATE_IDS.perTurnNarrative,
+    })
 
     expect(load).toEqual({
       ok: false,
       result: {
         status: 'failed',
-        error: { kind: 'orchestrator', detail: 'suggestion-emission: no open story for branch' },
+        error: {
+          kind: 'orchestrator',
+          detail: 'suggestion-emission: no open story for branch (story s1, branch b1)',
+        },
       },
     })
   })
@@ -1163,7 +1283,8 @@ describe('buildGenerationContext — data source', () => {
     entitiesStore.hydrate('b2', [])
 
     const load = await buildGenerationContext(phaseCtx(), {
-      label: 'piggyback-fallback-classifier',
+      phaseName: 'piggyback-fallback-classifier',
+      templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     })
 
     expect(load).toEqual({
@@ -1172,7 +1293,8 @@ describe('buildGenerationContext — data source', () => {
         status: 'failed',
         error: {
           kind: 'orchestrator',
-          detail: 'piggyback-fallback-classifier: entities store loaded for another branch',
+          detail:
+            'piggyback-fallback-classifier: entities store loaded for another branch (story s1, branch b1)',
         },
       },
     })
@@ -1192,7 +1314,10 @@ describe('buildGenerationContext — data source', () => {
     openStory()
     const intermediates: Record<string, unknown> = {}
 
-    const load = await buildGenerationContext(phaseCtx(intermediates), { label: 'test' })
+    const load = await buildGenerationContext(phaseCtx(intermediates), {
+      phaseName: 'narrative',
+      templateId: TEMPLATE_IDS.perTurnNarrative,
+    })
 
     if (!load.ok) throw new Error('expected a context')
     expect(load.idMap).toBeInstanceOf(IdBiMap)
