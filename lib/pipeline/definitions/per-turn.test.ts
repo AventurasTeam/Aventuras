@@ -8,8 +8,8 @@ import { retrievalSuccess } from '@/lib/retrieval/__tests__/outcome'
 import { appSettingsStore, currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
 import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
-import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
 
 const { streamTextMock, renderTemplateMock } = vi.hoisted(() => ({

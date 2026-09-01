@@ -1,15 +1,7 @@
-import { and, desc, eq, inArray, ne } from 'drizzle-orm'
-
 import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
-import {
-  inheritedEntryMetadata,
-  storyEntries,
-  type DbCtx,
-  type Entity,
-  type StoryEntry,
-} from '@/lib/db'
+import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
 import { IdBiMap, substituteIds } from '@/lib/ids'
-import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
+import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
 import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   readPromptBuffer,
@@ -21,7 +13,8 @@ import {
 } from '@/lib/retrieval'
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
 
-import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
+import { readLastTurns, readSceneSource } from './entry-reads'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import type { GenerationPhaseName, PhaseContext, PhaseFailure } from '../types'
 
 type BuildFlags = {
@@ -130,8 +123,6 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-const LAST_TURNS = 2
-
 // One read serves all three, so any of them keeps it.
 const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
 
@@ -146,35 +137,6 @@ const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
  */
 function promptEntry(entry: StoryEntry) {
   return { position: entry.position, content: promptProse(entry) }
-}
-
-// Scene state is written by classification, so it lives on AI-authored rows; a
-// user_action only inherits it forward. Reading the AI row directly keeps the
-// prompt's scene independent of which kind happens to sit at the tail.
-async function readSceneSource(db: DbCtx['db'], branchId: string): Promise<StoryEntry | undefined> {
-  const [row] = await db
-    .select()
-    .from(storyEntries)
-    .where(
-      and(eq(storyEntries.branchId, branchId), inArray(storyEntries.kind, [...NARRATIVE_KINDS])),
-    )
-    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(1)
-  return row
-}
-
-// Bounded by the query rather than by a caller or a template, so neither the
-// story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
-// classifier needs the action that caused a state change alongside the prose
-// around it; which kinds those two rows are depends on when in the run it asks.
-async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
-  const rows = await db
-    .select()
-    .from(storyEntries)
-    .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
-    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
-    .limit(LAST_TURNS)
-  return rows.reverse()
 }
 
 function readRetrievalOutcome(
