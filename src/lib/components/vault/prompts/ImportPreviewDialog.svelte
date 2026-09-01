@@ -6,7 +6,7 @@
   import { Badge } from '$lib/components/ui/badge'
   import * as Alert from '$lib/components/ui/alert'
   import { ScrollArea } from '$lib/components/ui/scroll-area'
-  import { AlertTriangle } from '@lucide/svelte'
+  import { AlertTriangle, Download } from '@lucide/svelte'
   import { renderDescription } from '$lib/utils/markdown'
 
   interface Props {
@@ -32,6 +32,7 @@
   <ResponsiveModal.Content class="p-0 sm:max-w-lg">
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <ResponsiveModal.Title class="flex items-center gap-2">
+        <Download class="text-primary h-5 w-5" />
         Import Prompt Pack
         {#if validationResult}
           {#if isValid}

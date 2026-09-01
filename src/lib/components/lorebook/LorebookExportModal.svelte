@@ -3,7 +3,7 @@
   import { errMessage } from '$lib/utils/error'
   import { story } from '$lib/stores/story.svelte'
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
-  import { Download, FileJson, FileText, Loader2 } from '@lucide/svelte'
+  import { Upload, FileJson, FileText, Loader2 } from '@lucide/svelte'
 
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
@@ -59,7 +59,7 @@
   <ResponsiveModal.Content class="flex max-h-[90vh] max-w-md flex-col gap-0 p-0">
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <div class="flex items-center gap-2">
-        <Download class="text-primary h-5 w-5" />
+        <Upload class="text-primary h-5 w-5" />
         <ResponsiveModal.Title>Export Lorebook</ResponsiveModal.Title>
       </div>
     </ResponsiveModal.Header>
@@ -159,7 +159,7 @@
           <Loader2 class="h-4 w-4 animate-spin" />
           Exporting...
         {:else}
-          <Download class="h-4 w-4" />
+          <Upload class="h-4 w-4" />
           Export
         {/if}
       </Button>

@@ -10,7 +10,6 @@
     Star,
     Users,
     ChevronLeft,
-    Upload,
     Archive,
     Book,
     Globe,
@@ -453,7 +452,7 @@
         {#if activeTab === 'prompts' && promptsViewState.mode === 'browsing'}
           <Button
             icon={Download}
-            label="Import"
+            label="Import Pack"
             variant="outline"
             size="sm"
             class="h-9"
@@ -490,7 +489,7 @@
 
               <div class="relative">
                 <Button
-                  icon={Upload}
+                  icon={Download}
                   label={section.importLabel}
                   variant="outline"
                   size="sm"

@@ -5,7 +5,7 @@
   import { LorebookImportExport } from '$lib/services/lorebookImportExport'
   import { open } from '@tauri-apps/plugin-dialog'
   import { readTextFile } from '@tauri-apps/plugin-fs'
-  import { Check, FileJson, Loader2, Upload } from '@lucide/svelte'
+  import { Check, FileJson, Loader2, Download } from '@lucide/svelte'
   import * as ResponsiveModal from '$lib/components/ui/responsive-modal'
   import { Button } from '$lib/components/ui/button'
   import { Progress } from '$lib/components/ui/progress'
@@ -150,7 +150,7 @@
   <ResponsiveModal.Content class="flex max-h-[90vh] max-w-lg flex-col gap-0 p-0">
     <ResponsiveModal.Header class="border-b px-6 py-4">
       <div class="flex items-center gap-2">
-        <Upload class="text-primary h-5 w-5" />
+        <Download class="text-primary h-5 w-5" />
         <ResponsiveModal.Title>Import Lorebook</ResponsiveModal.Title>
       </div>
       <ResponsiveModal.Description>
