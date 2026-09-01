@@ -67,7 +67,9 @@ read them.
   a state change alongside the prose around it. Which kinds those two
   rows are depends on when in the run the phase asks — the narrative
   fold reads them before its own reply is committed — so a template
-  must not assume an action/reply pair.
+  must not assume an action/reply pair. The piggyback fallback
+  classifier takes its write target from that same read, so the row
+  the extracted state lands on is a row the prompt rendered.
 
 - **The classifier fold sees the run's retrieval bundle.** It reads
   `intermediates` like every other caller, so the piggyback fallback

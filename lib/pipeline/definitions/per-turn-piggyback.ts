@@ -21,6 +21,7 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
+import { readLastTurns } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { loadPerTurnWorkingSet } from './working-set'
 
@@ -128,11 +129,15 @@ export async function* piggybackFallbackClassifierPhase(
 
   const working = loadPerTurnWorkingSet(ctx, PIGGYBACK_FALLBACK_PHASE_NAME)
   if (!working.ok) return working.result
-  const { open, entries, entities } = working.set
+  const { open, entities } = working.set
 
-  const tail = entries.at(-1)
+  // The same read the prompt's `lastTurns` comes from, so the extracted state is
+  // written back to the row the classifier actually reasoned over rather than to
+  // whatever the reader's window happens to end on.
+  const turns = await readLastTurns(ctx.db, ctx.branchId)
+  const tail = turns.at(-1)
   if (!tail) return { status: 'completed' }
-  const previousEntry = entries.at(-2)
+  const previousEntry = turns.at(-2)
 
   const suggestionEmission = resolveSuggestionEmission(open.settings)
   // Only ask when chips aren't already in hand: a <state>-failed /

@@ -383,6 +383,80 @@ describe('per-turn-piggyback', () => {
       expect(prompt).toContain('The blade slides home.')
     })
 
+    // The prompt's turn pair and the row the patch lands on must be the same two
+    // rows. A store lagging the branch tail is what tells them apart: the second
+    // hydrate rewinds the window without removing anything from the database.
+    it('targets the turn pair the prompt rendered, not the entries store window', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      const rows = [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          kind: 'user_action',
+          content: 'I put the sword away.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          kind: 'ai_reply',
+          content: 'The blade slides home.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ]
+      hydrateEntries(phaseDb, 'b1', rows)
+      hydrateEntries(phaseDb, 'b1', rows.slice(0, 1))
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const first = await gen.next()
+
+      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      expect(prompt).toContain('The blade slides home.')
+      expect(first.value).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          payload: expect.objectContaining({
+            id: 'entry-2',
+            // 100 from entry-1, the row the prompt showed as the previous turn —
+            // a window that ended at entry-1 would have had no previous row and
+            // started the delta from 0.
+            metadata: expect.objectContaining({ worldTime: 105 }),
+          }),
+        }),
+      })
+    })
+
     it('emits delta events and updates metadata when generateStructured succeeds', async () => {
       currentStoryStore.set({
         storyId: 's1',
