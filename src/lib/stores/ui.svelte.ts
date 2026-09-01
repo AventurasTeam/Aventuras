@@ -445,6 +445,31 @@ class UIStore {
    */
   pendingEntryScrollId = $state<string | null>(null)
 
+  /**
+   * A branch switch whose caller will position the view itself.
+   *
+   * The story view lands at the end of a branch on every switch. When the switch is one step
+   * of "go to this landmark on another branch", that landing and the entry the caller is
+   * about to request both run, computing different render windows and fighting over the
+   * scroll. The caller claims the landing so only its own jump happens.
+   *
+   * Not reactive: it is claimed and consumed synchronously around a single await, never read
+   * from a template. The claimer clears it unconditionally, because the only consumer is a
+   * mounted story view and it must not leak into an unrelated switch later.
+   */
+  private branchLandingClaimed = false
+
+  claimBranchLanding() {
+    this.branchLandingClaimed = true
+  }
+
+  /** Take the claim, if any, and clear it. */
+  consumeBranchLandingClaim(): boolean {
+    const claimed = this.branchLandingClaimed
+    this.branchLandingClaimed = false
+    return claimed
+  }
+
   requestEntryScroll(entryId: string) {
     this.pendingEntryScrollId = entryId
   }

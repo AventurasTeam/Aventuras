@@ -559,6 +559,23 @@ class StoryStore {
     return run
   }
 
+  /**
+   * Whether a newer load — or a close — has taken over since this one published
+   * `currentStory`, in which case this load has to unpublish it too.
+   *
+   * Returning without that leaves the store naming the story it just published while
+   * `entries`, `branches` and the world state still belong to the previous one, which the
+   * story view and the navigation panel both render. Loads are serialised, so the load that
+   * superseded this one has not started yet and this cannot clear a story it already
+   * published; if that load then fails early, the reader gets the library rather than the
+   * mismatch.
+   */
+  private supersededAfterPublish(seq: number): boolean {
+    if (seq === this.storyLoadSeq) return false
+    this.currentStory = null
+    return true
+  }
+
   private async performStoryLoad(storyId: string, seq: number): Promise<void> {
     // Serialize loads and let the most recent request win. This prevents a slower
     // earlier selection from publishing after the story the reader selected last.
@@ -584,7 +601,7 @@ class StoryStore {
     ui.setMobileDefaults()
     this.currentStory = story
     const backgroundImage = await database.getBackgroundForBranch(storyId, story.currentBranchId)
-    if (seq !== this.storyLoadSeq) return
+    if (this.supersededAfterPublish(seq)) return
     this.currentBgImage = backgroundImage
 
     // Load branch-independent data first
@@ -598,7 +615,7 @@ class StoryStore {
         database.getEntries(storyId),
         database.getBranches(storyId),
       ])
-    if (seq !== this.storyLoadSeq) return
+    if (this.supersededAfterPublish(seq)) return
 
     this.characters = characters
     this.locations = locations
@@ -620,7 +637,7 @@ class StoryStore {
 
     // Load entries and chapters based on current branch
     await this.reloadEntriesForCurrentBranch()
-    if (seq !== this.storyLoadSeq) return
+    if (this.supersededAfterPublish(seq)) return
 
     // Reset all caches after loading
     this.invalidateWordCountCache()
@@ -639,7 +656,7 @@ class StoryStore {
 
     // Load persisted activation data for this story (stickiness tracking)
     await ui.loadActivationData(storyId)
-    if (seq !== this.storyLoadSeq) return
+    if (this.supersededAfterPublish(seq)) return
 
     // Clear stale lorebook retrieval from previous story to prevent cross-story contamination
     ui.setLastLorebookRetrieval(null)
@@ -657,18 +674,18 @@ class StoryStore {
 
     // Validate and repair chapter integrity (handles orphaned references)
     await this.validateChapterIntegrity()
-    if (seq !== this.storyLoadSeq) return
+    if (this.supersededAfterPublish(seq)) return
 
     // Load persisted action choices for adventure mode
     if (story.mode === 'adventure') {
       await ui.loadActionChoices(storyId)
-      if (seq !== this.storyLoadSeq) return
+      if (this.supersededAfterPublish(seq)) return
     }
 
     // Load persisted suggestions for creative-writing mode
     if (story.mode === 'creative-writing') {
       await ui.loadSuggestions(storyId)
-      if (seq !== this.storyLoadSeq) return
+      if (this.supersededAfterPublish(seq)) return
     }
 
     // The settings-keyed cache above is empty for a story that never generated choices in this

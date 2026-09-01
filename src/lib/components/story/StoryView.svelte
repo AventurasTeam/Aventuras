@@ -301,6 +301,10 @@
   $effect(() => {
     // The payload is unread: landing resolves everything from the store when it runs
     return eventBus.subscribe<BranchSwitchedEvent>('BranchSwitched', () => {
+      // The switch is one step of a jump someone else is making: they position the view, and
+      // landing at the end of the branch here would race the entry they are about to request.
+      if (ui.consumeBranchLandingClaim()) return
+
       // Panel hidden: defer until the story panel comes back (see panel effect below)
       if (ui.activePanel !== 'story' || !storyContainer) {
         pendingBranchLanding = true

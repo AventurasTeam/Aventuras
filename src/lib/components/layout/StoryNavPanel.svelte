@@ -39,6 +39,9 @@
   // isn't, StoryView is destroyed rather than hidden. The request is left on the ui store for
   // it to pick up on mount, the same way the Branches panel jumps to a fork point.
   function goTo(entryId: string, confirmation: string) {
+    // The story view can only scroll to an entry it can render. Checked here as well so the
+    // confirmation below reports what will actually happen rather than asserting success.
+    const willLand = story.entries.some((e) => e.id === entryId)
     ui.requestEntryScroll(entryId)
     ui.setActivePanel('story')
     ui.closeNavPanelOnMobile()
@@ -46,7 +49,11 @@
     // Where the platform can't hover the panel may have just closed over the result, so the
     // jump confirms itself the way the fork-point jump does.
     if (!supportsHover()) {
-      ui.showToast(confirmation, 'info', 2000)
+      if (willLand) {
+        ui.showToast(confirmation, 'info', 2000)
+      } else {
+        ui.showToast('That entry is not in this branch', 'error', 2000)
+      }
     }
   }
 
@@ -72,12 +79,19 @@
   async function goToLandmark(landmark: Landmark) {
     const currentBranchId = story.currentStory?.currentBranchId ?? null
     if (landmarkNavigationMode === 'checkpoint-branch' && currentBranchId !== landmark.branchId) {
+      // Claimed before the switch, because the event that triggers the story view's own
+      // end-of-branch landing is emitted inside it.
+      ui.claimBranchLanding()
       try {
         await story.switchBranch(landmark.branchId)
       } catch (error) {
         console.error('Failed to switch to landmark branch:', error)
         ui.showToast(error instanceof Error ? error.message : 'Failed to switch branch', 'error')
         return
+      } finally {
+        // Only a mounted story view consumes the claim, and it is unmounted whenever another
+        // panel is up — so drop it either way rather than let it suppress a later switch.
+        ui.consumeBranchLandingClaim()
       }
     }
 
