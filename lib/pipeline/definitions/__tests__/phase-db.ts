@@ -23,11 +23,13 @@ export async function createPhaseDb(): Promise<Awaited<ReturnType<typeof createT
 }
 
 /**
- * Hydrates the store and writes the same rows to the database, so one fixture
- * describes both sources. Synchronous on purpose — it stands in for
- * `entriesStore.hydrate` at call sites that are not async, so it goes through
- * node:sqlite directly rather than the async drizzle handle. OR IGNORE because a
- * case that hydrates twice writes the same rows twice.
+ * Hydrates the store and writes the same rows to the database. Synchronous, so
+ * it drops in wherever `entriesStore.hydrate` already stood — hence node:sqlite
+ * directly rather than the async drizzle handle.
+ *
+ * The two sources agree only on the first call after a reset: a later hydrate
+ * replaces the store but only adds to the database, which is how a case makes
+ * them disagree on purpose.
  */
 export function hydrateEntries(
   testDb: Awaited<ReturnType<typeof createTestDb>>,
@@ -36,7 +38,7 @@ export function hydrateEntries(
 ): void {
   entriesStore.hydrate(branchId, [...rows])
   const stmt = testDb.sqlite.prepare(
-    `INSERT OR IGNORE INTO story_entries
+    `INSERT OR REPLACE INTO story_entries
        (id, branch_id, position, kind, content, chapter_id, metadata, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   )
@@ -58,7 +60,6 @@ export function hydrateEntries(
   }
 }
 
-/** Drops every entry so the next case starts from its own fixture. */
 export function resetPhaseDb(testDb: Awaited<ReturnType<typeof createTestDb>>): void {
   testDb.sqlite.exec('DELETE FROM story_entries')
 }

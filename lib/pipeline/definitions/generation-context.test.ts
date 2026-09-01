@@ -1061,6 +1061,18 @@ describe('buildGenerationContext — data source', () => {
     ])
   })
 
+  it('scopes lastTurns to the branch', async () => {
+    openStory()
+    await seedEntries([
+      dbEntry(1, 'ours'),
+      { ...dbEntry(2, 'theirs'), id: 'entry_other', branchId: 'b2' },
+    ])
+
+    const context = await build()
+
+    expect((context.lastTurns as { content: string }[]).map((e) => e.content)).toEqual(['ours'])
+  })
+
   it('projects entries to position, content and the scene metadata subset', async () => {
     openStory()
     await seedEntries([
@@ -1121,6 +1133,51 @@ describe('buildGenerationContext — data source', () => {
     })
   })
 
+  it('refuses the run when the open story is another story on the same branch', async () => {
+    currentStoryStore.set({
+      storyId: 's2',
+      branchId: 'b1',
+      definition: definition as never,
+      settings: storySettings(),
+    })
+    entitiesStore.hydrate('b1', [])
+
+    const load = await buildGenerationContext(phaseCtx(), { label: 'suggestion-emission' })
+
+    expect(load).toEqual({
+      ok: false,
+      result: {
+        status: 'failed',
+        error: { kind: 'orchestrator', detail: 'suggestion-emission: no open story for branch' },
+      },
+    })
+  })
+
+  it('refuses the run when the entities store is loaded for another branch', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition: definition as never,
+      settings: storySettings(),
+    })
+    entitiesStore.hydrate('b2', [])
+
+    const load = await buildGenerationContext(phaseCtx(), {
+      label: 'piggyback-fallback-classifier',
+    })
+
+    expect(load).toEqual({
+      ok: false,
+      result: {
+        status: 'failed',
+        error: {
+          kind: 'orchestrator',
+          detail: 'piggyback-fallback-classifier: entities store loaded for another branch',
+        },
+      },
+    })
+  })
+
   it('reuses the run-scoped idMap so placeholders stay stable across phases', async () => {
     openStory()
     const idMap = new IdBiMap()
@@ -1129,5 +1186,16 @@ describe('buildGenerationContext — data source', () => {
     await build(intermediates)
 
     expect(intermediates.idMap).toBe(idMap)
+  })
+
+  it('installs an idMap on a run that has none, and hands it back', async () => {
+    openStory()
+    const intermediates: Record<string, unknown> = {}
+
+    const load = await buildGenerationContext(phaseCtx(intermediates), { label: 'test' })
+
+    if (!load.ok) throw new Error('expected a context')
+    expect(load.idMap).toBeInstanceOf(IdBiMap)
+    expect(intermediates.idMap).toBe(load.idMap)
   })
 })
