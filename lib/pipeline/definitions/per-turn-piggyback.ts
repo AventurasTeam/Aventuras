@@ -126,7 +126,7 @@ export async function* piggybackFallbackClassifierPhase(
   const outcome = ctx.intermediates.piggybackOutcome as PiggybackOutcome | undefined
   if (!shouldFallbackFire(outcome)) return { status: 'completed' }
 
-  const working = loadPerTurnWorkingSet(ctx, 'piggyback-fallback')
+  const working = loadPerTurnWorkingSet(ctx, PIGGYBACK_FALLBACK_PHASE_NAME)
   if (!working.ok) return working.result
   const { open, entries, entities } = working.set
 
@@ -148,7 +148,8 @@ export async function* piggybackFallbackClassifierPhase(
   // carry state changes ("I put the sword away"), not just the AI's reply, and
   // that pair is a fixed contract the story's buffer knobs must not cut.
   const load = await buildGenerationContext(ctx, {
-    label: PIGGYBACK_FALLBACK_PHASE_NAME,
+    phaseName: PIGGYBACK_FALLBACK_PHASE_NAME,
+    templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     suggestionsFire: askForSuggestions,
   })
   if (!load.ok) return load.result

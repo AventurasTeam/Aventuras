@@ -42,7 +42,7 @@ export type PerTurnPhaseName =
 
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
-  const working = loadPerTurnWorkingSet(ctx, PER_TURN_KIND)
+  const working = loadPerTurnWorkingSet(ctx, 'narrative')
   if (!working.ok) return working.result
   const { open, entries, entities } = working.set
 
@@ -80,7 +80,8 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
 
   const load = await buildGenerationContext(ctx, {
-    label: PER_TURN_KIND,
+    phaseName: 'narrative',
+    templateId: TEMPLATE_IDS.perTurnNarrative,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
   })

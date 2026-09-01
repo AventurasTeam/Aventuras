@@ -195,7 +195,7 @@ describe('per-turn pipeline declaration', () => {
 
     expect(result).toEqual({
       status: 'failed',
-      error: { kind: 'orchestrator', detail: 'per-turn: no open story for branch' },
+      error: { kind: 'orchestrator', detail: 'narrative: no open story for branch' },
     })
     expect(streamTextMock).not.toHaveBeenCalled()
   })
@@ -215,7 +215,7 @@ describe('per-turn pipeline declaration', () => {
       status: 'failed',
       error: {
         kind: 'orchestrator',
-        detail: 'per-turn: entries store loaded for another branch',
+        detail: 'narrative: entries store loaded for another branch',
       },
     })
     expect(streamTextMock).not.toHaveBeenCalled()

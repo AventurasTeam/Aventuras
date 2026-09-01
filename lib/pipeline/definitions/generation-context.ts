@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from 'drizzle-orm'
+import { and, desc, eq, inArray, ne } from 'drizzle-orm'
 
 import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
 import {
@@ -9,7 +9,8 @@ import {
   type StoryEntry,
 } from '@/lib/db'
 import { IdBiMap, substituteIds } from '@/lib/ids'
-import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
+import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
+import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   readPromptBuffer,
   type Candidate,
@@ -21,11 +22,18 @@ import {
 import { currentStoryStore, entitiesStore } from '@/lib/stores'
 
 import { RETRIEVAL_INTERMEDIATE_KEY } from './per-turn-retrieval'
-import type { PhaseContext, PhaseFailure } from '../types'
+import type { GenerationPhaseName, PhaseContext, PhaseFailure } from '../types'
 
 type BuildFlags = {
-  /** Prefixes a guard failure's detail with the calling phase's name. */
-  label: string
+  /** Names the calling phase in a guard failure's detail. */
+  phaseName: GenerationPhaseName
+  /**
+   * The template this context will render. The group's variable set does not
+   * change with it — every story template may read all of it — but a read
+   * behind a variable this template never mentions is work with no reader, so
+   * the query behind it is skipped and the variable comes back empty.
+   */
+  templateId: TemplateId
   // Whether THIS turn's tagged block will actually be consumed — only the
   // narrative phase knows this (piggybackMode + resolved model capability), so
   // it stays caller-supplied. Defaults false for every other consumer, which
@@ -124,34 +132,47 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
 
 const LAST_TURNS = 2
 
+// One read serves all three, so any of them keeps it.
+const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
+
 /**
- * A story entry as a template sees it. `metadata` is projected, never passed
- * whole: the column also carries `reasoning`, `nextTurnSuggestions` and per-call
- * telemetry, none of which belongs in a prompt and any of which a pack could
- * come to depend on once exposed. `id` is deliberately absent; `entry` has no
- * substitutable prefix, and `position` is the handle a template wants.
+ * A story entry as a template sees it. Prose and position only: `metadata`
+ * carries entity ids, and substituteIds allocates a placeholder for every id it
+ * walks, so a window's worth of historical scene rosters would put entities
+ * deleted chapters ago into the map — where resolveRef reads presence as "the
+ * model was shown this". Current scene state is `sceneMetadata`, sourced from
+ * one entry. `id` is deliberately absent; `entry` has no substitutable prefix,
+ * and `position` is the handle a template wants.
  */
 function promptEntry(entry: StoryEntry) {
-  return {
-    position: entry.position,
-    content: promptProse(entry),
-    metadata: {
-      ...inheritedEntryMetadata(entry.metadata),
-      summary: entry.metadata?.summary ?? '',
-    },
-  }
+  return { position: entry.position, content: promptProse(entry) }
 }
 
 // Bounded by the query rather than by a caller or a template, so neither the
 // story's buffer knobs nor a pack can narrow it. Whichever phase asks, the
 // classifier needs the action that caused a state change alongside the prose
 // around it; which kinds those two rows are depends on when in the run it asks.
+// Scene state is written by classification, so it lives on AI-authored rows;
+// a user_action only inherits it forward. Reading the AI row directly keeps the
+// prompt's scene independent of which kind happens to sit at the tail.
+async function readSceneSource(db: DbCtx['db'], branchId: string): Promise<StoryEntry | undefined> {
+  const [row] = await db
+    .select()
+    .from(storyEntries)
+    .where(
+      and(eq(storyEntries.branchId, branchId), inArray(storyEntries.kind, [...NARRATIVE_KINDS])),
+    )
+    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
+    .limit(1)
+  return row
+}
+
 async function readLastTurns(db: DbCtx['db'], branchId: string): Promise<StoryEntry[]> {
   const rows = await db
     .select()
     .from(storyEntries)
     .where(and(eq(storyEntries.branchId, branchId), ne(storyEntries.kind, 'system')))
-    .orderBy(desc(storyEntries.position))
+    .orderBy(desc(storyEntries.position), desc(storyEntries.createdAt))
     .limit(LAST_TURNS)
   return rows.reverse()
 }
@@ -164,9 +185,21 @@ function readRetrievalOutcome(
   return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
 }
 
-const guardFailure = (detail: string): GuardFailure => ({
+// The identity is the whole point of a desync guard: which branch went out of
+// step is what the reader's system entry has to be able to say.
+const guardFailure = (
+  phaseName: GenerationPhaseName,
+  reason: string,
+  ids: { storyId: string | null; branchId: string },
+): GuardFailure => ({
   ok: false,
-  result: { status: 'failed', error: { kind: 'orchestrator', detail } },
+  result: {
+    status: 'failed',
+    error: {
+      kind: 'orchestrator',
+      detail: `${phaseName}: ${reason} (story ${ids.storyId}, branch ${ids.branchId})`,
+    },
+  },
 })
 
 /**
@@ -185,16 +218,25 @@ export async function buildGenerationContext(
   flags: BuildFlags,
 ) {
   const { branchId, storyId } = ctx
-  const { label, piggybackFires = false, suggestionsFire = false, refreshGuidance = '' } = flags
+  const {
+    phaseName,
+    templateId,
+    piggybackFires = false,
+    suggestionsFire = false,
+    refreshGuidance = '',
+  } = flags
 
   // Both guards are defense-in-depth against store desync: a build against the
   // wrong branch would describe a story this prompt isn't telling, and would
   // filter every entity away rather than fail.
   const open = currentStoryStore.getCurrentStory()
   if (!open || open.branchId !== branchId || open.storyId !== storyId)
-    return guardFailure(`${label}: no open story for branch`)
+    return guardFailure(phaseName, 'no open story for branch', { storyId, branchId })
   if (entitiesStore.getLoadedBranch() !== branchId)
-    return guardFailure(`${label}: entities store loaded for another branch`)
+    return guardFailure(phaseName, 'entities store loaded for another branch', {
+      storyId,
+      branchId,
+    })
 
   const { definition, settings } = open
 
@@ -203,9 +245,12 @@ export async function buildGenerationContext(
   const idMap = (ctx.intermediates.idMap as IdBiMap | undefined) ?? new IdBiMap()
   ctx.intermediates.idMap = idMap
 
-  const [buffer, lastTurns] = await Promise.all([
-    readPromptBuffer(ctx.db, branchId, settings),
-    readLastTurns(ctx.db, branchId),
+  const reads = templateReads(templateId)
+  const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
+  const [buffer, lastTurns, sceneSource] = await Promise.all([
+    reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
+    reads.has('lastTurns') ? readLastTurns(ctx.db, branchId) : [],
+    readsScene ? readSceneSource(ctx.db, branchId) : undefined,
   ])
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
     (e) => e.branchId === branchId,
@@ -231,10 +276,7 @@ export async function buildGenerationContext(
   const retrieval = readRetrievalOutcome(ctx.intermediates)
   const floor = retrieval?.floor
 
-  // The branch's own tail, not the window's: scene state is what the story is
-  // currently in, so it must not move with the buffer knobs or with whatever a
-  // template chose to render.
-  const tail = lastTurns.at(-1)
+  const scene = sceneSource?.metadata
 
   // Every place the prompt brackets an id for, in the order the blocks render.
   // A template that instead named "the ids above" would point <current_location>
@@ -254,10 +296,14 @@ export async function buildGenerationContext(
     entries: buffer.map(promptEntry),
     lastTurns: lastTurns.map(promptEntry),
     entities: branchEntities.map(promptEntity),
-    // Writers inherit scene state forward (submit-turn, per-turn), so the
-    // non-system tail always carries the current scene and location.
-    sceneEntities: tail?.metadata?.sceneEntities ?? [],
-    currentLocationId: tail?.metadata?.currentLocationId ?? null,
+    sceneEntities: scene?.sceneEntities ?? [],
+    currentLocationId: scene?.currentLocationId ?? null,
+    // The one entry's worth of scene state a template may read, so no historical
+    // roster reaches the prompt or the id map.
+    sceneMetadata: {
+      ...inheritedEntryMetadata(sceneSource?.metadata),
+      summary: scene?.summary ?? '',
+    },
     definition: normalizedDefinition,
     calendarVocabulary: describeCalendarVocabulary(calendar),
     userSettings: {

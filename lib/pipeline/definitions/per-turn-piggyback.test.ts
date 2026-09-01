@@ -148,7 +148,10 @@ describe('per-turn-piggyback', () => {
         done: true,
         value: {
           status: 'failed',
-          error: { kind: 'orchestrator', detail: 'piggyback-fallback: no open story for branch' },
+          error: {
+            kind: 'orchestrator',
+            detail: 'piggyback-fallback-classifier: no open story for branch',
+          },
         },
       })
     })
@@ -162,19 +165,19 @@ describe('per-turn-piggyback', () => {
         case: 'the open story is another branch',
         open: { storyId: 's1', branchId: 'b2' },
         loaded: 'b1',
-        detail: 'piggyback-fallback: no open story for branch',
+        detail: 'piggyback-fallback-classifier: no open story for branch',
       },
       {
         case: 'the open story is another story',
         open: { storyId: 's2', branchId: 'b1' },
         loaded: 'b1',
-        detail: 'piggyback-fallback: no open story for branch',
+        detail: 'piggyback-fallback-classifier: no open story for branch',
       },
       {
         case: 'the entries store holds another branch',
         open: { storyId: 's1', branchId: 'b1' },
         loaded: 'b2',
-        detail: 'piggyback-fallback: entries store loaded for another branch',
+        detail: 'piggyback-fallback-classifier: entries store loaded for another branch',
       },
     ])('refuses a desynced store when $case', async ({ open, loaded, detail }) => {
       currentStoryStore.set({

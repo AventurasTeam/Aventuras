@@ -113,7 +113,8 @@ async function* suggestionEmissionPhase(
     storyModels: open.settings.models,
   }
   const load = await buildGenerationContext(ctx, {
-    label: SUGGESTION_REFRESH_KIND,
+    phaseName: SUGGESTION_EMISSION_PHASE,
+    templateId: TEMPLATE_IDS.suggestionRefresh,
     refreshGuidance: guidance,
   })
   if (!load.ok) return load.result
