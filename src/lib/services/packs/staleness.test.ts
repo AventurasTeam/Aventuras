@@ -28,9 +28,10 @@ describe('classifyTemplate', () => {
     )
   })
 
-  it('reads a row the editor created as behind', () => {
-    // baselineHash '' matches no shipped hash. A known false positive, named in the listing.
-    expect(classifyTemplate(row('adventure', 'mine', ''), SHIPPED)).toBe('behind')
+  it('reads a row with no baseline as customised, not behind', () => {
+    // Nothing shipped is newer than a row the app never supplied, so the `behind` scope --
+    // which promises to take only what the app has changed since -- must not overwrite it.
+    expect(classifyTemplate(row('adventure', 'mine', ''), SHIPPED)).toBe('customised')
   })
 
   it('returns null for a template the app no longer ships', () => {
@@ -60,6 +61,12 @@ describe('classifyTemplates', () => {
     )
 
     expect(result).toEqual({ behind: ['adventure'], customised: ['adventure-user'] })
+  })
+
+  it('keeps a row with no baseline out of the behind group', () => {
+    const result = classifyTemplates([row('adventure', 'mine', '')], shippedHashes)
+
+    expect(result).toEqual({ behind: [], customised: ['adventure'] })
   })
 
   it('excludes a row whose id the app no longer ships from both groups', () => {

@@ -40,12 +40,16 @@ type Row = Pick<PackTemplate, 'templateId' | 'contentHash' | 'baselineHash'>
  * `null` when the app no longer ships this id -- there is nothing to compare against and
  * nothing to bring the row forward to.
  *
- * A row the editor created carries `baselineHash: ''`, which matches no shipped hash and so
- * reads as behind. The listing names it before anything is written.
+ * An empty `baselineHash` is a row written with no baseline to keep, so nothing shipped is
+ * newer than it and it is not behind anything. It classifies as customised, which keeps it
+ * out of the `behind` scope: that scope's promise is that it only takes what the app has
+ * changed since, and overwriting content the app never supplied would break it. The `edited`
+ * scope still replaces the row, because there the user has asked for exactly that.
  */
 export function classifyTemplate(row: Row, shippedHash: string | undefined): TemplateState | null {
   if (shippedHash === undefined) return null
   if (isUntouched(row)) return 'current'
+  if (row.baselineHash === '') return 'customised'
   return row.baselineHash === shippedHash ? 'customised' : 'behind'
 }
 
