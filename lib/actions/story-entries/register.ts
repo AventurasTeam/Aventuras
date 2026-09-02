@@ -26,7 +26,11 @@ declare module '@/lib/actions/action-map' {
     createStoryEntry: { source: DeltaSource; payload: { entry: NewStoryEntry } }
     updateStoryEntryMetadata: {
       source: DeltaSource
-      payload: { branchId: string; id: string; metadata: EntryMetadata }
+      // Partial: the handler merges onto the row it reads, so a writer only ever
+      // claims the fields it computed. A whole-column payload built from a read the
+      // caller took earlier drags every stale sibling field along with it — the
+      // pipeline's phase-start `tail` snapshot is exactly that read.
+      payload: { branchId: string; id: string; metadata: Partial<EntryMetadata> }
     }
     deleteStoryEntry: { source: DeltaSource; payload: { branchId: string; id: string } }
   }
@@ -91,6 +95,7 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
   if (!current)
     return { status: 'rejected', reason: `update target story_entries ${bid}:${id} not found` }
+  const merged: EntryMetadata = { ...(current.metadata as EntryMetadata), ...metadata }
   return {
     status: 'ok',
     targetTable: 'story_entries',
@@ -108,17 +113,17 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
           : computeUndoPayload(
               entryMetadataSchema,
               current.metadata as Record<string, unknown>,
-              metadata,
+              merged,
             ),
     },
     ops: [
       ctx.db
         .update(storyEntries)
-        .set({ metadata })
+        .set({ metadata: merged })
         .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
         .toSQL(),
     ],
-    patch: { op: 'update', id, columns: { metadata } },
+    patch: { op: 'update', id, columns: { metadata: merged } },
   }
 }
 

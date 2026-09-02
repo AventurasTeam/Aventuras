@@ -249,8 +249,10 @@ export async function* piggybackFallbackClassifierPhase(
       payload: {
         branchId: ctx.branchId,
         id: tail.id,
+        // Only what this phase computed: the handler merges onto the row it reads,
+        // so spreading `tail.metadata` here would re-assert a snapshot taken before
+        // the classifier call.
         metadata: {
-          ...tail.metadata,
           ...scenePatch,
           ...(suggestionItems.length > 0
             ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
-import { inheritedEntryMetadata, type EntryMetadata } from '@/lib/db'
+import { inheritedEntryMetadata } from '@/lib/db'
 import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
@@ -187,10 +187,6 @@ async function* suggestionEmissionPhase(
     ctx.log.warn('classifier.suggestions_refresh_target_reversed', { targetEntryId: target.id })
     return { status: 'completed' }
   }
-  // The empty-state ⟳ Generate fires on entries that carry no metadata at all —
-  // the column is nullable, so that is a live shape rather than an old one. The
-  // scene floor keeps the substituted default schema-valid.
-  const base: EntryMetadata = current.metadata ?? inheritedEntryMetadata(null)
 
   yield {
     type: 'delta_emitted',
@@ -204,7 +200,11 @@ async function* suggestionEmissionPhase(
         branchId: ctx.branchId,
         id: target.id,
         metadata: {
-          ...base,
+          // The empty-state ⟳ Generate fires on entries carrying no metadata at all —
+          // the column is nullable, so that is a live shape. The scene floor is
+          // substituted only when there is nothing to merge onto; every other case is
+          // covered by the handler's merge, which must not be handed a stale snapshot.
+          ...(current.metadata == null ? inheritedEntryMetadata(null) : {}),
           nextTurnSuggestions: {
             items,
             source: 'refresh' as const,

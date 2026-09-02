@@ -552,11 +552,9 @@ describe('suggestion-refresh emission phase', () => {
         payload: {
           branchId: 'b1',
           id: 'entry-1',
+          // Claims only the chips: the handler merges onto the stored row, so every
+          // sibling field is preserved by not being mentioned at all.
           metadata: {
-            sceneEntities: [],
-            currentLocationId: null,
-            worldTime: 120,
-            model: 'model-1',
             nextTurnSuggestions: {
               items: [
                 { categoryId: 'cat_action', text: 'Draw the blade.' },
@@ -677,7 +675,7 @@ describe('suggestion-refresh emission phase', () => {
     expect(events).toEqual([])
   })
 
-  it('writes over the row as it stands after the call, not the pre-call snapshot', async () => {
+  it('cannot clobber a field that changed while the model call was in flight', async () => {
     openStory()
     hydrate()
     wireAppSettings()
@@ -699,7 +697,11 @@ describe('suggestion-refresh emission phase', () => {
       event.action.kind !== 'updateStoryEntryMetadata'
     )
       throw new Error('expected an updateStoryEntryMetadata delta')
-    expect(event.action.payload.metadata.worldTime).toBe(999)
+    // The row moved under the phase mid-call. It never carried worldTime in its
+    // payload to begin with, so there is nothing to write back stale — the guarantee
+    // is structural rather than a matter of when the phase re-read.
+    expect(event.action.payload.metadata).not.toHaveProperty('worldTime')
+    expect(event.action.payload.metadata.nextTurnSuggestions?.items).toHaveLength(1)
   })
 
   it('discards the result when a cancel lands while the model call is in flight', async () => {

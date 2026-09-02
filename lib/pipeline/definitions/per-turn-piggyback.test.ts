@@ -1058,11 +1058,14 @@ describe('per-turn-piggyback', () => {
       )
         throw new Error('expected an updateStoryEntryMetadata delta')
       // This phase re-rolls state alone (row 3: <state> failed, <suggestions>
-      // already in hand) — it must not fire a second suggestion call and must
-      // not drop the chips the narrative fold already wrote, since the fold
-      // spreads ...tail.metadata first and never re-derives nextTurnSuggestions
-      // when it isn't re-asking.
-      expect(created.action.payload.metadata.nextTurnSuggestions).toEqual(existingChips)
+      // already in hand) — it must not fire a second suggestion call and must not
+      // drop the chips the narrative fold already wrote. The payload claims only
+      // what this phase computed, so omitting the key IS the guarantee: the
+      // handler merges onto the stored row and leaves the chips standing.
+      expect(created.action.payload.metadata).not.toHaveProperty('nextTurnSuggestions')
+      // Folded from an absent previous entry (this row is itself the tail), so the
+      // emitted delta of 5 lands on a base of 0.
+      expect(created.action.payload.metadata.worldTime).toBe(5)
     })
 
     it('does not fire the phase at all when state succeeded, regardless of suggestionsCaptured (purely state-driven)', async () => {
