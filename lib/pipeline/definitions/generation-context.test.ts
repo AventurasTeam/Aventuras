@@ -1213,4 +1213,13 @@ describe('buildGenerationContext — worldTimeDeltaBasis', () => {
     const context = await buildContext({ entries: [entry(1, 'opening', 0)] })
     expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
   })
+
+  // A retro-edit of the AI reply's own footer makes the pair unequal without the action
+  // having advanced anything, and inequality alone would read that as sinceUserAction.
+  it('is sinceLastAiReply when the action sits BEFORE the reply', async () => {
+    const context = await buildContext({
+      entries: [entry(1, 'ai_reply', 900), entry(2, 'user_action', 300)],
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
 })

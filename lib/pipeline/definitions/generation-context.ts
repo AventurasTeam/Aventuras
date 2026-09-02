@@ -136,14 +136,21 @@ const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
  * the user advanced time on the action itself (the world-time footer is editable
  * there), and the delta measures from its end.
  */
-function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): string {
+export type WorldTimeDeltaBasis = 'sinceUserAction' | 'sinceLastAiReply'
+
+function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): WorldTimeDeltaBasis {
   const tail = rows.at(-1)
   const previous = rows.at(-2)
   if (tail?.kind !== 'user_action' || previous == null || !NARRATIVE_KINDS.has(previous.kind))
     return 'sinceLastAiReply'
-  return tail.metadata?.worldTime !== previous.metadata?.worldTime
-    ? 'sinceUserAction'
-    : 'sinceLastAiReply'
+  const action = tail.metadata?.worldTime
+  const reply = previous.metadata?.worldTime
+  // Only a forward advance is evidence the user moved time on the action itself. A
+  // missing value (the column is nullable) or a backward one is a broken premise, not
+  // the other basis, and the inclusive reading is the safe default either way.
+  if (typeof action !== 'number' || typeof reply !== 'number' || action < reply)
+    return 'sinceLastAiReply'
+  return action > reply ? 'sinceUserAction' : 'sinceLastAiReply'
 }
 
 /**
