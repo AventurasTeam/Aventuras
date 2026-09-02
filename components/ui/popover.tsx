@@ -143,7 +143,11 @@ function PopoverContent({
                 onOpenAutoFocus={onOpenAutoFocus}
                 {...webProps}
                 className={cn(
-                  'z-50 w-72 rounded-md border border-border bg-bg-overlay p-4 outline-none',
+                  // z-100, matching Select: a popover must paint over a Dialog or
+                  // Sheet whose trigger is still visible (layout.md → Stacking,
+                  // "Popover over anything"). At the Dialog's own z-50 it ties and
+                  // loses to the modal it was opened from.
+                  'z-[100] w-72 rounded-md border border-border bg-bg-overlay p-4 outline-none',
                   // Web fade-in — native uses reanimated FadeIn.
                   Platform.select({ web: 'animate-fade-in' }),
                   className,

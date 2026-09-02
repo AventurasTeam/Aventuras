@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { Button } from './button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from './dialog'
 import { Heading } from './heading'
 import { Popover, PopoverContent, PopoverTrigger } from './popover'
 import { Text } from './text'
@@ -172,3 +174,46 @@ export const Accessibility: Story = {
 // (one theme at a time), or visit the native dev page at /dev/popover
 // where the ThemePicker drives data-theme globally and portals
 // inherit correctly.
+
+// layout.md → Stacking: "Popover over anything — they fire over a Sheet or Modal
+// when their trigger is visible." At the Dialog's own z-50 a popover ties with the
+// modal it was opened from and loses on paint order, which is how the scene editor's
+// multi-select ended up rendering behind its own dialog.
+export const OverAModal: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Host modal</DialogTitle>
+        </DialogHeader>
+        <Popover ariaLabel="Nested popover">
+          <PopoverTrigger asChild>
+            <Button>
+              <Text>Open popover</Text>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent>
+            <Text>Above the modal</Text>
+          </PopoverContent>
+        </Popover>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Open popover' }))
+    const content = await screen.findByText('Above the modal')
+
+    // Occlusion is not assertable through visibility alone — a covered element still
+    // reports visible. Compare the stacking values the two overlays actually resolve to.
+    const popoverLayer = content.closest('[class*="z-"]') as HTMLElement | null
+    const dialogLayer = screen
+      .getByText('Host modal')
+      .closest('[class*="z-"]') as HTMLElement | null
+    if (popoverLayer == null || dialogLayer == null) throw new Error('expected both layers')
+
+    const popoverZ = Number(getComputedStyle(popoverLayer).zIndex)
+    const dialogZ = Number(getComputedStyle(dialogLayer).zIndex)
+    expect(Number.isNaN(popoverZ)).toBe(false)
+    expect(popoverZ).toBeGreaterThan(dialogZ)
+  },
+}
