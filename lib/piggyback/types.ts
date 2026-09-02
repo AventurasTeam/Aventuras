@@ -46,7 +46,8 @@ export type ParsedStateBlock = {
   summary?: string
 }
 
-export type ParseFieldFailure = { field: keyof ParsedStateBlock; detail: string }
+// `'state'` is the block-level failure: a <state> that parsed into no field at all.
+export type ParseFieldFailure = { field: keyof ParsedStateBlock | 'state'; detail: string }
 
 export type ParseStateBlockResult = {
   block: ParsedStateBlock

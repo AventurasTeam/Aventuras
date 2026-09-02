@@ -192,6 +192,20 @@ export function parseStateBlock(raw: string): ParseStateBlockResult {
     }
   }
 
+  // Deliberately stricter than assertNotTruncated's field-level rule: an empty
+  // <visual_changes> reports "none", but there is no such thing as a turn with no
+  // state, so an empty <state> means the same as a MISSING one — which already
+  // fires the fallback. Left unrecorded it reads as a clean parse instead, and
+  // suppresses the very recovery it needs (per-turn.ts -> piggybackOutcome).
+  if (Object.keys(block).length === 0 && failures.length === 0)
+    failures.push({
+      field: 'state',
+      detail:
+        stateSegment.trim().length === 0
+          ? 'block was empty or truncated at the open tag'
+          : 'block content matched no known field tag',
+    })
+
   return { block, failures, blockFound: true }
 }
 

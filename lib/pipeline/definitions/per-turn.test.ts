@@ -813,6 +813,85 @@ describe('per-turn pipeline declaration', () => {
     const fallbackResult = await fallbackGen.next()
     expect(fallbackResult).toEqual({ done: true, value: { status: 'completed' } })
   })
+
+  // An empty block used to satisfy `blockFound && !failures`, which marked the turn a
+  // clean parse, suppressed the fallback, and left the row with no stateReport at all.
+  it('treats an empty <state> block as a failed parse and keeps the raw block as evidence', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          ...provider,
+          cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+        },
+      ],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      stream: {
+        fullStream: (async function* () {
+          yield { type: 'text-delta', text: 'Narrative text\n<state></state>' }
+        })(),
+      },
+    })
+
+    ensurePerTurnPipelineRegistered()
+    const narrativeNode = getPipeline(PER_TURN_KIND).phases[2]
+    if (!narrativeNode || !('run' in narrativeNode)) throw new Error('expected narrative phase')
+
+    const intermediates: Record<string, unknown> = {}
+    const gen = narrativeNode.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+
+    // succeeded: false is what lets shouldFallbackFire admit the recovery phase.
+    expect(intermediates.piggybackOutcome).toEqual({ attempted: true, succeeded: false })
+
+    const created = events.find(
+      (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+    )
+    if (!created || created.type !== 'delta_emitted' || created.action.kind !== 'createStoryEntry')
+      throw new Error('expected a createStoryEntry delta')
+    const { metadata } = created.action.payload.entry
+    expect(metadata?.stateReport?.failedFields).toEqual([
+      { field: 'state', detail: 'block was empty or truncated at the open tag' },
+    ])
+    // content no longer carries the markup, so the report is the only remaining copy.
+    expect(metadata?.stateReport?.raw).toBe('<state></state>')
+  })
 })
 
 const SUGGESTION_CATEGORIES = [

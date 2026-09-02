@@ -136,10 +136,38 @@ describe('parseStateBlock', () => {
     expect(result.block.worldTimeDelta).toBe(30)
   })
 
-  it('an empty <state></state> block parses with every field absent', () => {
+  // An empty block must not read as a clean parse: that sets piggybackParseSucceeded,
+  // which suppresses the fallback classifier and strands the turn with no state.
+  it('records a block-level failure for an empty <state></state>', () => {
     const result = parseStateBlock('<state></state>')
     expect(result.blockFound).toBe(true)
     expect(result.block).toEqual({})
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block was empty or truncated at the open tag' },
+    ])
+  })
+
+  it('records a block-level failure when the stream truncates at the open tag', () => {
+    const result = parseStateBlock('Some prose.<state>')
+    expect(result.blockFound).toBe(true)
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block was empty or truncated at the open tag' },
+    ])
+  })
+
+  it('records a block-level failure when every inner tag is unrecognised', () => {
+    const result = parseStateBlock('<state><scene>c1, c2</scene></state>')
+    expect(result.block).toEqual({})
+    expect(result.failures).toEqual([
+      { field: 'state', detail: 'block content matched no known field tag' },
+    ])
+  })
+
+  // Guards the other direction: one parsed field is a real report, however sparse,
+  // and must not be reclassified as a failure.
+  it('leaves a block that parsed a single field alone', () => {
+    const result = parseStateBlock('<state><summary>Kael left.</summary></state>')
+    expect(result.block).toEqual({ summary: 'Kael left.' })
     expect(result.failures).toEqual([])
   })
 })
