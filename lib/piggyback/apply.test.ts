@@ -596,4 +596,64 @@ describe('buildPiggybackActions', () => {
       },
     ])
   })
+
+  // These two decisions were previously visible only in classifier.* warn logs, which
+  // are a no-op unless diagnostics is on. Returning them is what lets the report record
+  // the cause instead of leaving the reader to guess it from a difference.
+  describe('applied outcomes', () => {
+    it('reports the clamped delta while metadata carries the clamped total', () => {
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { worldTimeDelta: -600 },
+        entities: [],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.worldTimeDelta).toBe(0)
+      expect(result.metadata.worldTime).toBe(previousMetadata.worldTime)
+    })
+
+    it('passes an unclamped delta through unchanged', () => {
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { worldTimeDelta: 30 },
+        entities: [],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.worldTimeDelta).toBe(30)
+      expect(result.applied.currentLocationRejected).toBe(false)
+    })
+
+    it('flags a location the model named that is not a location', () => {
+      const sword = mockEntity({ id: 'item_sword', kind: 'item', name: 'Sword' })
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { currentLocation: 'item_sword' },
+        entities: [sword],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(true)
+      // The rejection is why the previous location was kept, so both must agree.
+      expect(result.metadata.currentLocationId).toBe(previousMetadata.currentLocationId)
+    })
+
+    it('does not flag a location the model named correctly', () => {
+      const keep = mockEntity({ id: 'loc_keep', kind: 'location', name: 'The Keep' })
+      const result = buildPiggybackActions({
+        source: 'ai_classifier',
+        entryId: 'entry_1',
+        block: { currentLocation: 'loc_keep' },
+        entities: [keep],
+        previousMetadata,
+        branchId: 'main',
+      })
+      expect(result.applied.currentLocationRejected).toBe(false)
+      expect(result.metadata.currentLocationId).toBe('loc_keep')
+    })
+  })
 })

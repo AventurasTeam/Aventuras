@@ -225,22 +225,27 @@ field, since it is the number the model actually emitted.
 
 ### Emitted vs. applied
 
-`stateReport` records what the model emitted; the absolute triple
-records what survived validation. Two fields can disagree, and the
+`stateReport` records what the model emitted **and** what `apply.ts`
+did with it. Two fields can disagree with the absolute triple, and the
 panel shows the disagreement rather than hiding it:
 
 - **Location rejected.** `apply.ts` refuses a `currentLocation` that
   does not resolve to a `kind='location'` entity and inherits the
   previous location instead. The panel renders the rejected value
-  struck through beside the location that was actually applied.
+  struck through beside the location that was actually applied, keyed
+  on `stateReport.currentLocationRejected`.
 - **Delta clamped.** A negative or non-finite `worldTimeDelta` clamps
   to zero, and one that would push `worldTime` past the renderable
   ceiling clamps to the remaining headroom. The panel renders the
-  emitted value with the applied value beside it.
+  emitted value with `worldTimeDeltaApplied` beside it whenever the
+  two differ, which covers all three clamp causes.
 
-Both cases currently reach only the `classifier.current_location_rejected`
-and `classifier.delta_clamped` logs. Surfacing them is a side effect
-of persisting the emitted values, and is the point of doing so.
+The panel keys on the recorded decisions rather than comparing
+`stateReport` against the absolute triple. The report is immutable
+provenance while the triple is user-editable, so a comparison labels
+every scene edit as a model rejection; and the panel has no access to
+the previous entry's `worldTime`, so it cannot recover the applied
+delta by subtraction.
 
 **Resolution uses one pool, not the scene list.** A transfer's counterparty
 and a rejected location routinely sit outside the current scene, so

@@ -1722,6 +1722,8 @@ story_entries.metadata: {
     sceneEntities?: string[]         // as emitted, post-substitution
     currentLocation?: string         // as emitted; NOT nullable — the model cannot emit null, and a leaf may not stack optional over nullable, see [Entry mutability & rollback](#entry-mutability--rollback)
     worldTimeDelta?: number          // seconds, as emitted before clamping
+    worldTimeDeltaApplied?: number   // what apply.ts actually added to worldTime; absent when nothing was applied
+    currentLocationRejected?: true   // apply.ts refused the emitted id; absent otherwise, never false
     visualChanges?: { id: string; type: VisualChangeType; text: string }[]
     transfers?: { items: ItemTransfer[]; stackables: StackableTransfer[] }
     failedFields?: { field: string; detail: string }[]  // the failed NARRATIVE attempt, retained even once a fallback supplied the fields
@@ -1784,20 +1786,25 @@ exist specifically to say what happened. Divergence between report and
 absolute after an edit is the correct outcome and is rendered as such
 (see [EntryCard → World-state panel](./ui/patterns/entry-card.md#world-state-panel)).
 
-**The report records what was emitted, not what was applied.** Two
-fields can differ from the absolute state beside them, and both
-differences are surfaced rather than swallowed:
+**The report records what was emitted and what `apply.ts` did with
+it.** Two fields can differ from the absolute state beside them:
 
-- `currentLocation` is rejected by `apply.ts` when the id does not
-  resolve to a `kind='location'` entity, and the previous location is
-  inherited instead.
+- `currentLocation` is rejected when the id does not resolve to a
+  `kind='location'` entity, and the previous location is inherited
+  instead. `currentLocationRejected` records that decision.
 - `worldTimeDelta` is clamped to `0` when negative or non-finite, and
-  to the remaining headroom when it would push `worldTime` past
-  `MAX_WORLD_TIME_SECONDS`.
+  to the remaining headroom when it would push `worldTime` past the
+  ceiling. `worldTimeDeltaApplied` records what landed.
 
-Both cases previously reached only the `classifier.current_location_rejected`
-and `classifier.delta_clamped` logs. Persisting the emitted value is
-what lets the reader see them.
+The decision is recorded rather than re-derived, because the
+difference alone does not identify its cause. An emitted location
+unequal to `currentLocationId` also describes a user scene edit, which
+is a correct outcome rather than a model error; and the reader holds
+this entry's `worldTime` but not the previous entry's, so it cannot
+recover the applied delta by subtraction. Both decisions are known
+inside `apply.ts`, which raises the
+`classifier.current_location_rejected` and `classifier.delta_clamped`
+logs at the same points.
 
 **One report, two possible writers.** On a failed narrative parse the
 per-turn fallback classifier writes the same entry's metadata, so the

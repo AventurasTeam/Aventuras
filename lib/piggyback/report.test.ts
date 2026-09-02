@@ -16,6 +16,61 @@ describe('buildStateReport', () => {
     expect(report?.worldTimeDelta).toBe(-600)
   })
 
+  it('records the applied delta alongside the emitted one', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { worldTimeDelta: -600 },
+      failures: [],
+      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+    })
+    expect(report?.worldTimeDelta).toBe(-600)
+    expect(report?.worldTimeDeltaApplied).toBe(0)
+  })
+
+  // The headroom clamp is the case `worldTimeDelta < 0` never caught: a positive
+  // emitted value that apply.ts still had to truncate.
+  it('records a headroom clamp, which the emitted value alone cannot reveal', () => {
+    const report = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { worldTimeDelta: 9_000_000 },
+      failures: [],
+      applied: { worldTimeDelta: 120, currentLocationRejected: false },
+    })
+    expect(report?.worldTimeDelta).toBe(9_000_000)
+    expect(report?.worldTimeDeltaApplied).toBe(120)
+  })
+
+  it('flags a rejected location only when apply.ts rejected it', () => {
+    const rejected = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { currentLocation: 'item_sword' },
+      failures: [],
+      applied: { worldTimeDelta: 0, currentLocationRejected: true },
+    })
+    expect(rejected?.currentLocationRejected).toBe(true)
+
+    // An accepted location must leave the key absent: the panel keys its strikethrough
+    // off presence, and a later user edit must not be able to manufacture one.
+    const accepted = buildStateReport({
+      layer: 'piggyback_tagged_block',
+      block: { currentLocation: 'loc_keep' },
+      failures: [],
+      applied: { worldTimeDelta: 0, currentLocationRejected: false },
+    })
+    expect(accepted).not.toHaveProperty('currentLocationRejected')
+  })
+
+  // Rows written before this field existed, and turns where nothing was applied.
+  it('omits the applied delta when no apply outcome is supplied', () => {
+    const report = buildStateReport({
+      layer: 'per_turn_classifier',
+      block: { worldTimeDelta: 30 },
+      failures: [],
+    })
+    expect(report?.worldTimeDelta).toBe(30)
+    expect(report).not.toHaveProperty('worldTimeDeltaApplied')
+  })
+
   it('omits raw and failedFields on a clean parse', () => {
     const report = buildStateReport({
       layer: 'piggyback_tagged_block',

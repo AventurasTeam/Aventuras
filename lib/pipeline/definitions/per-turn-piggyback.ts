@@ -202,6 +202,22 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
+  const {
+    metadata: scenePatch,
+    actions,
+    applied,
+  } = buildPiggybackActions({
+    entryId: tail.id,
+    block: resolvedBlock,
+    entities,
+    previousMetadata: {
+      ...inheritedEntryMetadata(previousEntry?.metadata),
+      ...(previousEntry?.id ? { entryId: previousEntry.id } : {}),
+    },
+    branchId: ctx.branchId,
+    source: 'per_turn_classifier',
+  })
+
   // `layer` names whoever ultimately supplied the fields — this phase did. The prior
   // report, when there is one, is the narrative fold's FAILED attempt: its failedFields
   // and raw survive so the parse failure stays inspectable, but its layer does not.
@@ -215,19 +231,8 @@ export async function* piggybackFallbackClassifierPhase(
       ...(priorReport?.failedFields ?? []),
       ...failures.map((f) => ({ field: f.field, detail: f.detail })),
     ],
+    applied,
     ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
-  })
-
-  const { metadata: scenePatch, actions } = buildPiggybackActions({
-    entryId: tail.id,
-    block: resolvedBlock,
-    entities,
-    previousMetadata: {
-      ...inheritedEntryMetadata(previousEntry?.metadata),
-      ...(previousEntry?.id ? { entryId: previousEntry.id } : {}),
-    },
-    branchId: ctx.branchId,
-    source: 'per_turn_classifier',
   })
 
   const rawSuggestions =

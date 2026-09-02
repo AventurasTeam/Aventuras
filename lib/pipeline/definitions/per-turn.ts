@@ -223,6 +223,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
         layer: 'piggyback_tagged_block',
         block: resolvedBlock,
         failures: parseFailures,
+        ...(piggybackApplied !== undefined ? { applied: piggybackApplied.applied } : {}),
         ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
       })
     : undefined

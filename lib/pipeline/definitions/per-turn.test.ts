@@ -389,6 +389,9 @@ describe('per-turn pipeline declaration', () => {
                 layer: 'piggyback_tagged_block',
                 sceneEntities: [heroId],
                 worldTimeDelta: 15,
+                // Equal to the emitted value: nothing was clamped, and the panel needs
+                // both numbers to tell that apart from a clamp that landed on 15.
+                worldTimeDeltaApplied: 15,
               },
             }),
           }),

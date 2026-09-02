@@ -13,18 +13,20 @@ type BuildReportArgs = {
   failures: { field: string; detail: string }[]
   /** The trailing block's own text. Retained only when a field failed. */
   raw?: string
+  /** What apply.ts did with the emitted values. Absent when nothing was applied. */
+  applied?: { worldTimeDelta: number; currentLocationRejected: boolean }
 }
 
 /**
- * The turn's report as persisted. Records what the model EMITTED — `apply.ts`
- * separately decides what survives validation, and the divergence between the two is
- * what the reader's panel shows (docs/ui/patterns/entry-card.md → Emitted vs. applied).
+ * The turn's report as persisted: what the model EMITTED, plus what `apply.ts` did with
+ * it. Both are recorded because several causes collapse onto the same emitted-vs-current
+ * difference (docs/ui/patterns/entry-card.md → Emitted vs. applied).
  *
  * `summary` is deliberately not copied: it has a top-level home on EntryMetadata, and
  * a second copy here would give the reader two sources for one sentence.
  */
 export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateReport'] {
-  const { layer, block, failures, raw } = args
+  const { layer, block, failures, raw, applied } = args
   const { summary: _summary, ...reported } = block
   if (Object.keys(reported).length === 0 && failures.length === 0) return undefined
 
@@ -35,6 +37,12 @@ export function buildStateReport(args: BuildReportArgs): EntryMetadata['stateRep
       ? { currentLocation: reported.currentLocation }
       : {}),
     ...(reported.worldTimeDelta !== undefined ? { worldTimeDelta: reported.worldTimeDelta } : {}),
+    ...(reported.worldTimeDelta !== undefined && applied !== undefined
+      ? { worldTimeDeltaApplied: applied.worldTimeDelta }
+      : {}),
+    ...(applied?.currentLocationRejected === true
+      ? { currentLocationRejected: true as const }
+      : {}),
     ...(reported.visualChanges !== undefined ? { visualChanges: reported.visualChanges } : {}),
     ...(reported.transfers !== undefined ? { transfers: reported.transfers } : {}),
     ...(failures.length > 0

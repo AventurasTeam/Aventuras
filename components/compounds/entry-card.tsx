@@ -467,10 +467,19 @@ function WorldStatePanel({
   const stackables = stateReport?.transfers?.stackables ?? []
   const hasChanges = visualChanges.length + items.length + stackables.length > 0
 
-  // The report records what the model EMITTED; the absolute fields record what
-  // survived validation. Both divergences reach only the classifier.* warn logs today.
   const emittedLocation = stateReport?.currentLocation
-  const locationRejected = emittedLocation != null && emittedLocation !== currentLocationId
+  // Read as a recorded fact, not inferred from `emitted !== current`: that inequality
+  // also goes true when the user edits the location, which is a correct outcome rather
+  // than a model error (docs/data-model.md → Entry metadata shape).
+  // Holds the id rather than a flag: a rejection always names one, and the strikethrough
+  // needs it — keeping the value is what narrows it for the render below.
+  const rejectedLocation =
+    stateReport?.currentLocationRejected === true ? emittedLocation : undefined
+  const emittedDelta = stateReport?.worldTimeDelta
+  const appliedDelta = stateReport?.worldTimeDeltaApplied
+  // Holds the applied value rather than a flag so the copy can name it, and so all three
+  // clamp causes surface — `< 0` caught only the negative one.
+  const clampedTo = appliedDelta != null && appliedDelta !== emittedDelta ? appliedDelta : null
   const failedFields = stateReport?.failedFields ?? []
 
   return (
@@ -520,15 +529,15 @@ function WorldStatePanel({
 
       <StateGroup label={t('reader:entryCard.stateLocation')}>
         <StateLine>
-          {locationRejected ? (
+          {rejectedLocation != null ? (
             <Text size="xs" className="text-fg-muted line-through">
-              {`${resolveName(emittedLocation, entityNames)} `}
+              {`${resolveName(rejectedLocation, entityNames)} `}
             </Text>
           ) : null}
           {currentLocationId != null
             ? resolveName(currentLocationId, entityNames)
             : t('reader:entryCard.stateNone')}
-          {locationRejected ? (
+          {rejectedLocation != null ? (
             <Text size="xs" variant="muted">
               {` ${t('reader:entryCard.stateLocationRejected')}`}
             </Text>
@@ -588,9 +597,9 @@ function WorldStatePanel({
         <StateGroup label={t('reader:entryCard.stateDelta')}>
           <StateLine>
             {t('reader:entryCard.stateDeltaSeconds', { n: stateReport.worldTimeDelta })}
-            {stateReport.worldTimeDelta < 0 ? (
+            {clampedTo != null ? (
               <Text size="xs" variant="muted">
-                {` ${t('reader:entryCard.stateDeltaClamped', { n: 0 })}`}
+                {` ${t('reader:entryCard.stateDeltaClamped', { n: clampedTo })}`}
               </Text>
             ) : null}
           </StateLine>

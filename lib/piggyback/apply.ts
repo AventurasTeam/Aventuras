@@ -34,6 +34,9 @@ type BuildResult = {
     summary?: string
   }
   actions: PipelineAction[]
+  /** What validation did to the emitted values, for stateReport — so the reader renders
+   *  the emitted-vs-applied divergence as fact instead of inferring a cause from it. */
+  applied: { worldTimeDelta: number; currentLocationRejected: boolean }
 }
 
 export function buildPiggybackActions(args: BuildArgs): BuildResult {
@@ -41,9 +44,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
 
   const sceneEntities = block.sceneEntities ?? previousMetadata.sceneEntities
   const rawDelta = block.worldTimeDelta ?? 0
-  const worldTime =
-    previousMetadata.worldTime +
-    resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const appliedDelta = resolvePiggybackWorldTimeDelta(rawDelta, entryId, previousMetadata.worldTime)
+  const worldTime = previousMetadata.worldTime + appliedDelta
 
   const actions: PipelineAction[] = []
   const byId = new Map(entities.map((e) => [e.id, e]))
@@ -59,7 +61,8 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // or a legitimate id the prompt just offered would be refused here.
   const named = block.currentLocation
   const namedIsLocation = named !== undefined && byId.get(named)?.kind === 'location'
-  if (named !== undefined && !namedIsLocation) {
+  const currentLocationRejected = named !== undefined && !namedIsLocation
+  if (currentLocationRejected) {
     logger.warn('classifier.current_location_rejected', {
       entryId,
       currentLocation: named,
@@ -181,5 +184,5 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  return { metadata, actions }
+  return { metadata, actions, applied: { worldTimeDelta: appliedDelta, currentLocationRejected } }
 }

@@ -923,12 +923,60 @@ export const WorldStateRejectedLocation: StoryT = {
     currentLocationId: LOC_A,
     entityNames,
     // apply.ts refused the emitted id (an item, not a location) and inherited the
-    // previous location. Reaches only the warn log today.
-    stateReport: { layer: 'piggyback_tagged_block', currentLocation: ITEM_A },
+    // previous location. The flag is what the panel keys on — an emitted id merely
+    // unequal to currentLocationId is a user scene edit, not a rejection.
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      currentLocation: ITEM_A,
+      currentLocationRejected: true,
+    },
   },
   play: async () => {
     await openPanel()
     expect(screen.getByText(/emitted id was not a location/)).toBeVisible()
+  },
+}
+
+// The report is immutable provenance while currentLocationId is user-editable, so an
+// emitted id unequal to the applied one is the ordinary post-edit state. Labelling it a
+// rejection accuses the model of an error the user made deliberately.
+export const WorldStateEditedLocation: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    // The user moved the scene here after the turn landed on LOC_A.
+    currentLocationId: LOC_B,
+    entityNames,
+    stateReport: { layer: 'piggyback_tagged_block', currentLocation: LOC_A },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText('Eldrin Keep')).toBeVisible()
+    expect(screen.queryByText(/emitted id was not a location/)).not.toBeInTheDocument()
+  },
+}
+
+// A positive delta that apply.ts still truncated: the case `worldTimeDelta < 0` could
+// never detect, since nothing about the emitted value alone reveals the headroom bound.
+export const WorldStateHeadroomClampedDelta: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    sceneEntities: [CHAR_A],
+    currentLocationId: LOC_A,
+    entityNames,
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      worldTimeDelta: 9_000_000,
+      worldTimeDeltaApplied: 120,
+    },
+  },
+  play: async () => {
+    await openPanel()
+    expect(screen.getByText(/clamped to 120s/)).toBeVisible()
   },
 }
 
@@ -940,7 +988,11 @@ export const WorldStateClampedDelta: StoryT = {
     sceneEntities: [CHAR_A],
     currentLocationId: LOC_A,
     entityNames,
-    stateReport: { layer: 'piggyback_tagged_block', worldTimeDelta: -600 },
+    stateReport: {
+      layer: 'piggyback_tagged_block',
+      worldTimeDelta: -600,
+      worldTimeDeltaApplied: 0,
+    },
   },
   play: async () => {
     await openPanel()

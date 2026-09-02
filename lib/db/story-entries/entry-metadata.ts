@@ -28,6 +28,13 @@ export const entryMetadataSchema = z.object({
       currentLocation: z.string().optional(),
       // As emitted, before apply.ts clamps it — the divergence is what the reader shows.
       worldTimeDelta: z.number().optional(),
+      // What apply.ts actually added to worldTime. Recorded rather than re-derived: the
+      // reader has this entry's worldTime but not the previous one, so it cannot
+      // subtract, and `< 0` catches only one of the three clamp causes.
+      worldTimeDeltaApplied: z.number().optional(),
+      // Literal true so absence is the only other state: a rejection is a fact apply.ts
+      // knows, while `emitted !== current` also goes true on any later user edit.
+      currentLocationRejected: z.literal(true).optional(),
       visualChanges: z
         .array(z.object({ id: z.string(), type: z.enum(VISUAL_CATEGORIES), text: z.string() }))
         .optional(),
