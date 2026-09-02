@@ -192,12 +192,6 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // The column stores prose only (docs/memory/piggyback.md → Persistence and
   // stripping); everything the block carried is persisted structurally instead.
   const { prose, stateRaw } = stripTrailingBlocks(content)
-  const stateReport = buildStateReport({
-    layer: 'piggyback_tagged_block',
-    block: resolvedBlock,
-    failures: parseFailures,
-    ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
-  })
 
   const piggybackParseSucceeded = parsedState.blockFound && parseFailures.length === 0
   if (piggybackShouldFire && !piggybackParseSucceeded) {
@@ -220,6 +214,18 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
       source: 'piggyback_tagged_block',
     })
   }
+
+  // Gated on the phase having actually applied the block: a model piggyback was not
+  // enabled for can still emit a <state>, and a report badged with this layer would
+  // name an agent that supplied nothing. The fallback writes its own report instead.
+  const stateReport = piggybackShouldFire
+    ? buildStateReport({
+        layer: 'piggyback_tagged_block',
+        block: resolvedBlock,
+        failures: parseFailures,
+        ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
+      })
+    : undefined
 
   ctx.intermediates.piggybackOutcome = {
     attempted: piggybackShouldFire,

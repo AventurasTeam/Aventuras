@@ -1274,4 +1274,18 @@ describe('narrative fold — suggestions', () => {
     })
     expect(prompt).not.toContain('<suggestions>')
   })
+
+  // Both directions: the SAME block must yield a report when this phase applies it and
+  // none when it does not, or the badge names an agent that supplied nothing.
+  it('writes no state report when piggyback is off and the model emits a block anyway', async () => {
+    // A reportable field, not just <summary>: buildStateReport drops summary by design.
+    const narrative = 'p\n<state><world_time_delta>30</world_time_delta></state>'
+
+    const off = await runNarrativeWith({ settings: { piggybackMode: 'off' }, narrative })
+    expect(off.metadata.stateReport).toBeUndefined()
+
+    const on = await runNarrativeWith({ narrative })
+    expect(on.metadata.stateReport?.layer).toBe('piggyback_tagged_block')
+    expect(on.metadata.stateReport?.worldTimeDelta).toBe(30)
+  })
 })
