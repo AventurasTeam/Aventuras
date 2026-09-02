@@ -149,6 +149,10 @@
     "location": "Location",
     "noLocation": "— none —",
     "applyNote": "Saving re-applies scene presence to world state: per-character location, last-seen, and staged promotion. Removing a character does not retire them.",
-    "failed": "Could not save the scene. Try again."
+    "failed": "Could not save the scene. Try again.",
+    "failedInFlight": "Generation is running. Try again once it finishes.",
+    "failedNotTail": "Only the newest entry's scene can be edited.",
+    "failedNoMetadata": "This entry has no world state to edit.",
+    "failedNotFound": "This entry no longer exists."
   }
 }

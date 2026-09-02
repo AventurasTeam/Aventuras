@@ -6,7 +6,9 @@ import type { WorldTimeDecoration } from './worldtime-decoration'
 
 export type StreamingPayload = { content: string; reasoning: string }
 
-export type EditResult = { ok: boolean }
+// `code` is the action layer's rejection code, so a caller can say WHY rather than
+// offering a retry the refusal will never accept.
+export type EditResult = { ok: true } | { ok: false; code?: string }
 
 export type ReaderSurfaceHandle = { jumpToBottom: () => void }
 

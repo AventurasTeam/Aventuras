@@ -4,6 +4,8 @@ import {
   SceneEditForm,
   type SceneEdit,
   type SceneOptions,
+  sceneSaveErrorKey,
+  type SceneSaveResult,
 } from '@/components/compounds/scene-edit-form'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { t } from '@/lib/i18n'
@@ -12,7 +14,7 @@ type SceneEditSheetProps = {
   sceneEntities: readonly string[]
   currentLocationId: string | null
   options: SceneOptions
-  onSave: (next: SceneEdit) => Promise<boolean>
+  onSave: (next: SceneEdit) => Promise<SceneSaveResult>
   onClose: () => void
 }
 
@@ -35,10 +37,11 @@ export function SceneEditSheet({
     setSaving(true)
     setSaveError(undefined)
     try {
-      if (await onSave(next)) {
+      const result = await onSave(next)
+      if (result.ok) {
         onClose()
       } else {
-        setSaveError(t('reader:sceneEdit.failed'))
+        setSaveError(t(sceneSaveErrorKey(result.code)))
       }
     } catch {
       setSaveError(t('reader:sceneEdit.failed'))

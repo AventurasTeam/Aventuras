@@ -1048,12 +1048,61 @@ export const WorldStateTailEditable: StoryT = {
     ...aiEntry,
     ...reportedProps,
     sceneOptions,
-    onEditScene: fn(async () => true),
+    onEditScene: fn(async () => ({ ok: true }) as const),
   },
   play: async () => {
     await openPanel()
     await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+  },
+}
+
+// A terminal refusal must say why. The generic "try again" sends the user round a loop
+// the action layer will refuse identically every time.
+export const WorldStateSaveRefused: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'not-tail-entry' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    // An unchanged Save takes the form's cancel route and never reaches onEditScene.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(screen.getByText("Only the newest entry's scene can be edited.")).toBeVisible(),
+    )
+    expect(screen.queryByText('Could not save the scene. Try again.')).not.toBeInTheDocument()
+    // The overlay stays open on failure, so the edit is not silently discarded.
+    expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible()
+  },
+}
+
+// A retryable failure keeps the generic copy, which is accurate for that one case.
+export const WorldStateSaveFailed: StoryT = {
+  ...wrap,
+  args: {
+    ...baseProps,
+    ...aiEntry,
+    ...reportedProps,
+    sceneOptions,
+    onEditScene: fn(async () => ({ ok: false, code: 'delta-failed' }) as const),
+  },
+  play: async () => {
+    await openPanel()
+    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Corin' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(screen.getByText('Could not save the scene. Try again.')).toBeVisible(),
+    )
   },
 }
 

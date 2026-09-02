@@ -144,7 +144,7 @@ const ReaderRow = memo(function ReaderRow({
       stateReport={row.metadata?.stateReport}
       summary={row.metadata?.summary}
       sceneOptions={isTail ? sceneOptions : undefined}
-      onEditScene={isTail ? async (next) => (await onEditScene(row.id, next)).ok : undefined}
+      onEditScene={isTail ? (next) => onEditScene(row.id, next) : undefined}
       onRequestEditScene={isTail ? () => onRequestEditScene(row.id) : undefined}
     />
   )

@@ -79,6 +79,7 @@ export function useSceneEditing(
           reason: result.reason,
           code: result.code,
         })
+        return { ok: false, ...(result.code !== undefined ? { code: result.code } : {}) }
       } catch (err) {
         logger.error('action_layer.scene_edit_failed', {
           branchId,

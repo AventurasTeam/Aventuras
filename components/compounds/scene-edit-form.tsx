@@ -10,6 +10,36 @@ import { t } from '@/lib/i18n'
 
 type EntityOption = { id: string; name: string }
 
+/** Mirrors the action layer's rejection, which the bridge carries as plain JSON. */
+export type SceneSaveResult = { ok: true } | { ok: false; code?: string }
+
+/**
+ * Only `deltaFailed` is worth retrying. The others are terminal, and the generic
+ * "try again" copy sends the user round a loop they cannot exit. Codes are
+ * STORY_ENTRY_REJECTION's (lib/actions/story-entries/register.ts).
+ */
+type SceneSaveErrorKey =
+  | 'reader:sceneEdit.failed'
+  | 'reader:sceneEdit.failedInFlight'
+  | 'reader:sceneEdit.failedNotTail'
+  | 'reader:sceneEdit.failedNoMetadata'
+  | 'reader:sceneEdit.failedNotFound'
+
+export function sceneSaveErrorKey(code: string | undefined): SceneSaveErrorKey {
+  switch (code) {
+    case 'in-flight-gated':
+      return 'reader:sceneEdit.failedInFlight'
+    case 'not-tail-entry':
+      return 'reader:sceneEdit.failedNotTail'
+    case 'no-metadata':
+      return 'reader:sceneEdit.failedNoMetadata'
+    case 'not-found':
+      return 'reader:sceneEdit.failedNotFound'
+    default:
+      return 'reader:sceneEdit.failed'
+  }
+}
+
 export type SceneEdit = { sceneEntities: string[]; currentLocationId: string | null }
 
 export type SceneOptions = {

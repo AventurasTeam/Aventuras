@@ -41,7 +41,7 @@ import { stripTrailingBlocks } from '@/lib/piggyback'
 import { cn } from '@/lib/utils'
 
 import { RichEntryContent } from './rich-entry-content'
-import { SceneEditForm } from './scene-edit-form'
+import { SceneEditForm, sceneSaveErrorKey, type SceneSaveResult } from './scene-edit-form'
 import { WorldTimeEditForm, type MonotonicityBreak } from './world-time-edit-form'
 
 type EntryKind = StoryEntry['kind'] | 'streaming'
@@ -105,7 +105,7 @@ type EntryCardProps = {
    * failed write. Presence also gates the edit control, so the host supplies it on
    * the tail entry alone — a non-tail card renders no control at all.
    */
-  onEditScene?: (next: SceneEdit) => Promise<boolean>
+  onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
   /** Phone: the compound requests; the host presents the native Sheet. */
   onRequestEditScene?: () => void
   /** Candidate pool for the editor's selects; required alongside either handler. */
@@ -257,7 +257,7 @@ function SceneEditDialog({
   sceneEntities: readonly string[]
   currentLocationId: string | null
   options: SceneOptions
-  onEditScene?: (next: SceneEdit) => Promise<boolean>
+  onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
 }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
@@ -267,10 +267,11 @@ function SceneEditDialog({
     setSaving(true)
     setSaveError(undefined)
     try {
-      if (await onEditScene?.(next)) {
+      const result = await onEditScene?.(next)
+      if (result?.ok) {
         onOpenChange(false)
       } else {
-        setSaveError(t('reader:sceneEdit.failed'))
+        setSaveError(t(sceneSaveErrorKey(result?.code)))
       }
     } catch {
       setSaveError(t('reader:sceneEdit.failed'))

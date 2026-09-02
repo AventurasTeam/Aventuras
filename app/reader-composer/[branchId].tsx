@@ -1373,7 +1373,7 @@ export default function ReaderComposerRoute() {
           sceneEntities={sceneEdit.sceneEntities}
           currentLocationId={sceneEdit.currentLocationId}
           options={sceneOptions}
-          onSave={async (next) => (await editScene(sceneEdit.entryId, next)).ok}
+          onSave={(next) => editScene(sceneEdit.entryId, next)}
           onClose={closeSceneEdit}
         />
       ) : null}
