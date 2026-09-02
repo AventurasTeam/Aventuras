@@ -182,7 +182,7 @@ export function ImportDialog<TPayload>({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent scrollable={false}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>

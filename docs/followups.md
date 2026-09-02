@@ -188,3 +188,28 @@ for the placement rule.
   alone tunes one Medium signal inside a scoring model that is being
   replaced. Surfaced 2026-08-06 reviewing
   [Slice 3.4](./implementation/milestones/03-memory-floor/slices/04-retrieval.md).
+
+- **`AlertDialogContent` has no height cap.** The same shape as the
+  `DialogContent` gap fixed 2026-09-02: the overlay is
+  `position: fixed` and never scrolls, and the content sets no
+  `maxHeight`, so a panel taller than the viewport grows past both
+  edges at once and its actions become unreachable with no scrollbar
+  anywhere. Unproven in practice — every current consent gate is short
+  by construction — but silent when it does happen, and a long
+  description or a rich body is all it takes. The fix is the one
+  `DialogContent` now carries, per
+  [`ui/patterns/overlays.md → Dialog — height and scroll`](./ui/patterns/overlays.md#dialog--height-and-scroll):
+  cap at 90% of the `useWindowDimensions()` height, scroll inside it,
+  keep the actions row out of the scroll region.
+
+- **The Dialog scroll region is unverified on native RN.** The cap and
+  its scroll host were verified on web (desktop Electron, measured) and
+  inside the reader's WebView at tablet tier — both RN-Web. No
+  scrollable Dialog is reachable at phone tier, because every phone
+  overlay is either a Sheet or opts out via `scrollable={false}`, so
+  the native React Native path was never exercised on a device. Its
+  only consumers are `CollisionResolveDialog` and the wizard session
+  seam at tablet tier. The specific unknown is whether a
+  `flexShrink` scroll view clamps against the parent's `maxHeight` the
+  way it does under RN-Web. Worth one Android tablet pass when either
+  surface is next touched. Raised 2026-09-02.

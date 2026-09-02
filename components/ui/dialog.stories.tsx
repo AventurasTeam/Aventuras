@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { View } from 'react-native'
+import { expect, screen } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
 import {
@@ -113,4 +114,64 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+// A centred dialog sits in a `position: fixed` overlay that never scrolls, so an
+// uncapped panel grows out of the viewport in both directions and its actions
+// become unreachable — no scrollbar anywhere to bring them back.
+export const TallContent: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Long dialog</DialogTitle>
+          <DialogDescription>More rows than fit on screen.</DialogDescription>
+        </DialogHeader>
+        {Array.from({ length: 60 }, (_, i) => (
+          <Text key={i}>{`Row ${i + 1}`}</Text>
+        ))}
+        <DialogFooter>
+          <Button variant="primary">
+            <Text>Confirm</Text>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async () => {
+    const panel = (await screen.findByText('Long dialog')).closest('[role="dialog"]') as HTMLElement
+    const rect = panel.getBoundingClientRect()
+
+    expect(rect.height).toBeLessThanOrEqual(window.innerHeight * 0.9 + 1)
+    expect(rect.top).toBeGreaterThanOrEqual(0)
+    expect(rect.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+    let scroller: HTMLElement | null = null
+    for (let el = confirm.parentElement; el != null && el !== panel; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        scroller = el
+        break
+      }
+    }
+    expect(scroller).not.toBeNull()
+    expect(scroller!.scrollHeight).toBeGreaterThan(scroller!.clientHeight)
+
+    // Reachability is the point, not the overflow value: scroll to the end and
+    // require the actions to be both on screen and the topmost paint there.
+    scroller!.scrollTop = scroller!.scrollHeight
+    const box = confirm.getBoundingClientRect()
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+    const topMost = document.elementFromPoint(
+      Math.floor(box.left + box.width / 2),
+      Math.floor(box.top + box.height / 2),
+    )
+    expect(confirm.contains(topMost) || confirm === topMost).toBe(true)
+
+    // The × lives outside the scroll region, so scrolling to the end must not
+    // carry it off the top of the panel.
+    const close = screen.getByRole('button', { name: 'Close' })
+    expect(close.getBoundingClientRect().top - rect.top).toBeLessThan(64)
+  },
 }

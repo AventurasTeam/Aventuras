@@ -863,7 +863,7 @@ export function AiAssist<T, P = unknown>(props: AiAssistProps<T, P>) {
               swaps per state and the loading line is wider than the guidance
               label, so a content-sized dialog visibly resizes mid-flow. 32rem
               matches DialogContent's own sm:max-w-lg cap. */}
-          <DialogContent className="w-[32rem]" hideCloseButton>
+          <DialogContent className="w-[32rem]" hideCloseButton scrollable={false}>
             <DialogHeader hasCloseButton={false}>
               <DialogTitle>{title}</DialogTitle>
               {/* Radix warns without a description, and rn-primitives' web Content

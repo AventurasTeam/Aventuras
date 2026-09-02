@@ -92,7 +92,12 @@ export function EmbedderDownloadDialogView(props: EmbedderDownloadDialogViewProp
           the design spec: "560px-capped centered shape." */}
       {/* No header ×: every state carries an explicit affordance, and a header
           close would bypass the machine's cancel path (partial-file cleanup). */}
-      <DialogContent className="sm:max-w-[560px]" portalHost={portalHost} hideCloseButton>
+      <DialogContent
+        className="sm:max-w-[560px]"
+        portalHost={portalHost}
+        hideCloseButton
+        scrollable={false}
+      >
         <Header state={state} />
         <Body {...props} hfInputValue={hfInputValue} onHfInputChange={setHfInputValue} />
         <Footer {...props} hfInputValue={hfInputValue} />

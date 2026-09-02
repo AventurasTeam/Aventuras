@@ -1,7 +1,7 @@
 import * as DialogPrimitive from '@rn-primitives/dialog'
 import { X } from 'lucide-react-native'
 import { Fragment, type ComponentProps, type ReactNode } from 'react'
-import { Platform, View, type ViewProps } from 'react-native'
+import { Platform, ScrollView, useWindowDimensions, View, type ViewProps } from 'react-native'
 import { FadeIn, FadeOut } from 'react-native-reanimated'
 import { FullWindowOverlay as RNFullWindowOverlay } from 'react-native-screens'
 
@@ -48,26 +48,42 @@ function DialogOverlay({
   )
 }
 
+// The overlay is `position: fixed` and never scrolls, so a panel taller than the
+// viewport escapes past both edges — header above it, actions below it, neither
+// reachable. Cap the panel and scroll inside it instead.
+const MAX_HEIGHT_RATIO = 0.9
+
 function DialogContent({
   className,
   portalHost,
   hideCloseButton,
+  scrollable = true,
+  style,
   children,
   ...props
 }: ComponentProps<typeof DialogPrimitive.Content> & {
   portalHost?: string
   /** Hosts whose every state carries an explicit affordance can drop the ×. */
   hideCloseButton?: boolean
+  /**
+   * Opt out when the dialog already owns a bounded scroll region with chrome
+   * around it: two scrollables nested fight for the gesture on Android. The
+   * height cap applies either way.
+   */
+  scrollable?: boolean
 }) {
+  const { height } = useWindowDimensions()
   return (
     <DialogPortal hostName={portalHost}>
       <DialogOverlay>
         <DialogPrimitive.Content
           className={cn(
-            'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col gap-4 rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
+            'relative z-50 mx-auto flex w-full max-w-[calc(100%-2rem)] flex-col rounded-lg border border-border bg-bg-overlay p-6 shadow-lg shadow-black/5 sm:max-w-lg',
+            !scrollable && 'gap-4',
             Platform.select({ web: 'animate-fade-in' }),
             className,
           )}
+          style={[{ maxHeight: height * MAX_HEIGHT_RATIO }, style]}
           {...props}
           // The primitive claims the JS responder for every touch inside the
           // dialog (its guard against a close-on-press overlay). Our native
@@ -77,7 +93,13 @@ function DialogContent({
           // start. Drop it.
           onStartShouldSetResponder={undefined}
         >
-          <>{children}</>
+          {scrollable ? (
+            <ScrollView className="shrink" contentContainerClassName="gap-4">
+              {children}
+            </ScrollView>
+          ) : (
+            <>{children}</>
+          )}
           {hideCloseButton ? null : (
             <DialogPrimitive.Close
               className={cn(
