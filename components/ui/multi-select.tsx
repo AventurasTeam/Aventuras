@@ -185,6 +185,8 @@ export type MultiSelectListProps = {
    * a plain ScrollView's touches fight the sheet's drag gesture.
    */
   insideSheet?: boolean
+  /** Override the scroll host. `'none'` when an ancestor already scrolls. */
+  scroll?: 'bounded' | 'none'
   className?: string
 }
 
@@ -202,6 +204,7 @@ export function MultiSelectList({
   onChange,
   disabled,
   insideSheet = false,
+  scroll,
   className,
 }: MultiSelectListProps) {
   const normalized = useMemo(() => normalizeSelection(selected, options), [selected, options])
@@ -230,7 +233,7 @@ export function MultiSelectList({
         onClearAll={handleClearAll}
         onToggle={disabled === true ? () => {} : handleToggle}
         insideSheet={insideSheet}
-        scroll={insideSheet ? 'none' : 'bounded'}
+        scroll={scroll ?? (insideSheet ? 'none' : 'bounded')}
       />
     </View>
   )

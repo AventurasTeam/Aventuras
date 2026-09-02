@@ -292,6 +292,9 @@ function SceneEditDialog({
       <DialogContent
         className="max-w-xl"
         hideCloseButton={saving}
+        // The form pins its own actions below a scrolling body, the same shape the
+        // sheet uses; a primitive-owned scroll region would swallow them.
+        scrollable={false}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
           ;(event.currentTarget as HTMLElement | null)?.focus()

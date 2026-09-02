@@ -1,6 +1,6 @@
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { useMemo, useState } from 'react'
-import { View, type ViewProps, type ViewStyle } from 'react-native'
+import { ScrollView, View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
 import { MultiSelectList } from '@/components/ui/multi-select'
@@ -42,7 +42,11 @@ const NO_LOCATION = '__none__'
 
 const FILL: ViewStyle = { flex: 1 }
 
-/** Scroll host for the form body: the sheet's own on phone, plain layout in a Dialog. */
+/**
+ * Scroll host for the form body. The sheet needs gorhom's own so the rows don't
+ * fight its drag gesture; the dialog uses a plain one. Either way the body is the
+ * part that scrolls, so the actions below it stay pinned.
+ */
 function Body({
   insideSheet,
   children,
@@ -50,7 +54,13 @@ function Body({
   insideSheet: boolean
   children: ViewProps['children']
 }) {
-  if (!insideSheet) return <View className="gap-3">{children}</View>
+  if (!insideSheet) {
+    return (
+      <ScrollView className="shrink" contentContainerClassName="gap-3">
+        {children}
+      </ScrollView>
+    )
+  }
   return (
     <BottomSheetScrollView contentContainerClassName="gap-3 pb-3" style={FILL}>
       {children}
@@ -106,9 +116,10 @@ export function SceneEditForm({
   }
 
   return (
-    <View className={insideSheet ? 'flex-1' : undefined}>
-      {/* One scroll region for the whole body, with the actions pinned below it: the
-          lists are unbounded, and Save must stay reachable without scrolling to it. */}
+    <View className={insideSheet ? 'flex-1' : 'shrink'}>
+      {/* The body scrolls and the actions sit outside it, so Save stays reachable
+          without scrolling to it. The lists below are unbounded, so nothing inside
+          them may add a scroll region of its own. */}
       <Body insideSheet={insideSheet}>
         <View className="gap-1">
           <Text size="xs" variant="muted" className="uppercase tracking-wide">
@@ -120,6 +131,7 @@ export function SceneEditForm({
             onChange={setScene}
             disabled={saving}
             insideSheet={insideSheet}
+            scroll="none"
           />
         </View>
 
@@ -155,9 +167,7 @@ export function SceneEditForm({
         </View>
       ) : null}
 
-      <View
-        className={insideSheet ? 'flex-row justify-end gap-2 pt-3' : 'flex-row justify-end gap-2'}
-      >
+      <View className="flex-row justify-end gap-2 pt-3">
         <Button variant="ghost" size="sm" onPress={onCancel} disabled={saving}>
           <Text>{t('cancel')}</Text>
         </Button>

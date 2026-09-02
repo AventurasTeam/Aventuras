@@ -389,6 +389,18 @@ download's log pane, the wizard's AI-assist list. Two nested
 scrollables fight for the gesture on Android, and the host's own
 region is the one that should win.
 
+**Pinned actions.** The primitive scrolls everything it is handed,
+the actions row included, and it cannot pin that row on the host's
+behalf: no consumer renders `DialogFooter` as a direct child of
+`DialogContent`. The actions live inside a stateful body component —
+the scene editor's form, each collision-resolve mode, the world-time
+footer — so the primitive never sees them among its own children and
+has nothing to partition. A host that wants pinned actions takes
+`scrollable={false}` and adopts the shape a Sheet already uses: a
+body that scrolls and shrinks, with the actions row outside it. The
+scene editor does this, which is why it reads identically on both
+tiers.
+
 This is the opposite default from
 [Sheet](#sheet--api-surface), which ships no scroll wrapper at all.
 The asymmetry is deliberate. A Sheet is bounded by its detent, so a
