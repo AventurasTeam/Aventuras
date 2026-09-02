@@ -137,8 +137,10 @@
   .wt-mono-break { font-size: 11px; line-height: 1; }
   .wt-mono-break[title] { cursor: help; }
 
-  /* world-time edit popover (desktop) — anchored to footer.
-     Static centered overlay in the wireframe for review; real impl anchors to the footer click. */
+  /* world-time edit overlay (desktop) — deliberately NOT anchored to the footer:
+     the trigger lives in a scrolling list, so an anchored popover tracks a footer
+     moving under it. Centred Dialog on desktop/tablet, native Sheet on phone
+     (entry-card.md -> World-time footer). */
   .wt-edit-popover { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
   .wt-edit-popover.open { display: flex; }
   .wt-edit-popover .dialog { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.18); width: 320px; max-width: 100%; }
@@ -155,6 +157,63 @@
   .wt-edit-popover .dialog-foot { padding: 8px 14px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 6px; background: var(--bg); }
   .wt-edit-popover .btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 11px; cursor: pointer; background: var(--bg); color: var(--ink); font-family: inherit; }
   .wt-edit-popover .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* world-state panel — globe toggle in the meta line; body between reasoning and prose
+     (entry-card.md -> World-state panel). Renders on every ai_reply / opening, NOT only
+     where a report exists: the editable fields are the absolute scene triple, which every
+     entry carries. stateReport governs contents, never existence. */
+  .ws-body { display: none; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-soft); border-radius: 4px; background: rgba(0,0,0,0.015); font-size: 11.5px; color: var(--ink); }
+  .bubble.ws-open .ws-body { display: block; }
+  .ws-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft); }
+  .ws-head h4 { margin: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-muted); font-weight: 600; }
+  /* producing-layer badge — the whole of the invisible-fallback fix: before it, a
+     fallback-classifier turn wrote metadata and deltas but touched no content. */
+  .ws-layer { font-size: 9.5px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-muted); }
+  .ws-edit { margin-left: auto; font-size: 11px; color: var(--ink-muted); cursor: pointer; }
+  .ws-edit:hover { color: var(--ink); }
+  .ws-group { margin-bottom: 8px; }
+  .ws-group:last-child { margin-bottom: 0; }
+  .ws-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); margin-bottom: 3px; }
+  .ws-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .ws-chip { padding: 1px 7px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); font-size: 10.5px; }
+  /* stateReport is immutable while entities are deletable, so a dangling id is a
+     PERMANENT state, not a transient one. Never a crash, never a bare UUID. */
+  .ws-chip.unknown { border-style: dashed; color: var(--ink-faint); }
+  .ws-line { line-height: 1.6; }
+  .ws-line .k { color: var(--ink-muted); }
+  /* emitted vs applied — the report records what the model said, the absolute triple
+     records what survived validation. Both disagreements reach only the
+     classifier.current_location_rejected / classifier.delta_clamped logs today. */
+  .ws-rejected { text-decoration: line-through; color: var(--ink-faint); }
+  .ws-applied { color: var(--ink-muted); font-size: 10.5px; }
+  .ws-fail { margin-top: 8px; padding: 6px 8px; border: 1px solid var(--warn); background: var(--warn-bg); border-radius: 3px; font-size: 10.5px; color: #765; }
+  .ws-raw { margin-top: 6px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; white-space: pre-wrap; color: var(--ink-muted); max-height: 88px; overflow: auto; }
+  .ws-note { margin-top: 8px; font-size: 10px; color: var(--ink-faint); font-style: italic; }
+
+  /* scene editor — overlay, not inline: a multi-select over entities plus a single-select
+     location are overlay-shaped controls, and nesting them inside an expanded panel inside
+     the scrolling reader document reintroduces the collision problems the world-time
+     overlay was shaped to avoid. Save / Cancel only — no "Save and regen" (regen re-runs
+     piggyback, which overwrites the scene edit just saved). */
+  .scene-edit-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .scene-edit-modal.open { display: flex; }
+  .scene-edit-modal .dialog { background: var(--bg-region); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 32px rgba(0,0,0,0.18); width: 380px; max-width: 100%; }
+  .scene-edit-modal .dialog-head { padding: 10px 14px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; }
+  .scene-edit-modal .dialog-head h3 { margin: 0; font-size: 13px; color: var(--ink); font-weight: 600; }
+  .scene-edit-modal .dialog-close { font-size: 18px; color: var(--ink-faint); cursor: pointer; line-height: 1; padding: 0 4px; }
+  .scene-edit-modal .dialog-body { padding: 12px 14px; }
+  .scene-edit-modal .field-label { font-size: 9.5px; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+  .scene-edit-modal .field { margin-bottom: 12px; }
+  .scene-edit-modal .ms-box { border: 1px solid var(--line); border-radius: 3px; background: var(--bg); padding: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .scene-edit-modal .ms-tag { padding: 1px 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-region); font-size: 10.5px; display: inline-flex; gap: 4px; align-items: center; }
+  .scene-edit-modal .ms-tag .x { cursor: pointer; color: var(--ink-faint); }
+  .scene-edit-modal .ms-tag .x:hover { color: var(--ink); }
+  .scene-edit-modal .ms-add { font-size: 10.5px; color: var(--ink-muted); cursor: pointer; padding: 1px 4px; }
+  .scene-edit-modal select { width: 100%; padding: 5px 6px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg); font-size: 12px; font-family: inherit; box-sizing: border-box; }
+  .scene-edit-modal .apply-note { font-size: 10px; color: var(--ink-muted); line-height: 1.5; }
+  .scene-edit-modal .dialog-foot { padding: 8px 14px; border-top: 1px solid var(--line-soft); display: flex; justify-content: flex-end; gap: 6px; background: var(--bg); }
+  .scene-edit-modal .btn { padding: 4px 12px; border: 1px solid var(--line); border-radius: 3px; font-size: 11px; cursor: pointer; background: var(--bg); color: var(--ink); font-family: inherit; }
+  .scene-edit-modal .btn.primary { background: var(--ink); color: #fff; border-color: var(--ink); }
 
   /* flip-era modal — uses the Autocomplete-with-create primitive (patterns/forms.md) */
   .flip-era-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
@@ -808,11 +867,52 @@
             <span class="bubble-meta">
               <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
               <span class="reasoning-icon" data-reasoning-toggle title="Show reasoning trace">&#129504;</span>
+              <span class="reasoning-icon" data-ws-toggle title="Show world state">&#127758;</span>
               <span class="tok-display" title="reply tok / reasoning tok">1.8k / 3.2k</span>
             </span>
           </div>
           <div class="reasoning-body">
             [Reasoning trace &mdash; the model's thinking tokens, shown only when the provider exposes them. Italic, muted, indented. Appears before the reply because that's the chronological order the model produced them in.]
+          </div>
+          <!-- World-state panel, NON-TAIL entry: every field read-only, and no edit control at
+               all rather than a disabled one. A control present everywhere but effective only
+               at the tail is the same invisible-dependency failure this panel exists to remove. -->
+          <div class="ws-body">
+            <div class="ws-head">
+              <h4>World state</h4>
+              <span class="ws-layer" title="Which agent supplied these fields">piggyback</span>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">In scene</div>
+              <div class="ws-chips">
+                <span class="ws-chip">Aria</span>
+                <span class="ws-chip">Corin</span>
+                <!-- stateReport is immutable but entities are deletable / rollback-able, so an
+                     id that no longer resolves is permanent. Raw id kept, never a bare UUID. -->
+                <span class="ws-chip unknown" title="char_9f2a… &mdash; entity no longer exists">Unknown entity</span>
+              </div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Location</div>
+              <div class="ws-line">Ashfen Marshes</div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Changes this turn</div>
+              <div class="ws-line"><span class="k">Corin &middot; attire &mdash;</span> cloak now muddied to the waist</div>
+              <div class="ws-line"><span class="k">Sword of Dawn &rarr;</span> Aria <span class="k">(from Corin)</span></div>
+              <div class="ws-line"><span class="k">gold &times;50 &rarr;</span> Aria <span class="k">(from Corin)</span></div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Reported delta</div>
+              <!-- Raw seconds, exactly as emitted. No duration formatter exists (formatWorldTime
+                   renders an absolute instant through the calendar's display template), and raw
+                   is the honest rendering for a provenance field anyway. -->
+              <div class="ws-line">+120s</div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Summary</div>
+              <div class="ws-line">Aria pushed into the marshes; met an exiled noble who recognized House Eldrin's sigil.</div>
+            </div>
           </div>
           <div class="bubble-content placeholder">[narrative response &mdash; several paragraphs of story prose.]</div>
           <div class="entry-actions">
@@ -837,8 +937,47 @@
           <div class="bubble-kind">
             <span class="bubble-meta">
               <span class="bubble-glyph" title="Narrative" aria-label="Narrative">&#128218;</span>
+              <span class="reasoning-icon" data-ws-toggle title="Show world state">&#127758;</span>
               <span class="tok-display" title="reply tok / reasoning tok">2.1k / &mdash;</span>
             </span>
+          </div>
+          <!-- World-state panel, TAIL entry + recovered-parse case. Stands in for the tail here
+               so the editable state is reviewable next to the read-only one above.
+               Four legible report states exist; this is "recovered": the narrative block failed
+               to parse, the per-turn fallback classifier supplied the fields, so `layer` names the
+               fallback while failedFields / raw retain the failed narrative attempt. -->
+          <div class="ws-body">
+            <div class="ws-head">
+              <h4>World state</h4>
+              <span class="ws-layer" title="The narrative block failed to parse; the per-turn fallback classifier supplied these fields">classifier fallback</span>
+              <span class="ws-edit" title="Edit scene &mdash; last entry only" onclick="document.getElementById('scene-edit-modal').classList.add('open')">&#x270E; Edit scene</span>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">In scene</div>
+              <div class="ws-chips"><span class="ws-chip">Aria</span></div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Location</div>
+              <!-- Emitted vs applied: apply.ts refuses a currentLocation that does not resolve to a
+                   kind='location' entity and inherits the previous one. Reaches only the
+                   classifier.current_location_rejected log today. -->
+              <div class="ws-line"><span class="ws-rejected">Sword of Dawn</span> Ashfen Marshes <span class="ws-applied">(emitted id was not a location &mdash; previous kept)</span></div>
+            </div>
+            <div class="ws-group">
+              <div class="ws-label">Reported delta</div>
+              <!-- Clamped: negative / non-finite goes to 0, over-headroom goes to the remaining
+                   headroom. Reaches only the classifier.delta_clamped log today. -->
+              <div class="ws-line">&minus;600s <span class="ws-applied">(clamped to 0)</span></div>
+            </div>
+            <div class="ws-fail">
+              &#9888; Narrative block failed to parse: <b>transfers</b>, <b>visual_changes</b>.
+              Fields above came from the fallback classifier.
+              <div class="ws-raw">&lt;state&gt;
+  &lt;scene_entities&gt;c1&lt;/scene_entities&gt;
+  &lt;transfers&gt;
+    &lt;item id="i1" to="c1</div>
+            </div>
+            <div class="ws-note">Legacy rows written before the strip keep their inline block and render it here verbatim instead &mdash; tolerant reader, no migration.</div>
           </div>
           <div class="bubble-content placeholder">[narrative response &mdash; whose worldTime has been manually edited backward, e.g. the user noticed this scene took place earlier than the classifier inferred and dragged it back to 13:45.]</div>
           <div class="entry-actions">
@@ -1291,6 +1430,49 @@
     <div class="dialog-foot">
       <button class="btn" onclick="(function(){ var p=document.getElementById('wt-edit-popover'); p.classList.remove('open','has-break'); })()">Cancel</button>
       <button class="btn primary" onclick="(function(){ var p=document.getElementById('wt-edit-popover'); p.classList.remove('open','has-break'); })()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scene editor — overlay, not inline (entry-card.md -> Scene editor). Desktop/tablet Dialog
+     hosted by the card; phone renders no Sheet and calls onRequestEditScene, with the host
+     presenting the native Sheet outside the reader document per the bridge contract.
+     Sits outside .viewport so position:fixed centers against the document. -->
+<div class="scene-edit-modal" id="scene-edit-modal">
+  <div class="dialog">
+    <div class="dialog-head">
+      <h3>Edit scene</h3>
+      <span class="dialog-close" onclick="document.getElementById('scene-edit-modal').classList.remove('open')">&times;</span>
+    </div>
+    <div class="dialog-body">
+      <div class="field">
+        <div class="field-label">In scene</div>
+        <div class="ms-box">
+          <span class="ms-tag">Aria <span class="x">&times;</span></span>
+          <span class="ms-tag">Corin <span class="x">&times;</span></span>
+          <span class="ms-add">+ Add&hellip;</span>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label">Location</div>
+        <select>
+          <option>Ashfen Marshes</option>
+          <option>Eldrin Keep</option>
+          <option>&mdash; none &mdash;</option>
+        </select>
+      </div>
+      <!-- Applied, not merely recorded: these two fields drive materialized derived state
+           (per-character current_location_id, lastSeenAt, staged promotion), which is a fold
+           over entries. Editing the tail re-folds one step with nothing downstream to
+           invalidate. Removing someone never demotes them &mdash; no demote action exists, and
+           retiring an entity over a scene-list typo is the worse failure. -->
+      <div class="apply-note">Saving re-applies scene presence to world state: per-character location, last-seen, and staged promotion. Removing a character does not retire them.</div>
+    </div>
+    <div class="dialog-foot">
+      <!-- Save / Cancel only. No "Save and regen": regenerating re-runs piggyback, which emits a
+           fresh <state> and overwrites the edit just saved. -->
+      <button class="btn" onclick="document.getElementById('scene-edit-modal').classList.remove('open')">Cancel</button>
+      <button class="btn primary" onclick="document.getElementById('scene-edit-modal').classList.remove('open')">Save</button>
     </div>
   </div>
 </div>
@@ -1878,6 +2060,16 @@
       const bubble = t.closest('.bubble');
       bubble.classList.toggle('reasoning-open');
       t.setAttribute('title', bubble.classList.contains('reasoning-open') ? 'Hide reasoning trace' : 'Show reasoning trace');
+    });
+  });
+
+  // world-state panel toggle — globe icon in meta line. Mirrors the reasoning toggle.
+  document.querySelectorAll('[data-ws-toggle]').forEach(t => {
+    t.addEventListener('click', e => {
+      e.stopPropagation();
+      const bubble = t.closest('.bubble');
+      bubble.classList.toggle('ws-open');
+      t.setAttribute('title', bubble.classList.contains('ws-open') ? 'Hide world state' : 'Show world state');
     });
   });
 

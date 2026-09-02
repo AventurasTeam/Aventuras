@@ -49,6 +49,19 @@ type EntryCardProps = {
   worldTimeMonotonicityBreak?: MonotonicityBreak // presence fires the warning indicator + overlay banner
   worldTimeFrame?: CalendarFrame // active calendar + story origin; anchors the tuple ↔ seconds round-trip, stable reference required
 
+  // World-state panel — see "World-state panel" below. AI / opening only.
+  sceneEntityNames?: { id: string; name?: string }[] // resolved in the host's render pass; name absent renders the unknown-entity chip
+  currentLocationName?: { id: string; name?: string } | null
+  stateReport?: EntryMetadata['stateReport'] // ids inside are resolved by the card against the two props above
+  summary?: string
+  legacyStateRaw?: string // pre-strip rows only; host passes stripTrailingBlocks(content).stateRaw
+  onEditScene?: (next: {
+    sceneEntities: string[]
+    currentLocationId: string | null
+  }) => Promise<boolean> // desktop/tablet Dialog Save; presence also gates the edit control, so the host passes it on the tail entry only
+  onRequestEditScene?: () => void // phone: the card requests, the host presents the native Sheet
+  sceneOptions?: { characters: EntityOption[]; items: EntityOption[]; locations: EntityOption[] } // candidate pool for the editor's selects; required alongside either edit handler
+
   // AI / opening:
   meta?: Pick<EntryMetadata, 'tokens'> // the top line renders tokens.completion (+ tokens.reasoning when set)
   reasoning?: string
@@ -97,6 +110,7 @@ Two structural choices:
 | -------------------------- | -------------------------------- | ----------------------------------------- | -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------- |
 | Top line                   | `You` badge                      | meta line (glyph, brain, tokens)          | meta line                              | `System` with warn glyph                                            | meta line (brain pulses, trailing → ) |
 | Reasoning body             | —                                | conditional (`reasoning` set, expanded)   | conditional                            | —                                                                   | live-streaming on `streamingPhase`    |
+| World-state panel          | —                                | conditional (expanded)                    | conditional                            | —                                                                   | —                                     |
 | Content                    | prose (or textarea if `editing`) | prose                                     | prose                                  | error description with inline buttons (`fixAction`, retry, dismiss) | partial prose tokens                  |
 | Action cluster (top-right) | edit, `[flip era]`, delete       | edit, regen, branch, `[flip era]`, delete | edit, branch, `[flip era]` (no delete) | — (uses inline buttons)                                             | —                                     |
 | World-time footer          | shown                            | shown                                     | shown                                  | hidden                                                              | hidden                                |
@@ -144,6 +158,148 @@ never pin its own height; the parent list owns keeping the
 viewport stable through the shift. The
 [reader narrative anchor preservation](../screens/reader-composer/reader-composer.md#anchor-preservation-under-shifts)
 section covers the parent's mechanic.
+
+## World-state panel
+
+**Data source:** `story_entries.metadata` — the absolute scene triple
+(`sceneEntities`, `currentLocationId`, `worldTime`) plus
+`metadata.stateReport` for what this turn reported (see
+[data-model.md → Entry metadata shape](../../data-model.md#entry-metadata-shape)).
+Globe icon in the meta line toggles the panel, mirroring the brain
+toggle's anatomy.
+
+**The toggle renders on every `ai_reply` and `opening`, not only where
+a report exists.** The editable fields are the absolute triple, which
+every entry carries; gating the panel on `stateReport` would make the
+scene editor reachable only when a parse happened to succeed — an
+affordance whose availability depends on something the user cannot
+see, which is the failure mode this panel exists to remove.
+`stateReport` governs the panel's contents, never its existence.
+
+`user_action` gets no panel. Its scene metadata is inherited and
+identical to the entry above it, so a panel there renders the same
+facts twice. Accepted consequence: when the tail is a `user_action`
+(a failed generation) the scene editor is unreachable — the recovery
+there is Retry, not scene surgery.
+
+**State:** internal `stateExpanded: boolean`, default `false`. No
+external override prop, same as reasoning expansion.
+
+### Panel anatomy
+
+| Group                 | Source                                     | Rendered when                    | Editable  |
+| --------------------- | ------------------------------------------ | -------------------------------- | --------- |
+| **Scene**             | absolute triple, ids resolved to names     | always                           | tail only |
+| **Changes this turn** | `stateReport.visualChanges` / `.transfers` | either is non-empty              | never     |
+| **Reported delta**    | `stateReport.worldTimeDelta`               | present                          | never     |
+| **Summary**           | `metadata.summary`                         | present                          | never     |
+| **Parse failure**     | `stateReport.failedFields` / `.raw`        | `failedFields` non-empty         | never     |
+| **Legacy block**      | `stripTrailingBlocks(content).stateRaw`    | no `stateReport`, markup present | never     |
+
+The panel header carries the producing layer as a muted badge
+(piggyback or classifier fallback) whenever `stateReport` is present.
+This is the whole of the fix for the previously invisible fallback:
+before it, a fallback-classifier turn wrote metadata and deltas but
+touched no `content`, so its work was structurally unobservable.
+
+**Scene** renders in-scene entities as name chips and the location as
+a single resolved name; an empty scene list and a null location each
+render an em-dash rather than collapsing the row, so the fields stay
+in the same place across entries.
+
+**Changes this turn** renders one line per reported mutation: a visual
+change as name, category and its full-replace text; an item transfer
+as item, recipient and prior holder when tracked; a stackable as key,
+amount and the same holders. These exist nowhere else once the block
+is stripped from `content` — deltas carry the applied effect, not the
+narration of it.
+
+**Reported delta** renders `worldTimeDelta` raw, in seconds, exactly
+as emitted. Deliberately not formatted as a duration: no duration
+formatter exists — [`formatWorldTime`](../../data-model.md#in-world-time-tracking)
+renders an absolute instant through the calendar's display template,
+and a duration needs a separate tier-walking, vocabulary-aware
+formatter. Raw seconds is also the honest rendering for a provenance
+field, since it is the number the model actually emitted.
+
+### Emitted vs. applied
+
+`stateReport` records what the model emitted; the absolute triple
+records what survived validation. Two fields can disagree, and the
+panel shows the disagreement rather than hiding it:
+
+- **Location rejected.** `apply.ts` refuses a `currentLocation` that
+  does not resolve to a `kind='location'` entity and inherits the
+  previous location instead. The panel renders the rejected value
+  struck through beside the location that was actually applied.
+- **Delta clamped.** A negative or non-finite `worldTimeDelta` clamps
+  to zero, and one that would push `worldTime` past the renderable
+  ceiling clamps to the remaining headroom. The panel renders the
+  emitted value with the applied value beside it.
+
+Both cases currently reach only the `classifier.current_location_rejected`
+and `classifier.delta_clamped` logs. Surfacing them is a side effect
+of persisting the emitted values, and is the point of doing so.
+
+**Unresolvable ids render as an "Unknown entity" chip carrying the raw
+id.** `stateReport` is immutable while entities are deletable and
+rollback-able, so a dangling id is a permanent state, not a transient
+one. Never a crash, and never a bare UUID in the reader per
+[data-model.md → ID shape](../../data-model.md#id-shape--kind-prefixed-uuids-throughout).
+
+### Scene editor
+
+**Restricted to the last story entry**, and _applied_ to world state
+rather than merely recorded. `sceneEntities` and `currentLocationId`
+drive materialized derived state — per-character `current_location_id`,
+`lastSeenAt`, staged promotion — which is a fold over entries, so
+editing the tail re-folds one step with nothing downstream to
+invalidate. On any non-tail entry the panel renders the same fields
+with **no edit control at all**, not a disabled one: a control present
+everywhere but effective only at the tail repeats the failure mode
+the panel exists to remove.
+
+The world-time footer is unaffected and stays interactive on every
+entry — `worldTime` is a no-cascade scalar and its own monotonicity
+indicator already surfaces the only way to get it wrong.
+
+**The editor is an overlay, not inline.** A multi-select over entities
+plus a single-select location are overlay-shaped controls; nesting
+them inside an expanded panel inside the scrolling
+[reader document](./reader-document.md) reintroduces exactly the
+collision problems the world-time overlay was shaped to avoid. Tier
+split and hosting follow the world-time overlay verbatim: at desktop
+and tablet the card hosts a Dialog itself; at phone it renders no
+Sheet and calls a request handler, with the host presenting the native
+Sheet outside the document per
+[`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract).
+
+**Save / Cancel only — no "Save and regen".** Regenerating the entry
+re-runs piggyback, which emits a fresh `<state>` and overwrites the
+scene edit that was just saved, so the pairing is self-defeating here.
+The affordance belongs to content editing on a `user_action`, where
+the reply genuinely answers text that no longer exists; it is tracked
+separately in [`followups.md`](../../followups.md#ux).
+
+Failure handling matches the world-time overlay: a rejected or failed
+write keeps the overlay open with the edit intact and reports inline;
+the controls disable and Save shows its loading indicator while
+pending; only a successful write closes it; a Save with nothing
+changed takes the cancel route without writing a delta.
+
+**The edit is the first ungated second writer to entry metadata**, so
+it inherits the writer-serialization fix — see
+[`followups.md`](../../followups.md#ux). Both pipeline writers run
+behind the hard gate today, which is the only reason the interleave is
+currently unreachable.
+
+### Legacy rows
+
+Rows written before the strip retain their markup in `content` and
+carry no `stateReport`. The panel falls back to today's rendering for
+those — the raw block in monospace, read-only — rather than migrating
+them. Their absolute triple is intact, so a legacy tail entry still
+edits normally.
 
 ## Edit mode
 
@@ -323,7 +479,10 @@ Live demos for: user kind, ai kind (with reasoning expanded /
 collapsed), opening kind (no delete action), system kind (with
 detail expanded), streaming kind (reasoning-phase, reply-phase),
 edit mode (textarea), disabled state, world-time footer
-shown/hidden by kind. Belongs in
+shown/hidden by kind, world-state panel (reported, fallback-layer
+badge, rejected location, clamped delta, parse failure with raw
+block, legacy row, unknown-entity chip), scene editor (tail entry
+editable, non-tail read-only). Belongs in
 `Patterns/Reader composer/EntryCard` when component
 implementation begins.
 
