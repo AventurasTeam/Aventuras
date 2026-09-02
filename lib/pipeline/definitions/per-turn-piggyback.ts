@@ -5,6 +5,7 @@ import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } 
 import { inheritedEntryMetadata } from '@/lib/db'
 import {
   buildPiggybackActions,
+  buildStateReport,
   resolveSuggestionEmission,
   resolveSuggestionItems,
   substitutePiggybackIds,
@@ -201,6 +202,22 @@ export async function* piggybackFallbackClassifierPhase(
     })
   }
 
+  // `layer` names whoever ultimately supplied the fields — this phase did. The prior
+  // report, when there is one, is the narrative fold's FAILED attempt: its failedFields
+  // and raw survive so the parse failure stays inspectable, but its layer does not.
+  // Inheriting the whole object would leave a badge naming an agent whose output was
+  // discarded (docs/data-model.md → Entry metadata shape).
+  const priorReport = tail.metadata?.stateReport
+  const stateReport = buildStateReport({
+    layer: 'per_turn_classifier',
+    block: resolvedBlock,
+    failures: [
+      ...(priorReport?.failedFields ?? []),
+      ...failures.map((f) => ({ field: f.field, detail: f.detail })),
+    ],
+    ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
+  })
+
   const { metadata: scenePatch, actions } = buildPiggybackActions({
     entryId: tail.id,
     block: resolvedBlock,
@@ -254,6 +271,7 @@ export async function* piggybackFallbackClassifierPhase(
         // the classifier call.
         metadata: {
           ...scenePatch,
+          ...(stateReport !== undefined ? { stateReport } : {}),
           ...(suggestionItems.length > 0
             ? { nextTurnSuggestions: { items: suggestionItems, source: 'classifier' as const } }
             : {}),
