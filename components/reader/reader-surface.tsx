@@ -15,6 +15,7 @@ import {
 } from 'react'
 
 import { EntryCard } from '@/components/compounds/entry-card'
+import type { SceneEdit, SceneOptions } from '@/components/compounds/scene-edit-form'
 import { JumpButtons } from '@/components/reader/jump-buttons'
 import { Skeleton } from '@/components/ui/skeleton'
 import type { CalendarFrame } from '@/lib/calendar'
@@ -22,6 +23,7 @@ import type { StoryEntry } from '@/lib/db'
 import { computeScrollMetrics, createAutoscrollMachine } from '@/lib/reader-scroll'
 
 import type { EditResult, ReaderSurfaceHandle, ReaderSurfaceProps } from './reader-document-types'
+import type { ResolvedEntity } from './scene-editing'
 
 const NEAR_BOTTOM_THRESHOLD_PX = 20
 const JUMP_TO_BOTTOM_SETTLE_MS = 500
@@ -49,6 +51,13 @@ type ReaderRowProps = {
   worldTimeFrame: CalendarFrame | null
   onEditWorldTime: (entryId: string, next: number) => Promise<EditResult>
   onRequestEditWorldTime: (entryId: string) => Promise<void>
+  // Shared across every row, so one stable identity each keeps the memo compare holding.
+  entityNames: readonly ResolvedEntity[]
+  sceneOptions: SceneOptions
+  /** The tail rule: only the last entry's card gets edit handlers at all. */
+  isTail: boolean
+  onEditScene: (entryId: string, next: SceneEdit) => Promise<EditResult>
+  onRequestEditScene: (entryId: string) => void
   onStartEdit: (row: StoryEntry) => void
   onContentChange: (text: string) => void
   onCommitEdit: () => void | Promise<void>
@@ -76,6 +85,11 @@ const ReaderRow = memo(function ReaderRow({
   worldTimeFrame,
   onEditWorldTime,
   onRequestEditWorldTime,
+  entityNames,
+  sceneOptions,
+  isTail,
+  onEditScene,
+  onRequestEditScene,
   onStartEdit,
   onContentChange,
   onCommitEdit,
@@ -124,6 +138,14 @@ const ReaderRow = memo(function ReaderRow({
         timeEditable ? async (next) => (await onEditWorldTime(row.id, next)).ok : undefined
       }
       onRequestEditTime={timeEditable ? () => void onRequestEditWorldTime(row.id) : undefined}
+      sceneEntities={row.metadata?.sceneEntities}
+      currentLocationId={row.metadata?.currentLocationId}
+      entityNames={entityNames}
+      stateReport={row.metadata?.stateReport}
+      summary={row.metadata?.summary}
+      sceneOptions={isTail ? sceneOptions : undefined}
+      onEditScene={isTail ? async (next) => (await onEditScene(row.id, next)).ok : undefined}
+      onRequestEditScene={isTail ? () => onRequestEditScene(row.id) : undefined}
     />
   )
 })
@@ -138,11 +160,16 @@ export function ReaderSurface({
   editBlocked,
   jumpButtonEnabled,
   systemFixLabel,
+  entityNames,
+  sceneOptions,
+  tailEntryId,
   onNearTop,
   onCommitEdit,
   onRequestRollback,
   onEditWorldTime,
   onRequestEditWorldTime,
+  onEditScene,
+  onRequestEditScene,
   onRegenerate,
   onRetrySystemEntry,
   onDismissSystemEntry,
@@ -448,6 +475,11 @@ export function ReaderSurface({
                 worldTimeFrame={worldTimeFrame}
                 onEditWorldTime={onEditWorldTime}
                 onRequestEditWorldTime={onRequestEditWorldTime}
+                entityNames={entityNames}
+                sceneOptions={sceneOptions}
+                isTail={row.id === tailEntryId}
+                onEditScene={onEditScene}
+                onRequestEditScene={onRequestEditScene}
                 onStartEdit={startEdit}
                 onContentChange={setEditDraft}
                 onCommitEdit={commitEdit}

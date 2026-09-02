@@ -66,7 +66,15 @@ const ROWS: StoryEntry[] = [
   }),
 ]
 
+const sceneWiring = {
+  entityNames: [],
+  sceneOptions: { characters: [], items: [], locations: [] },
+  tailEntryId: null,
+}
+
 const noopHandlers = {
+  onEditScene: async () => ({ ok: true }),
+  onRequestEditScene: () => {},
   onNearTop: async () => {},
   onCommitEdit: async () => ({ ok: true }),
   onRequestRollback: async () => {},
@@ -100,6 +108,7 @@ const meta = {
     editBlocked: false,
     jumpButtonEnabled: true,
     ...noopHandlers,
+    ...sceneWiring,
   },
 } satisfies Meta<typeof ReaderSurface>
 

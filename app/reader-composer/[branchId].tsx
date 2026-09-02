@@ -26,6 +26,8 @@ import {
   shouldRestoreUserActionAfterHandlingFailure,
 } from '@/components/reader/regenerate-outcome'
 import { RollbackConfirmModal } from '@/components/reader/rollback-confirm'
+import { SceneEditSheet } from '@/components/reader/scene-edit-sheet'
+import { useSceneEditing } from '@/components/reader/scene-editing'
 import { describeSuggestionFailure } from '@/components/reader/suggestion-failure'
 import { SuggestionStrip, type SuggestionStripPhase } from '@/components/reader/suggestion-strip'
 import {
@@ -280,6 +282,19 @@ export default function ReaderComposerRoute() {
     openForBranch?.definition.worldTimeOrigin,
     ctx,
   )
+
+  // The whole branch, unwindowed: the panel resolves ids that may sit outside the
+  // current scene, and the editor offers every candidate.
+  const branchEntities = entitiesStore.useEntities((m) => [...m.values()])
+  const {
+    entityNames,
+    sceneOptions,
+    tailEntryId,
+    sceneEdit,
+    editScene,
+    requestEditScene,
+    closeSceneEdit,
+  } = useSceneEditing(branchId, entries, branchEntities, ctx)
 
   const [stripCollapsed, setStripCollapsed] = useState(false)
   const [stripError, setStripError] = useState<PipelineError | null>(null)
@@ -1172,6 +1187,11 @@ export default function ReaderComposerRoute() {
     onRequestRollback: openRollback,
     onEditWorldTime: editWorldTime,
     onRequestEditWorldTime: requestEditWorldTime,
+    entityNames,
+    sceneOptions,
+    tailEntryId,
+    onEditScene: editScene,
+    onRequestEditScene: requestEditScene,
     onRegenerate: handleRequestRegenerate,
     onRetrySystemEntry: handleRetrySystemEntry,
     onDismissSystemEntry: dismissSystemEntry,
@@ -1341,6 +1361,15 @@ export default function ReaderComposerRoute() {
             return result.ok
           }}
           onClose={closeTimeEdit}
+        />
+      ) : null}
+      {sceneEdit != null ? (
+        <SceneEditSheet
+          sceneEntities={sceneEdit.sceneEntities}
+          currentLocationId={sceneEdit.currentLocationId}
+          options={sceneOptions}
+          onSave={async (next) => (await editScene(sceneEdit.entryId, next)).ok}
+          onClose={closeSceneEdit}
         />
       ) : null}
     </ScreenShell>

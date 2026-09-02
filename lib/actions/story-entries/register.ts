@@ -16,6 +16,7 @@ export const STORY_ENTRY_REJECTION = {
   notFound: 'not-found',
   invalidWorldTime: 'invalid-world-time',
   noMetadata: 'no-metadata',
+  notTailEntry: 'not-tail-entry',
   deltaFailed: 'delta-failed',
 } as const
 export type StoryEntryRejectionCode =

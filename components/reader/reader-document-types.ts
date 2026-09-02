@@ -43,6 +43,22 @@ export type ReaderSurfaceProps = {
   onEditWorldTime: (entryId: string, nextWorldTime: number) => Promise<EditResult>
   /** Phone tier: the document requests; the host presents the native Sheet. */
   onRequestEditWorldTime: (entryId: string) => Promise<void>
+  /** Resolution pool for every id the world-state panel renders. Stable identity. */
+  entityNames: readonly { id: string; name?: string }[]
+  /** Candidate pool for the scene editor's selects. Stable identity. */
+  sceneOptions: {
+    characters: { id: string; name: string }[]
+    items: { id: string; name: string }[]
+    locations: { id: string; name: string }[]
+  }
+  /** Scene fields are editable on the last entry only; null on an empty branch. */
+  tailEntryId: string | null
+  onEditScene: (
+    entryId: string,
+    next: { sceneEntities: string[]; currentLocationId: string | null },
+  ) => Promise<EditResult>
+  /** Phone tier: the document requests; the host presents the native Sheet. */
+  onRequestEditScene: (entryId: string) => void
   onRegenerate: (entryId: string) => Promise<void>
   onRetrySystemEntry: () => Promise<void>
   onDismissSystemEntry: () => Promise<void>

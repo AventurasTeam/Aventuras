@@ -66,6 +66,11 @@ export {
 } from './story-entries/undo'
 export { clearSystemEntry, writeSystemEntry } from './story-entries/system-entry'
 export {
+  updateEntrySceneFields,
+  type SceneFieldsEdit,
+  type UpdateSceneFieldsResult,
+} from './story-entries/scene-fields'
+export {
   entryMetadataLockKey,
   updateEntryWorldTime,
   type UpdateWorldTimeResult,
