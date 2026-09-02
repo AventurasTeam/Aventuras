@@ -61,6 +61,28 @@ describe('bundled per-turn template — empty-guard contract', () => {
     expect(out).toMatchSnapshot()
   })
 
+  // Both branches asserted directly: the snapshot pins whichever one the fixture
+  // happens to select, so it would freeze one wording and never notice the other
+  // breaking.
+  it('measures the delta from the previous entry when the action consumed no time', () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      piggybackFires: true,
+      worldTimeDeltaBasis: 'sinceLastAiReply',
+    })
+    expect(rendered).toContain("including any time the user's action itself took")
+  })
+
+  it("measures the delta from the action's end when the action already advanced time", () => {
+    const rendered = renderTemplate(TEMPLATE_IDS.perTurnNarrative, {
+      ...m2Context,
+      piggybackFires: true,
+      worldTimeDeltaBasis: 'sinceUserAction',
+    })
+    expect(rendered).toContain("seconds elapsed since the end of the user's action")
+    expect(rendered).not.toContain("including any time the user's action itself took")
+  })
+
   // The retrieval-fed shape: where the memory blocks sit relative to the scene,
   // the location, and the ID instructions they are the referent for.
   it('matches the recorded snapshot with a retrieval pass behind it', () => {

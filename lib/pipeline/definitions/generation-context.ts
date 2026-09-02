@@ -1,7 +1,7 @@
 import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
 import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
 import { IdBiMap, substituteIds } from '@/lib/ids'
-import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
+import { buildSuggestionSlots, NARRATIVE_KINDS, promptProse } from '@/lib/piggyback'
 import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
   readPromptBuffer,
@@ -127,6 +127,26 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
 const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
 
 /**
+ * Which end the model should measure `<world_time_delta>` from. Resolved here rather
+ * than worded statically in the macro: "seconds elapsed since the previous entry" is
+ * ambiguous about time the user's own action consumed.
+ *
+ * A `user_action` inherits the preceding AI entry's `worldTime`, so equal values mean
+ * the action carries no time of its own and the delta must include it. Unequal means
+ * the user advanced time on the action itself (the world-time footer is editable
+ * there), and the delta measures from its end.
+ */
+function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): string {
+  const tail = rows.at(-1)
+  const previous = rows.at(-2)
+  if (tail?.kind !== 'user_action' || previous == null || !NARRATIVE_KINDS.has(previous.kind))
+    return 'sinceLastAiReply'
+  return tail.metadata?.worldTime !== previous.metadata?.worldTime
+    ? 'sinceUserAction'
+    : 'sinceLastAiReply'
+}
+
+/**
  * A story entry as a template sees it. Prose and position only: `metadata`
  * carries entity ids, and substituteIds allocates a placeholder for every id it
  * walks, so a window's worth of historical scene rosters would put entities
@@ -210,7 +230,9 @@ export async function buildGenerationContext(
   const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
   const [buffer, lastTurns, sceneSource] = await Promise.all([
     reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
-    reads.has('lastTurns') ? readLastTurns(ctx.db, branchId) : [],
+    reads.has('lastTurns') || reads.has('worldTimeDeltaBasis')
+      ? readLastTurns(ctx.db, branchId)
+      : [],
     readsScene ? readSceneSource(ctx.db, branchId) : undefined,
   ])
   const branchEntities = [...entitiesStore.getEntities().values()].filter(
@@ -260,11 +282,15 @@ export async function buildGenerationContext(
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
     entries: buffer.map(promptEntry),
-    lastTurns: lastTurns.map(promptEntry),
+    // Read whenever `worldTimeDeltaBasis` is asked for, but exposed only when the
+    // template names it: the read is a means to the basis, not an entitlement to
+    // the rows.
+    lastTurns: reads.has('lastTurns') ? lastTurns.map(promptEntry) : [],
     entities: branchEntities.map(promptEntity),
     sceneEntities: scene.sceneEntities,
     currentLocationId: scene.currentLocationId,
     sceneMetadata: scene,
+    worldTimeDeltaBasis: resolveWorldTimeDeltaBasis(lastTurns),
     definition: normalizedDefinition,
     calendarVocabulary: describeCalendarVocabulary(calendar),
     userSettings: {

@@ -1171,3 +1171,46 @@ describe('buildGenerationContext — data source', () => {
     expect(intermediates.idMap).toBe(load.idMap)
   })
 })
+
+describe('buildGenerationContext — worldTimeDeltaBasis', () => {
+  const entry = (position: number, kind: StoryEntry['kind'], worldTime: number): StoryEntry => ({
+    id: `entry_${position}`,
+    branchId: 'b1',
+    position,
+    kind,
+    content: `c${position}`,
+    chapterId: null,
+    metadata: { sceneEntities: [], currentLocationId: null, worldTime },
+    createdAt: position,
+  })
+
+  // The user's action inherited the AI entry's worldTime unchanged, so the time it
+  // consumed has not been accounted for anywhere — the delta must include it.
+  it('is sinceLastAiReply when the action carries no time of its own', async () => {
+    const context = await buildContext({
+      entries: [entry(1, 'ai_reply', 300), entry(2, 'user_action', 300)],
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
+
+  // The user advanced time on their own action via the world-time footer, so the
+  // delta measures from the end of it rather than from the AI entry.
+  it('is sinceUserAction when the action already advanced time', async () => {
+    const context = await buildContext({
+      entries: [entry(1, 'ai_reply', 300), entry(2, 'user_action', 900)],
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceUserAction')
+  })
+
+  it('is sinceLastAiReply when the tail is not a user action', async () => {
+    const context = await buildContext({
+      entries: [entry(1, 'user_action', 300), entry(2, 'ai_reply', 900)],
+    })
+    expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
+
+  it('is sinceLastAiReply on an opening-only branch', async () => {
+    const context = await buildContext({ entries: [entry(1, 'opening', 0)] })
+    expect(context.worldTimeDeltaBasis).toBe('sinceLastAiReply')
+  })
+})
