@@ -89,8 +89,6 @@ export function CollisionResolveDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* Each body pins its own actions below a scrolling region; a
-          primitive-owned scroll would swallow them. */}
       <DialogContent className="max-w-2xl" scrollable={false}>
         <DialogHeader>
           <DialogTitle>{`⚠ Two ${entityA.kind}s named "${entityA.name}"`}</DialogTitle>

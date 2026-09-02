@@ -288,11 +288,10 @@ export function stripTrailingBlocks(raw: string): {
 export const NARRATIVE_KINDS = new Set<StoryEntry['kind']>(['ai_reply', 'opening'])
 
 /**
- * What a prompt consumer should read instead of `story_entries.content`, which
- * persists the model's reply verbatim with its trailing blocks intact. The
- * reader already renders `stripTrailingBlocks(...).prose`, so reading the raw
- * column feeds a model back its own markup as narrative and diverges from what
- * the user sees.
+ * What a prompt consumer should read instead of `story_entries.content`. New rows hold
+ * stripped prose already, but rows written before the write-path strip still carry their
+ * trailing blocks, and feeding those back would hand a model its own markup as
+ * narrative.
  *
  * Gated on kind because the cut is by tag position anywhere in the string: a
  * `user_action` that types `<state>` is prose, not markup, and must keep its

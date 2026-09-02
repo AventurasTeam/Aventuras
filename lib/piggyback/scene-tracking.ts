@@ -9,7 +9,7 @@ type Args = {
   entities: readonly Entity[]
   /** The PREVIOUS entry's state — supplies the lastSeenAt anchor. */
   previous: {
-    entryId?: string
+    entryId: string
     sceneEntities: string[]
     currentLocationId: string | null
     worldTime: number
@@ -20,20 +20,6 @@ type Args = {
   after: SceneFields
 }
 
-/**
- * The computed bookkeeping behind a scene change: per-character
- * `current_location_id` and `lastSeenAt` (docs/memory/piggyback.md → What piggyback
- * writes).
- *
- * Three-way rather than two-way. The generation path passes `before === previous` and
- * folds one step; an edit passes this entry's ORIGINAL scene as `before`, so a
- * character the edit removed is still visited and gets their tracking closed. Folding
- * from `previous` alone would skip anyone who was in the original scene but in neither
- * the previous entry's nor the edited one, stranding the location the first fold wrote.
- *
- * Never demotes: no demote action exists, and retiring an entity over a scene-list typo
- * is the worse failure (docs/ui/patterns/entry-card.md → Scene editor).
- */
 /**
  * Auto-promote on scene membership: naming a staged entity in the scene is a strong
  * signal of intentional introduction (docs/memory/piggyback.md → Auto-promote on
@@ -56,6 +42,17 @@ export function scenePromotionActions(args: {
     .map((id) => ({ kind: 'promoteStagedEntity', source, payload: { branchId, id } }) as const)
 }
 
+/**
+ * The computed bookkeeping behind a scene change: per-character
+ * `current_location_id` and `lastSeenAt` (docs/memory/piggyback.md → What piggyback
+ * writes).
+ *
+ * Three-way rather than two-way. The generation path passes `before === previous` and
+ * folds one step; an edit passes this entry's ORIGINAL scene as `before`, so a
+ * character the edit removed is still visited and gets their tracking closed. Folding
+ * from `previous` alone would skip anyone who was in the original scene but in neither
+ * the previous entry's nor the edited one, stranding the location the first fold wrote.
+ */
 export function sceneTrackingActions(args: Args): PipelineAction[] {
   const { branchId, source, entities, previous, before, after } = args
   const actions: PipelineAction[] = []
@@ -71,8 +68,7 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
         payload: { branchId, id: character.id, currentLocationId: after.currentLocationId },
       })
     } else if (wasInScene.has(character.id) && !nowInScene.has(character.id)) {
-      // Only when we know where they were: a null locationId produces a delta the
-      // handler rejects, since piggyback creates no rows.
+      // A lastSeenAt anchored at an unknown location records nothing useful.
       if (previous.currentLocationId !== null) {
         actions.push({
           kind: 'updateEntityLocationTracking',
@@ -81,7 +77,7 @@ export function sceneTrackingActions(args: Args): PipelineAction[] {
             branchId,
             id: character.id,
             lastSeenAt: {
-              entryId: previous.entryId ?? '',
+              entryId: previous.entryId,
               locationId: previous.currentLocationId,
               worldTime: previous.worldTime,
             },

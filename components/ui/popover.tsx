@@ -131,11 +131,10 @@ function PopoverContent({
   return (
     <PopoverPrimitive.Portal hostName={portalHost}>
       <FullWindowOverlay>
-        {/* The overlay is a plain RN-Web View on web, and RN-Web gives every View
-            `z-index: 0` — which makes it a stacking context that caps the popper
-            inside it at 0, below Dialog's z-50, whatever z-index the content sets on
-            itself. Lifting the overlay is what actually puts a popover over a modal
-            whose trigger is visible (layout.md → Stacking). */}
+        {/* RN-Web Views are position:relative with z-index:0, so each is a stacking
+            context that caps its popper below Dialog's z-50 whatever the content sets
+            — lifting the overlay is the only thing that raises it
+            (lessons-learned/rnweb-view-stacking-context.md). */}
         <PopoverPrimitive.Overlay
           style={
             Platform.OS === 'web'

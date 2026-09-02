@@ -72,11 +72,7 @@ const NO_LOCATION = '__none__'
 
 const FILL: ViewStyle = { flex: 1 }
 
-/**
- * Scroll host for the form body. The sheet needs gorhom's own so the rows don't
- * fight its drag gesture; the dialog uses a plain one. Either way the body is the
- * part that scrolls, so the actions below it stay pinned.
- */
+/** The sheet needs gorhom's own scroll host so the rows don't fight its drag gesture. */
 function Body({
   insideSheet,
   children,
@@ -147,9 +143,8 @@ export function SceneEditForm({
 
   return (
     <View className={insideSheet ? 'flex-1' : 'shrink'}>
-      {/* The body scrolls and the actions sit outside it, so Save stays reachable
-          without scrolling to it. The lists below are unbounded, so nothing inside
-          them may add a scroll region of its own. */}
+      {/* The lists below are unbounded, so nothing inside them may add a scroll
+          region of its own. */}
       <Body insideSheet={insideSheet}>
         <View className="gap-1">
           <Text size="xs" variant="muted" className="uppercase tracking-wide">

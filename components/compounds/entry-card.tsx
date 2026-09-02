@@ -302,8 +302,6 @@ function SceneEditDialog({
       <DialogContent
         className="max-w-xl"
         hideCloseButton={saving}
-        // The form pins its own actions below a scrolling body, the same shape the
-        // sheet uses; a primitive-owned scroll region would swallow them.
         scrollable={false}
         // Radix returns focus to whatever DialogTrigger registered, and this Dialog is
         // controlled from the card rather than triggered, so it would drop the keyboard
