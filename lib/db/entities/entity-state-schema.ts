@@ -19,8 +19,7 @@ const lastSeenAtSchema = z.object({
 // The categories a full-replace visual change can target — visualSchema's own keys.
 // lib/piggyback duplicates this as VISUAL_CHANGE_TYPES behind a compile-time guard
 // rather than importing it: lib/db is the lowest layer, and a value import in the other
-// direction would drag the db barrel into scripts/mock-llm's plain-Node run. lib/piggyback carries a compile-time guard
-// pinning its VISUAL_CHANGE_TYPES to this list.
+// direction would drag the db barrel into scripts/mock-llm's plain-Node run.
 export const VISUAL_CATEGORIES = [
   'physique',
   'face',

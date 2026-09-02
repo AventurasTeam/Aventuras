@@ -22,6 +22,38 @@ function nextLogPosition(branchId: string) {
   return sql<number>`(SELECT COALESCE(MAX(${deltas.logPosition}), 0) + 1 FROM ${deltas} WHERE ${deltas.branchId} = ${branchId})`
 }
 
+type DeltaRowArgs = {
+  deltaId: string
+  branchId: string
+  entryId: string | null
+  actionId: string
+  source: PipelineAction['source']
+  outcome: Extract<HandlerOutcome, { status: 'ok' }>
+}
+
+function deltaRowOp(
+  ctx: DbCtx,
+  { deltaId, branchId, entryId, actionId, source, outcome }: DeltaRowArgs,
+): SqlOp {
+  return ctx.db
+    .insert(deltas)
+    .values({
+      id: deltaId,
+      branchId,
+      entryId,
+      actionId,
+      logPosition: nextLogPosition(branchId),
+      source,
+      targetTable: outcome.targetTable,
+      targetId: outcome.targetId,
+      op: outcome.op,
+      undoPayload: outcome.undoPayload,
+      encodingVersion: 1,
+      createdAt: Date.now(),
+    })
+    .toSQL()
+}
+
 export async function applyDeltaAction(args: Args, ctx: DbCtx): Promise<MutationResult> {
   const { action } = args
   // Defense in depth for the reversal barrier (prose-reversal.ts): rejecting a pipeline
@@ -55,23 +87,7 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
 
   const deltaId = generateId('delta')
   const ops: SqlOp[] = [
-    ctx.db
-      .insert(deltas)
-      .values({
-        id: deltaId,
-        branchId,
-        entryId,
-        actionId,
-        logPosition: nextLogPosition(branchId),
-        source: action.source,
-        targetTable: outcome.targetTable,
-        targetId: outcome.targetId,
-        op: outcome.op,
-        undoPayload: outcome.undoPayload,
-        encodingVersion: 1,
-        createdAt: Date.now(),
-      })
-      .toSQL(),
+    deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source: action.source, outcome }),
     ...outcome.ops,
   ]
 
@@ -105,6 +121,8 @@ export type DeltaGroupResult =
   | { status: 'ok' }
   | { status: 'rejected'; reason: string; code?: string }
 
+type GroupArgs = { actionId: string; branchId: string; entryId?: string | null }
+
 function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
   const keys = actions.flatMap((a) =>
     a.kind === 'promoteStagedEntity'
@@ -129,18 +147,26 @@ function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
  */
 export async function applyDeltaActionGroup(
   actions: readonly PipelineAction[],
-  args: { actionId: string; branchId: string; entryId?: string | null },
+  args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
-  return promoteLockKeys(actions).reduceRight<() => Promise<DeltaGroupResult>>(
-    (run, key) => () => withKeyLock(key, run),
-    () => applyDeltaActionGroupUnlocked(actions, args, ctx),
-  )()
+  return withKeyLocks(promoteLockKeys(actions), () =>
+    applyDeltaActionGroupUnlocked(actions, args, ctx),
+  )
+}
+
+function withKeyLocks(
+  keys: readonly string[],
+  run: () => Promise<DeltaGroupResult>,
+): Promise<DeltaGroupResult> {
+  const [first, ...rest] = keys
+  if (first === undefined) return run()
+  return withKeyLock(first, () => withKeyLocks(rest, run))
 }
 
 async function applyDeltaActionGroupUnlocked(
   actions: readonly PipelineAction[],
-  args: { actionId: string; branchId: string; entryId?: string | null },
+  args: GroupArgs,
   ctx: DbCtx,
 ): Promise<DeltaGroupResult> {
   const { actionId, branchId } = args
@@ -174,13 +200,14 @@ async function applyDeltaActionGroupUnlocked(
 
     const rowKey = `${outcome.targetTable}:${outcome.targetId}`
     const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
-    const claimed = pendingColumns.get(rowKey)
-    if (claimed !== undefined && columns.some((c) => claimed.has(c)))
+    const claimed = pendingColumns.get(rowKey) ?? new Set<string>()
+    if (columns.some((column) => claimed.has(column)))
       return {
         status: 'rejected',
         reason: `group writes ${rowKey} twice on one column; every handler read pre-group state`,
       }
-    pendingColumns.set(rowKey, new Set([...(claimed ?? []), ...columns]))
+    for (const column of columns) claimed.add(column)
+    pendingColumns.set(rowKey, claimed)
 
     prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
   }
@@ -188,23 +215,7 @@ async function applyDeltaActionGroupUnlocked(
   if (prepared.length === 0) return { status: 'ok' }
 
   const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
-    ctx.db
-      .insert(deltas)
-      .values({
-        id: deltaId,
-        branchId,
-        entryId,
-        actionId,
-        logPosition: nextLogPosition(branchId),
-        source,
-        targetTable: outcome.targetTable,
-        targetId: outcome.targetId,
-        op: outcome.op,
-        undoPayload: outcome.undoPayload,
-        encodingVersion: 1,
-        createdAt: Date.now(),
-      })
-      .toSQL(),
+    deltaRowOp(ctx, { deltaId, branchId, entryId, actionId, source, outcome }),
     ...outcome.ops,
   ])
 

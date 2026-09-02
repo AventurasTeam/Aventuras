@@ -44,6 +44,9 @@ type MultiSelectProps = {
   triggerClassName?: string
 }
 
+// Module-level so the memoised Overlay's handler props stay identical across renders.
+function noop(): void {}
+
 function emitSelection(
   next: ReadonlySet<string>,
   options: readonly MultiSelectOption[],
@@ -223,8 +226,6 @@ export function MultiSelectList({
     [normalized, options, onChange],
   )
 
-  // Stable identity so the memoised Overlay does not re-render on every keystroke.
-  const noop = useCallback(() => {}, [])
   // Bulk actions are gated with the rows: clearing mid-save leaves the form showing a
   // failure over a selection that no longer matches what was submitted.
   const inert = disabled === true

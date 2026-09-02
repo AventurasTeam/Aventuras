@@ -106,11 +106,11 @@ type EntryCardProps = {
   /** What this turn reported. Absent means the entry reported nothing. */
   stateReport?: EntryMetadata['stateReport']
   summary?: string
-  /** Pre-strip rows only: the host passes `stripTrailingBlocks(content).stateRaw`. */
   /**
-   * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `false` to report a
-   * failed write. Presence also gates the edit control, so the host supplies it on
-   * the tail entry alone — a non-tail card renders no control at all.
+   * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `{ ok: false }` to
+   * report a failed write, carrying the action layer's rejection code where there is
+   * one. Presence also gates the edit control, so the host supplies it on the tail
+   * entry alone — a non-tail card renders no control at all.
    */
   onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
   /** Phone: the compound requests; the host presents the native Sheet. */
@@ -454,6 +454,10 @@ function resolveName(id: string, pool: readonly ResolvedEntity[]): string {
   return pool.find((e) => e.id === id)?.name ?? t('reader:entryCard.stateUnknownEntity')
 }
 
+function resolveCounterparty(id: string | undefined, pool: readonly ResolvedEntity[]): string {
+  return id != null ? resolveName(id, pool) : t('reader:entryCard.stateNone')
+}
+
 function StateLine({ children }: { children: ReactNode }) {
   return <Text size="xs">{children}</Text>
 }
@@ -577,18 +581,12 @@ function WorldStatePanel({
               {it.from != null
                 ? t('reader:entryCard.stateItemTransferFrom', {
                     item: resolveName(it.id, entityNames),
-                    to:
-                      it.to != null
-                        ? resolveName(it.to, entityNames)
-                        : t('reader:entryCard.stateNone'),
+                    to: resolveCounterparty(it.to, entityNames),
                     from: resolveName(it.from, entityNames),
                   })
                 : t('reader:entryCard.stateItemTransfer', {
                     item: resolveName(it.id, entityNames),
-                    to:
-                      it.to != null
-                        ? resolveName(it.to, entityNames)
-                        : t('reader:entryCard.stateNone'),
+                    to: resolveCounterparty(it.to, entityNames),
                   })}
             </StateLine>
           ))}
@@ -598,19 +596,13 @@ function WorldStatePanel({
                 ? t('reader:entryCard.stateStackableFrom', {
                     key: st.key,
                     amount: st.amount,
-                    to:
-                      st.to != null
-                        ? resolveName(st.to, entityNames)
-                        : t('reader:entryCard.stateNone'),
+                    to: resolveCounterparty(st.to, entityNames),
                     from: resolveName(st.from, entityNames),
                   })
                 : t('reader:entryCard.stateStackable', {
                     key: st.key,
                     amount: st.amount,
-                    to:
-                      st.to != null
-                        ? resolveName(st.to, entityNames)
-                        : t('reader:entryCard.stateNone'),
+                    to: resolveCounterparty(st.to, entityNames),
                   })}
             </StateLine>
           ))}

@@ -186,6 +186,14 @@ export async function* piggybackFallbackClassifierPhase(
         classifierConfig,
         ctx.abortSignal,
       )
+
+  // `layer` names whoever ultimately supplied the fields — this phase did. The prior
+  // report, when there is one, is the narrative fold's FAILED attempt: its failedFields
+  // and raw survive so the parse failure stays inspectable, but its layer does not.
+  // Inheriting the whole object would leave a badge naming an agent whose output was
+  // discarded (docs/data-model.md → Entry metadata shape).
+  const priorReport = tail.metadata?.stateReport
+
   if (result.status !== 'ok') {
     ctx.log.warn('classifier.piggyback_fallback_failed', {
       status: result.status,
@@ -200,7 +208,7 @@ export async function* piggybackFallbackClassifierPhase(
       layer: 'per_turn_classifier',
       block: {},
       failures: [
-        ...(tail.metadata?.stateReport?.failedFields ?? []),
+        ...(priorReport?.failedFields ?? []),
         {
           field: 'classifier',
           detail:
@@ -209,9 +217,7 @@ export async function* piggybackFallbackClassifierPhase(
               : `classifier call ${result.status}`,
         },
       ],
-      ...(tail.metadata?.stateReport?.raw !== undefined
-        ? { raw: tail.metadata.stateReport.raw }
-        : {}),
+      ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
     })
     if (failedReport !== undefined) {
       yield {
@@ -254,12 +260,6 @@ export async function* piggybackFallbackClassifierPhase(
     source: 'per_turn_classifier',
   })
 
-  // `layer` names whoever ultimately supplied the fields — this phase did. The prior
-  // report, when there is one, is the narrative fold's FAILED attempt: its failedFields
-  // and raw survive so the parse failure stays inspectable, but its layer does not.
-  // Inheriting the whole object would leave a badge naming an agent whose output was
-  // discarded (docs/data-model.md → Entry metadata shape).
-  const priorReport = tail.metadata?.stateReport
   // The narrative fold applies visual/transfer changes whenever it fires, parse failure
   // or not, so those rows are already written. A fallback that reports neither must not
   // blank them out of the record — same reason failedFields and raw survive its write.

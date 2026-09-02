@@ -86,8 +86,8 @@ export function useSceneEditing(
           entryId,
           error: err instanceof Error ? err.message : String(err),
         })
+        return { ok: false }
       }
-      return { ok: false }
     },
     [branchId, ctx],
   )

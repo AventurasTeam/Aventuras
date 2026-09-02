@@ -148,8 +148,7 @@ function resolveWorldTimeDeltaBasis(rows: readonly StoryEntry[]): WorldTimeDelta
   // Only a forward advance is evidence the user moved time on the action itself. A
   // missing value (the column is nullable) or a backward one is a broken premise, not
   // the other basis, and the inclusive reading is the safe default either way.
-  if (typeof action !== 'number' || typeof reply !== 'number' || action < reply)
-    return 'sinceLastAiReply'
+  if (typeof action !== 'number' || typeof reply !== 'number') return 'sinceLastAiReply'
   return action > reply ? 'sinceUserAction' : 'sinceLastAiReply'
 }
 

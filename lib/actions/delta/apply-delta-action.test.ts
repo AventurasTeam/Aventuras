@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { branches, deltas, stories, storyEntries } from '@/lib/db'
+import { branches, deltas, entities, stories, storyEntries, type NewEntity } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
@@ -298,6 +298,69 @@ describe('applyDeltaActionGroup', () => {
     expect(res.status).toBe('rejected')
     const [entry] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_1'))
     expect(entry.metadata).toBeNull()
+  })
+
+  function staged(id: string): NewEntity {
+    return {
+      id,
+      branchId: 'b1',
+      kind: 'character',
+      name: id,
+      description: '',
+      status: 'staged',
+      injectionMode: 'auto',
+      state: {
+        visual: {},
+        traits: [],
+        drives: [],
+        current_location_id: null,
+        equipped_items: [],
+        inventory: [],
+        faction_id: null,
+        lastSeenAt: null,
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    }
+  }
+
+  const promote = (id: string): PipelineAction => ({
+    kind: 'promoteStagedEntity',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id },
+  })
+
+  // The group takes each promote key the single-action path takes, and takes them in
+  // sorted order. Two groups naming the same pair in opposite orders would otherwise
+  // each hold what the other waits on, and withKeyLock is not reentrant.
+  it('does not deadlock when two groups claim the same keys in opposite orders', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.insert(entities).values(staged('char_a'))
+    await db.insert(entities).values(staged('char_b'))
+
+    const [first, second] = await Promise.all([
+      applyDeltaActionGroup(
+        [promote('char_a'), promote('char_b')],
+        { actionId: 'act_1', branchId: 'b1' },
+        ctx,
+      ),
+      applyDeltaActionGroup(
+        [promote('char_b'), promote('char_a')],
+        { actionId: 'act_2', branchId: 'b1' },
+        ctx,
+      ),
+    ])
+
+    expect(first).toEqual({ status: 'ok' })
+    expect(second).toEqual({ status: 'ok' })
+
+    // Whichever group ran second saw both rows already active and no-opped, so exactly
+    // one promotion is logged per entity rather than two.
+    const rows = await db.select().from(deltas)
+    expect(rows).toHaveLength(2)
+    expect(rows.map((r) => r.targetId).sort()).toEqual(['char_a', 'char_b'])
   })
 
   // Every handler runs before the transaction opens, so an action cannot depend on a row

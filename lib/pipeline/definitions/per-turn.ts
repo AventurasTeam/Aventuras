@@ -218,15 +218,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   // Gated on the phase having actually applied the block: a model piggyback was not
   // enabled for can still emit a <state>, and a report badged with this layer would
   // name an agent that supplied nothing. The fallback writes its own report instead.
-  const stateReport = piggybackShouldFire
-    ? buildStateReport({
-        layer: 'piggyback_tagged_block',
-        block: resolvedBlock,
-        failures: parseFailures,
-        ...(piggybackApplied !== undefined ? { applied: piggybackApplied.applied } : {}),
-        ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
-      })
-    : undefined
+  const stateReport =
+    piggybackApplied !== undefined
+      ? buildStateReport({
+          layer: 'piggyback_tagged_block',
+          block: resolvedBlock,
+          failures: parseFailures,
+          applied: piggybackApplied.applied,
+          ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
+        })
+      : undefined
 
   ctx.intermediates.piggybackOutcome = {
     attempted: piggybackShouldFire,
