@@ -1084,6 +1084,154 @@ describe('per-turn-piggyback', () => {
       expect(report?.worldTimeDelta).toBe(60)
     })
 
+    it('keeps changes the narrative fold already applied when the classifier reports none', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            // The fold parsed these and buildPiggybackActions wrote them to entity rows;
+            // only sceneEntities failed, which is why the fallback is running at all.
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: 'char_1', type: 'attire', text: 'torn cloak' }],
+              transfers: { items: [], stackables: [{ key: 'gold', amount: 5 }] },
+              failedFields: [{ field: 'sceneEntities', detail: 'unresolvable placeholder' }],
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // The classifier omits both fields, which the schema now leaves undefined rather
+      // than defaulting to empty.
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: { sceneEntities: [], currentLocation: undefined, worldTimeDelta: 60 },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap: new IdBiMap(),
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+        },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const written = events[0]
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      const report = written.action.payload.metadata.stateReport
+      // An empty report here would tell the reader nothing changed this turn, while the
+      // character's attire had in fact already been rewritten in the entity row.
+      expect(report?.visualChanges).toEqual([{ id: 'char_1', type: 'attire', text: 'torn cloak' }])
+      expect(report?.transfers).toEqual({ items: [], stackables: [{ key: 'gold', amount: 5 }] })
+    })
+
+    it("lets the classifier's own changes win over the fold's", async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      const charUuid = 'char_00000000-0000-4000-8000-0000000000a1'
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'Hero steps into the clearing',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: charUuid, type: 'attire', text: 'torn cloak' }],
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      // Resolvable, so substitution keeps the field and the merge must leave it alone.
+      const idMap = new IdBiMap()
+      const placeholder = idMap.allocate(charUuid)
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 60,
+          visualChanges: [{ id: placeholder, type: 'hair', text: 'shorn short' }],
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: {
+          idMap,
+          piggybackOutcome: { attempted: true, succeeded: false } satisfies PiggybackOutcome,
+        },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const events = []
+      let result = await gen.next()
+      while (!result.done) {
+        events.push(result.value)
+        result = await gen.next()
+      }
+
+      const written = events[0]
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected an updateStoryEntryMetadata delta')
+      expect(written.action.payload.metadata.stateReport?.visualChanges).toEqual([
+        { id: charUuid, type: 'hair', text: 'shorn short' },
+      ])
+    })
+
     it('preserves narrative-fold chips already on the tail entry on a state-only refire (row 3 clobber guard)', async () => {
       currentStoryStore.set({
         storyId: 's1',

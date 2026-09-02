@@ -10,6 +10,7 @@ import {
   resolveSuggestionItems,
   substitutePiggybackIds,
   suggestionRefSchema,
+  type ParsedStateBlock,
   VISUAL_CHANGE_TYPES,
 } from '@/lib/piggyback'
 import type {
@@ -55,7 +56,7 @@ export const fallbackClassifierSchema = z.object({
         text: z.string(),
       }),
     )
-    .default([]),
+    .optional(),
   transfers: z
     .object({
       items: z
@@ -79,7 +80,7 @@ export const fallbackClassifierSchema = z.object({
         )
         .default([]),
     })
-    .default({ items: [], stackables: [] }),
+    .optional(),
   summary: z.string().optional(),
 })
 
@@ -259,9 +260,21 @@ export async function* piggybackFallbackClassifierPhase(
   // Inheriting the whole object would leave a badge naming an agent whose output was
   // discarded (docs/data-model.md → Entry metadata shape).
   const priorReport = tail.metadata?.stateReport
+  // The narrative fold applies visual/transfer changes whenever it fires, parse failure
+  // or not, so those rows are already written. A fallback that reports neither must not
+  // blank them out of the record — same reason failedFields and raw survive its write.
+  const reportedBlock: ParsedStateBlock = {
+    ...resolvedBlock,
+    ...(resolvedBlock.visualChanges === undefined && priorReport?.visualChanges !== undefined
+      ? { visualChanges: priorReport.visualChanges }
+      : {}),
+    ...(resolvedBlock.transfers === undefined && priorReport?.transfers !== undefined
+      ? { transfers: priorReport.transfers }
+      : {}),
+  }
   const stateReport = buildStateReport({
     layer: 'per_turn_classifier',
-    block: resolvedBlock,
+    block: reportedBlock,
     failures: [
       ...(priorReport?.failedFields ?? []),
       ...failures.map((f) => ({ field: f.field, detail: f.detail })),
