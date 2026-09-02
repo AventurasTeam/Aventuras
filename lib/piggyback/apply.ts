@@ -2,6 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
+import { sceneTrackingActions } from './scene-tracking'
 import type { ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
@@ -87,36 +88,22 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
     }
   }
 
-  // Computed bookkeeping
-  const wasInScene = new Set(previousMetadata.sceneEntities)
-  const nowInScene = new Set(sceneEntities)
-  for (const character of entities.filter((e) => e.kind === 'character')) {
-    if (nowInScene.has(character.id) && currentLocationId !== null) {
-      actions.push({
-        kind: 'updateEntityLocationTracking',
-        source,
-        payload: { branchId, id: character.id, currentLocationId },
-      })
-    } else if (wasInScene.has(character.id) && !nowInScene.has(character.id)) {
-      // Only emit lastSeenAt when we actually know where the character was;
-      // a null locationId would produce a silently rejected delta (piggyback creates no rows).
-      if (previousMetadata.currentLocationId !== null) {
-        actions.push({
-          kind: 'updateEntityLocationTracking',
-          source,
-          payload: {
-            branchId,
-            id: character.id,
-            lastSeenAt: {
-              entryId: previousMetadata.entryId ?? entryId,
-              locationId: previousMetadata.currentLocationId,
-              worldTime: previousMetadata.worldTime,
-            },
-          },
-        })
-      }
-    }
-  }
+  // Computed bookkeeping. Shared with the scene editor, which passes a distinct
+  // `before` — here this entry's scene IS the previous entry's until the block
+  // changes it, so the two-way fold falls out of the three-way shape.
+  actions.push(
+    ...sceneTrackingActions({
+      branchId,
+      source,
+      entities,
+      previous: { ...previousMetadata, entryId: previousMetadata.entryId ?? entryId },
+      before: {
+        sceneEntities: previousMetadata.sceneEntities,
+        currentLocationId: previousMetadata.currentLocationId,
+      },
+      after: { sceneEntities, currentLocationId },
+    }),
+  )
 
   // Visual changes
   for (const note of block.visualChanges ?? []) {
