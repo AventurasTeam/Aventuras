@@ -50,8 +50,9 @@ type EntryCardProps = {
   worldTimeFrame?: CalendarFrame // active calendar + story origin; anchors the tuple ↔ seconds round-trip, stable reference required
 
   // World-state panel — see "World-state panel" below. AI / opening only.
-  sceneEntityNames?: { id: string; name?: string }[] // resolved in the host's render pass; name absent renders the unknown-entity chip
-  currentLocationName?: { id: string; name?: string } | null
+  sceneEntities?: readonly string[] // this entry's scene, in order; ids, resolved through entityNames
+  currentLocationId?: string | null
+  entityNames?: readonly { id: string; name?: string }[] // resolution pool for EVERY id the panel mentions, not just the scene; name absent renders the unknown-entity chip
   stateReport?: EntryMetadata['stateReport'] // ids inside are resolved by the card against the two props above
   summary?: string
   legacyStateRaw?: string // pre-strip rows only; host passes stripTrailingBlocks(content).stateRaw
@@ -240,6 +241,12 @@ panel shows the disagreement rather than hiding it:
 Both cases currently reach only the `classifier.current_location_rejected`
 and `classifier.delta_clamped` logs. Surfacing them is a side effect
 of persisting the emitted values, and is the point of doing so.
+
+**Resolution uses one pool, not the scene list.** A transfer's counterparty
+and a rejected location routinely sit outside the current scene, so
+scoping name lookup to scene members would render them as unknown. The
+host passes `entityNames` covering every id the panel can mention, and
+`sceneEntities` separately as the ordered membership the chips render.
 
 **Unresolvable ids render as an "Unknown entity" chip carrying the raw
 id.** `stateReport` is immutable while entities are deletable and
