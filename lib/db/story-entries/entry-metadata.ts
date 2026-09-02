@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { VISUAL_CATEGORIES } from '../entities/entity-state-schema'
+
 export const entryMetadataSchema = z.object({
   tokens: z
     .object({ prompt: z.number(), completion: z.number(), reasoning: z.number().optional() })
@@ -12,6 +14,48 @@ export const entryMetadataSchema = z.object({
   sceneEntities: z.array(z.string()),
   currentLocationId: z.string().nullable(),
   worldTime: z.number().min(0),
+  // What THIS turn's generation reported — authored, never inherited (docs/data-model.md
+  // → Entry metadata shape). `layer` names whoever ultimately supplied the absolute scene
+  // fields above; failedFields / raw describe the failed NARRATIVE attempt and survive a
+  // fallback's write, so the four report states stay distinguishable.
+  stateReport: z
+    .object({
+      layer: z.enum(['piggyback_tagged_block', 'per_turn_classifier']),
+      sceneEntities: z.array(z.string()).optional(),
+      // Optional, never nullable: a leaf must not stack optional over nullable or the null
+      // sentinel becomes ambiguous (data-model.md → Entry mutability & rollback). The model
+      // cannot emit null, so nothing is lost.
+      currentLocation: z.string().optional(),
+      // As emitted, before apply.ts clamps it — the divergence is what the reader shows.
+      worldTimeDelta: z.number().optional(),
+      visualChanges: z
+        .array(z.object({ id: z.string(), type: z.enum(VISUAL_CATEGORIES), text: z.string() }))
+        .optional(),
+      transfers: z
+        .object({
+          items: z.array(
+            z.object({
+              id: z.string(),
+              slot: z.enum(['equipped_items', 'inventory']),
+              to: z.string().optional(),
+              from: z.string().optional(),
+            }),
+          ),
+          stackables: z.array(
+            z.object({
+              key: z.string(),
+              amount: z.number(),
+              to: z.string().optional(),
+              from: z.string().optional(),
+            }),
+          ),
+        })
+        .optional(),
+      failedFields: z.array(z.object({ field: z.string(), detail: z.string() })).optional(),
+      // Redundant on the happy path; the only inspectable remnant when a parse failed.
+      raw: z.string().optional(),
+    })
+    .optional(),
   nextTurnSuggestions: z
     .object({
       items: z.array(z.object({ categoryId: z.string(), text: z.string() })),

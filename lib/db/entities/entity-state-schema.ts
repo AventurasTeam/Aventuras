@@ -16,6 +16,20 @@ const lastSeenAtSchema = z.object({
   worldTime: z.number(),
 })
 
+// The categories a full-replace visual change can target — visualSchema's own keys.
+// Declared here rather than in lib/piggyback (which re-exports it as
+// VISUAL_CHANGE_TYPES) so that lib/db, the lowest layer, never takes a runtime
+// dependency on a module above it. lib/piggyback carries a compile-time guard
+// pinning its VISUAL_CHANGE_TYPES to this list.
+export const VISUAL_CATEGORIES = [
+  'physique',
+  'face',
+  'hair',
+  'eyes',
+  'attire',
+  'distinguishing',
+] as const
+
 const visualSchema = z.object({
   physique: z.string().max(500).optional(),
   face: z.string().max(500).optional(),
