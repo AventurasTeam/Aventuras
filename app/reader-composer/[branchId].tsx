@@ -283,9 +283,14 @@ export default function ReaderComposerRoute() {
     ctx,
   )
 
-  // The whole branch, unwindowed: the panel resolves ids that may sit outside the
-  // current scene, and the editor offers every candidate.
-  const branchEntities = entitiesStore.useEntities((m) => [...m.values()])
+  // Same snapshot-stability contract as `rows` above: select the raw map, derive
+  // the array with useMemo. The whole branch, unwindowed — the panel resolves ids
+  // that may sit outside the current scene, and the editor offers every candidate.
+  const entityRows = entitiesStore.useEntities((m) => m)
+  const branchEntities = useMemo(
+    () => [...entityRows.values()].filter((e) => e.branchId === branchId),
+    [entityRows, branchId],
+  )
   const {
     entityNames,
     sceneOptions,
