@@ -80,7 +80,7 @@
     "stateUnknownEntity": "Unknown entity",
     "stateLayerPiggyback": "piggyback",
     "stateLayerFallback": "classifier fallback",
-    "stateParseFailed": "Narrative block failed to parse: {{fields}}.",
+    "stateParseFailed": "State not fully recorded: {{fields}}.",
     "stateEditScene": "Edit scene",
     "stateNone": "—",
     "stateVisualChange": "{{name}} · {{category}}",

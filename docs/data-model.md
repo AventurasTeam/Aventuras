@@ -1812,12 +1812,15 @@ two roles inside `stateReport` are deliberately separated: `layer`
 names whoever ultimately supplied the fields (last writer wins), while
 `failedFields` and `raw` describe the failed _narrative_ attempt and
 survive the fallback's write. Four legible states result — clean
-piggyback; recovered (`per_turn_classifier` plus `failedFields`);
-`piggybackMode='off'` (`per_turn_classifier`, no failure); and both
-failed (failure recorded, scene fields left at their inherited
-values). The fallback must therefore write `stateReport` explicitly;
-inheriting it through its `{ ...tail.metadata }` spread would leave a
-`layer` that lies.
+piggyback; recovered (`per_turn_classifier` plus the narrative's
+`failedFields`); `piggybackMode='off'` (`per_turn_classifier`, no
+failure); and both failed, which appends a `classifier` entry to
+`failedFields` so it stays distinct from a recovered turn. The
+fallback must therefore write `stateReport` explicitly, including when
+its own call fails: returning silently leaves a row that reported
+nothing, which is not distinguishable from a turn where nothing
+changed. Inheriting the report through a `{ ...tail.metadata }` spread
+would instead leave a `layer` that lies.
 
 **`content` stores prose only.** The model's trailing `<state>` and
 `<suggestions>` blocks are parsed and stripped at write time; the raw

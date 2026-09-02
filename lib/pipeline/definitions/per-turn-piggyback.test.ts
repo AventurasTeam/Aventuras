@@ -288,7 +288,7 @@ describe('per-turn-piggyback', () => {
       expect(generateStructuredMock).not.toHaveBeenCalled()
     })
 
-    it('handles generateStructured failure gracefully', async () => {
+    it('records a failure report when the classifier call fails', async () => {
       currentStoryStore.set({
         storyId: 's1',
         branchId: 'b1',
@@ -320,9 +320,14 @@ describe('per-turn-piggyback', () => {
       }
 
       const gen = piggybackFallbackClassifierPhase(ctx)
-      const res = await gen.next()
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
 
-      expect(res).toEqual({ done: true, value: { status: 'completed' } })
+      expect(next.value).toEqual({ status: 'completed' })
       expect(generateStructuredMock).toHaveBeenCalledWith(
         'classifier',
         expect.stringContaining('The hero enters the dark forest.'),
@@ -330,6 +335,23 @@ describe('per-turn-piggyback', () => {
         expect.anything(),
         ctx.abortSignal,
       )
+
+      // With the narrative fold having written no report, this phase is the only writer:
+      // returning completed without one leaves the row saying nothing happened.
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      const report = written.action.payload.metadata.stateReport
+      expect(report?.layer).toBe('per_turn_classifier')
+      expect(report?.failedFields).toEqual([
+        { field: 'classifier', detail: 'classifier call failed' },
+      ])
     })
 
     // The pair is a pipeline contract, not a share of the prompt budget: the

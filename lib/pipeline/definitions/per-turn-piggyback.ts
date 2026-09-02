@@ -191,6 +191,41 @@ export async function* piggybackFallbackClassifierPhase(
       ...('kind' in result ? { errorKind: result.kind } : {}),
       ...('detail' in result ? { errorDetail: result.detail } : {}),
     })
+    // This phase is the only writer of a report when the narrative fold produced none
+    // (piggyback off, or its own parse failed). Returning silently leaves a row that
+    // reported nothing, which the panel cannot tell from a turn where nothing changed —
+    // and the warn above is a no-op unless diagnostics is on.
+    const failedReport = buildStateReport({
+      layer: 'per_turn_classifier',
+      block: {},
+      failures: [
+        ...(tail.metadata?.stateReport?.failedFields ?? []),
+        {
+          field: 'classifier',
+          detail:
+            'kind' in result
+              ? `classifier call ${result.status}: ${result.kind}`
+              : `classifier call ${result.status}`,
+        },
+      ],
+      ...(tail.metadata?.stateReport?.raw !== undefined
+        ? { raw: tail.metadata.stateReport.raw }
+        : {}),
+    })
+    if (failedReport !== undefined) {
+      yield {
+        type: 'delta_emitted',
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: {
+            branchId: ctx.branchId,
+            id: tail.id,
+            metadata: { stateReport: failedReport },
+          },
+        },
+      }
+    }
     return { status: 'completed' }
   }
 

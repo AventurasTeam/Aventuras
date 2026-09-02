@@ -910,7 +910,7 @@ export const WorldStateFallbackRecovered: StoryT = {
     // The whole of the invisible-fallback fix: before the badge, a fallback turn
     // wrote metadata and deltas but touched no content, so it was unobservable.
     expect(screen.getByText('classifier fallback')).toBeVisible()
-    expect(screen.getByText('Narrative block failed to parse: transfers.')).toBeVisible()
+    expect(screen.getByText('State not fully recorded: transfers.')).toBeVisible()
   },
 }
 
