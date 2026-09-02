@@ -278,4 +278,40 @@ describe('updateEntrySceneFields', () => {
     expect(meta?.currentLocationId).toBe(LOC_A)
     expect((await entityState(db, 'char_a')).current_location_id).toBe(LOC_A)
   })
+
+  // The metadata write and the tracking it implies are one transaction, so a tracking
+  // rejection must leave the scene untouched rather than report total failure over an
+  // edit that already landed.
+  it('commits nothing when a tracking action is rejected', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+
+    // In the working set but absent from the DB — what makes updateEntityLocationTracking
+    // reject outright instead of returning the tolerated 'noop'.
+    entitiesStore.hydrate('b1', [
+      character('char_a', LOC_A),
+      character('char_b', LOC_A),
+      character('char_ghost', LOC_A),
+      location(LOC_A),
+      location(LOC_B),
+    ] as never)
+
+    const before = await storedMetadata(db, 'e2')
+
+    const result = await updateEntrySceneFields(
+      'b1',
+      'e2',
+      { sceneEntities: ['char_a', 'char_ghost'], currentLocationId: LOC_B },
+      ctx,
+    )
+    // Pinned: a rejection for any other reason would also commit nothing, and the
+    // assertions below would pass without the group ever being exercised.
+    expect(result).toMatchObject({ status: 'rejected', code: 'delta-failed' })
+
+    // A committed metadata write here would make the failure unrecoverable: the retry
+    // the copy invites matches the stored scene and returns ok without ever tracking.
+    expect(await storedMetadata(db, 'e2')).toEqual(before)
+    expect((await entityState(db, 'char_a')).current_location_id).not.toBe(LOC_B)
+  })
 })

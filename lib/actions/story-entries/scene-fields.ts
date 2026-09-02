@@ -6,9 +6,9 @@ import { generateId } from '@/lib/ids'
 import { scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
-import { applyDeltaAction } from '../delta/apply-delta-action'
+import { applyDeltaActionGroup } from '../delta/apply-delta-action'
 import { withKeyLock } from '../delta/key-lock'
-import type { DbCtx } from '../types'
+import type { DbCtx, PipelineAction } from '../types'
 import type { StoryEntryRejection } from './operational'
 import { STORY_ENTRY_REJECTION, type StoryEntryRejectionCode } from './register'
 import { entryMetadataLockKey } from './world-time'
@@ -108,28 +108,13 @@ async function updateEntrySceneFieldsLocked(
   const previousMetadata = previousEntry?.metadata
   const actionId = generateId('act')
 
-  const metadataResult = await applyDeltaAction(
-    {
-      action: {
-        kind: 'updateStoryEntryMetadata',
-        source: 'user_edit',
-        payload: { branchId, id, metadata: after },
-      },
-      actionId,
-      branchId,
-      // Survival anchor: the delta's subject is this entry, so reversing a LATER
-      // turn's suffix spares it.
-      entryId: id,
-    },
-    ctx,
-  )
-  if (metadataResult.status !== 'ok')
-    return rejected(STORY_ENTRY_REJECTION.deltaFailed, metadataResult.reason)
-
-  // Same actionId as the metadata write, so undo reverses the correction and the
-  // world state it produced as one step.
   const branchEntities = [...entitiesStore.getEntities().values()]
-  const tracking = [
+  const group: PipelineAction[] = [
+    {
+      kind: 'updateStoryEntryMetadata',
+      source: 'user_edit',
+      payload: { branchId, id, metadata: after },
+    },
     // Promotion first: a staged entity the edit brings into the scene is promoted
     // exactly as the generation fold would, which is what the editor's copy promises.
     ...scenePromotionActions({
@@ -152,21 +137,19 @@ async function updateEntrySceneFieldsLocked(
       after,
     }),
   ]
-  for (const action of tracking) {
-    const result = await applyDeltaAction({ action, actionId, branchId, entryId: id }, ctx)
-    // 'noop' is the expected outcome for a character already at the edited location,
-    // which forward-diff emits for every in-scene member without checking first — the
-    // handler owns that judgement. Treating it as a failure would reject the user's
-    // whole correction over a redundant patch.
-    if (result.status !== 'ok' && result.code !== 'noop') {
-      logger.warn('action_layer.scene_tracking_rejected', {
-        branchId,
-        entryId: id,
-        reason: result.reason,
-        code: result.code,
-      })
-      return rejected(STORY_ENTRY_REJECTION.deltaFailed, result.reason)
-    }
+
+  // One transaction under one actionId: a partial commit would report total failure over
+  // an already-changed scene, and the retry it invites short-circuits on sameMembers.
+  // entryId anchors survival — reversing a LATER turn's suffix spares this entry.
+  const result = await applyDeltaActionGroup(group, { actionId, branchId, entryId: id }, ctx)
+  if (result.status !== 'ok') {
+    logger.warn('action_layer.scene_edit_rejected', {
+      branchId,
+      entryId: id,
+      reason: result.reason,
+      code: result.code,
+    })
+    return rejected(STORY_ENTRY_REJECTION.deltaFailed, result.reason)
   }
 
   return { status: 'ok' }

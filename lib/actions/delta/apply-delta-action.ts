@@ -13,7 +13,7 @@ import {
   type PipelineAction,
 } from '../types'
 import { withKeyLock } from './key-lock'
-import { resolveByActionKind, resolveByTable } from './registry'
+import { resolveByActionKind, resolveByTable, type HandlerOutcome } from './registry'
 
 type Args = { action: PipelineAction; actionId: string; branchId: string; entryId?: string | null }
 
@@ -99,4 +99,119 @@ async function applyDeltaActionUnlocked(args: Args, ctx: DbCtx): Promise<Mutatio
     return { status: 'ok', logPosition: null }
   }
   return { status: 'ok', logPosition: row.lp }
+}
+
+export type DeltaGroupResult =
+  | { status: 'ok' }
+  | { status: 'rejected'; reason: string; code?: string }
+
+function promoteLockKeys(actions: readonly PipelineAction[]): string[] {
+  const keys = actions.flatMap((a) =>
+    a.kind === 'promoteStagedEntity'
+      ? [`promoteStagedEntity:${a.payload.branchId}:${a.payload.id}`]
+      : [],
+  )
+  // Sorted so two groups sharing a subset of keys acquire them in the same order.
+  return [...new Set(keys)].sort()
+}
+
+/**
+ * Commits several actions under one actionId as a SINGLE transaction, so a rejection
+ * anywhere in the group leaves nothing behind. Sequential `applyDeltaAction` calls
+ * cannot give that: each commits on its own, so a caller learns of a failure only once
+ * the earlier writes are durable and the stores are patched.
+ *
+ * Handlers run before the transaction opens, so every one reads pre-group state. Two
+ * consequences bind callers: an action cannot depend on a row an earlier action in the
+ * group creates, and two actions writing one row's same column would build payloads from
+ * the same snapshot, so the later silently drops the earlier. The second is rejected
+ * here rather than left to each caller to reason about.
+ */
+export async function applyDeltaActionGroup(
+  actions: readonly PipelineAction[],
+  args: { actionId: string; branchId: string; entryId?: string | null },
+  ctx: DbCtx,
+): Promise<DeltaGroupResult> {
+  return promoteLockKeys(actions).reduceRight<() => Promise<DeltaGroupResult>>(
+    (run, key) => () => withKeyLock(key, run),
+    () => applyDeltaActionGroupUnlocked(actions, args, ctx),
+  )()
+}
+
+async function applyDeltaActionGroupUnlocked(
+  actions: readonly PipelineAction[],
+  args: { actionId: string; branchId: string; entryId?: string | null },
+  ctx: DbCtx,
+): Promise<DeltaGroupResult> {
+  const { actionId, branchId } = args
+  const entryId = args.entryId ?? null
+
+  type Prepared = {
+    deltaId: string
+    source: PipelineAction['source']
+    outcome: Extract<HandlerOutcome, { status: 'ok' }>
+  }
+  const prepared: Prepared[] = []
+  const pendingColumns = new Map<string, Set<string>>()
+
+  for (const action of actions) {
+    if (isUserOriginatedSource(action.source) && generationStore.getTxState().reversalInProgress)
+      return {
+        status: 'rejected',
+        code: 'reversal-in-progress',
+        reason: 'prose reversal in progress',
+      }
+
+    const resolved = resolveByActionKind(action.kind)
+    if (!resolved) return { status: 'rejected', reason: `no handler registered for ${action.kind}` }
+
+    const outcome = await resolved.handler(action, branchId, ctx)
+    if (outcome.status === 'rejected') {
+      // A no-op contributes nothing to commit, and a group cannot half-fail on one.
+      if (outcome.code === 'noop') continue
+      return { status: 'rejected', reason: outcome.reason, code: outcome.code }
+    }
+
+    const rowKey = `${outcome.targetTable}:${outcome.targetId}`
+    const columns = outcome.patch?.op === 'update' ? Object.keys(outcome.patch.columns) : []
+    const claimed = pendingColumns.get(rowKey)
+    if (claimed !== undefined && columns.some((c) => claimed.has(c)))
+      return {
+        status: 'rejected',
+        reason: `group writes ${rowKey} twice on one column; every handler read pre-group state`,
+      }
+    pendingColumns.set(rowKey, new Set([...(claimed ?? []), ...columns]))
+
+    prepared.push({ deltaId: generateId('delta'), source: action.source, outcome })
+  }
+
+  if (prepared.length === 0) return { status: 'ok' }
+
+  const ops: SqlOp[] = prepared.flatMap(({ deltaId, source, outcome }) => [
+    ctx.db
+      .insert(deltas)
+      .values({
+        id: deltaId,
+        branchId,
+        entryId,
+        actionId,
+        logPosition: nextLogPosition(branchId),
+        source,
+        targetTable: outcome.targetTable,
+        targetId: outcome.targetId,
+        op: outcome.op,
+        undoPayload: outcome.undoPayload,
+        encodingVersion: 1,
+        createdAt: Date.now(),
+      })
+      .toSQL(),
+    ...outcome.ops,
+  ])
+
+  await ctx.runInTransaction(ops)
+  undoRedoStore.clear()
+  for (const { outcome } of prepared) {
+    if (outcome.patch) resolveByTable(outcome.targetTable)?.patcher?.(branchId, outcome.patch)
+  }
+  return { status: 'ok' }
 }

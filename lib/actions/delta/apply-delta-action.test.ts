@@ -5,7 +5,8 @@ import { branches, deltas, stories, storyEntries } from '@/lib/db'
 import { createTestDb } from '@/lib/db/__tests__/test-db'
 import { generationStore, resetAllStores, undoRedoStore } from '@/lib/stores'
 
-import { applyDeltaAction } from './apply-delta-action'
+import type { PipelineAction } from '../types'
+import { applyDeltaAction, applyDeltaActionGroup } from './apply-delta-action'
 
 async function seed(db: Awaited<ReturnType<typeof createTestDb>>['db']) {
   await db.insert(stories).values({ id: 's1', title: 'T', createdAt: 1, updatedAt: 1 })
@@ -222,5 +223,97 @@ describe('applyDeltaAction', () => {
       code: 'reversal-in-progress',
       reason: 'prose reversal in progress',
     })
+  })
+})
+
+describe('applyDeltaActionGroup', () => {
+  beforeEach(() => resetAllStores())
+  afterEach(() => resetAllStores())
+
+  const createEntry = (id: string, position: number): PipelineAction => ({
+    kind: 'createStoryEntry',
+    source: 'user_edit',
+    payload: {
+      entry: { id, branchId: 'b1', position, kind: 'ai_reply', content: id, createdAt: 1 },
+    },
+  })
+
+  const setMetadata = (id: string, worldTime: number): PipelineAction => ({
+    kind: 'updateStoryEntryMetadata',
+    source: 'user_edit',
+    payload: { branchId: 'b1', id, metadata: { worldTime } },
+  })
+
+  it('commits every action under one actionId with sequential log positions', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), createEntry('entry_2', 2)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res).toEqual({ status: 'ok' })
+    const rows = await db.select().from(deltas).where(eq(deltas.actionId, 'act_1'))
+    // MAX+1 is a subquery per statement, so batching must not collapse the positions.
+    expect(rows.map((r) => r.logPosition).sort()).toEqual([1, 2])
+    expect((await db.select().from(storyEntries)).length).toBe(2)
+  })
+
+  it('commits nothing when a later action rejects', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), setMetadata('entry_missing', 5)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res.status).toBe('rejected')
+    // The first action's row must not survive the second's refusal.
+    expect((await db.select().from(storyEntries)).length).toBe(0)
+    expect((await db.select().from(deltas)).length).toBe(0)
+  })
+
+  it('refuses a group whose actions write one row column twice', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await applyDeltaActionGroup(
+      [createEntry('entry_1', 1)],
+      { actionId: 'act_0', branchId: 'b1' },
+      ctx,
+    )
+
+    // Both handlers read pre-group state, so committing both would silently drop the
+    // first writer's value rather than merge onto it.
+    const res = await applyDeltaActionGroup(
+      [setMetadata('entry_1', 10), setMetadata('entry_1', 20)],
+      { actionId: 'act_1', branchId: 'b1' },
+      ctx,
+    )
+
+    expect(res.status).toBe('rejected')
+    const [entry] = await db.select().from(storyEntries).where(eq(storyEntries.id, 'entry_1'))
+    expect(entry.metadata).toBeNull()
+  })
+
+  // Every handler runs before the transaction opens, so an action cannot depend on a row
+  // an earlier action in the same group creates. Callers compose groups over rows that
+  // already exist.
+  it('cannot update a row created by an earlier action in the same group', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    await seed(db)
+
+    const res = await applyDeltaActionGroup(
+      [createEntry('entry_1', 1), setMetadata('entry_1', 7)],
+      { actionId: 'act_1', branchId: 'b1' },
+      { db, runInTransaction },
+    )
+
+    expect(res.status).toBe('rejected')
+    expect((await db.select().from(storyEntries)).length).toBe(0)
   })
 })
