@@ -1,5 +1,5 @@
 // MultiSelect stories — Basic · Partial · None · Disabled · PerOptionDisabled
-// · NarrowContainer · ThemeMatrix (partial). ThemeMatrix is partial per the
+// · NarrowContainer · ThemeMatrix (partial) · ListDisabled. ThemeMatrix is partial per the
 // portal-skip rule in docs/ui/components.md → Storybook story conventions:
 // the open overlay portals to document.body, escaping per-row dataSet
 // scoping. Theme verification for the open branch uses the toolbar global
@@ -7,10 +7,11 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
 import { useState } from 'react'
 import { View } from 'react-native'
+import { expect, screen, userEvent } from 'storybook/test'
 
 import { themes } from '@/lib/themes'
 
-import { MultiSelect } from './multi-select'
+import { MultiSelect, MultiSelectList } from './multi-select'
 import { type MultiSelectOption } from './multi-select-state'
 import { Text } from './text'
 
@@ -140,4 +141,40 @@ export const ThemeMatrix: Story = {
       ))}
     </View>
   ),
+}
+
+function StatefulList({ disabled }: { disabled?: boolean }) {
+  const [selected, setSelected] = useState<string[]>(['classifier'])
+  return (
+    <>
+      <Text>{`selected:${selected.length}`}</Text>
+      <MultiSelectList
+        options={OPTIONS}
+        selected={selected}
+        onChange={setSelected}
+        disabled={disabled}
+      />
+    </>
+  )
+}
+
+// The bulk actions sit outside the row list, so gating only onToggle left Select all and
+// Clear all live while a save was in flight — enough to submit one scene and show the
+// failure over another.
+export const ListDisabled: Story = {
+  render: () => (
+    <View className="w-72 p-4">
+      <StatefulList disabled />
+    </View>
+  ),
+  play: async () => {
+    expect(screen.getByText('selected:1')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Select all' }))
+    expect(screen.getByText('selected:1')).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(screen.getByText('selected:1')).toBeVisible()
+    // The rows stay gated too, which was already true and must remain so.
+    await userEvent.click(screen.getByRole('checkbox', { name: 'retrieval' }))
+    expect(screen.getByText('selected:1')).toBeVisible()
+  },
 }

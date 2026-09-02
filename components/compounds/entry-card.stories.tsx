@@ -1052,8 +1052,13 @@ export const WorldStateTailEditable: StoryT = {
   },
   play: async () => {
     await openPanel()
-    await userEvent.click(screen.getByRole('button', { name: 'Edit scene' }))
+    const trigger = screen.getByRole('button', { name: 'Edit scene' })
+    await userEvent.click(trigger)
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Edit scene' })).toBeVisible())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    // Closing must hand the keyboard back to the control that opened it.
+    expect(document.activeElement).toBe(trigger)
   },
 }
 

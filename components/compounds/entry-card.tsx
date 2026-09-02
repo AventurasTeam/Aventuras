@@ -10,7 +10,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native'
-import { useEffect, useMemo, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { Platform, Pressable, View } from 'react-native'
 import Animated, {
   useAnimatedStyle,
@@ -99,7 +107,6 @@ type EntryCardProps = {
   stateReport?: EntryMetadata['stateReport']
   summary?: string
   /** Pre-strip rows only: the host passes `stripTrailingBlocks(content).stateRaw`. */
-  legacyStateRaw?: string
   /**
    * Desktop/tablet: fired by the in-card Dialog's Save. Resolve `false` to report a
    * failed write. Presence also gates the edit control, so the host supplies it on
@@ -251,6 +258,7 @@ function SceneEditDialog({
   currentLocationId,
   options,
   onEditScene,
+  returnFocusTo,
 }: {
   open: boolean
   onOpenChange: (next: boolean) => void
@@ -258,6 +266,7 @@ function SceneEditDialog({
   currentLocationId: string | null
   options: SceneOptions
   onEditScene?: (next: SceneEdit) => Promise<SceneSaveResult>
+  returnFocusTo: RefObject<View | null>
 }) {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | undefined>()
@@ -296,6 +305,15 @@ function SceneEditDialog({
         // The form pins its own actions below a scrolling body, the same shape the
         // sheet uses; a primitive-owned scroll region would swallow them.
         scrollable={false}
+        // Radix returns focus to whatever DialogTrigger registered, and this Dialog is
+        // controlled from the card rather than triggered, so it would drop the keyboard
+        // on <body> instead of the pencil that opened it.
+        onCloseAutoFocus={(event) => {
+          const trigger = returnFocusTo.current as { focus?: () => void } | null
+          if (typeof trigger?.focus !== 'function') return
+          event.preventDefault()
+          trigger.focus()
+        }}
         onOpenAutoFocus={(event) => {
           event.preventDefault()
           ;(event.currentTarget as HTMLElement | null)?.focus()
@@ -450,8 +468,7 @@ function WorldStatePanel({
   summary,
   legacyStateRaw,
   onOpenSceneEdit,
-  disabled,
-  disabledReason,
+  editTriggerRef,
 }: {
   sceneEntities: readonly string[]
   currentLocationId: string | null
@@ -460,8 +477,7 @@ function WorldStatePanel({
   summary?: string
   legacyStateRaw?: string
   onOpenSceneEdit?: () => void
-  disabled?: boolean
-  disabledReason?: string
+  editTriggerRef: RefObject<View | null>
 }) {
   const visualChanges = stateReport?.visualChanges ?? []
   const items = stateReport?.transfers?.items ?? []
@@ -509,8 +525,7 @@ function WorldStatePanel({
               label={t('reader:entryCard.stateEditScene')}
               size="sm"
               onPress={onOpenSceneEdit}
-              disabled={disabled}
-              disabledReason={disabledReason}
+              ref={editTriggerRef}
             />
           </View>
         ) : null}
@@ -564,12 +579,18 @@ function WorldStatePanel({
               {it.from != null
                 ? t('reader:entryCard.stateItemTransferFrom', {
                     item: resolveName(it.id, entityNames),
-                    to: it.to != null ? resolveName(it.to, entityNames) : '—',
+                    to:
+                      it.to != null
+                        ? resolveName(it.to, entityNames)
+                        : t('reader:entryCard.stateNone'),
                     from: resolveName(it.from, entityNames),
                   })
                 : t('reader:entryCard.stateItemTransfer', {
                     item: resolveName(it.id, entityNames),
-                    to: it.to != null ? resolveName(it.to, entityNames) : '—',
+                    to:
+                      it.to != null
+                        ? resolveName(it.to, entityNames)
+                        : t('reader:entryCard.stateNone'),
                   })}
             </StateLine>
           ))}
@@ -579,13 +600,19 @@ function WorldStatePanel({
                 ? t('reader:entryCard.stateStackableFrom', {
                     key: st.key,
                     amount: st.amount,
-                    to: st.to != null ? resolveName(st.to, entityNames) : '—',
+                    to:
+                      st.to != null
+                        ? resolveName(st.to, entityNames)
+                        : t('reader:entryCard.stateNone'),
                     from: resolveName(st.from, entityNames),
                   })
                 : t('reader:entryCard.stateStackable', {
                     key: st.key,
                     amount: st.amount,
-                    to: st.to != null ? resolveName(st.to, entityNames) : '—',
+                    to:
+                      st.to != null
+                        ? resolveName(st.to, entityNames)
+                        : t('reader:entryCard.stateNone'),
                   })}
             </StateLine>
           ))}
@@ -696,7 +723,6 @@ export function EntryCard({
   entityNames,
   stateReport,
   summary,
-  legacyStateRaw,
   onEditScene,
   onRequestEditScene,
   sceneOptions,
@@ -737,6 +763,7 @@ export function EntryCard({
   // Prose still comes from the strip: rows written before the write-path strip keep
   // their markup in `content`, so the reader stays a tolerant reader.
   const { prose, stateRaw } = useMemo(() => stripTrailingBlocks(content), [content])
+  const sceneTriggerRef = useRef<View | null>(null)
   // Deliberately NOT gated on `stateReport`. The editable fields are the absolute
   // scene triple, which every entry carries; gating on the report would make the
   // scene editor reachable only when a parse happened to succeed — an affordance
@@ -858,10 +885,9 @@ export function EntryCard({
             entityNames={entityNames ?? []}
             stateReport={stateReport}
             summary={summary}
-            legacyStateRaw={legacyStateRaw ?? stateRaw}
+            legacyStateRaw={stateRaw}
             onOpenSceneEdit={sceneEdit?.open}
-            disabled={disabled}
-            disabledReason={disabledReason}
+            editTriggerRef={sceneTriggerRef}
           />
           {sceneEdit != null && !useSceneRequest && sceneOptions != null ? (
             <SceneEditDialog
@@ -871,6 +897,7 @@ export function EntryCard({
               currentLocationId={currentLocationId ?? null}
               options={sceneOptions}
               onEditScene={onEditScene}
+              returnFocusTo={sceneTriggerRef}
             />
           ) : null}
         </>

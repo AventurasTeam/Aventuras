@@ -55,11 +55,10 @@ type EntryCardProps = {
   entityNames?: readonly { id: string; name?: string }[] // resolution pool for EVERY id the panel mentions, not just the scene; name absent renders the unknown-entity chip
   stateReport?: EntryMetadata['stateReport'] // ids inside are resolved by the card against the two props above
   summary?: string
-  legacyStateRaw?: string // pre-strip rows only; host passes stripTrailingBlocks(content).stateRaw
   onEditScene?: (next: {
     sceneEntities: string[]
     currentLocationId: string | null
-  }) => Promise<boolean> // desktop/tablet Dialog Save; presence also gates the edit control, so the host passes it on the tail entry only
+  }) => Promise<SceneSaveResult> // desktop/tablet Dialog Save; presence also gates the edit control, so the host passes it on the tail entry only, and only where the row has metadata to edit
   onRequestEditScene?: () => void // phone: the card requests, the host presents the native Sheet
   sceneOptions?: { characters: EntityOption[]; items: EntityOption[]; locations: EntityOption[] } // candidate pool for the editor's selects; required alongside either edit handler
 
@@ -271,7 +270,17 @@ reimplemented: a staged entity the edit names in the scene is promoted
 exactly as the classifier would promote it. On any non-tail entry the panel renders the same fields
 with **no edit control at all**, not a disabled one: a control present
 everywhere but effective only at the tail repeats the failure mode
-the panel exists to remove.
+the panel exists to remove. The same holds for a row whose `metadata`
+column is NULL: there is no absolute triple to edit, the action layer
+refuses it, so the host offers no control rather than one that fails.
+
+**A refusal says which one it was.** `SceneSaveResult` carries the
+action layer's rejection code back across the bridge, and the overlay
+maps it to copy. Only `deltaFailed` is worth retrying; `notTailEntry`,
+`noMetadata` and `notFound` are terminal, and a generic "try again"
+sends the user round a loop the action layer refuses identically every
+time. The overlay stays open on failure so the edit is never silently
+discarded.
 
 The world-time footer is unaffected and stays interactive on every
 entry — `worldTime` is a no-cascade scalar and its own monotonicity

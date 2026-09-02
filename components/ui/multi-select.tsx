@@ -223,15 +223,26 @@ export function MultiSelectList({
     [normalized, options, onChange],
   )
 
+  // Stable identity so the memoised Overlay does not re-render on every keystroke.
+  const noop = useCallback(() => {}, [])
+  // Bulk actions are gated with the rows: clearing mid-save leaves the form showing a
+  // failure over a selection that no longer matches what was submitted.
+  const inert = disabled === true
   return (
-    <View className={cn('overflow-hidden rounded-md border border-border', className)}>
+    <View
+      className={cn(
+        'overflow-hidden rounded-md border border-border',
+        inert && 'opacity-50',
+        className,
+      )}
+    >
       <Overlay
         options={options}
         selected={normalized}
         state={state}
-        onSelectAll={handleSelectAll}
-        onClearAll={handleClearAll}
-        onToggle={disabled === true ? () => {} : handleToggle}
+        onSelectAll={inert ? noop : handleSelectAll}
+        onClearAll={inert ? noop : handleClearAll}
+        onToggle={inert ? noop : handleToggle}
         insideSheet={insideSheet}
         scroll={scroll ?? (insideSheet ? 'none' : 'bounded')}
       />
