@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { Entity } from '@/lib/db'
 
-import { sceneTrackingActions } from './scene-tracking'
+import { scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 
 const branchId = 'branch_a'
 const entities = [
@@ -58,8 +58,10 @@ describe('sceneTrackingActions', () => {
   })
 
   // Promotion is a semantic event; no demote action exists and retiring an entity
-  // over a scene-list typo is the worse failure.
-  it('never emits a demotion', () => {
+  // over a scene-list typo is the worse failure. Asserted as what IS written rather
+  // than as the absence of a kind the function has no branch for.
+  it('closes a removed character out without touching their status', () => {
+    const after = { sceneEntities: [], currentLocationId: 'loc_a' }
     const actions = sceneTrackingActions({
       branchId,
       source: 'user_edit',
@@ -68,12 +70,29 @@ describe('sceneTrackingActions', () => {
         entryId: 'ent_0',
         sceneEntities: ['char_a'],
         currentLocationId: 'loc_a',
-        worldTime: 0,
+        worldTime: 40,
       },
       before: { sceneEntities: ['char_a'], currentLocationId: 'loc_a' },
-      after: { sceneEntities: [], currentLocationId: 'loc_a' },
+      after,
     })
-    expect(actions.every((a) => a.kind === 'updateEntityLocationTracking')).toBe(true)
+
+    // Visited, and only their lastSeenAt anchor is written.
+    expect(payloadsFor(actions, 'char_a')).toEqual([
+      {
+        branchId,
+        id: 'char_a',
+        lastSeenAt: { entryId: 'ent_0', locationId: 'loc_a', worldTime: 40 },
+      },
+    ])
+    // Leaving the scene is not a promotion event in either direction.
+    expect(
+      scenePromotionActions({
+        branchId,
+        source: 'user_edit',
+        entities,
+        sceneEntities: after.sceneEntities,
+      }),
+    ).toEqual([])
   })
 
   it('re-points every in-scene character when the location alone changed', () => {

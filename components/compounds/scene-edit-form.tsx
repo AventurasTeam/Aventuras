@@ -49,7 +49,10 @@ export type SceneOptions = {
 }
 
 export type SceneEditFormProps = {
-  /** The entry's current scene, seeding the controls. */
+  /**
+   * The entry's current scene. Read on mount only — remount via `key` to reseed after
+   * an external change, or the form shows a stale scene over a changed row.
+   */
   sceneEntities: readonly string[]
   currentLocationId: string | null
   options: SceneOptions

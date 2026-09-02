@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-native-web-vite'
-import { View } from 'react-native'
+import { ScrollView, View } from 'react-native'
 import { expect, screen } from 'storybook/test'
 
 import { Button } from '@/components/ui/button'
@@ -173,5 +173,56 @@ export const TallContent: Story = {
     // carry it off the top of the panel.
     const close = screen.getByRole('button', { name: 'Close' })
     expect(close.getBoundingClientRect().top - rect.top).toBeLessThan(64)
+  },
+}
+
+// The shape the scene editor ships: the form owns a bounded scroll region and pins its
+// own actions below it, so the primitive must add no scroller of its own — two nested
+// scrollables fight for the gesture on Android — while the height cap still applies.
+export const TallContentFormOwnedScroll: Story = {
+  render: () => (
+    <Dialog open>
+      <DialogContent scrollable={false}>
+        <DialogHeader>
+          <DialogTitle>Form-owned scroll</DialogTitle>
+        </DialogHeader>
+        <ScrollView style={{ maxHeight: 240 }}>
+          {Array.from({ length: 60 }, (_, i) => (
+            <Text key={i}>{`Row ${i + 1}`}</Text>
+          ))}
+        </ScrollView>
+        <DialogFooter>
+          <Button variant="primary">
+            <Text>Confirm</Text>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ),
+  play: async () => {
+    const panel = (await screen.findByText('Form-owned scroll')).closest(
+      '[role="dialog"]',
+    ) as HTMLElement
+    const rect = panel.getBoundingClientRect()
+    expect(rect.height).toBeLessThanOrEqual(window.innerHeight * 0.9 + 1)
+
+    const confirm = screen.getByRole('button', { name: 'Confirm' })
+    // Exactly one scroll region between the actions and the panel — the form's. A
+    // second would mean the primitive re-added the one this prop opts out of.
+    const scrollers: HTMLElement[] = []
+    for (let el = confirm.parentElement; el != null && el !== panel; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY
+      if (overflowY === 'auto' || overflowY === 'scroll') scrollers.push(el)
+    }
+    expect(scrollers).toHaveLength(0)
+
+    // The actions sit outside the form's scroller, so they stay put and on top.
+    const box = confirm.getBoundingClientRect()
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight + 1)
+    const topMost = document.elementFromPoint(
+      Math.floor(box.left + box.width / 2),
+      Math.floor(box.top + box.height / 2),
+    )
+    expect(confirm.contains(topMost) || confirm === topMost).toBe(true)
   },
 }
