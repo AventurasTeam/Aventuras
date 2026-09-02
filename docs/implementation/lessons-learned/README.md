@@ -58,6 +58,10 @@ slice plans when relevant.
 - [`BackHandler` is not inert on web](./backhandler-web-console-error.md)
   — RN-Web's shim `console.error`s on every subscribe; gate the
   subscribe on `Platform.OS === 'android'`, not the handler.
+- [Every RN-Web View is a stacking context](./rnweb-view-stacking-context.md)
+  — RN-Web emits `z-index: 0` on the base View style, so a portal
+  wrapper caps its own content below a Dialog; lift the ancestor, and
+  assert occlusion rather than z-index values.
 - [`className` on a Reanimated `Animated.*` is silently dropped](./nativewind-classname-on-animated-view.md)
   — NativeWind registers cssInterop for RN core components only and
   RNW drops unknown props, so the class lands nowhere on either

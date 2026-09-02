@@ -203,17 +203,16 @@ export const OverAModal: Story = {
     await userEvent.click(screen.getByRole('button', { name: 'Open popover' }))
     const content = await screen.findByText('Above the modal')
 
-    // Occlusion is not assertable through visibility alone — a covered element still
-    // reports visible. Compare the stacking values the two overlays actually resolve to.
-    const popoverLayer = content.closest('[class*="z-"]') as HTMLElement | null
-    const dialogLayer = screen
-      .getByText('Host modal')
-      .closest('[class*="z-"]') as HTMLElement | null
-    if (popoverLayer == null || dialogLayer == null) throw new Error('expected both layers')
-
-    const popoverZ = Number(getComputedStyle(popoverLayer).zIndex)
-    const dialogZ = Number(getComputedStyle(dialogLayer).zIndex)
-    expect(Number.isNaN(popoverZ)).toBe(false)
-    expect(popoverZ).toBeGreaterThan(dialogZ)
+    // Occlusion, not z-index values: the popover was once trapped in a stacking
+    // context whose own z-index capped it below the dialog, so every element in the
+    // subtree still reported a winning z-index while painting underneath. Hit-testing
+    // the rendered pixel is the only assertion that catches that.
+    const box = content.getBoundingClientRect()
+    const topMost = document.elementFromPoint(
+      Math.floor(box.left + box.width / 2),
+      Math.floor(box.top + box.height / 2),
+    )
+    expect(topMost).not.toBeNull()
+    expect(content.contains(topMost) || content === topMost).toBe(true)
   },
 }
