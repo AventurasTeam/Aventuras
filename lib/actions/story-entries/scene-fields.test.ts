@@ -187,6 +187,28 @@ describe('updateEntrySceneFields', () => {
     expect(row.status).toBe('active')
   })
 
+  // Naming a staged entity in the scene is a strong signal of intentional
+  // introduction — the same promotion the generation fold performs. The editor's own
+  // copy promises it ("…and staged promotion").
+  it('promotes a staged character the edit adds to the scene', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db.update(entities).set({ status: 'staged' }).where(eq(entities.id, 'char_b'))
+    entitiesStore.hydrate('b1', [
+      { ...character('char_a', LOC_A), status: 'active' },
+      { ...character('char_b', LOC_A), status: 'staged' },
+      location(LOC_A),
+      location(LOC_B),
+    ] as never)
+
+    // A real change: char_a leaves, staged char_b stays named in the scene.
+    await updateEntrySceneFields('b1', 'e2', { sceneEntities: ['char_b'] }, ctx)
+
+    const [row] = await db.select().from(entities).where(eq(entities.id, 'char_b'))
+    expect(row.status).toBe('active')
+  })
+
   it('rejects an edit to a non-tail entry', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

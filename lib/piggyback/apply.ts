@@ -2,7 +2,7 @@ import type { DeltaSource, PipelineAction } from '@/lib/actions'
 import type { CharacterState, Entity } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 
-import { sceneTrackingActions } from './scene-tracking'
+import { scenePromotionActions, sceneTrackingActions } from './scene-tracking'
 import type { ParsedStateBlock } from './types'
 import { resolvePiggybackWorldTimeDelta } from './world-time'
 
@@ -76,17 +76,7 @@ export function buildPiggybackActions(args: BuildArgs): BuildResult {
   // parses the merged result against the target's own kind-specific schema).
   const isCharacter = (id: string): boolean => byId.get(id)?.kind === 'character'
 
-  // Auto-promote staged entities named in sceneEntities
-  for (const id of sceneEntities) {
-    const entity = byId.get(id)
-    if (entity?.status === 'staged') {
-      actions.push({
-        kind: 'promoteStagedEntity',
-        source,
-        payload: { branchId, id },
-      })
-    }
-  }
+  actions.push(...scenePromotionActions({ branchId, source, entities, sceneEntities }))
 
   // Computed bookkeeping. Shared with the scene editor, which passes a distinct
   // `before` — here this entry's scene IS the previous entry's until the block

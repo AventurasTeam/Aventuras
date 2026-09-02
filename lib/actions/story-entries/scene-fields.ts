@@ -3,7 +3,7 @@ import { desc, eq } from 'drizzle-orm'
 import { storyEntries } from '@/lib/db'
 import { logger } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
-import { sceneTrackingActions } from '@/lib/piggyback'
+import { scenePromotionActions, sceneTrackingActions } from '@/lib/piggyback'
 import { entitiesStore, generationStore } from '@/lib/stores'
 
 import { applyDeltaAction } from '../delta/apply-delta-action'
@@ -128,19 +128,30 @@ async function updateEntrySceneFieldsLocked(
 
   // Same actionId as the metadata write, so undo reverses the correction and the
   // world state it produced as one step.
-  const tracking = sceneTrackingActions({
-    branchId,
-    source: 'user_edit',
-    entities: [...entitiesStore.getEntities().values()],
-    previous: {
-      entryId: previousEntry?.id ?? id,
-      sceneEntities: previousMetadata?.sceneEntities ?? [],
-      currentLocationId: previousMetadata?.currentLocationId ?? null,
-      worldTime: previousMetadata?.worldTime ?? 0,
-    },
-    before,
-    after,
-  })
+  const branchEntities = [...entitiesStore.getEntities().values()]
+  const tracking = [
+    // Promotion first: a staged entity the edit brings into the scene is promoted
+    // exactly as the generation fold would, which is what the editor's copy promises.
+    ...scenePromotionActions({
+      branchId,
+      source: 'user_edit',
+      entities: branchEntities,
+      sceneEntities: after.sceneEntities,
+    }),
+    ...sceneTrackingActions({
+      branchId,
+      source: 'user_edit',
+      entities: branchEntities,
+      previous: {
+        entryId: previousEntry?.id ?? id,
+        sceneEntities: previousMetadata?.sceneEntities ?? [],
+        currentLocationId: previousMetadata?.currentLocationId ?? null,
+        worldTime: previousMetadata?.worldTime ?? 0,
+      },
+      before,
+      after,
+    }),
+  ]
   for (const action of tracking) {
     const result = await applyDeltaAction({ action, actionId, branchId, entryId: id }, ctx)
     // 'noop' is the expected outcome for a character already at the edited location,

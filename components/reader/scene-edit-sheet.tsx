@@ -55,10 +55,14 @@ export function SceneEditSheet({
       }}
       ariaLabel={t('reader:sceneEdit.title')}
     >
-      <SheetContent anchor="bottom" size="auto" enablePanDownToClose={!saving}>
+      {/* Fixed detent, not `auto`: the scene list needs its own BottomSheetScrollView,
+          and `auto` wraps content in a BottomSheetView that captures vertical pan and
+          starves nested scrollables (sheet.tsx). */}
+      <SheetContent anchor="bottom" size="tall" enablePanDownToClose={!saving}>
         {/* Keyed so an external scene change (undo, classifier write) reseeds the
             form, which only reads its props on mount. */}
         <SceneEditForm
+          insideSheet
           key={`${sceneEntities.join(',')}|${currentLocationId ?? ''}`}
           sceneEntities={sceneEntities}
           currentLocationId={currentLocationId}

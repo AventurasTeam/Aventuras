@@ -261,7 +261,9 @@ rather than merely recorded. `sceneEntities` and `currentLocationId`
 drive materialized derived state — per-character `current_location_id`,
 `lastSeenAt`, staged promotion — which is a fold over entries, so
 editing the tail re-folds one step with nothing downstream to
-invalidate. On any non-tail entry the panel renders the same fields
+invalidate. Promotion is shared with the generation fold rather than
+reimplemented: a staged entity the edit names in the scene is promoted
+exactly as the classifier would promote it. On any non-tail entry the panel renders the same fields
 with **no edit control at all**, not a disabled one: a control present
 everywhere but effective only at the tail repeats the failure mode
 the panel exists to remove.
@@ -270,16 +272,29 @@ The world-time footer is unaffected and stays interactive on every
 entry — `worldTime` is a no-cascade scalar and its own monotonicity
 indicator already surfaces the only way to get it wrong.
 
-**The editor is an overlay, not inline.** A multi-select over entities
-plus a single-select location are overlay-shaped controls; nesting
-them inside an expanded panel inside the scrolling
-[reader document](./reader-document.md) reintroduces exactly the
-collision problems the world-time overlay was shaped to avoid. Tier
-split and hosting follow the world-time overlay verbatim: at desktop
-and tablet the card hosts a Dialog itself; at phone it renders no
-Sheet and calls a request handler, with the host presenting the native
-Sheet outside the document per
+**The editor is an overlay; its controls are not.** The editor itself is
+an overlay because it must survive the reader document scrolling under
+it. Its two controls are rendered **inline inside it** — a checkbox
+list for scene membership, a radio list for the location.
+
+That is a hard constraint, not a preference. Every pick-from-a-list
+primitive here — `Select`, `MultiSelect`, `SearchableOverlayList` —
+presents as a bottom Sheet on phone, and the editor is itself a Sheet
+on phone, so any of them nested inside it would be Sheet-over-Sheet,
+which [`layout.md → Stacking`](../foundations/mobile/layout.md#stacking)
+prohibits. `MultiSelect` therefore contributes
+[`MultiSelectList`](./forms.md), its list body without the trigger and
+overlay, and the location field forces `Select`'s inline `radio` mode
+rather than letting the auto-derivation pick `dropdown`.
+
+Tier split and hosting otherwise follow the world-time overlay: at
+desktop and tablet the card hosts a Dialog itself; at phone it renders
+no Sheet and calls a request handler, with the host presenting the
+native Sheet outside the document per
 [`reader-document.md → Bridge contract`](./reader-document.md#bridge-contract).
+The phone Sheet takes a **fixed detent**, not `auto` — `auto` wraps its
+content in a `BottomSheetView` that captures vertical pan and starves
+the scroll region the lists need.
 
 **Save / Cancel only — no "Save and regen".** Regenerating the entry
 re-runs piggyback, which emits a fresh `<state>` and overwrites the

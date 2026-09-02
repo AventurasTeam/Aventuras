@@ -94,7 +94,8 @@ export function MultiSelect({
       onSelectAll={handleSelectAll}
       onClearAll={handleClearAll}
       onToggle={handleToggle}
-      isPhone={usesSheet}
+      insideSheet={usesSheet}
+      scroll={usesSheet ? 'sheet' : 'bounded'}
     />
   )
 
@@ -174,6 +175,67 @@ export function MultiSelect({
   )
 }
 
+export type MultiSelectListProps = {
+  options: readonly MultiSelectOption[]
+  selected: ReadonlySet<string> | readonly string[]
+  onChange: (next: string[]) => void
+  disabled?: boolean
+  /**
+   * True when this list is rendered inside a bottom sheet. Selects the scroll host:
+   * a plain ScrollView's touches fight the sheet's drag gesture.
+   */
+  insideSheet?: boolean
+  className?: string
+}
+
+/**
+ * The selection list on its own, with no trigger and no overlay around it.
+ *
+ * Exists because every pick-from-a-list primitive here presents as a Sheet on phone,
+ * and a Sheet may not open over a Sheet
+ * (docs/ui/foundations/mobile/layout.md → Stacking). A form that is itself presented
+ * in a Sheet therefore cannot host `MultiSelect`; it renders this inline instead.
+ */
+export function MultiSelectList({
+  options,
+  selected,
+  onChange,
+  disabled,
+  insideSheet = false,
+  className,
+}: MultiSelectListProps) {
+  const normalized = useMemo(() => normalizeSelection(selected, options), [selected, options])
+  const state = useMemo(() => computeSelectionState(normalized, options), [normalized, options])
+
+  const handleSelectAll = useCallback(() => {
+    emitSelection(selectAll(options), options, onChange)
+  }, [options, onChange])
+  const handleClearAll = useCallback(() => {
+    emitSelection(clearAll(), options, onChange)
+  }, [options, onChange])
+  const handleToggle = useCallback(
+    (value: string) => {
+      emitSelection(toggleValue(normalized, value), options, onChange)
+    },
+    [normalized, options, onChange],
+  )
+
+  return (
+    <View className={cn('overflow-hidden rounded-md border border-border', className)}>
+      <Overlay
+        options={options}
+        selected={normalized}
+        state={state}
+        onSelectAll={handleSelectAll}
+        onClearAll={handleClearAll}
+        onToggle={disabled === true ? () => {} : handleToggle}
+        insideSheet={insideSheet}
+        scroll={insideSheet ? 'none' : 'bounded'}
+      />
+    </View>
+  )
+}
+
 type OverlayProps = {
   options: readonly MultiSelectOption[]
   selected: ReadonlySet<string>
@@ -181,7 +243,10 @@ type OverlayProps = {
   onSelectAll: () => void
   onClearAll: () => void
   onToggle: (value: string) => void
-  isPhone: boolean
+  /** Inside a gorhom bottom sheet — drives the touch row height. */
+  insideSheet: boolean
+  /** Which scroll host wraps the rows. `'none'` when an ancestor already scrolls. */
+  scroll: 'sheet' | 'bounded' | 'none'
 }
 
 const SCROLL_MAX_HEIGHT: ViewStyle = { maxHeight: 320 }
@@ -193,7 +258,8 @@ function Overlay({
   onSelectAll,
   onClearAll,
   onToggle,
-  isPhone,
+  insideSheet,
+  scroll,
 }: OverlayProps) {
   const header = (
     <View className="flex-row items-center gap-3 border-b border-border px-row-x-md py-row-y-sm">
@@ -226,11 +292,11 @@ function Overlay({
       option={option}
       checked={selected.has(option.value)}
       onPress={onToggle}
-      isPhone={isPhone}
+      insideSheet={insideSheet}
     />
   ))
 
-  if (isPhone) {
+  if (scroll === 'sheet') {
     // BottomSheetScrollView registers with gorhom's sheet gesture system;
     // a plain ScrollView's touches conflict with the sheet drag and its
     // scroll region doesn't claim available space inside the sheet.
@@ -239,6 +305,17 @@ function Overlay({
       <View className="flex-1">
         {header}
         <BottomSheetScrollView>{rows}</BottomSheetScrollView>
+      </View>
+    )
+  }
+
+  // An ancestor already owns the scroll. Nesting another scrollable here would
+  // fight it for the gesture and collapse to zero height inside a flex parent.
+  if (scroll === 'none') {
+    return (
+      <View>
+        {header}
+        {rows}
       </View>
     )
   }
@@ -261,7 +338,7 @@ type OptionRowProps = {
   option: MultiSelectOption
   checked: boolean
   onPress: (value: string) => void
-  isPhone: boolean
+  insideSheet: boolean
 }
 
 // Native popover width has no CSS-var equivalent to web's
@@ -278,7 +355,7 @@ function NativeWidthSync({ children }: { children: React.ReactNode }) {
   return <View style={style}>{children}</View>
 }
 
-function OptionRow({ option, checked, onPress, isPhone }: OptionRowProps) {
+function OptionRow({ option, checked, onPress, insideSheet }: OptionRowProps) {
   const handlePress = useCallback(() => onPress(option.value), [onPress, option.value])
 
   return (
@@ -289,7 +366,7 @@ function OptionRow({ option, checked, onPress, isPhone }: OptionRowProps) {
       disabled={option.disabled}
       className={cn(
         'flex-row items-center gap-3 px-row-x-md py-row-y-md',
-        isPhone && 'min-h-control-lg',
+        insideSheet && 'min-h-control-lg',
         Platform.select({ web: 'hover:bg-bg-raised' }),
         'active:bg-bg-raised',
         option.disabled && 'opacity-50',

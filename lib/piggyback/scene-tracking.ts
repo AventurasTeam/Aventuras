@@ -34,6 +34,28 @@ type Args = {
  * Never demotes: no demote action exists, and retiring an entity over a scene-list typo
  * is the worse failure (docs/ui/patterns/entry-card.md → Scene editor).
  */
+/**
+ * Auto-promote on scene membership: naming a staged entity in the scene is a strong
+ * signal of intentional introduction (docs/memory/piggyback.md → Auto-promote on
+ * staged-ID emission). Shared by the generation fold and the scene editor so a user
+ * adding a staged character promotes them exactly as the classifier would.
+ *
+ * Deliberately one-directional — removing someone never demotes. No demote action
+ * exists, and retiring an entity over a scene-list typo is the worse failure.
+ */
+export function scenePromotionActions(args: {
+  branchId: string
+  source: DeltaSource
+  entities: readonly Entity[]
+  sceneEntities: readonly string[]
+}): PipelineAction[] {
+  const { branchId, source, entities, sceneEntities } = args
+  const byId = new Map(entities.map((e) => [e.id, e]))
+  return sceneEntities
+    .filter((id) => byId.get(id)?.status === 'staged')
+    .map((id) => ({ kind: 'promoteStagedEntity', source, payload: { branchId, id } }) as const)
+}
+
 export function sceneTrackingActions(args: Args): PipelineAction[] {
   const { branchId, source, entities, previous, before, after } = args
   const actions: PipelineAction[] = []

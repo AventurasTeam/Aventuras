@@ -1,8 +1,9 @@
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet'
 import { useMemo, useState } from 'react'
-import { View } from 'react-native'
+import { View, type ViewProps, type ViewStyle } from 'react-native'
 
 import { Button } from '@/components/ui/button'
-import { MultiSelect } from '@/components/ui/multi-select'
+import { MultiSelectList } from '@/components/ui/multi-select'
 import { Select } from '@/components/ui/select'
 import { Text } from '@/components/ui/text'
 import { t } from '@/lib/i18n'
@@ -22,6 +23,13 @@ export type SceneEditFormProps = {
   sceneEntities: readonly string[]
   currentLocationId: string | null
   options: SceneOptions
+  /**
+   * True when the form is presented in a bottom sheet (the phone tier). Both controls
+   * are inline regardless — a Sheet may not open over a Sheet, and every picker
+   * primitive here presents as one on phone — but the list needs the sheet's own
+   * scroll host to avoid fighting its drag gesture.
+   */
+  insideSheet?: boolean
   saving?: boolean
   saveError?: string
   onSave: (next: SceneEdit) => void
@@ -31,6 +39,24 @@ export type SceneEditFormProps = {
 
 /** Sentinel for "no location", since Select's value is a plain string. */
 const NO_LOCATION = '__none__'
+
+const FILL: ViewStyle = { flex: 1 }
+
+/** Scroll host for the form body: the sheet's own on phone, plain layout in a Dialog. */
+function Body({
+  insideSheet,
+  children,
+}: {
+  insideSheet: boolean
+  children: ViewProps['children']
+}) {
+  if (!insideSheet) return <View className="gap-3">{children}</View>
+  return (
+    <BottomSheetScrollView contentContainerClassName="gap-3 pb-3" style={FILL}>
+      {children}
+    </BottomSheetScrollView>
+  )
+}
 
 function sameMembers(a: readonly string[], b: readonly string[]): boolean {
   if (a.length !== b.length) return false
@@ -42,6 +68,7 @@ export function SceneEditForm({
   sceneEntities,
   currentLocationId,
   options,
+  insideSheet = false,
   saving = false,
   saveError,
   onSave,
@@ -79,38 +106,46 @@ export function SceneEditForm({
   }
 
   return (
-    <View className="gap-3">
-      <View className="gap-1">
-        <Text size="xs" variant="muted" className="uppercase tracking-wide">
-          {t('reader:sceneEdit.inScene')}
-        </Text>
-        <MultiSelect
-          prefix={t('reader:sceneEdit.inScene')}
-          options={sceneChoices}
-          selected={scene}
-          onChange={setScene}
-          disabled={saving}
-        />
-      </View>
+    <View className={insideSheet ? 'flex-1' : undefined}>
+      {/* One scroll region for the whole body, with the actions pinned below it: the
+          lists are unbounded, and Save must stay reachable without scrolling to it. */}
+      <Body insideSheet={insideSheet}>
+        <View className="gap-1">
+          <Text size="xs" variant="muted" className="uppercase tracking-wide">
+            {t('reader:sceneEdit.inScene')}
+          </Text>
+          <MultiSelectList
+            options={sceneChoices}
+            selected={scene}
+            onChange={setScene}
+            disabled={saving}
+            insideSheet={insideSheet}
+          />
+        </View>
 
-      <View className="gap-1">
-        <Text size="xs" variant="muted" className="uppercase tracking-wide">
-          {t('reader:sceneEdit.location')}
-        </Text>
-        <Select
-          options={locationChoices}
-          value={locationId}
-          onValueChange={setLocationId}
-          label={t('reader:sceneEdit.location')}
-          disabled={saving}
-        />
-      </View>
+        <View className="gap-1">
+          <Text size="xs" variant="muted" className="uppercase tracking-wide">
+            {t('reader:sceneEdit.location')}
+          </Text>
+          {/* Forced to radio: the auto-derivation picks `dropdown` past seven options or
+            on phone, and dropdown is the branch that opens a Sheet. Radio renders
+            inline on every tier. */}
+          <Select
+            mode="radio"
+            options={locationChoices}
+            value={locationId}
+            onValueChange={setLocationId}
+            label={t('reader:sceneEdit.location')}
+            disabled={saving}
+          />
+        </View>
 
-      {/* Applied, not merely recorded: these two fields drive materialized derived
+        {/* Applied, not merely recorded: these two fields drive materialized derived
           state, and removing someone never retires them. */}
-      <Text size="xs" variant="muted">
-        {t('reader:sceneEdit.applyNote')}
-      </Text>
+        <Text size="xs" variant="muted">
+          {t('reader:sceneEdit.applyNote')}
+        </Text>
+      </Body>
 
       {saveError != null ? (
         <View role="alert" accessibilityLiveRegion="assertive">
@@ -120,7 +155,9 @@ export function SceneEditForm({
         </View>
       ) : null}
 
-      <View className="flex-row justify-end gap-2">
+      <View
+        className={insideSheet ? 'flex-row justify-end gap-2 pt-3' : 'flex-row justify-end gap-2'}
+      >
         <Button variant="ghost" size="sm" onPress={onCancel} disabled={saving}>
           <Text>{t('cancel')}</Text>
         </Button>
