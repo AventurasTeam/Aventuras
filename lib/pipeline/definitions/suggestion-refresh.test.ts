@@ -568,10 +568,10 @@ describe('suggestion-refresh emission phase', () => {
     })
   })
 
-  it('builds a metadata floor for a legacy target entry that carries none', async () => {
+  it('claims only its own field on a legacy target entry that carries no metadata', async () => {
     openStory()
-    // Legacy, not system: system targets are refused outright above, so the
-    // floor exists for rows written before the metadata column carried a scene.
+    // Legacy, not system: system targets are refused outright above. The scene floor for
+    // a NULL column is the update handler's job, so the payload must not restate it.
     hydrate([{ ...TARGET_ENTRY, metadata: null }])
     wireAppSettings()
     generateStructuredMock.mockResolvedValue(okChips([{ categoryRef: 'cat1', text: 'Draw.' }]))
@@ -586,9 +586,6 @@ describe('suggestion-refresh emission phase', () => {
     )
       throw new Error('expected an updateStoryEntryMetadata delta')
     expect(event.action.payload.metadata).toEqual({
-      sceneEntities: [],
-      currentLocationId: null,
-      worldTime: 0,
       nextTurnSuggestions: {
         items: [{ categoryId: 'cat_action', text: 'Draw.' }],
         source: 'refresh',

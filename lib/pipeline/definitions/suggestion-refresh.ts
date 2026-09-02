@@ -1,7 +1,6 @@
 import { z } from 'zod'
 
 import { generateStructured, type ResolveModelConfig } from '@/lib/ai'
-import { inheritedEntryMetadata } from '@/lib/db'
 import {
   findSuggestionAnchor,
   resolveSuggestionEmission,
@@ -200,11 +199,6 @@ async function* suggestionEmissionPhase(
         branchId: ctx.branchId,
         id: target.id,
         metadata: {
-          // The empty-state ⟳ Generate fires on entries carrying no metadata at all —
-          // the column is nullable, so that is a live shape. The scene floor is
-          // substituted only when there is nothing to merge onto; every other case is
-          // covered by the handler's merge, which must not be handed a stale snapshot.
-          ...(current.metadata == null ? inheritedEntryMetadata(null) : {}),
           nextTurnSuggestions: {
             items,
             source: 'refresh' as const,

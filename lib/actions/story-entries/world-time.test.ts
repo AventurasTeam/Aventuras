@@ -362,6 +362,40 @@ describe('updateStoryEntryMetadata partial merge', () => {
     expect(after?.sceneEntities).toEqual(['ent1'])
   })
 
+  // The column is nullable, so a partial writer needs a floor under it or the row ends up
+  // missing the three non-optional scene fields entirely.
+  it('completes a NULL metadata column rather than persisting only the partial', async () => {
+    const { db, runInTransaction } = await createTestDb()
+    const ctx = { db, runInTransaction }
+    await seed(db)
+    await db
+      .update(storyEntries)
+      .set({ metadata: null })
+      .where(and(eq(storyEntries.branchId, 'b1'), eq(storyEntries.id, 'e2')))
+
+    const result = await applyDeltaAction(
+      {
+        action: {
+          kind: 'updateStoryEntryMetadata',
+          source: 'per_turn_classifier',
+          payload: { branchId: 'b1', id: 'e2', metadata: { summary: 'first' } },
+        },
+        actionId: 'act_floor',
+        branchId: 'b1',
+        entryId: 'e2',
+      },
+      ctx,
+    )
+    expect(result.status).toBe('ok')
+
+    expect(await storedMetadata(db, 'e2')).toEqual({
+      sceneEntities: [],
+      currentLocationId: null,
+      worldTime: 0,
+      summary: 'first',
+    })
+  })
+
   it('reverses a partial merge back to the pre-write value', async () => {
     const { db, runInTransaction } = await createTestDb()
     const ctx = { db, runInTransaction }

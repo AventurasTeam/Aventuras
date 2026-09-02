@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm'
 
 import type { EntryMetadata, NewStoryEntry, StoryEntry } from '@/lib/db'
-import { entryMetadataSchema, storyEntries } from '@/lib/db'
+import { entryMetadataSchema, inheritedEntryMetadata, storyEntries } from '@/lib/db'
 import { entriesStore } from '@/lib/stores'
 
 import { computeUndoPayload } from '../delta/delta-encoding'
@@ -96,7 +96,14 @@ const updateHandler: ActionHandler = async (action, branchId, ctx) => {
     .where(and(eq(storyEntries.branchId, bid), eq(storyEntries.id, id)))
   if (!current)
     return { status: 'rejected', reason: `update target story_entries ${bid}:${id} not found` }
-  const merged: EntryMetadata = { ...(current.metadata as EntryMetadata), ...metadata }
+  // The column is nullable, so a partial writer onto a NULL row would otherwise persist
+  // a blob missing the three non-optional scene fields — the cast alone made that look
+  // sound. The floor keeps the merged result a complete EntryMetadata for every caller.
+  const merged: EntryMetadata = {
+    ...inheritedEntryMetadata(current.metadata),
+    ...current.metadata,
+    ...metadata,
+  }
   return {
     status: 'ok',
     targetTable: 'story_entries',

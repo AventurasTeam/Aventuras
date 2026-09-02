@@ -102,6 +102,10 @@ const ReaderRow = memo(function ReaderRow({
 }: ReaderRowProps) {
   const isSystem = row.kind === 'system'
   const timeEditable = worldTimeRaw != null && worldTimeFrame != null
+  // A NULL metadata column carries no absolute triple to edit: the action layer rejects
+  // it and useSceneEditing will not open the sheet, so offering the control would leave
+  // the phone tier's button doing nothing at all.
+  const sceneEditable = isTail && row.metadata != null
   // EntryCard's canonical prop is an object; building it here keeps the walk
   // primitive-valued so ReaderRow's memo compare still holds.
   const monotonicityBreak =
@@ -143,9 +147,9 @@ const ReaderRow = memo(function ReaderRow({
       entityNames={entityNames}
       stateReport={row.metadata?.stateReport}
       summary={row.metadata?.summary}
-      sceneOptions={isTail ? sceneOptions : undefined}
-      onEditScene={isTail ? (next) => onEditScene(row.id, next) : undefined}
-      onRequestEditScene={isTail ? () => onRequestEditScene(row.id) : undefined}
+      sceneOptions={sceneEditable ? sceneOptions : undefined}
+      onEditScene={sceneEditable ? (next) => onEditScene(row.id, next) : undefined}
+      onRequestEditScene={sceneEditable ? () => onRequestEditScene(row.id) : undefined}
     />
   )
 })
