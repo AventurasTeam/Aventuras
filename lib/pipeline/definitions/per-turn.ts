@@ -7,10 +7,12 @@ import { redactUrl } from '@/lib/diagnostics'
 import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
+  buildStateReport,
   parseStateBlock,
   parseSuggestionsBlock,
   resolveSuggestionEmission,
   resolveSuggestionItems,
+  stripTrailingBlocks,
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
@@ -187,6 +189,16 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   )
   const parseFailures = [...parsedState.failures, ...substitutionFailures]
 
+  // The column stores prose only (docs/memory/piggyback.md → Persistence and
+  // stripping); everything the block carried is persisted structurally instead.
+  const { prose, stateRaw } = stripTrailingBlocks(content)
+  const stateReport = buildStateReport({
+    layer: 'piggyback_tagged_block',
+    block: resolvedBlock,
+    failures: parseFailures,
+    ...(stateRaw !== undefined ? { raw: stateRaw } : {}),
+  })
+
   const piggybackParseSucceeded = parsedState.blockFound && parseFailures.length === 0
   if (piggybackShouldFire && !piggybackParseSucceeded) {
     ctx.log.warn('classifier.piggyback_parse_failed', {
@@ -256,6 +268,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
     generationTimingMs: Date.now() - startedAt,
     ...(reasoningText ? { reasoning: reasoningText } : {}),
     ...(piggybackApplied?.metadata ?? inherited),
+    ...(stateReport !== undefined ? { stateReport } : {}),
     ...(suggestionsCaptured
       ? { nextTurnSuggestions: { items: suggestionItems, source: 'piggyback' as const } }
       : {}),
@@ -278,7 +291,7 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
           branchId,
           position: next?.next ?? 1,
           kind: 'ai_reply',
-          content,
+          content: prose,
           chapterId: null,
           metadata,
           createdAt: Date.now(),

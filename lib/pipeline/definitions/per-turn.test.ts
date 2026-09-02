@@ -379,10 +379,17 @@ describe('per-turn pipeline declaration', () => {
         kind: 'createStoryEntry',
         payload: expect.objectContaining({
           entry: expect.objectContaining({
-            content: expect.stringContaining('<state>'),
+            // Prose only: the trailing block is parsed and stripped at write time,
+            // and what it carried is persisted structurally on stateReport instead.
+            content: 'The story begins.',
             metadata: expect.objectContaining({
               sceneEntities: [heroId],
               worldTime: 15,
+              stateReport: {
+                layer: 'piggyback_tagged_block',
+                sceneEntities: [heroId],
+                worldTimeDelta: 15,
+              },
             }),
           }),
         }),
@@ -398,6 +405,86 @@ describe('per-turn pipeline declaration', () => {
         payload: { branchId: 'b1', id: heroId },
       },
     })
+  })
+
+  it('strips BOTH trailing blocks from the persisted content, not only <state>', async () => {
+    currentStoryStore.set({
+      storyId: 's1',
+      branchId: 'b1',
+      definition,
+      settings: baseSettings({ partialChapterBuffer: 3, piggybackMode: 'on' }),
+    })
+    hydrateEntries(phaseDb, 'b1', [])
+    entitiesStore.hydrate('b1', [])
+    vi.spyOn(appSettingsStore, 'getAppSettings').mockReturnValue({
+      ...APP_SETTINGS_DEFAULTS,
+      providers: [
+        {
+          ...provider,
+          cachedModels: [{ id: 'model-1', capabilities: { taggedBlockReliable: true } }],
+        },
+      ],
+      profiles: [
+        {
+          id: 'prof-narrative',
+          kind: 'narrative',
+          name: 'Narrative',
+          modelRef: { providerId: provider.id, modelId: 'model-1' },
+        },
+      ],
+      defaultProviderId: provider.id,
+    })
+
+    streamTextMock.mockReturnValue({
+      ok: true,
+      modelId: 'model-1',
+      providerId: 'prov-1',
+      stream: {
+        fullStream: (async function* () {
+          yield {
+            type: 'text-delta',
+            text:
+              'The knight drew his sword.\n' +
+              '<state><world_time_delta>30</world_time_delta></state>\n' +
+              '<suggestions><item category="cat1">Run.</item></suggestions>',
+          }
+        })(),
+      },
+    })
+
+    const intermediates: Record<string, unknown> = {}
+    ensurePerTurnPipelineRegistered()
+    const phase = getPipeline(PER_TURN_KIND).phases[2]
+    if (!phase || !('run' in phase)) throw new Error('expected narrative phase')
+
+    const gen = phase.run({
+      actionId: 'act_1',
+      abortSignal: new AbortController().signal,
+      intermediates,
+      log: makeLogger('act_1'),
+      runInTransaction: async () => undefined,
+      db: phaseDb.db,
+      storyId: 's1',
+      branchId: 'b1',
+    })
+    const events = []
+    let next = await gen.next()
+    while (!next.done) {
+      events.push(next.value)
+      next = await gen.next()
+    }
+
+    const created = events.find(
+      (e) => e.type === 'delta_emitted' && e.action.kind === 'createStoryEntry',
+    )
+    if (!created || created.type !== 'delta_emitted' || created.action.kind !== 'createStoryEntry')
+      throw new Error('expected a createStoryEntry delta')
+    const { content, metadata } = created.action.payload.entry
+    expect(content).toBe('The knight drew his sword.')
+    expect(content).not.toContain('<state>')
+    expect(content).not.toContain('<suggestions>')
+    // The stripped state still reached metadata rather than being lost with the markup.
+    expect(metadata?.stateReport?.worldTimeDelta).toBe(30)
   })
 
   it('drops sceneEntities and falls back to the classifier when the model emits an unresolvable placeholder', async () => {
