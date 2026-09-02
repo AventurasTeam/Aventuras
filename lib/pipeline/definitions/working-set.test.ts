@@ -126,7 +126,8 @@ describe('loadPerTurnWorkingSet', () => {
 
   // The branch guard above already refuses a store hydrated elsewhere, so these
   // filters only catch a row tagged for another branch inside the held one.
-  // They stay because the prompt they feed describes a single branch's story.
+  // They stay because metadata inheritance and the retrieval query read the
+  // tail of this set, and a foreign row would be the wrong story's.
   it('drops rows tagged for another branch inside the held one', () => {
     openStory()
     entriesStore.hydrate('b1', [entry('e1', 1), entry('foreign', 2, 'b2')])

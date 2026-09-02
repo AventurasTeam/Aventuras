@@ -1,12 +1,13 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { APP_SETTINGS_DEFAULTS, STORY_SETTINGS_DEFAULTS, type StorySettings } from '@/lib/db'
 import { logger, makeLogger } from '@/lib/diagnostics'
 import { IdBiMap } from '@/lib/ids'
 import { runPreflight } from '@/lib/pipeline/runtime/preflight'
 import type { Pipeline, PreflightSnapshot } from '@/lib/pipeline/types'
-import { currentStoryStore, entitiesStore, entriesStore, resetAllStores } from '@/lib/stores'
+import { currentStoryStore, entitiesStore, resetAllStores } from '@/lib/stores'
 
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
 import {
   fallbackClassifierSchema,
   fallbackClassifierWithSuggestionsSchema,
@@ -59,11 +60,18 @@ vi.mock('@/lib/ai', async (importOriginal) => {
   }
 })
 
+let phaseDb: PhaseDb
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
+})
+
 describe('per-turn-piggyback', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     generateStructuredMock.mockReset()
     resetAllStores()
+    resetPhaseDb(phaseDb)
   })
 
   describe('resolvePiggybackFires', () => {
@@ -127,7 +135,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -140,7 +148,10 @@ describe('per-turn-piggyback', () => {
         done: true,
         value: {
           status: 'failed',
-          error: { kind: 'orchestrator', detail: 'piggyback-fallback: no open story for branch' },
+          error: {
+            kind: 'orchestrator',
+            detail: 'piggyback-fallback-classifier: no open story for branch',
+          },
         },
       })
     })
@@ -154,19 +165,19 @@ describe('per-turn-piggyback', () => {
         case: 'the open story is another branch',
         open: { storyId: 's1', branchId: 'b2' },
         loaded: 'b1',
-        detail: 'piggyback-fallback: no open story for branch',
+        detail: 'piggyback-fallback-classifier: no open story for branch',
       },
       {
         case: 'the open story is another story',
         open: { storyId: 's2', branchId: 'b1' },
         loaded: 'b1',
-        detail: 'piggyback-fallback: no open story for branch',
+        detail: 'piggyback-fallback-classifier: no open story for branch',
       },
       {
         case: 'the entries store holds another branch',
         open: { storyId: 's1', branchId: 'b1' },
         loaded: 'b2',
-        detail: 'piggyback-fallback: entries store loaded for another branch',
+        detail: 'piggyback-fallback-classifier: entries store loaded for another branch',
       },
     ])('refuses a desynced store when $case', async ({ open, loaded, detail }) => {
       currentStoryStore.set({
@@ -174,14 +185,14 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ piggybackMode: 'off' }),
       })
-      entriesStore.hydrate(loaded, [])
+      hydrateEntries(phaseDb, loaded, [])
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -204,14 +215,14 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ piggybackMode: 'off' }),
       })
-      entriesStore.hydrate('b1', [])
+      hydrateEntries(phaseDb, 'b1', [])
 
       const gen = piggybackFallbackClassifierPhase({
         actionId: 'act_1',
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -236,7 +247,7 @@ describe('per-turn-piggyback', () => {
           piggybackOutcome: { attempted: true, succeeded: true } satisfies PiggybackOutcome,
         },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -256,14 +267,15 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ piggybackMode: 'off' }),
       })
-      entriesStore.hydrate('b1', [])
+      hydrateEntries(phaseDb, 'b1', [])
+      entitiesStore.hydrate('b1', [])
 
       const ctx = {
         actionId: 'act_1',
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -283,7 +295,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -292,6 +304,7 @@ describe('per-turn-piggyback', () => {
           metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
         } as never,
       ])
+      entitiesStore.hydrate('b1', [])
 
       generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
 
@@ -300,7 +313,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -319,6 +332,131 @@ describe('per-turn-piggyback', () => {
       )
     })
 
+    // The pair is a pipeline contract, not a share of the prompt budget: the
+    // user's action can carry the state change ("I put the sword away"), so a
+    // story whose buffer knobs cut `entries` to a single row must still send
+    // both turns. partialChapterBuffer 1 with no protected floor is exactly
+    // that cut.
+    it('classifies both turns even when the buffer knobs would cut them to one', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {}, partialChapterBuffer: 1, protectedBuffer: 0 }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          kind: 'user_action',
+          content: 'I put the sword away.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          kind: 'ai_reply',
+          content: 'The blade slides home.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      await piggybackFallbackClassifierPhase(ctx).next()
+
+      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      expect(prompt).toContain('I put the sword away.')
+      expect(prompt).toContain('The blade slides home.')
+    })
+
+    // The prompt's turn pair and the row the patch lands on must be the same two
+    // rows. A store lagging the branch tail is what tells them apart: the second
+    // hydrate rewinds the window without removing anything from the database.
+    it('targets the turn pair the prompt rendered, not the entries store window', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      const rows = [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          kind: 'user_action',
+          content: 'I put the sword away.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+        {
+          id: 'entry-2',
+          branchId: 'b1',
+          position: 2,
+          kind: 'ai_reply',
+          content: 'The blade slides home.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ]
+      hydrateEntries(phaseDb, 'b1', rows)
+      hydrateEntries(phaseDb, 'b1', rows.slice(0, 1))
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({
+        status: 'ok',
+        value: {
+          sceneEntities: [],
+          currentLocation: undefined,
+          worldTimeDelta: 5,
+          visualChanges: [],
+          transfers: { items: [], stackables: [] },
+        },
+      })
+
+      const ctx = {
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      }
+
+      const gen = piggybackFallbackClassifierPhase(ctx)
+      const first = await gen.next()
+
+      const prompt = generateStructuredMock.mock.calls.at(-1)?.[1] as string
+      expect(prompt).toContain('The blade slides home.')
+      expect(first.value).toEqual({
+        type: 'delta_emitted',
+        action: expect.objectContaining({
+          kind: 'updateStoryEntryMetadata',
+          payload: expect.objectContaining({
+            id: 'entry-2',
+            // 100 from entry-1, the row the prompt showed as the previous turn —
+            // a window that ended at entry-1 would have had no previous row and
+            // started the delta from 0.
+            metadata: expect.objectContaining({ worldTime: 105 }),
+          }),
+        }),
+      })
+    })
+
     it('emits delta events and updates metadata when generateStructured succeeds', async () => {
       currentStoryStore.set({
         storyId: 's1',
@@ -326,7 +464,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -360,7 +498,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -401,7 +539,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -445,7 +583,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -485,7 +623,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -527,7 +665,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -555,7 +693,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -593,7 +731,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -627,7 +765,7 @@ describe('per-turn-piggyback', () => {
         definition,
         settings: baseSettings({ models: {} }),
       })
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -659,7 +797,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -689,7 +827,7 @@ describe('per-turn-piggyback', () => {
 
   describe('classifier fold — suggestions', () => {
     function runningEntries() {
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -735,7 +873,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -814,7 +952,7 @@ describe('per-turn-piggyback', () => {
           suggestionsCaptured: true,
         },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -862,7 +1000,7 @@ describe('per-turn-piggyback', () => {
         items: [{ categoryId: 'cat_action', text: 'Draw the blade.' }],
         source: 'piggyback' as const,
       }
-      entriesStore.hydrate('b1', [
+      hydrateEntries(phaseDb, 'b1', [
         {
           id: 'entry-1',
           branchId: 'b1',
@@ -898,7 +1036,7 @@ describe('per-turn-piggyback', () => {
           suggestionsCaptured: true,
         },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -952,7 +1090,7 @@ describe('per-turn-piggyback', () => {
           suggestionsCaptured: false,
         },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -994,7 +1132,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1067,7 +1205,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1122,7 +1260,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1184,7 +1322,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: makeLogger('act_1'),
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1249,7 +1387,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: logger,
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1302,7 +1440,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: logger,
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',
@@ -1346,7 +1484,7 @@ describe('per-turn-piggyback', () => {
         abortSignal: new AbortController().signal,
         intermediates: { idMap: new IdBiMap() },
         log: logger,
-        db: {} as never,
+        db: phaseDb.db,
         runInTransaction: async () => undefined,
         storyId: 's1',
         branchId: 'b1',

@@ -3,7 +3,6 @@ import { z } from 'zod'
 import { generateStructured, resolveModel, resolveModelCapabilities } from '@/lib/ai'
 import type { GenerateStructuredResult, ModelCapabilities, ResolveModelConfig } from '@/lib/ai'
 import { inheritedEntryMetadata } from '@/lib/db'
-import type { IdBiMap } from '@/lib/ids'
 import {
   buildPiggybackActions,
   resolveSuggestionEmission,
@@ -22,6 +21,7 @@ import type {
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
 import { appSettingsStore } from '@/lib/stores'
 
+import { readLastTurns } from './entry-reads'
 import { buildGenerationContext } from './generation-context'
 import { loadPerTurnWorkingSet } from './working-set'
 
@@ -127,13 +127,17 @@ export async function* piggybackFallbackClassifierPhase(
   const outcome = ctx.intermediates.piggybackOutcome as PiggybackOutcome | undefined
   if (!shouldFallbackFire(outcome)) return { status: 'completed' }
 
-  const working = loadPerTurnWorkingSet(ctx, 'piggyback-fallback')
+  const working = loadPerTurnWorkingSet(ctx, PIGGYBACK_FALLBACK_PHASE_NAME)
   if (!working.ok) return working.result
-  const { open, entries, entities } = working.set
+  const { open, entities } = working.set
 
-  const tail = entries.at(-1)
+  // The same read the prompt's `lastTurns` comes from, so the extracted state is
+  // written back to the row the classifier actually reasoned over rather than to
+  // whatever the reader's window happens to end on.
+  const turns = await readLastTurns(ctx.db, ctx.branchId)
+  const tail = turns.at(-1)
   if (!tail) return { status: 'completed' }
-  const previousEntry = entries.at(-2)
+  const previousEntry = turns.at(-2)
 
   const suggestionEmission = resolveSuggestionEmission(open.settings)
   // Only ask when chips aren't already in hand: a <state>-failed /
@@ -144,22 +148,20 @@ export async function* piggybackFallbackClassifierPhase(
 
   // Same context builder + template pattern as the narrative phase
   // (lib/pipeline/definitions/per-turn.ts) — the classifier is a
-  // story-related prompt like any other, not a special case. Reuses the
-  // narrative phase's idMap (ctx.intermediates) so placeholder IDs stay
-  // consistent across the turn instead of being renumbered from scratch.
-  const idMap = ctx.intermediates.idMap as IdBiMap
-  const context = buildGenerationContext({
-    branchId: ctx.branchId,
-    // The user's action can itself carry state changes ("I put the sword
-    // away"), not just the AI's reply — both entries go to the classifier.
-    entries: previousEntry ? [previousEntry, tail] : [tail],
-    entities,
-    definition: open.definition,
-    settings: open.settings,
-    idMap,
+  // story-related prompt like any other, not a special case. Its template
+  // renders `lastTurns` rather than `entries`: the user's action can itself
+  // carry state changes ("I put the sword away"), not just the AI's reply, and
+  // that pair is a fixed contract the story's buffer knobs must not cut.
+  const load = await buildGenerationContext(ctx, {
+    phaseName: PIGGYBACK_FALLBACK_PHASE_NAME,
+    templateId: TEMPLATE_IDS.piggybackFallbackClassifier,
     suggestionsFire: askForSuggestions,
   })
-  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, context)
+  if (!load.ok) return load.result
+  // Run-scoped, so placeholder ids stay consistent with the narrative fold's
+  // prompt instead of being renumbered from scratch.
+  const { idMap } = load
+  const prompt = renderTemplate(TEMPLATE_IDS.piggybackFallbackClassifier, load.context)
 
   const appSettings = appSettingsStore.getAppSettings()
   const classifierConfig: ResolveModelConfig = {

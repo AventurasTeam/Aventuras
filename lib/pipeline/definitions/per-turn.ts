@@ -4,7 +4,7 @@ import { eq, sql } from 'drizzle-orm'
 import { describeProviderError, resolveModel, resolveModelCapabilities, streamText } from '@/lib/ai'
 import { inheritedEntryMetadata, storyEntries, type EntryMetadata } from '@/lib/db'
 import { redactUrl } from '@/lib/diagnostics'
-import { generateId, IdBiMap } from '@/lib/ids'
+import { generateId } from '@/lib/ids'
 import {
   buildPiggybackActions,
   parseStateBlock,
@@ -14,7 +14,6 @@ import {
   substitutePiggybackIds,
 } from '@/lib/piggyback'
 import { renderTemplate, TEMPLATE_IDS } from '@/lib/prompts'
-import type { RetrievalSuccess } from '@/lib/retrieval'
 import { appSettingsStore, currentStoryStore } from '@/lib/stores'
 
 import { buildGenerationContext } from './generation-context'
@@ -24,11 +23,7 @@ import {
   piggybackFallbackClassifierPhase,
   resolvePiggybackFires,
 } from './per-turn-piggyback'
-import {
-  RETRIEVAL_INTERMEDIATE_KEY,
-  RETRIEVAL_PHASE_NAME,
-  retrievalPhase,
-} from './per-turn-retrieval'
+import { RETRIEVAL_PHASE_NAME, retrievalPhase } from './per-turn-retrieval'
 import { loadPerTurnWorkingSet } from './working-set'
 import { definePipeline } from '../authoring/define'
 import { getPipeline } from '../authoring/registry'
@@ -45,22 +40,9 @@ export type PerTurnPhaseName =
   | 'narrative'
   | typeof PIGGYBACK_FALLBACK_PHASE_NAME
 
-// `ctx.intermediates` is Record<string, unknown>, so presence is the discriminant:
-// only ok outcomes are ever stashed, and the phase fails the run before this one
-// otherwise — absence degrades the prompt to empty buckets rather than throwing.
-// The `ok` check is defensive: a future stash of the failure variant must not
-// reach the builder as a bundle.
-function readRetrievalOutcome(
-  intermediates: Record<string, unknown>,
-): RetrievalSuccess | undefined {
-  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
-  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
-  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
-}
-
 async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEvent, PhaseResult> {
   const { branchId } = ctx
-  const working = loadPerTurnWorkingSet(ctx, PER_TURN_KIND)
+  const working = loadPerTurnWorkingSet(ctx, 'narrative')
   if (!working.ok) return working.result
   const { open, entries, entities } = working.set
 
@@ -97,20 +79,15 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   const suggestionEmission = resolveSuggestionEmission(open.settings)
   const suggestionsShouldFire = piggybackShouldFire && suggestionEmission.settingsAllowEmission
 
-  const idMap = new IdBiMap()
-  ctx.intermediates.idMap = idMap
-  const context = buildGenerationContext({
-    branchId,
-    entries,
-    entities,
-    definition: open.definition,
-    settings: open.settings,
-    idMap,
+  const load = await buildGenerationContext(ctx, {
+    phaseName: 'narrative',
+    templateId: TEMPLATE_IDS.perTurnNarrative,
     piggybackFires: piggybackShouldFire,
     suggestionsFire: suggestionsShouldFire,
-    retrieval: readRetrievalOutcome(ctx.intermediates),
   })
-  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, context)
+  if (!load.ok) return load.result
+  const { idMap } = load
+  const prompt = renderTemplate(TEMPLATE_IDS.perTurnNarrative, load.context)
 
   const entryId = generateId('entry')
   const startedAt = Date.now()
@@ -173,10 +150,10 @@ async function* narrativePhase(ctx: PhaseContext): AsyncGenerator<PhaseEmittedEv
   if (ctx.abortSignal.aborted) return { status: 'aborted' }
   if (streamError !== undefined) {
     // The envelope message alone ("Failed to process successful response") names
-    // nothing actionable, and this is the only surface the failure reaches — the
-    // orchestrator does not log phase failures. No body: httpCallSink already
-    // stores it, capped. The URL is redacted — an OpenAI-compatible endpoint can
-    // pass its key as a query param.
+    // nothing actionable, and the orchestrator's own pipeline.phase_failed
+    // carries neither statusCode nor a URL. No body: httpCallSink already stores
+    // it, capped. The URL is redacted — an OpenAI-compatible endpoint can pass
+    // its key as a query param.
     ctx.log.error('provider.narrative_stream_failed', {
       detail: describeProviderError(streamError),
       ...(APICallError.isInstance(streamError)

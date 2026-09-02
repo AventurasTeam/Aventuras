@@ -19,7 +19,12 @@ export const storyEntries = sqliteTable(
     metadata: text('metadata', { mode: 'json' }).$type<EntryMetadata>(),
     createdAt: integer('created_at').notNull(),
   },
-  (t) => [primaryKey({ columns: [t.branchId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.branchId, t.id] }),
+    // The PK autoindex is (branch_id, id): it seeks the branch but cannot order
+    // by position, so the buffer and last-turns reads paid a temp B-tree sort.
+    index('story_entries_position_idx').on(t.branchId, t.position),
+  ],
 )
 
 export const chapters = sqliteTable(

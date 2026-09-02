@@ -34,6 +34,16 @@ export type PhaseResult =
   | { status: 'aborted' }
   | { status: 'failed'; error: PipelineError }
 
+export type PhaseFailure = Extract<PhaseResult, { status: 'failed' }>
+
+// The phases that build a generationContext prompt. Their own names, not their
+// pipeline's: a failure detail that says 'per-turn' cannot say which of the
+// kind's two builders tripped.
+export type GenerationPhaseName =
+  | 'narrative'
+  | 'piggyback-fallback-classifier'
+  | 'suggestion-emission'
+
 export type PhaseEmittedEvent =
   | { type: 'stream_chunk'; targetEntryId: string; text: string; channel: 'text' | 'reasoning' }
   | { type: 'delta_emitted'; action: PipelineAction; entryId?: string | null }

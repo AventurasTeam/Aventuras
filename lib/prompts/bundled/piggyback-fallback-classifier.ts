@@ -11,7 +11,7 @@ export const PIGGYBACK_FALLBACK_CLASSIFIER = `Known entities, referenced only by
 
 Extract scene state from this turn:
 
-{% for entry in entries %}
+{% for entry in lastTurns %}
 {{ entry.content }}
 {% endfor %}
 {% if suggestionsFire -%}

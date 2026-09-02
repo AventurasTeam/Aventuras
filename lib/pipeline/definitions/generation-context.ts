@@ -1,53 +1,48 @@
 import { describeCalendarVocabulary, resolveCalendar } from '@/lib/calendar'
-import type { Entity, StoryDefinition, StorySettings, StoryEntry } from '@/lib/db'
-import { substituteIds, type IdBiMap } from '@/lib/ids'
+import { inheritedEntryMetadata, type Entity, type StoryEntry } from '@/lib/db'
+import { IdBiMap, substituteIds } from '@/lib/ids'
 import { buildSuggestionSlots, promptProse } from '@/lib/piggyback'
+import { templateReads, type TemplateId } from '@/lib/prompts'
 import {
-  composePromptBuffer,
+  readPromptBuffer,
   type Candidate,
   type EntityRow,
   type LoreRow,
   type RetrievalSuccess,
   type ThreadRow,
 } from '@/lib/retrieval'
+import { currentStoryStore, entitiesStore } from '@/lib/stores'
 
-type BuildArgs = {
-  // Scopes both collections below. Callers already read per-branch, but no
-  // generation context has ever wanted a row from another branch, so the
-  // predicate belongs here rather than at each call site.
-  branchId: string
-  // The branch's loaded entries, ascending by position. Every consumer draws
-  // from that one set and differs only in how much of it it passes, so this is
-  // a truncation seam, not a per-kind query. What reaches a template is
-  // composePromptBuffer's window over this list, so a caller handing over a
-  // deliberate short tail can still have it cut — or emptied — by the story's
-  // own buffer knobs, which the caller does not control.
-  entries: readonly StoryEntry[]
-  entities: readonly Entity[]
-  definition: StoryDefinition
-  settings: StorySettings
-  idMap: IdBiMap
+import { readLastTurns, readSceneSource } from './entry-reads'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
+import type { GenerationPhaseName, PhaseContext, PhaseFailure } from '../types'
+
+type BuildFlags = {
+  /** Names the calling phase in a guard failure's detail. */
+  phaseName: GenerationPhaseName
+  /**
+   * The template this context will render. The group's variable set does not
+   * change with it — every story template may read all of it — but a read
+   * behind a variable this template never mentions is work with no reader, so
+   * the query behind it is skipped and the variable comes back empty.
+   */
+  templateId: TemplateId
   // Whether THIS turn's tagged block will actually be consumed — only the
-  // narrative phase knows this (piggybackMode + resolved model capability),
-  // so it's caller-supplied rather than computed here. Defaults false for
-  // every other generationContext consumer, which never emits state-emission
-  // instructions in the first place.
+  // narrative phase knows this (piggybackMode + resolved model capability), so
+  // it stays caller-supplied. Defaults false for every other consumer, which
+  // never emits state-emission instructions in the first place.
   piggybackFires?: boolean
-  // Whether THIS call should emit the <suggestions> fragment — only the
-  // calling fold knows this (suggestionsEnabled + enabled categories + no
-  // suggestions already in hand), so it's caller-supplied like piggybackFires
-  // rather than computed here. Defaults false for every other
-  // generationContext consumer.
+  // Whether THIS call should emit the <suggestions> fragment — only the calling
+  // fold knows this (suggestionsEnabled + enabled categories + no suggestions
+  // already in hand), so it is caller-supplied like piggybackFires.
   suggestionsFire?: boolean
   // Composer text at the moment the reader hit ⟳ on the chip strip
   // (reader-composer.md → Next-turn suggestions). Only the suggestion-refresh
   // phase has it; blank everywhere else.
   refreshGuidance?: string
-  // This turn's successful retrieval pass. Absent for the two folds that never
-  // retrieve — the piggyback fallback classifier and suggestion-refresh — which
-  // then render every bucket empty.
-  retrieval?: RetrievalSuccess
 }
+
+type GuardFailure = { ok: false; result: PhaseFailure }
 
 /** A ranked bundle row as a template sees it. */
 export type RetrievedRow = { id: string; displayName: string; renderedText: string }
@@ -81,7 +76,7 @@ export const PROMPT_ENTITY_FIELDS = [
   'injectionMode',
 ] as const
 
-function promptEntity(entity: Entity): Record<string, unknown> {
+function promptEntity(entity: Entity): Pick<Entity, (typeof PROMPT_ENTITY_FIELDS)[number]> {
   return {
     id: entity.id,
     kind: entity.kind,
@@ -128,30 +123,99 @@ const floorThreads = (rows: readonly ThreadRow[] | undefined): FloorThread[] =>
     description: t.description,
   }))
 
-// The one context builder for the `generationContext` group: every story
-// agent's phase calls this and its template picks from the same variable set
-// (pinned in templateContextMap; parity-tested here).
-export function buildGenerationContext(args: BuildArgs): Record<string, unknown> {
+// One read serves all three, so any of them keeps it.
+const SCENE_VARIABLES = ['sceneMetadata', 'sceneEntities', 'currentLocationId']
+
+/**
+ * A story entry as a template sees it. Prose and position only: `metadata`
+ * carries entity ids, and substituteIds allocates a placeholder for every id it
+ * walks, so a window's worth of historical scene rosters would put entities
+ * deleted chapters ago into the map — where resolveRef reads presence as "the
+ * model was shown this". Current scene state is `sceneMetadata`, sourced from
+ * one entry. `id` is deliberately absent; `entry` has no substitutable prefix,
+ * and `position` is the handle a template wants.
+ */
+function promptEntry(entry: StoryEntry) {
+  return { position: entry.position, content: promptProse(entry) }
+}
+
+function readRetrievalOutcome(
+  intermediates: Record<string, unknown>,
+): RetrievalSuccess | undefined {
+  const stashed = intermediates[RETRIEVAL_INTERMEDIATE_KEY]
+  if (typeof stashed !== 'object' || stashed === null || !('ok' in stashed)) return undefined
+  return stashed.ok === true ? (stashed as RetrievalSuccess) : undefined
+}
+
+// The identity is the whole point of a desync guard: which branch went out of
+// step is what the reader's system entry has to be able to say.
+function guardFailure(
+  phaseName: GenerationPhaseName,
+  reason: string,
+  ids: Pick<PhaseContext, 'storyId' | 'branchId'>,
+): GuardFailure {
+  return {
+    ok: false,
+    result: {
+      status: 'failed',
+      error: {
+        kind: 'orchestrator',
+        detail: `${phaseName}: ${reason} (story ${ids.storyId}, branch ${ids.branchId})`,
+      },
+    },
+  }
+}
+
+/**
+ * The one context builder for the `generationContext` group: every story agent's
+ * phase calls this and its template picks from the same variable set (pinned in
+ * templateContextMap; parity-tested here).
+ *
+ * Takes run identity and run-scoped flags only. No caller hands it domain data,
+ * so no phase can quietly narrow the group's context to a slice of its own —
+ * entries come from SQLite (never `entriesStore`, whose reader window caps them),
+ * definition and settings from the open story, and entities from
+ * `entitiesStore` — a separate store, hence the separate guard.
+ */
+export async function buildGenerationContext(
+  ctx: Pick<PhaseContext, 'db' | 'storyId' | 'branchId' | 'intermediates'>,
+  flags: BuildFlags,
+) {
+  const { branchId, storyId } = ctx
   const {
-    branchId,
-    entries,
-    entities,
-    definition,
-    settings,
-    idMap,
+    phaseName,
+    templateId,
     piggybackFires = false,
     suggestionsFire = false,
     refreshGuidance = '',
-    retrieval,
-  } = args
+  } = flags
 
-  // Both exclusions are unconditional defense-in-depth: system entries are
-  // technical-only rows (removed on generate) that templates must never see,
-  // and a foreign-branch row would describe a story this prompt isn't telling.
-  // Not redundant with composePromptBuffer's own system filter — the scene and
-  // location tail reads below depend on this one.
-  const narrative = entries.filter((e) => e.kind !== 'system' && e.branchId === branchId)
-  const branchEntities = entities.filter((e) => e.branchId === branchId)
+  // Both guards are defense-in-depth against store desync: a build against the
+  // wrong branch would describe a story this prompt isn't telling, and would
+  // filter every entity away rather than fail.
+  const open = currentStoryStore.getCurrentStory()
+  if (!open || open.branchId !== branchId || open.storyId !== storyId)
+    return guardFailure(phaseName, 'no open story for branch', ctx)
+  if (entitiesStore.getLoadedBranch() !== branchId)
+    return guardFailure(phaseName, 'entities store loaded for another branch', ctx)
+
+  const { definition, settings } = open
+
+  // Run-scoped, so it rides intermediates: the placeholders a later phase
+  // resolves must be the ones the prompt was built with.
+  const idMap = (ctx.intermediates.idMap as IdBiMap | undefined) ?? new IdBiMap()
+  ctx.intermediates.idMap = idMap
+
+  const reads = templateReads(templateId)
+  const readsScene = SCENE_VARIABLES.some((name) => reads.has(name))
+  const [buffer, lastTurns, sceneSource] = await Promise.all([
+    reads.has('entries') ? readPromptBuffer(ctx.db, branchId, settings) : [],
+    reads.has('lastTurns') ? readLastTurns(ctx.db, branchId) : [],
+    readsScene ? readSceneSource(ctx.db, branchId) : undefined,
+  ])
+  const branchEntities = [...entitiesStore.getEntities().values()].filter(
+    (e) => e.branchId === branchId,
+  )
 
   const normalizedDefinition = {
     ...definition,
@@ -170,8 +234,15 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   // false — asking is that call's whole premise, not a per-run condition.
   const suggestionSlots = buildSuggestionSlots(settings.suggestionCategories).slots
 
-  const tail = narrative.at(-1)
+  const retrieval = readRetrievalOutcome(ctx.intermediates)
   const floor = retrieval?.floor
+
+  // The one entry's worth of scene state a template may read, so no historical
+  // roster reaches the prompt or the id map.
+  const scene = {
+    ...inheritedEntryMetadata(sceneSource?.metadata),
+    summary: sceneSource?.metadata?.summary ?? '',
+  }
 
   // Every place the prompt brackets an id for, in the order the blocks render.
   // A template that instead named "the ids above" would point <current_location>
@@ -188,12 +259,12 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
   const context = {
     // cadence.md → Composition rule: the two-mode window plus its
     // protectedBuffer spillover is not expressible as a template `| recent: N`.
-    entries: composePromptBuffer(narrative, settings).map((e) => ({ content: promptProse(e) })),
+    entries: buffer.map(promptEntry),
+    lastTurns: lastTurns.map(promptEntry),
     entities: branchEntities.map(promptEntity),
-    // Writers inherit scene state forward (submit-turn, per-turn), so the
-    // non-system tail always carries the current scene and location.
-    sceneEntities: tail?.metadata?.sceneEntities ?? [],
-    currentLocationId: tail?.metadata?.currentLocationId ?? null,
+    sceneEntities: scene.sceneEntities,
+    currentLocationId: scene.currentLocationId,
+    sceneMetadata: scene,
     definition: normalizedDefinition,
     calendarVocabulary: describeCalendarVocabulary(calendar),
     userSettings: {
@@ -228,5 +299,9 @@ export function buildGenerationContext(args: BuildArgs): Record<string, unknown>
 
   // Data-side, pre-render substitution: entity `id` (char_/loc_/... UUIDs) becomes
   // a placeholder; prose (entry.content, definition prose) has no IDs and passes through.
-  return substituteIds(context, idMap) as Record<string, unknown>
+  return { ok: true as const, context: substituteIds(context, idMap), idMap }
 }
+
+export type GenerationContextLoad = Awaited<ReturnType<typeof buildGenerationContext>>
+/** The variable set every `generationContext` template renders, as the builder emits it. */
+export type GenerationContext = Extract<GenerationContextLoad, { ok: true }>['context']

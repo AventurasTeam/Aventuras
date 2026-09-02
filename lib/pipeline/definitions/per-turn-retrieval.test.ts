@@ -1,13 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite'
 
 import { eq } from 'drizzle-orm'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   APP_SETTINGS_DEFAULTS,
   APP_SETTINGS_SINGLETON_ID,
   appSettings,
   STORY_SETTINGS_DEFAULTS,
+  storyEntries,
   type DbCtx,
   type Entity,
   type EntryMetadata,
@@ -35,14 +36,15 @@ import { retrievalFailure, retrievalSuccess } from '@/lib/retrieval/__tests__/ou
 import {
   currentStoryStore,
   entitiesStore,
-  entriesStore,
   rehydrateAppSettings,
   resetAllStores,
   storiesStore,
 } from '@/lib/stores'
 
+import { createPhaseDb, hydrateEntries, resetPhaseDb, type PhaseDb } from './__tests__/phase-db'
+import { RETRIEVAL_INTERMEDIATE_KEY } from './intermediates'
 import { ensurePerTurnPipelineRegistered, PER_TURN_KIND } from './per-turn'
-import { RETRIEVAL_INTERMEDIATE_KEY, RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
+import { RETRIEVAL_PHASE_NAME } from './per-turn-retrieval'
 import { getPipeline } from '../authoring/registry'
 import type { PhaseEmittedEvent, PhaseResult } from '../types'
 
@@ -180,7 +182,7 @@ function seedOpenStory(
     definition,
     settings,
   })
-  entriesStore.hydrate(opts.entriesBranch ?? 'b1', opts.entries ?? [])
+  hydrateEntries(phaseDb, opts.entriesBranch ?? 'b1', opts.entries ?? [])
   entitiesStore.hydrate('b1', opts.entities ?? [])
   vi.spyOn(storiesStore, 'getStories').mockReturnValue({
     rows: [storyRow(settings, opts.storyId ?? 's1')],
@@ -194,6 +196,10 @@ function openOnBranch(branchId: string): void {
   if (!open) throw new Error('seedOpenStory must run first')
   currentStoryStore.set({ ...open, branchId })
 }
+
+// Database-only, so a case can make the two sources disagree on purpose;
+// seedOpenStory writes to both.
+const seedDbEntries = (rows: StoryEntry[]) => phaseDb.db.insert(storyEntries).values(rows)
 
 async function runRetrievalPhase(
   abortSignal = new AbortController().signal,
@@ -216,7 +222,7 @@ async function runRetrievalPhase(
     abortSignal,
     intermediates,
     log,
-    db: {} as never,
+    db: phaseDb.db,
     runInTransaction,
     storyId: 's1',
     branchId: 'b1',
@@ -343,7 +349,14 @@ function lastParams(): RetrievalParams {
   return call[1] as RetrievalParams
 }
 
+let phaseDb: PhaseDb
+
+beforeAll(async () => {
+  phaseDb = await createPhaseDb()
+})
+
 beforeEach(() => {
+  resetPhaseDb(phaseDb)
   vi.restoreAllMocks()
   runRetrievalMock.mockReset().mockResolvedValue(OK_OUTCOME)
   refreshEmbeddingStatusMock.mockReset().mockResolvedValue(undefined)
@@ -971,22 +984,32 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     })
   })
 
-  it('takes the scene and location off the tail entry, narrowing characters by kind', async () => {
+  // The pools are scoped to the scene the prompt shows, which
+  // generation-context takes off the last AI-authored row. The tail carries a
+  // different scene here, so a phase still reading it fails.
+  it('takes the scene and location off the last narrative entry, narrowing characters by kind', async () => {
     seedOpenStory({
       entities: [
         entity('char_hero', 'character', 'Kael'),
         entity('item_blade', 'item', 'Blade'),
         entity('loc_keep', 'location', 'The Keep'),
+        entity('loc_road', 'location', 'The Road'),
       ],
       entries: [
         entry(
           1,
-          'user_action',
-          'I draw the blade.',
+          'ai_reply',
+          'The keep swallows the light.',
           meta({
             sceneEntities: ['char_hero', 'item_blade'],
             currentLocationId: 'loc_keep',
           }),
+        ),
+        entry(
+          2,
+          'user_action',
+          'I draw the blade.',
+          meta({ sceneEntities: ['loc_road'], currentLocationId: 'loc_road' }),
         ),
       ],
     })
@@ -1155,6 +1178,23 @@ describe('retrieval phase — RetrievalParams assembly', () => {
     // not suppress a staged namesake forever.
     expect(recentProse).not.toContain('older-prose')
     expect(recentProse).not.toContain('ancient-prose')
+  })
+
+  // entriesStore holds the reader's window, which grows and shrinks with scroll
+  // position — sourcing the buffer from it makes the prompt a function of where
+  // the reader happened to be looking.
+  it('composes the prompt buffer from the database, not the reader window', async () => {
+    seedOpenStory({
+      settings: { fullChapterInBuffer: true, protectedBuffer: 0 },
+      entries: [entry(11, 'ai_reply', 'in-window-prose', meta())],
+    })
+    // Only in the database: the older entry a scroll-up would have to load
+    // before the store could see it.
+    await seedDbEntries([entry(10, 'ai_reply', 'beyond-window-prose', meta())])
+
+    await runRetrievalPhase()
+
+    expect(lastParams().recentProse).toContain('beyond-window-prose')
   })
 
   // The suggestion block names entities the story has not told yet. Left in the

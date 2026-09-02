@@ -40,11 +40,65 @@ read them.
   and become available to later templates in the same run.
 - **Pack variables (user-defined custom fields) sit alongside built-ins.**
   A pack author sees the same API surface a built-in template sees.
-- **No prop-drilling between phases or templates.** A phase reads the
-  domain stores directly and calls the group's context builder
-  (`buildGenerationContext`) per render; run-scoped values flow through
-  the pipeline's `intermediates` bag. Templates render against the
-  builder's output.
+- **No prop-drilling between phases or templates.** A phase calls the
+  group's context builder (`buildGenerationContext`) with run identity
+  and run-scoped flags, and nothing else; the builder reads the domain
+  data itself — the prompt buffer and last turns from SQLite,
+  definition and settings from the open story, entities from the
+  entities store — so no phase can hand the group a slice of its own
+  and quietly stop the context being unified. Run-scoped values flow
+  through the pipeline's `intermediates` bag. Templates render against
+  the builder's output.
+- **The prompt buffer is read, not filtered from a working set.** The
+  entries store holds the reader's window, which grows with scroll-up
+  paging and shrinks on reload; composing the buffer from it would cap
+  it below what
+  [`cadence.md → Composition rule`](./memory/cadence.md#composition-rule)
+  asks for and make prompt content a function of scroll position. The
+  builder and the retrieval phase both go through `readPromptBuffer`,
+  so the pools are priced against the same window the prompt carries —
+  two reads at two moments, not one shared result.
+- **`entries` is the only budget-governed collection.** A second,
+  wider entries variable would let a template render past the window
+  retrieval measured, leaving rows seated against a budget for a
+  prompt that was never sent. `lastTurns` is the deliberate exception
+  and is bounded at two rows by its own query, so the buffer knobs
+  cannot cut it: per-turn classification needs the action that caused
+  a state change alongside the prose around it. Which kinds those two
+  rows are depends on when in the run the phase asks — the narrative
+  fold reads them before its own reply is committed — so a template
+  must not assume an action/reply pair. The piggyback fallback
+  classifier takes its write target from that same read, so the row
+  the extracted state lands on is a row the prompt rendered.
+
+- **The classifier fold sees the run's retrieval bundle.** It reads
+  `intermediates` like every other caller, so the piggyback fallback
+  classifier now renders against populated buckets where it once
+  rendered empty ones. Nothing in the bundled classifier template
+  reaches for them; a pack may.
+- **Scene state comes from one entry, not from every entry.** Rows
+  reach a template as prose and position only. Their metadata carries
+  entity ids, and substitution allocates a placeholder for every id it
+  walks, so a window's worth of historical rosters would put
+  long-departed entities back in the map — where the classifier's
+  reference check reads presence as "the model was shown this".
+  `sceneMetadata` carries the current scene, sourced from the most
+  recent AI-authored entry: classification writes scene state, so it
+  lives on AI-authored rows and a `user_action` only inherits it
+  forward. The retrieval phase scopes its pools through that same
+  read, so the ranker and the prompt describe one scene rather than
+  two derivations that agree only while inheritance is perfect.
+  `previousMetadata` is the deliberate exception — it feeds
+  `lastSeenAt`, which needs the immediately-previous entry's id,
+  location and world time as one coherent triple, so it stays on the
+  branch tail.
+- **An unread variable costs no query.** The group offers the same
+  variables to every story template — a pack decides what it needs,
+  not the builder. But the builder asks the engine which variables the
+  template actually references (following `{% include %}`), and skips
+  the read behind one it never mentions; the variable is still there,
+  just empty. The classifier template names neither `entries` nor any
+  scene variable, so its build issues one query instead of four.
 - **`entity.id` exposed to templates is the placeholder, not the
   UUID.** Per
   [`data-model.md → ID shape`](./data-model.md#id-shape--kind-prefixed-uuids-throughout)

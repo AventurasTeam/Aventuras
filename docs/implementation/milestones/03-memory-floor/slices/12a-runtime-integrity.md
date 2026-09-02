@@ -203,12 +203,10 @@ corrected premises as of that pass; file/line references are dated
   `app-deps.ts`. A future caller reaching for `startSwap` instead of
   `startStorySwap` skips the admission lock and the
   `isUserEditBlocked` check, which is a real corruption path. Stop
-  exporting the primitives from the barrel; tests deep-import. The
-  extraction pass itself is in
-  [`followups.md → Code structure`](../../../../followups.md#code-structure).
-  Surfaced 2026-08-01; narrowed 2026-08-19. (The pass completed
-  2026-08-26 and its entry is gone from that section — see Slice 1.5a's
-  Post-M1 reconciliation for the `defineAction` half.)
+  exporting the primitives from the barrel; tests deep-import.
+  Surfaced 2026-08-01; narrowed 2026-08-19. (The extraction pass
+  completed 2026-08-26 — see Slice 1.5a's Post-M1 reconciliation for
+  the `defineAction` half.)
 
 ### Query and render cost
 
@@ -337,9 +335,9 @@ re-renders of a conditional footer — not worth a WebView profiling
 rig); the suggestions-invisible-to-old-stories item (3.7b shipped
 the toggle; an E2E proves the persisted round-trip). **Re-routed
 with owners:** the `buildGenerationContext` data-source refactor and
-the `lib/actions` extraction pass →
-[`followups.md → Code structure`](../../../../followups.md#code-structure)
-(near-future refactors, per the developer); the
+the `lib/actions` extraction pass → `followups.md`'s Code-structure
+section (near-future refactors, per the developer); both landed and
+the section is gone with them, the refactor on 2026-08-28. The
 `updateEntryWorldTime` metadata race → the world-state-block pass
 ([`followups.md → UX`](../../../../followups.md#ux)), whose
 scene-field editor is the concrete second writer that would arm it;
