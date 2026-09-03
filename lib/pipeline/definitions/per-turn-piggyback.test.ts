@@ -354,6 +354,120 @@ describe('per-turn-piggyback', () => {
       ])
     })
 
+    // The fold applied its visual changes and transfers before its own parse failed, so
+    // those entity rows exist. A report rebuilt from an empty block would deny them, and
+    // a per_turn_classifier badge would credit fields to a call that never returned.
+    it('amends the fold report rather than replacing it when the classifier call fails', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: {
+            sceneEntities: [],
+            currentLocationId: null,
+            worldTime: 100,
+            stateReport: {
+              layer: 'piggyback_tagged_block',
+              visualChanges: [{ id: 'char_a', type: 'attire', text: 'muddied cloak' }],
+              failedFields: [{ field: 'transfers', detail: 'no well-formed entries' }],
+              raw: '<state><transfers><item id="i1"',
+            },
+          },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({ status: 'failed', detail: 'LLM error' })
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      const written = events.find(
+        (e) => e.type === 'delta_emitted' && e.action.kind === 'updateStoryEntryMetadata',
+      )
+      if (
+        !written ||
+        written.type !== 'delta_emitted' ||
+        written.action.kind !== 'updateStoryEntryMetadata'
+      )
+        throw new Error('expected a metadata delta recording the failure')
+      const report = written.action.payload.metadata.stateReport
+      expect(report?.layer).toBe('piggyback_tagged_block')
+      expect(report?.visualChanges).toEqual([
+        { id: 'char_a', type: 'attire', text: 'muddied cloak' },
+      ])
+      expect(report?.raw).toBe('<state><transfers><item id="i1"')
+      expect(report?.failedFields).toEqual([
+        { field: 'transfers', detail: 'no well-formed entries' },
+        { field: 'classifier', detail: 'classifier call failed' },
+      ])
+    })
+
+    // Cancelling mid-call is not a classifier failure: the run discards its writes, and
+    // a durable failure report would outlive the turn the user threw away.
+    it('discards the write when the classifier call is aborted', async () => {
+      currentStoryStore.set({
+        storyId: 's1',
+        branchId: 'b1',
+        definition,
+        settings: baseSettings({ models: {} }),
+      })
+      hydrateEntries(phaseDb, 'b1', [
+        {
+          id: 'entry-1',
+          branchId: 'b1',
+          position: 1,
+          content: 'The hero enters the dark forest.',
+          metadata: { sceneEntities: [], currentLocationId: null, worldTime: 100 },
+        } as never,
+      ])
+      entitiesStore.hydrate('b1', [])
+
+      generateStructuredMock.mockResolvedValueOnce({ status: 'aborted' })
+
+      const gen = piggybackFallbackClassifierPhase({
+        actionId: 'act_1',
+        abortSignal: new AbortController().signal,
+        intermediates: { idMap: new IdBiMap() },
+        log: makeLogger('act_1'),
+        db: phaseDb.db,
+        runInTransaction: async () => undefined,
+        storyId: 's1',
+        branchId: 'b1',
+      })
+      const events = []
+      let next = await gen.next()
+      while (!next.done) {
+        events.push(next.value)
+        next = await gen.next()
+      }
+
+      expect(next.value).toEqual({ status: 'aborted' })
+      expect(events).toEqual([])
+    })
+
     // The pair is a pipeline contract, not a share of the prompt budget: the
     // user's action can carry the state change ("I put the sword away"), so a
     // story whose buffer knobs cut `entries` to a single row must still send

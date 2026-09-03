@@ -187,11 +187,16 @@ export async function* piggybackFallbackClassifierPhase(
         ctx.abortSignal,
       )
 
-  // `layer` names whoever ultimately supplied the fields — this phase did. The prior
-  // report, when there is one, is the narrative fold's FAILED attempt: its failedFields
-  // and raw survive so the parse failure stays inspectable, but its layer does not.
-  // Inheriting the whole object would leave a badge naming an agent whose output was
-  // discarded (docs/data-model.md → Entry metadata shape).
+  // A cancelled run discards its writes rather than recording them as a classifier
+  // failure. The signal as well as the status: generateClassifierState returns the
+  // first (ok) result when it is the re-roll that got cancelled.
+  if (ctx.abortSignal.aborted || result.status === 'aborted') return { status: 'aborted' }
+
+  // `layer` names whoever supplied the fields the report carries. The prior report, when
+  // there is one, is the narrative fold's FAILED attempt: its failedFields and raw
+  // survive so the parse failure stays inspectable, and its layer survives only where
+  // this phase produced no fields of its own to replace them with
+  // (docs/data-model.md → Entry metadata shape).
   const priorReport = tail.metadata?.stateReport
 
   if (result.status !== 'ok') {
@@ -200,38 +205,34 @@ export async function* piggybackFallbackClassifierPhase(
       ...('kind' in result ? { errorKind: result.kind } : {}),
       ...('detail' in result ? { errorDetail: result.detail } : {}),
     })
-    // This phase is the only writer of a report when the narrative fold produced none
-    // (piggyback off, or its own parse failed). Returning silently leaves a row that
-    // reported nothing, which the panel cannot tell from a turn where nothing changed —
-    // and the warn above is a no-op unless diagnostics is on.
-    const failedReport = buildStateReport({
-      layer: 'per_turn_classifier',
-      block: {},
-      failures: [
-        ...(priorReport?.failedFields ?? []),
-        {
-          field: 'classifier',
-          detail:
-            'kind' in result
-              ? `classifier call ${result.status}: ${result.kind}`
-              : `classifier call ${result.status}`,
+    const classifierFailure = {
+      field: 'classifier',
+      detail:
+        'kind' in result
+          ? `classifier call ${result.status}: ${result.kind}`
+          : `classifier call ${result.status}`,
+    }
+    // Amended rather than rebuilt. The call returned nothing, so every field the report
+    // carries is still the fold's — including the visual changes and transfers apply.ts
+    // already wrote as entity rows, which an empty-block rebuild would drop and leave
+    // the record contradicting world state. Where the fold produced no report at all
+    // (piggyback off, or a block that parsed nothing), this phase is the only writer:
+    // returning silently leaves a row the panel cannot tell from one where nothing
+    // changed, and the warn above is a no-op unless diagnostics is on.
+    const failedReport = priorReport
+      ? { ...priorReport, failedFields: [...(priorReport.failedFields ?? []), classifierFailure] }
+      : { layer: 'per_turn_classifier' as const, failedFields: [classifierFailure] }
+    yield {
+      type: 'delta_emitted',
+      action: {
+        kind: 'updateStoryEntryMetadata',
+        source: 'per_turn_classifier',
+        payload: {
+          branchId: ctx.branchId,
+          id: tail.id,
+          metadata: { stateReport: failedReport },
         },
-      ],
-      ...(priorReport?.raw !== undefined ? { raw: priorReport.raw } : {}),
-    })
-    if (failedReport !== undefined) {
-      yield {
-        type: 'delta_emitted',
-        action: {
-          kind: 'updateStoryEntryMetadata',
-          source: 'per_turn_classifier',
-          payload: {
-            branchId: ctx.branchId,
-            id: tail.id,
-            metadata: { stateReport: failedReport },
-          },
-        },
-      }
+      },
     }
     return { status: 'completed' }
   }
